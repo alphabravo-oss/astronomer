@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import {
   clusterId,
   now,
@@ -215,39 +215,7 @@ test("tool-owned release pivots to Tools without loading catalog mutation diagno
 test("upgrade keeps saved values and follows the wrapped operation receipt", async ({
   page,
 }, info) => {
-  const projectId = "e674c0e2-16d9-47a0-b804-725cfbfdd4ab";
-  const project = {
-    id: projectId,
-    name: "Payments",
-    display_name: "Payments",
-    cluster_id: clusterId,
-    cluster_ids: [clusterId],
-    namespaces: ["payments"],
-    resource_quota: {},
-    created_at: now,
-    updated_at: now,
-  };
-  await jsonRoute(page, `/api/v1/projects/${projectId}`, { data: project });
-  await jsonRoute(page, "/api/v1/projects", pageOf([project]));
-  await jsonRoute(
-    page,
-    `/api/v1/catalog/charts/${release.chart_id}/versions`,
-    pageOf([
-      {
-        id: release.chart_version_id,
-        chart_id: release.chart_id,
-        version: "1.2.3",
-        app_version: "1.2.3",
-        default_values: "replicaCount: 1\n",
-        created_at: now,
-      },
-    ]),
-  );
-  await jsonRoute(page, `/api/v1/catalog/charts/${release.chart_id}/values`, {
-    chart: "checkout",
-    version: "1.2.3",
-    default_values: "replicaCount: 1\n",
-  });
+  const projectId = await catalogCheckout(page);
   const writes: { method: string; body: unknown; key: string | undefined }[] =
     [];
   await page.route(
@@ -295,6 +263,178 @@ test("upgrade keeps saved values and follows the wrapped operation receipt", asy
   await page.screenshot({
     path: info.outputPath("upgrade-wrapped-receipt.png"),
     fullPage: true,
+    animations: "disabled",
+  });
+});
+
+async function catalogCheckout(page: Page) {
+  const projectId = "e674c0e2-16d9-47a0-b804-725cfbfdd4ab";
+  const project = {
+    id: projectId,
+    name: "Payments",
+    display_name: "Payments",
+    cluster_id: clusterId,
+    namespaces: ["payments"],
+    description: "Payments application project",
+    resource_quota: {},
+    limit_range: {},
+    pod_security_profile: "baseline",
+    network_policy_mode: "none",
+    resource_quota_cpu_limit: "",
+    resource_quota_memory_limit: "",
+    resource_quota_pod_count: 0,
+    created_by_id: null,
+    created_at: now,
+    updated_at: now,
+  };
+  await jsonRoute(page, `/api/v1/projects/${projectId}`, { data: project });
+  await jsonRoute(page, "/api/v1/projects", pageOf([project]));
+  await jsonRoute(
+    page,
+    `/api/v1/catalog/charts/${release.chart_id}/versions`,
+    pageOf([
+      {
+        id: release.chart_version_id,
+        chart_id: release.chart_id,
+        version: "1.2.3",
+        app_version: "1.2.3",
+        default_values: "replicaCount: 1\n",
+        created_at: now,
+      },
+    ]),
+  );
+  await jsonRoute(page, `/api/v1/catalog/charts/${release.chart_id}/values`, {
+    chart: "checkout",
+    version: "1.2.3",
+    default_values: "replicaCount: 1\n",
+  });
+  return projectId;
+}
+
+test("install follows its accepted receipt through navigation, refresh and release diagnostics", async ({
+  page,
+}, info) => {
+  const projectId = await catalogCheckout(page);
+  await jsonRoute(
+    page,
+    "/api/v1/catalog/charts",
+    pageOf([
+      {
+        id: release.chart_id,
+        repository_id: "repository-checkout",
+        name: "checkout",
+        display_name: "Checkout",
+        description: "Checkout test application",
+        keywords: [],
+        deprecated: false,
+      },
+    ]),
+  );
+  let installed = false;
+  await page.route(
+    (url) =>
+      url.pathname.replace(/\/$/, "") === `/api/v1/clusters/${clusterId}/apps`,
+    (route) => route.fulfill({ json: pageOf(installed ? [release] : []) }),
+  );
+  await jsonRoute(page, `/api/v1/catalog/operations/${operationId}`, {
+    data: { ...operation, operationType: "install" },
+  });
+  const writes: { method: string; body: unknown; key: string | undefined }[] =
+    [];
+  await page.route(
+    (url) => url.pathname.replace(/\/$/, "") === "/api/v1/catalog/installed",
+    (route) => {
+      writes.push({
+        method: route.request().method(),
+        body: route.request().postDataJSON(),
+        key: route.request().headers()["idempotency-key"],
+      });
+      installed = true;
+      return route.fulfill({
+        status: 202,
+        json: {
+          data: {
+            installation: { ...release, status: "pending_install" },
+            operation: { ...operation, operationType: "install" },
+          },
+        },
+      });
+    },
+  );
+  await page.goto(
+    `/dashboard/clusters/${clusterId}/apps?project=${projectId}&install=checkout`,
+  );
+  const dialog = page.getByRole("dialog", {
+    name: "Install checkout",
+    exact: true,
+  });
+  await expect(dialog.locator("textarea")).toHaveValue("replicaCount: 1\n");
+  await dialog
+    .getByLabel("Release name", { exact: true })
+    .fill(release.release_name);
+  await dialog.getByLabel("Namespace", { exact: true }).fill(release.namespace);
+  await dialog.locator("textarea").fill(savedValues);
+  await dialog.getByRole("button", { name: "Install", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`operation=${operationId}`));
+  await expect(page).toHaveURL(/section=installed/);
+  await expect(page).not.toHaveURL(/install=checkout/);
+  expect(writes).toHaveLength(1);
+  expect(writes[0].method).toBe("POST");
+  expect(writes[0].body).toEqual({
+    project_id: projectId,
+    cluster_id: clusterId,
+    chart_version_id: release.chart_version_id,
+    release_name: release.release_name,
+    namespace: release.namespace,
+    values_override: savedValues,
+  });
+  expect(writes[0].key).toBeTruthy();
+  await expect(
+    page.getByText("Request: pending. Delivery: pending.", { exact: true }),
+  ).toBeVisible();
+  const receiptUrl = page.url();
+  await page.goto(`/dashboard/clusters/${clusterId}/tools`);
+  await page.goBack();
+  await expect(page).toHaveURL(receiptUrl);
+  await page.reload();
+  await expect(
+    page.getByText(`Operation ${operationId}`, { exact: true }),
+  ).toBeVisible();
+  expect(writes).toHaveLength(1);
+  await jsonRoute(page, `/api/v1/catalog/operations/${operationId}`, {
+    data: {
+      ...operation,
+      operationType: "install",
+      status: "completed",
+      journalStatus: "completed",
+      deliveryPhase: "ready",
+      deliveryObservedAt: now,
+    },
+  });
+  await page
+    .getByRole("button", { name: "Refresh operation", exact: true })
+    .click();
+  await expect(
+    page.getByText("Request: completed. Delivery: ready.", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: release.release_name, exact: true })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`release=${releaseId}`));
+  await page.reload();
+  await page.getByText("Saved release values", { exact: true }).click();
+  await expect(
+    page.getByText("replicaCount: 2", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Rollout accepted by Flux", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("heading", { name: "Installed release", exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: info.outputPath("install-result-diagnostics.png"),
     animations: "disabled",
   });
 });

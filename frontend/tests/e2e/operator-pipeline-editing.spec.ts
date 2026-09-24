@@ -195,3 +195,78 @@ test("failed saves retain draft and denied destination prevents destructive repl
     animations: "disabled",
   });
 });
+
+test("201st pipeline is reachable through bounded server pages and returns to its cluster collection", async ({
+  page,
+}, info) => {
+  const reads: { cluster: string | null; limit: number; offset: number }[] = [];
+  await page.route(
+    (url) => url.pathname.replace(/\/$/, "") === "/api/v1/logging/pipelines",
+    (route) => {
+      const query = new URL(route.request().url()).searchParams;
+      const limit = Number(query.get("limit"));
+      const offset = Number(query.get("offset") ?? 0);
+      reads.push({ cluster: query.get("cluster_id"), limit, offset });
+      const count = Math.min(limit, 201 - offset);
+      return route.fulfill({
+        json: {
+          data: Array.from({ length: count }, (_, index) => ({
+            ...initial,
+            id: `paged-${offset + index + 1}`,
+            name: `Pipeline ${offset + index + 1}`,
+          })),
+          pagination: {
+            limit,
+            offset,
+            total: 201,
+            has_more: offset + count < 201,
+            next_offset: offset + count < 201 ? offset + count : null,
+          },
+        },
+      });
+    },
+  );
+  await jsonRoute(page, "/api/v1/logging/pipelines/paged-201", {
+    data: { ...initial, id: "paged-201", name: "Pipeline 201" },
+  });
+  await page.goto(`/dashboard/clusters/${clusterId}/logging?view=collection`);
+  await expect(
+    page.getByRole("link", { name: "Pipeline 1", exact: true }),
+  ).toBeVisible();
+  for (const first of [51, 101, 151, 201]) {
+    await page.getByRole("button", { name: "Next page", exact: true }).click();
+    await expect(
+      page.getByRole("link", { name: `Pipeline ${first}`, exact: true }),
+    ).toBeVisible();
+  }
+  await expect(
+    page.getByRole("button", { name: "Next page", exact: true }),
+  ).toBeDisabled();
+  expect(
+    reads.every((read) => read.limit === 50 && read.cluster === clusterId),
+  ).toBe(true);
+  expect([...new Set(reads.map((read) => read.offset))]).toEqual([
+    0, 50, 100, 150, 200,
+  ]);
+  await page.getByRole("link", { name: "Pipeline 201", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Pipeline 201", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Back to pipelines", exact: true })
+    .click();
+  await expect(page).toHaveURL(
+    new RegExp(`/clusters/${clusterId}/logging\\?view=collection`),
+  );
+  await expect(
+    page.getByRole("heading", { name: "Log collection", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Log collection", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: info.outputPath("pipeline-paged-return.png"),
+    animations: "disabled",
+  });
+});
