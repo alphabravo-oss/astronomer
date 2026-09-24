@@ -260,6 +260,10 @@ function ClusterImageScansPage() {
           ? `Vulnerability rescan ${rescan.operationState.phase}`
           : ""}
       </p>
+      <p className="text-xs text-muted-foreground">
+        Cluster-wide security inventory. Use this page’s namespace filter; the
+        navigation namespace selection does not filter these reports.
+      </p>
       <PageHeader
         title={
           <span className="inline-flex items-center gap-2">

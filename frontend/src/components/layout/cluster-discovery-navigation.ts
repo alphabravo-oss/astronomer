@@ -22,6 +22,7 @@ export function withDiscoveredNavigation(
   discovery: ClusterDiscovery,
   clusterId: string,
   starred: readonly string[] = [],
+  limit = 40,
 ): NavGroup[] {
   const represented = new Set(
     groups.flatMap(navGroupItems).map((item) => item.resourceType),
@@ -34,7 +35,7 @@ export function withDiscoveredNavigation(
       .filter((type) => starred.includes(type) && !represented.has(type))
       .slice(0, 20),
   );
-  let remaining = 40 - reserved.size;
+  let remaining = limit - reserved.size;
   let truncated = false;
   const subgroups = [...discovery.crdsByGroup.entries()]
     .sort(

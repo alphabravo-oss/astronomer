@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useTabParam } from "@/lib/use-tab-param";
+import { useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import {
@@ -27,6 +28,7 @@ interface ResourceDetailProps {
   k8sPath: string;
   /** Override for resources whose canonical RBAC name differs from the route. */
   permissionResource?: string;
+  collectionHref?: string;
 }
 
 const BASE_TABS = [
@@ -52,8 +54,8 @@ export function ResourceDetail({
   name,
   k8sPath,
   permissionResource,
+  collectionHref,
 }: ResourceDetailProps) {
-  const [tab, setTab] = useState<ResourceDetailTabId>("overview");
   const navigate = useNavigate();
 
   // These decisions intentionally use the same canonical/override resource as
@@ -139,6 +141,11 @@ export function ResourceDetail({
     resourceType,
   ]);
 
+  const [tab, setTab] = useTabParam<ResourceDetailTabId>(
+    tabs.map((item) => item.id),
+    "overview",
+  );
+
   if (!read.allowed) {
     return (
       <PermissionState
@@ -153,7 +160,8 @@ export function ResourceDetail({
   const created = obj?.metadata?.creationTimestamp;
   const detailStatus = isPod ? podStatus(obj) : obj?.status?.phase;
 
-  const backTo = `/dashboard/clusters/${clusterId}/${resourceType}`;
+  const backTo =
+    collectionHref ?? `/dashboard/clusters/${clusterId}/${resourceType}`;
 
   return (
     <div className="space-y-6">

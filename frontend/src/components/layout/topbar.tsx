@@ -30,6 +30,7 @@ import {
 import { useAlertEvents, useAlertEventSummary } from "@/lib/hooks/alerting";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime } from "@/lib/utils";
+import { ActionButton } from "@/components/ui/action-button";
 import { GlobalSearch } from "@/components/layout/global-search";
 import { logoutCurrentSession } from "@/lib/api/account-security";
 import { listCharlieFindings } from "@/lib/api/charlie";
@@ -217,7 +218,7 @@ export function Topbar() {
     visibleTheme === "dark" ? Moon : visibleTheme === "light" ? Sun : Monitor;
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
+    <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 py-2 border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
       <button
         type="button"
         onClick={() => setMobileSidebarOpen(true)}
@@ -243,12 +244,18 @@ export function Topbar() {
       {/* Center: Cross-cluster Global Search (Phase A3). Its own kbd hint
           covers the command palette shortcut, so the topbar no longer needs
           a separate ⌘K chip. */}
-      <div className="hidden md:flex flex-1 justify-center px-6">
+      <div className="hidden 2xl:flex min-w-0 flex-1 justify-center px-2">
         <GlobalSearch />
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-2">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
+        <ActionButton
+          size="sm"
+          onClick={() => useUIStore.getState().setCommandPaletteOpen(true)}
+        >
+          Go to page
+        </ActionButton>
         <ClusterShellLauncher
           clusterId={activeClusterId}
           clusterName={
@@ -298,7 +305,7 @@ export function Topbar() {
           </button>
 
           {notificationOpen && (
-            <div className="absolute right-0 top-full mt-1 w-80 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden">
+            <div className="fixed right-3 top-24 mt-1 w-80 max-w-[calc(100vw-1.5rem)] sm:absolute sm:right-0 sm:top-full rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <h4 className="text-sm font-medium text-foreground">
                   Notifications

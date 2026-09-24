@@ -68,7 +68,9 @@ function WorkloadPodsTab({
     {
       key: "status",
       header: "Status",
-      accessor: (pod) => <StatusBadge status={pod.phase} />,
+      accessor: (pod) => (
+        <StatusBadge status={pod.status?.trim() || pod.phase || "Unknown"} />
+      ),
     },
     {
       key: "ready",

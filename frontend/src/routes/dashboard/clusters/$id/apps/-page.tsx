@@ -1,3 +1,4 @@
+import { useProjectSelection } from "@/lib/cluster-scope-project";
 import {
   CatalogProjectPicker,
   useCatalogProjectScope,
@@ -72,6 +73,7 @@ export function ClusterAppsPage() {
   const clusterId = params.id;
   const { data: cluster } = useCluster(clusterId);
   const qc = useQueryClient();
+  const navigate = useNavigate();
   // Deep-link support: feature pages (image-scans, monitoring, etc.)
   // can drop the user here with ?install=<chartName> to auto-open the
   // install modal for that chart. Reads the search params once and
@@ -79,18 +81,12 @@ export function ClusterAppsPage() {
   const searchParams = new URLSearchParams(
     useLocation({ select: (location) => location.searchStr }),
   );
-  const navigate = useNavigate();
   const requestedProjectId = searchParams.get("project") ?? "";
   const projectScope = useCatalogProjectScope(requestedProjectId, clusterId);
   const { projectId } = projectScope;
+  const projectSelection = useProjectSelection(clusterId);
   const setProjectId = (nextProjectId: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (nextProjectId) next.set("project", nextProjectId);
-    else next.delete("project");
-    void navigate({
-      to: `/dashboard/clusters/${clusterId}/apps${next.size ? `?${next.toString()}` : ""}`,
-      replace: true,
-    });
+    void projectSelection.select(nextProjectId);
     setModal({ kind: "none" });
   };
   const requestedInstall = searchParams?.get("install") ?? "";
@@ -255,6 +251,11 @@ export function ClusterAppsPage() {
 
   return (
     <div className="space-y-6 p-4">
+      <p className="text-xs text-muted-foreground">
+        Installed releases are cluster-wide. Project visibility controls catalog
+        choices; namespace selection does not filter installed releases or
+        repositories.
+      </p>
       <PageHeader
         title={
           <span className="inline-flex items-center gap-2">

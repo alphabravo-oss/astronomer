@@ -23,7 +23,10 @@ import {
 } from "./cluster-discovery-navigation";
 import { useClusterDiscovery } from "./use-cluster-discovery-nav";
 
-export function useSidebarNavigation(clusterId?: string) {
+export function useSidebarNavigation(
+  clusterId?: string,
+  completeIndex = false,
+) {
   const user = useAuthStore((state) => state.user);
   const { data: cluster } = useCluster(clusterId ?? "");
   const { data: featureFlags } = useFeatureFlags();
@@ -51,6 +54,7 @@ export function useSidebarNavigation(clusterId?: string) {
           discovery,
           clusterId,
           preferences.starred_types,
+          completeIndex ? Infinity : 40,
         )
       : withFavoriteNavigation(baseGroups, preferences.favorites);
     const visible = filterNavGroups(
@@ -67,6 +71,7 @@ export function useSidebarNavigation(clusterId?: string) {
         )
       : visible;
   }, [
+    completeIndex,
     charlieActivated,
     cluster?.isLocal,
     clusterId,

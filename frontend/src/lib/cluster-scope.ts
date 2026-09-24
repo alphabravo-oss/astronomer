@@ -96,6 +96,14 @@ export function withClusterScopeSelection(
   projectId: string | null,
 ): string {
   const next = new URLSearchParams(search);
+  for (const key of [
+    "page",
+    "selected",
+    "continue",
+    "version_page",
+    "cluster_page",
+  ])
+    next.delete(key);
   if (namespaces === null) next.delete(NAMESPACE_SCOPE_PARAM);
   else
     next.set(NAMESPACE_SCOPE_PARAM, canonicalNamespaces(namespaces).join(","));

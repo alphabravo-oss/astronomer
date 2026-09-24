@@ -131,8 +131,15 @@ function CommandRow({
 export function CommandPaletteDialog() {
   const routerNavigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const project = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  ).get("project");
+  const pageHref = (href: string) =>
+    project && href.includes("/delivery")
+      ? `${href}?project=${encodeURIComponent(project)}`
+      : href;
   const currentClusterId = clusterIdFromPath(pathname);
-  const { navGroups } = useSidebarNavigation(currentClusterId);
+  const { navGroups } = useSidebarNavigation(currentClusterId, true);
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const { data: projectsData } = useProjects({ pageSize: 25 });
@@ -214,11 +221,11 @@ export function CommandPaletteDialog() {
               {globalPages.map((page) => (
                 <CommandRow
                   key={page.href}
-                  value={page.label}
+                  value={`${page.href} ${page.label}`}
                   icon={page.icon}
                   title={page.label}
                   onSelect={() => {
-                    void routerNavigate({ to: page.href });
+                    void routerNavigate({ to: pageHref(page.href) });
                     close();
                   }}
                 />
@@ -255,11 +262,12 @@ export function CommandPaletteDialog() {
                 {clusterContextPages.map((page) => (
                   <CommandRow
                     key={page.href}
-                    value={`${page.label} cluster`}
+                    value={`${page.href} ${page.label} ${page.description} cluster`}
+                    description={page.description}
                     icon={page.icon}
                     title={page.label}
                     onSelect={() => {
-                      void routerNavigate({ to: page.href });
+                      void routerNavigate({ to: pageHref(page.href) });
                       close();
                     }}
                   />

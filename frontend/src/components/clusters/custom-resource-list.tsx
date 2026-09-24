@@ -1,3 +1,6 @@
+import { collectionScope } from "@/lib/cluster-scope-collection";
+import { useClusterNamespaceScope } from "@/lib/cluster-scope";
+import { useClusterDiscovery } from "@/components/layout/use-cluster-discovery-nav";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
@@ -26,12 +29,52 @@ interface CRRow {
 }
 
 /** One server page at a time; proxy continuation tokens remain opaque. */
-export function CustomResourceList({
+export function CustomResourceList(props: {
+  clusterId: string;
+  group: string;
+  version: string;
+  plural: string;
+}) {
+  const scope = useClusterNamespaceScope(props.clusterId);
+  const discovery = useClusterDiscovery(props.clusterId);
+  const type = [...discovery.crdsByGroup.values()]
+    .flat()
+    .find(
+      (item) =>
+        item.group === props.group &&
+        item.servedVersions.includes(props.version) &&
+        item.plural === props.plural,
+    );
+  if (discovery.isLoading)
+    return <p role="status">Resolving resource scope…</p>;
+  if (discovery.isError || !type)
+    return (
+      <p role="alert">Resource scope unavailable. Reload to retry discovery.</p>
+    );
+  const selection = collectionScope(
+    type.namespaced ? scope.selectedNamespaces : null,
+  );
+  if (!selection.enabled) return <p role="status">{selection.message}</p>;
+  return (
+    <ScopedCustomResourceList
+      key={`${props.clusterId}/${props.group}/${props.version}/${props.plural}/${JSON.stringify(selection)}`}
+      {...props}
+      namespace={selection.namespace}
+      namespaced={type.namespaced}
+    />
+  );
+}
+
+function ScopedCustomResourceList({
+  namespace,
+  namespaced,
   clusterId,
   group,
   version,
   plural,
 }: {
+  namespace?: string;
+  namespaced: boolean;
   clusterId: string;
   group: string;
   version: string;
@@ -48,7 +91,7 @@ export function CustomResourceList({
   if (token) params.set("continue", token);
   const query = useK8sResource(
     clusterId,
-    `${crListPath(group, version, plural)}?${params}`,
+    `${namespace ? crResourcePath(group, version, plural, "", namespace).replace(/\/$/, "") : crListPath(group, version, plural)}?${params}`,
     permissions.read.allowed,
   );
   const rows = useMemo<CRRow[]>(() => {
@@ -121,7 +164,10 @@ export function CustomResourceList({
         mono
         description={
           <span className="font-mono">
-            {group ? `${group}/${version}` : version}
+            {group ? `${group}/${version}` : version} ·{" "}
+            {namespaced
+              ? (namespace ?? "All authorized namespaces")
+              : "Cluster scoped — namespace selection does not apply"}
           </span>
         }
       />

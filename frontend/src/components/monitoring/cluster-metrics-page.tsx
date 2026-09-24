@@ -1,5 +1,14 @@
-import { useCluster, useClusterNodes, useClusterNamespaces } from "@/lib/hooks/clusters";
-import { useClusterMetrics, useClusterMetricsSummary } from "@/lib/hooks/workloads";
+import { Link } from "@tanstack/react-router";
+import { detailHref } from "@/lib/k8s-paths";
+import {
+  useCluster,
+  useClusterNodes,
+  useClusterNamespaces,
+} from "@/lib/hooks/clusters";
+import {
+  useClusterMetrics,
+  useClusterMetricsSummary,
+} from "@/lib/hooks/workloads";
 import { useTabParam } from "@/lib/use-tab-param";
 import { useRollingMetrics } from "@/lib/use-rolling-metrics";
 import { Link as RouterLink } from "@tanstack/react-router";
@@ -60,7 +69,12 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
       key: "name",
       header: "Node",
       accessor: (row) => (
-        <span className="font-mono text-xs text-foreground">{row.name}</span>
+        <Link
+          to={detailHref(clusterId, "nodes", undefined, row.name)}
+          className="font-mono text-xs text-foreground hover:underline"
+        >
+          {row.name}
+        </Link>
       ),
     },
     {
@@ -141,7 +155,14 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
       key: "name",
       header: "Namespace",
       accessor: (row) => (
-        <span className="font-mono text-xs text-foreground">{row.name}</span>
+        <Link
+          to={String(
+            `/dashboard/clusters/${clusterId}/pods?namespaces=${encodeURIComponent(row.name)}`,
+          )}
+          className="font-mono text-xs text-foreground hover:underline"
+        >
+          {row.name}
+        </Link>
       ),
     },
     {
@@ -295,7 +316,8 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
               </p>
             </div>
             <RouterLink
-              to="/dashboard/clusters/$id/monitoring-stack" params={{ id: clusterId }}
+              to="/dashboard/clusters/$id/monitoring-stack"
+              params={{ id: clusterId }}
               className="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium hover:bg-accent transition-colors"
             >
               Set up monitoring stack

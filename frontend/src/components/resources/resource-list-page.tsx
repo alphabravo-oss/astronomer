@@ -1,3 +1,5 @@
+import { collectionScope } from "@/lib/cluster-scope-collection";
+import { useClusterNamespaceScope } from "@/lib/cluster-scope";
 import { useCallback, useMemo, useState } from "react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import type { SortingState } from "@tanstack/react-table";
@@ -223,12 +225,40 @@ export function WorkloadActions({
 
 function WorkloadsTable({
   clusterId,
+  ...props
+}: {
+  clusterId: string;
+  kind: string;
+  title: string;
+}) {
+  const scope = useClusterNamespaceScope(clusterId);
+  const selection = collectionScope(scope.selectedNamespaces);
+  if (!selection.enabled)
+    return (
+      <p role="status" className="p-6 text-sm text-muted-foreground">
+        {selection.message}
+      </p>
+    );
+  return (
+    <ScopedWorkloadsTable
+      key={`${clusterId}/${props.kind}/${JSON.stringify(scope.selectedNamespaces)}`}
+      clusterId={clusterId}
+      namespace={selection.namespace}
+      {...props}
+    />
+  );
+}
+
+function ScopedWorkloadsTable({
+  namespace,
+  clusterId,
   kind,
   title,
 }: {
   clusterId: string;
   kind: string;
   title: string;
+  namespace?: string;
 }) {
   const [pageIndex, setPageIndex] = useState(0);
   const [search, setSearch] = useState("");
@@ -242,6 +272,7 @@ function WorkloadsTable({
       : "namespace_asc"
   ) as WorkloadSort;
   const workloadQuery = useWorkloads(clusterId, {
+    namespace,
     kind,
     search: debouncedSearch.trim() || undefined,
     sort,

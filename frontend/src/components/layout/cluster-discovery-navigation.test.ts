@@ -56,7 +56,7 @@ it("hides only unserved Gateway kinds and preserves Astronomer API pages", () =>
   );
   // Preserve all built-in destinations: the original plan's <=40 target
   // could only be met by hiding unrelated supported pages.
-  expect(allItems(empty)).toHaveLength(47);
+  expect(allItems(empty)).toHaveLength(48);
 });
 
 it.each(["isLoading", "isError"] as const)(

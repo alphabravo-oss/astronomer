@@ -4,6 +4,7 @@ import type { ResourcePermissionDecisions } from "@/components/resources/resourc
 import type { PermissionDecision } from "@/lib/permissions";
 
 const state = vi.hoisted(() => ({
+  selection: null as readonly string[] | null | undefined,
   query: {
     data: {} as unknown,
     isError: false,
@@ -16,6 +17,28 @@ const state = vi.hoisted(() => ({
   getYaml: vi.fn(),
   download: vi.fn(),
   useResource: vi.fn(),
+}));
+vi.mock("@/lib/cluster-scope", () => ({
+  useClusterNamespaceScope: () => ({ selectedNamespaces: state.selection }),
+}));
+vi.mock("@/components/layout/use-cluster-discovery-nav", () => ({
+  useClusterDiscovery: () => ({
+    isLoading: false,
+    isError: false,
+    crdsByGroup: new Map([
+      [
+        "example.io",
+        [
+          {
+            group: "example.io",
+            servedVersions: ["v2"],
+            plural: "widgets",
+            namespaced: true,
+          },
+        ],
+      ],
+    ]),
+  }),
 }));
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
@@ -86,6 +109,7 @@ const props = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  state.selection = null;
   state.permissions = Object.fromEntries(
     [
       "create",
@@ -182,3 +206,29 @@ it("hides cached rows and actions after a denied refresh", () => {
   expect(screen.queryByText("demo")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Open actions menu")).not.toBeInTheDocument();
 });
+
+it("uses selected namespace in the API path before pagination and resets continuation", () => {
+  state.selection = ["team-b"];
+  const view = render(<CustomResourceList {...props} />);
+  expect(state.useResource).toHaveBeenLastCalledWith(
+    "c",
+    "apis/example.io/v2/namespaces/team-b/widgets?limit=50",
+    true,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  state.selection = ["team-a"];
+  view.rerender(<CustomResourceList {...props} />);
+  expect(state.useResource).toHaveBeenLastCalledWith(
+    "c",
+    "apis/example.io/v2/namespaces/team-a/widgets?limit=50",
+    true,
+  );
+});
+it.each([undefined, [], ["a", "b"]])(
+  "does not issue an unscoped query for unresolved/unsupported scope %s",
+  (selection) => {
+    state.selection = selection;
+    render(<CustomResourceList {...props} />);
+    expect(state.useResource).not.toHaveBeenCalled();
+  },
+);

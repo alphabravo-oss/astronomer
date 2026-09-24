@@ -1,3 +1,4 @@
+import { useProjectSelection } from "@/lib/cluster-scope-project";
 import { useEffect, useMemo, type ReactNode } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate, useLocation } from "@tanstack/react-router";
@@ -111,20 +112,13 @@ export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
     if (requested || !onlyProject) return;
     const next = new URLSearchParams(search);
     next.set("project", rows[0].id);
+    next.set("namespaces", rows[0].namespaces.join(","));
     void navigate({ to: `${pathname}?${next.toString()}`, replace: true });
   }, [pathname, requested, navigate, rows, search, onlyProject]);
 
+  const projectSelection = useProjectSelection(clusterId);
   const setProjectId = (id: string) => {
-    const next = new URLSearchParams(search);
-    if (id) next.set("project", id);
-    else next.delete("project");
-    next.delete("page");
-    next.delete("version_page");
-    next.delete("cluster_page");
-    void navigate({
-      to: `${pathname}${next.size ? `?${next.toString()}` : ""}`,
-      replace: true,
-    });
+    void projectSelection.select(id);
   };
 
   const projectQuery = requested ? selected : projects;

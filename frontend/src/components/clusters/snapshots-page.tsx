@@ -1,3 +1,4 @@
+import { QueryStates } from "@/components/ui/query-states";
 /**
  * Cluster Snapshots tab.
  *
@@ -95,6 +96,17 @@ function ClusterVeleroSnapshotsPage() {
       </div>
     );
   }
+
+  if (veleroQuery.isError)
+    return (
+      <QueryStates
+        query={veleroQuery}
+        permission="clusters:read"
+        errorTitle="Velero status unavailable"
+      >
+        <></>
+      </QueryStates>
+    );
 
   if (!veleroReady) {
     return (

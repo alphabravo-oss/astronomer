@@ -404,7 +404,12 @@ function CreateResourceEditor({
         {mode === "guided" ? (
           <GuidedResourceForm
             value={manifest}
-            onChange={setManifest}
+            onChange={(next) => {
+              setManifest(next);
+              setApplyResults((previous) =>
+                previous.filter((result) => result.ok),
+              );
+            }}
             schema={schema?.schema ?? {}}
             definitions={schema?.definitions ?? {}}
             onValidationChange={setGuidedValid}

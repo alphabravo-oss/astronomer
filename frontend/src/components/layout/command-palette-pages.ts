@@ -28,7 +28,14 @@ export function commandPaletteSettings(
 export function commandPaletteClusterPages(groups: NavGroup[]): NavItem[] {
   return [
     ...new Map(
-      groups.flatMap(navGroupItems).map((item) => [item.href, item]),
+      groups
+        .flatMap((group) =>
+          navGroupItems(group).map((item) => ({
+            ...item,
+            description: `${group.label}${item.resourceType?.includes("/") ? ` · ${item.resourceType}` : ""}`,
+          })),
+        )
+        .map((item) => [item.href, item]),
     ).values(),
   ];
 }

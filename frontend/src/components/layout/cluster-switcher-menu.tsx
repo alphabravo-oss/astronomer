@@ -1,3 +1,4 @@
+import { resolveClusterTransition } from "./cluster-navigation-transition";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
@@ -95,7 +96,10 @@ function ClusterSwitcherTrigger({
   currentDotClass?: string;
 }) {
   const label = clusterId
-    ? currentCluster?.displayName || currentCluster?.name || clusterName || "Cluster"
+    ? currentCluster?.displayName ||
+      currentCluster?.name ||
+      clusterName ||
+      "Cluster"
     : "Clusters";
 
   return (
@@ -119,7 +123,7 @@ function ClusterSwitcherTrigger({
       {/* Text collapses below `sm` so the always-mounted chip doesn't crowd
           out breadcrumbs on narrow viewports; `aria-label` above keeps the
           button's accessible name stable either way. */}
-      <span className="hidden min-w-0 flex-1 truncate text-left sm:inline">
+      <span className="min-w-0 max-w-32 flex-1 truncate text-left">
         {label}
       </span>
       <ChevronsUpDown className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
@@ -145,9 +149,6 @@ export function ClusterSwitcherMenu({
 }) {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
-  const search = new URLSearchParams(
-    useLocation({ select: (location) => location.searchStr }),
-  );
   const scopes = useClusterScopeStore((state) => state.namespacesByCluster);
   const projectScopes = useClusterScopeStore((state) => state.projectByCluster);
   const recentClusterIds = useClusterScopeStore(
@@ -246,21 +247,42 @@ export function ClusterSwitcherMenu({
     updatePreferences({ pinned_clusters: next });
   };
 
-  const subRoute = clusterId
-    ? pathname.slice(`/dashboard/clusters/${clusterId}`.length)
-    : "";
-  const select = (next: Cluster) => {
-    const nextPath = `/dashboard/clusters/${next.id}${subRoute}`;
-    void navigate({
-      to: withClusterScopeSelection(
-        nextPath,
-        search,
+  const transitionRequest = useRef(0);
+  const [transitionState, setTransitionState] = useState("");
+  useEffect(
+    () => () => {
+      transitionRequest.current++;
+    },
+    [pathname],
+  );
+  const select = async (next: Cluster) => {
+    const request = ++transitionRequest.current;
+    setTransitionState("Resolving target cluster scope…");
+    try {
+      const target = await resolveClusterTransition(
+        pathname,
+        next.id,
         scopes[next.id] ?? null,
         projectScopes[next.id] ?? null,
-      ),
-    });
-    close();
-    requestAnimationFrame(restoreFocus);
+      );
+      if (request !== transitionRequest.current) return;
+      void navigate({
+        to: withClusterScopeSelection(
+          target.path,
+          new URLSearchParams(),
+          target.namespaces,
+          target.projectId,
+        ),
+      });
+      setTransitionState("");
+      close();
+      requestAnimationFrame(restoreFocus);
+    } catch {
+      if (request === transitionRequest.current)
+        setTransitionState(
+          "Target scope could not be resolved. Select the cluster again to retry; your current scope is unchanged.",
+        );
+    }
   };
 
   const currentCluster = clusterId ? detailById.get(clusterId) : undefined;
@@ -279,7 +301,7 @@ export function ClusterSwitcherMenu({
   );
 
   return (
-    <div ref={ref} className="relative min-w-0">
+    <div ref={ref} className="relative min-w-0 shrink-0">
       <ClusterSwitcherTrigger
         triggerRef={triggerRef}
         open={open}
@@ -305,6 +327,11 @@ export function ClusterSwitcherMenu({
             />
           </div>
           <Command.List className="max-h-96 overflow-y-auto p-1" role="listbox">
+            {transitionState && (
+              <p role="status" className="p-3 text-sm">
+                {transitionState}
+              </p>
+            )}
             {pinnedClusters.length > 0 && (
               <Command.Group heading="Pinned" className={GROUP_HEADING_CLASS}>
                 {pinnedClusters.map(renderRow)}

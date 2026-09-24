@@ -1,3 +1,5 @@
+import { useProjectSelection } from "@/lib/cluster-scope-project";
+import { projectInCluster } from "@/lib/cluster-scope-collection";
 import { Command } from "cmdk";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import {
@@ -112,7 +114,8 @@ function ProjectScopePicker({
   );
   const selectedProject =
     projects.find((project) => project.id === scope.selectedProjectId) ??
-    (selectedProjectQuery.data?.clusterId === clusterId
+    (selectedProjectQuery.data &&
+    projectInCluster(selectedProjectQuery.data, clusterId)
       ? selectedProjectQuery.data
       : undefined);
   useEffect(() => {
@@ -121,9 +124,9 @@ function ProjectScopePicker({
   const close = () => setOpen(false);
   const restoreFocus = () => triggerRef.current?.focus();
   const ref = useDismissable(open, close, restoreFocus);
+  const projectSelection = useProjectSelection(clusterId);
   const selectProject = (projectId: string | null) => {
-    const project = projects.find((candidate) => candidate.id === projectId);
-    scope.setProjectScope(project?.id ?? null, project?.namespaces ?? null);
+    void projectSelection.select(projectId ?? "");
     close();
     requestAnimationFrame(restoreFocus);
   };

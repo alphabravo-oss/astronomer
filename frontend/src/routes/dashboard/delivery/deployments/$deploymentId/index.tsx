@@ -1,3 +1,4 @@
+import { QueryStates } from "@/components/ui/query-states";
 import { pageTableCount } from "@/lib/api/pagination";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useState } from "react";
@@ -130,6 +131,13 @@ export function DeploymentDetailPage() {
         onRetry={() => void projectQuery.refetch()}
       >
         <PageShell>
+          <QueryStates
+            query={detail}
+            permission="delivery_deployments:read"
+            errorTitle="Deployment unavailable"
+          >
+            <></>
+          </QueryStates>
           <RouterLink
             to={withProjectQuery(listHref("deployments"), projectId)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -142,7 +150,9 @@ export function DeploymentDetailPage() {
             description={
               deployment
                 ? `Target ${deployment.targetId} on cluster ${deployment.clusterId}`
-                : "Loading normalized status"
+                : detail.isError
+                  ? "Deployment status unavailable"
+                  : "Loading normalized status"
             }
             actions={
               deployment ? (

@@ -12,7 +12,7 @@
 // URL never has an empty path segment — see crListHref/crDetailHref.
 
 import { useMemo } from "react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
 import { usePermissionDecision } from "@/lib/permission-hooks";
@@ -35,6 +35,7 @@ function decodeGroup(seg: string): string {
 export function CustomResourcesPage({ slug }: { slug: string[] }) {
   const params = useParams({ from: "/dashboard/clusters/$id" });
   const clusterId = params.id;
+  const searchStr = useLocation({ select: (location) => location.searchStr });
 
   const read = usePermissionDecision(CR_PERMISSION, "read", {
     type: "cluster",
@@ -83,6 +84,7 @@ export function CustomResourcesPage({ slug }: { slug: string[] }) {
       name={name}
       k8sPath={k8sPath}
       permissionResource={CR_PERMISSION}
+      collectionHref={`${crListHref(clusterId, group, version, plural)}${searchStr}`}
     />
   );
 }

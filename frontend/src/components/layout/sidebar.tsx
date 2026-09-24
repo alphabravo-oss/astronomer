@@ -1,3 +1,4 @@
+import { useMobileNavigation } from "./use-mobile-navigation";
 import { useEffect } from "react";
 import { Link as RouterLink, useLocation } from "@tanstack/react-router";
 import {
@@ -65,6 +66,10 @@ export function Sidebar() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [mobileSidebarOpen, setMobileSidebarOpen]);
 
+  const mobileNavigation = useMobileNavigation(mobileSidebarOpen, () =>
+    setMobileSidebarOpen(false),
+  );
+
   const collapsed = sidebarCollapsed && !mobileSidebarOpen;
 
   // Expand one section at a time, independently in global and cluster scope.
@@ -101,6 +106,9 @@ export function Sidebar() {
         />
       )}
       <aside
+        ref={mobileNavigation.ref}
+        inert={mobileNavigation.closed}
+        aria-hidden={mobileNavigation.closed || undefined}
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex h-screen w-60 -translate-x-full flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 lg:transition-[width]",
           mobileSidebarOpen && "translate-x-0",
@@ -112,6 +120,7 @@ export function Sidebar() {
           {!collapsed && (
             <RouterLink
               to="/dashboard"
+              activeOptions={{ exact: true }}
               className="flex items-center gap-2.5 min-w-0"
             >
               <div className="shrink-0 w-7 h-7 rounded-lg bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">

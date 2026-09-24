@@ -1,3 +1,4 @@
+import { QueryStates } from "@/components/ui/query-states";
 import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/smtp — SMTP configuration + recent sent-email audit.
@@ -87,6 +88,12 @@ function SmtpForm({
   }, [form, initial]);
 
   const handleTest = async () => {
+    if (form.state.isDirty) {
+      toastError(
+        "Save configuration changes before testing the saved configuration",
+      );
+      return;
+    }
     if (!testTo) {
       toastError("Recipient required");
       return;
@@ -102,7 +109,9 @@ function SmtpForm({
     <div className="space-y-5">
       <form.AppForm>
         <form.FormErrorSummary
-          serverError={update.error ? extractApiErrorMessage(update.error) : null}
+          serverError={
+            update.error ? extractApiErrorMessage(update.error) : null
+          }
         />
       </form.AppForm>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -216,12 +225,13 @@ function SmtpForm({
           />
           <ActionButton
             type="button"
+            title="Tests the saved server configuration. Save any changes first."
             onClick={handleTest}
             disabled={testSend.isPending || !testTo}
             loading={testSend.isPending}
             icon={<Send className="h-3.5 w-3.5" />}
           >
-            Send test email
+            Test saved configuration email
           </ActionButton>
         </div>
         <form.Subscribe
@@ -436,7 +446,8 @@ function SmtpSummary({
 }
 
 function SmtpPageInner() {
-  const { data, isLoading } = useSmtpConfig();
+  const query = useSmtpConfig();
+  const { data, isLoading } = query;
   const initial = data ?? DEFAULT_CONFIG;
   const [editing, setEditing] = useState(false);
   if (isLoading) {
@@ -446,6 +457,16 @@ function SmtpPageInner() {
       </div>
     );
   }
+  if (query.isError)
+    return (
+      <QueryStates
+        query={query}
+        errorTitle="SMTP configuration unavailable"
+        permission="settings:read"
+      >
+        <></>
+      </QueryStates>
+    );
   return (
     <div className="space-y-6">
       <SmtpSummary config={initial} onEdit={() => setEditing(true)} />
