@@ -1,3 +1,4 @@
+import { MetricsReadError } from "./metrics-read-error";
 import { clusterMetricColumns } from "./cluster-metric-columns";
 import {
   useCluster,
@@ -41,11 +42,10 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
   );
 
   const { data: cluster } = useCluster(clusterId);
-  const { data: summary } = useClusterMetricsSummary(clusterId);
-  const { data: metrics, isLoading: metricsLoading } = useClusterMetrics(
-    clusterId,
-    timeRange,
-  );
+  const summaryQuery = useClusterMetricsSummary(clusterId);
+  const { data: summary } = summaryQuery;
+  const metricsQuery = useClusterMetrics(clusterId, timeRange);
+  const { data: metrics, isLoading: metricsLoading } = metricsQuery;
   const {
     data: nodes,
     isLoading: nodesLoading,
@@ -91,6 +91,12 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
         }
       />
 
+      {summaryQuery.isError && (
+        <MetricsReadError
+          query={summaryQuery}
+          title="Metrics summary unavailable"
+        />
+      )}
       <div
         className={cn(
           "grid grid-cols-1 sm:grid-cols-2 gap-4",
@@ -145,7 +151,12 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
         />
       </div>
 
-      {metricsLoading && !hasProm && rolling.count === 0 ? (
+      {metricsQuery.isError ? (
+        <MetricsReadError
+          query={metricsQuery}
+          title="Metrics history unavailable"
+        />
+      ) : metricsLoading && !hasProm && rolling.count === 0 ? (
         <div className="flex items-center justify-center h-48">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
           <span className="text-sm text-muted-foreground">

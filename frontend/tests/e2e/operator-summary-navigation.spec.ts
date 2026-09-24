@@ -162,3 +162,47 @@ test("metrics node and namespace links reach exact node and scoped pods", async 
     animations: "disabled",
   });
 });
+
+test("metrics read denial is recoverable without claiming monitoring is missing", async ({
+  page,
+}, info) => {
+  let denied = true;
+  let reads = 0;
+  await page.route(
+    (url) =>
+      url.pathname.replace(/\/$/, "") ===
+      `/api/v1/clusters/${clusterId}/metrics`,
+    (route) => {
+      reads++;
+      return route.fulfill(
+        denied
+          ? {
+              status: 403,
+              json: { error: { message: "Metrics access denied" } },
+            }
+          : { json: { data: { available: false } } },
+      );
+    },
+  );
+  await page.goto(`${base}/metrics`);
+  await expect(
+    page.getByText("Metrics history unavailable", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Permission to read these metrics was denied/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Set up monitoring stack", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText(/Live rolling window/)).toHaveCount(0);
+  await page
+    .getByText("Metrics history unavailable", { exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath("metrics-read-denied.png") });
+  denied = false;
+  await page.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: "Set up monitoring stack", exact: true }),
+  ).toBeVisible();
+  expect(reads).toBeGreaterThanOrEqual(2);
+});
