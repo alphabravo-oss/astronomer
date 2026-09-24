@@ -102,3 +102,19 @@ The checkpoint is not final acceptance. Browser journey coverage, remaining sour
 ### Further fixes required by concrete integration findings
 
 Catalog visibility must traverse beyond its former 10,000-project/repository cap. Kubernetes Events must follow native continuation before reporting totals or applying response offsets. Project scope must use actual per-cluster namespace assignments from the API; a helper test with a synthesized secondary `clusterIds` property cannot establish production support. Pipeline list navigation must retain server pagination instead of treating its first 200 rows as complete. These remain part of the authorized workflow implementation.
+
+
+## Final API scope checkpoint
+
+Integrated `32ab6aa2` as `5413d6e8` (Catalog visibility traversal, complete native Events pagination and corrected CLI envelope consumers), and frontend `ce96ccfb` as `77227c95` (workflow recovery and shared overlay correction). The Project contract/runtime/review commits `9833f4ba`, `f9376d37`, `e44860a3` are integrated as `d9acd3e0`, `65fcda44`, `9605d4b2`.
+
+Project reads now expose authoritative cluster membership and per-cluster namespace assignments. The cluster picker filters authorized membership before matching page/count queries, includes secondary membership, and does not turn a secondary cluster grant into permission to read an entire project. Namespace-narrowed grants remain narrowed. Unexpected bracketed namespace query keys fail closed rather than silently requesting all namespaces.
+
+- Full handler/server tests on this API source: PASS, 20.559s / 7.009s (`/tmp/plan027-api-project-packages.log`).
+- Canonical disposable PostgreSQL run: PASS **18/18 required tests, zero skips**, all 66 migrations applied (`/tmp/plan027-api-project-postgres.log`). This supersedes the earlier SQL checkpoint.
+- `OPENAPI_BASELINE=main:docs/openapi.yaml scripts/openapi-breaking-change.sh`: PASS after exact review entries for corrected pre-existing Catalog response envelopes (`/tmp/plan027-api-project-compat.log`). Actual wire responses were already wrapped; generated consumers and CLI tests now match them.
+- Browser workflow test commit `6c04a360`, integrated as `a36a7f4e`: **22/22 passed** across desktop/mobile (20 journeys and two setup checks), 38.9s, one worker, zero retries. Covers alert investigation, release inspection and lifecycle receipts, pipeline editing, and target-cluster restore tracking. Source/build: frontend `ce96ccfb` (browser-worktree cherry-pick `e25fa8f4`). Evidence: `/tmp/plan027-workflow-e2e-final.log` and executor `frontend/test-results/operator-workflow-final/`. Root inspected the mobile alert and restore screenshots.
+
+### Verification attempts that do not count as passing
+
+The next frontend enterprise attempt stopped on a stale canonical code-health inventory; a combined-source regeneration is required. A standalone full frontend unit run and a backend enterprise attempt were terminated under host memory and temporary-filesystem pressure (exit 143). The backend attempt had passed formatting, shell, migration and sqlc checks but had not finished the build. These are **not passing full gates**. Final checks will use one heavy process at a time and disk-backed temporary directories. Existing unrelated temporary artifacts and live services are preserved.
