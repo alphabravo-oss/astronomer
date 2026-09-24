@@ -29,7 +29,7 @@ export function clusterTransitionPath(
     return `${base}/custom-resources/${group}/${version}/${plural}`;
   if (type === "custom-resources" && !group) return `${base}/custom-resources`;
   if (type === "delivery")
-    return `${base}/delivery${["sources", "bundles", "targets", "rollouts", "deployments"].includes(group) ? `/${group}` : ""}`;
+    return `${base}/delivery${["sources", "bundles", "targets", "rollouts", "deployments", "configuration-templates", "override-sets", "system-components"].includes(group) ? `/${group}` : ""}`;
   if (
     [
       "apps",

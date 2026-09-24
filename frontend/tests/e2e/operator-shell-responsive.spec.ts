@@ -21,6 +21,20 @@ test("all header controls fit at the five reviewed widths", async ({
         .locator("header")
         .getByRole("button", { name: "Import", exact: true }),
     ).toBeVisible();
+    for (const label of ["Go to page", "User menu", "Import"]) await expect(page.locator("header").getByRole("button", { name: label, exact: true })).toBeVisible();
+    await expect(page.locator("header").getByRole("button", { name: /Notifications/ })).toBeVisible();
+    await expect(page.locator("header").getByRole("button", { name: /Namespace scope/ })).toBeVisible();
+    for (const name of ["User menu", "Notifications"]) {
+      const trigger = page.locator("header").getByRole("button", { name: new RegExp(`^${name}`) });
+      await trigger.click();
+      const popover = page.locator("[data-header-popover]");
+      await expect(popover).toBeVisible();
+      const rect = await popover.boundingBox();
+      expect(rect!.x).toBeGreaterThanOrEqual(0);
+      expect(rect!.x + rect!.width).toBeLessThanOrEqual(width);
+      await page.keyboard.press("Escape");
+      await expect(trigger).toBeFocused();
+    }
     const outside = await page.locator("header button").evaluateAll((buttons) =>
       buttons
         .filter((el) => {

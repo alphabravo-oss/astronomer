@@ -33,7 +33,7 @@ const outputPath = path.join(
 // Reviewed 2026-08-23 after adding resource discovery/schema and enterprise
 // operations surfaces. Keep this exact: a route addition needs a smoke fixture
 // and a route removal needs an explicit product decision.
-const EXPECTED_ROUTE_COUNT = 144; // 2026-09-22: net +1 after plan 023 step 8 — added dashboard/extensions/$name, the host-fixed full-page mount ExtensionNavItems' sidebar links already pointed at (previously a 404).
+const EXPECTED_ROUTE_COUNT = 146; // 2026-09-24: Plan027 adds pipeline inspect and edit routes.
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to
@@ -48,6 +48,7 @@ const PARAM_FIXTURES = {
   targetId: "target-smoke-1",
   rolloutId: "rollout-smoke-1",
   deploymentId: "deployment-smoke-1",
+  pipelineId: "pipeline-smoke-1",
   componentId: "component-smoke-1",
   restoreId: "restore-smoke-1",
   runId: "run-smoke-1",

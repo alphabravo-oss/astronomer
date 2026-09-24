@@ -383,7 +383,7 @@ export async function getHelmCharts(
 ): Promise<PaginatedResponse<HelmChart>> {
   const response = await getCatalogCharts({
     query: {
-      cluster_id: params.clusterId,
+      cluster_id: params.projectId ? undefined : params.clusterId,
       project_id: params.projectId,
       search: params.search?.trim() || undefined,
       limit: params.limit ?? CATALOG_PAGE_LIMIT,

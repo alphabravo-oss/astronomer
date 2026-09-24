@@ -352,6 +352,8 @@ export const queryKeys = {
     outputPages: (clusterId?: string) =>
       ["logging", "outputs", "pages", clusterId] as const,
     pipelinesAll: ["logging", "pipelines"] as const,
+    pipelinePage: (clusterId: string | undefined, offset: number) =>
+      ["logging", "pipelines", clusterId, offset] as const,
     pipelines: (clusterId?: string) =>
       ["logging", "pipelines", clusterId ?? "all"] as const,
     operations: (params?: Record<string, unknown>) =>
@@ -657,6 +659,8 @@ export const queryKeys = {
       resourceType: string,
       params?: Record<string, unknown>,
     ) => ["generic", "named", clusterId, resourceType, params] as const,
+    completeDiscovery: (clusterId: string) =>
+      ["generic", "discovery", clusterId, "complete"] as const,
     discovery: (clusterId: string) =>
       ["generic", clusterId, "discovery"] as const,
     schema: (clusterId: string, resourceType: ResourceType) =>

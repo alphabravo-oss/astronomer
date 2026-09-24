@@ -84,37 +84,7 @@ export function DeploymentDetailPage() {
       : queryKeys.delivery.all,
   );
   const deployment = detail.data?.data.deployment;
-  const conditionColumns: Column<DeliveryConditionView>[] = [
-    { key: "type", header: "Condition", accessor: (row) => row.type },
-    {
-      key: "status",
-      header: "Status",
-      accessor: (row) => (
-        <DeliveryPhaseBadge
-          value={
-            row.status === "True"
-              ? row.type === "Ready"
-                ? "ready"
-                : row.type.toLowerCase()
-              : row.status.toLowerCase()
-          }
-        />
-      ),
-    },
-    { key: "reason", header: "Reason", accessor: (row) => row.reason || "—" },
-    {
-      key: "message",
-      header: "Sanitized message",
-      accessor: (row) => (
-        <span className="max-w-xl whitespace-normal">{row.message || "—"}</span>
-      ),
-    },
-    {
-      key: "transition",
-      header: "Last transition",
-      accessor: (row) => formatRelativeTime(row.lastTransitionTime),
-    },
-  ];
+
   return (
     <DeliveryShell
       projectId={projectId}
@@ -450,3 +420,35 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
 export const Route = createFileRoute(
   "/dashboard/delivery/deployments/$deploymentId/",
 )({ component: DeploymentDetailPage });
+
+const conditionColumns: Column<DeliveryConditionView>[] = [
+  { key: "type", header: "Condition", accessor: (row) => row.type },
+  {
+    key: "status",
+    header: "Status",
+    accessor: (row) => (
+      <DeliveryPhaseBadge
+        value={
+          row.status === "True"
+            ? row.type === "Ready"
+              ? "ready"
+              : row.type.toLowerCase()
+            : row.status.toLowerCase()
+        }
+      />
+    ),
+  },
+  { key: "reason", header: "Reason", accessor: (row) => row.reason || "—" },
+  {
+    key: "message",
+    header: "Sanitized message",
+    accessor: (row) => (
+      <span className="max-w-xl whitespace-normal">{row.message || "—"}</span>
+    ),
+  },
+  {
+    key: "transition",
+    header: "Last transition",
+    accessor: (row) => formatRelativeTime(row.lastTransitionTime),
+  },
+];

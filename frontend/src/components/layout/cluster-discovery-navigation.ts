@@ -61,7 +61,8 @@ export function withDiscoveredNavigation(
           resourceType,
           href: `${base}/${group}/${resource.version}/${resource.plural}`,
           countKey: `crd:${resourceType}`,
-          permission: { resource: "custom_resources", verb: "read" },
+          permission: { resource: "custom_resources", verb: "list" },
+          projectPermission: { resource: "custom_resources", verb: "list" },
         });
       }
       return { label: crdGroupLabel(group), items };

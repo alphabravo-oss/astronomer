@@ -30,3 +30,24 @@ it("maps apps/operations and delivery objects to target collection", () => {
     "/dashboard/clusters/b",
   );
 });
+
+it.each([
+  "sources",
+  "bundles",
+  "targets",
+  "rollouts",
+  "deployments",
+  "configuration-templates",
+  "override-sets",
+  "system-components",
+])(
+  "preserves the %s collection while discarding its old object ID",
+  (collection) => {
+    expect(
+      clusterTransitionPath(
+        `/dashboard/clusters/a/delivery/${collection}/old`,
+        "b",
+      ),
+    ).toBe(`/dashboard/clusters/b/delivery/${collection}`);
+  },
+);

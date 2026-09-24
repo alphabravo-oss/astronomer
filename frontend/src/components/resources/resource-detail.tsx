@@ -1,3 +1,5 @@
+import { useClusterNamespaceScope } from "@/lib/cluster-scope";
+import { canonicalPermissionResource } from "@/lib/permission-hooks";
 import { safeWorkloadOrigin } from "./resource-navigation-context";
 import { useTabParam } from "@/lib/use-tab-param";
 import { useMemo, useState } from "react";
@@ -105,8 +107,17 @@ export function ResourceDetail({
     "monitoring",
   );
 
+  const scope = useClusterNamespaceScope(clusterId);
+  const canRead =
+    read.allowed ||
+    (!!namespace &&
+      scope.allows(
+        permissionResource ?? canonicalPermissionResource(resourceType),
+        "read",
+        namespace,
+      ));
   const isPod = resourceType === "pods";
-  const resourceQuery = useK8sResource(clusterId, k8sPath, read.allowed);
+  const resourceQuery = useK8sResource(clusterId, k8sPath, canRead);
   const { data, isLoading, error } = resourceQuery;
   const obj = data as K8sObject | undefined;
   const conditions = obj?.status?.conditions ?? [];
@@ -158,7 +169,7 @@ export function ResourceDetail({
     setExecOpen(next === "exec");
     if (next !== "exec") setUrlTab(next);
   };
-  if (!read.allowed) {
+  if (!canRead) {
     return (
       <PermissionState
         title="Resource access denied"

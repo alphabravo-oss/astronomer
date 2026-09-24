@@ -256,10 +256,11 @@ export async function restoreSnapshot(
   snapshotId: string,
   body: RestoreSnapshotRequest,
   signal?: AbortSignal,
+  idempotencyKey = createIdempotencyKey(),
 ): Promise<SnapshotRestore> {
   const wire = await generated.postClustersByClusterIdSnapshotsByIdRestore({
     path: { cluster_id: clusterId, id: snapshotId },
-    headerParams: { "Idempotency-Key": createIdempotencyKey() },
+    headerParams: { "Idempotency-Key": idempotencyKey },
     body,
     signal,
   });
@@ -345,7 +346,7 @@ export async function getSnapshotRestore(
     path: { cluster_id: clusterId, id },
     signal,
   });
-  return wire.data;
+  return requireEnvelopeData(wire, "Snapshot restore");
 }
 export async function getSnapshotRestores(
   clusterId: string,

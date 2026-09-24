@@ -1,5 +1,6 @@
+import { Select } from "@/components/ui/select";
 import { toastApiError } from "@/lib/toast";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getLoggingPipeline, updateLoggingPipeline } from "@/lib/api/logging";
@@ -80,9 +81,11 @@ function PipelineContent({
       updateLoggingPipeline(pipeline.id, pipelineUpdate(original, draft)),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.logging.all });
-      void navigate({ to: `/dashboard/logging/pipelines/${pipeline.id}` });
     },
   });
+  useEffect(() => {
+    if (mutation.isSuccess) void navigate({ to: `/dashboard/logging/pipelines/${pipeline.id}` });
+  }, [mutation.isSuccess, navigate, pipeline.id]);
   const missing = draft.outputIds.filter(
     (id) =>
       !outputs.data?.some(
@@ -194,14 +197,15 @@ function PipelineContent({
             )}
           </pre>
         </details>
-        <label className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm">
           Enabled
           <Switch
-            checked={draft.enabled}
+            aria-label="Pipeline enabled"
+            checked={edit ? draft.enabled : pipeline.enabled}
             disabled={!edit}
             onCheckedChange={(enabled) => setDraft({ ...draft, enabled })}
           />
-        </label>
+        </div>
         {mutation.isError && (
           <p role="alert" className="text-destructive">
             Saving failed. Your edits are retained. {mutation.error.message}
@@ -283,13 +287,13 @@ function PipelineFilters({
             <legend>Filter {index + 1}</legend>
             <label>
               Type
-              <select
+              <Select
                 value={filter.type}
                 onChange={(event) => update("type", event.target.value)}
               >
                 <option value="include">Include</option>
                 <option value="exclude">Exclude</option>
-              </select>
+              </Select>
             </label>
             <label>
               Field

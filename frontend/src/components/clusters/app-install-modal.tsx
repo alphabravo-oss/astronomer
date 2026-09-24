@@ -280,30 +280,14 @@ export function AppInstallModal({
       bodyClassName="p-0"
       footerClassName="bg-muted/30 shrink-0"
       footer={
-        <div className="flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
-            disabled={install.isPending}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!submittable}
-            title={submitBlockedReason}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            {install.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />{" "}
-                {isUpgrade ? "Upgrading" : "Installing"}…
-              </>
-            ) : (
-              <>{isUpgrade ? "Upgrade" : "Install"}</>
-            )}
-          </button>
-        </div>
+        <AppInstallFooter
+          onClose={onClose}
+          pending={install.isPending}
+          onSubmit={handleSubmit}
+          submittable={submittable}
+          reason={submitBlockedReason}
+          upgrade={isUpgrade}
+        />
       }
     >
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -316,28 +300,12 @@ export function AppInstallModal({
             <></>
           </QueryStates>
         )}
-        {(slowInstall || hasCRDs) && (
-          <div className="rounded-md border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
-            <Info className="h-4 w-4 text-status-warning mt-0.5 shrink-0" />
-            <div className="space-y-0.5 text-foreground">
-              {slowInstall && (
-                <div>
-                  First install of{" "}
-                  <span className="font-medium">{mode.chartName}</span>{" "}
-                  typically takes 3–10 minutes — sub-charts and CRDs land before
-                  the workloads come up.
-                </div>
-              )}
-              {hasCRDs && !isUpgrade && (
-                <div>
-                  This chart ships CRDs. The CRDs will <em>not</em> be removed
-                  automatically on uninstall (helm leaves them to protect data)
-                  — pick a stable namespace from the start.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        <ChartInstallationNotes
+          slowInstall={slowInstall}
+          hasCRDs={hasCRDs}
+          isUpgrade={isUpgrade}
+          chartName={mode.chartName}
+        />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="space-y-1.5">
@@ -572,5 +540,88 @@ export function AppUninstallModal({
         />
       </div>
     </ModalShell>
+  );
+}
+
+function AppInstallFooter({
+  onClose,
+  pending,
+  onSubmit,
+  submittable,
+  reason,
+  upgrade,
+}: {
+  onClose: () => void;
+  pending: boolean;
+  onSubmit: () => void;
+  submittable: boolean;
+  reason?: string;
+  upgrade: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <button
+        onClick={onClose}
+        className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
+        disabled={pending}
+      >
+        Cancel
+      </button>
+      <button
+        onClick={onSubmit}
+        disabled={!submittable}
+        title={reason}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+      >
+        {pending ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />{" "}
+            {upgrade ? "Upgrading" : "Installing"}…
+          </>
+        ) : (
+          <>{upgrade ? "Upgrade" : "Install"}</>
+        )}
+      </button>
+    </div>
+  );
+}
+
+function ChartInstallationNotes({
+  slowInstall,
+  hasCRDs,
+  isUpgrade,
+  chartName,
+}: {
+  slowInstall: boolean;
+  hasCRDs: boolean;
+  isUpgrade: boolean;
+  chartName: string;
+}) {
+  return (
+    <>
+      {" "}
+      {(slowInstall || hasCRDs) && (
+        <div className="rounded-md border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
+          <Info className="h-4 w-4 text-status-warning mt-0.5 shrink-0" />
+          <div className="space-y-0.5 text-foreground">
+            {slowInstall && (
+              <div>
+                First install of{" "}
+                <span className="font-medium">{chartName}</span> typically takes
+                3–10 minutes — sub-charts and CRDs land before the workloads
+                come up.
+              </div>
+            )}
+            {hasCRDs && !isUpgrade && (
+              <div>
+                This chart ships CRDs. The CRDs will <em>not</em> be removed
+                automatically on uninstall (helm leaves them to protect data) —
+                pick a stable namespace from the start.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

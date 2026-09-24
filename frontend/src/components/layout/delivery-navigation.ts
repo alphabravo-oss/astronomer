@@ -38,7 +38,7 @@ export const DELIVERY_DESTINATIONS: NavItem[] = [
     permission: { resource: "delivery_configuration_templates", verb: "list" },
     projectPermission: {
       resource: "delivery_configuration_templates",
-      verb: "read",
+      verb: "list",
     },
   },
   {
@@ -48,7 +48,7 @@ export const DELIVERY_DESTINATIONS: NavItem[] = [
     permission: { resource: "delivery_configuration_templates", verb: "list" },
     projectPermission: {
       resource: "delivery_configuration_templates",
-      verb: "read",
+      verb: "list",
     },
   },
 ];

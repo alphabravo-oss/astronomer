@@ -131,13 +131,7 @@ function CommandRow({
 export function CommandPaletteDialog() {
   const routerNavigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
-  const project = new URLSearchParams(
-    useLocation({ select: (location) => location.searchStr }),
-  ).get("project");
-  const pageHref = (href: string) =>
-    project && href.includes("/delivery")
-      ? `${href}?project=${encodeURIComponent(project)}`
-      : href;
+  const pageHref = useProjectPageHref();
   const currentClusterId = clusterIdFromPath(pathname);
   const { navGroups } = useSidebarNavigation(currentClusterId, true);
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
@@ -171,16 +165,7 @@ export function CommandPaletteDialog() {
     [close, routerNavigate],
   );
 
-  const selectProject = useCallback(
-    (project: Project) => {
-      void routerNavigate({
-        to: "/dashboard/projects/$id",
-        params: { id: project.id },
-      });
-      close();
-    },
-    [close, routerNavigate],
-  );
+  const selectProject = useProjectNavigation(routerNavigate, close);
 
   if (!commandPaletteOpen) return null;
 
@@ -390,4 +375,32 @@ export function CommandPaletteDialog() {
       </div>
     </OverlayShell>
   );
+}
+
+function useProjectPageHref() {
+  const project = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  ).get("project");
+  const pageHref = (href: string) =>
+    project && href.includes("/delivery")
+      ? `${href}?project=${encodeURIComponent(project)}`
+      : href;
+  return pageHref;
+}
+
+function useProjectNavigation(
+  routerNavigate: ReturnType<typeof useNavigate>,
+  close: () => void,
+) {
+  const selectProject = useCallback(
+    (project: Project) => {
+      void routerNavigate({
+        to: "/dashboard/projects/$id",
+        params: { id: project.id },
+      });
+      close();
+    },
+    [close, routerNavigate],
+  );
+  return selectProject;
 }

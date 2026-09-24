@@ -1,3 +1,4 @@
+import { ResourceApplyResults } from "./resource-apply-results";
 import {
   useEffect,
   useMemo,
@@ -5,7 +6,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { LazyGuidedResourceForm as GuidedResourceForm } from "@/components/resources/lazy-guided-resource-form";
 import type { KubernetesManifest } from "@/components/resources/guided-resource-model";
@@ -26,7 +27,6 @@ import {
   normalizeManifestDocuments,
 } from "./create-resource-manifest";
 import { k8sTemplates } from "@/lib/k8s-templates";
-import { extractApiErrorMessage } from "@/lib/api/errors";
 import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -368,42 +368,7 @@ function CreateResourceEditor({
         </div>
       )}
 
-      {applyResults.length > 0 && (
-        <div
-          className="max-h-40 overflow-y-auto border-b border-border bg-muted/20"
-          aria-label="Resource creation results"
-        >
-          {applyResults.map((result) => (
-            <div
-              key={result.id}
-              className="flex items-start gap-2 border-b border-border/60 px-5 py-2 text-xs last:border-b-0"
-            >
-              {result.ok ? (
-                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-success" />
-              ) : (
-                <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-error" />
-              )}
-              <span className="min-w-0 flex-1">
-                <span className="font-mono text-foreground">
-                  {result.label}
-                </span>
-                {!result.ok && (
-                  <span className="ml-2 text-status-error">
-                    {extractApiErrorMessage(result.error) ?? "Create failed"}
-                  </span>
-                )}
-              </span>
-              <span
-                className={
-                  result.ok ? "text-status-success" : "text-status-error"
-                }
-              >
-                {result.ok ? "Created" : "Failed"}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      <ResourceApplyResults results={applyResults} />
 
       <div
         id={`resource-editor-panel-${mode}`}

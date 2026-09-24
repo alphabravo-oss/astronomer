@@ -18,7 +18,7 @@ export function useClusterDiscovery(clusterId?: string): ClusterDiscovery {
       id: clusterId,
     });
   const query = useQuery({
-    queryKey: [...queryKeys.generic.discovery(clusterId ?? ""), "complete"],
+    queryKey: queryKeys.generic.completeDiscovery(clusterId ?? ""),
     queryFn: ({ signal }) => getCompleteResourceDiscovery(clusterId!, signal),
     enabled: allowed,
     staleTime: 5 * 60_000,

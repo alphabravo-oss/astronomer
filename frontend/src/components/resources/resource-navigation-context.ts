@@ -14,7 +14,7 @@ export function safeWorkloadOrigin(
   clusterId: string,
 ): string | undefined {
   if (!value || !value.startsWith(`/dashboard/clusters/${clusterId}/`)) return;
-  if (/[#\\\u0000-\u0020]/.test(value)) return;
+  if (/[#\\]/.test(value) || hasControlOrSpace(value)) return;
   const [path, query] = value.split("?");
   let parts: string[];
   try {
@@ -30,7 +30,8 @@ export function safeWorkloadOrigin(
         !part ||
         part === "." ||
         part === ".." ||
-        /[/%#\\\u0000-\u0020]/.test(part),
+        /[/%#\\]/.test(part) ||
+        hasControlOrSpace(part),
     )
   )
     return;
@@ -70,4 +71,8 @@ export function useInvestigationParam(key: string, fallback = "") {
     [key, location.pathname, location.searchStr, navigate],
   );
   return [search.get(key) ?? fallback, setValue] as const;
+}
+
+function hasControlOrSpace(value: string) {
+  return [...value].some((character) => character.charCodeAt(0) <= 32);
 }

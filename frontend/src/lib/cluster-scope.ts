@@ -278,7 +278,11 @@ export function useClusterNamespaceScope(
     // state is absent or stale. The initialization effect fills the exact
     // server-authorized namespace set and writes it into the URL.
     if (restricted && (stored === undefined || stored === null)) return [];
-    return stored ?? null;
+    return stored === null || stored === undefined
+      ? null
+      : canonicalNamespaces(
+          stored.filter((namespace) => availableNamespaces.includes(namespace)),
+        );
   }, [
     availableNamespaces,
     ready,

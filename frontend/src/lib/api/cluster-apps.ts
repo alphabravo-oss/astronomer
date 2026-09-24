@@ -116,6 +116,7 @@ export async function listCatalogCharts(params: {
   const wire = await generated.getCatalogCharts({
     query: {
       project_id: params.projectId,
+      search: params.search?.trim() || undefined,
       limit: params.limit,
       offset: params.offset,
     },
@@ -137,20 +138,7 @@ export async function listCatalogCharts(params: {
       deprecated: raw.deprecated ?? false,
     }),
   );
-  const term = params.search?.trim().toLocaleLowerCase();
-  return {
-    ...page,
-    data: term
-      ? page.data.filter((chart) =>
-          [
-            chart.name,
-            chart.displayName,
-            chart.description,
-            ...chart.keywords,
-          ].some((value) => value.toLocaleLowerCase().includes(term)),
-        )
-      : page.data,
-  };
+  return page;
 }
 
 // Recommended view: wraps /catalog/recommendations/popular which

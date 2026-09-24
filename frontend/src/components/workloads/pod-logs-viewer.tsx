@@ -144,21 +144,6 @@ export function PodLogsViewer({
     URL.revokeObjectURL(url);
   }, [filteredLogs, podName, selectedContainer, showTimestamps]);
 
-  const getLogLineClass = (log: PodLog) => {
-    const msg = (log.message || "").toLowerCase();
-    if (
-      log.level === "error" ||
-      msg.includes("error") ||
-      msg.includes("fatal")
-    ) {
-      return "log-error";
-    }
-    if (log.level === "warn" || msg.includes("warn")) {
-      return "log-warn";
-    }
-    return "";
-  };
-
   if (!activePod) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground text-xs">
@@ -429,4 +414,15 @@ export function PodLogsViewer({
       )}
     </div>
   );
+}
+
+function getLogLineClass(log: PodLog) {
+  const msg = (log.message || "").toLowerCase();
+  if (log.level === "error" || msg.includes("error") || msg.includes("fatal")) {
+    return "log-error";
+  }
+  if (log.level === "warn" || msg.includes("warn")) {
+    return "log-warn";
+  }
+  return "";
 }

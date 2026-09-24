@@ -192,12 +192,7 @@ export function ClusterDetailPage() {
     );
   }
 
-  const distribution = distributionDisplayName(cluster.distribution);
-  const clusterMeta = [
-    { label: "Distribution", value: distribution },
-    { label: "Version", value: formatK8sVersion(cluster.kubernetesVersion) },
-    { label: "Environment", value: capitalize(cluster.environment ?? "") },
-  ];
+  const clusterMeta = clusterOverviewMetadata(cluster);
 
   return (
     <div className="space-y-6">
@@ -812,4 +807,19 @@ export function AnomalyBaselinesPanel({ clusterId }: { clusterId: string }) {
       </QueryStates>
     </div>
   );
+}
+
+function clusterOverviewMetadata(cluster: {
+  distribution?: string | null;
+  kubernetesVersion?: string | null;
+  environment?: string | null;
+}) {
+  return [
+    {
+      label: "Distribution",
+      value: distributionDisplayName(cluster.distribution ?? ""),
+    },
+    { label: "Version", value: formatK8sVersion(cluster.kubernetesVersion) },
+    { label: "Environment", value: capitalize(cluster.environment ?? "") },
+  ];
 }

@@ -1,3 +1,5 @@
+import { pageTableCount } from "@/lib/api/pagination";
+import { usePermissionDecision } from "@/lib/permission-hooks";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,6 +19,8 @@ import { toastError, toastSuccess } from "@/lib/toast";
 
 export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
   const queryClient = useQueryClient();
+  const [pageIndex, setPageIndex] = useState(0);
+  const [toggling, setToggling] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LoggingPipeline | null>(
     null,
   );
@@ -26,7 +30,7 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
     isLoading,
     isError,
     refetch,
-  } = useLoggingPipelines(clusterId);
+  } = useLoggingPipelines(clusterId, pageIndex * 50);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -46,6 +50,8 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
   };
 
   const handleToggle = async (pipeline: LoggingPipeline) => {
+    if (toggling) return;
+    setToggling(pipeline.id);
     try {
       await updateLoggingPipeline(pipeline.id, {
         ...pipeline,
@@ -57,6 +63,8 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
       toastError(
         `Failed to update pipeline: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
+    } finally {
+      setToggling(null);
     }
   };
 
@@ -132,14 +140,11 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
       key: "enabled",
       header: "Enabled",
       accessor: (row) => (
-        <span onClickCapture={(e) => e.stopPropagation()}>
-          <Switch
-            size="sm"
-            checked={row.enabled}
-            onCheckedChange={() => handleToggle(row)}
-            className={row.enabled ? "bg-primary" : undefined}
-          />
-        </span>
+        <PipelineToggle
+          row={row}
+          pending={!!toggling}
+          onToggle={() => void handleToggle(row)}
+        />
       ),
       sortable: false,
     },
@@ -156,15 +161,7 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
       key: "actions",
       header: "",
       accessor: (row) => (
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setDeleteTarget(row)}
-            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete pipeline"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <PipelineDelete row={row} onDelete={() => setDeleteTarget(row)} />
       ),
       sortable: false,
     },
@@ -173,10 +170,16 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
   return (
     <>
       <DataTable
-        data={pipelines || []}
-        columns={columns}
+        data={pipelines?.data || []}
+        columns={columns.map((column) => ({ ...column, sortable: false }))}
         keyExtractor={(row) => row.id}
-        searchPlaceholder="Search logging pipelines..."
+        searchable={false}
+        pageSize={50}
+        serverSide={{
+          ...pageTableCount(pipelines),
+          pagination: { pageIndex, pageSize: 50 },
+          onPaginationChange: (next) => setPageIndex(next.pageIndex),
+        }}
         loading={isLoading}
         isError={isError}
         onRetry={() => refetch()}
@@ -197,5 +200,55 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
         loading={deleting}
       />
     </>
+  );
+}
+
+function PipelineToggle({
+  row,
+  pending,
+  onToggle,
+}: {
+  row: LoggingPipeline;
+  pending: boolean;
+  onToggle: () => void;
+}) {
+  const permission = usePermissionDecision("logging", "update", {
+    type: "cluster",
+    id: row.clusterId,
+  });
+  return (
+    <span
+      onClickCapture={(event) => event.stopPropagation()}
+      title={permission.reason}
+    >
+      <Switch
+        size="sm"
+        checked={row.enabled}
+        disabled={!permission.allowed || pending}
+        onCheckedChange={onToggle}
+      />
+    </span>
+  );
+}
+function PipelineDelete({
+  row,
+  onDelete,
+}: {
+  row: LoggingPipeline;
+  onDelete: () => void;
+}) {
+  const permission = usePermissionDecision("logging", "delete", {
+    type: "cluster",
+    id: row.clusterId,
+  });
+  return (
+    <button
+      onClick={onDelete}
+      disabled={!permission.allowed}
+      title={permission.allowed ? "Delete pipeline" : permission.reason}
+      className="p-1.5 disabled:opacity-50"
+    >
+      <Trash2 className="h-3.5 w-3.5" />
+    </button>
   );
 }

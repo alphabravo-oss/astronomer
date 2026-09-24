@@ -1,3 +1,4 @@
+import { useOperationIntent } from "@/lib/use-operation-intent";
 import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -335,19 +336,28 @@ export function RestoreSnapshotDialog({
     },
     onSubmit: () => mutation.mutate(),
   });
+  const intent = useOperationIntent();
   const mutation = useMutation({
     mutationFn: () => {
       const values = form.state.values;
-      return restoreSnapshot(clusterId, snapshot.id, {
+      const body = {
         target_cluster_id: values.targetClusterId,
         spec: {
           includedNamespaces: parseCommaSeparated(values.includedNamespaces),
           excludedNamespaces: parseCommaSeparated(values.excludedNamespaces),
           restorePVs: values.restorePVs,
         },
-      });
+      };
+      return restoreSnapshot(
+        clusterId,
+        snapshot.id,
+        body,
+        undefined,
+        intent.keyFor({ clusterId, snapshotId: snapshot.id, body }),
+      );
     },
     onSuccess: (receipt) => {
+      intent.complete();
       queryClient.invalidateQueries({
         queryKey: queryKeys.clusterPages.snapshots(clusterId),
       });

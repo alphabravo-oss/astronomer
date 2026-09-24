@@ -147,10 +147,6 @@ export function ClusterSwitcherMenu({
   /** Display name for the current route's cluster, if any. */
   clusterName?: string;
 }) {
-  const navigate = useNavigate();
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const scopes = useClusterScopeStore((state) => state.namespacesByCluster);
-  const projectScopes = useClusterScopeStore((state) => state.projectByCluster);
   const recentClusterIds = useClusterScopeStore(
     (state) => state.recentClusterIds,
   );
@@ -247,47 +243,10 @@ export function ClusterSwitcherMenu({
     updatePreferences({ pinned_clusters: next });
   };
 
-  const transitionRequest = useRef(0);
-  const [transitionState, setTransitionState] = useState("");
-  const [failedTarget, setFailedTarget] = useState<Cluster | null>(null);
-  useEffect(
-    () => () => {
-      transitionRequest.current++;
-    },
-    [pathname],
+  const { select, transitionState, failedTarget } = useClusterTransition(
+    close,
+    restoreFocus,
   );
-  const select = async (next: Cluster, clearScope = false) => {
-    const request = ++transitionRequest.current;
-    setTransitionState("Resolving target cluster scope…");
-    setFailedTarget(null);
-    try {
-      const target = await resolveClusterTransition(
-        pathname,
-        next.id,
-        clearScope ? null : (scopes[next.id] ?? null),
-        clearScope ? null : (projectScopes[next.id] ?? null),
-      );
-      if (request !== transitionRequest.current) return;
-      void navigate({
-        to: withClusterScopeSelection(
-          target.path,
-          new URLSearchParams(),
-          target.namespaces,
-          target.projectId,
-        ),
-      });
-      setTransitionState("");
-      close();
-      requestAnimationFrame(restoreFocus);
-    } catch {
-      if (request === transitionRequest.current) {
-        setFailedTarget(next);
-        setTransitionState(
-          "Target scope could not be resolved. Retry the cluster or explicitly clear its remembered scope.",
-        );
-      }
-    }
-  };
 
   const currentCluster = clusterId ? detailById.get(clusterId) : undefined;
   const currentDotClass = currentCluster?.badgeColor
@@ -405,4 +364,57 @@ export function ClusterSwitcherMenu({
       ) : null}
     </div>
   );
+}
+
+function useClusterTransition(close: () => void, restoreFocus: () => void) {
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const scopes = useClusterScopeStore((state) => state.namespacesByCluster);
+  const projectScopes = useClusterScopeStore((state) => state.projectByCluster);
+  const transitionRequest = useRef(0);
+  const [transitionState, setTransitionState] = useState("");
+  const [failedTarget, setFailedTarget] = useState<Cluster | null>(null);
+  useEffect(
+    () => () => {
+      transitionRequest.current++;
+    },
+    [pathname],
+  );
+  const select = async (next: Cluster, clearScope = false) => {
+    const request = ++transitionRequest.current;
+    setTransitionState("Resolving target cluster scope…");
+    setFailedTarget(null);
+    try {
+      const target = await resolveClusterTransition(
+        pathname,
+        next.id,
+        clearScope ? null : (scopes[next.id] ?? null),
+        clearScope ? null : (projectScopes[next.id] ?? null),
+      );
+      if (request !== transitionRequest.current) return;
+      useClusterScopeStore
+        .getState()
+        .setClusterScope(next.id, target.namespaces, target.projectId);
+      void navigate({
+        to: withClusterScopeSelection(
+          target.path,
+          new URLSearchParams(),
+          target.namespaces,
+          target.projectId,
+        ),
+      });
+      setTransitionState("");
+      close();
+      requestAnimationFrame(restoreFocus);
+    } catch {
+      if (request === transitionRequest.current) {
+        setFailedTarget(next);
+        setTransitionState(
+          "Target scope could not be resolved. Retry the cluster or explicitly clear its remembered scope.",
+        );
+      }
+    }
+  };
+
+  return { select, transitionState, failedTarget };
 }

@@ -61,7 +61,7 @@ export function useProjectSelection(clusterId?: string) {
         if (request === latestSelection)
           toastApiError("Project scope unavailable", error);
       } finally {
-        setPending(false);
+        if (ownedSelection.current === request) setPending(false);
       }
     },
     [clusterId, location.pathname, location.searchStr, navigate],

@@ -141,6 +141,7 @@ export function ClusterAppsPage() {
         idempotencyKey: uninstallIntent.keyFor({ id }),
       }),
     onSuccess: (operation) => {
+      uninstallIntent.complete();
       if (operation?.id) onOperationStarted(operation.id);
       toastSuccess("Uninstall dispatched");
       qc.invalidateQueries({
@@ -259,11 +260,7 @@ export function ClusterAppsPage() {
     setShowDeleteFailed(true);
   };
 
-  const failedCount =
-    installed.data?.data.filter((r) => {
-      const s = r.status.toLowerCase();
-      return s === "failed_install" || s === "failed_uninstall";
-    }).length ?? 0;
+  const failedCount = countFailedReleases(installed.data?.data ?? []);
 
   return (
     <div className="space-y-6 p-4">
@@ -279,28 +276,7 @@ export function ClusterAppsPage() {
           </span>
         }
         description={
-          <>
-            Browse, install, and manage helm-packaged applications on
-            {cluster?.displayName ? (
-              <>
-                {" "}
-                <span className="font-medium text-foreground">
-                  {cluster.displayName}
-                </span>
-              </>
-            ) : (
-              " this cluster"
-            )}
-            . Releases managed by the{" "}
-            <RouterLink
-              to="/dashboard/clusters/$id/tools"
-              params={{ id: clusterId }}
-              className="underline"
-            >
-              Tools tab
-            </RouterLink>{" "}
-            appear here too with a &quot;Managed by Tools&quot; pivot.
-          </>
+          <AppsDescription clusterId={clusterId} name={cluster?.displayName} />
         }
         actions={
           <>
@@ -409,4 +385,35 @@ export function ClusterAppsPage() {
       />
     </div>
   );
+}
+
+function AppsDescription({
+  clusterId,
+  name,
+}: {
+  clusterId: string;
+  name?: string;
+}) {
+  return (
+    <>
+      Browse, install, and manage helm-packaged applications on{" "}
+      {name || "this cluster"}. Releases managed by the{" "}
+      <RouterLink
+        to="/dashboard/clusters/$id/tools"
+        params={{ id: clusterId }}
+        className="underline"
+      >
+        Tools tab
+      </RouterLink>{" "}
+      appear here too with a &quot;Managed by Tools&quot; pivot.
+    </>
+  );
+}
+
+function countFailedReleases(releases: ClusterAppRow[]) {
+  return releases.filter((release) =>
+    ["failed_install", "failed_uninstall"].includes(
+      release.status.toLowerCase(),
+    ),
+  ).length;
 }

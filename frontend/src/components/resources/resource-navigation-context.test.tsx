@@ -20,6 +20,9 @@ it("retains the originating workload Pods tab and scope without action state", (
 });
 it.each([
   "https://evil.example",
+  "/dashboard/clusters/a/deployments/%2e%2e/x",
+  "/dashboard/clusters/a/deployments/ns/x%2Fy",
+  "/dashboard/clusters/a/deployments/ns/x#bad",
   "//evil.example",
   "/dashboard/clusters/b/deployments/ns/x",
   "/dashboard/clusters/a/deployments/../x",

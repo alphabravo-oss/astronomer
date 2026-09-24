@@ -14,7 +14,6 @@ import { ResourceActionMenu } from "./resource-action-menu";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader } from "@/components/ui/page";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
-import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import { GenericResourceTable } from "@/components/resources/generic-resource-table";
 import {
   EventsTable,
@@ -260,11 +259,7 @@ function ScopedWorkloadsTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: "namespace", desc: false },
   ]);
-  const sort = (
-    sorting[0]
-      ? `${sorting[0].id === "age" ? "created" : sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
-      : "namespace_asc"
-  ) as WorkloadSort;
+  const sort = workloadSort(sorting);
   const workloadQuery = useWorkloads(clusterId, {
     namespace,
     namespaces,
@@ -608,4 +603,12 @@ export function ClusterResourcePage() {
       {renderTable()}
     </div>
   );
+}
+
+function workloadSort(sorting: SortingState): WorkloadSort {
+  return (
+    sorting[0]
+      ? `${sorting[0].id === "age" ? "created" : sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
+      : "namespace_asc"
+  ) as WorkloadSort;
 }

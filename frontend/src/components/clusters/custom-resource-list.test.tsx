@@ -18,7 +18,10 @@ const state = vi.hoisted(() => ({
   download: vi.fn(),
   useResource: vi.fn(),
 }));
-vi.mock("@/lib/permission-hooks", () => ({ usePermissionDecision: () => state.permissions.read }));
+vi.mock("@/lib/permission-hooks", async (original) => ({
+  ...(await original<typeof import("@/lib/permission-hooks")>()),
+  usePermissionDecision: () => state.permissions.read,
+}));
 vi.mock("@/lib/cluster-scope", () => ({
   useClusterNamespaceScope: () => ({ selectedNamespaces: state.selection }),
 }));

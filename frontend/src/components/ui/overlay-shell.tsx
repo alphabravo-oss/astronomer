@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -146,7 +147,7 @@ export function OverlayShell({
     return () => document.removeEventListener("keydown", handleKey);
   }, []);
 
-  return (
+  return createPortal(
     <div
       ref={rootRef}
       data-overlay-root
@@ -181,6 +182,7 @@ export function OverlayShell({
         onClick={closeOnBackdrop ? onClose : undefined}
       />
       {children}
-    </div>
+    </div>,
+    document.body,
   );
 }
