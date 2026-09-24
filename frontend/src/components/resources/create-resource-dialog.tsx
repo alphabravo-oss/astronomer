@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 import { LazyGuidedResourceForm as GuidedResourceForm } from "@/components/resources/lazy-guided-resource-form";
 import type { KubernetesManifest } from "@/components/resources/guided-resource-model";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { ErrorState } from "@/components/ui/empty-state";
 import { YamlEditor } from "@/components/ui/yaml-editor";
 import {
   useK8sCreateBatch,
@@ -108,26 +109,71 @@ function useTemplateManifest(
   modeRequestRef: { current: number },
 ) {
   const [manifest, setManifest] = useState<KubernetesManifest>({});
+  const [initialization, setInitialization] = useState({
+    ready: !templateKey,
+    error: "",
+  });
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!open || !templateKey) return;
     modeRequestRef.current += 1;
-    const template = k8sTemplates[templateKey] || "";
     let cancelled = false;
-    void import("js-yaml").then((yaml) => {
-      if (cancelled) return;
-      const parsed = yaml.load(template);
-      setManifest(
-        parsed && typeof parsed === "object"
-          ? (parsed as KubernetesManifest)
-          : {},
-      );
-    });
+    void import("js-yaml")
+      .then((yaml) => {
+        if (cancelled) return;
+        const parsed = yaml.load(k8sTemplates[templateKey] || "");
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+          throw new Error(
+            "The resource template must contain a Kubernetes object.",
+          );
+        setManifest(parsed as KubernetesManifest);
+        setInitialization({ ready: true, error: "" });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled)
+          setInitialization({
+            ready: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Could not load the resource template.",
+          });
+      });
     return () => {
       cancelled = true;
       modeRequestRef.current += 1;
     };
-  }, [open, templateKey, modeRequestRef]);
-  return [manifest, setManifest] as const;
+  }, [open, templateKey, modeRequestRef, attempt]);
+  return {
+    manifest,
+    setManifest,
+    templateReady: initialization.ready,
+    templateError: initialization.error,
+    retryTemplate: () => {
+      setInitialization({ ready: false, error: "" });
+      setAttempt((value) => value + 1);
+    },
+  };
+}
+
+function TemplateInitialization({
+  error,
+  onRetry,
+}: {
+  error: string;
+  onRetry: () => void;
+}) {
+  return error ? (
+    <ErrorState
+      title="Failed to load resource template"
+      description={error}
+      onRetry={onRetry}
+    />
+  ) : (
+    <p role="status" className="p-5 text-sm text-muted-foreground">
+      Loading resource template…
+    </p>
+  );
 }
 
 function CreateResourceEditor({
@@ -156,11 +202,8 @@ function CreateResourceEditor({
   const [applyResults, setApplyResults] = useState<K8sCreateBatchResult[]>([]);
   const [editorDirty, setEditorDirty] = useState(false);
   const modeRequestRef = useRef(0);
-  const [manifest, setManifest] = useTemplateManifest(
-    open,
-    templateKey,
-    modeRequestRef,
-  );
+  const { manifest, setManifest, templateReady, templateError, retryTemplate } =
+    useTemplateManifest(open, templateKey, modeRequestRef);
   const k8sCreateBatch = useK8sCreateBatch();
   const discovery = useClusterDiscovery(clusterId);
   const schemaQuery = useResourceSchema(
@@ -178,7 +221,7 @@ function CreateResourceEditor({
   if (!open) return null;
 
   const changeMode = async (next: "guided" | "yaml") => {
-    if (!hasGuidedTemplate) return;
+    if (!templateReady) return;
     const request = ++modeRequestRef.current;
     // Selecting the current mode also cancels a superseded async transition.
     if (next === mode) return;
@@ -291,6 +334,7 @@ function CreateResourceEditor({
     applyResults.length > 0 &&
     applyResults.every((result) => result.ok);
   const createDisabled =
+    !templateReady ||
     k8sCreateBatch.isPending ||
     (mode === "guided" && (!guidedValid || !hasGuidedTemplate)) ||
     (mode === "yaml" && !!parseError);
@@ -348,7 +392,7 @@ function CreateResourceEditor({
               id={`resource-editor-tab-${item}`}
               type="button"
               role="tab"
-              disabled={!hasGuidedTemplate}
+              disabled={!templateReady}
               aria-selected={mode === item}
               aria-controls={`resource-editor-panel-${item}`}
               tabIndex={mode === item ? 0 : -1}
@@ -391,10 +435,11 @@ function CreateResourceEditor({
         tabIndex={0}
         className="min-h-0 flex-1 overflow-hidden focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {templateKey && !hasGuidedTemplate ? (
-          <p role="status" className="p-5 text-sm text-muted-foreground">
-            Loading resource template…
-          </p>
+        {!templateReady ? (
+          <TemplateInitialization
+            error={templateError}
+            onRetry={retryTemplate}
+          />
         ) : mode === "guided" ? (
           <GuidedResourceForm
             value={manifest}

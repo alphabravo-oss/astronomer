@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { toastApiError } from "@/lib/toast";
+import { k8sTemplates } from "@/lib/k8s-templates";
 import {
   clusterDiscoveryFromDefinitions,
   type ClusterDiscovery,
@@ -339,4 +340,65 @@ it("keeps the template intact when mode switching is attempted during initializa
     spec: { template: { spec: { containers: expect.any(Array) } } },
   });
   await screen.findByRole("button", { name: "Done" });
+});
+
+it("allows correcting an empty edited manifest by returning to YAML", async () => {
+  render(
+    wrap(
+      <CreateResourceDialog
+        open
+        onClose={vi.fn()}
+        clusterId="cluster-1"
+        templateKey="deployment"
+        title="Create Deployment"
+      />,
+    ),
+  );
+  const yaml = screen.getByRole("tab", { name: "yaml" });
+  const guided = screen.getByRole("tab", { name: "guided" });
+  await waitFor(() => expect(yaml).toBeEnabled());
+  fireEvent.click(yaml);
+  fireEvent.change(await screen.findByLabelText("yaml-editor"), {
+    target: { value: "{}" },
+  });
+  fireEvent.click(guided);
+  await screen.findByLabelText("Guided name");
+  expect(
+    screen.queryByText("Loading resource template…"),
+  ).not.toBeInTheDocument();
+  expect(yaml).toBeEnabled();
+  fireEvent.click(yaml);
+  expect(await screen.findByLabelText("yaml-editor")).toHaveValue("{}\n");
+});
+
+it("shows initialization errors and can retry the template load", async () => {
+  const original = k8sTemplates.deployment;
+  try {
+    k8sTemplates.deployment = "kind: [";
+    render(
+      wrap(
+        <CreateResourceDialog
+          open
+          onClose={vi.fn()}
+          clusterId="cluster-1"
+          templateKey="deployment"
+          title="Create Deployment"
+        />,
+      ),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Failed to load resource template",
+    );
+    expect(screen.getByRole("tab", { name: "yaml" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Create", exact: true }),
+    ).toBeDisabled();
+    k8sTemplates.deployment = original;
+    fireEvent.click(screen.getByRole("button", { name: "Retry", exact: true }));
+    const name = await screen.findByLabelText("Guided name");
+    expect(name).toHaveValue("my-deployment");
+    expect(screen.getByRole("tab", { name: "yaml" })).toBeEnabled();
+  } finally {
+    k8sTemplates.deployment = original;
+  }
 });
