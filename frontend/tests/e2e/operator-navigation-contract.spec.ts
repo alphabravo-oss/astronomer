@@ -21,6 +21,7 @@ test("canonical sidebar has one active destination on cluster and global pages",
     `/dashboard/clusters/${SMOKE_CLUSTER_ID}`,
     `/dashboard/clusters/${SMOKE_CLUSTER_ID}/pods`,
     "/dashboard/monitoring",
+    "/dashboard/monitoring/stacks",
     "/dashboard/delivery/rollouts",
   ]) {
     await page.goto(path);
@@ -127,4 +128,76 @@ test("collapsed sidebar exposes one canonical active link and restores keyboard 
   );
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
+});
+
+test("installed tools retain the Management onboarding template destination", async ({
+  page,
+}, info) => {
+  let statusReads = 0;
+  await page.route(
+    (url) =>
+      url.pathname.replace(/\/$/, "") ===
+      `/api/v1/clusters/${SMOKE_CLUSTER_ID}/tools/status`,
+    (route) => {
+      statusReads++;
+      return route.fulfill({
+        json: {
+          data: ["velero", "monitoring", "cert-manager", "dex"].map((slug) => ({
+            slug,
+            name: slug,
+            status: "installed",
+            release_name: slug,
+            namespace: "astronomer-system",
+            preset_used: "default",
+            error: "",
+          })),
+        },
+      });
+    },
+  );
+  await page.route(
+    (url) =>
+      url.pathname.replace(/\/$/, "") ===
+      `/api/v1/clusters/${SMOKE_CLUSTER_ID}/template`,
+    (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            template_id: "applied-navigation-template",
+            template_name: "Applied navigation template",
+            status: "applied",
+            applied_at: "2026-09-01T00:00:00Z",
+            spec_snapshot: { tools: [] },
+          },
+        },
+      }),
+  );
+  await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}`);
+  await expect.poll(() => statusReads).toBeGreaterThan(0);
+  await expect(
+    page.locator("header").getByRole("button", { name: "Import", exact: true }),
+  ).toBeVisible();
+  await openNavigation(page);
+  const management = page
+    .locator("aside")
+    .getByRole("button", { name: "Cluster Management", exact: true });
+  if ((await management.getAttribute("aria-expanded")) === "false")
+    await management.click();
+  const link = page
+    .locator("aside")
+    .getByRole("link", { name: "Onboarding template", exact: true });
+  await expect(link).toHaveAttribute(
+    "href",
+    `/dashboard/clusters/${SMOKE_CLUSTER_ID}/template`,
+  );
+  await link.click();
+  await expect(
+    page.getByRole("heading", { name: "Template", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Applied navigation template", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: info.outputPath("installed-tools-template.png"),
+  });
 });
