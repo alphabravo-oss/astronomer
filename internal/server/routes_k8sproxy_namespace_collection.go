@@ -1,10 +1,12 @@
 package server
 
 import (
+	"net/http"
+
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
-	"github.com/google/uuid"
-	"net/http"
 )
 
 // An explicit subset is authorized for every actual downstream namespace.

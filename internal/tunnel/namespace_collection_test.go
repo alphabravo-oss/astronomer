@@ -11,10 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/callerid"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func TestNamespaceCollectionProxyPagination(t *testing.T) {
@@ -183,4 +184,67 @@ func TestNamespaceCollectionRejectsUnscopedUpstreamItems(t *testing.T) {
 			t.Fatalf("accepted unsafe response%s", body)
 		}
 	}
+}
+
+func TestNamespaceCollectionCursorSurvivesForwardingToOwner(t *testing.T) {
+	ownerHub := NewHub(nil)
+	agent := &AgentConnection{ClusterID: "cluster", Streams: NewStreamManager(256), sendCh: make(chan *protocol.Message, sendChannelSize), cancel: func() {}}
+	ownerHub.agents.Set("cluster", agent)
+	owner := NewProxyHandler(ownerHub, nil)
+	user := uuid.New()
+	ownerRouter := chi.NewRouter()
+	ownerRouter.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer caller" {
+			http.Error(w, "missing caller authentication", 401)
+			return
+		}
+		owner.HandleK8sProxy(w, r.WithContext(callerid.WithUser(r.Context(), user)))
+	})
+	upstream := httptest.NewServer(ownerRouter)
+	defer upstream.Close()
+	oldClient := proxyHTTPClient
+	proxyHTTPClient = upstream.Client()
+	t.Cleanup(func() { proxyHTTPClient = oldClient })
+	siblingHub := NewHub(nil)
+	siblingHub.SetLocator(NewFakeLocatorForTest("self:8000", map[string]string{"cluster": strings.TrimPrefix(upstream.URL, "http://")}))
+	sibling := NewProxyHandler(siblingHub, nil)
+	siblingRouter := chi.NewRouter()
+	siblingRouter.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", sibling.HandleK8sProxy)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 2; i++ {
+			select {
+			case msg := <-agent.sendCh:
+				encoded, _ := json.Marshal(protocol.K8sResponsePayload{StatusCode: 200, Body: base64.StdEncoding.EncodeToString([]byte(`{"kind":"WidgetList","metadata":{},"items":[]}`))})
+				stream, _ := agent.Streams.GetStream(msg.StreamID)
+				stream.DataCh <- encoded
+			case <-time.After(10 * time.Second):
+				return
+			}
+		}
+	}()
+	cursor := ""
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest("GET", "/api/v1/clusters/cluster/k8s/apis/g/v1/widgets?astronomerNamespace=a&astronomerNamespace=b&continue="+url.QueryEscape(cursor), nil)
+		req.Header.Set("Authorization", "Bearer caller")
+		rec := httptest.NewRecorder()
+		siblingRouter.ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("forwarded page%d status%d: %s", i, rec.Code, rec.Body.String())
+		}
+		var list struct {
+			Metadata struct {
+				Continue string `json:"continue"`
+			} `json:"metadata"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+			t.Fatal(err)
+		}
+		cursor = list.Metadata.Continue
+		if (cursor != "") != (i == 0) {
+			t.Fatalf("page%d continuation%q", i, cursor)
+		}
+	}
+	<-done
 }

@@ -13,10 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/callerid"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/go-chi/chi/v5"
 	"k8s.io/apimachinery/pkg/util/validation"
+
+	"github.com/alphabravocompany/astronomer-go/internal/callerid"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 const NamespaceCollectionQuery = "astronomerNamespace"

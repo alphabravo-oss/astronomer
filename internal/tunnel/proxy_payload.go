@@ -3,11 +3,12 @@ package tunnel
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
+	"net/http"
+
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/proxyhdr"
-	"io"
-	"net/http"
 )
 
 // buildK8sRequestPayload constructs a K8sRequestPayload from an HTTP request.
