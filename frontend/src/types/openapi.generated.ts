@@ -5430,6 +5430,7 @@ export interface OpenAPIComponents {
           };
         };
     SnapshotRestoreResponse: {
+          "source_cluster_id"?: string;
           "id"?: string;
           "snapshot_id"?: string;
           "target_cluster_id"?: string;
@@ -8301,6 +8302,18 @@ export interface OpenAPIOperations {
         "body": OpenAPIComponents['schemas']['LoggingPipelineWriteRequest'];
       };
     response: OpenAPIComponents['schemas']['LoggingPipelineMutationReceiptEnvelope'];
+  };
+  "getLoggingPipelinesById": {
+    method: "GET";
+    path: "/api/v1/logging/pipelines/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: Record<string, unknown> & {
+        "data"?: OpenAPIComponents['schemas']['LoggingPipeline'];
+      };
   };
   "deleteLoggingPipelinesById": {
     method: "DELETE";
@@ -12058,6 +12071,35 @@ export interface OpenAPIOperations {
       };
     response: void;
   };
+  "getClustersByClusterIdSnapshotRestores": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/snapshot-restores";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SnapshotRestoreResponse'][];
+      };
+  };
+  "getClustersByClusterIdSnapshotRestoresById": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/snapshot-restores/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: Record<string, unknown> & {
+        "data"?: OpenAPIComponents['schemas']['SnapshotRestoreResponse'];
+      };
+  };
   "getClustersByClusterIdSnapshots": {
     method: "GET";
     path: "/api/v1/clusters/{cluster_id}/snapshots";
@@ -12576,6 +12618,18 @@ export interface OpenAPIOperations {
         };
       };
     response: OpenAPIComponents['schemas']['CatalogInstallationAcceptedEnvelope'];
+  };
+  "getCatalogInstalledById": {
+    method: "GET";
+    path: "/api/v1/catalog/installed/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: Record<string, unknown> & {
+        "data"?: OpenAPIComponents['schemas']['InstalledAppEnriched'];
+      };
   };
   "deleteCatalogInstalledById": {
     method: "DELETE";
@@ -15528,6 +15582,7 @@ export interface OpenAPIOperations {
           "cluster_id": string;
         };
         "query"?: {
+          "namespaces"?: string[];
           "namespace"?: string;
           "limit"?: number;
           "offset"?: number;
@@ -15593,6 +15648,7 @@ export interface OpenAPIOperations {
           "cluster_id": string;
         };
         "query"?: {
+          "namespaces"?: string[];
           "limit"?: number;
           "offset"?: number;
           "namespace"?: string;

@@ -5898,6 +5898,7 @@ components:
     SnapshotRestoreResponse:
       type: object
       properties:
+        source_cluster_id: {type: string, format: uuid}
         id:
           type: string
           format: uuid
@@ -16315,6 +16316,42 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/logging/pipelines/{id}:
+    get:
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
+      x-astronomer-route-class: public-api
+      tags:
+      - operator-workflows
+      operationId: getLoggingPipelinesById
+      summary: Read operator workflow resource
+      description: Requires logging:read on the owning cluster. Returns output associations, labels, and opaque filter JSON unchanged for full replacement editing.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Authorized resource representation.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - type: object
+                  required: [data]
+                - properties:
+                    data:
+                      $ref: '#/components/schemas/LoggingPipeline'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       x-astronomer-auth: "bearer-or-session"
       x-astronomer-rbac: "handler-and-route-policy"
@@ -25124,6 +25161,87 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '500':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/clusters/{cluster_id}/snapshot-restores:
+    get:
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
+      x-astronomer-route-class: public-api
+      tags: [operator-workflows]
+      operationId: getClustersByClusterIdSnapshotRestores
+      summary: Read operator workflow resource
+      description: Requires clusters:read on both target and source clusters. Source visibility filters history before pagination and counts. Reports durable restore status and poller freshness. History is ordered by created_at DESC, id DESC. A completed source snapshot does not prove restore completion.
+      parameters:
+      - name: cluster_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Authorized resource representation.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageEnvelope'
+                - properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/SnapshotRestoreResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/clusters/{cluster_id}/snapshot-restores/{id}:
+    get:
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
+      x-astronomer-route-class: public-api
+      tags: [operator-workflows]
+      operationId: getClustersByClusterIdSnapshotRestoresById
+      summary: Read operator workflow resource
+      description: Requires clusters:read on both target and source clusters. Source visibility filters history before pagination and counts. Reports durable restore status and poller freshness. History is ordered by created_at DESC, id DESC. A completed source snapshot does not prove restore completion.
+      parameters:
+      - name: cluster_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Authorized resource representation.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - type: object
+                  required: [data]
+                - properties:
+                    data:
+                      $ref: '#/components/schemas/SnapshotRestoreResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/clusters/{cluster_id}/snapshots:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -26729,6 +26847,43 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/catalog/installed/{id}/:
+    get:
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
+      x-astronomer-route-class: public-api
+      tags:
+      - operator-workflows
+      operationId: getCatalogInstalledById
+      summary: Read operator workflow resource
+      description: Requires catalog:read on the owning cluster. Includes authoritative Flux status and app/tool provenance. Values are excluded; use the separately authorized
+        values endpoint.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Authorized resource representation.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - type: object
+                  required: [data]
+                - properties:
+                    data:
+                      $ref: '#/components/schemas/InstalledAppEnriched'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       x-astronomer-auth: "bearer/session auth"
       x-astronomer-rbac: "authenticated catalog surface; explicit catalog RBAC audit remains open"
@@ -27641,7 +27796,7 @@ paths:
         Per-cluster Apps tab listing: installed_charts rows for the cluster with
         LEFT-joined chart metadata. Tool installs (chart_version_id NULL) come
         back with empty chart_* fields, a non-empty tool_slug, and
-        source_kind="tool". Requires RBAC `clusters:read`. Paginated envelope.
+        source_kind="tool". Requires RBAC `clusters:read`. Paginated envelope; values_override is excluded. Use the catalog-authorized values endpoint for release values.
       tags:
         - catalog
       security:
@@ -37274,6 +37429,18 @@ paths:
         is supplied the listing is scoped to that namespace, otherwise
         all namespaces are returned. RBAC: pods:list.
       parameters:
+        - name: namespaces
+          in: query
+          required: false
+          style: form
+          explode: true
+          description: Repeated selection intersected with RBAC before pagination. Omit for all authorized namespaces; a single empty value selects none. Mutually exclusive
+            with namespace.
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
         - name: cluster_id
           in: path
           required: true
@@ -37530,6 +37697,18 @@ paths:
         filtering. Returns a DRF-style paginated envelope (always 200).
         RBAC: workloads:list.
       parameters:
+        - name: namespaces
+          in: query
+          required: false
+          style: form
+          explode: true
+          description: Repeated selection intersected with RBAC before pagination. Omit for all authorized namespaces; a single empty value selects none. Mutually exclusive
+            with namespace.
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
         - {$ref: '#/components/parameters/Limit'}
         - {$ref: '#/components/parameters/Offset'}
         - name: cluster_id

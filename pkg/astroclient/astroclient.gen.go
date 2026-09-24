@@ -10461,6 +10461,7 @@ type SnapshotRestoreResponse struct {
 	LastPollError   *string                 `json:"last_poll_error,omitempty"`
 	Phase           *string                 `json:"phase,omitempty"`
 	SnapshotId      *openapi_types.UUID     `json:"snapshot_id,omitempty"`
+	SourceClusterId *openapi_types.UUID     `json:"source_cluster_id,omitempty"`
 	Spec            *map[string]interface{} `json:"spec,omitempty"`
 	StartTime       *time.Time              `json:"start_time"`
 	TargetClusterId *openapi_types.UUID     `json:"target_cluster_id,omitempty"`
@@ -12444,6 +12445,9 @@ type GetClustersByClusterIdNodesParams struct {
 
 // GetClustersByClusterIdPodsParams defines parameters for GetClustersByClusterIdPods.
 type GetClustersByClusterIdPodsParams struct {
+	// Namespaces Repeated selection intersected with RBAC before pagination. Omit for all authorized namespaces; a single empty value selects none. Mutually exclusive with namespace.
+	Namespaces *[]string `form:"namespaces,omitempty" json:"namespaces,omitempty"`
+
 	// Namespace Restrict to a single namespace.
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
 
@@ -12669,6 +12673,15 @@ type GetClustersByClusterIdShellSessionsByIdCommandsParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetClustersByClusterIdSnapshotRestoresParams defines parameters for GetClustersByClusterIdSnapshotRestores.
+type GetClustersByClusterIdSnapshotRestoresParams struct {
+	// Limit Bounded page size; the server clamps ordinary lists to at most 200.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Zero-based offset into the authorized, filtered result.
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // PostClustersByClusterIdSnapshotsParams defines parameters for PostClustersByClusterIdSnapshots.
 type PostClustersByClusterIdSnapshotsParams struct {
 	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
@@ -12724,6 +12737,9 @@ type PostClustersByClusterIdVulnerabilitiesRescanParams struct {
 
 // GetClustersByClusterIdWorkloadsParams defines parameters for GetClustersByClusterIdWorkloads.
 type GetClustersByClusterIdWorkloadsParams struct {
+	// Namespaces Repeated selection intersected with RBAC before pagination. Omit for all authorized namespaces; a single empty value selects none. Mutually exclusive with namespace.
+	Namespaces *[]string `form:"namespaces,omitempty" json:"namespaces,omitempty"`
+
 	// Limit Bounded page size; the server clamps ordinary lists to at most 200.
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 
@@ -21079,6 +21095,9 @@ type ClientInterface interface {
 	// DeleteCatalogInstalledById request
 	DeleteCatalogInstalledById(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCatalogInstalledById request
+	GetCatalogInstalledById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetCatalogInstalledByIdRevisions request
 	GetCatalogInstalledByIdRevisions(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -21716,6 +21735,12 @@ type ClientInterface interface {
 
 	// GetClustersByClusterIdShellSessionsByIdCommands request
 	GetClustersByClusterIdShellSessionsByIdCommands(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, params *GetClustersByClusterIdShellSessionsByIdCommandsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetClustersByClusterIdSnapshotRestores request
+	GetClustersByClusterIdSnapshotRestores(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdSnapshotRestoresParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetClustersByClusterIdSnapshotRestoresById request
+	GetClustersByClusterIdSnapshotRestoresById(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByClusterIdSnapshotSchedules request
 	GetClustersByClusterIdSnapshotSchedules(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -22389,6 +22414,9 @@ type ClientInterface interface {
 
 	// DeleteLoggingPipelinesById request
 	DeleteLoggingPipelinesById(ctx context.Context, id string, params *DeleteLoggingPipelinesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLoggingPipelinesById request
+	GetLoggingPipelinesById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutLoggingPipelinesByIdWithBody request with any body
 	PutLoggingPipelinesByIdWithBody(ctx context.Context, id openapi_types.UUID, params *PutLoggingPipelinesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -27224,6 +27252,18 @@ func (c *Client) DeleteCatalogInstalledById(ctx context.Context, id openapi_type
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetCatalogInstalledById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogInstalledByIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetCatalogInstalledByIdRevisions(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCatalogInstalledByIdRevisionsRequest(c.Server, id)
 	if err != nil {
@@ -30022,6 +30062,30 @@ func (c *Client) GetClustersByClusterIdShellSessionsById(ctx context.Context, cl
 
 func (c *Client) GetClustersByClusterIdShellSessionsByIdCommands(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, params *GetClustersByClusterIdShellSessionsByIdCommandsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetClustersByClusterIdShellSessionsByIdCommandsRequest(c.Server, clusterId, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetClustersByClusterIdSnapshotRestores(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdSnapshotRestoresParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByClusterIdSnapshotRestoresRequest(c.Server, clusterId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetClustersByClusterIdSnapshotRestoresById(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByClusterIdSnapshotRestoresByIdRequest(c.Server, clusterId, id)
 	if err != nil {
 		return nil, err
 	}
@@ -32950,6 +33014,18 @@ func (c *Client) PostLoggingPipelines(ctx context.Context, params *PostLoggingPi
 
 func (c *Client) DeleteLoggingPipelinesById(ctx context.Context, id string, params *DeleteLoggingPipelinesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteLoggingPipelinesByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLoggingPipelinesById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLoggingPipelinesByIdRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -48356,6 +48432,40 @@ func NewDeleteCatalogInstalledByIdRequest(server string, id openapi_types.UUID, 
 	return req, nil
 }
 
+// NewGetCatalogInstalledByIdRequest generates requests for GetCatalogInstalledById
+func NewGetCatalogInstalledByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/installed/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetCatalogInstalledByIdRevisionsRequest generates requests for GetCatalogInstalledByIdRevisions
 func NewGetCatalogInstalledByIdRevisionsRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -54102,6 +54212,22 @@ func NewGetClustersByClusterIdPodsRequest(server string, clusterId openapi_types
 	if params != nil {
 		queryValues := queryURL.Query()
 
+		if params.Namespaces != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespaces", runtime.ParamLocationQuery, *params.Namespaces); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		if params.Namespace != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespace", runtime.ParamLocationQuery, *params.Namespace); err != nil {
@@ -57331,6 +57457,119 @@ func NewGetClustersByClusterIdShellSessionsByIdCommandsRequest(server string, cl
 	return req, nil
 }
 
+// NewGetClustersByClusterIdSnapshotRestoresRequest generates requests for GetClustersByClusterIdSnapshotRestores
+func NewGetClustersByClusterIdSnapshotRestoresRequest(server string, clusterId openapi_types.UUID, params *GetClustersByClusterIdSnapshotRestoresParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/snapshot-restores", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetClustersByClusterIdSnapshotRestoresByIdRequest generates requests for GetClustersByClusterIdSnapshotRestoresById
+func NewGetClustersByClusterIdSnapshotRestoresByIdRequest(server string, clusterId openapi_types.UUID, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/snapshot-restores/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetClustersByClusterIdSnapshotSchedulesRequest generates requests for GetClustersByClusterIdSnapshotSchedules
 func NewGetClustersByClusterIdSnapshotSchedulesRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -58463,6 +58702,22 @@ func NewGetClustersByClusterIdWorkloadsRequest(server string, clusterId openapi_
 
 	if params != nil {
 		queryValues := queryURL.Query()
+
+		if params.Namespaces != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespaces", runtime.ParamLocationQuery, *params.Namespaces); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
 
 		if params.Limit != nil {
 
@@ -67095,6 +67350,40 @@ func NewDeleteLoggingPipelinesByIdRequest(server string, id string, params *Dele
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewGetLoggingPipelinesByIdRequest generates requests for GetLoggingPipelinesById
+func NewGetLoggingPipelinesByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/logging/pipelines/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -79541,6 +79830,9 @@ type ClientWithResponsesInterface interface {
 	// DeleteCatalogInstalledByIdWithResponse request
 	DeleteCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error)
 
+	// GetCatalogInstalledByIdWithResponse request
+	GetCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdResponse, error)
+
 	// GetCatalogInstalledByIdRevisionsWithResponse request
 	GetCatalogInstalledByIdRevisionsWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdRevisionsResponse, error)
 
@@ -80178,6 +80470,12 @@ type ClientWithResponsesInterface interface {
 
 	// GetClustersByClusterIdShellSessionsByIdCommandsWithResponse request
 	GetClustersByClusterIdShellSessionsByIdCommandsWithResponse(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, params *GetClustersByClusterIdShellSessionsByIdCommandsParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdShellSessionsByIdCommandsResponse, error)
+
+	// GetClustersByClusterIdSnapshotRestoresWithResponse request
+	GetClustersByClusterIdSnapshotRestoresWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdSnapshotRestoresParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdSnapshotRestoresResponse, error)
+
+	// GetClustersByClusterIdSnapshotRestoresByIdWithResponse request
+	GetClustersByClusterIdSnapshotRestoresByIdWithResponse(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdSnapshotRestoresByIdResponse, error)
 
 	// GetClustersByClusterIdSnapshotSchedulesWithResponse request
 	GetClustersByClusterIdSnapshotSchedulesWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdSnapshotSchedulesResponse, error)
@@ -80851,6 +81149,9 @@ type ClientWithResponsesInterface interface {
 
 	// DeleteLoggingPipelinesByIdWithResponse request
 	DeleteLoggingPipelinesByIdWithResponse(ctx context.Context, id string, params *DeleteLoggingPipelinesByIdParams, reqEditors ...RequestEditorFn) (*DeleteLoggingPipelinesByIdResponse, error)
+
+	// GetLoggingPipelinesByIdWithResponse request
+	GetLoggingPipelinesByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetLoggingPipelinesByIdResponse, error)
 
 	// PutLoggingPipelinesByIdWithBodyWithResponse request with any body
 	PutLoggingPipelinesByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutLoggingPipelinesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutLoggingPipelinesByIdResponse, error)
@@ -88559,6 +88860,34 @@ func (r DeleteCatalogInstalledByIdResponse) StatusCode() int {
 	return 0
 }
 
+type GetCatalogInstalledByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data InstalledAppEnriched `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogInstalledByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogInstalledByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetCatalogInstalledByIdRevisionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -93052,6 +93381,63 @@ func (r GetClustersByClusterIdShellSessionsByIdCommandsResponse) Status() string
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetClustersByClusterIdShellSessionsByIdCommandsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetClustersByClusterIdSnapshotRestoresResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data       []SnapshotRestoreResponse `json:"data"`
+		Pagination PaginationMetadata        `json:"pagination"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersByClusterIdSnapshotRestoresResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersByClusterIdSnapshotRestoresResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetClustersByClusterIdSnapshotRestoresByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data SnapshotRestoreResponse `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersByClusterIdSnapshotRestoresByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersByClusterIdSnapshotRestoresByIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -97704,6 +98090,34 @@ func (r DeleteLoggingPipelinesByIdResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r DeleteLoggingPipelinesByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLoggingPipelinesByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data LoggingPipeline `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLoggingPipelinesByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLoggingPipelinesByIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -107055,6 +107469,15 @@ func (c *ClientWithResponses) DeleteCatalogInstalledByIdWithResponse(ctx context
 	return ParseDeleteCatalogInstalledByIdResponse(rsp)
 }
 
+// GetCatalogInstalledByIdWithResponse request returning *GetCatalogInstalledByIdResponse
+func (c *ClientWithResponses) GetCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdResponse, error) {
+	rsp, err := c.GetCatalogInstalledById(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogInstalledByIdResponse(rsp)
+}
+
 // GetCatalogInstalledByIdRevisionsWithResponse request returning *GetCatalogInstalledByIdRevisionsResponse
 func (c *ClientWithResponses) GetCatalogInstalledByIdRevisionsWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdRevisionsResponse, error) {
 	rsp, err := c.GetCatalogInstalledByIdRevisions(ctx, id, reqEditors...)
@@ -109095,6 +109518,24 @@ func (c *ClientWithResponses) GetClustersByClusterIdShellSessionsByIdCommandsWit
 		return nil, err
 	}
 	return ParseGetClustersByClusterIdShellSessionsByIdCommandsResponse(rsp)
+}
+
+// GetClustersByClusterIdSnapshotRestoresWithResponse request returning *GetClustersByClusterIdSnapshotRestoresResponse
+func (c *ClientWithResponses) GetClustersByClusterIdSnapshotRestoresWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdSnapshotRestoresParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdSnapshotRestoresResponse, error) {
+	rsp, err := c.GetClustersByClusterIdSnapshotRestores(ctx, clusterId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersByClusterIdSnapshotRestoresResponse(rsp)
+}
+
+// GetClustersByClusterIdSnapshotRestoresByIdWithResponse request returning *GetClustersByClusterIdSnapshotRestoresByIdResponse
+func (c *ClientWithResponses) GetClustersByClusterIdSnapshotRestoresByIdWithResponse(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdSnapshotRestoresByIdResponse, error) {
+	rsp, err := c.GetClustersByClusterIdSnapshotRestoresById(ctx, clusterId, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersByClusterIdSnapshotRestoresByIdResponse(rsp)
 }
 
 // GetClustersByClusterIdSnapshotSchedulesWithResponse request returning *GetClustersByClusterIdSnapshotSchedulesResponse
@@ -111232,6 +111673,15 @@ func (c *ClientWithResponses) DeleteLoggingPipelinesByIdWithResponse(ctx context
 		return nil, err
 	}
 	return ParseDeleteLoggingPipelinesByIdResponse(rsp)
+}
+
+// GetLoggingPipelinesByIdWithResponse request returning *GetLoggingPipelinesByIdResponse
+func (c *ClientWithResponses) GetLoggingPipelinesByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetLoggingPipelinesByIdResponse, error) {
+	rsp, err := c.GetLoggingPipelinesById(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLoggingPipelinesByIdResponse(rsp)
 }
 
 // PutLoggingPipelinesByIdWithBodyWithResponse request with arbitrary body returning *PutLoggingPipelinesByIdResponse
@@ -127208,6 +127658,62 @@ func ParseDeleteCatalogInstalledByIdResponse(rsp *http.Response) (*DeleteCatalog
 	return response, nil
 }
 
+// ParseGetCatalogInstalledByIdResponse parses an HTTP response from a GetCatalogInstalledByIdWithResponse call
+func ParseGetCatalogInstalledByIdResponse(rsp *http.Response) (*GetCatalogInstalledByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogInstalledByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data InstalledAppEnriched `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetCatalogInstalledByIdRevisionsResponse parses an HTTP response from a GetCatalogInstalledByIdRevisionsWithResponse call
 func ParseGetCatalogInstalledByIdRevisionsResponse(rsp *http.Response) (*GetCatalogInstalledByIdRevisionsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -135554,6 +136060,119 @@ func ParseGetClustersByClusterIdShellSessionsByIdCommandsResponse(rsp *http.Resp
 	return response, nil
 }
 
+// ParseGetClustersByClusterIdSnapshotRestoresResponse parses an HTTP response from a GetClustersByClusterIdSnapshotRestoresWithResponse call
+func ParseGetClustersByClusterIdSnapshotRestoresResponse(rsp *http.Response) (*GetClustersByClusterIdSnapshotRestoresResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersByClusterIdSnapshotRestoresResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data       []SnapshotRestoreResponse `json:"data"`
+			Pagination PaginationMetadata        `json:"pagination"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetClustersByClusterIdSnapshotRestoresByIdResponse parses an HTTP response from a GetClustersByClusterIdSnapshotRestoresByIdWithResponse call
+func ParseGetClustersByClusterIdSnapshotRestoresByIdResponse(rsp *http.Response) (*GetClustersByClusterIdSnapshotRestoresByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersByClusterIdSnapshotRestoresByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data SnapshotRestoreResponse `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetClustersByClusterIdSnapshotSchedulesResponse parses an HTTP response from a GetClustersByClusterIdSnapshotSchedulesWithResponse call
 func ParseGetClustersByClusterIdSnapshotSchedulesResponse(rsp *http.Response) (*GetClustersByClusterIdSnapshotSchedulesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -143603,6 +144222,62 @@ func ParseDeleteLoggingPipelinesByIdResponse(rsp *http.Response) (*DeleteLogging
 			return nil, err
 		}
 		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLoggingPipelinesByIdResponse parses an HTTP response from a GetLoggingPipelinesByIdWithResponse call
+func ParseGetLoggingPipelinesByIdResponse(rsp *http.Response) (*GetLoggingPipelinesByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLoggingPipelinesByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data LoggingPipeline `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
