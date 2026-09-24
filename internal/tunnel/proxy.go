@@ -16,10 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"github.com/alphabravocompany/astronomer-go/pkg/proxyhdr"
 )
 
 // k8sProxyMaxBodyBytes caps the request body buffered per proxied k8s call
@@ -46,8 +44,9 @@ const (
 
 // ProxyHandler forwards K8s API requests through the tunnel to agents.
 type ProxyHandler struct {
-	hub *Hub
-	log *slog.Logger
+	hub                *Hub
+	log                *slog.Logger
+	namespaceCursorKey []byte
 }
 
 // NewProxyHandler creates a new ProxyHandler.
@@ -55,7 +54,7 @@ func NewProxyHandler(hub *Hub, log *slog.Logger) *ProxyHandler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &ProxyHandler{hub: hub, log: log}
+	return &ProxyHandler{hub: hub, log: log, namespaceCursorKey: []byte(uuid.NewString())}
 }
 
 // HandleK8sProxy handles all requests to /api/v1/clusters/{cluster_id}/k8s/*.
@@ -93,6 +92,13 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"Cluster agent not connected"}`, http.StatusServiceUnavailable)
 		return
 	}
+
+	prepared, collectionPage, status, err := p.prepareNamespaceCollection(r)
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return
+	}
+	r = prepared
 
 	// Create a stream for this request.
 	streamID := uuid.New().String()
@@ -200,6 +206,10 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if err := p.finishNamespaceCollection(resp, collectionPage); err != nil {
+		http.Error(w, `{"error":"invalid namespace collection response"}`, http.StatusBadGateway)
+		return
+	}
 	writeK8sResponse(w, resp)
 }
 
@@ -437,72 +447,6 @@ func k8sProxyResponseHeaderAllowed(name string) bool {
 	default:
 		return !isHopByHopHeader(lower)
 	}
-}
-
-// buildK8sRequestPayload constructs a K8sRequestPayload from an HTTP request.
-func buildK8sRequestPayload(r *http.Request) (*protocol.K8sRequestPayload, error) {
-	// Authorization, auditing, and forwarding consume the same validated
-	// path. The route middleware stores it in context; direct callers run the
-	// same strict validator here.
-	path, err := CanonicalK8sProxyPath(r)
-	if err != nil {
-		return nil, err
-	}
-
-	// Include query string if present.
-	if r.URL.RawQuery != "" {
-		path = path + "?" + r.URL.RawQuery
-	}
-
-	// Forward only the small allowlist of headers that the kubernetes API
-	// actually needs (see proxyhdr.ShouldForwardRequestHeader). Everything
-	// else is dropped — the allowlist fails closed against header-spoofing,
-	// including Authorization (caller's Astronomer JWT, not a k8s bearer),
-	// Cookie/Host/X-Forwarded-*, user-controlled Impersonate-* headers, and
-	// the front-proxy identity headers X-Remote-User/X-Remote-Group/
-	// X-Remote-Extra-* honored by clusters using --requestheader auth.
-	headers := make(map[string]string)
-	for key, values := range r.Header {
-		if len(values) == 0 {
-			continue
-		}
-		if !proxyhdr.ShouldForwardRequestHeader(key) {
-			continue
-		}
-		headers[key] = values[0]
-	}
-
-	// Read and base64-encode the body, capped so a huge payload can't OOM the
-	// shared replica. Read one byte past the limit to distinguish "exactly at
-	// the cap" from "over".
-	var body string
-	if r.Body != nil {
-		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, k8sProxyMaxBodyBytes+1))
-		if err != nil {
-			return nil, fmt.Errorf("reading request body: %w", err)
-		}
-		if int64(len(bodyBytes)) > k8sProxyMaxBodyBytes {
-			return nil, errRequestBodyTooLarge
-		}
-		if len(bodyBytes) > 0 {
-			body = base64.StdEncoding.EncodeToString(bodyBytes)
-		}
-	}
-
-	return &protocol.K8sRequestPayload{
-		Method:  r.Method,
-		Path:    path,
-		Headers: headers,
-		Body:    body,
-		// Typed caller identity, resolved from the authenticated session (or
-		// from a positive machine marker stamped by a trusted gate — never
-		// from a header. Note this runs AFTER the allowlist loop above, which
-		// has already dropped any Impersonate-* / X-Remote-* the client sent, so
-		// there is no path by which a caller-supplied header can influence it.
-		//
-		// PHASE 0: populated, unused.
-		CallerIdentity: callerid.Resolve(r.Context()),
-	}, nil
 }
 
 // extractK8sPath extracts the Kubernetes API path from the full URL path.
