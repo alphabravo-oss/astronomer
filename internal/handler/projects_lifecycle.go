@@ -3,11 +3,8 @@ package handler
 import (
 	"net/http"
 	"sort"
-	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -129,47 +126,4 @@ func firstNonEmptyStr(vs ...string) string {
 		}
 	}
 	return ""
-}
-
-func (h *ProjectHandler) ListByCluster(w http.ResponseWriter, r *http.Request) {
-	clusterID, ok := parseClusterID(w, r)
-	if !ok {
-		return
-	}
-
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
-	search := strings.TrimSpace(r.URL.Query().Get("search"))
-
-	projects, err := h.queries.ListProjectsByCluster(r.Context(), sqlc.ListProjectsByClusterParams{
-		ClusterID:    clusterID,
-		FilterSearch: search,
-		QueryLimit:   limit,
-		QueryOffset:  offset,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
-		return
-	}
-
-	var total int64
-	if search == "" {
-		total, err = h.queries.CountProjectsByCluster(r.Context(), clusterID)
-	} else {
-		total, err = h.queries.CountProjectsByClusterFiltered(r.Context(), sqlc.CountProjectsByClusterFilteredParams{
-			ClusterID:    clusterID,
-			FilterSearch: search,
-		})
-	}
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
-		return
-	}
-
-	items := make([]ProjectResponse, 0, len(projects))
-	for _, p := range projects {
-		items = append(items, projectToResponse(p))
-	}
-
-	paging.Write(w, items, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(items)))
 }

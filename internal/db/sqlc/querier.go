@@ -220,6 +220,7 @@ type Querier interface {
 	CountClusterConditionRemediationSinceForType(ctx context.Context, arg CountClusterConditionRemediationSinceForTypeParams) (int64, error)
 	CountClusterDeploymentEvents(ctx context.Context, arg CountClusterDeploymentEventsParams) (int64, error)
 	CountClusterDeployments(ctx context.Context, arg CountClusterDeploymentsParams) (int64, error)
+	CountClusterProjectsForScopes(ctx context.Context, arg CountClusterProjectsForScopesParams) (int64, error)
 	CountClusterRestores(ctx context.Context, arg CountClusterRestoresParams) (int64, error)
 	// Whether the service user already holds the reserved role on this cluster, so
 	// the connect path doesn't pile up duplicate bindings on every reconnect.
@@ -1412,6 +1413,7 @@ type Querier interface {
 	ListClusterLivenessForClusters(ctx context.Context, clusterIds []uuid.UUID) ([]ClusterLiveness, error)
 	// Resume bounded probe sweeps by stable identity, independent of fleet churn.
 	ListClusterProbeTargets(ctx context.Context, arg ListClusterProbeTargetsParams) ([]uuid.UUID, error)
+	ListClusterProjectsForScopes(ctx context.Context, arg ListClusterProjectsForScopesParams) ([]Project, error)
 	ListClusterRegistrationSteps(ctx context.Context, clusterID uuid.UUID) ([]ClusterRegistrationStep, error)
 	// Migration 050: multi-registry-per-cluster CRUD. The legacy
 	// Get/Upsert/Delete by cluster_id above is kept for back-compat with the old
@@ -1793,6 +1795,8 @@ type Querier interface {
 	// string.
 	ListPlatformSettingsByPrefix(ctx context.Context, prefix string) ([]PlatformSetting, error)
 	ListPodSecurityTemplates(ctx context.Context, arg ListPodSecurityTemplatesParams) ([]PodSecurityTemplate, error)
+	// Only the already authorized page of projects; no estate-wide namespace scan.
+	ListProjectNamespaceScopes(ctx context.Context, projectIds []uuid.UUID) ([]ProjectNamespace, error)
 	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]ProjectNamespace, error)
 	ListProjectOwnedCatalogs(ctx context.Context, projectID uuid.UUID) ([]HelmRepository, error)
 	// Usage snapshots for the admin dashboard --------------------------------

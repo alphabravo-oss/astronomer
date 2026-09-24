@@ -12,6 +12,11 @@ import (
 // selectedNamespaces distinguishes omitted scope from explicit empty scope.
 // Repeated namespaces parameters are intersected with permission-derived scope.
 func selectedNamespaces(query url.Values, all bool, allowed map[string]struct{}) (bool, map[string]struct{}, error) {
+	for key := range query {
+		if strings.HasPrefix(key, "namespaces[") || strings.HasPrefix(key, "namespace[") {
+			return false, nil, fmt.Errorf("Use repeated namespaces parameters without brackets")
+		}
+	}
 	values, present := query["namespaces"]
 	if len(query["namespace"]) > 1 {
 		return false, nil, fmt.Errorf("Use namespaces for multiple namespace values")

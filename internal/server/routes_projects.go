@@ -44,7 +44,7 @@ func registerProjectRoutes(r chi.Router, deps RouterDependencies) {
 			// frontend multi-cluster project view.
 			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/clusters/", deps.ClusterResources.Projects.ListClusters)
 		})
-		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/clusters/{cluster_id}/projects/", deps.ClusterResources.Projects.ListByCluster)
+		r.With(requireCollectionPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/clusters/{cluster_id}/projects/", deps.ClusterResources.Projects.ListByCluster)
 	}
 
 	// Cloud credentials (migration 053). Project-scoped CRUD with the

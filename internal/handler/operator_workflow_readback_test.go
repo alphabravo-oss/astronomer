@@ -32,6 +32,9 @@ func TestOperatorWorkloadNamespacePage(t *testing.T) {
 		{"namespace=team-a&namespaces=team-b", 400, 0, "", 0},
 		{"namespace=team-a&namespace=team-b", 400, 0, "", 0},
 		{"namespaces=../bad", 400, 0, "", 0},
+		{"namespaces[]=team-a", 400, 0, "", 0},
+		{"namespaces[0]=team-a", 400, 0, "", 0},
+		{"namespace[]=team-a", 400, 0, "", 0},
 	} {
 		t.Run(tc.query, func(t *testing.T) {
 			stub := &stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {

@@ -64,22 +64,68 @@ func TestCatalogSearchFiltersScopeBeforePaginationAndCounts(t *testing.T) {
 	}
 	q := New(tx)
 	var projectRows []Project
-	for offset := int32(0); offset < 2; offset++ {
+	for offset := int32(0); ; offset++ {
 		page, err := q.ListCatalogProjectsByCluster(ctx, ListCatalogProjectsByClusterParams{ClusterID: cluster, QueryLimit: 1, QueryOffset: offset})
-		if err != nil || len(page) != 1 {
-			t.Fatalf("effective cluster project page: %+v %v", page, err)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		if len(page) != 1 || offset > 10 {
+			t.Fatalf("invalid project pagination: %+v", page)
 		}
 		projectRows = append(projectRows, page...)
 	}
-	if projectRows[0].ID == projectRows[1].ID {
-		t.Fatal("secondary namespaces duplicated project")
-	}
 	foundProjects := map[uuid.UUID]bool{}
 	for _, row := range projectRows {
+		if foundProjects[row.ID] {
+			t.Fatal("secondary namespaces duplicated project")
+		}
 		foundProjects[row.ID] = true
 	}
 	if !foundProjects[project] || !foundProjects[secondaryProject] || foundProjects[unrelatedProject] {
 		t.Fatalf("wrong effective cluster projects %+v", projectRows)
+	}
+	// A secondary cluster association changes membership, not project read authority.
+	for _, tc := range []struct {
+		name               string
+		projects, clusters []uuid.UUID
+		want               int64
+	}{
+		{"direct project", []uuid.UUID{secondaryProject}, nil, 1},
+		{"unrelated project", []uuid.UUID{unrelatedProject}, nil, 0},
+		{"namespace only has no broad grants", nil, nil, 0},
+	} {
+		args := ListClusterProjectsForScopesParams{SelectedClusterID: cluster, ProjectIds: tc.projects, ClusterIds: tc.clusters, QueryLimit: 1}
+		rows, err := q.ListClusterProjectsForScopes(ctx, args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		total, err := q.CountClusterProjectsForScopes(ctx, CountClusterProjectsForScopesParams{SelectedClusterID: cluster, ProjectIds: tc.projects, ClusterIds: tc.clusters})
+		if err != nil || total != tc.want || int64(len(rows)) != tc.want {
+			t.Fatalf("%s: rows=%+v total=%d err=%v", tc.name, rows, total, err)
+		}
+		if len(rows) > 0 && rows[0].ID != secondaryProject {
+			t.Fatal("wrong authorized secondary project")
+		}
+	}
+	clusterVisible, err := q.ListClusterProjectsForScopes(ctx, ListClusterProjectsForScopesParams{SelectedClusterID: cluster, ClusterIds: []uuid.UUID{cluster}, QueryLimit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clusterCount, err := q.CountClusterProjectsForScopes(ctx, CountClusterProjectsForScopesParams{SelectedClusterID: cluster, ClusterIds: []uuid.UUID{cluster}})
+	if err != nil || clusterCount != int64(len(clusterVisible)) {
+		t.Fatalf("cluster grant count mismatch: %d %v", clusterCount, err)
+	}
+	for _, row := range clusterVisible {
+		if row.ID == secondaryProject || row.ClusterID != cluster {
+			t.Fatal("secondary association widened project authority")
+		}
+	}
+	assignments, err := q.ListProjectNamespaceScopes(ctx, []uuid.UUID{secondaryProject})
+	if err != nil || len(assignments) != 2 {
+		t.Fatalf("batch namespace scope read: %+v %v", assignments, err)
 	}
 	check := func(arg ListFilteredHelmChartsParams, wantTotal int64, wantRows int) []HelmChart {
 		t.Helper()
