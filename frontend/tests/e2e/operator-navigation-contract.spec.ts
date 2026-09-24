@@ -201,3 +201,42 @@ test("installed tools retain the Management onboarding template destination", as
     path: info.outputPath("installed-tools-template.png"),
   });
 });
+
+test("keyboard selection distinguishes the cluster and workload Overview commands", async ({
+  page,
+}) => {
+  const base = `/dashboard/clusters/${SMOKE_CLUSTER_ID}`;
+  await page.goto(base);
+  await expect(
+    page.getByRole("button", { name: "Go to page", exact: true }),
+  ).toBeVisible();
+  for (const destination of [base, `${base}/workloads`]) {
+    await page.keyboard.press("ControlOrMeta+k");
+    const search = page.getByPlaceholder("Search clusters, pages, actions...");
+    await expect(search).toBeFocused();
+    await page.keyboard.type("Overview");
+    const expected = page.locator(
+      `[cmdk-item][data-value^="${destination} Overview "]`,
+    );
+    await expect(expected).toBeVisible();
+    const selected = page.locator('[cmdk-item][data-selected="true"]');
+    const limit = await page.getByRole("option").count();
+    for (
+      let index = 0;
+      index < limit &&
+      (await selected.getAttribute("data-value")) !==
+        (await expected.getAttribute("data-value"));
+      index++
+    ) {
+      const previous = await selected.getAttribute("data-value");
+      await page.keyboard.press("ArrowDown");
+      await expect(selected).not.toHaveAttribute("data-value", previous!);
+    }
+    await expect(expected).toHaveAttribute("data-selected", "true");
+    await page.keyboard.press("Enter");
+    await expect(search).toBeHidden();
+    await expect(page).toHaveURL(
+      (url) => url.pathname.replace(/\/$/, "") === destination,
+    );
+  }
+});
