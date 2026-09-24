@@ -51,7 +51,7 @@ describe("catalog project isolation", () => {
     vi.restoreAllMocks();
   });
 
-  it("scopes every generated chart browse and version request to a project", async () => {
+  it("sends chart search to the API while keeping browse and versions project-scoped", async () => {
     const signal = new AbortController().signal;
     vi.mocked(generated.getCatalogCharts).mockResolvedValueOnce({
       data: [],
@@ -72,7 +72,13 @@ describe("catalog project isolation", () => {
     await getHelmChartVersions("project-1", "chart-1", "project", signal);
 
     expect(generated.getCatalogCharts).toHaveBeenCalledWith({
-      query: { project_id: "project-1", limit: 25 },
+      query: {
+        project_id: "project-1",
+        cluster_id: undefined,
+        search: "metrics",
+        limit: 25,
+        offset: undefined,
+      },
       signal,
     });
     expect(generated.getCatalogChartsByIdVersions).toHaveBeenCalledWith({
