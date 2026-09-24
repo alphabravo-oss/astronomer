@@ -274,6 +274,24 @@ for (const status of [403, 404]) {
           },
         }),
     );
+    let podReads = 0;
+    await page.route(
+      "**/workloads/deployments/default/review-web/pods/**",
+      (route) => {
+        podReads++;
+        return route.fulfill({
+          status,
+          json: {
+            error: {
+              message:
+                status === 403
+                  ? "Parent workload access denied"
+                  : "Parent workload not found",
+            },
+          },
+        });
+      },
+    );
     const origin = `${base}/deployments/default/review-web?tab=workload-pods&namespaces=default`;
     await page.goto(
       `${base}/pods/default/review-pod?tab=events&namespaces=default&origin=${encodeURIComponent(origin)}`,
@@ -290,6 +308,7 @@ for (const status of [403, 404]) {
         .getByText(status === 403 ? /denied|permission/i : /not found/i)
         .first(),
     ).toBeVisible();
+    expect(podReads).toBeGreaterThan(0);
     await expect(
       page.getByRole("link", { name: "Back", exact: true }),
     ).toHaveAttribute("href", `${base}/deployments`);

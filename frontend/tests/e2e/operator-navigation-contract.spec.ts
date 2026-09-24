@@ -195,7 +195,10 @@ test("installed tools retain the Management onboarding template destination", as
     page.getByRole("heading", { name: "Template", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("Applied navigation template", { exact: true }),
+    page.getByRole("heading", {
+      name: "Applied navigation template",
+      exact: true,
+    }),
   ).toBeVisible();
   await page.screenshot({
     path: info.outputPath("installed-tools-template.png"),

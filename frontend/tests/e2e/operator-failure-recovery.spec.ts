@@ -260,6 +260,26 @@ test("deleting a custom resource returns to its canonical type and retains proje
   const objectPath = `/api/v1/clusters/${SMOKE_CLUSTER_ID}/k8s/apis/cert-manager.io/v1/namespaces/default/certificates/delete-review`;
   const deletes: string[] = [];
   await page.route(
+    (url) =>
+      url.pathname.replace(/\/$/, "") ===
+      `/api/v1/clusters/${SMOKE_CLUSTER_ID}/namespaces`,
+    (route) =>
+      route.fulfill({
+        json: {
+          data: [
+            { name: "default", clusterId: SMOKE_CLUSTER_ID, status: "Active" },
+          ],
+          pagination: {
+            total: 1,
+            limit: 200,
+            offset: 0,
+            has_more: false,
+            next_offset: null,
+          },
+        },
+      }),
+  );
+  await page.route(
     (url) => url.pathname.replace(/\/$/, "") === objectPath,
     (route) => {
       if (route.request().method() === "DELETE") {
