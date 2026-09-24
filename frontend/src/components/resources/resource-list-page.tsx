@@ -1,3 +1,4 @@
+import { ErrorState } from "@/components/ui/empty-state";
 import { WorkloadTableDialogs } from "./workload-table-dialogs";
 import { collectionScope } from "@/lib/cluster-scope-collection";
 import { useClusterNamespaceScope } from "@/lib/cluster-scope";
@@ -223,6 +224,14 @@ function WorkloadsTable({
 }) {
   const scope = useClusterNamespaceScope(clusterId);
   const selection = collectionScope(scope.selectedNamespaces);
+  if (scope.error)
+    return (
+      <ErrorState
+        title="Namespace scope unavailable"
+        description="The selected project or authorized namespaces could not be resolved."
+        onRetry={scope.retry}
+      />
+    );
   if (!selection.enabled)
     return (
       <p role="status" className="p-6 text-sm text-muted-foreground">

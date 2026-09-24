@@ -1,3 +1,4 @@
+import { usePipelinePageParam } from "./-pipeline-page-param";
 import { pageTableCount } from "@/lib/api/pagination";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { Link } from "@tanstack/react-router";
@@ -19,7 +20,7 @@ import { toastError, toastSuccess } from "@/lib/toast";
 
 export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
   const queryClient = useQueryClient();
-  const [pageIndex, setPageIndex] = useState(0);
+  const { pageIndex, page, setPageIndex } = usePipelinePageParam();
   const [toggling, setToggling] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LoggingPipeline | null>(
     null,
@@ -76,6 +77,7 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
         <div>
           <Link
             to={String(`/dashboard/logging/pipelines/${row.id}`)}
+            search={{ pipelinePage: page }}
             className="font-medium text-foreground hover:underline"
           >
             {row.name}
@@ -96,7 +98,7 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
             header: "Cluster",
             accessor: (row: LoggingPipeline) => (
               <span className="text-sm text-muted-foreground">
-                {row.clusterName || "All"}
+                {row.clusterName || row.clusterId || "Unavailable"}
               </span>
             ),
           } as Column<LoggingPipeline>,

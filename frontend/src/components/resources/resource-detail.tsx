@@ -65,7 +65,8 @@ export function ResourceDetail({
     new URLSearchParams(searchStr).get("origin"),
     clusterId,
   );
-  const [execOpen, setExecOpen] = useState(false);
+  const resourceIdentity = `${clusterId}/${k8sPath}`;
+  const [execOpen, setExecOpen] = useState<string | null>(null);
 
   // These decisions intentionally use the same canonical/override resource as
   // list rows. The backend remains the final authorization boundary.
@@ -164,9 +165,10 @@ export function ResourceDetail({
     "overview",
   );
 
-  const tab = execOpen && execPermission.allowed ? "exec" : urlTab;
+  const tab =
+    execOpen === resourceIdentity && execPermission.allowed ? "exec" : urlTab;
   const setTab = (next: ResourceDetailTabId) => {
-    setExecOpen(next === "exec");
+    setExecOpen(next === "exec" ? resourceIdentity : null);
     if (next !== "exec") setUrlTab(next);
   };
   if (!canRead) {

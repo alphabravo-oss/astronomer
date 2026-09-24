@@ -28,10 +28,8 @@ import {
  *     out of scope. YAML correctness isn't validated client-side;
  *     helm install will fail clearly on bad YAML.
  *
- * The submit is async via the asynq queue (existing /catalog/installed/
- * handler enqueues a HelmInstall through the tunnel). The modal just
- * reports success when the row is created — the actual install state
- * surfaces through the Installed view's polling.
+ * Submission returns a durable catalog operation receipt. The caller tracks
+ * that operation and its Flux rollout; acceptance is not workload readiness.
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -233,7 +231,7 @@ export function AppInstallModal({
       toastSuccess(
         isUpgrade
           ? `Upgrade dispatched — ${mode.kind === "upgrade" ? mode.releaseName : ""} will reflect new revision shortly`
-          : `Install dispatched — "${releaseName}" will appear in Installed once helm completes`,
+          : `Install accepted — track "${releaseName}" and its Flux rollout in the operation timeline`,
       );
       qc.invalidateQueries({
         queryKey: queryKeys.clusterPages.appsInstalled(clusterId),

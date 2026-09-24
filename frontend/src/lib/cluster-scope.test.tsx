@@ -1,5 +1,6 @@
 import {
   projectInCluster,
+  projectNamespacesInCluster,
   projectSelectionSearch,
 } from "./cluster-scope-collection";
 import { describe, it, expect } from "vitest";
@@ -98,4 +99,60 @@ it("unmount invalidates pending project navigation", async () => {
   });
   expect(transactions.navigate).toHaveBeenCalledTimes(1);
   expect(transactions.navigate.mock.lastCall?.[0].to).toContain("namespaces=");
+});
+
+it("resolves authoritative secondary namespaces without flattening primary scope", () => {
+  const project = {
+    clusterId: "a",
+    clusterIds: ["a", "b"],
+    namespaces: ["primary"],
+    namespaceScopes: [
+      { clusterId: "a", namespaces: ["primary"] },
+      { clusterId: "b", namespaces: ["secondary"] },
+    ],
+  };
+  expect(projectNamespacesInCluster(project, "b")).toEqual(["secondary"]);
+  expect(
+    projectNamespacesInCluster({ ...project, namespaceScopes: undefined }, "b"),
+  ).toBeUndefined();
+});
+it("an older request cannot clear the same picker's newer pending state", async () => {
+  const first = deferred<{ clusterId: string; namespaces: string[] }>();
+  const second = deferred<{ clusterId: string; namespaces: string[] }>();
+  transactions.getProject.mockImplementation((id: string) =>
+    id === "a" ? first.promise : second.promise,
+  );
+  const picker = renderHook(() => useProjectSelection("c"));
+  act(() => {
+    void picker.result.current.select("a");
+    void picker.result.current.select("b");
+  });
+  await act(async () => {
+    first.resolve({ clusterId: "c", namespaces: ["team-a"] });
+    await first.promise;
+  });
+  expect(picker.result.current.pending).toBe(true);
+  await act(async () => {
+    second.resolve({ clusterId: "c", namespaces: ["team-b"] });
+    await second.promise;
+  });
+  expect(picker.result.current.pending).toBe(false);
+});
+it("a namespace selection made during a pending project read is not overwritten", async () => {
+  const request = deferred<{ clusterId: string; namespaces: string[] }>();
+  transactions.getProject.mockReturnValue(request.promise);
+  const picker = renderHook(() => useProjectSelection("c"));
+  act(() => {
+    void picker.result.current.select("a");
+  });
+  const { useClusterScopeStore } = await import("./cluster-scope");
+  act(() =>
+    useClusterScopeStore.getState().setClusterScope("c", ["manual"], null),
+  );
+  transactions.navigate.mockClear();
+  await act(async () => {
+    request.resolve({ clusterId: "c", namespaces: ["project"] });
+    await request.promise;
+  });
+  expect(transactions.navigate).not.toHaveBeenCalled();
 });

@@ -40,7 +40,11 @@ function mapProject(wire: ProjectWire): Project {
     displayName: wire.display_name,
     description: wire.description || undefined,
     clusterId: wire.cluster_id,
-    clusterIds: [wire.cluster_id],
+    clusterIds: wire.cluster_ids ?? [wire.cluster_id],
+    namespaceScopes: wire.namespace_scopes?.map((scope) => ({
+      clusterId: scope.cluster_id,
+      namespaces: scope.namespaces,
+    })),
     namespaces: wire.namespaces,
     resourceQuota: {
       cpuLimit: wire.resource_quota_cpu_limit,

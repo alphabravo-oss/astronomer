@@ -198,4 +198,103 @@ describe("CreateResourceDialog without a templateKey (Import YAML)", () => {
       expect(mutateAsync).not.toHaveBeenCalled();
     },
   );
+  it("applies an edited failed document body without resubmitting successful documents", async () => {
+    const yaml = (value: string) =>
+      `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: first\n  namespace: default\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: second\n  namespace: default\ndata:\n  value: ${value}`;
+    mutateAsync
+      .mockImplementationOnce(async ({ items }) =>
+        items.map((item: object, index: number) => ({
+          ...item,
+          ok: index === 0,
+          error: index === 0 ? undefined : new Error("Retry me"),
+        })),
+      )
+      .mockImplementationOnce(async ({ items }) =>
+        items.map((item: object) => ({ ...item, ok: true })),
+      );
+    render(
+      wrap(
+        <CreateResourceDialog
+          open
+          onClose={vi.fn()}
+          clusterId="cluster-1"
+          title="Import YAML"
+          initialYaml={yaml("old")}
+        />,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await screen.findByRole("button", { name: "Retry failed" });
+    fireEvent.change(await screen.findByLabelText("yaml-editor"), {
+      target: { value: yaml("corrected") },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry failed" }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+    expect(mutateAsync.mock.calls[1][0].items).toHaveLength(1);
+    expect(mutateAsync.mock.calls[1][0].items[0].body).toMatchObject({
+      metadata: { name: "second" },
+      data: { value: "corrected" },
+    });
+    await screen.findByRole("button", { name: "Done" });
+  });
+});
+
+vi.mock("@/components/resources/lazy-guided-resource-form", () => ({
+  LazyGuidedResourceForm: ({
+    value,
+    onChange,
+    onValidationChange,
+  }: {
+    value: { metadata?: { name?: string } };
+    onChange: (value: unknown) => void;
+    onValidationChange: (valid: boolean) => void;
+  }) => (
+    <input
+      aria-label="Guided name"
+      value={value.metadata?.name ?? ""}
+      onChange={(event) => {
+        onChange({
+          ...value,
+          metadata: { ...value.metadata, name: event.target.value },
+        });
+        onValidationChange(true);
+      }}
+    />
+  ),
+}));
+it("guided correction resubmits the edited name after failure", async () => {
+  mutateAsync.mockReset();
+  mutateAsync
+    .mockImplementationOnce(async ({ items }) =>
+      items.map((item: object) => ({
+        ...item,
+        ok: false,
+        error: new Error("Invalid name"),
+      })),
+    )
+    .mockImplementationOnce(async ({ items }) =>
+      items.map((item: object) => ({ ...item, ok: true })),
+    );
+  render(
+    wrap(
+      <CreateResourceDialog
+        open
+        onClose={vi.fn()}
+        clusterId="cluster-1"
+        templateKey="configmap"
+        title="Create ConfigMap"
+      />,
+    ),
+  );
+  const name = await screen.findByLabelText("Guided name");
+  await waitFor(() => expect(name).not.toHaveValue(""));
+  fireEvent.change(name, { target: { value: "wrong" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create" }));
+  await screen.findByRole("button", { name: "Retry failed" });
+  fireEvent.change(name, { target: { value: "corrected" } });
+  fireEvent.click(screen.getByRole("button", { name: "Retry failed" }));
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+  expect(mutateAsync.mock.calls[1][0].items[0].body.metadata.name).toBe(
+    "corrected",
+  );
 });

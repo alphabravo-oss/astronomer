@@ -43,6 +43,8 @@ const api: AxiosInstance = axios.create({
   baseURL: API_BASE,
   timeout: 30000,
   withCredentials: true,
+  // OpenAPI form/explode arrays use repeated keys, without Axios brackets.
+  paramsSerializer: { indexes: null },
   headers: { "Content-Type": "application/json" },
 });
 

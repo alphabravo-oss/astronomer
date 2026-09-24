@@ -140,4 +140,32 @@ describe("generated projects API", () => {
       transferred: true,
     });
   });
+  it("maps authoritative secondary membership and preserves per-cluster namespaces", async () => {
+    vi.mocked(getProjects).mockResolvedValueOnce({
+      data: [
+        {
+          ...projectWire,
+          cluster_ids: [projectWire.cluster_id, "secondary"],
+          namespace_scopes: [
+            { cluster_id: projectWire.cluster_id, namespaces: ["apps"] },
+            { cluster_id: "secondary", namespaces: ["secondary-apps"] },
+          ],
+        },
+      ],
+      pagination: {
+        limit: 20,
+        offset: 0,
+        total: 1,
+        has_more: false,
+        next_offset: null,
+      },
+    });
+    const result = await listProjects();
+    expect(result.data[0].clusterIds).toContain("secondary");
+    expect(result.data[0].namespaceScopes).toContainEqual({
+      clusterId: "secondary",
+      namespaces: ["secondary-apps"],
+    });
+    expect(result.data[0].namespaces).toEqual(["apps"]);
+  });
 });

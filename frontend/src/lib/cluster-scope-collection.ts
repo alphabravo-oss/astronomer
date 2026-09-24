@@ -50,3 +50,20 @@ export function projectSelectionSearch(
   }
   return next;
 }
+
+/** Secondary membership never borrows namespaces from the primary cluster. */
+export function projectNamespacesInCluster(
+  project: {
+    clusterId?: string;
+    namespaces: string[];
+    namespaceScopes?: Array<{ clusterId: string; namespaces: string[] }>;
+  },
+  clusterId?: string,
+): string[] | undefined {
+  if (!clusterId) return project.namespaces;
+  const selected = project.namespaceScopes?.find(
+    (scope) => scope.clusterId === clusterId,
+  );
+  if (selected) return selected.namespaces;
+  return project.clusterId === clusterId ? project.namespaces : undefined;
+}

@@ -17,7 +17,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { ResourceMasthead } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
 import { ActionButton } from "@/components/ui/action-button";
-import { PermissionState } from "@/components/ui/empty-state";
+import { PermissionState, ErrorState } from "@/components/ui/empty-state";
 import { ResourceActionMenu } from "@/components/resources/resource-action-menu";
 import { useClusterResourcePermissions } from "@/components/resources/resource-action-policy";
 
@@ -57,6 +57,10 @@ export function CustomResourceList(props: {
           Retry discovery
         </ActionButton>
       </div>
+    );
+  if (type.namespaced && scope.error)
+    return (
+      <ErrorState title="Namespace scope unavailable" onRetry={scope.retry} />
     );
   const selection = collectionScope(
     type.namespaced ? scope.selectedNamespaces : null,

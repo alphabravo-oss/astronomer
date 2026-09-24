@@ -6,7 +6,6 @@ import { useProject } from "@/lib/hooks/projects";
 import { useQuery } from "@tanstack/react-query";
 import { getProjects, getClusterProjects } from "@/lib/api/projects";
 import { queryKeys } from "@/lib/query-keys";
-import { RemoteProjectPicker } from "@/components/projects/remote-project-picker";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   EmptyState,
@@ -165,8 +164,6 @@ export function deliveryProjectLabel(project: {
 
 export function DeliveryShell({
   projectId,
-  setProjectId,
-  showProjectSelect = true,
   children,
 }: {
   projectId: string;
@@ -182,33 +179,19 @@ export function DeliveryShell({
   children: ReactNode;
 }) {
   const { clusterId } = useDeliveryWorkspace();
-  // Cluster delivery layout already owns the tab strip. Detail pages that
-  // still sit on /dashboard/delivery/... only need a way back to the fleet.
+  // Workspace layouts own project selection; detail pages retain a fleet link.
   if (clusterId) return children;
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
         <RouterLink
           to="/dashboard/delivery"
+          search={{ project: projectId }}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to delivery fleet
         </RouterLink>
-        {showProjectSelect ? (
-          <div className="flex min-w-64 items-center gap-2 text-sm">
-            <FolderKanban
-              className="h-4 w-4 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <span className="sr-only">Delivery project</span>
-            <RemoteProjectPicker
-              value={projectId}
-              onChange={setProjectId}
-              ariaLabel="Delivery project"
-            />
-          </div>
-        ) : null}
       </div>
       {children}
     </div>

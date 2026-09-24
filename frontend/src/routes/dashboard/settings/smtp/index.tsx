@@ -24,7 +24,7 @@ import { toastError } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { formatRelativeTime } from "@/lib/utils";
 import { pageCount, pageNumber } from "@/lib/api/pagination";
-import { useAppForm } from "@/lib/form";
+import { useAppForm, useStore } from "@/lib/form";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
@@ -81,6 +81,8 @@ function SmtpForm({
       }
     },
   });
+
+  const dirty = useStore(form.store, (state) => state.isDirty);
 
   // Post-save invalidation refetches the config — rebase the form on it.
   useEffect(() => {
@@ -227,7 +229,9 @@ function SmtpForm({
             type="button"
             title="Tests the saved server configuration. Save any changes first."
             onClick={handleTest}
-            disabled={testSend.isPending || !testTo}
+            disabled={
+              dirty || update.isPending || testSend.isPending || !testTo
+            }
             loading={testSend.isPending}
             icon={<Send className="h-3.5 w-3.5" />}
           >

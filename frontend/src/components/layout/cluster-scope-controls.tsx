@@ -1,6 +1,9 @@
 import { ActionButton } from "@/components/ui/action-button";
 import { useProjectSelection } from "@/lib/cluster-scope-project";
-import { projectInCluster } from "@/lib/cluster-scope-collection";
+import {
+  projectInCluster,
+  projectNamespacesInCluster,
+} from "@/lib/cluster-scope-collection";
 import { Command } from "cmdk";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import {
@@ -207,8 +210,13 @@ function ProjectScopePicker({
                     {project.displayName || project.name}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {project.namespaces.length} namespace
-                    {project.namespaces.length === 1 ? "" : "s"}
+                    {projectNamespacesInCluster(project, clusterId)?.length ??
+                      0}{" "}
+                    namespace
+                    {projectNamespacesInCluster(project, clusterId)?.length ===
+                    1
+                      ? ""
+                      : "s"}
                   </span>
                 </span>
               </Command.Item>

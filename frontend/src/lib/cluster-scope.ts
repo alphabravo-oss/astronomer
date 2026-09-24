@@ -1,5 +1,8 @@
 import { useProject } from "@/lib/hooks/projects";
-import { projectInCluster } from "./cluster-scope-collection";
+import {
+  projectInCluster,
+  projectNamespacesInCluster,
+} from "./cluster-scope-collection";
 import { useCallback, useEffect, useMemo } from "react";
 
 import { useClusterNamespaces } from "@/lib/hooks/clusters";
@@ -218,19 +221,11 @@ export function useClusterNamespaceScope(
     [namespacesQuery.data],
   );
 
-  const broadNamespaceAccess = useMemo(() => {
-    const response = permissionsQuery.data;
-    if (!response) return false;
-    if (response.superuser) return true;
-    return response.bindings.some((binding) => {
-      if (binding.namespace) return false;
-      if (binding.scope === "cluster" && binding.clusterId !== clusterId)
-        return false;
-      if (binding.scope !== "cluster" && binding.scope !== "global")
-        return false;
-      return binding.rules?.some(ruleGrantsNamespaceVisibility);
-    });
-  }, [clusterId, permissionsQuery.data]);
+  const broadNamespaceAccess = hasBroadNamespaceAccess(
+    permissionsQuery.data,
+    clusterId,
+  );
+
   const restricted = !broadNamespaceAccess;
   const urlSelection = useMemo(
     () => parseNamespaceSelection(new URLSearchParams(searchString)),
@@ -248,20 +243,28 @@ export function useClusterNamespaceScope(
     !selectedProjectId ||
     (projectQuery.isSuccess &&
       projectQuery.data &&
-      projectInCluster(projectQuery.data, clusterId));
+      projectInCluster(projectQuery.data, clusterId) &&
+      projectNamespacesInCluster(projectQuery.data, clusterId) !== undefined);
   const ready =
     namespacesQuery.isSuccess &&
     permissionsQuery.isSuccess &&
     Boolean(validProject);
   const projectNamespaces = selectedProjectId
-    ? projectQuery.data?.namespaces
+    ? projectQuery.data &&
+      projectNamespacesInCluster(projectQuery.data, clusterId)
     : undefined;
 
   const activeSelection = useMemo<NamespaceSelection | undefined>(() => {
     if (!ready) return undefined;
     if (selectedProjectId && projectNamespaces)
       return canonicalNamespaces(
-        (urlSelection ?? projectNamespaces).filter(
+        (
+          urlSelection ??
+          (urlProjectId === undefined && storedProjectId === selectedProjectId
+            ? stored
+            : undefined) ??
+          projectNamespaces
+        ).filter(
           (namespace) =>
             availableNamespaces.includes(namespace) &&
             projectNamespaces.includes(namespace),
@@ -291,6 +294,8 @@ export function useClusterNamespaceScope(
     urlSelection,
     selectedProjectId,
     projectNamespaces,
+    urlProjectId,
+    storedProjectId,
   ]);
 
   const commit = useCallback(
@@ -338,7 +343,7 @@ export function useClusterNamespaceScope(
   useEffect(() => {
     if (!ready) return;
     if (selectedProjectId && projectNamespaces && urlSelection === undefined) {
-      commit(projectNamespaces, selectedProjectId);
+      commit(activeSelection ?? projectNamespaces, selectedProjectId);
       return;
     }
     const fromUrl = urlSelection;
@@ -373,6 +378,7 @@ export function useClusterNamespaceScope(
     selectedProjectId,
     urlSelection,
     projectNamespaces,
+    activeSelection,
   ]);
 
   const includes = useCallback(
@@ -422,4 +428,19 @@ export function useClusterNamespaceScope(
     includes,
     allows,
   };
+}
+
+function hasBroadNamespaceAccess(
+  response: ReturnType<typeof useMyEffectivePermissions>["data"],
+  clusterId: string,
+) {
+  if (!response) return false;
+  if (response.superuser) return true;
+  return response.bindings.some((binding) => {
+    if (binding.namespace) return false;
+    if (binding.scope === "cluster" && binding.clusterId !== clusterId)
+      return false;
+    if (binding.scope !== "cluster" && binding.scope !== "global") return false;
+    return binding.rules?.some(ruleGrantsNamespaceVisibility);
+  });
 }

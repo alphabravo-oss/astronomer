@@ -21,11 +21,22 @@ test("all header controls fit at the five reviewed widths", async ({
         .locator("header")
         .getByRole("button", { name: "Import", exact: true }),
     ).toBeVisible();
-    for (const label of ["Go to page", "User menu", "Import"]) await expect(page.locator("header").getByRole("button", { name: label, exact: true })).toBeVisible();
-    await expect(page.locator("header").getByRole("button", { name: /Notifications/ })).toBeVisible();
-    await expect(page.locator("header").getByRole("button", { name: /Namespace scope/ })).toBeVisible();
+    for (const label of ["Go to page", "User menu", "Import"])
+      await expect(
+        page
+          .locator("header")
+          .getByRole("button", { name: label, exact: true }),
+      ).toBeVisible();
+    await expect(
+      page.locator("header").getByRole("button", { name: /Notifications/ }),
+    ).toBeVisible();
+    await expect(
+      page.locator("header").getByRole("button", { name: /Namespace scope/ }),
+    ).toBeVisible();
     for (const name of ["User menu", "Notifications"]) {
-      const trigger = page.locator("header").getByRole("button", { name: new RegExp(`^${name}`) });
+      const trigger = page
+        .locator("header")
+        .getByRole("button", { name: new RegExp(`^${name}`) });
       await trigger.click();
       const popover = page.locator("[data-header-popover]");
       await expect(popover).toBeVisible();
@@ -72,4 +83,36 @@ test("all header controls fit at the five reviewed widths", async ({
       ).toBeFocused();
     }
   }
+});
+
+test("long cluster labels retain viewport-safe context and actions", async ({
+  page,
+}, info) => {
+  const { overrides } = await import("../e2e-smoke/stub-overrides");
+  const original = (
+    overrides.find(
+      (entry) => entry.path === `/api/v1/clusters/${SMOKE_CLUSTER_ID}`,
+    )!.body as { data: Record<string, unknown> }
+  ).data;
+  const name =
+    "Production customer services cluster in the western region with a very long descriptive name";
+  await page.route(
+    new RegExp(`/api/v1/clusters/${SMOKE_CLUSTER_ID}/?(?:\\?.*)?$`),
+    (route) =>
+      route.fulfill({ json: { data: { ...original, display_name: name } } }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}`);
+  await expect(
+    page.locator("header").getByRole("button", { name, exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator("header").getByRole("button", { name: "Import", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page
+      .locator("header")
+      .evaluate((header) => header.scrollWidth <= innerWidth),
+  ).toBe(true);
+  await page.screenshot({ path: info.outputPath("shell-long-name-390.png") });
 });

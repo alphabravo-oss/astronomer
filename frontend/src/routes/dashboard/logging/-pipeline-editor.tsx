@@ -1,3 +1,4 @@
+import { usePipelinePageParam } from "./-pipeline-page-param";
 import { Select } from "@/components/ui/select";
 import { toastApiError } from "@/lib/toast";
 import { useEffect, useState } from "react";
@@ -65,6 +66,7 @@ function PipelineContent({
   const [draft, setDraft] = useState(pipeline);
   const stale = original.updatedAt !== pipeline.updatedAt;
   const navigate = useNavigate();
+  const { page } = usePipelinePageParam();
   const client = useQueryClient();
   const outputs = useLoggingOutputs(pipeline.clusterId);
   const namespaces = useClusterNamespaces(pipeline.clusterId ?? "");
@@ -84,8 +86,12 @@ function PipelineContent({
     },
   });
   useEffect(() => {
-    if (mutation.isSuccess) void navigate({ to: `/dashboard/logging/pipelines/${pipeline.id}` });
-  }, [mutation.isSuccess, navigate, pipeline.id]);
+    if (mutation.isSuccess)
+      void navigate({
+        to: `/dashboard/logging/pipelines/${pipeline.id}`,
+        search: { pipelinePage: page },
+      });
+  }, [mutation.isSuccess, navigate, pipeline.id, page]);
   const missing = draft.outputIds.filter(
     (id) =>
       !outputs.data?.some(
@@ -107,9 +113,17 @@ function PipelineContent({
         title={edit ? `Edit ${pipeline.name}` : pipeline.name}
         description={`Cluster ${pipeline.clusterId ?? "unavailable"}`}
         actions={
-          <Link to="/dashboard/logging" search={{ tab: "pipelines" }}>
-            Back to pipelines
-          </Link>
+          pipeline.clusterId ? (
+            <Link
+              to="/dashboard/clusters/$id/logging"
+              params={{ id: pipeline.clusterId }}
+              search={{ view: "collection", pipelinePage: page }}
+            >
+              Back to pipelines
+            </Link>
+          ) : (
+            <Link to="/dashboard/logging">Back to logging</Link>
+          )
         }
       />
       <FormShell
@@ -232,6 +246,7 @@ function PipelineContent({
           write.allowed && (
             <Link
               to={String(`/dashboard/logging/pipelines/${pipeline.id}/edit`)}
+              search={{ pipelinePage: page }}
             >
               Edit pipeline
             </Link>

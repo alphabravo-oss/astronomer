@@ -83,7 +83,11 @@ test("multi-namespace scope is sent as repeated API parameters and empty scope s
   await page.route("**/api/v1/clusters/*/namespaces/**", (route) =>
     route.fulfill({
       json: {
-        data: ["team-a", "team-b"].map((name) => ({ name })),
+        data: ["team-a", "team-b"].map((name) => ({
+          name,
+          clusterId: SMOKE_CLUSTER_ID,
+          createdAt: "2026-01-01T00:00:00Z",
+        })),
         pagination: {
           limit: 200,
           offset: 0,
@@ -134,7 +138,7 @@ test("multi-namespace scope is sent as repeated API parameters and empty scope s
   expect(requests).toEqual([]);
 });
 
-test("direct project entry resolves its namespaces before any workload request", async ({
+test("direct secondary-project entry resolves its own namespaces before any workload request", async ({
   page,
 }) => {
   await page.addInitScript(
@@ -155,7 +159,11 @@ test("direct project entry resolves its namespaces before any workload request",
   await page.route("**/api/v1/clusters/*/namespaces/**", (route) =>
     route.fulfill({
       json: {
-        data: [{ name: "team-a" }, { name: "team-b" }],
+        data: ["team-a", "team-b"].map((name) => ({
+          name,
+          clusterId: SMOKE_CLUSTER_ID,
+          createdAt: "2026-01-01T00:00:00Z",
+        })),
         pagination: {
           limit: 200,
           offset: 0,
@@ -178,8 +186,13 @@ test("direct project entry resolves its namespaces before any workload request",
           id: "project-b",
           name: "B",
           display_name: "Project B",
-          cluster_id: SMOKE_CLUSTER_ID,
-          namespaces: ["team-b"],
+          cluster_id: "primary-cluster",
+          cluster_ids: ["primary-cluster", SMOKE_CLUSTER_ID],
+          namespaces: ["team-a"],
+          namespace_scopes: [
+            { cluster_id: "primary-cluster", namespaces: ["team-a"] },
+            { cluster_id: SMOKE_CLUSTER_ID, namespaces: ["team-b"] },
+          ],
           resource_quota: {},
           created_at: "2026-01-01T00:00:00Z",
           updated_at: "2026-01-01T00:00:00Z",
@@ -230,4 +243,68 @@ test("direct project entry resolves its namespaces before any workload request",
       (url) => new URL(url).searchParams.get("namespace") === "team-b",
     ),
   ).toBeTruthy();
+});
+
+test("a removed remembered namespace never reaches the collection API", async ({
+  page,
+}) => {
+  await page.addInitScript(
+    (cluster) =>
+      localStorage.setItem(
+        "astronomer-cluster-scope",
+        JSON.stringify({
+          state: {
+            namespacesByCluster: { [cluster]: ["removed"] },
+            projectByCluster: {},
+            recentClusterIds: [],
+          },
+          version: 2,
+        }),
+      ),
+    SMOKE_CLUSTER_ID,
+  );
+  await page.route("**/api/v1/clusters/*/namespaces/**", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            name: "current",
+            clusterId: SMOKE_CLUSTER_ID,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+        pagination: {
+          limit: 200,
+          offset: 0,
+          total: 1,
+          has_more: false,
+          next_offset: null,
+        },
+      },
+    }),
+  );
+  const requests: string[] = [];
+  await page.route(
+    /\/api\/v1\/clusters\/[^/]+\/workloads\/?(?:\?.*)?$/,
+    (route) => {
+      requests.push(route.request().url());
+      return route.fulfill({
+        json: {
+          data: [],
+          pagination: {
+            limit: 50,
+            offset: 0,
+            total: 0,
+            has_more: false,
+            next_offset: null,
+          },
+        },
+      });
+    },
+  );
+  await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}/deployments`);
+  await expect(
+    page.getByText("No namespaces selected", { exact: false }).first(),
+  ).toBeVisible();
+  expect(requests).toEqual([]);
 });

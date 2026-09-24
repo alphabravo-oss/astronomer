@@ -2,7 +2,10 @@ import { getResourceDef } from "@/lib/k8s-paths";
 import { getClusterNamespaces } from "@/lib/api/workloads";
 import { getProject } from "@/lib/api/projects";
 import { getCompleteResourceDiscovery } from "@/lib/api/resources";
-import { projectInCluster } from "@/lib/cluster-scope-collection";
+import {
+  projectInCluster,
+  projectNamespacesInCluster,
+} from "@/lib/cluster-scope-collection";
 import type { NamespaceSelection } from "@/lib/cluster-scope";
 import { clusterDiscoveryFromSummaries } from "./cluster-discovery-model";
 
@@ -62,7 +65,12 @@ export async function resolveClusterTransition(
       throw new Error(
         "The remembered project is no longer available in this cluster. Clear its scope before switching.",
       );
-    selection = project.namespaces.filter((name) => allowed.has(name));
+    const namespaces = projectNamespacesInCluster(project, target);
+    if (!namespaces)
+      throw new Error(
+        "Project namespace scope is unavailable for the target cluster",
+      );
+    selection = namespaces.filter((name) => allowed.has(name));
   }
   let types: string[] = [];
   if (pathname.includes("/custom-resources/")) {

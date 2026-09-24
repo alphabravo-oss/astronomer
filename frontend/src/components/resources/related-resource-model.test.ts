@@ -11,12 +11,11 @@ const discovery: ResourceDiscoveryView = {
   resources: [],
   crds: [
     {
-      spec: {
-        group: "example.io",
-        scope: "Cluster",
-        names: { kind: "Deployment", plural: "deployments" },
-        versions: [{ name: "v1", served: true, storage: true }],
-      },
+      group: "example.io",
+      scope: "Cluster",
+      kind: "Deployment",
+      plural: "deployments",
+      versions: [{ name: "v1", storage: true }],
     },
   ],
   crdContinue: "",

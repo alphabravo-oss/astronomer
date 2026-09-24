@@ -40,3 +40,16 @@ it("rejects missing CRD discovery and a repeated continuation instead of claimin
   request.mockResolvedValue(page([], "repeated") as never);
   await expect(getCompleteResourceDiscovery("c")).rejects.toThrow("repeated");
 });
+it("stops metadata traversal when the caller aborts between pages", async () => {
+  const controller = new AbortController();
+  const request = vi.mocked(getClustersByClusterIdResourcesDiscovery);
+  request.mockClear();
+  request.mockImplementationOnce(async () => {
+    controller.abort();
+    return page([], "next") as never;
+  });
+  await expect(
+    getCompleteResourceDiscovery("c", controller.signal),
+  ).rejects.toThrow();
+  expect(request).toHaveBeenCalledTimes(1);
+});

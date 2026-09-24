@@ -1,5 +1,5 @@
 import type { ResourceDiscoveryView } from "@/lib/api/resources";
-import { clusterDiscoveryFromDefinitions } from "@/components/layout/cluster-discovery-model";
+import { clusterDiscoveryFromSummaries } from "@/components/layout/cluster-discovery-model";
 import { crDetailHref, detailHref, k8sListPath } from "@/lib/k8s-paths";
 import type { K8sObject } from "./resource-detail-model";
 
@@ -31,7 +31,7 @@ export function ownerHref(
       resource.namespaced ? namespace : undefined,
       owner.name,
     );
-  const custom = clusterDiscoveryFromDefinitions(discovery.crds)
+  const custom = clusterDiscoveryFromSummaries(discovery.crds)
     .crdsByGroup.get(group)
     ?.find(
       (entry) =>

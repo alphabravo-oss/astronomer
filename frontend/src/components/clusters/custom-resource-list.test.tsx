@@ -237,3 +237,33 @@ it.each([undefined, []])(
     expect(state.useResource).not.toHaveBeenCalled();
   },
 );
+
+it("uses the explicit repeated namespace contract for a combined collection", () => {
+  state.selection = ["team-a", "team-b"];
+  render(<CustomResourceList {...props} />);
+  const path = state.useResource.mock.lastCall?.[1] as string;
+  const query = new URLSearchParams(path.split("?")[1]);
+  expect(query.getAll("astronomerNamespace")).toEqual(["team-a", "team-b"]);
+  expect(path).toMatch(/^apis\/example.io\/v2\/widgets\?/);
+});
+it("restarts at the first collection page after an expired cursor", () => {
+  state.query.data = { items: [], metadata: { continue: "opaque-expired" } };
+  const { rerender } = render(<CustomResourceList {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  expect(state.useResource.mock.lastCall?.[1]).toContain(
+    "continue=opaque-expired",
+  );
+  state.query.error = { response: { status: 410 } };
+  state.query.isError = true;
+  rerender(<CustomResourceList {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(state.useResource.mock.lastCall?.[1]).not.toContain("continue=");
+});
+it("drops old collection continuation when the cluster changes", () => {
+  state.query.data = { items: [], metadata: { continue: "old-cluster" } };
+  const { rerender } = render(<CustomResourceList {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  rerender(<CustomResourceList {...props} clusterId="other" />);
+  expect(state.useResource.mock.lastCall?.[0]).toBe("other");
+  expect(state.useResource.mock.lastCall?.[1]).not.toContain("continue=");
+});

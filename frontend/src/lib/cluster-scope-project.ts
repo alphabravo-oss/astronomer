@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { getProject } from "@/lib/api/projects";
 import {
   projectInCluster,
+  projectNamespacesInCluster,
   projectSelectionSearch,
 } from "./cluster-scope-collection";
 import { useClusterScopeStore } from "./cluster-scope";
@@ -54,9 +55,19 @@ export function useProjectSelection(clusterId?: string) {
       try {
         const project = await getProject(id);
         if (request !== latestSelection) return;
+        if (
+          clusterId &&
+          useClusterScopeStore.getState().projectByCluster[clusterId] !== id
+        )
+          return;
         if (clusterId && !projectInCluster(project, clusterId))
           throw new Error("Project does not belong to this cluster");
-        commit(project.namespaces);
+        const namespaces = projectNamespacesInCluster(project, clusterId);
+        if (!namespaces)
+          throw new Error(
+            "Project namespace scope is unavailable for this cluster",
+          );
+        commit(namespaces);
       } catch (error) {
         if (request === latestSelection)
           toastApiError("Project scope unavailable", error);

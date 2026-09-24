@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ClusterGrafanaView } from "@/components/monitoring/cluster-grafana-view";
+import { ClusterMetricsWorkspace } from "./-page";
 
 function ClusterMetricsRoute() {
   const params = Route.useParams();
-  return <ClusterGrafanaView clusterId={params.id} view="metrics" />;
+  return <ClusterMetricsWorkspace clusterId={params.id} />;
 }
 
 export const Route = createFileRoute("/dashboard/clusters/$id/metrics/")({
