@@ -202,6 +202,11 @@ test("tool-owned release pivots to Tools without loading catalog mutation diagno
   await jsonRoute(page, `/api/v1/catalog/installed/${releaseId}`, {
     data: { ...release, source_kind: "tool", tool_slug: "velero" },
   });
+  await jsonRoute(
+    page,
+    `/api/v1/clusters/${clusterId}/apps`,
+    pageOf([{ ...release, source_kind: "tool", tool_slug: "velero" }]),
+  );
   const diagnosticReads: string[] = [];
   page.on("request", (request) => {
     if (

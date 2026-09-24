@@ -29,6 +29,19 @@ const event = {
 };
 test.beforeEach(async ({ page, context }) => {
   await workflowAuth(page, context);
+  await jsonRoute(page, "/api/v1/alerting/events/summary", {
+    data: {
+      total: 1,
+      firing: 1,
+      acknowledged: 0,
+      resolved: 0,
+      silenced: 0,
+      firing_critical: 1,
+      firing_warning: 0,
+      firing_info: 0,
+      as_of: now,
+    },
+  });
   await jsonRoute(page, "/api/v1/alerting/events", pageOf([event]));
   await jsonRoute(page, `/api/v1/alerting/events/${id}`, { data: event });
 });
