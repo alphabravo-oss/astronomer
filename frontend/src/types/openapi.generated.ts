@@ -759,6 +759,7 @@ export interface OpenAPIComponents {
           "catalog_digest": string;
         };
     CatalogOperation: {
+          "events"?: OpenAPIComponents['schemas']['CatalogOperationEvent'][];
           "journalStatus"?: string;
           "deliveryPhase"?: string;
           "deliveryObservedAt"?: string;

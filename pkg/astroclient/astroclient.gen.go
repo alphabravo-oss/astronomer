@@ -3583,9 +3583,10 @@ type CatalogOperation struct {
 	DeliveryObservedAt       *time.Time `json:"deliveryObservedAt,omitempty"`
 
 	// DeliveryPhase Exact operation rollout or deletion outcome; unknown means no reliable observation is available.
-	DeliveryPhase *string             `json:"deliveryPhase,omitempty"`
-	ErrorMessage  *string             `json:"errorMessage,omitempty"`
-	Id            *openapi_types.UUID `json:"id,omitempty"`
+	DeliveryPhase *string                  `json:"deliveryPhase,omitempty"`
+	ErrorMessage  *string                  `json:"errorMessage,omitempty"`
+	Events        *[]CatalogOperationEvent `json:"events,omitempty"`
+	Id            *openapi_types.UUID      `json:"id,omitempty"`
 
 	// JournalStatus Durable catalog worker state; only failed/retryable journal entries can use catalog retry.
 	JournalStatus *string `json:"journalStatus,omitempty"`

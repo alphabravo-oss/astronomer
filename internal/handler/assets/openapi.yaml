@@ -6917,6 +6917,7 @@ components:
     CatalogOperation:
       type: object
       properties:
+        events: {type: array, items: {$ref: '#/components/schemas/CatalogOperationEvent'}}
         journalStatus: {type: string, description: Durable catalog worker state; only failed/retryable journal entries can use catalog retry.}
         deliveryPhase: {type: string, description: Exact operation rollout or deletion outcome; unknown means no reliable observation is available.}
         deliveryObservedAt: {type: string, format: date-time}
