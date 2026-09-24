@@ -41,7 +41,7 @@ func (f *pagedDiscoveryRequester) Do(ctx context.Context, _ string, method, path
 	}
 	uri, _ := url.Parse(path)
 	status := http.StatusOK
-	payload := map[string]any{}
+	var payload map[string]any
 	if strings.HasSuffix(uri.Path, "/customresourcedefinitions") {
 		if f.crdStatus != 0 {
 			status = f.crdStatus

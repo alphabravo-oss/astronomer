@@ -195,7 +195,7 @@ func TestNamespaceCollectionCursorSurvivesForwardingToOwner(t *testing.T) {
 	ownerRouter := chi.NewRouter()
 	ownerRouter.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer caller" {
-			http.Error(w, "missing caller authentication", 401)
+			http.Error(w, "missing caller authentication", http.StatusUnauthorized)
 			return
 		}
 		owner.HandleK8sProxy(w, r.WithContext(callerid.WithUser(r.Context(), user)))

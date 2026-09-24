@@ -47,7 +47,6 @@ func TestK8sProxyExplicitNamespaceCollectionAuthorization(t *testing.T) {
 }
 
 type changingNamespaceBindings struct {
-	routeSecurityRBACQuerier
 	current []rbac.RoleBinding
 }
 
