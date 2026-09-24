@@ -1,4 +1,10 @@
 import { test, expect } from "@playwright/test";
+import type {
+  AlertEvent,
+  RBACEffectivePermissions,
+} from "../../src/types/openapi.generated";
+import { authMeWire, seedAuth } from "./helpers/auth";
+import { readOnlyAuthUser } from "./helpers/auth-state";
 import {
   clusterId,
   now,
@@ -9,7 +15,7 @@ import {
 } from "./helpers/operator-workflows";
 const id = "alert-workflow-1";
 const message = `Workload checkout has failed readiness. ${"Detailed diagnostic context with namespace and timing. ".repeat(25)} END-OF-LONG-MESSAGE`;
-const event = {
+const event: AlertEvent = {
   id,
   ruleId: "rule-workflow",
   ruleName: "Checkout readiness",
@@ -44,6 +50,325 @@ test.beforeEach(async ({ page, context }) => {
   });
   await jsonRoute(page, "/api/v1/alerting/events", pageOf([event]));
   await jsonRoute(page, `/api/v1/alerting/events/${id}`, { data: event });
+});
+
+for (const missing of ["rule", "cluster"] as const) {
+  test(`alert without a ${missing} identity does not invent destination links`, async ({
+    page,
+  }) => {
+    const incomplete: AlertEvent = {
+      ...event,
+      ...(missing === "rule"
+        ? { ruleId: "", ruleName: "" }
+        : { clusterId: null, clusterName: null }),
+    };
+    await jsonRoute(page, `/api/v1/alerting/events/${id}`, {
+      data: incomplete,
+    });
+    await page.goto(`/dashboard/alerting?tab=history&event=${id}`);
+    const dialog = page.getByRole("dialog", { name: "Alert investigation" });
+    await expect(dialog.getByText(message, { exact: true })).toBeVisible();
+    await expect(
+      dialog.getByRole("link", { name: "Investigate rule" }),
+    ).toHaveCount(0);
+    if (missing === "rule") {
+      await expect(
+        dialog.getByText("Unavailable", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        dialog.getByRole("link", { name: "Cluster metrics" }),
+      ).toHaveAttribute("href", `/dashboard/clusters/${clusterId}/metrics`);
+    } else {
+      await expect(
+        dialog.getByText(event.ruleName, { exact: true }),
+      ).toBeVisible();
+      await expect(dialog.getByRole("link")).toHaveCount(0);
+    }
+    // A resource display string is insufficient to construct a resource URL.
+    await expect(dialog.locator('a[href*="checkout"]')).toHaveCount(0);
+    await expect(
+      dialog.locator('a[href*="undefined"], a[href*="null"]'),
+    ).toHaveCount(0);
+  });
+}
+
+test("an alert reader sees only destinations granted by the authenticated role", async ({
+  page,
+  context,
+}) => {
+  const bindingId = "39c9a5cc-c8c4-4c45-8c59-ff0df1b8ad01";
+  const roleId = "39c9a5cc-c8c4-4c45-8c59-ff0df1b8ad02";
+  const rule = { resource: "alerts", verbs: ["read"] };
+  const user = {
+    ...readOnlyAuthUser,
+    globalRoles: [],
+    roles: {
+      global: [
+        { id: bindingId, roleId, roleName: "Alert reader", roleRules: [rule] },
+      ],
+      cluster: [],
+      project: [],
+    },
+  };
+  await seedAuth(context, page, user);
+  let authReads = 0;
+  await page.route(
+    (url) => url.pathname.replace(/\/$/, "") === "/api/v1/auth/me",
+    (route) => {
+      authReads += 1;
+      return route.fulfill({ json: { data: authMeWire(user) } });
+    },
+  );
+  const permissions: RBACEffectivePermissions = {
+    subject: { user_id: user.id, self: true },
+    superuser: false,
+    context: { namespace_scoped_bindings_supported: true, warnings: [] },
+    bindings: [
+      {
+        scope: "global",
+        binding_id: bindingId,
+        role_id: roleId,
+        role_name: "Alert reader",
+        rules: [rule],
+      },
+    ],
+    permissions: [
+      {
+        resource: "alerts",
+        verb: "read",
+        applies_to_context: true,
+        sources: [
+          {
+            scope: "global",
+            binding_id: bindingId,
+            role_id: roleId,
+            role_name: "Alert reader",
+          },
+        ],
+      },
+    ],
+  };
+  await jsonRoute(page, "/api/v1/rbac/my-permissions", { data: permissions });
+  const resolved: AlertEvent = {
+    ...event,
+    status: "resolved",
+    resolvedAt: "2026-09-24T12:10:00Z",
+    resolvedBy: "user-admin",
+  };
+  await jsonRoute(page, "/api/v1/alerting/events", pageOf([resolved]));
+  await jsonRoute(page, `/api/v1/alerting/events/${id}`, { data: resolved });
+  await jsonRoute(page, "/api/v1/alerting/events/summary", {
+    data: {
+      total: 1,
+      firing: 0,
+      acknowledged: 0,
+      resolved: 1,
+      silenced: 0,
+      firing_critical: 0,
+      firing_warning: 0,
+      firing_info: 0,
+      as_of: now,
+    },
+  });
+  await page.goto(`/dashboard/alerting?tab=history&event=${id}`);
+  const dialog = page.getByRole("dialog", { name: "Alert investigation" });
+  await expect(dialog.getByText(message, { exact: true })).toBeVisible();
+  await expect.poll(() => authReads).toBeGreaterThan(0);
+  // Global alerts:read is inherited by the cluster alert destination, but does
+  // not imply clusters:read or monitoring:read.
+  await expect(
+    dialog.getByRole("link", { name: "Investigate rule" }),
+  ).toHaveAttribute(
+    "href",
+    `/dashboard/clusters/${clusterId}/alerting?tab=rules&rule=${event.ruleId}`,
+  );
+  await expect(
+    dialog.getByRole("link", { name: "Cluster metrics" }),
+  ).toHaveCount(0);
+  await expect(dialog.getByRole("link", { name: /^Cluster:/ })).toHaveCount(0);
+  await expect(dialog.getByRole("link")).toHaveCount(1);
+  await page.reload();
+  await expect(dialog.getByText(message, { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("link")).toHaveCount(1);
+  await expect(
+    dialog.getByRole("link", { name: "Investigate rule" }),
+  ).toBeVisible();
+});
+
+for (const status of ["acknowledged", "resolved"] as const) {
+  test(`${status} history preserves filters, server page and off-page deep link through reload`, async ({
+    page,
+  }) => {
+    const records: AlertEvent[] = Array.from({ length: 51 }, (_, index) => ({
+      ...event,
+      id: `history-${status}-${index + 1}`,
+      ruleName: `History ${status} ${index + 1}`,
+      message: `Historical ${status} event ${index + 1}`,
+      status,
+      acknowledgedAt: "2026-09-24T12:05:00Z",
+      acknowledgedBy: "user-admin",
+      resolvedAt: status === "resolved" ? "2026-09-24T12:10:00Z" : null,
+      resolvedBy: status === "resolved" ? "user-admin" : null,
+    }));
+    const selected = records[0]!;
+    const reads: { method: string; query: Record<string, string> }[] = [];
+    await page.route(
+      (url) => url.pathname.replace(/\/$/, "") === "/api/v1/alerting/events",
+      (route) => {
+        const query = new URL(route.request().url()).searchParams;
+        reads.push({
+          method: route.request().method(),
+          query: Object.fromEntries(query),
+        });
+        const offset = Number(query.get("offset"));
+        return route.fulfill({
+          json: {
+            data: records.slice(offset, offset + 50),
+            pagination: {
+              limit: 50,
+              offset,
+              total: 51,
+              has_more: offset === 0,
+              next_offset: offset === 0 ? 50 : null,
+            },
+          },
+        });
+      },
+    );
+    await jsonRoute(page, `/api/v1/alerting/events/${selected.id}`, {
+      data: selected,
+    });
+    await jsonRoute(page, "/api/v1/alerting/events/summary", {
+      data: {
+        total: 51,
+        firing: 0,
+        acknowledged: status === "acknowledged" ? 51 : 0,
+        resolved: status === "resolved" ? 51 : 0,
+        silenced: 0,
+        firing_critical: 0,
+        firing_warning: 0,
+        firing_info: 0,
+        as_of: now,
+      },
+    });
+    await page.goto(
+      `/dashboard/alerting?tab=history&alertPage=1&alertStatus=${status}&alertSeverity=critical&event=${selected.id}`,
+    );
+    const dialog = page.getByRole("dialog", { name: "Alert investigation" });
+    await expect(
+      dialog.getByText(selected.message, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      dialog
+        .locator("span")
+        .filter({ hasText: new RegExp(`^${status}$`, "i") }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByText(selected.acknowledgedAt!, { exact: true }),
+    ).toBeVisible();
+    if (selected.resolvedAt) {
+      await expect(
+        dialog.getByText(selected.resolvedAt, { exact: true }),
+      ).toBeVisible();
+    }
+    await page.reload();
+    await expect(
+      dialog.getByText(selected.message, { exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(page).toHaveURL(
+      (url) =>
+        !url.searchParams.has("event") &&
+        url.searchParams.get("alertPage") === "1" &&
+        url.searchParams.get("alertStatus") === status &&
+        url.searchParams.get("alertSeverity") === "critical",
+    );
+    await expect(
+      page.getByRole("button", { name: `History ${status} 51`, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: selected.ruleName, exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Ack", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Resolve", exact: true }),
+    ).toHaveCount(status === "acknowledged" ? 1 : 0);
+    await expect(page.getByLabel("Filter alert events by status")).toHaveValue(
+      status,
+    );
+    await expect(
+      page.getByLabel("Filter alert events by severity"),
+    ).toHaveValue("critical");
+    await page
+      .getByRole("button", { name: "Previous page", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: selected.ruleName, exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Next page", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: `History ${status} 51`, exact: true }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: `History ${status} 51`, exact: true }),
+    ).toBeVisible();
+    expect(reads.some(({ query }) => query.offset === "0")).toBe(true);
+    expect(
+      reads.filter(({ query }) => query.offset === "50").length,
+    ).toBeGreaterThanOrEqual(3);
+    for (const read of reads) {
+      expect(read.method).toBe("GET");
+      expect(read.query).toEqual({
+        status,
+        severity: "critical",
+        limit: "50",
+        offset: expect.stringMatching(/^(0|50)$/),
+      });
+    }
+  });
+}
+
+test("an unavailable deep-linked alert can retry without losing history context", async ({
+  page,
+}) => {
+  let available = false;
+  const reads: string[] = [];
+  await page.route(
+    (url) =>
+      url.pathname.replace(/\/$/, "") === `/api/v1/alerting/events/${id}`,
+    (route) => {
+      reads.push(route.request().method());
+      return route.fulfill(
+        available
+          ? { json: { data: event } }
+          : { status: 404, json: errorBody("Historical alert is unavailable") },
+      );
+    },
+  );
+  await page.goto(
+    `/dashboard/alerting?tab=history&alertSeverity=critical&event=${id}`,
+  );
+  const dialog = page.getByRole("dialog", { name: "Alert investigation" });
+  await expect(
+    dialog.getByText("Alert unavailable", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText("Historical alert is unavailable", { exact: true }),
+  ).toBeVisible();
+  await expect(dialog.getByRole("link")).toHaveCount(0);
+  available = true;
+  await dialog.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(dialog.getByText(message, { exact: true })).toBeVisible();
+  expect(reads).toEqual(["GET", "GET"]);
+  await expect(page).toHaveURL(
+    (url) =>
+      url.searchParams.get("event") === id &&
+      url.searchParams.get("alertSeverity") === "critical",
+  );
 });
 test("alert deep link survives reload and exposes the entire investigation", async ({
   page,
