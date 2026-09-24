@@ -1,0 +1,61 @@
+import { test, expect } from "@playwright/test";
+import { installStubs } from "../e2e-smoke/stubs";
+import { seedAuth } from "./helpers/auth";
+import { adminStoreUser, SMOKE_CLUSTER_ID } from "../e2e-smoke/stub-overrides";
+test.beforeEach(async ({ page, context }) => {
+  await installStubs(page);
+  await seedAuth(context, page, adminStoreUser);
+});
+
+test("all header controls fit at the five reviewed widths", async ({
+  page,
+}, info) => {
+  for (const width of [390, 412, 768, 1024, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}`);
+    await expect(
+      page.getByRole("button", { name: "User menu", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .locator("header")
+        .getByRole("button", { name: "Import", exact: true }),
+    ).toBeVisible();
+    const outside = await page.locator("header button").evaluateAll((buttons) =>
+      buttons
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return (
+            r.width > 0 && r.height > 0 && (r.x < 0 || r.right > innerWidth)
+          );
+        })
+        .map((el) => el.getAttribute("aria-label") || el.textContent),
+    );
+    expect(outside).toEqual([]);
+    await page.screenshot({ path: info.outputPath(`shell-${width}.png`) });
+    if (width < 1024) {
+      await expect(page.locator("aside")).toHaveAttribute("inert", "");
+      await expect(page.locator("aside")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+      await page
+        .getByRole("link", { name: "Skip to main content", exact: true })
+        .focus();
+      await page.keyboard.press("Tab");
+      expect(
+        await page.evaluate(() =>
+          Boolean(document.activeElement?.closest("aside")),
+        ),
+      ).toBe(false);
+      await page
+        .getByRole("button", { name: "Open navigation", exact: true })
+        .click();
+      await expect(page.locator("aside")).not.toHaveAttribute("inert", "");
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("button", { name: "Open navigation", exact: true }),
+      ).toBeFocused();
+    }
+  }
+});

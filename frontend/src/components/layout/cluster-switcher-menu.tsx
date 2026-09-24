@@ -249,21 +249,23 @@ export function ClusterSwitcherMenu({
 
   const transitionRequest = useRef(0);
   const [transitionState, setTransitionState] = useState("");
+  const [failedTarget, setFailedTarget] = useState<Cluster | null>(null);
   useEffect(
     () => () => {
       transitionRequest.current++;
     },
     [pathname],
   );
-  const select = async (next: Cluster) => {
+  const select = async (next: Cluster, clearScope = false) => {
     const request = ++transitionRequest.current;
     setTransitionState("Resolving target cluster scope…");
+    setFailedTarget(null);
     try {
       const target = await resolveClusterTransition(
         pathname,
         next.id,
-        scopes[next.id] ?? null,
-        projectScopes[next.id] ?? null,
+        clearScope ? null : (scopes[next.id] ?? null),
+        clearScope ? null : (projectScopes[next.id] ?? null),
       );
       if (request !== transitionRequest.current) return;
       void navigate({
@@ -278,10 +280,12 @@ export function ClusterSwitcherMenu({
       close();
       requestAnimationFrame(restoreFocus);
     } catch {
-      if (request === transitionRequest.current)
+      if (request === transitionRequest.current) {
+        setFailedTarget(next);
         setTransitionState(
-          "Target scope could not be resolved. Select the cluster again to retry; your current scope is unchanged.",
+          "Target scope could not be resolved. Retry the cluster or explicitly clear its remembered scope.",
         );
+      }
     }
   };
 
@@ -330,6 +334,14 @@ export function ClusterSwitcherMenu({
             {transitionState && (
               <p role="status" className="p-3 text-sm">
                 {transitionState}
+                {failedTarget && (
+                  <button
+                    className="underline"
+                    onClick={() => void select(failedTarget, true)}
+                  >
+                    Clear remembered scope and switch
+                  </button>
+                )}
               </p>
             )}
             {pinnedClusters.length > 0 && (

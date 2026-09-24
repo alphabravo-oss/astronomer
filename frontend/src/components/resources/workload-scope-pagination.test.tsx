@@ -14,11 +14,18 @@ describe("server collection scope", () => {
       namespace: undefined,
     });
   });
-  it.each([undefined, [], ["a", "b"]])(
+  it.each([undefined, []])(
     "blocks incomplete or unsupported combined scope %s",
     (scope) => {
       expect(collectionScope(scope).enabled).toBe(false);
       expect(collectionScope(scope).message).toBeTruthy();
     },
   );
+});
+
+it("passes explicit multi-namespace selection to server pagination", () => {
+  expect(collectionScope(["a", "b"])).toEqual({
+    enabled: true,
+    namespaces: ["a", "b"],
+  });
 });

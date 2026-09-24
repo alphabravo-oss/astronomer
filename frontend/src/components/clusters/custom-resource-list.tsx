@@ -1,8 +1,10 @@
+import { apiErrorStatus } from "@/lib/api/errors";
+import { usePermissionDecision } from "@/lib/permission-hooks";
 import { collectionScope } from "@/lib/cluster-scope-collection";
 import { useClusterNamespaceScope } from "@/lib/cluster-scope";
 import { useClusterDiscovery } from "@/components/layout/use-cluster-discovery-nav";
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useLocation } from "@tanstack/react-router";
 import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
 import {
   crListPath,
@@ -49,7 +51,12 @@ export function CustomResourceList(props: {
     return <p role="status">Resolving resource scope…</p>;
   if (discovery.isError || !type)
     return (
-      <p role="alert">Resource scope unavailable. Reload to retry discovery.</p>
+      <div role="alert">
+        <p>Resource scope unavailable.</p>
+        <ActionButton onClick={() => void discovery.retry?.()}>
+          Retry discovery
+        </ActionButton>
+      </div>
     );
   const selection = collectionScope(
     type.namespaced ? scope.selectedNamespaces : null,
@@ -60,6 +67,7 @@ export function CustomResourceList(props: {
       key={`${props.clusterId}/${props.group}/${props.version}/${props.plural}/${JSON.stringify(selection)}`}
       {...props}
       namespace={selection.namespace}
+      namespaces={selection.namespaces}
       namespaced={type.namespaced}
     />
   );
@@ -67,6 +75,7 @@ export function CustomResourceList(props: {
 
 function ScopedCustomResourceList({
   namespace,
+  namespaces,
   namespaced,
   clusterId,
   group,
@@ -74,6 +83,7 @@ function ScopedCustomResourceList({
   plural,
 }: {
   namespace?: string;
+  namespaces?: string[];
   namespaced: boolean;
   clusterId: string;
   group: string;
@@ -81,18 +91,31 @@ function ScopedCustomResourceList({
   plural: string;
 }) {
   const navigate = useNavigate();
+  const search = useLocation({ select: (location) => location.searchStr });
+  const scope = useClusterNamespaceScope(clusterId);
+  const clusterList = usePermissionDecision("custom_resources", "list", {
+    type: "cluster",
+    id: clusterId,
+  });
+  const selected = namespace ? [namespace] : namespaces;
+  const canList =
+    clusterList.allowed ||
+    (namespaced &&
+      !!selected?.length &&
+      selected.every((ns) => scope.allows("custom_resources", "list", ns)));
   const [tokens, setTokens] = useState([""]);
   const permissions = useClusterResourcePermissions(
     clusterId,
     "custom_resources",
   );
   const params = new URLSearchParams({ limit: "50" });
+  for (const ns of namespaces ?? []) params.append("astronomerNamespace", ns);
   const token = tokens.at(-1);
   if (token) params.set("continue", token);
   const query = useK8sResource(
     clusterId,
     `${namespace ? crResourcePath(group, version, plural, "", namespace).replace(/\/$/, "") : crListPath(group, version, plural)}?${params}`,
-    permissions.read.allowed,
+    canList,
   );
   const rows = useMemo<CRRow[]>(() => {
     const items =
@@ -116,14 +139,16 @@ function ScopedCustomResourceList({
         sortAccessor: (row) => row.name,
         accessor: (row) => (
           <Link
-            to={crDetailHref(
-              clusterId,
-              group,
-              version,
-              plural,
-              row.name,
-              row.namespace,
-            )}
+            to={
+              crDetailHref(
+                clusterId,
+                group,
+                version,
+                plural,
+                row.name,
+                row.namespace,
+              ) + search
+            }
             onClick={(event) => event.stopPropagation()}
             className="min-w-0 truncate font-medium text-foreground font-mono text-xs hover:underline"
           >
@@ -150,11 +175,10 @@ function ScopedCustomResourceList({
         ),
       },
     ],
-    [clusterId, group, version, plural],
+    [clusterId, group, version, plural, search],
   );
 
-  if (!permissions.read.allowed)
-    return <PermissionState permission="custom_resources:read" />;
+  if (!canList) return <PermissionState permission="custom_resources:list" />;
 
   return (
     <div className="space-y-4">
@@ -166,15 +190,26 @@ function ScopedCustomResourceList({
           <span className="font-mono">
             {group ? `${group}/${version}` : version} ·{" "}
             {namespaced
-              ? (namespace ?? "All authorized namespaces")
+              ? (namespace ??
+                namespaces?.join(", ") ??
+                "All authorized namespaces")
               : "Cluster scoped — namespace selection does not apply"}
           </span>
         }
       />
       <QueryStates
-        query={query}
-        permission="custom_resources:read"
+        query={
+          apiErrorStatus(query.error) === 410
+            ? { ...query, refetch: () => setTokens([""]) }
+            : query
+        }
+        permission="custom_resources:list"
         errorTitle="Custom resources unavailable"
+        errorDescription={
+          apiErrorStatus(query.error) === 410
+            ? "The collection cursor expired or its scope changed. Retry to restart at the first page."
+            : undefined
+        }
       >
         <DataTable
           data={rows}
@@ -209,14 +244,15 @@ function ScopedCustomResourceList({
           }
           onRowClick={(row) =>
             void navigate({
-              to: crDetailHref(
-                clusterId,
-                group,
-                version,
-                plural,
-                row.name,
-                row.namespace,
-              ),
+              to:
+                crDetailHref(
+                  clusterId,
+                  group,
+                  version,
+                  plural,
+                  row.name,
+                  row.namespace,
+                ) + search,
             })
           }
           searchPlaceholder={`Search this page of ${plural}...`}

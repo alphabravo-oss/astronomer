@@ -1,15 +1,11 @@
+import { WorkloadTableDialogs } from "./workload-table-dialogs";
 import { collectionScope } from "@/lib/cluster-scope-collection";
 import { useClusterNamespaceScope } from "@/lib/cluster-scope";
 import { useCallback, useMemo, useState } from "react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import type { SortingState } from "@tanstack/react-table";
 import { useCluster } from "@/lib/hooks/clusters";
-import {
-  useWorkloads,
-  useScaleWorkload,
-  useRestartWorkload,
-} from "@/lib/hooks/workloads";
-import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
+import { useWorkloads, useRestartWorkload } from "@/lib/hooks/workloads";
 import { getWorkloadPods, type WorkloadSort } from "@/lib/api/workloads";
 import type { Column } from "@/components/ui/data-table";
 import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
@@ -17,10 +13,7 @@ import type { ActionMenuItem } from "@/components/ui/action-menu";
 import { ResourceActionMenu } from "./resource-action-menu";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader } from "@/components/ui/page";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ScaleDialog } from "@/components/workloads/scale-dialog";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
-import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import { GenericResourceTable } from "@/components/resources/generic-resource-table";
 import {
@@ -54,7 +47,6 @@ import {
   genericColumnMap,
   workloadColumns,
 } from "@/components/resources/resource-list-columns";
-import { resourceDeletionImpact } from "@/components/resources/resource-deletion-impact";
 import {
   k8sResourcePath,
   kindToResourceType,
@@ -75,7 +67,6 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import {
   RESOURCE_TITLES,
   WORKLOAD_KINDS,
-  WORKLOAD_TEMPLATE_BY_KIND,
   isGenericResourceType,
 } from "@/components/resources/resource-route-config";
 import {
@@ -244,6 +235,7 @@ function WorkloadsTable({
       key={`${clusterId}/${props.kind}/${JSON.stringify(scope.selectedNamespaces)}`}
       clusterId={clusterId}
       namespace={selection.namespace}
+      namespaces={selection.namespaces}
       {...props}
     />
   );
@@ -251,6 +243,7 @@ function WorkloadsTable({
 
 function ScopedWorkloadsTable({
   namespace,
+  namespaces,
   clusterId,
   kind,
   title,
@@ -259,6 +252,7 @@ function ScopedWorkloadsTable({
   kind: string;
   title: string;
   namespace?: string;
+  namespaces?: string[];
 }) {
   const [pageIndex, setPageIndex] = useState(0);
   const [search, setSearch] = useState("");
@@ -273,6 +267,7 @@ function ScopedWorkloadsTable({
   ) as WorkloadSort;
   const workloadQuery = useWorkloads(clusterId, {
     namespace,
+    namespaces,
     kind,
     search: debouncedSearch.trim() || undefined,
     sort,
@@ -283,9 +278,7 @@ function ScopedWorkloadsTable({
   const resourceType = kindToResourceType(kind);
   const navigate = useNavigate();
   const workloads = data?.data || [];
-  const scaleWorkload = useScaleWorkload();
   const restartWorkload = useRestartWorkload();
-  const k8sDeleteMut = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, "workloads");
   const podPermissions = useClusterResourcePermissions(clusterId, "pods");
 
@@ -475,87 +468,18 @@ function ScopedWorkloadsTable({
         bulkWorkloads={{ target: workloadTarget }}
       />
 
-      <ScaleDialog
-        open={!!scaleTarget}
-        onClose={() => setScaleTarget(null)}
-        onScale={(replicas) => {
-          if (!permissions.scale.allowed) {
-            toastPermissionDenied(permissions.scale);
-            return;
-          }
-          if (scaleTarget) {
-            scaleWorkload.mutate(
-              {
-                clusterId,
-                kind: scaleTarget.kind,
-                namespace: scaleTarget.namespace,
-                name: scaleTarget.name,
-                replicas,
-              },
-              { onSuccess: () => setScaleTarget(null) },
-            );
-          }
-        }}
-        workloadName={scaleTarget?.name || ""}
-        currentReplicas={scaleTarget?.replicas || 0}
-        loading={scaleWorkload.isPending}
+      <WorkloadTableDialogs
+        clusterId={clusterId}
+        kind={kind}
+        scaleTarget={scaleTarget}
+        setScaleTarget={setScaleTarget}
+        yamlTarget={yamlTarget}
+        setYamlTarget={setYamlTarget}
+        deleteTarget={deleteTarget}
+        setDeleteTarget={setDeleteTarget}
+        showCreate={showCreate}
+        setShowCreate={setShowCreate}
       />
-
-      {yamlTarget && (
-        <YamlViewDialog
-          open={!!yamlTarget}
-          onClose={() => setYamlTarget(null)}
-          clusterId={clusterId}
-          k8sPath={yamlTarget.path}
-          title={yamlTarget.title}
-          allowEdit={permissions.update.allowed}
-          forceConflictPermission={permissions.manage}
-        />
-      )}
-
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (!permissions.delete.allowed) {
-            toastPermissionDenied(permissions.delete);
-            return;
-          }
-          if (deleteTarget) {
-            const resType = kindToResourceType(deleteTarget.kind);
-            k8sDeleteMut.mutate(
-              {
-                clusterId,
-                path: k8sResourcePath(
-                  resType,
-                  deleteTarget.name,
-                  deleteTarget.namespace,
-                ),
-              },
-              { onSuccess: () => setDeleteTarget(null) },
-            );
-          }
-        }}
-        title={`Delete ${deleteTarget?.kind || "Workload"}`}
-        description={`This will permanently delete ${deleteTarget?.name}. Managed pods will also be terminated.`}
-        impact={resourceDeletionImpact(
-          deleteTarget ? kindToResourceType(deleteTarget.kind) : kind,
-          deleteTarget,
-        )}
-        confirmValue={deleteTarget?.name}
-        variant="destructive"
-        loading={k8sDeleteMut.isPending}
-      />
-
-      {WORKLOAD_TEMPLATE_BY_KIND[kind] && (
-        <CreateResourceDialog
-          open={showCreate}
-          onClose={() => setShowCreate(false)}
-          clusterId={clusterId}
-          templateKey={WORKLOAD_TEMPLATE_BY_KIND[kind]}
-          title={`Create ${kind}`}
-        />
-      )}
     </>
   );
 }

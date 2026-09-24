@@ -1,3 +1,6 @@
+import { useOperationIntent } from "@/lib/use-operation-intent";
+import { InstalledReleaseDetail } from "@/components/catalog/installed-release-detail";
+import { CatalogOperationTimeline } from "@/components/catalog/catalog-operation-timeline";
 import { useProjectSelection } from "@/lib/cluster-scope-project";
 import {
   CatalogProjectPicker,
@@ -89,6 +92,14 @@ export function ClusterAppsPage() {
     void projectSelection.select(nextProjectId);
     setModal({ kind: "none" });
   };
+  const operationId = searchParams.get("operation") ?? "";
+  const onOperationStarted = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("operation", id);
+    next.set("section", "installed");
+    next.delete("install");
+    void navigate({ to: `/dashboard/clusters/${clusterId}/apps?${next}` });
+  };
   const requestedInstall = searchParams?.get("install") ?? "";
 
   // Default to Browse when a deep-link asks for an install — we
@@ -123,9 +134,14 @@ export function ClusterAppsPage() {
   const queries = useAppsQueries(clusterId, projectId, section, searchQ);
   const { installed, browse, recommended, reposQuery } = queries;
 
+  const uninstallIntent = useOperationIntent();
   const uninstall = useMutation({
-    mutationFn: (id: string) => uninstallCatalogRelease(id),
-    onSuccess: () => {
+    mutationFn: (id: string) =>
+      uninstallCatalogRelease(id, {
+        idempotencyKey: uninstallIntent.keyFor({ id }),
+      }),
+    onSuccess: (operation) => {
+      if (operation?.id) onOperationStarted(operation.id);
       toastSuccess("Uninstall dispatched");
       qc.invalidateQueries({
         queryKey: queryKeys.clusterPages.appsInstalled(clusterId),
@@ -358,8 +374,16 @@ export function ClusterAppsPage() {
       />
 
       <AppsPagination section={section} queries={queries} />
+      {operationId && <CatalogOperationTimeline operationId={operationId} />}
+      {searchParams.get("release") && (
+        <InstalledReleaseDetail
+          id={searchParams.get("release")!}
+          clusterId={clusterId}
+        />
+      )}
       <AppsModals
         modal={modal}
+        onOperationStarted={onOperationStarted}
         onCloseModal={() => setModal({ kind: "none" })}
         projectId={projectId}
         clusterId={clusterId}

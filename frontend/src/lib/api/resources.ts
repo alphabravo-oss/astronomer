@@ -39,6 +39,7 @@ export interface ResourceDiscoveryView {
   clusterId: string;
   resources: ResourceDiscoveryEntryView[];
   crds: Array<Record<string, unknown>>;
+  crdContinue: string;
   partial: boolean;
   errors: Record<string, string>;
 }
@@ -81,15 +82,18 @@ function mapEntry(wire: WireEntry): ResourceDiscoveryEntryView {
 export async function getResourceDiscovery(
   clusterId: string,
   signal?: AbortSignal,
+  continuation?: string,
 ): Promise<ResourceDiscoveryView> {
   const { data } = await getClustersByClusterIdResourcesDiscovery({
     path: { cluster_id: clusterId },
+    query: { crd_limit: 500, crd_continue: continuation },
     signal,
   });
   return {
     clusterId: data.cluster_id,
     resources: data.resources.map(mapEntry),
     crds: data.crds,
+    crdContinue: data.crd_continue,
     partial: data.partial,
     errors: data.errors,
   };
@@ -115,4 +119,30 @@ export async function getResourceSchema(
     definitions: data.definitions ?? {},
     definitionsTruncated: data.definitions_truncated ?? false,
   };
+}
+
+/** Traverse bounded metadata pages; never substitute partial discovery for absence. */
+export async function getCompleteResourceDiscovery(
+  clusterId: string,
+  signal?: AbortSignal,
+) {
+  const first = await getResourceDiscovery(clusterId, signal);
+  const definitions = new Map<string, Record<string, unknown>>();
+  const seen = new Set<string>();
+  let page = first;
+  while (true) {
+    if (page.errors.custom_resource_definitions)
+      throw new Error(page.errors.custom_resource_definitions);
+    for (const crd of page.crds)
+      definitions.set(String(crd.name ?? `${crd.group}/${crd.plural}`), crd);
+    if (!page.crdContinue) break;
+    if (seen.has(page.crdContinue))
+      throw new Error(
+        "Discovery repeated a continuation token. Retry discovery.",
+      );
+    seen.add(page.crdContinue);
+    signal?.throwIfAborted();
+    page = await getResourceDiscovery(clusterId, signal, page.crdContinue);
+  }
+  return { ...first, crds: [...definitions.values()], crdContinue: "" };
 }

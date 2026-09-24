@@ -36,6 +36,7 @@ export function useWorkloads(
   clusterId: string,
   params?: {
     namespace?: string;
+    namespaces?: string[];
     kind?: string;
     search?: string;
     sort?: WorkloadSort;

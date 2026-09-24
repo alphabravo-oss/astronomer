@@ -1,6 +1,7 @@
+import { safeWorkloadOrigin } from "./resource-navigation-context";
 import { useTabParam } from "@/lib/use-tab-param";
-import { useMemo } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import {
   ResourceDetailTabPanel,
@@ -57,6 +58,12 @@ export function ResourceDetail({
   collectionHref,
 }: ResourceDetailProps) {
   const navigate = useNavigate();
+  const searchStr = useLocation({ select: (location) => location.searchStr });
+  const origin = safeWorkloadOrigin(
+    new URLSearchParams(searchStr).get("origin"),
+    clusterId,
+  );
+  const [execOpen, setExecOpen] = useState(false);
 
   // These decisions intentionally use the same canonical/override resource as
   // list rows. The backend remains the final authorization boundary.
@@ -141,11 +148,16 @@ export function ResourceDetail({
     resourceType,
   ]);
 
-  const [tab, setTab] = useTabParam<ResourceDetailTabId>(
-    tabs.map((item) => item.id),
+  const [urlTab, setUrlTab] = useTabParam<ResourceDetailTabId>(
+    tabs.filter((item) => item.id !== "exec").map((item) => item.id),
     "overview",
   );
 
+  const tab = execOpen && execPermission.allowed ? "exec" : urlTab;
+  const setTab = (next: ResourceDetailTabId) => {
+    setExecOpen(next === "exec");
+    if (next !== "exec") setUrlTab(next);
+  };
   if (!read.allowed) {
     return (
       <PermissionState
@@ -165,6 +177,11 @@ export function ResourceDetail({
 
   return (
     <div className="space-y-6">
+      {isPod && origin && (
+        <Link to={origin} className="text-sm text-primary hover:underline">
+          Back to workload
+        </Link>
+      )}
       <ResourceMasthead
         backTo={backTo}
         title={name}

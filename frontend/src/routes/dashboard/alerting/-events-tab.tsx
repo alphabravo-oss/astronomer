@@ -1,5 +1,7 @@
 import { Check, CheckCircle } from "lucide-react";
-import { useState } from "react";
+import { AlertInvestigation } from "./-alert-investigation";
+import { useInvestigationParam } from "@/components/resources/resource-navigation-context";
+import { useTabParam } from "@/lib/use-tab-param";
 import {
   useAcknowledgeAlert,
   useAlertEventSummary,
@@ -16,10 +18,26 @@ import { pageTableCount } from "@/lib/api/pagination";
 
 const ALERT_EVENTS_PAGE_SIZE = 50;
 
-export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
-  const [pageIndex, setPageIndex] = useState(0);
-  const [status, setStatus] = useState<"" | AlertEvent["status"]>("");
-  const [severity, setSeverity] = useState<"" | AlertEvent["severity"]>("");
+export function EventsTab({
+  clusterId,
+  history = true,
+}: { clusterId?: string; history?: boolean } = {}) {
+  const [pageValue, setPageValue] = useInvestigationParam("alertPage", "0");
+  const pageIndex = /^\d+$/.test(pageValue)
+    ? Math.min(Number(pageValue), 100000)
+    : 0;
+  const setPageIndex = (page: number) => setPageValue(String(page));
+  const [selected, setSelected] = useInvestigationParam("event");
+  const [status, setStatus] = useTabParam(
+    ["", "firing", "acknowledged", "resolved", "silenced"] as const,
+    "",
+    "alertStatus",
+  );
+  const [severity, setSeverity] = useTabParam(
+    ["", "critical", "warning", "info"] as const,
+    "",
+    "alertSeverity",
+  );
   const {
     data: eventsPage,
     isLoading,
@@ -27,7 +45,7 @@ export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
     refetch,
   } = useAlertEvents({
     clusterId,
-    status: status || undefined,
+    status: history ? status || undefined : "firing",
     severity: severity || undefined,
     limit: ALERT_EVENTS_PAGE_SIZE,
     offset: pageIndex * ALERT_EVENTS_PAGE_SIZE,
@@ -56,7 +74,13 @@ export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
       key: "rule",
       header: "Rule",
       accessor: (row) => (
-        <span className="font-medium text-foreground">{row.ruleName}</span>
+        <ActionButton
+          intent="ghost"
+          size="sm"
+          onClick={() => setSelected(row.id)}
+        >
+          {row.ruleName || "Inspect alert"}
+        </ActionButton>
       ),
     },
     {
@@ -107,6 +131,7 @@ export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
                 size="sm"
                 intent="ghost"
                 title="Acknowledge"
+                disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
                 onClick={() => acknowledgeAlert.mutate(row.id)}
                 icon={<Check className="h-3 w-3" />}
                 className="h-auto px-2 py-1"
@@ -117,6 +142,7 @@ export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
                 size="sm"
                 intent="ghost"
                 title="Resolve"
+                disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
                 onClick={() => resolveAlert.mutate(row.id)}
                 icon={<CheckCircle className="h-3 w-3" />}
                 className="h-auto px-2 py-1 hover:text-status-success hover:bg-status-success/10"
@@ -130,6 +156,7 @@ export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
               size="sm"
               intent="ghost"
               title="Resolve"
+              disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
               onClick={() => resolveAlert.mutate(row.id)}
               icon={<CheckCircle className="h-3 w-3" />}
               className="h-auto px-2 py-1 hover:text-status-success hover:bg-status-success/10"
@@ -150,6 +177,14 @@ export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
 
   return (
     <div className="space-y-3">
+      {selected && (
+        <AlertInvestigation id={selected} onClose={() => setSelected("")} />
+      )}
+      {(acknowledgeAlert.isError || resolveAlert.isError) && (
+        <p role="alert" className="text-sm text-destructive">
+          The alert update failed. Retry after reviewing the error.
+        </p>
+      )}
       <div
         className="grid grid-cols-2 gap-2 sm:grid-cols-4"
         aria-label="Alert event totals"
@@ -193,21 +228,23 @@ export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
         }}
         toolbar={
           <div className="flex items-center gap-2">
-            <Select
-              aria-label="Filter alert events by status"
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value as "" | AlertEvent["status"]);
-                setPageIndex(0);
-              }}
-              containerClassName="w-auto"
-            >
-              <option value="">All statuses</option>
-              <option value="firing">Firing</option>
-              <option value="acknowledged">Acknowledged</option>
-              <option value="resolved">Resolved</option>
-              <option value="silenced">Silenced</option>
-            </Select>
+            {history && (
+              <Select
+                aria-label="Filter alert events by status"
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value as "" | AlertEvent["status"]);
+                  setPageIndex(0);
+                }}
+                containerClassName="w-auto"
+              >
+                <option value="">All statuses</option>
+                <option value="firing">Firing</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="resolved">Resolved</option>
+                <option value="silenced">Silenced</option>
+              </Select>
+            )}
             <Select
               aria-label="Filter alert events by severity"
               value={severity}

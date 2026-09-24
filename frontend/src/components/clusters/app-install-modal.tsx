@@ -1,3 +1,5 @@
+import { useOperationIntent } from "@/lib/use-operation-intent";
+import { useUpgradeValues } from "./app-upgrade-values";
 import {
   CatalogVersionSelect,
   useCatalogVersionSelection,
@@ -43,8 +45,8 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import {
   getChartDefaultValues,
   installChartOnCluster,
+  upgradeClusterApp,
 } from "@/lib/api/cluster-apps";
-import { upgradeInstalledChart } from "@/lib/api/catalog";
 import { queryKeys } from "@/lib/query-keys";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
@@ -67,6 +69,7 @@ interface AppInstallModalProps {
   clusterId: string;
   mode: Mode;
   onClose: () => void;
+  onOperationStarted?: (id: string) => void;
   submitDecision?: PermissionDecision;
 }
 
@@ -103,6 +106,7 @@ export function AppInstallModal({
   mode,
   onClose,
   submitDecision,
+  onOperationStarted,
 }: AppInstallModalProps) {
   const qc = useQueryClient();
   const isUpgrade = mode.kind === "upgrade";
@@ -120,6 +124,10 @@ export function AppInstallModal({
     },
     onSubmit: () => install.mutate(),
   });
+  const upgradeValues = useUpgradeValues(
+    mode.kind === "upgrade" ? mode.installedChartId : "",
+    (values) => form.setFieldValue("valuesYaml", values),
+  );
   const selectedVersionId = useStore(
     form.store,
     (s) => s.values.selectedVersionId,
@@ -176,9 +184,18 @@ export function AppInstallModal({
     isUpgrade,
   ]);
 
+  const intent = useOperationIntent();
   const install = useMutation({
     mutationFn: async () => {
+      if (isUpgrade && (!upgradeValues.isSuccess || upgradeValues.isError))
+        throw new Error("Load the saved release values before upgrading");
       const value = form.state.values;
+      const idempotencyKey = intent.keyFor({
+        mode,
+        clusterId,
+        projectId,
+        ...value,
+      });
       if (
         !selectedVersion ||
         selectedVersion.id !== value.selectedVersionId ||
@@ -193,6 +210,7 @@ export function AppInstallModal({
         return installChartOnCluster({
           projectId,
           clusterId,
+          idempotencyKey,
           chartVersionId: value.selectedVersionId,
           releaseName: value.releaseName.trim(),
           namespace: value.namespace.trim(),
@@ -200,12 +218,18 @@ export function AppInstallModal({
         });
       }
       // Upgrade — uses the existing /catalog/installed/{id}/upgrade/ endpoint.
-      return upgradeInstalledChart(mode.installedChartId, {
-        chart_version_id: value.selectedVersionId,
-        values_override: value.valuesYaml,
-      });
+      return upgradeClusterApp(
+        mode.installedChartId,
+        {
+          chart_version_id: value.selectedVersionId,
+          values_override: value.valuesYaml,
+        },
+        idempotencyKey,
+      );
     },
-    onSuccess: () => {
+    onSuccess: (receipt) => {
+      intent.complete();
+      if (receipt.operation?.id) onOperationStarted?.(receipt.operation.id);
       toastSuccess(
         isUpgrade
           ? `Upgrade dispatched — ${mode.kind === "upgrade" ? mode.releaseName : ""} will reflect new revision shortly`
@@ -228,7 +252,8 @@ export function AppInstallModal({
     releaseName.trim() !== "" &&
     namespace.trim() !== "" &&
     !install.isPending &&
-    !submitBlockedReason;
+    !submitBlockedReason &&
+    (!isUpgrade || (upgradeValues.isSuccess && !upgradeValues.isError));
 
   const handleSubmit = () => {
     if (submitBlockedReason) {
@@ -282,6 +307,15 @@ export function AppInstallModal({
       }
     >
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {isUpgrade && (
+          <QueryStates
+            query={upgradeValues}
+            permission="catalog:read"
+            errorTitle="Saved release values unavailable"
+          >
+            <></>
+          </QueryStates>
+        )}
         {(slowInstall || hasCRDs) && (
           <div className="rounded-md border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
             <Info className="h-4 w-4 text-status-warning mt-0.5 shrink-0" />

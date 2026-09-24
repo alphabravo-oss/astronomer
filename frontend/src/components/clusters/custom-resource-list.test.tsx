@@ -18,6 +18,7 @@ const state = vi.hoisted(() => ({
   download: vi.fn(),
   useResource: vi.fn(),
 }));
+vi.mock("@/lib/permission-hooks", () => ({ usePermissionDecision: () => state.permissions.read }));
 vi.mock("@/lib/cluster-scope", () => ({
   useClusterNamespaceScope: () => ({ selectedNamespaces: state.selection }),
 }));
@@ -42,6 +43,7 @@ vi.mock("@/components/layout/use-cluster-discovery-nav", () => ({
 }));
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => "",
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),
@@ -224,7 +226,7 @@ it("uses selected namespace in the API path before pagination and resets continu
     true,
   );
 });
-it.each([undefined, [], ["a", "b"]])(
+it.each([undefined, []])(
   "does not issue an unscoped query for unresolved/unsupported scope %s",
   (selection) => {
     state.selection = selection;

@@ -251,7 +251,14 @@ function InstalledRow({
   return (
     <TableRow className="border-t border-border hover:bg-muted/40">
       <TableCell className="px-3 py-2 font-mono text-xs">
-        {row.releaseName}
+        <RouterLink
+          to={String(
+            `/dashboard/clusters/${clusterId}/apps?section=installed&release=${encodeURIComponent(row.id)}`,
+          )}
+          className="hover:underline"
+        >
+          {row.releaseName}
+        </RouterLink>
       </TableCell>
       <TableCell className="px-3 py-2">
         <div className="flex items-center gap-2">

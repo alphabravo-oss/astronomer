@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLoggingPipelines } from "@/lib/hooks/logging";
@@ -65,7 +66,12 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
       header: "Pipeline",
       accessor: (row) => (
         <div>
-          <p className="font-medium text-foreground">{row.name}</p>
+          <Link
+            to={String(`/dashboard/logging/pipelines/${row.id}`)}
+            className="font-medium text-foreground hover:underline"
+          >
+            {row.name}
+          </Link>
           {row.description && (
             <p className="text-xs text-muted-foreground truncate max-w-[300px]">
               {row.description}

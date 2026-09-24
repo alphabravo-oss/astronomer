@@ -115,6 +115,7 @@ import { Route as DashboardDeliveryBundlesBundleIdIndexRouteImport } from './rou
 import { Route as DashboardDeliveryDeploymentsDeploymentIdIndexRouteImport } from './routes/dashboard/delivery/deployments/$deploymentId/index'
 import { Route as DashboardDeliveryRolloutsRolloutIdIndexRouteImport } from './routes/dashboard/delivery/rollouts/$rolloutId/index'
 import { Route as DashboardDeliveryTargetsTargetIdIndexRouteImport } from './routes/dashboard/delivery/targets/$targetId/index'
+import { Route as DashboardLoggingPipelinesPipelineIdIndexRouteImport } from './routes/dashboard/logging/pipelines/$pipelineId/index'
 import { Route as DashboardProjectsIdCatalogsIndexRouteImport } from './routes/dashboard/projects/$id/catalogs/index'
 import { Route as DashboardProjectsIdCloudCredentialsIndexRouteImport } from './routes/dashboard/projects/$id/cloud-credentials/index'
 import { Route as DashboardProjectsIdPolicyIndexRouteImport } from './routes/dashboard/projects/$id/policy/index'
@@ -148,6 +149,7 @@ import { Route as DashboardClustersIdDeliverySystemComponentsIndexRouteImport } 
 import { Route as DashboardClustersIdDeliveryTargetsIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/targets/index'
 import { Route as DashboardClustersIdNodesNodeNameIndexRouteImport } from './routes/dashboard/clusters/$id/nodes/$nodeName/index'
 import { Route as DashboardClustersIdServiceMeshMtlsIndexRouteImport } from './routes/dashboard/clusters/$id/service-mesh/mtls/index'
+import { Route as DashboardLoggingPipelinesPipelineIdEditIndexRouteImport } from './routes/dashboard/logging/pipelines/$pipelineId/edit/index'
 import { Route as DashboardProjectsIdCloudCredentialsNewIndexRouteImport } from './routes/dashboard/projects/$id/cloud-credentials/new/index'
 import { Route as DashboardSettingsAuthConnectorsIdIndexRouteImport } from './routes/dashboard/settings/auth/connectors/$id/index'
 import { Route as DashboardSettingsAuthConnectorsNewIndexRouteImport } from './routes/dashboard/settings/auth/connectors/new/index'
@@ -775,6 +777,12 @@ const DashboardDeliveryTargetsTargetIdIndexRoute =
     path: '/targets/$targetId/',
     getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
+const DashboardLoggingPipelinesPipelineIdIndexRoute =
+  DashboardLoggingPipelinesPipelineIdIndexRouteImport.update({
+    id: '/logging/pipelines/$pipelineId/',
+    path: '/logging/pipelines/$pipelineId/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
 const DashboardProjectsIdCatalogsIndexRoute =
   DashboardProjectsIdCatalogsIndexRouteImport.update({
     id: '/catalogs/',
@@ -973,6 +981,12 @@ const DashboardClustersIdServiceMeshMtlsIndexRoute =
     path: '/service-mesh/mtls/',
     getParentRoute: () => DashboardClustersIdRouteRoute,
   } as any)
+const DashboardLoggingPipelinesPipelineIdEditIndexRoute =
+  DashboardLoggingPipelinesPipelineIdEditIndexRouteImport.update({
+    id: '/logging/pipelines/$pipelineId/edit/',
+    path: '/logging/pipelines/$pipelineId/edit/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
 const DashboardProjectsIdCloudCredentialsNewIndexRoute =
   DashboardProjectsIdCloudCredentialsNewIndexRouteImport.update({
     id: '/cloud-credentials/new/',
@@ -1161,6 +1175,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/delivery/deployments/$deploymentId/': typeof DashboardDeliveryDeploymentsDeploymentIdIndexRoute
   '/dashboard/delivery/rollouts/$rolloutId/': typeof DashboardDeliveryRolloutsRolloutIdIndexRoute
   '/dashboard/delivery/targets/$targetId/': typeof DashboardDeliveryTargetsTargetIdIndexRoute
+  '/dashboard/logging/pipelines/$pipelineId/': typeof DashboardLoggingPipelinesPipelineIdIndexRoute
   '/dashboard/projects/$id/catalogs/': typeof DashboardProjectsIdCatalogsIndexRoute
   '/dashboard/projects/$id/cloud-credentials/': typeof DashboardProjectsIdCloudCredentialsIndexRoute
   '/dashboard/projects/$id/policy/': typeof DashboardProjectsIdPolicyIndexRoute
@@ -1194,6 +1209,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/clusters/$id/delivery/targets/': typeof DashboardClustersIdDeliveryTargetsIndexRoute
   '/dashboard/clusters/$id/nodes/$nodeName/': typeof DashboardClustersIdNodesNodeNameIndexRoute
   '/dashboard/clusters/$id/service-mesh/mtls/': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
+  '/dashboard/logging/pipelines/$pipelineId/edit/': typeof DashboardLoggingPipelinesPipelineIdEditIndexRoute
   '/dashboard/projects/$id/cloud-credentials/new/': typeof DashboardProjectsIdCloudCredentialsNewIndexRoute
   '/dashboard/settings/auth/connectors/$id/': typeof DashboardSettingsAuthConnectorsIdIndexRoute
   '/dashboard/settings/auth/connectors/new/': typeof DashboardSettingsAuthConnectorsNewIndexRoute
@@ -1309,6 +1325,7 @@ export interface FileRoutesByTo {
   '/dashboard/delivery/deployments/$deploymentId': typeof DashboardDeliveryDeploymentsDeploymentIdIndexRoute
   '/dashboard/delivery/rollouts/$rolloutId': typeof DashboardDeliveryRolloutsRolloutIdIndexRoute
   '/dashboard/delivery/targets/$targetId': typeof DashboardDeliveryTargetsTargetIdIndexRoute
+  '/dashboard/logging/pipelines/$pipelineId': typeof DashboardLoggingPipelinesPipelineIdIndexRoute
   '/dashboard/projects/$id/catalogs': typeof DashboardProjectsIdCatalogsIndexRoute
   '/dashboard/projects/$id/cloud-credentials': typeof DashboardProjectsIdCloudCredentialsIndexRoute
   '/dashboard/projects/$id/policy': typeof DashboardProjectsIdPolicyIndexRoute
@@ -1342,6 +1359,7 @@ export interface FileRoutesByTo {
   '/dashboard/clusters/$id/delivery/targets': typeof DashboardClustersIdDeliveryTargetsIndexRoute
   '/dashboard/clusters/$id/nodes/$nodeName': typeof DashboardClustersIdNodesNodeNameIndexRoute
   '/dashboard/clusters/$id/service-mesh/mtls': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
+  '/dashboard/logging/pipelines/$pipelineId/edit': typeof DashboardLoggingPipelinesPipelineIdEditIndexRoute
   '/dashboard/projects/$id/cloud-credentials/new': typeof DashboardProjectsIdCloudCredentialsNewIndexRoute
   '/dashboard/settings/auth/connectors/$id': typeof DashboardSettingsAuthConnectorsIdIndexRoute
   '/dashboard/settings/auth/connectors/new': typeof DashboardSettingsAuthConnectorsNewIndexRoute
@@ -1464,6 +1482,7 @@ export interface FileRoutesById {
   '/dashboard/delivery/deployments/$deploymentId/': typeof DashboardDeliveryDeploymentsDeploymentIdIndexRoute
   '/dashboard/delivery/rollouts/$rolloutId/': typeof DashboardDeliveryRolloutsRolloutIdIndexRoute
   '/dashboard/delivery/targets/$targetId/': typeof DashboardDeliveryTargetsTargetIdIndexRoute
+  '/dashboard/logging/pipelines/$pipelineId/': typeof DashboardLoggingPipelinesPipelineIdIndexRoute
   '/dashboard/projects/$id/catalogs/': typeof DashboardProjectsIdCatalogsIndexRoute
   '/dashboard/projects/$id/cloud-credentials/': typeof DashboardProjectsIdCloudCredentialsIndexRoute
   '/dashboard/projects/$id/policy/': typeof DashboardProjectsIdPolicyIndexRoute
@@ -1497,6 +1516,7 @@ export interface FileRoutesById {
   '/dashboard/clusters/$id/delivery/targets/': typeof DashboardClustersIdDeliveryTargetsIndexRoute
   '/dashboard/clusters/$id/nodes/$nodeName/': typeof DashboardClustersIdNodesNodeNameIndexRoute
   '/dashboard/clusters/$id/service-mesh/mtls/': typeof DashboardClustersIdServiceMeshMtlsIndexRoute
+  '/dashboard/logging/pipelines/$pipelineId/edit/': typeof DashboardLoggingPipelinesPipelineIdEditIndexRoute
   '/dashboard/projects/$id/cloud-credentials/new/': typeof DashboardProjectsIdCloudCredentialsNewIndexRoute
   '/dashboard/settings/auth/connectors/$id/': typeof DashboardSettingsAuthConnectorsIdIndexRoute
   '/dashboard/settings/auth/connectors/new/': typeof DashboardSettingsAuthConnectorsNewIndexRoute
@@ -1620,6 +1640,7 @@ export interface FileRouteTypes {
     | '/dashboard/delivery/deployments/$deploymentId/'
     | '/dashboard/delivery/rollouts/$rolloutId/'
     | '/dashboard/delivery/targets/$targetId/'
+    | '/dashboard/logging/pipelines/$pipelineId/'
     | '/dashboard/projects/$id/catalogs/'
     | '/dashboard/projects/$id/cloud-credentials/'
     | '/dashboard/projects/$id/policy/'
@@ -1653,6 +1674,7 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/delivery/targets/'
     | '/dashboard/clusters/$id/nodes/$nodeName/'
     | '/dashboard/clusters/$id/service-mesh/mtls/'
+    | '/dashboard/logging/pipelines/$pipelineId/edit/'
     | '/dashboard/projects/$id/cloud-credentials/new/'
     | '/dashboard/settings/auth/connectors/$id/'
     | '/dashboard/settings/auth/connectors/new/'
@@ -1768,6 +1790,7 @@ export interface FileRouteTypes {
     | '/dashboard/delivery/deployments/$deploymentId'
     | '/dashboard/delivery/rollouts/$rolloutId'
     | '/dashboard/delivery/targets/$targetId'
+    | '/dashboard/logging/pipelines/$pipelineId'
     | '/dashboard/projects/$id/catalogs'
     | '/dashboard/projects/$id/cloud-credentials'
     | '/dashboard/projects/$id/policy'
@@ -1801,6 +1824,7 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/delivery/targets'
     | '/dashboard/clusters/$id/nodes/$nodeName'
     | '/dashboard/clusters/$id/service-mesh/mtls'
+    | '/dashboard/logging/pipelines/$pipelineId/edit'
     | '/dashboard/projects/$id/cloud-credentials/new'
     | '/dashboard/settings/auth/connectors/$id'
     | '/dashboard/settings/auth/connectors/new'
@@ -1922,6 +1946,7 @@ export interface FileRouteTypes {
     | '/dashboard/delivery/deployments/$deploymentId/'
     | '/dashboard/delivery/rollouts/$rolloutId/'
     | '/dashboard/delivery/targets/$targetId/'
+    | '/dashboard/logging/pipelines/$pipelineId/'
     | '/dashboard/projects/$id/catalogs/'
     | '/dashboard/projects/$id/cloud-credentials/'
     | '/dashboard/projects/$id/policy/'
@@ -1955,6 +1980,7 @@ export interface FileRouteTypes {
     | '/dashboard/clusters/$id/delivery/targets/'
     | '/dashboard/clusters/$id/nodes/$nodeName/'
     | '/dashboard/clusters/$id/service-mesh/mtls/'
+    | '/dashboard/logging/pipelines/$pipelineId/edit/'
     | '/dashboard/projects/$id/cloud-credentials/new/'
     | '/dashboard/settings/auth/connectors/$id/'
     | '/dashboard/settings/auth/connectors/new/'
@@ -2723,6 +2749,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardDeliveryTargetsTargetIdIndexRouteImport
       parentRoute: typeof DashboardDeliveryRouteRoute
     }
+    '/dashboard/logging/pipelines/$pipelineId/': {
+      id: '/dashboard/logging/pipelines/$pipelineId/'
+      path: '/logging/pipelines/$pipelineId'
+      fullPath: '/dashboard/logging/pipelines/$pipelineId/'
+      preLoaderRoute: typeof DashboardLoggingPipelinesPipelineIdIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
     '/dashboard/projects/$id/catalogs/': {
       id: '/dashboard/projects/$id/catalogs/'
       path: '/catalogs'
@@ -2953,6 +2986,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/clusters/$id/service-mesh/mtls/'
       preLoaderRoute: typeof DashboardClustersIdServiceMeshMtlsIndexRouteImport
       parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/logging/pipelines/$pipelineId/edit/': {
+      id: '/dashboard/logging/pipelines/$pipelineId/edit/'
+      path: '/logging/pipelines/$pipelineId/edit'
+      fullPath: '/dashboard/logging/pipelines/$pipelineId/edit/'
+      preLoaderRoute: typeof DashboardLoggingPipelinesPipelineIdEditIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/projects/$id/cloud-credentials/new/': {
       id: '/dashboard/projects/$id/cloud-credentials/new/'
@@ -3431,8 +3471,10 @@ interface DashboardRouteRouteChildren {
   DashboardBackupsSchedulesNewIndexRoute: typeof DashboardBackupsSchedulesNewIndexRoute
   DashboardBackupsStorageNewIndexRoute: typeof DashboardBackupsStorageNewIndexRoute
   DashboardClusterTemplatesIdEditIndexRoute: typeof DashboardClusterTemplatesIdEditIndexRoute
+  DashboardLoggingPipelinesPipelineIdIndexRoute: typeof DashboardLoggingPipelinesPipelineIdIndexRoute
   DashboardSecurityScansScanIdIndexRoute: typeof DashboardSecurityScansScanIdIndexRoute
   DashboardSecurityScansNewIndexRoute: typeof DashboardSecurityScansNewIndexRoute
+  DashboardLoggingPipelinesPipelineIdEditIndexRoute: typeof DashboardLoggingPipelinesPipelineIdEditIndexRoute
 }
 
 const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
@@ -3478,9 +3520,13 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardBackupsStorageNewIndexRoute: DashboardBackupsStorageNewIndexRoute,
   DashboardClusterTemplatesIdEditIndexRoute:
     DashboardClusterTemplatesIdEditIndexRoute,
+  DashboardLoggingPipelinesPipelineIdIndexRoute:
+    DashboardLoggingPipelinesPipelineIdIndexRoute,
   DashboardSecurityScansScanIdIndexRoute:
     DashboardSecurityScansScanIdIndexRoute,
   DashboardSecurityScansNewIndexRoute: DashboardSecurityScansNewIndexRoute,
+  DashboardLoggingPipelinesPipelineIdEditIndexRoute:
+    DashboardLoggingPipelinesPipelineIdEditIndexRoute,
 }
 
 const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(

@@ -127,6 +127,7 @@ function CreateResourceEditor({
   const [guidedValid, setGuidedValid] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [applyResults, setApplyResults] = useState<K8sCreateBatchResult[]>([]);
+  const [editorDirty, setEditorDirty] = useState(false);
   const modeRequestRef = useRef(0);
   const k8sCreateBatch = useK8sCreateBatch();
   const discovery = useClusterDiscovery(clusterId);
@@ -195,7 +196,7 @@ function CreateResourceEditor({
       );
       setParseError(null);
     }
-    setApplyResults([]);
+    setEditorDirty(true);
     setMode(next);
   };
 
@@ -223,7 +224,7 @@ function CreateResourceEditor({
     try {
       let items: K8sCreateBatchItem[];
       const failed = applyResults.filter((result) => !result.ok);
-      if (failed.length > 0) {
+      if (failed.length > 0 && !editorDirty) {
         items = failed.map(({ id, path, body, label }) => ({
           id,
           path,
@@ -237,18 +238,26 @@ function CreateResourceEditor({
         } else {
           yaml.loadAll(yamlContent, (document) => documents.push(document));
         }
-        items = createManifestBatch(documents, schema, apiPath, discovery);
+        items = createManifestBatch(
+          documents,
+          schema,
+          apiPath,
+          discovery,
+        ).filter(
+          (item) =>
+            !applyResults.some(
+              (previous) =>
+                previous.ok &&
+                previous.path === item.path &&
+                previous.label === item.label,
+            ),
+        );
       }
 
       const next = await k8sCreateBatch.mutateAsync({ clusterId, items });
-      const merged =
-        failed.length > 0
-          ? applyResults.map(
-              (previous) =>
-                next.find((result) => result.id === previous.id) ?? previous,
-            )
-          : next;
+      const merged = [...applyResults.filter((result) => result.ok), ...next];
       setApplyResults(merged);
+      setEditorDirty(false);
       const failedCount = merged.filter((result) => !result.ok).length;
       if (failedCount === 0) {
         toastSuccess(
@@ -265,7 +274,9 @@ function CreateResourceEditor({
   };
 
   const allApplied =
-    applyResults.length > 0 && applyResults.every((result) => result.ok);
+    !editorDirty &&
+    applyResults.length > 0 &&
+    applyResults.every((result) => result.ok);
   const createDisabled =
     k8sCreateBatch.isPending ||
     (mode === "guided" && (!guidedValid || !hasGuidedTemplate)) ||
@@ -406,9 +417,7 @@ function CreateResourceEditor({
             value={manifest}
             onChange={(next) => {
               setManifest(next);
-              setApplyResults((previous) =>
-                previous.filter((result) => result.ok),
-              );
+              setEditorDirty(true);
             }}
             schema={schema?.schema ?? {}}
             definitions={schema?.definitions ?? {}}
@@ -420,7 +429,7 @@ function CreateResourceEditor({
             onChange={(next) => {
               setYamlContent(next);
               setParseError(null);
-              setApplyResults([]);
+              setEditorDirty(true);
             }}
             className="h-full"
           />

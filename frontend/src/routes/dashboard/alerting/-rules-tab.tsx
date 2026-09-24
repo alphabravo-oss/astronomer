@@ -1,3 +1,4 @@
+import { AlertRuleInspection } from "./-alert-investigation";
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useAlertRules, useDeleteAlertRule } from "@/lib/hooks/alerting";
@@ -128,6 +129,7 @@ export function RulesTab({
 
   return (
     <>
+      <AlertRuleInspection />
       <DataTable
         data={rules || []}
         columns={columns}

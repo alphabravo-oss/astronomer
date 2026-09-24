@@ -1,3 +1,4 @@
+import { podInvestigationHref } from "./resource-navigation-context";
 import { useState } from "react";
 import { Box } from "lucide-react";
 
@@ -10,7 +11,7 @@ import { QueryStates } from "@/components/ui/query-states";
 import { PodLogsViewer } from "@/components/workloads/pod-logs-viewer";
 import { useWorkloadMetrics, useWorkloadPods } from "@/lib/hooks/workloads";
 import { detailHref } from "@/lib/k8s-paths";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { Pod } from "@/types";
 
@@ -45,6 +46,13 @@ function WorkloadPodsTab({
   name,
 }: WorkloadTabProps) {
   const navigate = useNavigate();
+  const location = useLocation({ select: (location) => location });
+  const podHref = (pod: Pod) =>
+    podInvestigationHref(
+      detailHref(clusterId, "pods", pod.namespace ?? namespace, pod.name),
+      `${location.pathname}${location.searchStr}`,
+      location.searchStr,
+    );
   const query = useWorkloadPods(clusterId, resourceType, namespace, name);
   const columns: Column<Pod>[] = [
     {
@@ -52,12 +60,7 @@ function WorkloadPodsTab({
       header: "Name",
       accessor: (pod) => (
         <RouterLink
-          to={detailHref(
-            clusterId,
-            "pods",
-            pod.namespace ?? namespace,
-            pod.name,
-          )}
+          to={podHref(pod)}
           onClick={(event) => event.stopPropagation()}
           className="font-mono text-xs text-foreground hover:underline"
         >
@@ -145,12 +148,7 @@ function WorkloadPodsTab({
           }}
           onRowClick={(pod) =>
             void navigate({
-              to: detailHref(
-                clusterId,
-                "pods",
-                pod.namespace ?? namespace,
-                pod.name,
-              ),
+              to: podHref(pod),
             })
           }
         />

@@ -1,3 +1,4 @@
+import { SnapshotRestoreHistory } from "./snapshot-restore-tracking";
 import { QueryStates } from "@/components/ui/query-states";
 /**
  * Cluster Snapshots tab.
@@ -50,7 +51,13 @@ import {
 // are distinct capabilities (application/PV backups versus control-plane DR),
 // so they do not share a tab or controller.
 export function ClusterSnapshotsPage() {
-  return <ClusterVeleroSnapshotsPage />;
+  const { id } = useParams({ from: "/dashboard/clusters/$id" });
+  return (
+    <div className="space-y-6">
+      <ClusterVeleroSnapshotsPage />
+      <SnapshotRestoreHistory clusterId={id} />
+    </div>
+  );
 }
 
 // ─── Velero snapshots page (unchanged existing behavior) ─────────────────────

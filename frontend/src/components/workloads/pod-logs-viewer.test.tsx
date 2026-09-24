@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
@@ -26,6 +27,10 @@ const { usePodLogsMock } = vi.hoisted(() => ({
 
 vi.mock("@/lib/hooks/workloads", () => ({
   usePodLogs: usePodLogsMock,
+}));
+
+vi.mock("@/components/resources/resource-navigation-context", () => ({
+  useInvestigationParam: (_key: string, fallback = "") => useState(fallback),
 }));
 
 describe("PodLogsViewer", () => {

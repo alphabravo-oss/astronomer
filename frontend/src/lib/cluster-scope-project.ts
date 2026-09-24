@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { getProject } from "@/lib/api/projects";
 import {
@@ -12,7 +12,7 @@ let latestSelection = 0;
 
 /** All pickers replace project and namespaces together; a late lookup cannot win. */
 export function useProjectSelection(clusterId?: string) {
-  const location = useLocation();
+  const location = useLocation({ select: (location) => location });
   const navigate = useNavigate();
   const ownedSelection = useRef(0);
   useEffect(
@@ -22,9 +22,8 @@ export function useProjectSelection(clusterId?: string) {
     [clusterId, location.pathname],
   );
   const [pending, setPending] = useState(false);
-  return {
-    pending,
-    select: async (id: string) => {
+  const select = useCallback(
+    async (id: string) => {
       const request = ++latestSelection;
       ownedSelection.current = request;
       const commit = (namespaces?: readonly string[]) => {
@@ -65,5 +64,7 @@ export function useProjectSelection(clusterId?: string) {
         setPending(false);
       }
     },
-  };
+    [clusterId, location.pathname, location.searchStr, navigate],
+  );
+  return { pending, select };
 }

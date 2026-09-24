@@ -19,6 +19,7 @@ const discovery: ResourceDiscoveryView = {
       },
     },
   ],
+  crdContinue: "",
   partial: false,
   errors: {},
 };

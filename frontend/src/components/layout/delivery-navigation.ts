@@ -35,7 +35,7 @@ export const DELIVERY_DESTINATIONS: NavItem[] = [
     label: "Templates",
     href: "/dashboard/delivery/configuration-templates",
     icon: SlidersHorizontal,
-    permission: { resource: "delivery_configuration_templates", verb: "read" },
+    permission: { resource: "delivery_configuration_templates", verb: "list" },
     projectPermission: {
       resource: "delivery_configuration_templates",
       verb: "read",
@@ -45,7 +45,7 @@ export const DELIVERY_DESTINATIONS: NavItem[] = [
     label: "Overrides",
     href: "/dashboard/delivery/override-sets",
     icon: SlidersVertical,
-    permission: { resource: "delivery_configuration_templates", verb: "read" },
+    permission: { resource: "delivery_configuration_templates", verb: "list" },
     projectPermission: {
       resource: "delivery_configuration_templates",
       verb: "read",

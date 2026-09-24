@@ -1,3 +1,5 @@
+import { useProject } from "@/lib/hooks/projects";
+import { projectInCluster } from "./cluster-scope-collection";
 import { useCallback, useEffect, useMemo } from "react";
 
 import { useClusterNamespaces } from "@/lib/hooks/clusters";
@@ -173,6 +175,8 @@ export interface ClusterNamespaceScope {
   selectedNamespaces: NamespaceSelection | undefined;
   restricted: boolean;
   ready: boolean;
+  error?: boolean;
+  retry?: () => void;
   selectedProjectId: string | null;
   setSelectedNamespaces: (selection: NamespaceSelection) => void;
   setProjectScope: (
@@ -228,7 +232,6 @@ export function useClusterNamespaceScope(
     });
   }, [clusterId, permissionsQuery.data]);
   const restricted = !broadNamespaceAccess;
-  const ready = namespacesQuery.isSuccess && permissionsQuery.isSuccess;
   const urlSelection = useMemo(
     () => parseNamespaceSelection(new URLSearchParams(searchString)),
     [searchString],
@@ -238,8 +241,32 @@ export function useClusterNamespaceScope(
     [searchString],
   );
   const selectedProjectId = urlProjectId ?? storedProjectId ?? null;
+  const projectQuery = useProject(selectedProjectId ?? "", {
+    throwOnError: false,
+  });
+  const validProject =
+    !selectedProjectId ||
+    (projectQuery.isSuccess &&
+      projectQuery.data &&
+      projectInCluster(projectQuery.data, clusterId));
+  const ready =
+    namespacesQuery.isSuccess &&
+    permissionsQuery.isSuccess &&
+    Boolean(validProject);
+  const projectNamespaces = selectedProjectId
+    ? projectQuery.data?.namespaces
+    : undefined;
+
   const activeSelection = useMemo<NamespaceSelection | undefined>(() => {
     if (!ready) return undefined;
+    if (selectedProjectId && projectNamespaces)
+      return canonicalNamespaces(
+        (urlSelection ?? projectNamespaces).filter(
+          (namespace) =>
+            availableNamespaces.includes(namespace) &&
+            projectNamespaces.includes(namespace),
+        ),
+      );
     if (urlSelection !== undefined) {
       return canonicalNamespaces(
         urlSelection.filter((namespace) =>
@@ -252,7 +279,15 @@ export function useClusterNamespaceScope(
     // server-authorized namespace set and writes it into the URL.
     if (restricted && (stored === undefined || stored === null)) return [];
     return stored ?? null;
-  }, [availableNamespaces, ready, restricted, stored, urlSelection]);
+  }, [
+    availableNamespaces,
+    ready,
+    restricted,
+    stored,
+    urlSelection,
+    selectedProjectId,
+    projectNamespaces,
+  ]);
 
   const commit = useCallback(
     (selection: NamespaceSelection, projectId: string | null) => {
@@ -298,6 +333,10 @@ export function useClusterNamespaceScope(
 
   useEffect(() => {
     if (!ready) return;
+    if (selectedProjectId && projectNamespaces && urlSelection === undefined) {
+      commit(projectNamespaces, selectedProjectId);
+      return;
+    }
     const fromUrl = urlSelection;
     if (fromUrl !== undefined) {
       const safe = canonicalNamespaces(
@@ -329,6 +368,7 @@ export function useClusterNamespaceScope(
     stored,
     selectedProjectId,
     urlSelection,
+    projectNamespaces,
   ]);
 
   const includes = useCallback(
@@ -362,6 +402,16 @@ export function useClusterNamespaceScope(
     selectedNamespaces: activeSelection,
     restricted,
     ready,
+    error:
+      namespacesQuery.isError ||
+      permissionsQuery.isError ||
+      projectQuery.isError ||
+      (projectQuery.isSuccess && !validProject),
+    retry: () => {
+      void namespacesQuery.refetch();
+      void permissionsQuery.refetch();
+      if (selectedProjectId) void projectQuery.refetch();
+    },
     selectedProjectId,
     setSelectedNamespaces,
     setProjectScope,

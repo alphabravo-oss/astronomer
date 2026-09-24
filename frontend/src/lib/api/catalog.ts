@@ -385,30 +385,13 @@ export async function getHelmCharts(
     query: {
       cluster_id: params.clusterId,
       project_id: params.projectId,
+      search: params.search?.trim() || undefined,
       limit: params.limit ?? CATALOG_PAGE_LIMIT,
       offset: params.offset,
     },
     signal,
   });
-  const search = params.search?.trim().toLocaleLowerCase();
-  const page = mapPage(response, mapHelmChart);
-  return {
-    ...page,
-    data: page.data.filter((chart) => {
-      if (params.repository && chart.repositoryId !== params.repository)
-        return false;
-      if (params.category && chart.category !== params.category) return false;
-      if (!search) return true;
-      return [
-        chart.name,
-        chart.displayName,
-        chart.description,
-        ...chart.keywords,
-      ]
-        .filter(Boolean)
-        .some((value) => value!.toLocaleLowerCase().includes(search));
-    }),
-  };
+  return mapPage(response, mapHelmChart);
 }
 
 export async function getHelmChartVersions(
@@ -554,8 +537,12 @@ export async function installHelmChart(
 /** Detail is the only catalog endpoint that exposes persisted stage events. */
 export async function getCatalogOperation(
   id: string,
+  signal?: AbortSignal,
 ): Promise<CatalogOperation> {
-  return getCatalogOperationsById({ path: { id } });
+  return requireData(
+    await getCatalogOperationsById({ path: { id }, signal }),
+    "getCatalogOperation",
+  );
 }
 
 export async function listCatalogOperations(
@@ -571,10 +558,13 @@ export async function listCatalogOperations(
 export async function retryCatalogOperation(
   id: string,
 ): Promise<CatalogOperation> {
-  return postCatalogOperationsByIdRetry({
-    path: { id },
-    headerParams: idempotencyHeaderParams(),
-  });
+  return requireData(
+    await postCatalogOperationsByIdRetry({
+      path: { id },
+      headerParams: idempotencyHeaderParams(),
+    }),
+    "retryCatalogOperation",
+  );
 }
 
 export async function upgradeInstalledChart(

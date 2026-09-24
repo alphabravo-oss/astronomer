@@ -10,11 +10,13 @@ const state = vi.hoisted(() => ({
 vi.mock("@tanstack/react-router", () => ({
   Link: () => null,
   useNavigate: () => state.navigate,
-  useLocation: ({ select }: { select: (value: unknown) => unknown }) =>
-    select({
+  useLocation: (options?: { select?: (value: unknown) => unknown }) => {
+    const value = {
       pathname: "/dashboard/delivery/bundles",
       searchStr: `?project=${state.requested}`,
-    }),
+    };
+    return options?.select ? options.select(value) : value;
+  },
 }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => state.page }));
 vi.mock("@/lib/hooks/projects", () => ({ useProject: () => state.selected }));

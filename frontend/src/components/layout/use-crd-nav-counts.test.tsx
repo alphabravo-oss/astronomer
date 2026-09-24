@@ -19,6 +19,11 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import("@tanstack/react-router")>()),
     Link: RouterLinkStub,
+    useLocation: ({
+      select,
+    }: {
+      select: (value: { searchStr: string }) => unknown;
+    }) => select({ searchStr: "" }),
   };
 });
 

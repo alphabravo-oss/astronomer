@@ -1,13 +1,10 @@
 import { getResourceDef } from "@/lib/k8s-paths";
 import { getClusterNamespaces } from "@/lib/api/workloads";
 import { getProject } from "@/lib/api/projects";
-import { k8sGet } from "@/lib/api/kubernetes-proxy";
+import { getCompleteResourceDiscovery } from "@/lib/api/resources";
 import { projectInCluster } from "@/lib/cluster-scope-collection";
 import type { NamespaceSelection } from "@/lib/cluster-scope";
-import {
-  clusterDiscoveryFromDefinitions,
-  CRD_DISCOVERY_PATH,
-} from "./cluster-discovery-model";
+import { clusterDiscoveryFromSummaries } from "./cluster-discovery-model";
 
 export function clusterTransitionPath(
   pathname: string,
@@ -69,11 +66,9 @@ export async function resolveClusterTransition(
   }
   let types: string[] = [];
   if (pathname.includes("/custom-resources/")) {
-    const definitions = await k8sGet(target, CRD_DISCOVERY_PATH);
+    const definitions = await getCompleteResourceDiscovery(target);
     types = [
-      ...clusterDiscoveryFromDefinitions(
-        definitions.items ?? [],
-      ).crdsByGroup.values(),
+      ...clusterDiscoveryFromSummaries(definitions.crds).crdsByGroup.values(),
     ]
       .flat()
       .flatMap((type) =>

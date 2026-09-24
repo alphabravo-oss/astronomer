@@ -8,7 +8,9 @@ import { navGroupItems } from "./nav-group-items";
 import { SidebarNavItems, type StarredNavControls } from "./sidebar-nav-items";
 
 function isItemActive(item: NavItem, pathname: string): boolean {
-  return item.exact ? pathname === item.href : pathname.startsWith(item.href);
+  return item.exact
+    ? pathname === item.href
+    : pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
 /**
@@ -27,11 +29,20 @@ export function CollapsedNavItems({
     <div className="space-y-0.5">
       {items.map((item) => {
         const Icon = item.icon;
-        const active = isItemActive(item, pathname);
+        const active =
+          isItemActive(item, pathname) &&
+          !items.some(
+            (other) =>
+              other.href.length > item.href.length &&
+              isItemActive(other, pathname),
+          );
         return (
           <RouterLink
             key={item.href}
             to={item.href}
+            activeOptions={{ exact: true }}
+            activeProps={{ "aria-current": active ? "page" : undefined }}
+            aria-current={active ? "page" : undefined}
             className={cn(
               "nav-item group justify-center px-0",
               active && "active",

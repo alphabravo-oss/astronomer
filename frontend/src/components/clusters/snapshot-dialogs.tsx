@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -324,6 +325,7 @@ export function RestoreSnapshotDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const form = useAppForm({
     defaultValues: {
       targetClusterId: clusterId,
@@ -345,11 +347,14 @@ export function RestoreSnapshotDialog({
         },
       });
     },
-    onSuccess: () => {
+    onSuccess: (receipt) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.clusterPages.snapshots(clusterId),
       });
-      toastSuccess("Restore queued");
+      toastSuccess("Restore queued — follow its status in restore history");
+      void navigate({
+        to: `/dashboard/clusters/${receipt.targetClusterId}/snapshots?restore=${encodeURIComponent(receipt.id)}`,
+      });
       onClose();
     },
     onError: (error: Error) => toastApiError("Restore failed", error),

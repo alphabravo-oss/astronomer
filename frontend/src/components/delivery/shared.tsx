@@ -72,10 +72,8 @@ export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
         : getProjects({ pageSize: 25 }, { signal }),
     throwOnError: false,
   });
-  const pathname = useLocation({ select: (location) => location.pathname });
   const searchStr = useLocation({ select: (location) => location.searchStr });
   const search = useMemo(() => new URLSearchParams(searchStr), [searchStr]);
-  const navigate = useNavigate();
   const clusterId = opts?.clusterId;
   const requested = search.get("project") ?? "";
   const selected = useProject(requested);
@@ -106,20 +104,12 @@ export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
         ? rows[0].id
         : "";
 
-  // A one-project user should land on working data immediately. The URL is
-  // still authoritative and is updated so deep links remain shareable.
-  useEffect(() => {
-    if (requested || !onlyProject) return;
-    const next = new URLSearchParams(search);
-    next.set("project", rows[0].id);
-    next.set("namespaces", rows[0].namespaces.join(","));
-    void navigate({ to: `${pathname}?${next.toString()}`, replace: true });
-  }, [pathname, requested, navigate, rows, search, onlyProject]);
-
   const projectSelection = useProjectSelection(clusterId);
-  const setProjectId = (id: string) => {
-    void projectSelection.select(id);
-  };
+  const setProjectId = projectSelection.select;
+  // Unique bounded project defaults use the same atomic transaction as all pickers.
+  useEffect(() => {
+    if (!requested && onlyProject) void setProjectId(rows[0].id);
+  }, [requested, onlyProject, rows, setProjectId]);
 
   const projectQuery = requested ? selected : projects;
   return { projectId, projects: rows, projectQuery, setProjectId };

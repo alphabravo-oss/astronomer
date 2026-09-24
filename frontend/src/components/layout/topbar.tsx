@@ -244,7 +244,7 @@ export function Topbar() {
       {/* Center: Cross-cluster Global Search (Phase A3). Its own kbd hint
           covers the command palette shortcut, so the topbar no longer needs
           a separate ⌘K chip. */}
-      <div className="hidden 2xl:flex min-w-0 flex-1 justify-center px-2">
+      <div className="flex min-w-44 max-w-xs flex-1 justify-center px-2">
         <GlobalSearch />
       </div>
 

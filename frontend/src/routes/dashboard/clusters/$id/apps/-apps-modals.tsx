@@ -15,6 +15,7 @@ import type { ModalState } from "./-modal-state";
 export function AppsModals({
   modal,
   onCloseModal,
+  onOperationStarted,
   projectId,
   clusterId,
   catalogCreateDecision,
@@ -32,6 +33,7 @@ export function AppsModals({
 }: {
   modal: ModalState;
   onCloseModal: () => void;
+  onOperationStarted?: (id: string) => void;
   projectId: string;
   clusterId: string;
   catalogCreateDecision: PermissionDecision;
@@ -61,6 +63,7 @@ export function AppsModals({
           }}
           submitDecision={catalogCreateDecision}
           onClose={onCloseModal}
+          onOperationStarted={onOperationStarted}
         />
       )}
       {projectId && modal.kind === "upgrade" && (
@@ -80,6 +83,7 @@ export function AppsModals({
           }}
           submitDecision={catalogUpdateDecision}
           onClose={onCloseModal}
+          onOperationStarted={onOperationStarted}
         />
       )}
       {modal.kind === "uninstall" && (

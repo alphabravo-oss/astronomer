@@ -1,17 +1,16 @@
 import type { NamespaceSelection } from "./cluster-scope";
 
-/** Singular-namespace collection APIs cannot produce a combined, correctly paged subset. */
+/** Explicit selection is always applied before server pagination. */
 export function collectionScope(selection: NamespaceSelection | undefined) {
   if (selection === undefined)
     return { enabled: false, message: "Resolving namespace scope…" };
   if (selection === null) return { enabled: true, namespace: undefined };
   if (selection.length === 1) return { enabled: true, namespace: selection[0] };
+  if (selection.length > 1)
+    return { enabled: true, namespaces: [...selection] };
   return {
     enabled: false,
-    message:
-      selection.length === 0
-        ? "No namespaces selected. Select a namespace to view resources."
-        : "This collection supports one namespace at a time. Select one namespace; combined pagination is not available.",
+    message: "No namespaces selected. Select a namespace to view resources.",
   };
 }
 

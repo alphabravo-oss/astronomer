@@ -1,3 +1,4 @@
+import { ActionButton } from "@/components/ui/action-button";
 import { useProjectSelection } from "@/lib/cluster-scope-project";
 import { projectInCluster } from "@/lib/cluster-scope-collection";
 import { Command } from "cmdk";
@@ -90,6 +91,11 @@ export function ClusterScopeControls({ clusterId }: { clusterId: string }) {
     <>
       <ProjectScopePicker clusterId={clusterId} scope={scope} />
       <NamespaceScopePicker scope={scope} />
+      {scope.error && (
+        <ActionButton size="sm" onClick={scope.retry}>
+          Retry scope
+        </ActionButton>
+      )}
     </>
   );
 }
