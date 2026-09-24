@@ -212,14 +212,33 @@ for (const status of ["acknowledged", "resolved"] as const) {
     }));
     const selected = records[0]!;
     const reads: { method: string; query: Record<string, string> }[] = [];
+    const notificationReads: typeof reads = [];
     await page.route(
       (url) => url.pathname.replace(/\/$/, "") === "/api/v1/alerting/events",
       (route) => {
         const query = new URL(route.request().url()).searchParams;
-        reads.push({
+        const read = {
           method: route.request().method(),
           query: Object.fromEntries(query),
-        });
+        };
+        // The shell requests a separate bounded firing preview. This history
+        // fixture contains no firing events, so it must not receive history rows.
+        if (query.get("status") === "firing" && query.get("limit") === "5") {
+          notificationReads.push(read);
+          return route.fulfill({
+            json: {
+              data: [],
+              pagination: {
+                limit: 5,
+                offset: 0,
+                total: 0,
+                has_more: false,
+                next_offset: null,
+              },
+            },
+          });
+        }
+        reads.push(read);
         const offset = Number(query.get("offset"));
         return route.fulfill({
           json: {
@@ -327,6 +346,12 @@ for (const status of ["acknowledged", "resolved"] as const) {
         severity: "critical",
         limit: "50",
         offset: expect.stringMatching(/^(0|50)$/),
+      });
+    }
+    for (const read of notificationReads) {
+      expect(read).toEqual({
+        method: "GET",
+        query: { status: "firing", limit: "5" },
       });
     }
   });
