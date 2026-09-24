@@ -86,8 +86,19 @@ At `0067c824`, the feature branch includes the following reviewed increments:
 - `281d95a0`: operation outcome observes its own durable rollout or deletion target. A newer rollout cannot overwrite an older receipt, and observation failure remains explicitly unknown.
 - `0067c824`: UI wiring for those contracts, URL-addressed app/restore inspection, pipeline detail/edit routes, alert investigation, and resource context.
 
-The API executor's canonical disposable PostgreSQL gate passed 16 expected tests with zero skips, including restore visibility/pagination and repeated pipeline association updates. A combined run including the subsequently added search and exact-operation SQL regressions is pending at this checkpoint.
+The API executor's canonical disposable PostgreSQL gate first passed 16 expected tests with zero skips. The combined run then passed **18/18 required tests**, including search visibility/literal matching, restore visibility/pagination, repeated pipeline association updates, and exact-rollout/deletion SQL. Log: `/tmp/plan027-api-postgres-combined.log`. Subsequent SQL refinements require another run before final acceptance.
 
 Go test binary builds require `GOFLAGS='-p=1 -buildvcs=false'` in this environment: Go's VCS discovery encounters an incomplete parent `/root/astronomer-all/.git` while the nested repository/worktrees are valid. This disables test-binary VCS stamping only; unknown parent metadata is preserved. It does not disable source, authorization, schema, race, or contract checks.
 
 The checkpoint is not final acceptance. Browser journey coverage, remaining source refinements, complexity reductions, route fixtures and final combined enterprise gates remain in progress. No live offering is marked qualified by these fixture or database tests.
+
+### Independent integration checks at `5b2d0d19`
+
+- `GOMAXPROCS=2 GOFLAGS='-p=1 -buildvcs=false' go test ./internal/handler ./internal/server ./internal/tunnel ./internal/delivery/catalogapp -count=1`: PASS for all four packages (20.202s, 7.229s, 0.872s, 0.011s). Database-dependent tests are qualified separately by the mandatory disposable PostgreSQL run.
+- Backend enterprise attempt: formatting, shell checks, migration policy, data governance and canonical sqlc drift checks passed. Go build failed on three CLI accesses to the now-corrected values/operation response envelopes. The executor is fixing the CLI consumers and adding command/SDK HTTP regressions; this attempt is explicitly **not a passing enterprise result**.
+- Independent frontend adapter check: 11 passed, one discovery mock assertion failed because the adapter now sends bounded continuation parameters. The assertion and behavioral continuation cases are being updated; nonexistent requested test paths are not counted as coverage.
+- Browser screenshot review found the long alert dialog rendered beneath the sticky header. The shared overlay stacking correction and obstruction checks are required before final screenshot acceptance.
+
+### Further fixes required by concrete integration findings
+
+Catalog visibility must traverse beyond its former 10,000-project/repository cap. Kubernetes Events must follow native continuation before reporting totals or applying response offsets. Project scope must use actual per-cluster namespace assignments from the API; a helper test with a synthesized secondary `clusterIds` property cannot establish production support. Pipeline list navigation must retain server pagination instead of treating its first 200 rows as complete. These remain part of the authorized workflow implementation.
