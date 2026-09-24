@@ -759,6 +759,10 @@ export interface OpenAPIComponents {
           "catalog_digest": string;
         };
     CatalogOperation: {
+          "journalStatus"?: string;
+          "deliveryPhase"?: string;
+          "deliveryObservedAt"?: string;
+          "deliveryObservationError"?: string;
           "id"?: string;
           "targetType"?: string;
           "targetKey"?: string;
@@ -12449,6 +12453,7 @@ export interface OpenAPIOperations {
     path: "/api/v1/catalog/charts/";
     arguments: {
         "query"?: {
+          "search"?: string;
           "limit"?: number;
           "offset"?: number;
           "tag"?: string;
@@ -12750,8 +12755,10 @@ export interface OpenAPIOperations {
           "id": string;
         };
       };
-    response: OpenAPIComponents['schemas']['CatalogOperation'] & {
-        "events"?: OpenAPIComponents['schemas']['CatalogOperationEvent'][];
+    response: {
+        "data": OpenAPIComponents['schemas']['CatalogOperation'] & {
+          "events"?: OpenAPIComponents['schemas']['CatalogOperationEvent'][];
+        };
       };
   };
   "postCatalogOperationsByIdRetry": {
@@ -12765,7 +12772,7 @@ export interface OpenAPIOperations {
           "Idempotency-Key": string;
         };
       };
-    response: OpenAPIComponents['schemas']['CatalogOperation'];
+    response: OpenAPIComponents['schemas']['CatalogOperationEnvelope'];
   };
   "getCatalogRepositories": {
     method: "GET";

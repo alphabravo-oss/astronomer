@@ -3576,11 +3576,19 @@ type CatalogInstallationPreview struct {
 
 // CatalogOperation defines model for CatalogOperation.
 type CatalogOperation struct {
-	AttemptCount *int                `json:"attemptCount,omitempty"`
-	CompletedAt  *time.Time          `json:"completedAt"`
-	CreatedAt    *time.Time          `json:"createdAt,omitempty"`
-	ErrorMessage *string             `json:"errorMessage,omitempty"`
-	Id           *openapi_types.UUID `json:"id,omitempty"`
+	AttemptCount             *int       `json:"attemptCount,omitempty"`
+	CompletedAt              *time.Time `json:"completedAt"`
+	CreatedAt                *time.Time `json:"createdAt,omitempty"`
+	DeliveryObservationError *string    `json:"deliveryObservationError,omitempty"`
+	DeliveryObservedAt       *time.Time `json:"deliveryObservedAt,omitempty"`
+
+	// DeliveryPhase Exact operation rollout or deletion outcome; unknown means no reliable observation is available.
+	DeliveryPhase *string             `json:"deliveryPhase,omitempty"`
+	ErrorMessage  *string             `json:"errorMessage,omitempty"`
+	Id            *openapi_types.UUID `json:"id,omitempty"`
+
+	// JournalStatus Durable catalog worker state; only failed/retryable journal entries can use catalog retry.
+	JournalStatus *string `json:"journalStatus,omitempty"`
 
 	// OperationType install / upgrade / rollback / uninstall
 	OperationType *string    `json:"operationType,omitempty"`
@@ -12021,8 +12029,10 @@ type PostCatalogApplicationsPreviewJSONBody struct {
 
 // GetCatalogChartsParams defines parameters for GetCatalogCharts.
 type GetCatalogChartsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	// Search Case-insensitive literal substring of chart name, display name or description; filters authorized repositories before pagination and count.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int    `form:"offset,omitempty" json:"offset,omitempty"`
 
 	// Tag Filter charts by helm_chart_tags tag.
 	Tag *string `form:"tag,omitempty" json:"tag,omitempty"`
@@ -47692,6 +47702,22 @@ func NewGetCatalogChartsRequest(server string, params *GetCatalogChartsParams) (
 
 	if params != nil {
 		queryValues := queryURL.Query()
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
 
 		if params.Limit != nil {
 
@@ -89227,20 +89253,30 @@ type GetCatalogOperationsByIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		AttemptCount *int                     `json:"attemptCount,omitempty"`
-		CompletedAt  *time.Time               `json:"completedAt"`
-		CreatedAt    *time.Time               `json:"createdAt,omitempty"`
-		ErrorMessage *string                  `json:"errorMessage,omitempty"`
-		Events       *[]CatalogOperationEvent `json:"events,omitempty"`
-		Id           *openapi_types.UUID      `json:"id,omitempty"`
+		Data struct {
+			AttemptCount             *int       `json:"attemptCount,omitempty"`
+			CompletedAt              *time.Time `json:"completedAt"`
+			CreatedAt                *time.Time `json:"createdAt,omitempty"`
+			DeliveryObservationError *string    `json:"deliveryObservationError,omitempty"`
+			DeliveryObservedAt       *time.Time `json:"deliveryObservedAt,omitempty"`
 
-		// OperationType install / upgrade / rollback / uninstall
-		OperationType *string    `json:"operationType,omitempty"`
-		StartedAt     *time.Time `json:"startedAt"`
-		Status        *string    `json:"status,omitempty"`
-		TargetKey     *string    `json:"targetKey,omitempty"`
-		TargetType    *string    `json:"targetType,omitempty"`
-		UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+			// DeliveryPhase Exact operation rollout or deletion outcome; unknown means no reliable observation is available.
+			DeliveryPhase *string                  `json:"deliveryPhase,omitempty"`
+			ErrorMessage  *string                  `json:"errorMessage,omitempty"`
+			Events        *[]CatalogOperationEvent `json:"events,omitempty"`
+			Id            *openapi_types.UUID      `json:"id,omitempty"`
+
+			// JournalStatus Durable catalog worker state; only failed/retryable journal entries can use catalog retry.
+			JournalStatus *string `json:"journalStatus,omitempty"`
+
+			// OperationType install / upgrade / rollback / uninstall
+			OperationType *string    `json:"operationType,omitempty"`
+			StartedAt     *time.Time `json:"startedAt"`
+			Status        *string    `json:"status,omitempty"`
+			TargetKey     *string    `json:"targetKey,omitempty"`
+			TargetType    *string    `json:"targetType,omitempty"`
+			UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON403 *ErrorEnvelope
@@ -89267,7 +89303,7 @@ func (r GetCatalogOperationsByIdResponse) StatusCode() int {
 type PostCatalogOperationsByIdRetryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *CatalogOperation
+	JSON202      *CatalogOperationEnvelope
 	JSON400      *ErrorEnvelope
 	JSON403      *ErrorEnvelope
 	JSON404      *ErrorEnvelope
@@ -128221,20 +128257,30 @@ func ParseGetCatalogOperationsByIdResponse(rsp *http.Response) (*GetCatalogOpera
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			AttemptCount *int                     `json:"attemptCount,omitempty"`
-			CompletedAt  *time.Time               `json:"completedAt"`
-			CreatedAt    *time.Time               `json:"createdAt,omitempty"`
-			ErrorMessage *string                  `json:"errorMessage,omitempty"`
-			Events       *[]CatalogOperationEvent `json:"events,omitempty"`
-			Id           *openapi_types.UUID      `json:"id,omitempty"`
+			Data struct {
+				AttemptCount             *int       `json:"attemptCount,omitempty"`
+				CompletedAt              *time.Time `json:"completedAt"`
+				CreatedAt                *time.Time `json:"createdAt,omitempty"`
+				DeliveryObservationError *string    `json:"deliveryObservationError,omitempty"`
+				DeliveryObservedAt       *time.Time `json:"deliveryObservedAt,omitempty"`
 
-			// OperationType install / upgrade / rollback / uninstall
-			OperationType *string    `json:"operationType,omitempty"`
-			StartedAt     *time.Time `json:"startedAt"`
-			Status        *string    `json:"status,omitempty"`
-			TargetKey     *string    `json:"targetKey,omitempty"`
-			TargetType    *string    `json:"targetType,omitempty"`
-			UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+				// DeliveryPhase Exact operation rollout or deletion outcome; unknown means no reliable observation is available.
+				DeliveryPhase *string                  `json:"deliveryPhase,omitempty"`
+				ErrorMessage  *string                  `json:"errorMessage,omitempty"`
+				Events        *[]CatalogOperationEvent `json:"events,omitempty"`
+				Id            *openapi_types.UUID      `json:"id,omitempty"`
+
+				// JournalStatus Durable catalog worker state; only failed/retryable journal entries can use catalog retry.
+				JournalStatus *string `json:"journalStatus,omitempty"`
+
+				// OperationType install / upgrade / rollback / uninstall
+				OperationType *string    `json:"operationType,omitempty"`
+				StartedAt     *time.Time `json:"startedAt"`
+				Status        *string    `json:"status,omitempty"`
+				TargetKey     *string    `json:"targetKey,omitempty"`
+				TargetType    *string    `json:"targetType,omitempty"`
+				UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -128289,7 +128335,7 @@ func ParsePostCatalogOperationsByIdRetryResponse(rsp *http.Response) (*PostCatal
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest CatalogOperation
+		var dest CatalogOperationEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

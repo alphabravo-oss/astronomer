@@ -6917,6 +6917,10 @@ components:
     CatalogOperation:
       type: object
       properties:
+        journalStatus: {type: string, description: Durable catalog worker state; only failed/retryable journal entries can use catalog retry.}
+        deliveryPhase: {type: string, description: Exact operation rollout or deletion outcome; unknown means no reliable observation is available.}
+        deliveryObservedAt: {type: string, format: date-time}
+        deliveryObservationError: {type: string}
         id:
           type: string
           format: uuid
@@ -13108,6 +13112,9 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '410': {description: CRD continuation expired; restart discovery.}
+        '429': {description: Kubernetes API rate limit exceeded.}
+        '502': {description: Kubernetes transport or malformed discovery response.}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/clusters/{cluster_id}/resources/schema:
@@ -26278,6 +26285,10 @@ paths:
       security:
         - bearerJWT: []
       parameters:
+        - name: search
+          in: query
+          description: Case-insensitive literal substring of chart name, display name or description; filters authorized repositories before pagination and count.
+          schema: {type: string, maxLength: 256}
         - name: limit
           in: query
           schema:
@@ -27307,14 +27318,17 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/CatalogOperation'
-                  - type: object
-                    properties:
-                      events:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/CatalogOperationEvent'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/CatalogOperation'
+                      - type: object
+                        properties:
+                          events:
+                            type: array
+                            items: {$ref: '#/components/schemas/CatalogOperationEvent'}
         '400':
           description: Invalid operation ID.
           content:
@@ -27370,7 +27384,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CatalogOperation'
+                $ref: '#/components/schemas/CatalogOperationEnvelope'
         '400':
           description: Invalid operation ID.
           content:
