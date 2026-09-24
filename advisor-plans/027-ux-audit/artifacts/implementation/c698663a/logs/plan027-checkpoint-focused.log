@@ -1,0 +1,17 @@
+
+> astronomer-frontend@1.2.0 test
+> vitest run --maxWorkers=1 src/routes/dashboard/delivery/index.test.tsx src/routes/dashboard/clusters/$id/logging/index.test.tsx src/lib/cluster-scope.test.tsx src/lib/api/transport-query.test.ts src/components/resources/create-resource-dialog.test.tsx src/components/resources/related-resource-model.test.ts
+
+
+ RUN  v5.0.0 /root/astronomer-all/astronomer-plan027/frontend
+
+
+ Test Files  6 passed (6)
+      Tests  27 passed (27)
+   Start at  21:51:03
+   Duration  236.91s (import 69%, environment 22%, transform 5%, tests 2%, setup 1%)
+
+     Import  112 modules were evaluated 160 times · 154.70s total, 69% of tracked time
+             ~46.41s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+

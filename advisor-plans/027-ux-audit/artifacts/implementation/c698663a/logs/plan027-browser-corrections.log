@@ -1,0 +1,197 @@
+
+> astronomer-frontend@1.2.0 pretest:e2e
+> node scripts/generate-e2e-stubs.mjs
+
+e2e-stubs: 357 GET stubs -> tests/e2e-smoke/openapi-stubs.generated.json (18 GETs without a JSON success schema skipped)
+
+> astronomer-frontend@1.2.0 test:e2e
+> playwright test --project=chromium --project=mobile-chromium operator-failure-recovery operator-resource-history operator-scope-consistency operator-pipeline-editing operator-restricted-navigation --workers=1
+
+
+Running 34 tests using 1 worker
+(node:3166478) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··(node:3166616) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+····F(node:3167224) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+F(node:3167603) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··········(node:3168420) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+····F(node:3169113) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+F(node:3169541) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··········
+
+  1) [chromium] › tests/e2e/operator-failure-recovery.spec.ts:151:3 › Delivery target 403 renders recoverable read state without success controls 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/denied|permission/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/denied|permission/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/denied|permission/i).first()
+
+
+      186 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      187 |         .first(),
+    > 188 |     ).toBeVisible();
+          |       ^
+      189 |     await expect(
+      190 |       page.getByRole("button", { name: /Delete target|Save changes/ }),
+      191 |     ).toHaveCount(0);
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-failure-recovery.spec.ts:188:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--3f2b2-te-without-success-controls-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--3f2b2-te-without-success-controls-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-corrections/operator-failure-recovery--3f2b2-te-without-success-controls-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--3f2b2-te-without-success-controls-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-corrections/operator-failure-recovery--3f2b2-te-without-success-controls-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium] › tests/e2e/operator-failure-recovery.spec.ts:151:3 › Delivery target 404 renders recoverable read state without success controls 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/not found/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/not found/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/not found/i).first()
+
+
+      186 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      187 |         .first(),
+    > 188 |     ).toBeVisible();
+          |       ^
+      189 |     await expect(
+      190 |       page.getByRole("button", { name: /Delete target|Save changes/ }),
+      191 |     ).toHaveCount(0);
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-failure-recovery.spec.ts:188:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--d6e89-te-without-success-controls-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--d6e89-te-without-success-controls-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-corrections/operator-failure-recovery--d6e89-te-without-success-controls-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--d6e89-te-without-success-controls-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-corrections/operator-failure-recovery--d6e89-te-without-success-controls-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:151:3 › Delivery target 403 renders recoverable read state without success controls 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/denied|permission/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/denied|permission/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/denied|permission/i).first()
+
+
+      186 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      187 |         .first(),
+    > 188 |     ).toBeVisible();
+          |       ^
+      189 |     await expect(
+      190 |       page.getByRole("button", { name: /Delete target|Save changes/ }),
+      191 |     ).toHaveCount(0);
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-failure-recovery.spec.ts:188:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--3f2b2-te-without-success-controls-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--3f2b2-te-without-success-controls-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-corrections/operator-failure-recovery--3f2b2-te-without-success-controls-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--3f2b2-te-without-success-controls-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-corrections/operator-failure-recovery--3f2b2-te-without-success-controls-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:151:3 › Delivery target 404 renders recoverable read state without success controls 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('main').getByText(/not found/i).first()
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('main').getByText(/not found/i).first() with timeout 10000ms
+      - waiting for getByRole('main').getByText(/not found/i).first()
+
+
+      186 |         .getByText(status === 403 ? /denied|permission/i : /not found/i)
+      187 |         .first(),
+    > 188 |     ).toBeVisible();
+          |       ^
+      189 |     await expect(
+      190 |       page.getByRole("button", { name: /Delete target|Save changes/ }),
+      191 |     ).toHaveCount(0);
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/operator-failure-recovery.spec.ts:188:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--d6e89-te-without-success-controls-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--d6e89-te-without-success-controls-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-corrections/operator-failure-recovery--d6e89-te-without-success-controls-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-corrections/operator-failure-recovery--d6e89-te-without-success-controls-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-corrections/operator-failure-recovery--d6e89-te-without-success-controls-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4 failed
+    [chromium] › tests/e2e/operator-failure-recovery.spec.ts:151:3 › Delivery target 403 renders recoverable read state without success controls 
+    [chromium] › tests/e2e/operator-failure-recovery.spec.ts:151:3 › Delivery target 404 renders recoverable read state without success controls 
+    [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:151:3 › Delivery target 403 renders recoverable read state without success controls 
+    [mobile-chromium] › tests/e2e/operator-failure-recovery.spec.ts:151:3 › Delivery target 404 renders recoverable read state without success controls 
+  30 passed (1.6m)
