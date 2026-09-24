@@ -458,3 +458,39 @@ specification-only suppressions:
 - GET /api/v1/tools/ removed the required property `count` from the response with the `200` status
 - GET /api/v1/tools/ removed the required property `next` from the response with the `200` status
 - GET /api/v1/tools/ removed the required property `previous` from the response with the `200` status
+
+
+Reviewed 2026-09-24 for Plan 027 operator workflow closure against
+`main:docs/openapi.yaml` (preserved baseline `89229ce5`). The following are
+schema corrections to existing server responses, not new server wire changes:
+
+- `GetInstalledChartValues` already uses `RespondJSON`, returning
+  `{data: {release_name, namespace, values_override}}`.
+- `GetOperation` already uses `RespondJSON`, and `RetryOperation` already uses
+  `RespondAcceptedOperation`; both return the operation under `data`.
+- The canonical generated TypeScript client and Go SDK now model those wrappers.
+  Frontend values/operation adapters and all three affected `astro catalog`
+  commands unwrap `data`; CLI JSON retains the prior unwrapped command output.
+  `TestCatalogReadbackCommandsUnwrapCanonicalAPIEnvelopes` exercises real HTTP
+  wrappers for values, operation GET, and retry. Handler response tests cover
+  values and operation metadata; no alternate envelope or silent fallback was
+  introduced. API consumers generated from the previous incorrect specification
+  must regenerate and access `data`.
+
+The main-baseline diff reports only these exact optional-field removals from
+incorrectly documented top-level objects. Their fields remain inside `data`:
+
+- GET /api/v1/catalog/installed/{id}/values/ removed the optional property `namespace` from the response with the `200` status
+- GET /api/v1/catalog/installed/{id}/values/ removed the optional property `release_name` from the response with the `200` status
+- GET /api/v1/catalog/installed/{id}/values/ removed the optional property `values_override` from the response with the `200` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `attemptCount` from the response with the `202` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `completedAt` from the response with the `202` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `createdAt` from the response with the `202` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `errorMessage` from the response with the `202` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `id` from the response with the `202` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `operationType` from the response with the `202` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `startedAt` from the response with the `202` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `status` from the response with the `202` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `targetKey` from the response with the `202` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `targetType` from the response with the `202` status
+- POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `updatedAt` from the response with the `202` status
