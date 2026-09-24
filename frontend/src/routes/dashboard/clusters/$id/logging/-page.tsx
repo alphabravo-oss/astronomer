@@ -50,7 +50,7 @@ export function ClusterLoggingPage() {
         title="Log collection"
         description={`Log pipelines for ${cluster?.displayName || cluster?.name || "this cluster"}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <ActionButton onClick={() => setView("logs")}>
               View logs in Grafana
             </ActionButton>

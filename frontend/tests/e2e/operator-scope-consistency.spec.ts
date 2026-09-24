@@ -128,6 +128,7 @@ test("multi-namespace scope is sent as repeated API parameters and empty scope s
         "team-a,team-b",
     ),
   ).toBeTruthy();
+  await page.goto("about:blank");
   requests.length = 0;
   await page.goto(
     `/dashboard/clusters/${SMOKE_CLUSTER_ID}/deployments?namespaces=`,

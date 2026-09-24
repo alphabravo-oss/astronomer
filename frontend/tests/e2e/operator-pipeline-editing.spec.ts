@@ -143,7 +143,9 @@ test("pipeline edits keep its ID, opaque filters and labels through PUT", async 
   expect(mutations).toEqual([
     { method: "PUT", path: `/api/v1/logging/pipelines/${id}` },
   ]);
-  await expect(page).toHaveURL(new RegExp(`/logging/pipelines/${id}$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/logging/pipelines/${id}\\?pipelinePage=1$`),
+  );
   await page.reload();
   await expect(
     page.getByRole("heading", { name: "Checkout logs revised", exact: true }),
@@ -286,6 +288,18 @@ test("201st pipeline is reachable through bounded server pages and returns to it
   await expect(
     page.getByRole("link", { name: "Pipeline 201", exact: true }),
   ).toBeVisible();
+  await expect(
+    page.locator("header").getByRole("button", { name: "Import", exact: true }),
+  ).toBeVisible();
+  for (const name of ["View logs in Grafana", "Create Pipeline"]) {
+    const action = page.getByRole("button", { name, exact: true });
+    await expect(action).toBeVisible();
+    const bounds = await action.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(
+      page.viewportSize()!.width,
+    );
+  }
   await page.screenshot({
     path: info.outputPath("pipeline-paged-return.png"),
     animations: "disabled",

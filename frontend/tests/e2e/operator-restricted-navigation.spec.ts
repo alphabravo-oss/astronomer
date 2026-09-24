@@ -60,7 +60,10 @@ async function closeNavigation(page: Page) {
     name: "Close navigation",
     exact: true,
   });
-  if (await button.isVisible()) await button.click();
+  if (await button.isVisible()) {
+    await page.keyboard.press("Escape");
+    await expect(button).toBeHidden();
+  }
 }
 test("project-only Delivery lists remain reachable without granting read-only destinations or mutations", async ({
   page,

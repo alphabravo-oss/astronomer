@@ -93,7 +93,12 @@ test("latest rapid cluster selection wins and drops source resource identity", a
   await expect(page.getByText("Resolving target cluster scope…")).toBeVisible();
   await page.getByRole("option", { name: /Target C/ }).click();
   await expect(page).toHaveURL(/\/clusters\/cluster-c\/pods(?:\?|$)/);
+  const lateResponse = page.waitForResponse((response) =>
+    response.url().includes("/clusters/cluster-b/namespaces"),
+  );
   release();
+  await (await lateResponse).finished();
+  await expect(page).toHaveURL(/\/clusters\/cluster-c\/pods(?:\?|$)/);
   await expect(
     page.locator("header").getByTitle("Switch cluster (Ctrl/Cmd+J)"),
   ).toContainText("Target C");

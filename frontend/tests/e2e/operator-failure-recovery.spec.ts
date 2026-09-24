@@ -110,7 +110,11 @@ test("SMTP tests only saved configuration after an edited draft is saved", async
   const tests: unknown[] = [];
   const writes: unknown[] = [];
   await page.route("**/api/v1/admin/smtp**", async (route) => {
-    if (new URL(route.request().url()).pathname.endsWith("/test")) {
+    if (
+      new URL(route.request().url()).pathname
+        .replace(/\/$/, "")
+        .endsWith("/test")
+    ) {
       tests.push(route.request().postDataJSON());
       return route.fulfill({
         json: { success: true, recipient: "ops@example.test" },

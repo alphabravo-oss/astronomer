@@ -100,15 +100,24 @@ test("workload to pod retains failing status, URL logs state, and browser Back c
     `${base}/deployments/default/review-web?tab=workload-pods&namespaces=default`,
   );
   await expect(
-    page.getByText("CrashLoopBackOff", { exact: true }),
+    page.getByText("Crash Loop Back Off", { exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "review-pod", exact: true }).click();
+  const back = page.getByRole("link", {
+    name: "Back to workload",
+    exact: true,
+  });
+  await expect(back).toBeVisible();
+  const origin = new URL((await back.getAttribute("href"))!, page.url());
+  expect(origin.pathname).toBe(`${base}/deployments/default/review-web`);
+  expect(origin.searchParams.get("namespaces")).toBe("default");
+  expect(origin.searchParams.get("tab")).toBe("workload-pods");
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  await expect(page).toHaveURL(/tab=events/);
+  await page.reload();
   await expect(
-    page.getByRole("link", { name: "Back to workload", exact: true }),
-  ).toHaveAttribute(
-    "href",
-    `${base}/deployments/default/review-web?namespaces=default&tab=workload-pods`,
-  );
+    page.getByRole("tab", { name: "Events", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
   await page.getByRole("tab", { name: "Logs", exact: true }).click();
   await expect(page).toHaveURL(/tab=logs/);
   await page.reload();

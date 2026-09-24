@@ -103,3 +103,28 @@ test("page palette finds custom types beyond sidebar display cap without count f
   const countPaths = requests.filter((url) => url.includes("limit=1"));
   expect(new Set(countPaths).size).toBeLessThanOrEqual(15);
 });
+
+test("collapsed sidebar exposes one canonical active link and restores keyboard focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/dashboard/monitoring");
+  await page
+    .getByRole("button", { name: "Collapse sidebar", exact: true })
+    .click();
+  const trigger = page
+    .locator("aside")
+    .getByRole("button", { name: "Observability", exact: true });
+  await trigger.click();
+  const flyout = page.getByRole("navigation", {
+    name: "Observability",
+    exact: true,
+  });
+  await expect(flyout.locator('a[aria-current="page"]')).toHaveCount(1);
+  await expect(flyout.locator('a[aria-current="page"]')).toHaveAttribute(
+    "href",
+    "/dashboard/monitoring",
+  );
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+});
