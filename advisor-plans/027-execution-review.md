@@ -118,3 +118,12 @@ Project reads now expose authoritative cluster membership and per-cluster namesp
 ### Verification attempts that do not count as passing
 
 The next frontend enterprise attempt stopped on a stale canonical code-health inventory; a combined-source regeneration is required. A standalone full frontend unit run and a backend enterprise attempt were terminated under host memory and temporary-filesystem pressure (exit 143). The backend attempt had passed formatting, shell, migration and sqlc checks but had not finished the build. These are **not passing full gates**. Final checks will use one heavy process at a time and disk-backed temporary directories. Existing unrelated temporary artifacts and live services are preserved.
+
+
+## Combined frontend acceptance candidate
+
+Frontend checkpoint `c879acf6` is integrated as `2eb073f5`, with browser additions `d6520847`, `aa3649db`, `31514353` integrated through `fed20d15`. This includes authoritative secondary-cluster project scope, repeated-key API query serialization, object-bound Exec activation, actual reachable Metrics Overview/Grafana views, single Delivery project selection and permission-aware summaries, and URL-backed pipeline collection/page return. The original `ce96ccfb` five-width screenshots are retained with an explicit checkpoint README.
+
+Additional browser testing exposed two source gaps before acceptance: Metrics route never mounted the native summary component, and project-only Delivery duplicated its project picker and linked unauthorized summary destinations. Static journey review also found pipeline Back pointed to a nonexistent global tab. These were repaired in the candidate, along with preserving the current pipeline page and gating its create action. The new install receipt, restricted-role, metrics and 201st-pipeline journeys remain **pending final combined-source execution** at this checkpoint.
+
+Root backend enterprise verification on `d6b32f6a` passed formatting, shell checks, migration/data governance, canonical sqlc drift, Go build, Go vet, and reachable Go vulnerability scanning. It then failed on three lint findings in new tests (ineffectual initialization, numeric HTTP status, unused embedded test field). Log: `/root/astronomer-all/.tmp-plan027-root/backend-final.log`. These are being corrected; this is not a complete enterprise pass. The frontend executor separately passed 27 focused tests in six files; its first type-check found an optional cluster ID in a return link, now guarded, with final type-check pending.
