@@ -54,7 +54,33 @@ func TestCatalogSearchFiltersScopeBeforePaginationAndCounts(t *testing.T) {
 	for _, id := range []uuid.UUID{targets[0], targets[2]} {
 		exec(`INSERT INTO helm_chart_tags(chart_id,tag) VALUES($1,'mesh')`, id)
 	}
+	secondaryCluster, secondaryProject, unrelatedProject := uuid.New(), uuid.New(), uuid.New()
+	exec(`INSERT INTO clusters(id,name,display_name) VALUES($1,$2,$2)`, secondaryCluster, secondaryCluster.String())
+	for _, id := range []uuid.UUID{secondaryProject, unrelatedProject} {
+		exec(`INSERT INTO projects(id,name,display_name,cluster_id) VALUES($1,$2,$2,$3)`, id, id.String(), secondaryCluster)
+	}
+	for _, namespace := range []string{"team-a", "team-b"} {
+		exec(`INSERT INTO project_namespaces(project_id,cluster_id,namespace) VALUES($1,$2,$3)`, secondaryProject, cluster, namespace)
+	}
 	q := New(tx)
+	var projectRows []Project
+	for offset := int32(0); offset < 2; offset++ {
+		page, err := q.ListCatalogProjectsByCluster(ctx, ListCatalogProjectsByClusterParams{ClusterID: cluster, QueryLimit: 1, QueryOffset: offset})
+		if err != nil || len(page) != 1 {
+			t.Fatalf("effective cluster project page: %+v %v", page, err)
+		}
+		projectRows = append(projectRows, page...)
+	}
+	if projectRows[0].ID == projectRows[1].ID {
+		t.Fatal("secondary namespaces duplicated project")
+	}
+	foundProjects := map[uuid.UUID]bool{}
+	for _, row := range projectRows {
+		foundProjects[row.ID] = true
+	}
+	if !foundProjects[project] || !foundProjects[secondaryProject] || foundProjects[unrelatedProject] {
+		t.Fatalf("wrong effective cluster projects %+v", projectRows)
+	}
 	check := func(arg ListFilteredHelmChartsParams, wantTotal int64, wantRows int) []HelmChart {
 		t.Helper()
 		rows, err := q.ListFilteredHelmCharts(ctx, arg)

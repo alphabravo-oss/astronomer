@@ -1304,6 +1304,9 @@ type Querier interface {
 	ListCatalogOperationEvents(ctx context.Context, operationID uuid.UUID) ([]CatalogOperationEvent, error)
 	ListCatalogOperations(ctx context.Context, arg ListCatalogOperationsParams) ([]CatalogOperation, error)
 	ListCatalogOperationsForScopes(ctx context.Context, arg ListCatalogOperationsForScopesParams) ([]CatalogOperation, error)
+	// Catalog visibility includes secondary cluster membership without widening
+	// the general project inventory API's separate authorization contract.
+	ListCatalogProjectsByCluster(ctx context.Context, arg ListCatalogProjectsByClusterParams) ([]Project, error)
 	// Helm Charts
 	ListCatalogUserDiscovery(ctx context.Context, userID uuid.UUID) ([]ListCatalogUserDiscoveryRow, error)
 	// Per-project catalog queries — migration 061.

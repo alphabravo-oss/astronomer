@@ -26312,12 +26312,12 @@ paths:
           schema:
             type: string
             format: uuid
-          description: Select the project-scoped catalog union. Omit only for the globally managed catalog view.
+          description: Select the project-scoped catalog union. Mutually exclusive with cluster_id. Omit both for the globally managed catalog view.
         - name: cluster_id
           in: query
           required: false
           schema: {type: string, format: uuid}
-          description: Select the caller-visible catalog union for a cluster. Preferred by cluster Apps pages.
+          description: Select the caller-visible catalog union for a cluster. Mutually exclusive with project_id. Preferred by cluster Apps pages.
       responses:
         '200':
           description: Paginated page of charts.

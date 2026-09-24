@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -129,53 +128,6 @@ func (h *WorkloadHandler) GetNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	RespondJSON(w, http.StatusOK, detail)
-}
-
-func (h *WorkloadHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
-	clusterUUID, ok := parseClusterID(w, r)
-	if !ok {
-		return
-	}
-	clusterID := clusterUUID.String()
-	var events eventList
-	// Bound the upstream Kubernetes list as well as the response page. Passing
-	// raw client input here allowed an arbitrarily large list to be buffered by
-	// both the agent and server.
-	path := "/api/v1/events?limit=" + strconv.Itoa(queryLimitMax(r, 100, 500))
-	if err := h.getJSON(r.Context(), clusterID, path, &events); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
-		return
-	}
-	items := make([]map[string]any, 0, len(events.Items))
-	for _, evt := range events.Items {
-		items = append(items, map[string]any{
-			"id":      evt.Metadata.UID,
-			"type":    evt.Type,
-			"reason":  evt.Reason,
-			"message": evt.Message,
-			"involvedObject": map[string]any{
-				"kind":      evt.InvolvedObject.Kind,
-				"name":      evt.InvolvedObject.Name,
-				"namespace": evt.InvolvedObject.Namespace,
-			},
-			"count":          evt.Count,
-			"firstTimestamp": evt.FirstTimestamp,
-			"lastTimestamp":  evt.LastTimestamp,
-		})
-	}
-	all, names, err := h.authz.authorizedNamespaces(r.Context(), clusterUUID, rbac.ResourceClusters, rbac.VerbRead)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
-		return
-	}
-	if !all {
-		items = filterEventsByNamespace(items, names)
-	}
-	// Events come straight from the cluster's API (capped by the limit query
-	// param the agent honours); slice to the requested page so Total reflects the
-	// fetched set and Next advances correctly instead of re-serving the same rows.
-	page, pagination := pageWindow(r, items)
-	paging.Write(w, page, pagination)
 }
 
 func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {

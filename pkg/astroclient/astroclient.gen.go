@@ -12038,10 +12038,10 @@ type GetCatalogChartsParams struct {
 	// Tag Filter charts by helm_chart_tags tag.
 	Tag *string `form:"tag,omitempty" json:"tag,omitempty"`
 
-	// ProjectId Select the project-scoped catalog union. Omit only for the globally managed catalog view.
+	// ProjectId Select the project-scoped catalog union. Mutually exclusive with cluster_id. Omit both for the globally managed catalog view.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
 
-	// ClusterId Select the caller-visible catalog union for a cluster. Preferred by cluster Apps pages.
+	// ClusterId Select the caller-visible catalog union for a cluster. Mutually exclusive with project_id. Preferred by cluster Apps pages.
 	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 }
 

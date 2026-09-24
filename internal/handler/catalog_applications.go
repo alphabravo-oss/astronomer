@@ -41,6 +41,7 @@ type catalogUpgradeVersionQuerier interface {
 }
 
 type catalogClusterProjectResolver interface {
+	ListCatalogProjectsByCluster(context.Context, sqlc.ListCatalogProjectsByClusterParams) ([]sqlc.Project, error)
 	ListProjectsByCluster(context.Context, sqlc.ListProjectsByClusterParams) ([]sqlc.Project, error)
 	GetProjectNamespaceByClusterAndNamespace(context.Context, sqlc.GetProjectNamespaceByClusterAndNamespaceParams) (sqlc.ProjectNamespace, error)
 }

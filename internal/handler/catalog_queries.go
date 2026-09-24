@@ -19,6 +19,10 @@ import (
 // --- Helm Charts ---
 
 func catalogProjectQuery(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool, bool) {
+	if strings.TrimSpace(r.URL.Query().Get("project_id")) != "" && strings.TrimSpace(r.URL.Query().Get("cluster_id")) != "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Select project_id or cluster_id, not both")
+		return uuid.Nil, false, false
+	}
 	raw := strings.TrimSpace(r.URL.Query().Get("project_id"))
 	if raw == "" {
 		return uuid.Nil, false, true
@@ -51,7 +55,9 @@ func (h *CatalogHandler) visibleCatalogRepositoryIDs(ctx context.Context, cluste
 	if !ok {
 		return nil, errors.New("cluster project resolver is unavailable")
 	}
-	projects, err := resolver.ListProjectsByCluster(ctx, sqlc.ListProjectsByClusterParams{ClusterID: clusterID, QueryLimit: 10_000, QueryOffset: 0})
+	projects, err := collectCatalogVisibilityPages(ctx, func(limit, offset int32) ([]sqlc.Project, error) {
+		return resolver.ListCatalogProjectsByCluster(ctx, sqlc.ListCatalogProjectsByClusterParams{ClusterID: clusterID, QueryLimit: limit, QueryOffset: offset})
+	}, func(row sqlc.Project) uuid.UUID { return row.ID })
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +97,9 @@ func (h *CatalogHandler) visibleCatalogRepositoryIDs(ctx context.Context, cluste
 		return nil, errCatalogClusterAccessDenied
 	}
 	repositories := make(map[uuid.UUID]struct{})
-	globals, err := h.queries.ListGlobalHelmRepositories(ctx, sqlc.ListGlobalHelmRepositoriesParams{Limit: 10_000, Offset: 0})
+	globals, err := collectCatalogVisibilityPages(ctx, func(limit, offset int32) ([]sqlc.HelmRepository, error) {
+		return h.queries.ListGlobalHelmRepositories(ctx, sqlc.ListGlobalHelmRepositoriesParams{Limit: limit, Offset: offset})
+	}, func(row sqlc.HelmRepository) uuid.UUID { return row.ID })
 	if err != nil {
 		return nil, err
 	}

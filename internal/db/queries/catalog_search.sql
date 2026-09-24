@@ -21,3 +21,15 @@ WHERE ((sqlc.arg(global_scope)::boolean AND r.owner_project_id IS NULL)
        OR c.name ILIKE sqlc.arg(search_pattern)::text ESCAPE E'\\'
        OR COALESCE(c.display_name, '') ILIKE sqlc.arg(search_pattern)::text ESCAPE E'\\'
        OR COALESCE(c.description, '') ILIKE sqlc.arg(search_pattern)::text ESCAPE E'\\');
+
+-- name: ListCatalogProjectsByCluster :many
+-- Catalog visibility includes secondary cluster membership without widening
+-- the general project inventory API's separate authorization contract.
+SELECT projects.* FROM projects
+WHERE projects.cluster_id = sqlc.arg(cluster_id)
+   OR EXISTS (
+     SELECT 1 FROM project_namespaces pn
+     WHERE pn.project_id = projects.id AND pn.cluster_id = sqlc.arg(cluster_id)
+   )
+ORDER BY projects.created_at DESC, projects.id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);

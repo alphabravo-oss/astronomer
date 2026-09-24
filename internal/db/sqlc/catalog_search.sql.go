@@ -42,6 +42,71 @@ func (q *Queries) CountFilteredHelmCharts(ctx context.Context, arg CountFiltered
 	return count, err
 }
 
+const listCatalogProjectsByCluster = `-- name: ListCatalogProjectsByCluster :many
+SELECT projects.id, projects.name, projects.display_name, projects.description, projects.cluster_id, projects.namespaces, projects.resource_quota, projects.created_by_id, projects.created_at, projects.updated_at, projects.limit_range, projects.network_policy_mode, projects.pod_security_profile, projects.resource_quota_cpu_limit, projects.resource_quota_memory_limit, projects.resource_quota_pod_count, projects.quota_plan, projects.quota_overrides, projects.default_vault_connection_id, projects.managed_by, projects.external_ref_api_version, projects.external_ref_kind, projects.external_ref_namespace, projects.external_ref_name, projects.observed_generation FROM projects
+WHERE projects.cluster_id = $1
+   OR EXISTS (
+     SELECT 1 FROM project_namespaces pn
+     WHERE pn.project_id = projects.id AND pn.cluster_id = $1
+   )
+ORDER BY projects.created_at DESC, projects.id DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListCatalogProjectsByClusterParams struct {
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
+}
+
+// Catalog visibility includes secondary cluster membership without widening
+// the general project inventory API's separate authorization contract.
+func (q *Queries) ListCatalogProjectsByCluster(ctx context.Context, arg ListCatalogProjectsByClusterParams) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listCatalogProjectsByCluster, arg.ClusterID, arg.QueryOffset, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Project{}
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.ClusterID,
+			&i.Namespaces,
+			&i.ResourceQuota,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LimitRange,
+			&i.NetworkPolicyMode,
+			&i.PodSecurityProfile,
+			&i.ResourceQuotaCpuLimit,
+			&i.ResourceQuotaMemoryLimit,
+			&i.ResourceQuotaPodCount,
+			&i.QuotaPlan,
+			&i.QuotaOverrides,
+			&i.DefaultVaultConnectionID,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFilteredHelmCharts = `-- name: ListFilteredHelmCharts :many
 SELECT c.id, c.repository_id, c.name, c.display_name, c.description, c.icon_url, c.home_url, c.category, c.keywords, c.maintainers, c.deprecated, c.created_at, c.updated_at FROM helm_charts c
 JOIN helm_repositories r ON r.id = c.repository_id

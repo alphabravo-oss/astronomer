@@ -142,3 +142,10 @@ func TestCatalogBrowseSearchDeniesInaccessibleScopesBeforeChartQuery(t *testing.
 		}
 	}
 }
+
+func (m *clusterCatalogQuerier) ListCatalogProjectsByCluster(ctx context.Context, arg sqlc.ListCatalogProjectsByClusterParams) ([]sqlc.Project, error) {
+	return m.ListProjectsByCluster(ctx, sqlc.ListProjectsByClusterParams{ClusterID: arg.ClusterID, QueryLimit: arg.QueryLimit, QueryOffset: arg.QueryOffset})
+}
+func (q *namespaceOwnedCatalogQuerier) ListCatalogProjectsByCluster(ctx context.Context, arg sqlc.ListCatalogProjectsByClusterParams) ([]sqlc.Project, error) {
+	return q.ListProjectsByCluster(ctx, sqlc.ListProjectsByClusterParams{ClusterID: arg.ClusterID, QueryLimit: arg.QueryLimit, QueryOffset: arg.QueryOffset})
+}
