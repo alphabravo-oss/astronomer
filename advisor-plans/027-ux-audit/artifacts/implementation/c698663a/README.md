@@ -67,6 +67,10 @@ Test-only checkpoint `d2e9389c` adds three scenarios to `operator-failure-recove
 
 These tests share a complete project fixture checked against the generated Project type. They were written after the executor lane was released; the parent will execute them on the final combined branch. They are not included in any passing count above.
 
+Test-only checkpoint `500bd0b1` additionally includes `/dashboard/monitoring/stacks` in the unique-active-link browser loop and verifies the Management Onboarding template link after the actual tools-status API reports installed tools, followed by the applied-template page. These additions also await the parent’s final combined browser run.
+
+The phase audit does not imply exhaustive combinations: the retained new browser runs do not separately assert duplicate Overview keyboard command selection, multi-container/tail/log-filter refresh, permission-change/deleted-parent variants, or missing/denied alert destinations. Those distinctions were sent to the parent for final acceptance coverage review; core journeys and related adapter/permission/internal-origin unit tests are listed above.
+
 ## Screenshot handling
 
 88 PNGs are retained. `operator-metrics-final/` is the final `c698663a` source capture, including all five viewport widths and the metrics permission/Retry state. `operator-acceptance/` preserves workflow evidence from `d2a19257`, including corrected pipeline action wrapping, full alert investigation, release owner/values diagnostics, restore readback and role-specific navigation. `operator-explorer-axe/` contains the axe-reviewed CR navigation. `diagnostics/` preserves failed-run screenshots; they are intentionally not presented as successful outcomes. The two legacy keyboard failure screenshots also remain beside the raw102-case run so its failure record is not hidden.
