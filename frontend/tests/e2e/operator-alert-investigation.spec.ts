@@ -16,12 +16,16 @@ const event = {
   clusterId,
   clusterName: "Smoke East",
   namespace: "payments",
+  resource: "deployment/checkout",
+  labels: {},
   severity: "critical",
   status: "firing",
   message,
   firedAt: now,
   acknowledgedAt: null,
+  acknowledgedBy: null,
   resolvedAt: null,
+  resolvedBy: null,
 };
 test.beforeEach(async ({ page, context }) => {
   await workflowAuth(page, context);

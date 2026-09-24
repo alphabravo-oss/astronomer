@@ -54,6 +54,8 @@ test.beforeEach(async ({ page, context }) => {
   });
   await jsonRoute(page, `/api/v1/catalog/installed/${releaseId}/revisions`, {
     data: {
+      release_name: release.release_name,
+      namespace: release.namespace,
       revisions: [
         {
           revision: 2,

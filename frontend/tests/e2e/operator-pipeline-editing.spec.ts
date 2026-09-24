@@ -94,7 +94,18 @@ test("pipeline edits keep its ID, opaque filters and labels through PUT", async 
         json: {
           data: {
             pipeline: record,
-            operation: { id: "pipeline-operation", status: "pending" },
+            operation: {
+              id: "pipeline-operation",
+              targetType: "pipeline",
+              targetKey: id,
+              operationType: "update",
+              status: "pending",
+              attemptCount: 0,
+              errorMessage: "",
+              createdAt: now,
+              updatedAt: now,
+              events: [],
+            },
           },
         },
       });
@@ -242,6 +253,7 @@ test("201st pipeline is reachable through bounded server pages and returns to it
   await expect(
     page.getByRole("button", { name: "Next page", exact: true }),
   ).toBeDisabled();
+  await expect(page).toHaveURL(/pipelinePage=5/);
   expect(
     reads.every((read) => read.limit === 50 && read.cluster === clusterId),
   ).toBe(true);
@@ -252,6 +264,7 @@ test("201st pipeline is reachable through bounded server pages and returns to it
   await expect(
     page.getByRole("heading", { name: "Pipeline 201", exact: true }),
   ).toBeVisible();
+  await expect(page).toHaveURL(/pipelinePage=5/);
   await page
     .getByRole("link", { name: "Back to pipelines", exact: true })
     .click();
@@ -261,9 +274,17 @@ test("201st pipeline is reachable through bounded server pages and returns to it
   await expect(
     page.getByRole("heading", { name: "Log collection", exact: true }),
   ).toBeVisible();
+  await expect(page).toHaveURL(/pipelinePage=5/);
+  await expect(
+    page.getByRole("link", { name: "Pipeline 201", exact: true }),
+  ).toBeVisible();
   await page.reload();
   await expect(
     page.getByRole("heading", { name: "Log collection", exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/pipelinePage=5/);
+  await expect(
+    page.getByRole("link", { name: "Pipeline 201", exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: info.outputPath("pipeline-paged-return.png"),
