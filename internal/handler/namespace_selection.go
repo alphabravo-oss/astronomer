@@ -2,10 +2,11 @@ package handler
 
 import (
 	"fmt"
-	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"net/url"
 	"sort"
 	"strings"
+
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
 // selectedNamespaces distinguishes omitted scope from explicit empty scope.

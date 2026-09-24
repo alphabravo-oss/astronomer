@@ -1527,6 +1527,48 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/catalog/application-sources/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/catalog/applications/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/catalog/applications/preview/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped-read",
+    "risk_reason": "Application preview is POST-shaped only because rendered values and target selection are supplied in the request body. It performs no mutation and requires authenticated catalog browse permission; the handler independently authorizes the selected cluster and target namespace before returning a render plan."
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/catalog/charts/",
     "handler_owner": "handler.CatalogHandler",
     "surface": "catalog and application API",
@@ -1550,6 +1592,22 @@
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
     ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/catalog/charts/{id}/favorite/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-owner-scoped",
+    "risk_reason": "Favorite state is private user-owned discovery metadata. The authenticated user identity is taken from request context rather than the payload, catalog browse permission is required, and the upsert can only change that user's row for the named chart."
   },
   {
     "method": "GET",
@@ -1605,6 +1663,19 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/catalog/discovery/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/catalog/installed/",
     "handler_owner": "handler.CatalogHandler",
     "surface": "catalog and application API",
@@ -1648,6 +1719,19 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/catalog/installed/{id}/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/catalog/installed/{id}/revisions/",
     "handler_owner": "handler.CatalogHandler",
     "surface": "catalog and application API",
@@ -1672,6 +1756,19 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ],
     "security_registry_id": "catalog-installed-rollback"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/catalog/installed/{id}/upgrade-versions/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
   },
   {
     "method": "PUT",
@@ -3832,6 +3929,32 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/snapshot-restores/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{cluster_id}/snapshot-restores/{id}/",
+    "handler_owner": "handler.ResourceHandler / cluster extension handlers",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/clusters/{cluster_id}/snapshot-schedules/",
     "handler_owner": "handler.ResourceHandler / cluster extension handlers",
     "surface": "adopted cluster management API",
@@ -4622,7 +4745,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
   },
   {
     "method": "POST",
@@ -4638,7 +4761,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
   },
   {
     "method": "POST",
@@ -4654,7 +4777,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
   },
   {
     "method": "POST",
@@ -4670,7 +4793,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
   },
   {
     "method": "GET",
@@ -4699,7 +4822,7 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
   },
   {
     "method": "PUT",
@@ -4715,7 +4838,316 @@
       "TestMutatingRoutesHaveSecurityClassification"
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
-    "risk_reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/*",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/*",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/*",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/*",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/*",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/*",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/clusters/{id}/observability/grafana/*",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-cluster-scoped",
+    "risk_reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
   },
   {
     "method": "POST",
@@ -5142,6 +5574,80 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/delivery/configuration-templates/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/configuration-templates/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/delivery/configuration-templates/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/configuration-templates/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/delivery/configuration-templates/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/delivery/deployments/",
     "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "management API",
@@ -5237,6 +5743,96 @@
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
     ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/override-sets/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/override-sets/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/override-sets/effective/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped-read",
+    "risk_reason": "Effective configuration resolution is POST-shaped because bounded base values and override identities are supplied in the body. It performs no mutation, resolves every enabled override inside one normalized project, returns no Secret values, and requires delivery_configuration_templates:read."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/delivery/override-sets/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/override-sets/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/delivery/override-sets/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
   },
   {
     "method": "GET",
@@ -6008,6 +6604,19 @@
     ],
     "risk_classification": "covered-rbac-cluster-scoped",
     "risk_reason": "Logging output and pipeline mutators authorize inside the handler: each resolves the owning cluster from the row and calls authorizeClusterAction with rbac.ResourceLogging (create/update/delete), so the grant is scoped to the cluster whose log shipping is being changed. Attach-astronomer is logging:create on that cluster."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/logging/pipelines/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
   },
   {
     "method": "PUT",
@@ -8095,7 +8704,7 @@
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/activity",
+    "pattern": "/api/v1/activity/",
     "handler_owner": "handler.ResourceHandler",
     "surface": "management API",
     "auth": "bearer/session auth through route middleware or handler-specific gate",

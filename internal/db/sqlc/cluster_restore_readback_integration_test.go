@@ -2,10 +2,11 @@ package sqlc
 
 import (
 	"context"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"os"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestClusterRestoreHistoryFiltersSourceBeforePagination(t *testing.T) {

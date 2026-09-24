@@ -9,10 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
-
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/google/uuid"
 )
 
 // Keep the existing scoped catalog fixtures on the canonical filtered queries.

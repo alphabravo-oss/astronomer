@@ -3,10 +3,11 @@ package handler
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
 	"github.com/google/uuid"
-	"testing"
 )
 
 type operationDeliveryObserver struct {
