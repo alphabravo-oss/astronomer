@@ -1,10 +1,35 @@
 import { test, expect } from "@playwright/test";
+import type { OpenAPIComponents } from "../../src/types/openapi.generated";
 import { installStubs } from "../e2e-smoke/stubs";
 import { seedAuth } from "./helpers/auth";
 import { adminStoreUser, SMOKE_CLUSTER_ID } from "../e2e-smoke/stub-overrides";
+const reviewProject = {
+  id: "project-review",
+  name: "Review",
+  display_name: "Review",
+  description: "Navigation recovery fixture",
+  cluster_id: SMOKE_CLUSTER_ID,
+  cluster_ids: [SMOKE_CLUSTER_ID],
+  namespaces: ["default"],
+  namespace_scopes: [{ cluster_id: SMOKE_CLUSTER_ID, namespaces: ["default"] }],
+  resource_quota: {},
+  resource_quota_cpu_limit: "",
+  resource_quota_memory_limit: "",
+  resource_quota_pod_count: 0,
+  limit_range: {},
+  network_policy_mode: "none",
+  pod_security_profile: "baseline",
+  created_by_id: null,
+  created_at: "2026-09-01T00:00:00Z",
+  updated_at: "2026-09-01T00:00:00Z",
+} satisfies OpenAPIComponents["schemas"]["Project"];
+
 test.beforeEach(async ({ page, context }) => {
   await installStubs(page);
   await seedAuth(context, page, adminStoreUser);
+  await page.route("**/api/v1/projects/project-review/**", (route) =>
+    route.fulfill({ json: { data: reviewProject } }),
+  );
 });
 test("custom resource returns to canonical collection", async ({
   page,
@@ -151,29 +176,6 @@ for (const status of [403, 404]) {
   test(`Delivery target ${status} renders recoverable read state without success controls`, async ({
     page,
   }) => {
-    await page.route("**/api/v1/projects/project-review/**", (route) =>
-      route.fulfill({
-        json: {
-          data: {
-            id: "project-review",
-            name: "Review",
-            display_name: "Review",
-            cluster_id: SMOKE_CLUSTER_ID,
-            namespaces: ["default"],
-            resource_quota: {},
-            resource_quota_cpu_limit: "",
-            resource_quota_memory_limit: "",
-            resource_quota_pod_count: 0,
-            limit_range: {},
-            network_policy_mode: "none",
-            pod_security_profile: "baseline",
-            created_by_id: null,
-            created_at: "2026-09-01T00:00:00Z",
-            updated_at: "2026-09-01T00:00:00Z",
-          },
-        },
-      }),
-    );
     await page.route("**/api/v1/delivery/targets/missing-target/**", (route) =>
       route.fulfill({
         status,
@@ -199,3 +201,128 @@ for (const status of [403, 404]) {
     ).toHaveCount(0);
   });
 }
+
+for (const status of [403, 404]) {
+  test(`Delivery deployment ${status} exposes its read failure without mutation controls`, async ({
+    page,
+  }) => {
+    let detailReads = 0;
+    await page.route(
+      "**/api/v1/delivery/deployments/missing-deployment/**",
+      (route) => {
+        if (
+          new URL(route.request().url()).pathname
+            .replace(/\/$/, "")
+            .endsWith("/missing-deployment")
+        ) {
+          detailReads++;
+          return route.fulfill({
+            status,
+            json: {
+              error: {
+                message:
+                  status === 403
+                    ? "Deployment access denied"
+                    : "Deployment not found",
+              },
+            },
+          });
+        }
+        return route.fallback();
+      },
+    );
+    await page.goto(
+      "/dashboard/delivery/deployments/missing-deployment?project=project-review",
+    );
+    await expect(
+      page
+        .getByRole("main")
+        .getByText(
+          status === 403 ? /denied|permission/i : /Deployment not found/i,
+        )
+        .first(),
+    ).toBeVisible();
+    expect(detailReads).toBeGreaterThan(0);
+    for (const name of ["Reconcile", "Suspend", "Advanced diagnostics"])
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
+        0,
+      );
+    await expect(
+      page.getByRole("link", { name: "Deployments", exact: true }).last(),
+    ).toHaveAttribute("href", /delivery\/deployments\?project=project-review$/);
+  });
+}
+
+test("deleting a custom resource returns to its canonical type and retains project and namespace", async ({
+  page,
+}) => {
+  const collection = `/dashboard/clusters/${SMOKE_CLUSTER_ID}/custom-resources/cert-manager.io/v1/certificates`;
+  const objectPath = `/api/v1/clusters/${SMOKE_CLUSTER_ID}/k8s/apis/cert-manager.io/v1/namespaces/default/certificates/delete-review`;
+  const deletes: string[] = [];
+  await page.route(
+    (url) => url.pathname.replace(/\/$/, "") === objectPath,
+    (route) => {
+      if (route.request().method() === "DELETE") {
+        deletes.push(
+          new URL(route.request().url()).pathname.replace(/\/$/, ""),
+        );
+        return route.fulfill({
+          json: { apiVersion: "v1", kind: "Status", status: "Success" },
+        });
+      }
+      return route.fulfill({
+        json: {
+          apiVersion: "cert-manager.io/v1",
+          kind: "Certificate",
+          metadata: {
+            name: "delete-review",
+            namespace: "default",
+            uid: "delete-review-uid",
+          },
+          spec: { secretName: "delete-review-tls" },
+          status: { conditions: [] },
+        },
+      });
+    },
+  );
+  await page.route(
+    (url) =>
+      url.pathname.replace(/\/$/, "") ===
+      objectPath.replace(/\/delete-review$/, ""),
+    (route) =>
+      route.fulfill({
+        json: {
+          apiVersion: "cert-manager.io/v1",
+          kind: "CertificateList",
+          metadata: {},
+          items: [],
+        },
+      }),
+  );
+  await page.goto(
+    `${collection}/default/delete-review?project=project-review&namespaces=default`,
+  );
+  await expect(
+    page.getByRole("heading", { name: "delete-review", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("main")
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Delete Certificate",
+    exact: true,
+  });
+  await dialog
+    .getByPlaceholder("delete-review", { exact: true })
+    .fill("delete-review");
+  await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname.replace(/\/$/, "") === collection &&
+      url.searchParams.get("project") === "project-review" &&
+      url.searchParams.get("namespaces") === "default",
+  );
+  expect(deletes).toEqual([objectPath]);
+  await expect(page.getByText(/Unknown resource type/i)).toHaveCount(0);
+});
