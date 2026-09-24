@@ -4530,6 +4530,11 @@ export interface OpenAPIComponents {
           "display_name": string;
           "cluster_id": string;
           "description": string;
+          "cluster_ids"?: string[];
+          "namespace_scopes"?: Array<{
+            "cluster_id": string;
+            "namespaces": string[];
+          }>;
           "namespaces": string[];
           "resource_quota": Record<string, unknown>;
           "limit_range": Record<string, unknown>;

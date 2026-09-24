@@ -7103,7 +7103,29 @@ components:
           format: uuid
         description:
           type: string
+        cluster_ids:
+          type: array
+          description: Authoritative primary and secondary cluster memberships, returned on project reads and lists. Secondary membership derives from assigned project namespaces.
+          items:
+            type: string
+            format: uuid
+        namespace_scopes:
+          type: array
+          description: Namespace assignments grouped by their actual cluster. Includes the primary cluster even when empty. Never apply a namespace from one scope to another cluster.
+          items:
+            type: object
+            additionalProperties: false
+            required: [cluster_id, namespaces]
+            properties:
+              cluster_id:
+                type: string
+                format: uuid
+              namespaces:
+                type: array
+                items:
+                  type: string
         namespaces:
+          description: Legacy primary-cluster namespace assignments only.
           type: array
           items:
             type: string

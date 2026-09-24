@@ -9142,14 +9142,25 @@ type PrincipalSearchResponse struct {
 
 // Project Project row (cluster-scoped namespace policy container).
 type Project struct {
-	ClusterId                openapi_types.UUID       `json:"cluster_id"`
-	CreatedAt                time.Time                `json:"created_at"`
-	CreatedById              *openapi_types.UUID      `json:"created_by_id"`
-	Description              string                   `json:"description"`
-	DisplayName              string                   `json:"display_name"`
-	Id                       openapi_types.UUID       `json:"id"`
-	LimitRange               map[string]interface{}   `json:"limit_range"`
-	Name                     string                   `json:"name"`
+	ClusterId openapi_types.UUID `json:"cluster_id"`
+
+	// ClusterIds Authoritative primary and secondary cluster memberships, returned on project reads and lists. Secondary membership derives from assigned project namespaces.
+	ClusterIds  *[]openapi_types.UUID  `json:"cluster_ids,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
+	CreatedById *openapi_types.UUID    `json:"created_by_id"`
+	Description string                 `json:"description"`
+	DisplayName string                 `json:"display_name"`
+	Id          openapi_types.UUID     `json:"id"`
+	LimitRange  map[string]interface{} `json:"limit_range"`
+	Name        string                 `json:"name"`
+
+	// NamespaceScopes Namespace assignments grouped by their actual cluster. Includes the primary cluster even when empty. Never apply a namespace from one scope to another cluster.
+	NamespaceScopes *[]struct {
+		ClusterId  openapi_types.UUID `json:"cluster_id"`
+		Namespaces []string           `json:"namespaces"`
+	} `json:"namespace_scopes,omitempty"`
+
+	// Namespaces Legacy primary-cluster namespace assignments only.
 	Namespaces               []string                 `json:"namespaces"`
 	NetworkPolicyMode        ProjectNetworkPolicyMode `json:"network_policy_mode"`
 	PodSecurityProfile       string                   `json:"pod_security_profile"`
