@@ -6,7 +6,9 @@ import { useAuthStore } from "@/lib/store";
 import { clusterDiscoveryFromDefinitions } from "./cluster-discovery-model";
 import { useClusterDiscovery } from "./use-cluster-discovery-nav";
 
-vi.mock("@/lib/api/resources", () => ({ getCompleteResourceDiscovery: vi.fn() }));
+vi.mock("@/lib/api/resources", () => ({
+  getCompleteResourceDiscovery: vi.fn(),
+}));
 
 export function crd(group: string, plural: string, kind: string) {
   return {
@@ -38,7 +40,11 @@ beforeEach(() => {
 
 it("maps served CRDs into groups and caches the single discovery request", async () => {
   vi.mocked(getCompleteResourceDiscovery).mockResolvedValue({
-    clusterId: "c-1", resources: [], partial: false, errors: {}, crdContinue: "",
+    clusterId: "c-1",
+    resources: [],
+    partial: false,
+    errors: {},
+    crdContinue: "",
     crds: [
       summary("cert-manager.io", "certificates", "Certificate"),
       summary("cert-manager.io", "issuers", "Issuer"),
@@ -62,7 +68,9 @@ it("does not query outside cluster context or without permission", () => {
 });
 
 it("distinguishes failed discovery from a cluster without CRDs", async () => {
-  vi.mocked(getCompleteResourceDiscovery).mockRejectedValue(new Error("Forbidden"));
+  vi.mocked(getCompleteResourceDiscovery).mockRejectedValue(
+    new Error("Forbidden"),
+  );
   const { result } = renderHook(() => useClusterDiscovery("c-1"), { wrapper });
   await waitFor(() => expect(result.current.isError).toBe(true));
   expect(result.current.crdsByGroup.size).toBe(0);
@@ -98,4 +106,12 @@ it("chooses only served versions and rejects malformed path segments", () => {
   ]);
 });
 
-function summary(group: string, plural: string, kind: string) { return { group, plural, kind, scope: "Namespaced", versions: [{ name: "v1", storage: true }] }; }
+function summary(group: string, plural: string, kind: string) {
+  return {
+    group,
+    plural,
+    kind,
+    scope: "Namespaced",
+    versions: [{ name: "v1", storage: true }],
+  };
+}

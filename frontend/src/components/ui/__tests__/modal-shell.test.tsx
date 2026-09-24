@@ -13,7 +13,9 @@ describe("ModalShell", () => {
       </ModalShell>,
     );
     // Portaled picker fields are no longer owned by the parent form.
-    expect((screen.getByLabelText("Search targets") as HTMLInputElement).form).toBeNull();
+    expect(
+      (screen.getByLabelText("Search targets") as HTMLInputElement).form,
+    ).toBeNull();
     expect(
       fireEvent.keyDown(screen.getByLabelText("Search targets"), {
         key: "Enter",
