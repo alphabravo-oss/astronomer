@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Server } from "lucide-react";
 
 import { ActionButton } from "@/components/ui/action-button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { PageSection } from "@/components/ui/page";
@@ -12,7 +12,6 @@ import {
   moveClustersToGroup,
   type ClusterGroupTreeNode,
 } from "@/lib/api/cluster-groups";
-import { useClusters } from "@/lib/hooks/clusters";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 
@@ -112,7 +111,6 @@ function ClusterMembershipDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const clusters = useClusters({ pageSize: 200 });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const mutation = useMutation({
     mutationFn: () => moveClustersToGroup(group.id, [...selected]),
@@ -131,9 +129,6 @@ function ClusterMembershipDialog({
     onError: (error: Error) =>
       toastApiError("Failed to assign clusters", error),
   });
-  const available = (clusters.data?.data ?? []).filter(
-    (cluster) => !memberIds.has(cluster.id),
-  );
 
   return (
     <ModalShell
@@ -158,47 +153,33 @@ function ClusterMembershipDialog({
         </div>
       }
     >
-      <div className="max-h-96 space-y-1 overflow-auto rounded-md border border-border p-2">
-        {available.map((cluster) => (
-          <label
-            key={cluster.id}
-            className="flex cursor-pointer items-center gap-3 rounded px-3 py-2 hover:bg-muted"
-          >
-            <Checkbox
-              checked={selected.has(cluster.id)}
-              onChange={(event) => {
+      <RemoteClusterPicker
+        value=""
+        onChange={(id) => setSelected((current) => new Set([...current, id]))}
+        excludedClusterIds={[...memberIds, ...selected]}
+        ariaLabel="Cluster to assign"
+        disabled={mutation.isPending}
+      />
+      <ul className="mt-4 max-h-64 space-y-2 overflow-auto">
+        {[...selected].map((id) => (
+          <li key={id} className="flex items-center justify-between gap-2">
+            <span className="font-mono text-xs">{id}</span>
+            <ActionButton
+              disabled={mutation.isPending}
+              aria-label={`Remove ${id} from selection`}
+              onClick={() =>
                 setSelected((current) => {
                   const next = new Set(current);
-                  if (event.target.checked) next.add(cluster.id);
-                  else next.delete(cluster.id);
+                  next.delete(id);
                   return next;
-                });
-              }}
-            />
-            <span className="font-medium">
-              {cluster.displayName || cluster.name}
-            </span>
-            <span className="ml-auto font-mono text-xs text-muted-foreground">
-              {cluster.id}
-            </span>
-          </label>
+                })
+              }
+            >
+              Remove
+            </ActionButton>
+          </li>
         ))}
-        {clusters.isLoading && (
-          <p className="p-4 text-center text-sm text-muted-foreground">
-            Loading clusters…
-          </p>
-        )}
-        {clusters.isError && (
-          <p className="p-4 text-center text-sm text-status-error">
-            Clusters could not be loaded.
-          </p>
-        )}
-        {!clusters.isLoading && !clusters.isError && available.length === 0 && (
-          <p className="p-4 text-center text-sm text-muted-foreground">
-            Every visible cluster is already in this group subtree.
-          </p>
-        )}
-      </div>
+      </ul>
     </ModalShell>
   );
 }

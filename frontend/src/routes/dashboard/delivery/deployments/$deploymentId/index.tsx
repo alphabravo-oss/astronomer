@@ -1,3 +1,4 @@
+import { pageTableCount } from "@/lib/api/pagination";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,8 +14,6 @@ import {
   DeliveryShell,
   Detail,
   DetailGrid,
-  RedirectDeliveryDetail,
-  deliveryPageRowCount,
   primaryButton,
   secondaryButton,
   useDeliveryPageIndex,
@@ -260,7 +259,7 @@ export function DeploymentDetailPage() {
                   "New observations will appear here as they are reported.",
               }}
               serverSide={{
-                rowCount: deliveryPageRowCount(events.data),
+                ...pageTableCount(events.data),
                 pagination: { pageIndex: eventPage, pageSize },
                 onPaginationChange: (next) => setEventPage(next.pageIndex),
               }}
@@ -438,17 +437,6 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
   },
 ];
 
-function DeliveryDeploymentDetailRedirect() {
-  const { deploymentId } = useParams({ strict: false }) as {
-    deploymentId: string;
-  };
-  return (
-    <RedirectDeliveryDetail tab="deployments" id={deploymentId}>
-      <DeploymentDetailPage />
-    </RedirectDeliveryDetail>
-  );
-}
-
 export const Route = createFileRoute(
   "/dashboard/delivery/deployments/$deploymentId/",
-)({ component: DeliveryDeploymentDetailRedirect });
+)({ component: DeploymentDetailPage });

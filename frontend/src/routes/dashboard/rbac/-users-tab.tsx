@@ -6,27 +6,27 @@ import { useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/utils";
 import type { User } from "@/types";
 import { adminUserHref, isUserLocked } from "@/components/rbac/binding-utils";
+import { useState } from "react";
+import { useUsers } from "@/lib/hooks/user-settings";
+import { pageTableCount } from "@/lib/api/pagination";
+import { usePermissionDecision } from "@/lib/permission-hooks";
+import { PermissionState } from "@/components/ui/empty-state";
 
 interface UsersTabProps {
-  users: User[];
-  loading: boolean;
-  isError: boolean;
-  onRetry: () => void;
   onEdit: (user: User) => void;
   onResetPassword: (user: User) => void;
   onDelete: (user: User) => void;
 }
 
-export function UsersTab({
-  users,
-  loading,
-  isError,
-  onRetry,
-  onEdit,
-  onResetPassword,
-  onDelete,
-}: UsersTabProps) {
+export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
   const navigate = useNavigate();
+  const [pageIndex, setPageIndex] = useState(0);
+  const [search, setSearch] = useState("");
+  const read = usePermissionDecision("users", "read");
+  const query = useUsers(
+    { page: pageIndex + 1, pageSize: 25, search },
+    { enabled: read.allowed },
+  );
 
   const userColumns: Column<User>[] = [
     {
@@ -143,15 +143,33 @@ export function UsersTab({
     },
   ];
 
-  return (
+  return !read.allowed ? (
+    <PermissionState permission="users:read" />
+  ) : (
     <DataTable
-      data={users}
-      columns={userColumns}
+      data={query.isError || !read.allowed ? [] : (query.data?.data ?? [])}
+      columns={userColumns.map((column) => ({ ...column, sortable: false }))}
       keyExtractor={(row) => row.id}
       searchPlaceholder="Search users..."
-      loading={loading}
-      isError={isError}
-      onRetry={onRetry}
+      loading={query.isLoading}
+      isError={query.isError}
+      error={query.error}
+      permission="users:read"
+      onRetry={() => void query.refetch()}
+      serverSide={{
+        ...pageTableCount(
+          query.isError || !read.allowed ? undefined : query.data,
+        ),
+        pagination: { pageIndex, pageSize: 25 },
+        onPaginationChange: (next) => setPageIndex(next.pageIndex),
+        search: {
+          value: search,
+          onChange: (term) => {
+            setSearch(term);
+            setPageIndex(0);
+          },
+        },
+      }}
       onRowClick={(row) => void navigate({ to: adminUserHref(row.id) })}
       emptyState={{
         title: "No users found",

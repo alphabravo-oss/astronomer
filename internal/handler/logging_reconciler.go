@@ -610,11 +610,11 @@ func renderPipelineBlock(env loggingOperationEnvelope) string {
 		b.WriteString("# no namespaces declared; matches all kube.* records\n")
 	}
 	for _, ns := range namespaces {
-		if !fluentBitValuePattern.MatchString(ns) {
+		if !isSafeK8sName(ns) {
 			b.WriteString("# warning: skipped invalid namespace " + safeComment(ns) + "\n")
 			continue
 		}
-		b.WriteString("# match kube." + ns + ".*\n")
+		b.WriteString("# match kube.var.log.containers.*_" + ns + "_*.log\n")
 	}
 
 	labels := decodeStringMap(env.Labels)
@@ -678,7 +678,7 @@ func renderPipelineBlock(env loggingOperationEnvelope) string {
 				b.WriteString("[FILTER]\n")
 				writeKV(&b, "Name", "rewrite_tag")
 				writeKV(&b, "Match", matchPattern)
-				writeKV(&b, "Rule", "$TAG ^.+$ "+pipelineRouteTag(pipelineID)+" true")
+				writeKV(&b, "Rule", "$log ^.*$ "+pipelineRouteTag(pipelineID)+" true")
 				writeKV(&b, "Emitter_Name", fmt.Sprintf("%s_%d", emitterBase, i))
 			}
 		}
@@ -689,11 +689,11 @@ func renderPipelineBlock(env loggingOperationEnvelope) string {
 func pipelineMatchPatterns(namespaces []string) []string {
 	patterns := make([]string, 0, len(namespaces))
 	for _, ns := range namespaces {
-		if fluentBitValuePattern.MatchString(ns) {
-			patterns = append(patterns, "kube."+ns+".*")
+		if isSafeK8sName(ns) {
+			patterns = append(patterns, "kube.var.log.containers.*_"+ns+"_*.log")
 		}
 	}
-	if len(patterns) == 0 {
+	if len(namespaces) == 0 {
 		return []string{"kube.*"}
 	}
 	return patterns

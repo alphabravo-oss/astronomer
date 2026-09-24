@@ -4531,7 +4531,9 @@ type Cluster struct {
 	AgentOverrides AgentOverrides `json:"agent_overrides"`
 
 	// AgentOverridesDigest Canonical digest included in generated manifests and agent upgrade plans.
-	AgentOverridesDigest  string                       `json:"agent_overrides_digest"`
+	AgentOverridesDigest string `json:"agent_overrides_digest"`
+
+	// AgentPrivilegeProfile Legacy enrollment metadata. Newly rendered agent installations always support full management; user RBAC controls access. This value is not a live permission measurement.
 	AgentPrivilegeProfile ClusterAgentPrivilegeProfile `json:"agent_privilege_profile"`
 	AgentVersion          string                       `json:"agent_version"`
 	Annotations           map[string]string            `json:"annotations"`
@@ -4593,7 +4595,7 @@ type Cluster struct {
 	UpdatedAt               time.Time                `json:"updated_at"`
 }
 
-// ClusterAgentPrivilegeProfile defines model for Cluster.AgentPrivilegeProfile.
+// ClusterAgentPrivilegeProfile Legacy enrollment metadata. Newly rendered agent installations always support full management; user RBAC controls access. This value is not a live permission measurement.
 type ClusterAgentPrivilegeProfile string
 
 // ClusterBadgeColor Validated semantic color token. Empty when badge_text is empty.
@@ -4639,9 +4641,11 @@ type ClusterAgentItem struct {
 	NodeName             *string                             `json:"node_name,omitempty"`
 	OfflineBehavior      *AgentOfflineBehavior               `json:"offline_behavior,omitempty"`
 	PodName              *string                             `json:"pod_name,omitempty"`
-	PrivilegeProfile     ClusterAgentItemPrivilegeProfile    `json:"privilege_profile"`
-	RecommendedAction    *string                             `json:"recommended_action,omitempty"`
-	SessionId            *string                             `json:"session_id,omitempty"`
+
+	// PrivilegeProfile Legacy enrollment metadata for diagnostics, not an authorization gate. New installations use full management with user RBAC.
+	PrivilegeProfile  ClusterAgentItemPrivilegeProfile `json:"privilege_profile"`
+	RecommendedAction *string                          `json:"recommended_action,omitempty"`
+	SessionId         *string                          `json:"session_id,omitempty"`
 }
 
 // ClusterAgentItemAgentStatus defines model for ClusterAgentItem.AgentStatus.
@@ -4650,7 +4654,7 @@ type ClusterAgentItemAgentStatus string
 // ClusterAgentItemCompatibilityStatus defines model for ClusterAgentItem.CompatibilityStatus.
 type ClusterAgentItemCompatibilityStatus string
 
-// ClusterAgentItemPrivilegeProfile defines model for ClusterAgentItem.PrivilegeProfile.
+// ClusterAgentItemPrivilegeProfile Legacy enrollment metadata for diagnostics, not an authorization gate. New installations use full management with user RBAC.
 type ClusterAgentItemPrivilegeProfile string
 
 // ClusterAgentResponse defines model for ClusterAgentResponse.
@@ -12255,8 +12259,10 @@ type GetChartsByChartIdRatingsParams struct {
 
 // GetClusterAgentsParams defines parameters for GetClusterAgents.
 type GetClusterAgentsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	// Search Case-insensitive cluster name or display-name filter, applied before pagination. Summary distributions describe this page; total_clusters counts all matching clusters.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int    `form:"offset,omitempty" json:"offset,omitempty"`
 
 	// Cursor Opaque continuation bound to the stable sort contract.
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -50649,6 +50655,22 @@ func NewGetClusterAgentsRequest(server string, params *GetClusterAgentsParams) (
 
 	if params != nil {
 		queryValues := queryURL.Query()
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
 
 		if params.Limit != nil {
 
@@ -99773,7 +99795,8 @@ type GetRbacClusterBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []RBACClusterRoleBinding `json:"data"`
+		Data       []RBACClusterRoleBinding `json:"data"`
+		Pagination PaginationMetadata       `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *ErrorEnvelope
@@ -99854,7 +99877,8 @@ type GetRbacClusterRoleBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []RBACClusterRoleBinding `json:"data"`
+		Data       []RBACClusterRoleBinding `json:"data"`
+		Pagination PaginationMetadata       `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *ErrorEnvelope
@@ -100099,7 +100123,8 @@ type GetRbacGlobalBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []RBACGlobalRoleBinding `json:"data"`
+		Data       []RBACGlobalRoleBinding `json:"data"`
+		Pagination PaginationMetadata      `json:"pagination"`
 	}
 	JSON401 *ErrorEnvelope
 	JSON403 *ErrorEnvelope
@@ -100179,7 +100204,8 @@ type GetRbacGlobalRoleBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []RBACGlobalRoleBinding `json:"data"`
+		Data       []RBACGlobalRoleBinding `json:"data"`
+		Pagination PaginationMetadata      `json:"pagination"`
 	}
 	JSON401 *ErrorEnvelope
 	JSON403 *ErrorEnvelope
@@ -100577,7 +100603,8 @@ type GetRbacProjectBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []RBACProjectRoleBinding `json:"data"`
+		Data       []RBACProjectRoleBinding `json:"data"`
+		Pagination PaginationMetadata       `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *ErrorEnvelope
@@ -100659,7 +100686,8 @@ type GetRbacProjectRoleBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []RBACProjectRoleBinding `json:"data"`
+		Data       []RBACProjectRoleBinding `json:"data"`
+		Pagination PaginationMetadata       `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *ErrorEnvelope
@@ -147639,7 +147667,8 @@ func ParseGetRbacClusterBindingsResponse(rsp *http.Response) (*GetRbacClusterBin
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []RBACClusterRoleBinding `json:"data"`
+			Data       []RBACClusterRoleBinding `json:"data"`
+			Pagination PaginationMetadata       `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -147798,7 +147827,8 @@ func ParseGetRbacClusterRoleBindingsResponse(rsp *http.Response) (*GetRbacCluste
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []RBACClusterRoleBinding `json:"data"`
+			Data       []RBACClusterRoleBinding `json:"data"`
+			Pagination PaginationMetadata       `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -148283,7 +148313,8 @@ func ParseGetRbacGlobalBindingsResponse(rsp *http.Response) (*GetRbacGlobalBindi
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []RBACGlobalRoleBinding `json:"data"`
+			Data       []RBACGlobalRoleBinding `json:"data"`
+			Pagination PaginationMetadata      `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -148435,7 +148466,8 @@ func ParseGetRbacGlobalRoleBindingsResponse(rsp *http.Response) (*GetRbacGlobalR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []RBACGlobalRoleBinding `json:"data"`
+			Data       []RBACGlobalRoleBinding `json:"data"`
+			Pagination PaginationMetadata      `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -149195,7 +149227,8 @@ func ParseGetRbacProjectBindingsResponse(rsp *http.Response) (*GetRbacProjectBin
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []RBACProjectRoleBinding `json:"data"`
+			Data       []RBACProjectRoleBinding `json:"data"`
+			Pagination PaginationMetadata       `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -149361,7 +149394,8 @@ func ParseGetRbacProjectRoleBindingsResponse(rsp *http.Response) (*GetRbacProjec
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []RBACProjectRoleBinding `json:"data"`
+			Data       []RBACProjectRoleBinding `json:"data"`
+			Pagination PaginationMetadata       `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err

@@ -6,7 +6,8 @@ export const psaLevels: PodSecurityLevel[] = [
   "restricted",
 ];
 
-export const psaLevelColors: Record<PodSecurityLevel, string> = {
+export const psaLevelColors: Record<PodSecurityLevel | "unknown", string> = {
+  unknown: "bg-muted text-muted-foreground",
   privileged: "bg-status-error/10 text-status-error",
   baseline: "bg-status-warning/10 text-status-warning",
   restricted: "bg-status-success/10 text-status-success",

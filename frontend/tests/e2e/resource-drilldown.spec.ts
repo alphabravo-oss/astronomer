@@ -99,11 +99,17 @@ const serviceObject = {
     creationTimestamp: "2024-01-01T00:00:00Z",
     labels: { team: "platform" },
     ownerReferences: [
-      { kind: "Deployment", name: "my-deploy", uid: "dep-uid-1" },
+      {
+        apiVersion: "apps/v1",
+        kind: "Deployment",
+        name: "my-deploy",
+        uid: "dep-uid-1",
+      },
     ],
   },
   spec: {
     type: "ClusterIP",
+    selector: { app: "web" },
     clusterIP: "10.0.0.10",
     ports: [{ port: 80, protocol: "TCP" }],
   },
@@ -142,6 +148,30 @@ async function mockApi(page: Page) {
     if (path === `/clusters/${CLUSTER_ID}` && method === "GET") {
       return route.fulfill({ json: apiResponse(cluster) });
     }
+    if (path === `/clusters/${CLUSTER_ID}/resources/discovery`) {
+      return route.fulfill({
+        json: apiResponse({
+          cluster_id: CLUSTER_ID,
+          partial: false,
+          errors: {},
+          crds: [],
+          resources: [
+            {
+              resource_type: "deployments",
+              api_base: "apis/apps/v1",
+              api_group: "apps",
+              api_version: "v1",
+              kind: "Deployment",
+              plural: "deployments",
+              namespaced: true,
+              verbs: ["get", "list"],
+              source: "builtin",
+              policy: {},
+            },
+          ],
+        }),
+      });
+    }
     if (
       path === `/clusters/${CLUSTER_ID}/resources/services` &&
       method === "GET"
@@ -149,6 +179,32 @@ async function mockApi(page: Page) {
       return route.fulfill({ json: paginated([serviceRow]) });
     }
     // Events feed (fieldSelector query) — match before the single-object route.
+    if (
+      path ===
+      `/clusters/${CLUSTER_ID}/k8s/api/v1/namespaces/${SERVICE_NS}/pods`
+    ) {
+      expect(url.searchParams.get("limit")).toBe("50");
+      return route.fulfill({
+        json: {
+          items: [
+            {
+              metadata: {
+                name: "web-1",
+                namespace: SERVICE_NS,
+                labels: { app: "web" },
+              },
+            },
+            {
+              metadata: {
+                name: "other-pod",
+                namespace: SERVICE_NS,
+                labels: { app: "other" },
+              },
+            },
+          ],
+        },
+      });
+    }
     if (
       path ===
       `/clusters/${CLUSTER_ID}/k8s/api/v1/namespaces/${SERVICE_NS}/events`
@@ -198,7 +254,9 @@ test("drilldown: clicking a Service row opens its detail (Overview + YAML)", asy
   await expect(page.getByRole("heading", { name: SERVICE_NAME })).toBeVisible();
   await expect(page.getByText("Kind: Service")).toBeVisible();
   await expect(page.getByText("Metadata")).toBeVisible();
-  await expect(page.getByText("Labels")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Labels", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("platform")).toBeVisible();
 
   // YAML tab renders the panel (View/Edit toggle + editor toolbar). Scope to
@@ -260,6 +318,12 @@ test("drilldown: Events tab lists this object's events; Related shows owner refs
   await page.getByRole("tab", { name: "Related" }).click();
   await expect(page.getByText("Owned By")).toBeVisible();
   const ownerLink = page.getByRole("link", { name: "my-deploy" });
+  const podLink = page.getByRole("link", { name: "web-1" });
+  await expect(podLink).toHaveAttribute(
+    "href",
+    `/dashboard/clusters/${CLUSTER_ID}/pods/${SERVICE_NS}/web-1`,
+  );
+  await expect(page.getByRole("link", { name: "other-pod" })).toHaveCount(0);
   await expect(ownerLink).toBeVisible();
   await expect(ownerLink).toHaveAttribute(
     "href",
@@ -267,4 +331,28 @@ test("drilldown: Events tab lists this object's events; Related shows owner refs
       `/dashboard/clusters/${CLUSTER_ID}/deployments/${SERVICE_NS}/my-deploy$`,
     ),
   );
+});
+
+test("denied owner discovery does not invent a link or an empty relationship list", async ({
+  context,
+  page,
+}) => {
+  await seedAuth(context, page, adminUser);
+  await page.route(`**/clusters/${CLUSTER_ID}/resources/discovery**`, (route) =>
+    route.fulfill({
+      status: 403,
+      json: { error: { message: "Discovery denied" } },
+    }),
+  );
+  await page.goto(
+    `/dashboard/clusters/${CLUSTER_ID}/services/${SERVICE_NS}/${SERVICE_NAME}`,
+  );
+  await page.getByRole("tab", { name: "Related" }).click();
+  await expect(
+    page.getByText("Permission required", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "my-deploy" })).toHaveCount(0);
+  await expect(
+    page.getByText("No owner references.", { exact: true }),
+  ).toHaveCount(0);
 });

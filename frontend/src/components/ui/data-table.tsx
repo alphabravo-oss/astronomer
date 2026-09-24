@@ -44,6 +44,8 @@ export interface Column<T> {
 }
 
 export interface DataTableProps<T> {
+  /** Visual groups within the loaded page (or full virtualized row model). */
+  groupBy?: (row: T) => string;
   data: T[];
   columns: Column<T>[];
   keyExtractor: (row: T) => string;
@@ -112,6 +114,8 @@ export interface DataTableProps<T> {
    */
   serverSide?: {
     rowCount: number;
+    rowCountIsLowerBound?: boolean;
+    rowCountIsUnknown?: boolean;
     pagination: PaginationState;
     onPaginationChange: (next: PaginationState) => void;
     /**
@@ -136,6 +140,7 @@ export interface DataTableProps<T> {
 // ============================================================
 
 export function DataTable<T extends RowData>({
+  groupBy,
   data,
   columns,
   keyExtractor,
@@ -191,6 +196,7 @@ export function DataTable<T extends RowData>({
     searchInput,
     setSearchInput,
   } = useDataTableController({
+    groupBy,
     data,
     columns,
     keyExtractor,
@@ -227,6 +233,7 @@ export function DataTable<T extends RowData>({
       {/* Table — virtualized (DIV grid) branch */}
       {effectiveVirtualized ? (
         <VirtualizedGrid
+          groupBy={groupBy}
           activeColumns={activeColumns}
           table={table}
           rows={rows}
@@ -255,6 +262,8 @@ export function DataTable<T extends RowData>({
       ) : (
         /* Table — default (semantic table) branch */
         <SemanticDataTable
+          rows={rows}
+          groupBy={groupBy}
           table={table}
           activeColumns={activeColumns}
           selectable={selectable}
@@ -281,6 +290,8 @@ export function DataTable<T extends RowData>({
           pageSize={effPageSize}
           pageCount={totalPages}
           rowCount={totalRows}
+          rowCountIsLowerBound={serverSide?.rowCountIsLowerBound}
+          countUnavailable={loading || isError || serverSide?.rowCountIsUnknown}
           currentRowCount={rows.length}
         />
       )}

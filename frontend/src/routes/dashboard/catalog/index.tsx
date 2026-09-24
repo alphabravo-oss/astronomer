@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useTabParam } from "@/lib/use-tab-param";
 import { useCluster } from "@/lib/hooks/clusters";
-import { useProjects } from "@/lib/hooks/projects";
+import {
+  CatalogProjectPicker,
+  useCatalogProjectScope,
+} from "@/components/catalog/project-scope";
 import {
   useHelmRepositories,
   useSyncHelmRepository,
@@ -17,7 +20,6 @@ import { ActionButton } from "@/components/ui/action-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
-import { Select } from "@/components/ui/select";
 import { TabStrip, Tabs, TabsContent } from "@/components/ui/tabs";
 import type { HelmChart, HelmChartCategory, HelmChartVersion } from "@/types";
 import { Package, Plus, SearchX } from "lucide-react";
@@ -26,10 +28,13 @@ import { BrowseTab } from "./-browse-tab";
 import { ChartDetailModal } from "./-chart-detail-modal";
 import { InstallChartModal } from "./-install-chart-modal";
 import { CatalogOperationTimeline } from "@/components/catalog/catalog-operation-timeline";
+import {
+  OffsetPagination,
+  useOffsetPagination,
+} from "@/components/ui/offset-pagination";
+import { catalogTabs } from "./-tabs";
 import { InstalledTab } from "./-installed-tab";
 import { RepositoriesTab } from "./-repositories-tab";
-
-type TabKey = "browse" | "installed" | "repositories";
 
 const TAB_KEYS = ["browse", "installed", "repositories"] as const;
 
@@ -42,17 +47,9 @@ function CatalogPage() {
     useLocation({ select: (location) => location.searchStr }),
   );
   const navigate = useNavigate();
-  const projectsQuery = useProjects({ pageSize: 200 });
-  const projects = projectsQuery.data?.data ?? [];
   const requestedProjectId = initialSearchParams?.get("project") ?? "";
-  const projectId = projects.some(
-    (project) => project.id === requestedProjectId,
-  )
-    ? requestedProjectId
-    : projects.length === 1
-      ? projects[0].id
-      : "";
-  const selectedProject = projects.find((project) => project.id === projectId);
+  const projectScope = useCatalogProjectScope(requestedProjectId);
+  const { projectId, project: selectedProject } = projectScope;
   const allowedClusterIds = [
     selectedProject?.clusterId,
     ...(selectedProject?.clusterIds ?? []),
@@ -76,21 +73,29 @@ function CatalogPage() {
   const [selectedChart, setSelectedChart] = useState<HelmChart | null>(null);
   const [showRepoModal, setShowRepoModal] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
-  const [installChart, setInstallChart] =
-    useState<{ chart: HelmChart; version: HelmChartVersion } | null>(null);
+  const [installChart, setInstallChart] = useState<{
+    chart: HelmChart;
+    version: HelmChartVersion;
+  } | null>(null);
   const [operationId, setOperationId] = useState<string | null>(null);
 
+  const chartsPaging = useOffsetPagination(projectId);
+  const installedPaging = useOffsetPagination("installed");
+  const reposPaging = useOffsetPagination("repositories");
   const chartsQuery = useHelmCharts({
+    ...chartsPaging.params,
     projectId,
     category: selectedCategory !== "all" ? selectedCategory : undefined,
     search: searchQuery || undefined,
   });
-  const installedQuery = useInstalledCharts();
-  const reposQuery = useHelmRepositories();
+  const installedQuery = useInstalledCharts(installedPaging.params);
+  const reposQuery = useHelmRepositories(undefined, reposPaging.params);
   const presetClusterQuery = useCluster(presetClusterIdPage);
-  const charts = chartsQuery.data;
-  const installed = installedQuery.data;
-  const repos = reposQuery.data;
+  const charts = chartsQuery.isError ? undefined : chartsQuery.data?.data;
+  const installed = installedQuery.isError
+    ? undefined
+    : installedQuery.data?.data;
+  const repos = reposQuery.isError ? undefined : reposQuery.data?.data;
   const repositoryNames = useMemo(
     () => new Map((repos || []).map((repo) => [repo.id, repo.name])),
     [repos],
@@ -110,58 +115,7 @@ function CatalogPage() {
   const uninstall = useUninstallChart();
   const rollback = useRollbackChart();
 
-  const tabs: { key: TabKey; label: ReactNode }[] = [
-    { key: "browse", label: "Browse Charts" },
-    {
-      key: "installed",
-      label: (
-        <>
-          Installed
-          {installed && (
-            <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">
-              {installed.length}
-            </span>
-          )}
-        </>
-      ),
-    },
-    {
-      key: "repositories",
-      label: (
-        <>
-          Repositories
-          {repos && (
-            <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">
-              {repos.length}
-            </span>
-          )}
-        </>
-      ),
-    },
-  ];
-
-  if (
-    projectsQuery.isLoading ||
-    projectsQuery.isError ||
-    projectsQuery.data === undefined
-  ) {
-    return (
-      <PageShell>
-        <PageHeader
-          title="Catalog"
-          description="Shared Helm repositories and charts."
-        />
-        <QueryStates
-          query={projectsQuery}
-          loadingTitle="Loading catalog projects"
-          permission="projects:read"
-          errorTitle="Failed to load catalog projects"
-        >
-          {null}
-        </QueryStates>
-      </PageShell>
-    );
-  }
+  const tabs = catalogTabs(installedQuery, reposQuery);
 
   return (
     <PageShell>
@@ -171,23 +125,11 @@ function CatalogPage() {
           description="Shared Helm repositories. Browse and install charts from a cluster's Apps page."
           actions={
             <>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                Project visibility
-                <Select
-                  aria-label="Catalog project"
-                  value={projectId}
-                  onChange={(event) => setProjectId(event.target.value)}
-                  containerClassName="min-w-56"
-                  disabled={projectsQuery.isLoading}
-                >
-                  <option value="">Select a project</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.displayName || project.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
+              <CatalogProjectPicker
+                scope={projectScope}
+                value={requestedProjectId || projectId}
+                onChange={setProjectId}
+              />
               {activeTab === "repositories" && (
                 <ActionButton
                   intent="primary"
@@ -240,7 +182,7 @@ function CatalogPage() {
                 loadingTitle="Loading charts"
                 permission="catalog:read"
                 errorTitle="Failed to load charts"
-                isEmpty={(rows) => rows.length === 0}
+                isEmpty={(page) => page.data.length === 0}
                 empty={
                   <EmptyState
                     icon={
@@ -255,8 +197,8 @@ function CatalogPage() {
                     }
                     description={
                       searchQuery || selectedCategory !== "all"
-                        ? "Clear the search and category filter to browse the complete catalog."
-                        : "Add and sync a Helm repository before browsing charts."
+                        ? "These filters apply to the current page. Try another page or clear the filters."
+                        : "Try another page, or add and sync a Helm repository."
                     }
                     actionLabel={
                       searchQuery || selectedCategory !== "all"
@@ -287,13 +229,20 @@ function CatalogPage() {
               </QueryStates>
             ))}
 
+          {activeTab === "browse" && projectId && (
+            <OffsetPagination
+              control={chartsPaging}
+              query={chartsQuery}
+              label="charts"
+            />
+          )}
           {activeTab === "installed" && (
             <QueryStates
               query={installedQuery}
               loadingTitle="Loading installed charts"
               permission="catalog:read"
               errorTitle="Failed to load installed charts"
-              isEmpty={(rows) => rows.length === 0}
+              isEmpty={(page) => page.data.length === 0}
               empty={
                 <EmptyState
                   icon={Package}
@@ -314,13 +263,20 @@ function CatalogPage() {
             </QueryStates>
           )}
 
+          {activeTab === "installed" && (
+            <OffsetPagination
+              control={installedPaging}
+              query={installedQuery}
+              label="installed charts"
+            />
+          )}
           {activeTab === "repositories" && (
             <QueryStates
               query={reposQuery}
               loadingTitle="Loading repositories"
               permission="catalog:read"
               errorTitle="Failed to load repositories"
-              isEmpty={(rows) => rows.length === 0}
+              isEmpty={(page) => page.data.length === 0}
               empty={
                 <EmptyState
                   icon={Package}
@@ -342,11 +298,19 @@ function CatalogPage() {
               />
             </QueryStates>
           )}
+          {activeTab === "repositories" && (
+            <OffsetPagination
+              control={reposPaging}
+              query={reposQuery}
+              label="repositories"
+            />
+          )}
         </TabsContent>
       </Tabs>
 
-      {selectedChart && (
+      {projectId && selectedChart && (
         <ChartDetailModal
+          key={`${projectId}:${selectedChart.id}`}
           projectId={projectId}
           chart={selectedChart}
           onClose={() => setSelectedChart(null)}
@@ -358,7 +322,7 @@ function CatalogPage() {
         />
       )}
 
-      {showInstallModal && installChart && (
+      {projectId && showInstallModal && installChart && (
         <InstallChartModal
           projectId={projectId}
           allowedClusterIds={allowedClusterIds}

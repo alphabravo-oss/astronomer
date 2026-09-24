@@ -1,4 +1,3 @@
-
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createCISScan,
@@ -27,25 +26,35 @@ export function useCISProfiles(clusterId: string | undefined) {
   });
 }
 
-export function useCISScans(params?: {
-  page?: number;
-  pageSize?: number;
-  limit?: number;
-  offset?: number;
-}) {
+export function useCISScans(
+  params?: {
+    page?: number;
+    pageSize?: number;
+    limit?: number;
+    offset?: number;
+  },
+  options: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: cisQueryKeys.scans(params),
-    queryFn: () => getCISScans(params),
+    queryFn: ({ signal }) => getCISScans(params, signal),
+    enabled: options.enabled,
+    throwOnError: false,
     refetchInterval: liveFallback(30_000),
   });
 }
 
-export function useCISScan(id: string | undefined) {
+export function useCISScan(
+  id: string | undefined,
+  options: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: cisQueryKeys.scan(id ?? ""),
-    queryFn: () => getCISScan(id!),
-    enabled: !!id,
+    queryFn: ({ signal }) => getCISScan(id!, signal),
+    enabled: !!id && options.enabled !== false,
+    throwOnError: false,
     refetchInterval: (query) => {
+      if (query.state.status === "error") return false;
       const status = query.state.data?.status;
       if (
         status === "completed" ||

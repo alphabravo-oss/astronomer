@@ -26,7 +26,9 @@ import type {
   LoggingOutputCapabilities,
   LoggingOutputType,
   LoggingPipeline,
+  PaginatedResponse,
 } from "@/types";
+import { mapPage } from "./pagination";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
 
@@ -104,9 +106,16 @@ function loggingOutputBody(
   };
 }
 
-export async function getLoggingOutputs(): Promise<LoggingOutput[]> {
-  const page = await listLoggingOutputsOperation({ query: { limit: 200 } });
-  return (page.data ?? []).map(mapLoggingOutput);
+export async function getLoggingOutputs(
+  clusterId?: string,
+  offset = 0,
+  signal?: AbortSignal,
+): Promise<PaginatedResponse<LoggingOutput>> {
+  const page = await listLoggingOutputsOperation({
+    query: { limit: 50, offset, cluster_id: clusterId },
+    signal,
+  });
+  return mapPage(page, mapLoggingOutput);
 }
 
 export async function createLoggingOutput(
@@ -414,14 +423,18 @@ export function mapLoggingOperation(
   };
 }
 
-export async function getLoggingOperations(params?: {
-  status?: string;
-  target_type?: string;
-  target_key?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<LoggingOperation[]> {
+export async function getLoggingOperations(
+  params?: {
+    status?: string;
+    target_type?: string;
+    target_key?: string;
+    limit?: number;
+    offset?: number;
+  },
+  signal?: AbortSignal,
+): Promise<PaginatedResponse<LoggingOperation>> {
   const response = await listLoggingOperationsOperation({
+    signal,
     query: {
       status: params?.status as LoggingOperationWire["status"] | undefined,
       targetType: params?.target_type as
@@ -431,7 +444,7 @@ export async function getLoggingOperations(params?: {
       offset: params?.offset,
     },
   });
-  return response.data.map(mapLoggingOperation);
+  return mapPage(response, mapLoggingOperation);
 }
 
 export async function getLoggingOperation(

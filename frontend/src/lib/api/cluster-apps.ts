@@ -122,7 +122,7 @@ export async function listCatalogCharts(params: {
     signal: params.signal,
   });
   const rows = (wire.data ?? []) as OpenAPIComponents["schemas"]["HelmChart"][];
-  return mapPage(
+  const page = mapPage(
     { data: rows, pagination: wire.pagination },
     (raw): CatalogChartSummary => ({
       id: raw.id ?? "",
@@ -137,6 +137,20 @@ export async function listCatalogCharts(params: {
       deprecated: raw.deprecated ?? false,
     }),
   );
+  const term = params.search?.trim().toLocaleLowerCase();
+  return {
+    ...page,
+    data: term
+      ? page.data.filter((chart) =>
+          [
+            chart.name,
+            chart.displayName,
+            chart.description,
+            ...chart.keywords,
+          ].some((value) => value.toLocaleLowerCase().includes(term)),
+        )
+      : page.data,
+  };
 }
 
 // Recommended view: wraps /catalog/recommendations/popular which
@@ -166,32 +180,6 @@ export async function listRecommendedCharts(
     score: raw.bayesian_score,
     ratingAvg: raw.avg_stars,
     installCount: raw.rating_count,
-  }));
-}
-
-// Chart-version list for the install modal's version dropdown.
-export interface ChartVersionRow {
-  id: string;
-  version: string;
-  appVersion: string;
-  createdAtUpstream: string;
-}
-
-export async function listChartVersions(
-  projectId: string,
-  chartId: string,
-  signal?: AbortSignal,
-): Promise<ChartVersionRow[]> {
-  const wire = await generated.getCatalogChartsByIdVersions({
-    path: { id: chartId },
-    query: { project_id: projectId, limit: 50 },
-    signal,
-  });
-  return wire.data.map((raw) => ({
-    id: raw.id ?? "",
-    version: raw.version ?? "",
-    appVersion: raw.app_version ?? "",
-    createdAtUpstream: raw.created_at_upstream ?? "",
   }));
 }
 

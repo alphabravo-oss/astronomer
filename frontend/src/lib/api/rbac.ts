@@ -274,7 +274,7 @@ export async function applyProjectRoleTemplate(input: {
   );
 }
 
-function mapAccessBinding(
+export function mapAccessBinding(
   scope: AccessBinding["scope"],
   wire: GlobalBindingWire | ClusterBindingWire | ProjectBindingWire,
 ): AccessBinding {
@@ -303,7 +303,9 @@ export async function listClusterRoleBindings(
     query: { limit: RBAC_LIST_LIMIT, cluster_id: params?.cluster_id },
     signal,
   });
-  return (response.data ?? []).map((wire) => mapAccessBinding("cluster", wire));
+  return (response.data ?? []).map((wire: ClusterBindingWire) =>
+    mapAccessBinding("cluster", wire),
+  );
 }
 
 export async function listGlobalRoleBindings(
@@ -313,7 +315,9 @@ export async function listGlobalRoleBindings(
     query: { limit: RBAC_LIST_LIMIT },
     signal,
   });
-  return (response.data ?? []).map((wire) => mapAccessBinding("global", wire));
+  return (response.data ?? []).map((wire: GlobalBindingWire) =>
+    mapAccessBinding("global", wire),
+  );
 }
 
 export async function listProjectRoleBindings(
@@ -326,7 +330,9 @@ export async function listProjectRoleBindings(
     query: { limit: RBAC_LIST_LIMIT, project_id: params?.project_id },
     signal,
   });
-  return (response.data ?? []).map((wire) => mapAccessBinding("project", wire));
+  return (response.data ?? []).map((wire: ProjectBindingWire) =>
+    mapAccessBinding("project", wire),
+  );
 }
 
 export async function createClusterRoleBinding(input: {

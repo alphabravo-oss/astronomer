@@ -16,10 +16,6 @@ spec:
     tier: prod
     region: us-east
   template: prod-platform-baseline
-  registries:
-    - dockerhub-mirror
-  toolPresets:
-    - cert-manager-v1.14
   project: platform
 `)
 	doc, err := Parse(content, "clusters/prod-east.yaml")
@@ -35,10 +31,10 @@ spec:
 	if doc.Spec.Template != "prod-platform-baseline" {
 		t.Fatalf("template = %q", doc.Spec.Template)
 	}
-	if len(doc.Spec.Registries) != 1 || doc.Spec.Registries[0] != "dockerhub-mirror" {
+	if len(doc.Spec.Registries) != 0 {
 		t.Fatalf("registries = %#v", doc.Spec.Registries)
 	}
-	if len(doc.Spec.ToolPresets) != 1 || doc.Spec.ToolPresets[0] != "cert-manager-v1.14" {
+	if len(doc.Spec.ToolPresets) != 0 {
 		t.Fatalf("toolPresets = %#v", doc.Spec.ToolPresets)
 	}
 	if doc.Spec.Project != "platform" {

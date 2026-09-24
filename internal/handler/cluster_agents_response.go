@@ -77,7 +77,7 @@ func buildClusterAgentItem(cluster sqlc.Cluster, conn sqlc.AgentConnection, conn
 		if compatibility.UpgradeRecommendation != "" {
 			item.RecommendedAction = compatibility.UpgradeRecommendation
 		} else {
-			item.RecommendedAction = "Review the degraded reasons and rotate to the least-privilege operator profile where possible."
+			item.RecommendedAction = "Review the degraded reasons and run live diagnostics."
 		}
 		return item
 	}

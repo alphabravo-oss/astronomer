@@ -91,6 +91,7 @@ it("chooses only served versions and rejects malformed path segments", () => {
       plural: "certificates",
       kind: "Certificate",
       version: "v1",
+      servedVersions: ["v1"],
       namespaced: true,
     },
   ]);

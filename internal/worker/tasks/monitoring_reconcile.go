@@ -54,9 +54,6 @@ func HandleMonitoringReconcile(ctx context.Context, t *asynq.Task) error {
 		if err != nil {
 			return err
 		}
-		if client == nil {
-			return fmt.Errorf("default monitoring backend has no query URL")
-		}
 
 		clusters, err := listAllClustersPaged(ctx, runtimeDependencies(ctx).Queries.ListClusters)
 		if err != nil {
@@ -206,6 +203,10 @@ func reconcileClusterMonitoring(ctx context.Context, client *imonitoring.Client,
 		return nil
 	}
 
+	if !cfg.ThanosSidecarEnabled && cfg.LastAppliedSpecHash != "" {
+		client, err = imonitoring.NewClusterClient(ctx, runtimeDependencies(ctx).K8s, cluster.ID.String(), cfg.StackNamespace, cfg.PrometheusReleaseName)
+		backendHealthy = err == nil && client.HealthCheck(ctx) == nil
+	}
 	status := "degraded"
 	lastHealthyAt := pgtype.Timestamptz{}
 

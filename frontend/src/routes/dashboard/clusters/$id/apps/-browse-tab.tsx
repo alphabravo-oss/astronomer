@@ -47,7 +47,7 @@ export function BrowseView({
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search charts (kube-prometheus, loki, …)"
+          placeholder="Filter charts on this page (kube-prometheus, loki, …)"
           className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm
             placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
         />
@@ -64,7 +64,8 @@ export function BrowseView({
             No matching charts
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Try a broader search, or add a repository on the Repositories tab.
+            Filters apply to the current page. Try another page, clear the
+            filter, or add a repository on the Repositories tab.
           </p>
         </div>
       ) : (

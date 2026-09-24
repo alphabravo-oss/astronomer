@@ -1,3 +1,4 @@
+import { pageTableCount } from "@/lib/api/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -17,7 +18,6 @@ import {
   secondaryButton,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
-  deliveryPageRowCount,
 } from "@/components/delivery/shared";
 import {
   createDeliveryConfigurationTemplate,
@@ -192,7 +192,7 @@ export function ConfigurationTemplatesPage() {
                 description: "Create a reusable values or patch template.",
               }}
               serverSide={{
-                rowCount: deliveryPageRowCount(query.data),
+                ...pageTableCount(query.data),
                 pagination: { pageIndex, pageSize },
                 onPaginationChange: (next) => setPageIndex(next.pageIndex),
               }}

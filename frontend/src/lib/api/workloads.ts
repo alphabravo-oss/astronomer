@@ -280,6 +280,7 @@ export async function getWorkloads(
     sort?: WorkloadSort;
     page?: number;
     pageSize?: number;
+    offset?: number;
     signal?: AbortSignal;
   },
 ): Promise<PaginatedResponse<Workload>> {
@@ -289,7 +290,7 @@ export async function getWorkloads(
     path: { cluster_id: clusterId },
     query: {
       limit: pageSize,
-      offset: (page - 1) * pageSize,
+      offset: params?.offset ?? (page - 1) * pageSize,
       namespace: params?.namespace,
       kind: params?.kind,
       search: params?.search,

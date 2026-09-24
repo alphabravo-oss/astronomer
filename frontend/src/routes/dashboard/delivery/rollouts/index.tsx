@@ -1,3 +1,4 @@
+import { pageTableCount } from "@/lib/api/pagination";
 import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -7,8 +8,6 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
-  RedirectDeliveryList,
-  deliveryPageRowCount,
   inputClass,
   useDeliveryWorkspace,
 } from "@/components/delivery/shared";
@@ -208,7 +207,7 @@ export function RolloutsPage() {
             void navigate({ to: entityHref("rollouts", row.id) })
           }
           serverSide={{
-            rowCount: deliveryPageRowCount(query.data),
+            ...pageTableCount(query.data),
             pagination: { pageIndex, pageSize },
             onPaginationChange: (next) =>
               setFilters(state ?? "", next.pageIndex),
@@ -219,7 +218,5 @@ export function RolloutsPage() {
   );
 }
 export const Route = createFileRoute("/dashboard/delivery/rollouts/")({
-  component: function DeliveryRolloutsRedirect() {
-    return <RedirectDeliveryList tab="rollouts" />;
-  },
+  component: RolloutsPage,
 });

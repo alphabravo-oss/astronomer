@@ -2,23 +2,20 @@ import { useMemo, useState } from "react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
+import { RemoteProjectPicker } from "@/components/projects/remote-project-picker";
+import { RemoteUserPicker } from "@/components/rbac/remote-user-picker";
+import { ActionButton } from "@/components/ui/action-button";
 import { MetricCard } from "@/components/ui/metric-card";
-import { useClusters } from "@/lib/hooks/clusters";
-import { useProjects } from "@/lib/hooks/projects";
-import { useUsers } from "@/lib/hooks/user-settings";
+import { useCluster } from "@/lib/hooks/clusters";
+import { useProject } from "@/lib/hooks/projects";
 import { useEffectivePermissions } from "@/lib/hooks/rbac";
 import type {
   EffectivePermissionBinding,
   EffectivePermissionGrant,
   EffectivePermissionSource,
-  User,
 } from "@/types";
-import {
-  clusterLabel,
-  projectLabel,
-  userLabel,
-} from "@/components/rbac/binding-utils";
+import { clusterLabel, projectLabel } from "@/components/rbac/binding-utils";
 
 function effectivePermissionColumns(
   clusterNameById: Map<string, string>,
@@ -76,34 +73,27 @@ function effectivePermissionColumns(
 }
 
 export function EffectiveTab() {
-  const { data: usersData } = useUsers({ pageSize: 200 });
-  const { data: clustersData } = useClusters({ pageSize: 200 });
-  const { data: projectsData } = useProjects({ pageSize: 200 });
-  const users = usersData?.data || [];
-  const clusters = useMemo(
-    () => clustersData?.data ?? [],
-    [clustersData?.data],
-  );
-  const projects = useMemo(
-    () => projectsData?.data ?? [],
-    [projectsData?.data],
-  );
-
   const [userId, setUserId] = useState("");
   const [clusterId, setClusterId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [namespace, setNamespace] = useState("");
+  const clusterQuery = useCluster(clusterId);
+  const projectQuery = useProject(projectId);
 
   const selectedContext = {
     clusterId: clusterId || undefined,
     projectId: projectId || undefined,
     namespace: namespace.trim() || undefined,
   };
-  const { data, isLoading, isError, refetch } = useEffectivePermissions(
-    userId || undefined,
-    selectedContext,
-  );
+  const {
+    data: response,
+    isLoading,
+    isError,
+    refetch,
+  } = useEffectivePermissions(userId || undefined, selectedContext);
 
+  const data = isError ? undefined : response;
+  const measured = !isLoading && !isError && !!data;
   const permissions = data?.permissions ?? [];
   const bindings = data?.bindings ?? [];
   const responseContext = data?.context;
@@ -115,12 +105,22 @@ export function EffectiveTab() {
   ).length;
 
   const clusterNameById = useMemo(
-    () => new Map(clusters.map((c) => [c.id, clusterLabel(c)])),
-    [clusters],
+    () =>
+      new Map(
+        clusterQuery.data && !clusterQuery.isError
+          ? [[clusterQuery.data.id, clusterLabel(clusterQuery.data)]]
+          : [],
+      ),
+    [clusterQuery.data, clusterQuery.isError],
   );
   const projectNameById = useMemo(
-    () => new Map(projects.map((p) => [p.id, projectLabel(p)])),
-    [projects],
+    () =>
+      new Map(
+        projectQuery.data && !projectQuery.isError
+          ? [[projectQuery.data.id, projectLabel(projectQuery.data)]]
+          : [],
+      ),
+    [projectQuery.data, projectQuery.isError],
   );
 
   const permissionColumns = effectivePermissionColumns(
@@ -178,67 +178,57 @@ export function EffectiveTab() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <MetricCard dense label="Grants" value={permissions.length} />
-        <MetricCard dense label="Bindings" value={bindings.length} />
-        <MetricCard dense label="Resources" value={resourceCount} />
-        <MetricCard dense label="Applies here" value={applicableCount} />
+        <MetricCard
+          dense
+          label="Grants"
+          value={measured ? permissions.length : "—"}
+        />
+        <MetricCard
+          dense
+          label="Bindings"
+          value={measured ? bindings.length : "—"}
+        />
+        <MetricCard
+          dense
+          label="Resources"
+          value={measured ? resourceCount : "—"}
+        />
+        <MetricCard
+          dense
+          label="Applies here"
+          value={measured ? applicableCount : "—"}
+        />
         <MetricCard
           dense
           label="High risk"
-          value={highRiskCount}
+          value={measured ? highRiskCount : "—"}
           tone={highRiskCount > 0 ? "warning" : undefined}
         />
       </div>
 
       <div className="grid gap-3 rounded-lg border border-border bg-card p-4 md:grid-cols-2 xl:grid-cols-4">
-        <label className="space-y-1">
-          <span className="text-xs font-medium text-muted-foreground">
-            User
-          </span>
-          <Select
-            value={userId}
-            onChange={(event) => setUserId(event.target.value)}
-          >
-            <option value="">Me</option>
-            {users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {userOptionLabel(user)}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className="space-y-1">
-          <span className="text-xs font-medium text-muted-foreground">
-            Cluster
-          </span>
-          <Select
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">User</p>
+          <RemoteUserPicker value={userId} onChange={setUserId} />
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Cluster</p>
+          <RemoteClusterPicker
             value={clusterId}
-            onChange={(event) => setClusterId(event.target.value)}
-          >
-            <option value="">All clusters</option>
-            {clusters.map((cluster) => (
-              <option key={cluster.id} value={cluster.id}>
-                {clusterLabel(cluster)}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className="space-y-1">
-          <span className="text-xs font-medium text-muted-foreground">
-            Project
-          </span>
-          <Select
-            value={projectId}
-            onChange={(event) => setProjectId(event.target.value)}
-          >
-            <option value="">All projects</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {projectLabel(project)}
-              </option>
-            ))}
-          </Select>
-        </label>
+            onChange={setClusterId}
+            placeholder="All clusters"
+          />
+          <ActionButton onClick={() => setClusterId("")}>
+            All clusters
+          </ActionButton>
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Project</p>
+          <RemoteProjectPicker value={projectId} onChange={setProjectId} />
+          <ActionButton onClick={() => setProjectId("")}>
+            All projects
+          </ActionButton>
+        </div>
         <label className="space-y-1">
           <span className="text-xs font-medium text-muted-foreground">
             Namespace
@@ -293,11 +283,6 @@ export function EffectiveTab() {
       />
     </div>
   );
-}
-
-function userOptionLabel(user: User): string {
-  const extra = user.isSuperuser ? " (superuser)" : "";
-  return `${userLabel(user)}${extra}`;
 }
 
 function sourceSummary(sources?: EffectivePermissionSource[]): string {

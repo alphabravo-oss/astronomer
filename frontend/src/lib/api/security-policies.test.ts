@@ -63,7 +63,8 @@ describe("security policy generated API boundary", () => {
       },
     });
 
-    await expect(getPodSecurityTemplates()).resolves.toEqual([
+    const page = await getPodSecurityTemplates({ limit: 25, offset: 200 });
+    expect(page.data).toEqual([
       expect.objectContaining({
         id: templateWire.id,
         isDefault: true,
@@ -72,7 +73,15 @@ describe("security policy generated API boundary", () => {
       }),
     ]);
     expect(generated.getSecurityTemplates).toHaveBeenCalledWith({
-      query: { limit: 200 },
+      query: { limit: 25, offset: 200 },
+      signal: undefined,
+    });
+    expect(page.pagination).toEqual({
+      total: 1,
+      limit: 100,
+      offset: 0,
+      has_more: false,
+      next_offset: null,
     });
   });
 
@@ -116,7 +125,9 @@ describe("security policy generated API boundary", () => {
       },
     });
 
-    const [policy] = await getClusterSecurityPolicies();
+    const {
+      data: [policy],
+    } = await getClusterSecurityPolicies();
     expect(policy).toEqual({
       id: policyWire.id,
       clusterId: policyWire.cluster_id,

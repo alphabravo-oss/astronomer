@@ -27,6 +27,33 @@ const bodyRowText = () =>
     .map((r) => r.textContent ?? "");
 
 describe("DataTable behavior (TanStack Table engine)", () => {
+  it("groups only the current server page and preserves continuation controls", () => {
+    const onPage = vi.fn();
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(row) => row.id}
+        groupBy={(row) => (row.size >= 20 ? "Namespace: z" : "Namespace: a")}
+        serverSide={{
+          rowCount: 30,
+          pagination: { pageIndex: 0, pageSize: 3 },
+          onPaginationChange: onPage,
+        }}
+      />,
+    );
+    expect(bodyRowText()).toEqual([
+      "Namespace: a",
+      "Apple10",
+      "Namespace: z",
+      "Banana30",
+      "Cherry20",
+    ]);
+    expect(screen.queryByRole("grid")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(onPage).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 3 });
+  });
   it("distinguishes an empty collection from a search with no matches and clears filters", async () => {
     render(
       <DataTable
@@ -466,6 +493,65 @@ describe("DataTable behavior (TanStack Table engine)", () => {
       size: i,
     }));
 
+    it("shrinks a virtual window safely when filtering removes its rows", async () => {
+      const restore = stubLayout();
+      try {
+        render(
+          <DataTable
+            data={bigRows}
+            columns={columns}
+            keyExtractor={(row) => row.id}
+            virtualized
+            searchPlaceholder="Filter virtual rows"
+          />,
+        );
+        fireEvent.change(screen.getByPlaceholderText("Filter virtual rows"), {
+          target: { value: "Row 999" },
+        });
+        await waitFor(() =>
+          expect(screen.getByRole("grid")).toHaveAttribute(
+            "aria-rowcount",
+            "2",
+          ),
+        );
+        expect(screen.getByText("Row 999")).toBeInTheDocument();
+      } finally {
+        restore();
+      }
+    });
+
+    it("does not consume arrow keys from editable controls in a virtual row", () => {
+      const restore = stubLayout();
+      try {
+        render(
+          <DataTable
+            data={bigRows}
+            columns={[
+              {
+                key: "name",
+                header: "Name",
+                accessor: (row) => (
+                  <input
+                    aria-label={`Edit ${row.id}`}
+                    defaultValue={row.name}
+                  />
+                ),
+              },
+            ]}
+            keyExtractor={(row) => row.id}
+            virtualized
+          />,
+        );
+        const input = screen.getByLabelText("Edit 0");
+        input.focus();
+        expect(fireEvent.keyDown(input, { key: "ArrowDown" })).toBe(true);
+        expect(fireEvent.keyDown(input, { key: "ArrowUp" })).toBe(true);
+        expect(input).toHaveFocus();
+      } finally {
+        restore();
+      }
+    });
+
     it("automatically virtualizes a 5k client-side collection", () => {
       const restore = stubLayout();
       try {
@@ -486,7 +572,7 @@ describe("DataTable behavior (TanStack Table engine)", () => {
         );
 
         const grid = screen.getByRole("grid");
-        expect(grid).toHaveAttribute("aria-rowcount", "5000");
+        expect(grid).toHaveAttribute("aria-rowcount", "5001");
         expect(screen.getAllByRole("row").length).toBeLessThan(100);
       } finally {
         restore();
@@ -531,7 +617,7 @@ describe("DataTable behavior (TanStack Table engine)", () => {
 
         const grid = screen.getByRole("grid");
         expect(grid).toBeInTheDocument();
-        expect(grid).toHaveAttribute("aria-rowcount", "1000");
+        expect(grid).toHaveAttribute("aria-rowcount", "1001");
 
         // Body rows = all role="row" minus the sticky header row. The virtualizer
         // must mount far fewer than the full 1000 rows.

@@ -19,14 +19,19 @@ import {
   type DataTableFeatures,
 } from "@/components/ui/data-table-features";
 import { searchIndexMatches } from "@/components/ui/data-table-search";
-import { sortValue } from "@/components/ui/data-table-state";
+import {
+  sortValue,
+  serverNavigationRowCount,
+} from "@/components/ui/data-table-state";
 import { useDataTableState } from "@/components/ui/use-data-table-state";
 import { useVirtualRows } from "@/components/ui/use-virtual-rows";
 import { useUserPreferences } from "@/lib/user-preferences";
+import { groupTableRows } from "./data-table-grouping";
 
 const CLIENT_SIDE_VIRTUALIZATION_THRESHOLD = 250;
 
 interface DataTableControllerOptions<T extends RowData> {
+  groupBy?: (row: T) => string;
   data: T[];
   columns: Column<T>[];
   keyExtractor: (row: T) => string;
@@ -45,6 +50,7 @@ interface DataTableControllerOptions<T extends RowData> {
 }
 
 export function useDataTableController<T extends RowData>({
+  groupBy,
   data,
   columns,
   keyExtractor,
@@ -173,7 +179,7 @@ export function useDataTableController<T extends RowData>({
       onPaginationChange: setClientPagination,
       ...(effectiveServerSide
         ? {
-            rowCount: effectiveServerSide.rowCount,
+            rowCount: serverNavigationRowCount(effectiveServerSide),
             onPaginationChange: (updater: Updater<PaginationState>) => {
               const next =
                 typeof updater === "function"
@@ -278,7 +284,10 @@ export function useDataTableController<T extends RowData>({
   // Faceted filters render for visible columns that opted in via `filter`.
   const facetColumns = activeColumns.filter((c) => c.filter);
 
-  const rows = table.getRowModel().rows;
+  const rows = groupTableRows(
+    table.getRowModel().rows,
+    groupBy ? (row) => groupBy(row.original) : undefined,
+  );
   const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original);
   const filteredCount = table.getFilteredRowModel().rows.length;
   const totalPages = table.getPageCount();

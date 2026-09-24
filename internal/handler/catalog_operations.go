@@ -473,6 +473,12 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 	switch op.OperationType {
 	case "install":
 		projectID, parseErr := uuid.Parse(env.ProjectID)
+		// Older queued cluster-scoped requests predate explicit platform
+		// Delivery ownership. Their target was already cluster-authorized;
+		// resolve only the canonical system-owned project on replay.
+		if env.ProjectID == "" {
+			projectID, parseErr = h.platformCatalogProject(ctx, installation.ClusterID)
+		}
 		if parseErr != nil {
 			return fmt.Errorf("parse catalog project identity: %w", parseErr)
 		}

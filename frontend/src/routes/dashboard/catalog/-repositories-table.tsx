@@ -146,7 +146,7 @@ export function RepositoriesTable({
         data={repos}
         columns={repoColumns}
         keyExtractor={(row) => row.id}
-        searchPlaceholder="Search repositories..."
+        searchPlaceholder="Filter repositories on this page..."
         loading={loading}
         emptyState={{
           title: "No repositories configured",

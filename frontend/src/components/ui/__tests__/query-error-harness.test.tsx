@@ -24,7 +24,7 @@ const fns = vi.hoisted(() => ({
   getClusterAgents: vi.fn(),
   useCISScans: vi.fn(),
   useAlertEvents: vi.fn(),
-  getGlobalRoles: vi.fn(),
+  getRolePage: vi.fn(),
   useManagementBackupStatus: vi.fn(),
 }));
 
@@ -63,6 +63,10 @@ vi.mock("@/lib/hooks/auth", async (importOriginal) => ({
 vi.mock("@/lib/permissions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/permissions")>()),
   can: () => true,
+}));
+vi.mock("@/lib/permission-hooks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/permission-hooks")>()),
+  usePermissionDecision: () => ({ allowed: true }),
 }));
 
 vi.mock("@/lib/api/clusters", async (importOriginal) => ({
@@ -120,9 +124,9 @@ vi.mock("@/lib/hooks/alerting", async (importOriginal) => ({
   useAlertEventSummary: () => ({ data: undefined }),
 }));
 
-vi.mock("@/lib/api/rbac", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/api/rbac")>()),
-  getGlobalRoles: fns.getGlobalRoles,
+vi.mock("@/lib/api/rbac-role-page", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/rbac-role-page")>()),
+  getRolePage: fns.getRolePage,
 }));
 
 vi.mock("@/components/settings/hooks", async (importOriginal) => ({
@@ -214,7 +218,7 @@ beforeEach(() => {
     error: undefined,
     refetch: vi.fn(),
   });
-  fns.getGlobalRoles.mockResolvedValue([]);
+  fns.getRolePage.mockResolvedValue(emptyPage);
   fns.useManagementBackupStatus.mockReturnValue({
     data: undefined,
     isLoading: false,
@@ -301,7 +305,7 @@ describe("error-state harness", () => {
   });
 
   it("rbac: global roles query failure shows an alert", async () => {
-    fns.getGlobalRoles.mockRejectedValue(new Error("rbac down"));
+    fns.getRolePage.mockRejectedValue(new Error("rbac down"));
     mount(<RBACPage />);
     await vi.waitFor(() => expectErrorSurfaceNotEmptyState([]));
   });

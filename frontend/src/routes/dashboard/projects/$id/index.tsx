@@ -11,7 +11,8 @@ import { Link as RouterLink } from "@tanstack/react-router";
 
 import { Users, Server, Layers } from "lucide-react";
 import { useProject } from "@/lib/hooks/projects";
-import { useProjectRoleBindings } from "@/lib/hooks/rbac";
+import { useProjectBindingPage } from "@/lib/hooks/project-binding-page";
+import { pageCountLabel } from "@/lib/api/pagination";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { canAssignProjectNamespaces } from "@/components/projects/hooks";
 import { ProjectNamespacesCard } from "@/components/projects/namespaces-card";
@@ -34,15 +35,20 @@ function ProjectOverviewPage() {
   const canEdit = canAssignProjectNamespaces(user);
   // `Project.members` is a dead wire field (never populated by the GET) — the
   // real roster is the project-scoped RBAC binding list; see members-card.tsx.
-  const { data: memberBindings } = useProjectRoleBindings({ project_id: id });
-  const memberCount = memberBindings?.length ?? 0;
+  const membersQuery = useProjectBindingPage(id);
+  const memberCount =
+    membersQuery.isError || !membersQuery.data
+      ? "—"
+      : pageCountLabel(membersQuery.data);
 
   if (isLoading || projectQuery.isError) {
     return (
       <QueryStates
         query={projectQuery}
         permission="projects:read"
-        notFound={<p className="text-sm text-muted-foreground">Project not found.</p>}
+        notFound={
+          <p className="text-sm text-muted-foreground">Project not found.</p>
+        }
       >
         {() => null}
       </QueryStates>
@@ -74,9 +80,7 @@ function ProjectOverviewPage() {
           dense
           icon={<Server className="h-3.5 w-3.5" />}
           label="Clusters"
-          value={
-            (project.clusterIds?.length ?? (project.clusterId ? 1 : 0)) || 1
-          }
+          value={project.clusterIds?.length ?? (project.clusterId ? 1 : 0)}
         />
         <MetricCard
           dense
@@ -91,8 +95,15 @@ function ProjectOverviewPage() {
           <MetricCard
             dense
             icon={<Users className="h-3.5 w-3.5" />}
-            label="Members"
+            label="Role bindings"
             value={memberCount}
+            subtitle={
+              membersQuery.isError
+                ? "Member data unavailable"
+                : membersQuery.isLoading
+                  ? "Loading members…"
+                  : "Project-scoped assignments"
+            }
           />
         </a>
 
@@ -129,7 +140,8 @@ function ProjectOverviewPage() {
           <p className="text-xs text-muted-foreground pt-2">
             Configure pod security and resource limits on the{" "}
             <RouterLink
-              to="/dashboard/projects/$id/policy" params={{ id: project.id }}
+              to="/dashboard/projects/$id/policy"
+              params={{ id: project.id }}
               className="text-foreground underline-offset-2 hover:underline"
             >
               Policy tab

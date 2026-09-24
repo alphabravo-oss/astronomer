@@ -163,6 +163,10 @@ func loadBuiltinTestCatalog(t *testing.T) builtinbundles.Catalog {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// These transaction scenarios deliberately exercise the two metrics
+	// components sharing one source; current multi-source membership is
+	// covered separately by TestPlanCatalogSourcesReusesCurrentSourceAndPreservesIdentity.
+	catalog.Components = catalog.Components[1:]
 	return catalog
 }
 

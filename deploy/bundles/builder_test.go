@@ -76,7 +76,7 @@ printf '%s' "${chart}:${version}" >"${destination}/${chart}-${version}.tgz"
 		t.Fatal(err)
 	}
 	entries := string(listing)
-	legacy := "charts/" + catalog.Components[0].Source.Chart + "-" + catalog.Components[0].Source.Version + ".tgz"
+	legacy := "charts/" + catalog.Components[2].Source.Chart + "-" + catalog.Components[2].Source.Version + ".tgz"
 	sourceDigest := sha256.Sum256([]byte(secondURL))
 	multi := fmt.Sprintf("charts/sources/%x/%s-%s.tgz", sourceDigest[:8], catalog.Components[1].Source.Chart, catalog.Components[1].Source.Version)
 	for _, want := range []string{legacy, multi} {

@@ -1,3 +1,7 @@
+import {
+  CatalogVersionSelect,
+  useCatalogVersionSelection,
+} from "@/components/catalog/version-selection";
 /**
  * App install / upgrade modal — sprint 082+.
  *
@@ -28,7 +32,8 @@
  * surfaces through the Installed view's polling.
  */
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
+import { QueryStates } from "@/components/ui/query-states";
 import { useAppForm, useStore } from "@/lib/form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
@@ -36,10 +41,8 @@ import { Loader2, AlertTriangle, Info } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
-  listChartVersions,
   getChartDefaultValues,
   installChartOnCluster,
-  type ChartVersionRow,
 } from "@/lib/api/cluster-apps";
 import { upgradeInstalledChart } from "@/lib/api/catalog";
 import { queryKeys } from "@/lib/query-keys";
@@ -129,27 +132,13 @@ export function AppInstallModal({
   // clobbered by a re-render of the same version.
   const hydratedForVersion = useRef("");
 
-  // Versions
-  const versions = useQuery({
-    queryKey: queryKeys.catalog.installChartVersions(clusterId, mode.chartId),
-    queryFn: () => listChartVersions(clusterId, mode.chartId),
-    enabled: !!clusterId,
-  });
-
-  // Default the version select to the first (latest by row order) once
-  // versions land. In upgrade mode we keep the current version unless
-  // the user picks a different one.
-  useEffect(() => {
-    if (!versions.data || versions.data.length === 0) return;
-    if (selectedVersionId) return;
-    form.setFieldValue("selectedVersionId", versions.data[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [versions.data, selectedVersionId]);
-
-  const selectedVersion: ChartVersionRow | undefined = useMemo(
-    () => versions.data?.find((v) => v.id === selectedVersionId),
-    [versions.data, selectedVersionId],
+  const versions = useCatalogVersionSelection(
+    projectId,
+    mode.chartId,
+    selectedVersionId,
+    (id) => form.setFieldValue("selectedVersionId", id),
   );
+  const selectedVersion = versions.selected;
 
   // Hydrate values.yaml when the version changes. In upgrade mode we
   // intentionally DON'T overwrite the user's current values with the
@@ -157,27 +146,49 @@ export function AppInstallModal({
   // customisation. Show a "Reset to chart defaults" button instead.
   const defaultValues = useQuery({
     queryKey: queryKeys.catalog.installChartValues(
-      clusterId,
+      projectId,
       mode.chartId,
       selectedVersion?.version,
     ),
-    queryFn: () =>
-      getChartDefaultValues(clusterId, mode.chartId, selectedVersion?.version),
-    enabled: !!clusterId && !!selectedVersion?.version,
+    queryFn: ({ signal }) =>
+      getChartDefaultValues(
+        projectId,
+        mode.chartId,
+        selectedVersion?.version,
+        signal,
+      ),
+    enabled: !!projectId && !!selectedVersion?.version,
+    throwOnError: false,
   });
 
   useEffect(() => {
     if (isUpgrade) return; // don't auto-clobber on upgrade
-    if (!defaultValues.data) return;
+    if (defaultValues.isError || !defaultValues.data) return;
     const key = selectedVersionId;
     if (hydratedForVersion.current === key) return;
     form.setFieldValue("valuesYaml", defaultValues.data.defaultValues);
     hydratedForVersion.current = key;
-  }, [defaultValues.data, form, selectedVersionId, isUpgrade]);
+  }, [
+    defaultValues.data,
+    defaultValues.isError,
+    form,
+    selectedVersionId,
+    isUpgrade,
+  ]);
 
   const install = useMutation({
     mutationFn: async () => {
       const value = form.state.values;
+      if (
+        !selectedVersion ||
+        selectedVersion.id !== value.selectedVersionId ||
+        submitBlockedReason ||
+        (!isUpgrade && (defaultValues.isError || defaultValues.isLoading))
+      ) {
+        throw new Error(
+          "Select an available version and wait for its values before submitting.",
+        );
+      }
       if (mode.kind === "install") {
         return installChartOnCluster({
           projectId,
@@ -211,6 +222,8 @@ export function AppInstallModal({
   });
 
   const submittable =
+    !!selectedVersion &&
+    (isUpgrade || (!defaultValues.isError && !defaultValues.isLoading)) &&
     !!selectedVersionId &&
     releaseName.trim() !== "" &&
     namespace.trim() !== "" &&
@@ -300,31 +313,10 @@ export function AppInstallModal({
             >
               Version
             </label>
-            {versions.isLoading ? (
-              <div className="h-9 flex items-center text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                Loading versions…
-              </div>
-            ) : (
-              <form.Field name="selectedVersionId">
-                {(field) => (
-                  <select
-                    id="field-ae92ffd8-268"
-                    value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                    onBlur={field.handleBlur}
-                    className="w-full h-9 px-2 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-1 focus:ring-ring"
-                  >
-                    {(versions.data ?? []).map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.version}
-                        {v.appVersion ? ` (app ${v.appVersion})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </form.Field>
-            )}
+            <CatalogVersionSelect
+              selection={versions}
+              id="field-ae92ffd8-268"
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -383,7 +375,16 @@ export function AppInstallModal({
                 </span>
               )}
             </label>
-            {isUpgrade && defaultValues.data && (
+            {defaultValues.isError && (
+              <QueryStates
+                query={defaultValues}
+                permission="catalog:read"
+                errorTitle="Could not load chart defaults"
+              >
+                {null}
+              </QueryStates>
+            )}
+            {isUpgrade && !defaultValues.isError && defaultValues.data && (
               <button
                 onClick={() =>
                   form.setFieldValue(

@@ -205,6 +205,26 @@ async function mockApi(page: Page, mutations: MutationRecord[]) {
   });
 }
 
+test("namespace grouping persists and keeps resource rows keyboard accessible", async ({
+  context,
+  page,
+}) => {
+  await mockApi(page, []);
+  await seedAuth(context, page, adminUser);
+  await page.goto(`/dashboard/clusters/${CLUSTER_ID}/deployments`);
+  const grouping = page.getByRole("checkbox", { name: /Group namespaces/ });
+  await grouping.check();
+  await expect(
+    page.getByText(`Namespace: ${NAMESPACE}`, { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(grouping).toBeChecked();
+  const row = page.locator("tbody tr").filter({ hasText: NAME }).first();
+  await row.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/deployments/${NAMESPACE}/${NAME}`));
+});
+
 test("keyboard-only resource create, scale, restart, YAML preview/apply, and delete works responsively", async ({
   context,
   page,

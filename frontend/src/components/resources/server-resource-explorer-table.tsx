@@ -7,7 +7,7 @@ import {
   type ExplorerBulkDelete,
 } from "@/components/resources/explorer-data-table";
 import type { Column, DataTableProps } from "@/components/ui/data-table";
-import { pageRowCount } from "@/lib/api/pagination";
+import { pageTableCount } from "@/lib/api/pagination";
 import type { NamedResourceType } from "@/lib/api/kubernetes-resources";
 import { useClusterNamespaceScope } from "@/lib/cluster-scope";
 import { useNamedResources } from "@/lib/hooks/kubernetes-resources";
@@ -126,7 +126,7 @@ export function ServerResourceExplorerTable<T extends object>({
       searchPlaceholder={searchPlaceholder}
       pageSize={PAGE_SIZE}
       serverSide={{
-        rowCount: pageRowCount(query.data),
+        ...pageTableCount(query.data),
         pagination: { pageIndex, pageSize: PAGE_SIZE },
         onPaginationChange: (next) => setPageIndex(next.pageIndex),
         search: {

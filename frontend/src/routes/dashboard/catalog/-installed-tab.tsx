@@ -25,7 +25,9 @@ export function InstalledTab({
   const [uninstallTarget, setUninstallTarget] = useState<InstalledChart | null>(
     null,
   );
-  const [upgradeTarget, setUpgradeTarget] = useState<InstalledChart | null>(null);
+  const [upgradeTarget, setUpgradeTarget] = useState<InstalledChart | null>(
+    null,
+  );
   const installedColumns: Column<InstalledChart>[] = [
     {
       key: "release",
@@ -139,7 +141,7 @@ export function InstalledTab({
         data={installed || []}
         columns={installedColumns}
         keyExtractor={(row) => row.id}
-        searchPlaceholder="Search installed releases..."
+        searchPlaceholder="Filter releases on this page..."
         loading={loading}
         emptyState={{
           title: "No charts installed",

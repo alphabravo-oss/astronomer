@@ -11,7 +11,8 @@ import {
 import { ActionButton } from "@/components/ui/action-button";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useAppForm, useStore } from "@/lib/form";
-import { useClusterNamespaces, useClusters } from "@/lib/hooks/clusters";
+import { useClusterNamespaces } from "@/lib/hooks/clusters";
+import { RemoteClusterPicker } from "./remote-cluster-picker";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import {
@@ -323,7 +324,6 @@ export function RestoreSnapshotDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const { data: clustersPage } = useClusters();
   const form = useAppForm({
     defaultValues: {
       targetClusterId: clusterId,
@@ -363,20 +363,13 @@ export function RestoreSnapshotDialog({
       <TextField label="Target cluster" id="restore-target">
         <form.Field name="targetClusterId">
           {(field) => (
-            <select
+            <RemoteClusterPicker
               id="restore-target"
+              ariaLabel="Target cluster"
               value={field.state.value}
-              onChange={(event) => field.handleChange(event.target.value)}
+              onChange={field.handleChange}
               onBlur={field.handleBlur}
-              className={inputClass}
-            >
-              {(clustersPage?.data ?? []).map((cluster) => (
-                <option key={cluster.id} value={cluster.id}>
-                  {cluster.displayName}{" "}
-                  {cluster.id === clusterId ? "(this cluster)" : ""}
-                </option>
-              ))}
-            </select>
+            />
           )}
         </form.Field>
       </TextField>

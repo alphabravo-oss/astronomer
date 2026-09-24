@@ -1,7 +1,11 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate, useLocation } from "@tanstack/react-router";
-import { useProjects } from "@/lib/hooks/projects";
+import { useProject } from "@/lib/hooks/projects";
+import { useQuery } from "@tanstack/react-query";
+import { getProjects, getClusterProjects } from "@/lib/api/projects";
+import { queryKeys } from "@/lib/query-keys";
+import { RemoteProjectPicker } from "@/components/projects/remote-project-picker";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   EmptyState,
@@ -11,8 +15,6 @@ import {
 } from "@/components/ui/empty-state";
 import { ArrowLeft, FolderKanban, PackageOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { pageRowCount } from "@/lib/api/pagination";
-import type { PaginatedResponse } from "@/types";
 
 export type DeliveryListTab =
   "sources" | "bundles" | "targets" | "rollouts" | "deployments";
@@ -61,32 +63,56 @@ export function projectBoundToCluster(
 }
 
 export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
-  const projects = useProjects({ pageSize: 200 });
+  const projects = useQuery({
+    queryKey: queryKeys.projects.deliveryScope(opts?.clusterId),
+    queryFn: ({ signal }) =>
+      opts?.clusterId
+        ? getClusterProjects(opts.clusterId, { pageSize: 25 }, { signal })
+        : getProjects({ pageSize: 25 }, { signal }),
+    throwOnError: false,
+  });
   const pathname = useLocation({ select: (location) => location.pathname });
   const searchStr = useLocation({ select: (location) => location.searchStr });
   const search = useMemo(() => new URLSearchParams(searchStr), [searchStr]);
   const navigate = useNavigate();
   const clusterId = opts?.clusterId;
+  const requested = search.get("project") ?? "";
+  const selected = useProject(requested);
   const rows = useMemo(() => {
-    const all = projects.data?.data ?? [];
+    const all = projects.isError ? [] : [...(projects.data?.data ?? [])];
+    if (
+      selected.data &&
+      !selected.isError &&
+      !all.some((item) => item.id === selected.data.id)
+    )
+      all.push(selected.data);
     if (!clusterId) return all;
     return all.filter((project) => projectBoundToCluster(project, clusterId));
-  }, [clusterId, projects.data?.data]);
-  const requested = search.get("project") ?? "";
-  const projectId = rows.some((project) => project.id === requested)
-    ? requested
-    : rows.length === 1
-      ? rows[0].id
-      : "";
+  }, [
+    clusterId,
+    projects.data?.data,
+    projects.isError,
+    selected.data,
+    selected.isError,
+  ]);
+  const onlyProject = rows.length === 1 && !projects.data?.pagination.has_more;
+  const projectId =
+    requested &&
+    !selected.isError &&
+    rows.some((project) => project.id === requested)
+      ? requested
+      : !requested && onlyProject
+        ? rows[0].id
+        : "";
 
   // A one-project user should land on working data immediately. The URL is
   // still authoritative and is updated so deep links remain shareable.
   useEffect(() => {
-    if (requested || rows.length !== 1) return;
+    if (requested || !onlyProject) return;
     const next = new URLSearchParams(search);
     next.set("project", rows[0].id);
     void navigate({ to: `${pathname}?${next.toString()}`, replace: true });
-  }, [pathname, requested, navigate, rows, search]);
+  }, [pathname, requested, navigate, rows, search, onlyProject]);
 
   const setProjectId = (id: string) => {
     const next = new URLSearchParams(search);
@@ -101,7 +127,8 @@ export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
     });
   };
 
-  return { projectId, projects: rows, projectQuery: projects, setProjectId };
+  const projectQuery = requested ? selected : projects;
+  return { projectId, projects: rows, projectQuery, setProjectId };
 }
 
 export function useDeliveryWorkspace() {
@@ -125,87 +152,6 @@ export function useDeliveryWorkspace() {
   return { clusterId, listHref, entityHref, ...scope };
 }
 
-function resolveDeliveryCluster(
-  projectId: string,
-  projects: Array<{ id: string; clusterId?: string; clusterIds?: string[] }>,
-) {
-  const project =
-    projects.find((item) => item.id === projectId) ??
-    (projects.length === 1 ? projects[0] : undefined);
-  return {
-    project,
-    clusterId: project ? projectClusterId(project) : undefined,
-  };
-}
-
-export function RedirectDeliveryList({ tab }: { tab: DeliveryListTab }) {
-  const { projectId, projects, projectQuery } = useDeliveryProjectScope();
-  const search = new URLSearchParams(
-    useLocation({ select: (location) => location.searchStr }),
-  );
-  const searchKey = search.toString();
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (projectQuery.isLoading) return;
-    const { project, clusterId } = resolveDeliveryCluster(projectId, projects);
-    const next = new URLSearchParams(searchKey);
-    if (project?.id) next.set("project", project.id);
-    if (clusterId) {
-      void navigate({
-        to: `${clusterDeliveryPath(clusterId, tab)}${next.size ? `?${next.toString()}` : ""}`,
-        replace: true,
-      });
-      return;
-    }
-    void navigate({ to: "/dashboard/delivery", replace: true });
-  }, [projectId, projectQuery.isLoading, projects, navigate, searchKey, tab]);
-  return <LoadingState title="Opening cluster delivery" />;
-}
-
-export function RedirectDeliveryDetail({
-  tab,
-  id,
-  children,
-}: {
-  tab: DeliveryListTab;
-  id: string;
-  children: ReactNode;
-}) {
-  const { projectId, projects, projectQuery } = useDeliveryProjectScope();
-  const search = new URLSearchParams(
-    useLocation({ select: (location) => location.searchStr }),
-  );
-  const searchKey = search.toString();
-  const navigate = useNavigate();
-  const redirecting =
-    !projectQuery.isLoading &&
-    !!id &&
-    !!resolveDeliveryCluster(projectId, projects).clusterId;
-  useEffect(() => {
-    if (projectQuery.isLoading || !id) return;
-    const { project, clusterId } = resolveDeliveryCluster(projectId, projects);
-    if (!clusterId) return;
-    const next = new URLSearchParams(searchKey);
-    if (project?.id) next.set("project", project.id);
-    void navigate({
-      to: `${clusterDeliveryPath(clusterId, tab)}/${encodeURIComponent(id)}${next.size ? `?${next.toString()}` : ""}`,
-      replace: true,
-    });
-  }, [
-    id,
-    projectId,
-    projectQuery.isLoading,
-    projects,
-    navigate,
-    searchKey,
-    tab,
-  ]);
-  if (projectQuery.isLoading || redirecting) {
-    return <LoadingState title="Opening cluster delivery" />;
-  }
-  return children;
-}
-
 export function useDeliveryPageIndex(parameter = "page") {
   const pathname = useLocation({ select: (location) => location.pathname });
   const search = new URLSearchParams(
@@ -226,19 +172,6 @@ export function useDeliveryPageIndex(parameter = "page") {
   return [pageIndex, setPageIndex] as const;
 }
 
-/**
- * React Table needs a row count to enable its next-page control. Most delivery
- * endpoints return an exact total, but append-only history can intentionally
- * omit it. In that case expose only the smallest count proven by the current
- * page and `has_more`; this enables
- * one safe server fetch without pretending the browser knows the full total.
- */
-export function deliveryPageRowCount(
-  page: PaginatedResponse<unknown> | undefined,
-): number {
-  return pageRowCount(page);
-}
-
 export function deliveryProjectLabel(project: {
   displayName: string;
   name: string;
@@ -248,7 +181,6 @@ export function deliveryProjectLabel(project: {
 
 export function DeliveryShell({
   projectId,
-  projects,
   setProjectId,
   showProjectSelect = true,
   children,
@@ -280,26 +212,18 @@ export function DeliveryShell({
           Back to delivery fleet
         </RouterLink>
         {showProjectSelect ? (
-          <label className="flex min-w-64 items-center gap-2 text-sm">
+          <div className="flex min-w-64 items-center gap-2 text-sm">
             <FolderKanban
               className="h-4 w-4 text-muted-foreground"
               aria-hidden="true"
             />
             <span className="sr-only">Delivery project</span>
-            <select
-              aria-label="Delivery project"
+            <RemoteProjectPicker
               value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
-              className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm"
-            >
-              <option value="">Select a project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {deliveryProjectLabel(project)}
-                </option>
-              ))}
-            </select>
-          </label>
+              onChange={setProjectId}
+              ariaLabel="Delivery project"
+            />
+          </div>
         ) : null}
       </div>
       {children}
@@ -334,7 +258,6 @@ export function DeliveryProjectGate({
         onRetry={onRetry}
       />
     );
-  if (!allowed) return <PermissionState permission={permission} />;
   if (projectsCount === 0) {
     return (
       <EmptyState
@@ -357,6 +280,7 @@ export function DeliveryProjectGate({
       />
     );
   }
+  if (!allowed) return <PermissionState permission={permission} />;
   return children;
 }
 

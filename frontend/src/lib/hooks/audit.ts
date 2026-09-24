@@ -13,6 +13,7 @@ export function useAuditLogs(
     queryKey: queryKeys.settings.auditLogs(params),
     queryFn: ({ signal }) => apiClient.getAuditLogs(params, signal),
     enabled: options?.enabled,
+    throwOnError: false,
   });
 }
 

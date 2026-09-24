@@ -254,7 +254,7 @@ func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, ba
 		"grafana.ini": map[string]any{
 			"server": map[string]any{
 				"root_url":            rootURL,
-				"serve_from_sub_path": true,
+				"serve_from_sub_path": false,
 			},
 			"dataproxy": map[string]any{
 				"send_user_header": true,
@@ -279,7 +279,7 @@ func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, ba
 				"auto_assign_org":      true,
 				"auto_assign_org_role": "Viewer",
 			},
-			"live": map[string]any{"enabled": false},
+			"live": map[string]any{"max_connections": 0},
 			"security": map[string]any{
 				"csrf_trusted_origins": csrfOrigins,
 				"allow_embedding":      true,

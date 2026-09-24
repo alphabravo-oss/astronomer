@@ -127,6 +127,7 @@ func (s *Service) apply(ctx context.Context, request InstallRequest, pendingStat
 		TargetID: result.TargetID, ExpectedTargetGeneration: generation,
 		PreviewDigest: preview.PreviewDigest, Strategy: strategy,
 		Actor: actor(request.ActorID), IdempotencyKey: "catalog:" + request.IdempotencyKey,
+		Audit: catalogRolloutAuditIntent(request, result.TargetID),
 	})
 	if err != nil {
 		return InstallResult{}, fmt.Errorf("start catalog application rollout: %w", err)

@@ -70,10 +70,12 @@ func NewProvisioner(pool *pgxpool.Pool, previewer Previewer, planner Planner, re
 }
 
 type registrationState struct {
-	phase           registration.Phase
-	install         bool
-	inventoryReady  bool
-	latestRetryTime *time.Time
+	phase            registration.Phase
+	isLocal          bool
+	install          bool
+	scanningDisabled bool
+	inventoryReady   bool
+	latestRetryTime  *time.Time
 }
 
 type targetIdentity struct {
@@ -99,13 +101,16 @@ func (p *Provisioner) Reconcile(ctx context.Context, clusterID uuid.UUID) error 
 	if err != nil {
 		return err
 	}
-	if !state.install || !state.inventoryReady || state.phase == registration.PhaseReady || state.phase == registration.PhaseFailed {
+	if !state.shouldReconcile() {
 		return nil
 	}
 	catalog, err := builtinbundles.Load()
 	if err != nil {
 		return err
 	}
+	// Ready remote clusters also receive the scanner, including clusters
+	// enrolled before automatic scanning was introduced. Metrics remain opt-in.
+	catalog = catalog.ForRegistration(state.install && state.phase != registration.PhaseReady, state.scanningDisabled)
 	targets, err := p.ensureAssets(ctx, clusterID, catalog)
 	if err != nil {
 		return err
@@ -115,13 +120,21 @@ func (p *Provisioner) Reconcile(ctx context.Context, clusterID uuid.UUID) error 
 		return err
 	}
 	if complete {
+		if state.phase == registration.PhaseReady {
+			return nil
+		}
 		return p.registration.OnDeliveryApplySuccess(ctx, clusterID)
 	}
 	if failed {
+		if state.phase == registration.PhaseReady {
+			return nil // The failed scanner rollout remains visible in delivery.
+		}
 		return p.registration.OnDeliveryApplyFailure(ctx, clusterID, failedCode)
 	}
-	if err := p.registration.OnDeliveryApplyStart(ctx, clusterID); err != nil {
-		return err
+	if state.phase != registration.PhaseReady {
+		if err := p.registration.OnDeliveryApplyStart(ctx, clusterID); err != nil {
+			return err
+		}
 	}
 	for _, target := range targets {
 		if err := p.ensureRollout(ctx, target, state.latestRetryTime); err != nil {
@@ -134,8 +147,9 @@ func (p *Provisioner) Reconcile(ctx context.Context, clusterID uuid.UUID) error 
 func (p *Provisioner) loadRegistrationState(ctx context.Context, clusterID uuid.UUID) (registrationState, error) {
 	var state registrationState
 	err := p.pool.QueryRow(ctx, `
-		SELECT c.registration_phase,
+		SELECT c.registration_phase, c.is_local,
 		       COALESCE(c.install_baseline, false),
+		       COALESCE(c.annotations ->> 'astronomer.io/image-scanning', '') = 'disabled',
 		       EXISTS (
 		           SELECT 1 FROM delivery_controller_inventory i
 		           WHERE i.cluster_id=c.id AND i.ready=true AND i.compatibility_status='compatible'
@@ -144,7 +158,7 @@ func (p *Provisioner) loadRegistrationState(ctx context.Context, clusterID uuid.
 		        WHERE s.cluster_id=c.id AND s.step_name='delivery_retry_requested'
 		        ORDER BY s.created_at DESC,s.step_order DESC LIMIT 1)
 		FROM clusters c WHERE c.id=$1 AND c.decommissioned_at IS NULL`, clusterID).
-		Scan(&state.phase, &state.install, &state.inventoryReady, &state.latestRetryTime)
+		Scan(&state.phase, &state.isLocal, &state.install, &state.scanningDisabled, &state.inventoryReady, &state.latestRetryTime)
 	if err != nil {
 		return registrationState{}, fmt.Errorf("load built-in registration state: %w", err)
 	}

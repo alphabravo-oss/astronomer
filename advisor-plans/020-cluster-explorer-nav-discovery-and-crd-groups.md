@@ -218,4 +218,4 @@ node scripts/check-complexity-budget.mjs
 
 - New cluster nav rows must declare `ifHaveGroup`/`ifHaveKind` unless they read Astronomer-side APIs. Reviewers should ask.
 - The friendly-name table will need entries as customers bring new operators; keep it alphabetical.
-- Plan 019's kind-less Import YAML can now resolve CRD kinds via `useClusterDiscovery` (`createPathForManifest` fallback) — small follow-up.
+- Plan 019's kind-less Import YAML now resolves CRDs via `useClusterDiscovery` and the shared manifest resolver. Matching uses the exact API group and served version, discovered plural, and namespace/cluster scope; denied or incomplete discovery never guesses a CRD endpoint. Mixed-document paths are all resolved before any writes.

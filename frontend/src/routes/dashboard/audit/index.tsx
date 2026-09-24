@@ -24,10 +24,11 @@ import {
 } from "@/components/audit/activity-details-drawer";
 import { useAuditLogs } from "@/lib/hooks/audit";
 import { useSearchParam } from "@/lib/use-search-param";
-import { pageRowCount } from "@/lib/api/pagination";
-import { useClusters } from "@/lib/hooks/clusters";
-import { useProjects } from "@/lib/hooks/projects";
-import { useUsers } from "@/lib/hooks/user-settings";
+import { pageCountLabel, pageTableCount } from "@/lib/api/pagination";
+import { useEntityNames } from "@/lib/hooks/entity-names";
+import { AuditScopeFilter } from "@/components/audit/scope-filter";
+import { usePermissionDecision } from "@/lib/permission-hooks";
+import { PermissionState } from "@/components/ui/empty-state";
 import { getAuditLogExportURL } from "@/lib/api/audit";
 import { cn, formatDate, formatRelativeTime } from "@/lib/utils";
 import { useDebouncedValue } from "@tanstack/react-pacer";
@@ -43,6 +44,38 @@ import {
   type AuditFilters,
 } from "./-filters";
 
+function useAuditNames(
+  rows: AuditLogEntry[],
+  clusterId: string,
+  projectId: string,
+) {
+  const names = useEntityNames({
+    userIds: rows.map((row) => row.userId),
+    clusterIds: [clusterId],
+    projectIds: [projectId],
+  });
+  return {
+    usersById: new Map(
+      names.users.map((user) => [
+        user.id,
+        user.displayName || user.username || user.email,
+      ]),
+    ),
+    clusterNames: Object.fromEntries(
+      names.clusters.map((cluster) => [
+        cluster.id,
+        cluster.displayName || cluster.name,
+      ]),
+    ),
+    projectNames: Object.fromEntries(
+      names.projects.map((project) => [
+        project.id,
+        project.displayName || project.name,
+      ]),
+    ),
+  };
+}
+
 function AuditLogPage() {
   const [filters, setFilters] = useState<AuditFilters>(emptyFilters);
   const [qInput, setQInput] = useSearchParam("q", { debounceMs: 200 });
@@ -51,37 +84,23 @@ function AuditLogPage() {
   const advancedFiltersId = useId();
   const [page, setPage] = useDraft(0, qDebounced);
   const [selected, setSelected] = useState<AuditLogEntry | null>(null);
-
   const queryParams = useMemo(
     () => buildAuditQuery({ ...filters, q: qDebounced }, page),
     [filters, qDebounced, page],
   );
-  const auditQuery = useAuditLogs(queryParams);
-  const { data: usersData } = useUsers({ pageSize: 200 });
-  const { data: clustersData } = useClusters({ pageSize: 200 });
-  const { data: projectsData } = useProjects({ pageSize: 200 });
-  const rows = auditQuery.data?.data || [];
-  const total = pageRowCount(auditQuery.data);
-  const users = useMemo(() => usersData?.data ?? [], [usersData?.data]);
-  const clusters = useMemo(() => clustersData?.data ?? [], [clustersData?.data]);
-  const projects = useMemo(
-    () => projectsData?.data ?? [],
-    [projectsData?.data],
+  const read = usePermissionDecision("audit", "read");
+  const auditQuery = useAuditLogs(queryParams, { enabled: read.allowed });
+  const rows =
+    !read.allowed || auditQuery.isError ? [] : (auditQuery.data?.data ?? []);
+  const total = pageCountLabel(
+    auditQuery.isError ? undefined : auditQuery.data,
   );
-  const usersById = useMemo(
-    () =>
-      new Map(users.map((u) => [u.id, u.displayName || u.username || u.email])),
-    [users],
-  );
-  const clusterNames = useMemo(
-    () =>
-      Object.fromEntries(clusters.map((c) => [c.id, c.displayName || c.name])),
-    [clusters],
-  );
-  const projectNames = useMemo(
-    () =>
-      Object.fromEntries(projects.map((p) => [p.id, p.displayName || p.name])),
-    [projects],
+  const { usersById, clusterNames, projectNames } = useAuditNames(
+    selected && read.allowed && !auditQuery.isError
+      ? [...rows, selected]
+      : rows,
+    filters.clusterId,
+    filters.projectId,
   );
 
   const activeFilterCount = countActiveFilters({ ...filters, q: qInput });
@@ -226,6 +245,7 @@ function AuditLogPage() {
     [usersById],
   );
 
+  if (!read.allowed) return <PermissionState permission="audit:read" />;
   return (
     <PageShell>
       <PageHeader
@@ -319,7 +339,8 @@ function AuditLogPage() {
               intent={advancedOpen || advancedCount > 0 ? "default" : "ghost"}
               icon={<Filter className="h-4 w-4" />}
               onClick={() => setAdvancedOpen((open) => !open)}
-              aria-expanded={advancedOpen} aria-controls={advancedFiltersId}
+              aria-expanded={advancedOpen}
+              aria-controls={advancedFiltersId}
             >
               Filters
               {advancedCount > 0 ? ` (${advancedCount})` : ""}
@@ -361,7 +382,10 @@ function AuditLogPage() {
         )}
 
         {advancedOpen && (
-          <div id={advancedFiltersId} className="grid gap-3 rounded-lg border border-border bg-card p-3 md:grid-cols-2 xl:grid-cols-4">
+          <div
+            id={advancedFiltersId}
+            className="grid gap-3 rounded-lg border border-border bg-card p-3 md:grid-cols-2 xl:grid-cols-4"
+          >
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground">
                 Actor
@@ -393,38 +417,16 @@ function AuditLogPage() {
                 placeholder="resource or path"
               />
             </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">
-                Cluster
-              </span>
-              <Select
-                value={filters.clusterId}
-                onChange={(e) => updateFilter("clusterId", e.target.value)}
-              >
-                <option value="">Any cluster</option>
-                {clusters.map((cluster) => (
-                  <option key={cluster.id} value={cluster.id}>
-                    {cluster.displayName || cluster.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-muted-foreground">
-                Project
-              </span>
-              <Select
-                value={filters.projectId}
-                onChange={(e) => updateFilter("projectId", e.target.value)}
-              >
-                <option value="">Any project</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.displayName || project.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
+            <AuditScopeFilter
+              kind="cluster"
+              value={filters.clusterId}
+              onChange={(id) => updateFilter("clusterId", id)}
+            />
+            <AuditScopeFilter
+              kind="project"
+              value={filters.projectId}
+              onChange={(id) => updateFilter("projectId", id)}
+            />
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground">
                 From
@@ -473,7 +475,7 @@ function AuditLogPage() {
 
       <DataTable
         data={rows}
-        columns={columns}
+        columns={columns.map((column) => ({ ...column, sortable: false }))}
         keyExtractor={(row) => row.id}
         searchable={false}
         pageSize={PAGE_SIZE}
@@ -489,13 +491,13 @@ function AuditLogPage() {
         }}
         onRowClick={setSelected}
         serverSide={{
-          rowCount: total,
+          ...pageTableCount(auditQuery.isError ? undefined : auditQuery.data),
           pagination: { pageIndex: page, pageSize: PAGE_SIZE },
           onPaginationChange: (next) => setPage(next.pageIndex),
         }}
       />
 
-      {selected && (
+      {selected && !auditQuery.isError && (
         <AuditDetailsDrawer
           row={selected}
           usersById={usersById}

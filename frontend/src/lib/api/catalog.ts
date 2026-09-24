@@ -32,6 +32,7 @@ import {
   putChartsByChartIdRatingsByRatingId,
 } from "@/lib/api/generated/client";
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
+import { completePage, mapPage } from "@/lib/api/pagination";
 import type {
   HelmChart,
   HelmChartCategory,
@@ -39,6 +40,7 @@ import type {
   HelmRepository,
   HelmRepoType,
   InstalledChart,
+  PaginatedResponse,
 } from "@/types";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
@@ -76,7 +78,7 @@ export type CatalogUserDiscovery = CamelizeKeys<
   OpenAPIComponents["schemas"]["CatalogUserDiscovery"]
 >;
 
-const CATALOG_PAGE_LIMIT = 200;
+const CATALOG_PAGE_LIMIT = 25;
 const CHART_CATEGORIES = new Set<HelmChartCategory>([
   "monitoring",
   "logging",
@@ -317,13 +319,18 @@ function mapChartScore(wire: ChartRecommendationWire): ChartScore {
 export async function getHelmRepositories(
   clusterId?: string,
   signal?: AbortSignal,
-): Promise<HelmRepository[]> {
+  params: { limit?: number; offset?: number } = {},
+): Promise<PaginatedResponse<HelmRepository>> {
   const response = await getCatalogRepositories({
-    query: { cluster_id: clusterId, limit: CATALOG_PAGE_LIMIT },
+    query: { cluster_id: clusterId, limit: CATALOG_PAGE_LIMIT, ...params },
     signal,
   });
-  const rows = Array.isArray(response) ? response : (response.data ?? []);
-  return rows.map(mapHelmRepository);
+  // The published OpenAPI contract also permits a complete legacy array.
+  // Normalize that explicit contract once; never invent totals for paged data.
+  return mapPage(
+    Array.isArray(response) ? completePage(response) : response,
+    mapHelmRepository,
+  );
 }
 
 export async function createHelmRepository(data: {
@@ -369,27 +376,39 @@ export async function getHelmCharts(
     repository?: string;
     category?: string;
     search?: string;
+    limit?: number;
+    offset?: number;
   },
   signal?: AbortSignal,
-): Promise<HelmChart[]> {
+): Promise<PaginatedResponse<HelmChart>> {
   const response = await getCatalogCharts({
     query: {
       cluster_id: params.clusterId,
       project_id: params.projectId,
-      limit: CATALOG_PAGE_LIMIT,
+      limit: params.limit ?? CATALOG_PAGE_LIMIT,
+      offset: params.offset,
     },
     signal,
   });
   const search = params.search?.trim().toLocaleLowerCase();
-  return (response.data ?? []).map(mapHelmChart).filter((chart) => {
-    if (params.repository && chart.repositoryId !== params.repository)
-      return false;
-    if (params.category && chart.category !== params.category) return false;
-    if (!search) return true;
-    return [chart.name, chart.displayName, chart.description, ...chart.keywords]
-      .filter(Boolean)
-      .some((value) => value!.toLocaleLowerCase().includes(search));
-  });
+  const page = mapPage(response, mapHelmChart);
+  return {
+    ...page,
+    data: page.data.filter((chart) => {
+      if (params.repository && chart.repositoryId !== params.repository)
+        return false;
+      if (params.category && chart.category !== params.category) return false;
+      if (!search) return true;
+      return [
+        chart.name,
+        chart.displayName,
+        chart.description,
+        ...chart.keywords,
+      ]
+        .filter(Boolean)
+        .some((value) => value!.toLocaleLowerCase().includes(search));
+    }),
+  };
 }
 
 export async function getHelmChartVersions(
@@ -397,17 +416,19 @@ export async function getHelmChartVersions(
   chartId: string,
   scope: "cluster" | "project" = "project",
   signal?: AbortSignal,
-): Promise<HelmChartVersion[]> {
+  params: { limit?: number; offset?: number } = {},
+): Promise<PaginatedResponse<HelmChartVersion>> {
   const response = await getCatalogChartsByIdVersions({
     path: { id: chartId },
     query: {
       cluster_id: scope === "cluster" ? scopeId : undefined,
       project_id: scope === "project" ? scopeId : undefined,
-      limit: 200,
+      limit: params.limit ?? CATALOG_PAGE_LIMIT,
+      offset: params.offset,
     },
     signal,
   });
-  return (response.data ?? []).map(mapHelmChartVersion);
+  return mapPage(response, mapHelmChartVersion);
 }
 
 export async function getHelmChart(
@@ -489,14 +510,20 @@ export async function getInstalledChartUpgradeVersions(
 export async function getInstalledCharts(
   params?: {
     cluster?: string;
+    limit?: number;
+    offset?: number;
   },
   signal?: AbortSignal,
-): Promise<InstalledChart[]> {
+): Promise<PaginatedResponse<InstalledChart>> {
   const response = await getCatalogInstalled({
-    query: { cluster_id: params?.cluster, limit: CATALOG_PAGE_LIMIT },
+    query: {
+      cluster_id: params?.cluster,
+      limit: params?.limit ?? CATALOG_PAGE_LIMIT,
+      offset: params?.offset,
+    },
     signal,
   });
-  return (response.data ?? []).map(mapInstalledChart);
+  return mapPage(response, mapInstalledChart);
 }
 
 export interface InstallHelmChartRequest {
@@ -535,7 +562,7 @@ export async function listCatalogOperations(
   signal?: AbortSignal,
 ): Promise<CatalogOperation[]> {
   const response = await getCatalogOperations({
-    query: { limit: CATALOG_PAGE_LIMIT },
+    query: { limit: 200 },
     signal,
   });
   return response.data ?? [];

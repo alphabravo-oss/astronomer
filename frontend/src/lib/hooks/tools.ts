@@ -27,6 +27,7 @@ export function useClusterToolsStatus(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.tools.clusterStatus(clusterId),
     queryFn: () => getClusterToolsStatus(clusterId),
+    throwOnError: false,
     enabled: !!clusterId,
     refetchInterval: liveFallback(30_000),
   });

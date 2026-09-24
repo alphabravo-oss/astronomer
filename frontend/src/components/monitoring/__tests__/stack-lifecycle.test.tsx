@@ -49,8 +49,17 @@ vi.mock("@/lib/hooks/clusters", () => ({
   })),
 }));
 
-vi.mock("@/components/backups/hooks", () => ({
-  useB2StorageLocations: vi.fn(),
+vi.mock("@/lib/hooks/cluster-search", () => ({
+  useClusterSearch: () => ({
+    data: {
+      pages: [
+        { data: [{ id: CLUSTER_ID, name: "mgmt", displayName: "Management" }] },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+    hasNextPage: false,
+  }),
 }));
 
 vi.mock("@/lib/api/monitoring-stack", async (importOriginal) => {
@@ -84,7 +93,6 @@ import {
   type MonitoringStackTarget,
 } from "@/lib/api/monitoring-stack";
 import { useCluster, useClusters, useFeatureFlags } from "@/lib/hooks/clusters";
-import { useB2StorageLocations } from "@/components/backups/hooks";
 import { useAuthStore } from "@/lib/store";
 import { SharedMonitoringStacksPage } from "@/components/monitoring/shared-stacks-page";
 import { ClusterMonitoringStackPage } from "@/components/monitoring/cluster-stack-page";
@@ -96,7 +104,6 @@ const listOperations = vi.mocked(listMonitoringOperations);
 const getOperation = vi.mocked(getMonitoringOperation);
 const clustersHook = vi.mocked(useClusters);
 const clusterHook = vi.mocked(useCluster);
-const storageHook = vi.mocked(useB2StorageLocations);
 
 const CLUSTER_ID = "cluster-1";
 
@@ -378,13 +385,6 @@ beforeEach(() => {
   clusterHook.mockReturnValue({
     data: { id: CLUSTER_ID, displayName: "Management" },
   } as never);
-  storageHook.mockReturnValue({
-    data: {
-      data: [
-        { id: "storage-1", name: "metrics", bucket: "astronomer-metrics" },
-      ],
-    },
-  } as never);
   vi.mocked(getSharedThanosStatus).mockResolvedValue({
     status: "not_configured",
   });
@@ -484,6 +484,21 @@ describe.each(FAMILIES)("$name lifecycle screen", (family) => {
     // Progressive disclosure: the config form is hidden until an intentional
     // "Set up …" action reveals it, so click that before filling/installing.
     fireEvent.click(within(panel).getByRole("button", { name: /^Set up / }));
+    if (family.key !== "cluster") {
+      // Shared installation requires an explicit cluster choice, never a
+      // first-page isLocal guess. Exercise the real picker's keyboard path.
+      expect(
+        within(panel).getByRole("button", { name: "Install" }),
+      ).toBeDisabled();
+      fireEvent.click(
+        within(panel).getByRole("combobox", { name: "Management cluster" }),
+      );
+      const search = within(panel).getByRole("searchbox", {
+        name: "Search clusters",
+      });
+      fireEvent.keyDown(search, { key: "ArrowDown" });
+      fireEvent.keyDown(search, { key: "Enter" });
+    }
     family.prepareInstall?.(panel);
 
     const install = within(panel).getByRole("button", { name: "Install" });

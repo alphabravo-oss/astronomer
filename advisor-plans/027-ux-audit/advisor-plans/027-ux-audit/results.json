@@ -1,0 +1,201 @@
+{
+  "config": {
+    "argv": [
+      "/usr/bin/node",
+      "/root/astronomer-all/astronomer/frontend/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "advisor-plans/027-ux-audit/playwright.config.mjs"
+    ],
+    "configFile": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/playwright.config.mjs",
+    "rootDir": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit/artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/root/astronomer-all/astronomer/advisor-plans/027-ux-audit",
+        "testIgnore": [],
+        "testMatch": [
+          "review.spec.ts"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "./advisor-plans/027-ux-audit/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "review.spec.ts",
+      "file": "review.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "measure current source shell at five widths",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 14983,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "SHELL_GEOMETRY [{\"width\":390,\"controls\":[{\"label\":\"Open navigation\",\"x\":12,\"right\":44,\"width\":32,\"visible\":true,\"outside\":false},{\"label\":\"Smoke East\",\"x\":52,\"right\":84,\"width\":32,\"visible\":true,\"outside\":false},{\"label\":\"Project scope: All projects\",\"x\":52,\"right\":102,\"width\":50,\"visible\":true,\"outside\":false},{\"label\":\"Namespace scope: All namespaces\",\"x\":102,\"right\":214,\"width\":112,\"visible\":true,\"outside\":false},{\"label\":\"Open cluster shell for Smoke East (Ctrl+`)\",\"x\":214,\"right\":250,\"width\":36,\"visible\":true,\"outside\":false},{\"label\":\"Kubeconfig\",\"x\":258,\"right\":391,\"width\":133,\"visible\":true,\"outside\":true},{\"label\":\"Apply one or more Kubernetes manifests to this cluster\",\"x\":399,\"right\":484,\"width\":85,\"visible\":true,\"outside\":true},{\"label\":\"Theme: light\",\"x\":492,\"right\":524,\"width\":32,\"visible\":true,\"outside\":true},{\"label\":\"Notifications\",\"x\":532,\"right\":564,\"width\":32,\"visible\":true,\"outside\":true},{\"label\":\"User menu\",\"x\":572,\"right\":628,\"width\":56,\"visible\":true,\"outside\":true}]},{\"width\":412,\"controls\":[{\"label\":\"Open navigation\",\"x\":12,\"right\":44,\"width\":32,\"visible\":true,\"outside\":false},{\"label\":\"Smoke East\",\"x\":52,\"right\":84,\"width\":32,\"visible\":true,\"outside\":false},{\"label\":\"Project scope: All projects\",\"x\":52,\"right\":102,\"width\":50,\"visible\":true,\"outside\":false},{\"label\":\"Namespace scope: All namespaces\",\"x\":102,\"right\":214,\"width\":112,\"visible\":true,\"outside\":false},{\"label\":\"Open cluster shell for Smoke East (Ctrl+`)\",\"x\":214,\"right\":250,\"width\":36,\"visible\":true,\"outside\":false},{\"label\":\"Kubeconfig\",\"x\":258,\"right\":391,\"width\":133,\"visible\":true,\"outside\":false},{\"label\":\"Apply one or more Kubernetes manifests to this cluster\",\"x\":399,\"right\":484,\"width\":85,\"visible\":true,\"outside\":true},{\"label\":\"Theme: light\",\"x\":492,\"right\":524,\"width\":32,\"visible\":true,\"outside\":true},{\"label\":\"Notifications\",\"x\":532,\"right\":564,\"width\":32,\"visible\":true,\"outside\":true},{\"label\":\"User menu\",\"x\":572,\"right\":628,\"width\":56,\"visible\":true,\"outside\":true}]},{\"width\":768,\"controls\":[{\"label\":\"Open navigation\",\"x\":24,\"right\":56,\"width\":32,\"visible\":true,\"outside\":false},{\"label\":\"Smoke East\",\"x\":64,\"right\":199,\"width\":135,\"visible\":true,\"outside\":false},{\"label\":\"Project scope: All projects\",\"x\":64,\"right\":118,\"width\":54,\"visible\":true,\"outside\":false},{\"label\":\"Namespace scope: All namespaces\",\"x\":118,\"right\":267,\"width\":149,\"visible\":true,\"outside\":false},{\"label\":\"Open cluster shell for Smoke East (Ctrl+`)\",\"x\":413,\"right\":449,\"width\":36,\"visible\":true,\"outside\":false},{\"label\":\"Kubeconfig\",\"x\":457,\"right\":590,\"width\":133,\"visible\":true,\"outside\":false},{\"label\":\"Apply one or more Kubernetes manifests to this cluster\",\"x\":598,\"right\":683,\"width\":85,\"visible\":true,\"outside\":false},{\"label\":\"Theme: light\",\"x\":691,\"right\":723,\"width\":32,\"visible\":true,\"outside\":false},{\"label\":\"Notifications\",\"x\":731,\"right\":763,\"width\":32,\"visible\":true,\"outside\":false},{\"label\":\"User menu\",\"x\":771,\"right\":827,\"width\":56,\"visible\":true,\"outside\":true}]},{\"width\":1024,\"controls\":[{\"label\":\"Open navigation\",\"x\":0,\"right\":0,\"width\":0,\"visible\":false,\"outside\":false},{\"label\":\"Smoke East\",\"x\":264,\"right\":399,\"width\":135,\"visible\":true,\"outside\":false},{\"label\":\"Project scope: All projects\",\"x\":264,\"right\":387,\"width\":123,\"visible\":true,\"outside\":false},{\"label\":\"Namespace scope: All namespaces\",\"x\":387,\"right\":536,\"width\":149,\"visible\":true,\"outside\":false},{\"label\":\"Open cluster shell for Smoke East (Ctrl+`)\",\"x\":682,\"right\":718,\"width\":36,\"visible\":true,\"outside\":false},{\"label\":\"Kubeconfig\",\"x\":726,\"right\":859,\"width\":133,\"visible\":true,\"outside\":false},{\"label\":\"Apply one or more Kubernetes manifests to this cluster\",\"x\":867,\"right\":952,\"width\":85,\"visible\":true,\"outside\":false},{\"label\":\"Theme: light\",\"x\":960,\"right\":992,\"width\":32,\"visible\":true,\"outside\":false},{\"label\":\"Notifications\",\"x\":1000,\"right\":1032,\"width\":32,\"visible\":true,\"outside\":true},{\"label\":\"User menu\",\"x\":1040,\"right\":1096,\"width\":56,\"visible\":true,\"outside\":true}]},{\"width\":1280,\"controls\":[{\"label\":\"Open navigation\",\"x\":0,\"right\":0,\"width\":0,\"visible\":false,\"outside\":false},{\"label\":\"Smoke East\",\"x\":264,\"right\":399,\"width\":135,\"visible\":true,\"outside\":false},{\"label\":\"Project scope: All projects\",\"x\":390,\"right\":513,\"width\":123,\"visible\":true,\"outside\":false},{\"label\":\"Namespace scope: All namespaces\",\"x\":513,\"right\":662,\"width\":149,\"visible\":true,\"outside\":false},{\"label\":\"Open cluster shell for Smoke East (Ctrl+`)\",\"x\":808,\"right\":878,\"width\":70,\"visible\":true,\"outside\":false},{\"label\":\"Kubeconfig\",\"x\":886,\"right\":1019,\"width\":133,\"visible\":true,\"outside\":false},{\"label\":\"Apply one or more Kubernetes manifests to this cluster\",\"x\":1027,\"right\":1112,\"width\":85,\"visible\":true,\"outside\":false},{\"label\":\"Theme: light\",\"x\":1120,\"right\":1152,\"width\":32,\"visible\":true,\"outside\":false},{\"label\":\"Notifications\",\"x\":1160,\"right\":1192,\"width\":32,\"visible\":true,\"outside\":false},{\"label\":\"User menu\",\"x\":1200,\"right\":1256,\"width\":56,\"visible\":true,\"outside\":false}]}]\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T19:52:51.744Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-2b05ed9f102b00e64bd2",
+          "file": "review.spec.ts",
+          "line": 14,
+          "column": 1
+        },
+        {
+          "title": "inspect delivery destination selection and page search",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 32887,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "DELIVERY_SELECTED [\"Astronomerby AlphaBravo\",\"Overview\"]\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T19:53:07.112Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-a1f646ee219c5cf8a61f",
+          "file": "review.spec.ts",
+          "line": 34,
+          "column": 1
+        },
+        {
+          "title": "capture representative page families from current source",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 61973,
+                  "errors": [],
+                  "stdout": [
+                    {
+                      "text": "PAGE_FAMILIES [{\"route\":\"/dashboard\",\"headings\":[\"Platform Overview\",\"Clusters\",\"Recent Activity\",\"Platform Health\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/clusters\",\"headings\":[\"Clusters\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/projects\",\"headings\":[\"Projects\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/rbac\",\"headings\":[\"RBAC\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/security\",\"headings\":[\"Security\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/agents\",\"headings\":[\"Cluster Agents\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/alerting\",\"headings\":[\"Alerting\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/logging\",\"headings\":[\"Logging\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/catalog\",\"headings\":[\"Catalog\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/settings\",\"headings\":[\"Experience\",\"Identity & access\",\"Governance\",\"Reliability\",\"Integrations\",\"Experience\",\"Identity & access\",\"Governance\",\"Reliability\",\"Integrations\",\"Settings\",\"Experience\",\"Identity & access\",\"Governance\",\"Reliability\",\"Integrations\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/settings/backup\",\"headings\":[\"Experience\",\"Identity & access\",\"Governance\",\"Reliability\",\"Integrations\",\"Experience\",\"Identity & access\",\"Governance\",\"Reliability\",\"Integrations\",\"Astronomer backup\",\"S3 destinations\",\"Restore drill history\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/settings/operations\",\"headings\":[\"Experience\",\"Identity & access\",\"Governance\",\"Reliability\",\"Integrations\",\"Experience\",\"Identity & access\",\"Governance\",\"Reliability\",\"Integrations\",\" Operations\",\"Queues\",\"Dead-letter\",\"Task outbox\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/cluster-templates\",\"headings\":[\"Onboarding Bundles\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/clusters/c-smoke-1/apps\",\"headings\":[\" Apps\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/clusters/c-smoke-1/tools\",\"headings\":[\"Tools\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/clusters/c-smoke-1/workloads\",\"headings\":[\"Workloads\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/clusters/c-smoke-1/custom-resources\",\"headings\":[\"Custom Resources\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/clusters/c-smoke-1/metrics\",\"headings\":[\"Metrics\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/clusters/c-smoke-1/logging\",\"headings\":[\"Logs\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/clusters/c-smoke-1/image-scans\",\"headings\":[\" Image Scans\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/clusters/c-smoke-1/snapshots\",\"headings\":[\"Snapshots\"],\"alerts\":[],\"errors\":[]},{\"route\":\"/dashboard/clusters/c-smoke-1/template\",\"headings\":[\"Template\",\"\"],\"alerts\":[],\"errors\":[]}]\n"
+                    }
+                  ],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-24T19:53:40.020Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12f883ce49bb8436c3d7-059ad6dde3dee69b7d0b",
+          "file": "review.spec.ts",
+          "line": 47,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-24T19:52:50.788Z",
+    "duration": 111325.391,
+    "expected": 3,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

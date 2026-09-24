@@ -10,14 +10,14 @@ export function useCRDNavCounts(
   clusterId: string,
   groups: NavGroup[],
   discovery: ClusterDiscovery,
-  expanded: boolean,
+  visibleGroups: Set<string>,
 ) {
   const namespaces = useClusterScopeStore(
     (state) => state.namespacesByCluster[clusterId],
   );
   const visible = new Set(
     groups
-      .filter((group) => group.label === "More Resources")
+      .filter((group) => visibleGroups.has(group.label))
       .flatMap(navGroupItems)
       .map((item) => item.countKey),
   );
@@ -38,7 +38,6 @@ export function useCRDNavCounts(
       getCRDNavCounts(clusterId, types, namespaces ?? null, signal),
     enabled:
       !!clusterId &&
-      expanded &&
       !discovery.isError &&
       namespaces !== undefined &&
       namespaces?.length !== 0 &&
@@ -47,7 +46,7 @@ export function useCRDNavCounts(
     retry: false,
     throwOnError: false,
   });
-  return expanded &&
+  return types.length > 0 &&
     !discovery.isError &&
     namespaces !== undefined &&
     namespaces?.length !== 0

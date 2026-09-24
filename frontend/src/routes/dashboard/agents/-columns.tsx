@@ -1,4 +1,4 @@
-import { Shield, Stethoscope } from "lucide-react";
+import { Stethoscope } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { ClusterAgentItem } from "@/types";
@@ -67,24 +67,6 @@ export function agentColumns(
         </span>
       ),
       sortAccessor: (row) => row.compatibilityStatus,
-    },
-    {
-      key: "profile",
-      header: "Profile",
-      accessor: (row) => (
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-medium",
-            row.privilegeProfile === "admin"
-              ? "bg-status-warning/10 text-status-warning"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          <Shield className="h-3 w-3" />
-          {row.privilegeProfile}
-        </span>
-      ),
-      sortAccessor: (row) => row.privilegeProfile,
     },
     {
       key: "capabilities",

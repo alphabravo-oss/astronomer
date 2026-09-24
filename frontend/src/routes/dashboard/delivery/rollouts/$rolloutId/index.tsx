@@ -1,13 +1,11 @@
+import { pageTableCount } from "@/lib/api/pagination";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Ban, Check, Pause, Play, RotateCcw, X } from "lucide-react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import {
-  OperationTimeline,
-  type OperationTimelineStepStatus,
-} from "@/components/ui/operation-timeline";
+import { RolloutEventTimeline } from "./-event-timeline";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { AuditReasonForm } from "@/components/delivery/audit-reason-form";
@@ -18,8 +16,6 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
-  RedirectDeliveryDetail,
-  deliveryPageRowCount,
   primaryButton,
   secondaryButton,
   useDeliveryPageIndex,
@@ -31,10 +27,8 @@ import {
   approveDeliveryRollout,
   getDeliveryRollout,
   listDeliveryRolloutClusters,
-  listDeliveryRolloutEvents,
   rolloutIsTerminal,
   type DeliveryRolloutCluster,
-  type DeliveryRolloutEvent,
 } from "@/lib/api/delivery-rollouts";
 import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
@@ -90,15 +84,6 @@ export function RolloutDetailPage() {
       ),
     enabled: Boolean(projectId && rolloutId && allowed),
     refetchInterval: liveFallback(5_000),
-  });
-  const events = useQuery({
-    queryKey: queryKeys.delivery.rolloutEvents(projectId, rolloutId, {
-      limit: 100,
-    }),
-    queryFn: ({ signal }) =>
-      listDeliveryRolloutEvents(projectId, rolloutId, { limit: 100 }, signal),
-    enabled: Boolean(projectId && rolloutId && allowed),
-    refetchInterval: liveFallback(10_000),
   });
   useLiveQueryInvalidation(
     "delivery_rollout.changed",
@@ -317,17 +302,17 @@ export function RolloutDetailPage() {
                   "Resources will appear here when they are available in this scope.",
               }}
               serverSide={{
-                rowCount: deliveryPageRowCount(clusters.data),
+                ...pageTableCount(clusters.data),
                 pagination: { pageIndex: clusterPage, pageSize },
                 onPaginationChange: (next) => setClusterPage(next.pageIndex),
               }}
             />
           </PageSection>
           <PageSection title="Timeline">
-            <OperationTimeline
-              header="Rollout events"
-              headerMeta={`${deliveryPageRowCount(events.data)} events`}
-              steps={(events.data?.data ?? []).map(eventStep)}
+            <RolloutEventTimeline
+              projectId={projectId}
+              rolloutId={rolloutId}
+              allowed={allowed}
             />
           </PageSection>
         </PageShell>
@@ -485,37 +470,12 @@ function ApprovalDialog({
   );
 }
 
-function eventStep(event: DeliveryRolloutEvent) {
-  const failed =
-    event.toState?.includes("failed") || event.eventType.includes("failed");
-  const status: OperationTimelineStepStatus = failed
-    ? "failed"
-    : event.toState === "succeeded" || event.toState === "ready"
-      ? "success"
-      : "running";
-  return {
-    id: event.id,
-    label: event.eventType.replaceAll("_", " "),
-    status,
-    detail: `${event.fromState || "—"} → ${event.toState || "—"} · ${new Date(event.occurredAt).toLocaleString()}`,
-    error: failed ? event.reasonCode : undefined,
-  };
-}
 function actionIcon(action: RolloutAction) {
   if (action === "pause") return <Pause className="h-4 w-4" />;
   if (action === "resume") return <Play className="h-4 w-4" />;
   if (action === "abort") return <Ban className="h-4 w-4" />;
   return <RotateCcw className="h-4 w-4" />;
 }
-function DeliveryRolloutDetailRedirect() {
-  const { rolloutId } = useParams({ strict: false }) as { rolloutId: string };
-  return (
-    <RedirectDeliveryDetail tab="rollouts" id={rolloutId}>
-      <RolloutDetailPage />
-    </RedirectDeliveryDetail>
-  );
-}
-
 export const Route = createFileRoute(
   "/dashboard/delivery/rollouts/$rolloutId/",
-)({ component: DeliveryRolloutDetailRedirect });
+)({ component: RolloutDetailPage });

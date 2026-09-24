@@ -11,21 +11,22 @@ import { capitalize, formatRelativeTime, cn } from "@/lib/utils";
 import type { LoggingOperation } from "@/types";
 import { X, RotateCcw } from "lucide-react";
 import { mapLoggingOperationStatus, truncate } from "./-utils";
+import { extractApiErrorMessage } from "@/lib/api/errors";
+import {
+  OffsetPagination,
+  useOffsetPagination,
+} from "@/components/ui/offset-pagination";
 
 export function OperationsTab() {
   const [statusFilter, setStatusFilter] = useSearchParam("op_status");
   const [targetFilter, setTargetFilter] = useSearchParam("op_target");
   // Server-side params kept narrow so the list query key changes drive the
   // refetch — client-side filtering of the bigger fields happens in DataTable.
-  const {
-    data: operations,
-    isLoading,
-    isError,
-    refetch,
-  } = useLoggingOperations({
+  const control = useOffsetPagination(`${statusFilter}:${targetFilter}`);
+  const operations = useLoggingOperations({
     status: statusFilter || undefined,
     target_type: targetFilter || undefined,
-    limit: 100,
+    ...control.params,
   });
   const retryOperation = useRetryLoggingOperation();
 
@@ -185,19 +186,26 @@ export function OperationsTab() {
         )}
       </div>
       <DataTable
-        data={operations || []}
+        data={operations.isError ? [] : operations.data?.data || []}
         columns={columns}
         keyExtractor={(row) => row.id}
-        searchPlaceholder="Search operations..."
-        loading={isLoading}
-        isError={isError}
-        onRetry={() => refetch()}
+        searchPlaceholder="Filter operations on this page..."
+        loading={operations.isLoading}
+        isError={operations.isError}
+        error={operations.error}
+        errorMessage={extractApiErrorMessage(operations.error) ?? undefined}
+        onRetry={() => operations.refetch()}
         emptyState={{
           title: "No reconciler activity yet",
           description:
             "New observations will appear here as they are reported.",
         }}
-        pageSize={20}
+        pageSize={25}
+      />
+      <OffsetPagination
+        control={control}
+        query={operations}
+        label="logging operations"
       />
     </div>
   );

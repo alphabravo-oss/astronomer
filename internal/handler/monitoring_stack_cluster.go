@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -497,27 +496,7 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	if req.StorageClass != "" {
 		prometheusPVCSpec["storageClassName"] = req.StorageClass
 	}
-	grafanaValues := map[string]any{"enabled": enableGrafana}
-	if enableGrafana {
-		rootURL := strings.TrimRight(h.serverURL, "/") + clusterGrafanaProxyPath(clusterID)
-		grafanaValues["grafana.ini"] = map[string]any{
-			"server": map[string]any{
-				"root_url":            rootURL,
-				"serve_from_sub_path": true,
-			},
-			"auth": map[string]any{
-				"disable_login_form":   true,
-				"disable_signout_menu": true,
-			},
-			"auth.anonymous": map[string]any{
-				"enabled":  true,
-				"org_role": "Viewer",
-			},
-			"auth.basic": map[string]any{"enabled": false},
-			"security":   map[string]any{"allow_embedding": true},
-			"users":      map[string]any{"allow_sign_up": false},
-		}
-	}
+	grafanaValues := h.clusterGrafanaValues(req, clusterID, enableGrafana)
 	values := map[string]any{
 		"additionalPrometheusRulesMap": map[string]any{
 			"astronomer-cluster-metadata": map[string]any{

@@ -115,16 +115,6 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.WrongClusterScope, msg)
 		return
 	}
-	// Pre-flight the agent privilege profile for components whose chart creates
-	// cluster-scoped RBAC (cert-manager, gatekeeper, ingress-nginx,
-	// trivy-operator). The managed cluster's agent SA is read-only
-	// on ClusterRole/ClusterRoleBinding, so the install would land its namespaced
-	// bits but leave the cluster-scoped ones permanently OutOfSync. Reject up
-	// front instead of enqueuing an operation that can never converge.
-	if msg, ok := h.checkClusterRBACProfile(r.Context(), tool.Slug, clusterID); !ok {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, msg)
-		return
-	}
 	// Migration 067 — the values blob keeps its ${vault://...} markers in
 	// both the enqueued payload and the installed_charts row (written by
 	// the worker), so a rotated secret takes effect on next upgrade and no

@@ -47,7 +47,7 @@ type InstallTemplateData struct {
 	// wipe it and silently drop CA pinning on the next restart).
 	CAChecksum           string
 	AgentImage           string
-	PrivilegeProfile     string
+	PrivilegeProfile     string // Deprecated: retained for legacy callers; installs always use full management.
 	ServiceAccountName   string
 	PodLabels            map[string]string
 	AgentOverrides       AgentOverrides
@@ -89,7 +89,9 @@ func CAChecksumFromPEM(caPEM string) string {
 }
 
 func RenderInstallYAML(data InstallTemplateData) string {
-	profile := NormalizePrivilegeProfile(data.PrivilegeProfile)
+	// Cluster management is authorized per user by Astronomer RBAC. Legacy
+	// enrollment profiles no longer restrict newly rendered agent installations.
+	profile := PrivilegeProfileAdmin
 	serviceAccountName := strings.TrimSpace(data.ServiceAccountName)
 	if serviceAccountName == "" {
 		serviceAccountName = "astronomer-agent"
@@ -264,12 +266,9 @@ func NormalizePrivilegeProfile(profile string) string {
 	normalized := strings.NewReplacer("_", "-", " ", "-").Replace(strings.ToLower(strings.TrimSpace(profile)))
 	switch normalized {
 	case "":
-		// Default to least-privilege read-only viewer. An adopted cluster
-		// should grant the agent the minimum to observe; broadening to
-		// operator/admin is an explicit, auditable opt-in chosen at
-		// registration. This keeps a no-annotation registration safe by
-		// default and trivially removable (read-only ClusterRole, no
-		// mutation surface).
+		// Missing legacy observations cannot prove broad permissions. Keep
+		// capability inference conservative; installation rendering always
+		// selects full management independently of this legacy normalizer.
 		return PrivilegeProfileViewer
 	case PrivilegeProfileAdmin:
 		return PrivilegeProfileAdmin

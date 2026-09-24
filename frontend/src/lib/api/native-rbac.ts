@@ -69,6 +69,14 @@ export interface CreateNativeRuleRequest {
 // Endpoints
 // ============================================================
 
+/** Bounded administrative page; unlike listNativeRules, does not fetch all grants. */
+export function getNativeRulePage(
+  params: { userId?: string; limit: number; offset: number },
+  signal?: AbortSignal,
+) {
+  return getNativeRbacRules({ query: params, signal });
+}
+
 export async function listNativeRules(
   userId?: string,
   signal?: AbortSignal,

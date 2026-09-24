@@ -13,7 +13,14 @@ import { QueryStates } from "@/components/ui/query-states";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import type { PaginatedResponse } from "@/types";
-import { AlertTriangle, ArrowUpCircle, Box, ExternalLink, Trash2, Wrench } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpCircle,
+  Box,
+  ExternalLink,
+  Trash2,
+  Wrench,
+} from "lucide-react";
 import type { ClusterAppRow } from "@/lib/api/cluster-apps";
 
 // Coarse status → tone mapping. We don't try to enumerate every
@@ -88,16 +95,21 @@ export function InstalledView({
   deleteDecision: PermissionDecision;
 }) {
   return (
-    <QueryStates query={q} loadingTitle="Loading installed apps…" isEmpty={(page) => page.data.length === 0}
+    <QueryStates
+      query={q}
+      loadingTitle="Loading installed apps…"
+      isEmpty={(page) => page.data.length === 0}
       empty={
         <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
           <Box className="h-8 w-8 mx-auto text-muted-foreground" />
-          <p className="text-sm font-medium text-foreground">No apps installed yet</p>
+          <p className="text-sm font-medium text-foreground">
+            No apps installed yet
+          </p>
           <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Browse the catalog and install your first chart. The Platform
-            Baseline tools (trivy-operator, kube-state-metrics, fluent-bit,
-            ingress-nginx, cert-manager, gatekeeper) are managed via the Tools
-            tab and will also appear here once installed.
+            Browse the catalog and install your first chart. Quick Start deploys
+            metrics exporters and, unless opted out, Trivy image scanning
+            through Flux. Inspect those baseline deployments in Delivery. Full
+            monitoring and logging are separate add-ons.
           </p>
           <div className="flex items-center justify-center gap-2 pt-2">
             <RouterLink
@@ -140,10 +152,9 @@ export function InstalledView({
                     Releases in{" "}
                     <code className="font-mono">failed_install</code> /{" "}
                     <code className="font-mono">failed_uninstall</code> never
-                    deployed cleanly. The helm release itself is either
-                    missing or already gone, so they can&apos;t be uninstalled
-                    through the normal flow — use the bulk delete to clear
-                    them.
+                    deployed cleanly. The helm release itself is either missing
+                    or already gone, so they can&apos;t be uninstalled through
+                    the normal flow — use the bulk delete to clear them.
                   </p>
                 </div>
                 <ActionButton
@@ -168,13 +179,13 @@ export function InstalledView({
                 <AlertTriangle className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
                 <div>
                   <div className="font-medium text-foreground">
-                    {staleCount} release{staleCount === 1 ? "" : "s"} stuck in
-                    a transient state for over 10 minutes
+                    {staleCount} release{staleCount === 1 ? "" : "s"} stuck in a
+                    transient state for over 10 minutes
                   </div>
                   <p className="text-muted-foreground mt-0.5">
                     The helm operation may have stalled. Common causes: the
-                    agent tunnel dropped, the helm chart failed validation, or
-                    a long-running install (kube-prom-stack, istio) is still
+                    agent tunnel dropped, the helm chart failed validation, or a
+                    long-running install (kube-prom-stack, istio) is still
                     pulling images. Check the worker queue or re-trigger the
                     operation.
                   </p>

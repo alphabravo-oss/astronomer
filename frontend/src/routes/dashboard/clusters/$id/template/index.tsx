@@ -1,4 +1,4 @@
-import { Select } from "@/components/ui/select";
+import { TemplatePicker } from "./-template-picker";
 import { createFileRoute } from "@tanstack/react-router";
 /**
  * Cluster Template tab — the applied cluster-template binding and its
@@ -38,7 +38,6 @@ import {
   reapplyClusterTemplate,
   type ClusterTemplateStatus,
 } from "@/lib/api/cluster-template-binding";
-import { listClusterTemplates } from "@/lib/api/project-detail";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -129,21 +128,16 @@ function ClusterTemplatePage() {
   const clusterQuery = useCluster(clusterId);
   const { data: cluster, isLoading: clusterLoading } = clusterQuery;
 
-  const { data: templatesPage, isLoading: tplsLoading } = useQuery({
-    queryKey: queryKeys.clusterPages.templates,
-    queryFn: () => listClusterTemplates({ pageSize: 200 }),
-    staleTime: 60_000,
-  });
-  const templates = templatesPage?.data;
-
-  const { data: binding, isLoading: bindingLoading } = useQuery({
+  const bindingQuery = useQuery({
     queryKey: queryKeys.clusterPages.templateBinding(clusterId),
-    queryFn: () => getClusterTemplateBinding(clusterId),
+    queryFn: ({ signal }) => getClusterTemplateBinding(clusterId, signal),
     enabled: !!clusterId,
+    throwOnError: false,
     // While-pending wrap (P4.5): `template_binding.changed` drives freshness
     // when the stream is open; the 5s poll only runs for in-flight applies
     // during a stream drop, and stops entirely once settled.
     refetchInterval: (q) => {
+      if (q.state.status === "error") return false;
       const status = q.state.data?.status;
       return status === "pending" || status === "applying"
         ? liveFallback(5000)()
@@ -151,8 +145,8 @@ function ClusterTemplatePage() {
     },
     refetchIntervalInBackground: false,
   });
+  const { data: binding, isLoading: bindingLoading } = bindingQuery;
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [specOpen, setSpecOpen] = useState(true);
   const [confirmReapply, setConfirmReapply] = useState(false);
   const [confirmDetach, setConfirmDetach] = useState(false);
@@ -232,7 +226,15 @@ function ClusterTemplatePage() {
         description={`Cluster template applied to ${cluster.displayName}.`}
       />
 
-      {bindingLoading ? (
+      {bindingQuery.isError ? (
+        <QueryStates
+          query={bindingQuery}
+          permission="clusters:read"
+          errorTitle="Could not load template binding"
+        >
+          {null}
+        </QueryStates>
+      ) : bindingLoading ? (
         <div className="rounded-lg border border-border bg-card p-12 flex items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
@@ -247,40 +249,13 @@ function ClusterTemplatePage() {
             Apply a cluster template to install a curated set of tools,
             policies, and labels.
           </p>
-          <div className="mt-4 flex items-center gap-2">
-            <Select
-              value={selectedTemplateId}
-              onChange={(e) => setSelectedTemplateId(e.target.value)}
-              disabled={tplsLoading || !canWrite}
-              className="h-8 px-2 rounded-md border border-border bg-background text-xs
-                focus:outline-hidden focus:ring-1 focus:ring-ring
-                disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <option value="">Select a template…</option>
-              {(templates || []).map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.displayName}
-                </option>
-              ))}
-            </Select>
-            <button
-              onClick={() =>
-                selectedTemplateId && bindMutation.mutate(selectedTemplateId)
-              }
-              disabled={
-                !selectedTemplateId || bindMutation.isPending || !canWrite
-              }
-              title={canWrite ? undefined : reason}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
-                bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
-                disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {bindMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : null}
-              Apply Template
-            </button>
-          </div>
+          <TemplatePicker
+            key={clusterId}
+            canWrite={canWrite}
+            reason={reason}
+            pending={bindMutation.isPending}
+            onApply={(id) => bindMutation.mutate(id)}
+          />
         </div>
       ) : (
         <>
@@ -401,6 +376,11 @@ function ClusterTemplatePage() {
       )}
 
       <ConfirmDialog
+        confirmDisabledReason={
+          !canWrite || bindingQuery.isError
+            ? "A current binding and update permission are required."
+            : undefined
+        }
         open={confirmReapply}
         onClose={() => setConfirmReapply(false)}
         onConfirm={() => reapplyMutation.mutate()}
@@ -411,6 +391,11 @@ function ClusterTemplatePage() {
       />
 
       <ConfirmDialog
+        confirmDisabledReason={
+          !canWrite || bindingQuery.isError
+            ? "A current binding and update permission are required."
+            : undefined
+        }
         open={confirmDetach}
         onClose={() => setConfirmDetach(false)}
         onConfirm={() => detachMutation.mutate()}

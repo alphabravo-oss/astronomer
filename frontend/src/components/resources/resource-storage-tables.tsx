@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useDeletePV, useDeletePVC } from "@/lib/hooks/kubernetes-resources";
 import { useNavigate } from "@tanstack/react-router";
 import { ActionButton } from "@/components/ui/action-button";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ResourceActionMenu } from "./resource-action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import type { Column } from "@/components/ui/data-table";
@@ -57,7 +57,11 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
         header: "",
         accessor: (row) => (
           <StopRowClick>
-            <ActionMenu
+            <ResourceActionMenu
+              clusterId={clusterId}
+              resourceType={"persistentvolumes"}
+              row={row}
+              permissions={permissions}
               items={[
                 {
                   label: "View YAML",
@@ -98,7 +102,7 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
         align: "center" as const,
       },
     ],
-    [clusterId, permissions.delete, permissions.read, permissions.update],
+    [clusterId, permissions],
   );
 
   return (
@@ -185,7 +189,11 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
         header: "",
         accessor: (row) => (
           <StopRowClick>
-            <ActionMenu
+            <ResourceActionMenu
+              clusterId={clusterId}
+              resourceType={"persistentvolumeclaims"}
+              row={row}
+              permissions={permissions}
               items={[
                 {
                   label: "View YAML",
@@ -234,7 +242,7 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
         align: "center" as const,
       },
     ],
-    [clusterId, permissions.delete, permissions.read, permissions.update],
+    [clusterId, permissions],
   );
 
   return (
@@ -361,7 +369,11 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
         header: "",
         accessor: (row) => (
           <StopRowClick>
-            <ActionMenu
+            <ResourceActionMenu
+              clusterId={clusterId}
+              resourceType={"storageclasses"}
+              row={row}
+              permissions={permissions}
               items={[
                 {
                   label: "View YAML",
@@ -382,7 +394,7 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
         align: "center" as const,
       },
     ],
-    [clusterId, permissions.read],
+    [clusterId, permissions],
   );
 
   return (

@@ -1,13 +1,21 @@
 import { Lock, Pencil, Shield, Trash2 } from "lucide-react";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import {
+  DataTable,
+  type Column,
+  type DataTableProps,
+} from "@/components/ui/data-table";
 import { cn } from "@/lib/utils";
 import type { PodSecurityTemplate } from "@/types";
 import { psaLevelColors } from "./-psa-constants";
 import { PSAExplainer } from "./-psa-explainer";
+import { usePermissionDecision } from "@/lib/permission-hooks";
+import { ActionButton } from "@/components/ui/action-button";
 
 function templateColumns(
   onEdit: (row: PodSecurityTemplate) => void,
   onDelete: (row: PodSecurityTemplate) => void,
+  canUpdate: boolean,
+  canDelete: boolean,
 ): Column<PodSecurityTemplate>[] {
   return [
     {
@@ -88,9 +96,10 @@ function templateColumns(
       header: "",
       accessor: (row) => (
         <div className="flex items-center gap-1">
-          <button
+          <ActionButton
             onClick={() => onEdit(row)}
-            disabled={row.isBuiltin}
+            disabled={row.isBuiltin || !canUpdate}
+            disabledReason={!canUpdate ? "Requires security:update" : undefined}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
             title={
@@ -100,10 +109,11 @@ function templateColumns(
             }
           >
             <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
             onClick={() => onDelete(row)}
-            disabled={row.isDefault || row.isBuiltin}
+            disabled={row.isDefault || row.isBuiltin || !canDelete}
+            disabledReason={!canDelete ? "Requires security:delete" : undefined}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
             title={
@@ -113,7 +123,7 @@ function templateColumns(
             }
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </ActionButton>
         </div>
       ),
       sortable: false,
@@ -124,15 +134,24 @@ function templateColumns(
 export function TemplatesTab({
   templates,
   loading,
+  serverSide,
   onEdit,
   onDelete,
 }: {
   templates: PodSecurityTemplate[];
   loading: boolean;
+  serverSide: DataTableProps<PodSecurityTemplate>["serverSide"];
   onEdit: (row: PodSecurityTemplate) => void;
   onDelete: (row: PodSecurityTemplate) => void;
 }) {
-  const columns = templateColumns(onEdit, onDelete);
+  const update = usePermissionDecision("security", "update");
+  const remove = usePermissionDecision("security", "delete");
+  const columns = templateColumns(
+    onEdit,
+    onDelete,
+    update.allowed,
+    remove.allowed,
+  );
   return (
     <div className="space-y-4">
       <PSAExplainer />
@@ -142,6 +161,8 @@ export function TemplatesTab({
         keyExtractor={(row) => row.id}
         searchPlaceholder="Search templates..."
         loading={loading}
+        serverSide={serverSide}
+        searchable={false}
         emptyState={{
           title: "No PSA templates defined",
           description: "Create the first item to configure this feature.",

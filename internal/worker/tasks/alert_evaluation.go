@@ -19,7 +19,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
@@ -1280,57 +1279,8 @@ func evaluatePromQLRule(ctx context.Context, rule sqlc.AlertRule, config map[str
 	return true, fmt.Sprintf("Cluster %s query matched %s %.2f (value %.2f)", strutil.FirstNonBlank(cluster.DisplayName, cluster.Name), comparison, threshold, value), blob, clusterID, true, nil
 }
 
-func monitoringClientForCluster(ctx context.Context, clusterID uuid.UUID) (*imonitoring.Client, monitoringSelector, bool, error) {
-	if runtimeDependencies(ctx).Queries == nil {
-		return nil, monitoringSelector{}, false, nil
-	}
-	if joined, err := runtimeDependencies(ctx).Queries.GetClusterMonitoringContext(ctx, clusterID); err == nil {
-		client, err := imonitoring.NewClient(imonitoring.BackendConfig{
-			QueryURL:            joined.QueryUrl,
-			TenantID:            joined.TenantID,
-			AuthType:            joined.AuthType,
-			AuthConfig:          joined.AuthConfig,
-			AuthConfigEncrypted: joined.AuthConfigEncrypted,
-			Decryptor:           monitoringDecryptor(ctx),
-			Logger:              runtimeLogger(ctx),
-			DefaultStepSeconds:  joined.DefaultStepSeconds,
-			TimeoutSeconds:      joined.TimeoutSeconds,
-		})
-		if err != nil {
-			return nil, monitoringSelector{}, false, err
-		}
-		return client, monitoringSelector{
-			Label: joined.ClusterLabel,
-			Value: joined.ClusterLabelValue,
-		}, true, nil
-	} else if err != pgx.ErrNoRows {
-		return nil, monitoringSelector{}, false, err
-	}
-	backend, err := runtimeDependencies(ctx).Queries.GetDefaultMonitoringBackend(ctx)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, monitoringSelector{}, false, nil
-		}
-		return nil, monitoringSelector{}, false, err
-	}
-	client, err := imonitoring.NewClient(imonitoring.BackendConfig{
-		QueryURL:            backend.QueryUrl,
-		TenantID:            backend.TenantID,
-		AuthType:            backend.AuthType,
-		AuthConfig:          backend.AuthConfig,
-		AuthConfigEncrypted: backend.AuthConfigEncrypted,
-		Decryptor:           monitoringDecryptor(ctx),
-		Logger:              runtimeLogger(ctx),
-		DefaultStepSeconds:  backend.DefaultStepSeconds,
-		TimeoutSeconds:      backend.TimeoutSeconds,
-	})
-	if err != nil {
-		return nil, monitoringSelector{}, false, err
-	}
-	return client, monitoringSelector{Label: "cluster_id", Value: clusterID.String()}, true, nil
-}
-
 type monitoringSelector struct {
+	Local bool
 	Label string
 	Value string
 }
@@ -1348,7 +1298,11 @@ func renderAlertQuery(query string, cluster sqlc.Cluster, selector monitoringSel
 	if value == "" {
 		value = cluster.ID.String()
 	}
-	rendered := strings.ReplaceAll(query, "{{cluster_selector}}", fmt.Sprintf(`%s="%s"`, label, escapePromWorkerLabel(value)))
+	clusterSelector := fmt.Sprintf(`%s="%s"`, label, escapePromWorkerLabel(value))
+	if selector.Local {
+		clusterSelector = `job=~".*"`
+	}
+	rendered := strings.ReplaceAll(query, "{{cluster_selector}}", clusterSelector)
 	rendered = strings.ReplaceAll(rendered, "{{cluster_label}}", label)
 	rendered = strings.ReplaceAll(rendered, "{{cluster_value}}", escapePromWorkerLabel(value))
 	rendered = strings.ReplaceAll(rendered, "{{cluster_id}}", cluster.ID.String())

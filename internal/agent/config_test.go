@@ -46,8 +46,8 @@ func TestLoadAgentConfig_Defaults(t *testing.T) {
 	if cfg.HealthAddr != ":8081" {
 		t.Errorf("HealthAddr = %q, want %q", cfg.HealthAddr, ":8081")
 	}
-	if cfg.PrivilegeProfile != agenttemplate.PrivilegeProfileViewer {
-		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, agenttemplate.PrivilegeProfileViewer)
+	if cfg.PrivilegeProfile != agenttemplate.PrivilegeProfileAdmin {
+		t.Errorf("PrivilegeProfile = %q, want %q", cfg.PrivilegeProfile, agenttemplate.PrivilegeProfileAdmin)
 	}
 	if cfg.BootstrapTokenSecretName != "astronomer-agent-registration-token" {
 		t.Errorf("BootstrapTokenSecretName = %q", cfg.BootstrapTokenSecretName)

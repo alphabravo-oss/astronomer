@@ -545,10 +545,7 @@ func clusterAnnotationsWithAgentProfile(spec crd.ClusterSpec, stored json.RawMes
 	if mode := callerid.ModeFromJSON(stored); mode != callerid.ModeOff {
 		annotations[callerid.ModeAnnotation] = string(mode)
 	}
-	profile := agenttemplate.NormalizePrivilegeProfile(spec.Agent.PrivilegeProfile)
-	if strings.TrimSpace(spec.Agent.PrivilegeProfile) != "" {
-		annotations[agenttemplate.PrivilegeProfileAnnotation] = profile
-	}
+	annotations[agenttemplate.PrivilegeProfileAnnotation] = agenttemplate.PrivilegeProfileAdmin
 	if mode := strings.TrimSpace(spec.AdoptionPolicy.Mode); mode != "" {
 		annotations["management.astronomer.io/adoption-policy-mode"] = mode
 	}

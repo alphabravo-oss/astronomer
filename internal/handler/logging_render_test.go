@@ -172,8 +172,8 @@ func TestRenderConfigMapDataPipelineWithNamespacesAndLabels(t *testing.T) {
 	}
 	conf := data["pipeline.conf"]
 	for _, want := range []string{
-		"# match kube.team-a.*",
-		"# match kube.team-a-staging.*",
+		"# match kube.var.log.containers.*_team-a_*.log",
+		"# match kube.var.log.containers.*_team-a-staging_*.log",
 		"[FILTER]",
 		"Name modify",
 		"Add         cluster_name prod_west",
@@ -236,7 +236,7 @@ func TestRenderConfigMapDataPipelineWithFilters(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	conf := data["pipeline.conf"]
-	for _, want := range []string{"[FILTER]", "Name grep", "Match kube.app.*", "Exclude log_level_DEBUG", "Regex log_level_INFO"} {
+	for _, want := range []string{"[FILTER]", "Name grep", "Match kube.var.log.containers.*_app_*.log", "Exclude log_level_DEBUG", "Regex log_level_INFO"} {
 		if !strings.Contains(conf, want) {
 			t.Errorf("pipeline.conf missing %q\n--- got ---\n%s", want, conf)
 		}

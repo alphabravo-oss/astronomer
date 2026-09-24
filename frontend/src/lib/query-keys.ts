@@ -95,18 +95,47 @@ export const queryKeys = {
     listAll: ["clusters", "list"] as const,
   },
   clusterPages: {
-    appsInstalled: (id: string) =>
-      ["clusters", id, "apps", "installed"] as const,
-    appCatalogBrowse: (projectId: string, query: string) =>
-      ["catalog", projectId, "browse", query] as const,
+    appsInstalled: (id: string, params?: Record<string, unknown>) =>
+      [
+        "clusters",
+        id,
+        "apps",
+        "installed",
+        ...(params ? [params] : []),
+      ] as const,
+    appCatalogBrowse: (
+      projectId: string,
+      query: string,
+      params?: Record<string, unknown>,
+    ) =>
+      [
+        "catalog",
+        projectId,
+        "browse",
+        query,
+        ...(params ? [params] : []),
+      ] as const,
     appCatalogRecommended: (projectId: string) =>
       ["catalog", projectId, "recommended"] as const,
     imageVulnSummary: (id: string) =>
       ["clusters", id, "image-vulns", "summary"] as const,
     imageVulnImages: (id: string, namespace: string) =>
       ["clusters", id, "image-vulns", "images", namespace] as const,
-    imageVulnReport: (id: string, reportId: string, severity: string) =>
-      ["clusters", id, "image-vulns", "report", reportId, severity] as const,
+    imageVulnReport: (
+      id: string,
+      reportId: string,
+      severity: string,
+      pageIndex = 0,
+    ) =>
+      [
+        "clusters",
+        id,
+        "image-vulns",
+        "report",
+        reportId,
+        severity,
+        pageIndex,
+      ] as const,
     imageVulnHistory: (id: string, hours: number) =>
       ["clusters", id, "image-vulns", "history", hours] as const,
     imageVulnReportHistory: (id: string, reportId: string) =>
@@ -215,6 +244,14 @@ export const queryKeys = {
     principals: (query: string) => ["rbac", "principals", query] as const,
     templates: ["rbac", "templates"] as const,
     globalRoles: ["rbac", "global-roles"] as const,
+    rolePage: (scope: string, pageIndex: number) =>
+      ["rbac", "role-page", scope, pageIndex] as const,
+    bindingPage: (scope: string, pageIndex: number) =>
+      ["rbac", "binding-page", scope, pageIndex] as const,
+    projectBindingPage: (projectId: string, pageIndex: number) =>
+      ["rbac", "project-binding-page", projectId, pageIndex] as const,
+    roleDetail: (scope: string, id: string) =>
+      ["rbac", "role-detail", scope, id] as const,
     clusterRoles: (clusterId?: string) =>
       ["rbac", "cluster-roles", clusterId] as const,
     projectRoles: (projectId?: string) =>
@@ -234,6 +271,7 @@ export const queryKeys = {
   },
   users: {
     all: ["users"] as const,
+    detail: (id: string) => ["users", "detail", id] as const,
     current: ["users", "current"] as const,
     preferences: (userId: string) => ["users", "preferences", userId] as const,
     list: (params?: Record<string, unknown>) =>
@@ -244,6 +282,8 @@ export const queryKeys = {
     // userId is part of the key so the per-user filtered list and the unfiltered
     // list never collide on one cache entry.
     list: (userId?: string) => ["native-rbac", "list", userId] as const,
+    page: (params: { userId?: string; limit: number; offset: number }) =>
+      ["native-rbac", "page", params] as const,
   },
   settings: {
     general: ["settings", "general"] as const,
@@ -302,6 +342,8 @@ export const queryKeys = {
   logging: {
     all: ["logging"] as const,
     outputs: ["logging", "outputs"] as const,
+    outputPages: (clusterId?: string) =>
+      ["logging", "outputs", "pages", clusterId] as const,
     pipelinesAll: ["logging", "pipelines"] as const,
     pipelines: (clusterId?: string) =>
       ["logging", "pipelines", clusterId ?? "all"] as const,
@@ -483,6 +525,10 @@ export const queryKeys = {
   projects: {
     all: ["projects"] as const,
     details: ["projects", "detail"] as const,
+    picker: (clusterId: string | undefined, params: Record<string, unknown>) =>
+      ["projects", "picker", clusterId, params] as const,
+    deliveryScope: (clusterId?: string) =>
+      ["projects", "delivery-scope", clusterId] as const,
     search: (clusterId: string, search: string) =>
       ["projects", "search", clusterId, search] as const,
     list: (params?: Record<string, unknown>) =>
@@ -495,15 +541,30 @@ export const queryKeys = {
     applicationSources: ["catalog", "application-sources"] as const,
     discovery: ["catalog", "discovery"] as const,
     repositories: ["catalog", "repositories"] as const,
-    repositoriesFor: (scopeId?: string) =>
-      ["catalog", "repositories", scopeId ?? "global"] as const,
+    repositoriesFor: (scopeId?: string, params?: Record<string, unknown>) =>
+      [
+        "catalog",
+        "repositories",
+        scopeId ?? "global",
+        ...(params ? [params] : []),
+      ] as const,
     charts: (params?: Record<string, unknown>) =>
       ["catalog", "charts", params] as const,
     chartVersions: (
       scopeId: string,
       chartId: string,
       scope: "cluster" | "project" = "project",
-    ) => ["catalog", scope, scopeId, "charts", chartId, "versions"] as const,
+      params?: Record<string, unknown>,
+    ) =>
+      [
+        "catalog",
+        scope,
+        scopeId,
+        "charts",
+        chartId,
+        "versions",
+        ...(params ? [params] : []),
+      ] as const,
     installed: (params?: Record<string, unknown>) =>
       ["catalog", "installed", params] as const,
     // Prefix matching every `installed(params)` variant — used by the live
@@ -513,10 +574,6 @@ export const queryKeys = {
       ["catalog", "installed", installationId, "upgrade-versions"] as const,
     operations: ["catalog", "operations"] as const,
     operation: (id: string) => ["catalog", "operations", id] as const,
-    // App-install/upgrade modal — distinct endpoints from `chartVersions` above
-    // (note the different array shapes), kept verbatim to preserve cache identity.
-    installChartVersions: (projectId: string, chartId: string) =>
-      ["catalog", projectId, "chart-versions", chartId] as const,
     installChartValues: (
       projectId: string,
       chartId: string,
@@ -541,6 +598,11 @@ export const queryKeys = {
     all: ["security"] as const,
     templates: ["security", "templates"] as const,
     policies: ["security", "policies"] as const,
+    templatePage: (params: { limit: number; offset: number }) =>
+      ["security", "templates", params] as const,
+    template: (id: string) => ["security", "template", id] as const,
+    policyPage: (params: { limit: number; offset: number }) =>
+      ["security", "policies", params] as const,
     scans: (params?: Record<string, unknown>) =>
       ["security", "scans", params] as const,
     // Prefix matching every `scans(params)` variant — used by the live

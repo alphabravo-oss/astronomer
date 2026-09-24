@@ -62,7 +62,7 @@ function mapUpgradeRequest(
 }
 
 export async function getClusterAgents(
-  params?: { limit?: number; offset?: number },
+  params?: { limit?: number; offset?: number; search?: string },
   options: AgentRequestOptions = {},
 ): Promise<ClusterAgentResponse> {
   const response = await getClusterAgentsOperation({

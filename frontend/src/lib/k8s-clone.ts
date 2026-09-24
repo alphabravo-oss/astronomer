@@ -12,6 +12,10 @@ const STRIPPED_METADATA_KEYS = [
   "managedFields",
   "ownerReferences",
   "selfLink",
+  "deletionTimestamp",
+  "deletionGracePeriodSeconds",
+  "finalizers",
+  "generateName",
 ] as const;
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -30,7 +34,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 export function prepareCloneManifest(
   obj: KubernetesManifest,
 ): KubernetesManifest {
-  const clone: KubernetesManifest = { ...obj };
+  const clone: KubernetesManifest = structuredClone(obj);
   delete clone.status;
 
   const metadata = { ...asRecord(clone.metadata) };
@@ -41,6 +45,31 @@ export function prepareCloneManifest(
     metadata.name = `${metadata.name}-copy`;
   }
   clone.metadata = metadata;
+
+  const annotations = asRecord(metadata.annotations);
+  delete annotations["kubectl.kubernetes.io/last-applied-configuration"];
+  if (Object.keys(annotations).length) metadata.annotations = annotations;
+  else delete metadata.annotations;
+  const spec = asRecord(clone.spec);
+  if (clone.kind === "Service") {
+    if (spec.clusterIP !== "None") {
+      delete spec.clusterIP;
+      delete spec.clusterIPs;
+    }
+    delete spec.healthCheckNodePort;
+    if (Array.isArray(spec.ports))
+      for (const port of spec.ports) delete asRecord(port).nodePort;
+  }
+  if (clone.kind === "PersistentVolumeClaim") {
+    delete spec.volumeName;
+    for (const key of Object.keys(annotations))
+      if (
+        key.startsWith("pv.kubernetes.io/") ||
+        key.startsWith("volume.kubernetes.io/") ||
+        key.startsWith("volume.beta.kubernetes.io/")
+      )
+        delete annotations[key];
+  }
 
   return clone;
 }

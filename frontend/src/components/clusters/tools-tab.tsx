@@ -5,7 +5,8 @@ import { ToolInstallModal } from "@/components/clusters/tool-install-modal";
 import { ToolInstallProgress } from "@/components/clusters/tool-install-progress";
 import { useClusterToolActions } from "@/components/clusters/use-cluster-tool-actions";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Loader2, Wrench, Sparkles } from "lucide-react";
+import { Wrench, Sparkles } from "lucide-react";
+import { QueryStates } from "@/components/ui/query-states";
 
 interface ToolsTabProps {
   clusterId: string;
@@ -19,8 +20,10 @@ export function ToolsTab({
   clusterStatus,
 }: ToolsTabProps) {
   const isDisconnected = clusterStatus === "disconnected";
-  const { data: tools = [], isLoading: toolsLoading } = useTools();
-  const { data: statuses = [] } = useClusterToolsStatus(clusterId);
+  const toolsQuery = useTools();
+  const statusesQuery = useClusterToolsStatus(clusterId);
+  const tools = toolsQuery.isError ? [] : (toolsQuery.data ?? []);
+  const statuses = statusesQuery.isError ? [] : (statusesQuery.data ?? []);
   const actions = useClusterToolActions({
     clusterId,
     clusterEnvironment,
@@ -28,11 +31,34 @@ export function ToolsTab({
     statuses,
   });
 
-  if (toolsLoading) {
+  if (
+    toolsQuery.isLoading ||
+    toolsQuery.isError ||
+    toolsQuery.data === undefined
+  ) {
     return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates
+        query={toolsQuery}
+        permission="tools:read"
+        errorTitle="Tool catalog unavailable"
+      >
+        {null}
+      </QueryStates>
+    );
+  }
+  if (
+    statusesQuery.isLoading ||
+    statusesQuery.isError ||
+    statusesQuery.data === undefined
+  ) {
+    return (
+      <QueryStates
+        query={statusesQuery}
+        permission="tools:read"
+        errorTitle="Tool status unavailable"
+      >
+        {null}
+      </QueryStates>
     );
   }
   if (tools.length === 0) {
@@ -46,8 +72,11 @@ export function ToolsTab({
 
   // Automatic metrics arrive over delivery, not the optional Helm/tool path.
   // See internal/baseline/registry.go for that ownership split.
-  const noToolsInstalled = statuses.every(
-    (status) => !["installed", "installing"].includes(status.status),
+  const noToolsInstalled = tools.every((tool) =>
+    statuses.some(
+      (status) =>
+        status.slug === tool.slug && status.status === "not_installed",
+    ),
   );
 
   return (

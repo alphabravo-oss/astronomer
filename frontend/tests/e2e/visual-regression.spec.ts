@@ -4,6 +4,13 @@ import { seedAuth } from "./helpers/auth";
 import { adminStoreUser } from "../e2e-smoke/stub-overrides";
 import { collectErrors, filterAllowed, installStubs } from "../e2e-smoke/stubs";
 
+// Stub observations are fixed; wall-clock age labels must be fixed as well.
+// Normal timers continue, so query retries and UI transitions remain realistic.
+test.use({ locale: "en-US", timezoneId: "UTC" });
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-09-22T12:00:00Z"));
+});
+
 const routes = [
   { name: "estate", url: "/dashboard" },
   { name: "cluster-overview", url: "/dashboard/clusters/c-smoke-1" },

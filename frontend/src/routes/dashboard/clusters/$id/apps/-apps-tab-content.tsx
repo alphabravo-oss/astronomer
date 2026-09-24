@@ -8,6 +8,7 @@ import type {
   RecommendedChart,
 } from "@/lib/api/cluster-apps";
 import type { HelmRepository } from "@/types";
+import { QueryStates, type QueryState } from "@/components/ui/query-states";
 import { RepositoriesTab } from "../../../catalog/-repositories-tab";
 import { InstalledView } from "./-installed-tab";
 import { BrowseView } from "./-browse-tab";
@@ -25,8 +26,7 @@ export function AppsTabContent({
   installed,
   browse,
   recommended,
-  repos,
-  reposLoading,
+  reposQuery,
   onSyncRepo,
   onDeleteRepo,
   syncRepoPending,
@@ -46,8 +46,7 @@ export function AppsTabContent({
   installed: ReturnType<typeof useQuery<PaginatedResponse<ClusterAppRow>>>;
   browse: ReturnType<typeof useQuery<PaginatedResponse<CatalogChartSummary>>>;
   recommended: ReturnType<typeof useQuery<RecommendedChart[]>>;
-  repos: HelmRepository[] | undefined;
-  reposLoading: boolean;
+  reposQuery: QueryState<PaginatedResponse<HelmRepository>>;
   onSyncRepo: (id: string) => void;
   onDeleteRepo: (id: string) => void;
   syncRepoPending: boolean;
@@ -95,7 +94,7 @@ export function AppsTabContent({
         q={browse}
         search={searchQ}
         setSearch={setSearchQ}
-        installed={installed.data?.data ?? []}
+        installed={installed.isError ? [] : (installed.data?.data ?? [])}
         installDecision={catalogCreateDecision}
         onInstall={onInstall}
       />
@@ -109,13 +108,19 @@ export function AppsTabContent({
           Helm repositories are shared across the fleet. Charts from these
           sources are available to install on every cluster.
         </p>
-        <RepositoriesTab
-          repos={repos}
-          loading={reposLoading}
-          onSync={onSyncRepo}
-          onDelete={onDeleteRepo}
-          syncPending={syncRepoPending}
-        />
+        <QueryStates
+          query={reposQuery}
+          permission="catalog:read"
+          errorTitle="Could not load repositories"
+        >
+          <RepositoriesTab
+            repos={reposQuery.data?.data}
+            loading={reposQuery.isLoading}
+            onSync={onSyncRepo}
+            onDelete={onDeleteRepo}
+            syncPending={syncRepoPending}
+          />
+        </QueryStates>
       </div>
     );
   }
@@ -124,7 +129,7 @@ export function AppsTabContent({
     return (
       <RecommendedView
         q={recommended}
-        installed={installed.data?.data ?? []}
+        installed={installed.isError ? [] : (installed.data?.data ?? [])}
         installDecision={catalogCreateDecision}
         onInstall={onInstall}
       />

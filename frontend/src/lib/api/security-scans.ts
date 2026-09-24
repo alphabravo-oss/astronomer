@@ -68,25 +68,31 @@ export async function getCISProfiles(
   return requireData(response.data, "get CIS profiles");
 }
 
-export async function getCISScans(params?: {
-  page?: number;
-  pageSize?: number;
-  limit?: number;
-  offset?: number;
-}): Promise<PaginatedResponse<CISScanListItem>> {
+export async function getCISScans(
+  params?: {
+    page?: number;
+    pageSize?: number;
+    limit?: number;
+    offset?: number;
+  },
+  signal?: AbortSignal,
+): Promise<PaginatedResponse<CISScanListItem>> {
   const limit = params?.limit ?? params?.pageSize;
   const page = Math.max(1, params?.page ?? 1);
   const offset =
     params?.offset ?? (limit === undefined ? undefined : (page - 1) * limit);
-  const response = await getSecurityScans({ query: { limit, offset } });
+  const response = await getSecurityScans({ query: { limit, offset }, signal });
   return mapPage(
     { data: response.data ?? [], pagination: response.pagination },
     mapCISScan,
   );
 }
 
-export async function getCISScan(id: string): Promise<CISScanDetail> {
-  const response = await getSecurityScansById({ path: { id } });
+export async function getCISScan(
+  id: string,
+  signal?: AbortSignal,
+): Promise<CISScanDetail> {
+  const response = await getSecurityScansById({ path: { id }, signal });
   return mapCISScan(response.data);
 }
 

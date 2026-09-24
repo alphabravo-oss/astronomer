@@ -160,8 +160,11 @@ test("DataTable(virtualized): windows a 1200-row CIS findings list", async ({
   // The virtualized branch renders a DIV-based ARIA grid.
   const grid = page.getByRole("grid");
   await expect(grid).toBeVisible();
-  // aria-rowcount reflects the *full* body-row count, not what's in the DOM.
-  await expect(grid).toHaveAttribute("aria-rowcount", String(FINDING_COUNT));
+  // ARIA counts every logical row, including the header, not just the window.
+  await expect(grid).toHaveAttribute(
+    "aria-rowcount",
+    String(FINDING_COUNT + 1),
+  );
 
   // role="row" inside the grid includes the sticky header row + the windowed
   // body rows. With 1200 findings, only a small window is mounted — assert the
@@ -191,4 +194,24 @@ test("DataTable(virtualized): windows a 1200-row CIS findings list", async ({
 
   // The rendered-row count is still bounded after scrolling.
   expect(await gridRows.count()).toBeLessThan(60);
+
+  // Shrinking a window from a far row must not dereference stale virtual
+  // indices or leave the grid's keyboard entry pointing past the new model.
+  await grid.locator(`[data-row-index="${FINDING_COUNT - 1}"]`).focus();
+  const search = page.getByPlaceholder("Search test ID or description...");
+  await search.fill("1.2.0001");
+  await expect(grid).toHaveAttribute("aria-rowcount", "2");
+  await grid.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(grid.locator('[data-row-index="0"]')).toBeFocused();
+  await expect(grid.getByText("1.2.0001")).toBeVisible();
+  await search.fill("no matching finding");
+  await expect(grid).toHaveAttribute("aria-rowcount", "1");
+  await expect(grid.locator("[data-row-index]")).toHaveCount(0);
+  await search.fill("");
+  await expect(grid).toHaveAttribute(
+    "aria-rowcount",
+    String(FINDING_COUNT + 1),
+  );
+  expect(await page.pageErrors()).toEqual([]);
 });

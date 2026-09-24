@@ -1,21 +1,24 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ContainerSelector } from "./guided-container-selector";
+import { IngressRulesSection, RoleRulesSection } from "./guided-rule-fields";
+import { manifestArray } from "./guided-array-fields";
 
 import {
   GatewaySection,
   RoleBindingSection,
-  RoleSection,
   SecretSection,
 } from "@/components/resources/guided-resource-access-sections";
 import { AdvancedFieldsSection } from "@/components/resources/guided-resource-advanced-section";
 import {
   IdentitySection,
-  IngressSection,
   PrimaryWorkloadSection,
   ServiceSection,
 } from "@/components/resources/guided-resource-basic-sections";
 import type { GuidedFormState } from "@/components/resources/guided-resource-fields";
 import {
   containerPath,
+  manifestValue,
+  validateGuidedContainer,
   descriptionForPath,
   podSpecPath,
   stringValue,
@@ -58,6 +61,17 @@ export function GuidedResourceForm({
 }: GuidedResourceFormProps) {
   const kind = stringValue(value, ["kind"]);
   const errors = useMemo(() => validateGuidedResource(value), [value]);
+  const [selected, setSelected] = useState("containers:0");
+  const podPath = podSpecPath(kind);
+  const [group, index] = selected.split(":");
+  const selectedPath =
+    podPath &&
+    manifestArray(manifestValue(value, [...podPath, group]))[Number(index)]
+      ? [...podPath, group, Number(index)]
+      : containerPath(kind);
+  const selection = selectedPath
+    ? `${selectedPath.at(-2)}:${selectedPath.at(-1)}`
+    : "containers:0";
 
   useEffect(() => {
     onValidationChange?.(Object.keys(errors).length === 0);
@@ -68,9 +82,21 @@ export function GuidedResourceForm({
   const form: GuidedFormState = {
     value,
     kind,
-    podPath: podSpecPath(kind),
-    containerPath: containerPath(kind),
-    errors,
+    podPath,
+    containerPath: selectedPath,
+    errors: {
+      ...errors,
+      ...Object.fromEntries(
+        [
+          "image",
+          "containerPort",
+          "readinessProbe",
+          "livenessProbe",
+          "startupProbe",
+        ].map((key) => [key, ""]),
+      ),
+      ...(selectedPath ? validateGuidedContainer(value, selectedPath) : {}),
+    },
     identityReadOnly,
     onChange,
     doc: (path, fallback) =>
@@ -83,18 +109,31 @@ export function GuidedResourceForm({
   return (
     <div className="space-y-5 overflow-y-auto p-5">
       <IdentitySection form={form} />
+      <ContainerSelector
+        form={form}
+        selected={selection}
+        onSelect={setSelected}
+      />
       <PrimaryWorkloadSection form={form} />
       <ServiceSection form={form} />
-      <IngressSection form={form} />
+      <IngressRulesSection form={form} />
       <AutoscalingSection form={form} />
       <StorageClaimSection form={form} />
       <DisruptionBudgetSection form={form} />
       <NetworkPolicySection form={form} />
       <SecretSection form={form} />
-      <RoleSection form={form} />
+      <RoleRulesSection form={form} />
       <RoleBindingSection form={form} />
       <GatewaySection form={form} />
       <AdvancedFieldsSection form={form} />
+      {Object.keys(errors).length > 0 && (
+        <p role="alert" className="text-sm text-status-error">
+          Fields need attention:{" "}
+          {Object.entries(errors)
+            .map(([key, message]) => `${key}: ${message}`)
+            .join("; ")}
+        </p>
+      )}
     </div>
   );
 }

@@ -13,6 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 export type ProbeKind = "readiness" | "liveness" | "startup";
 type ProbeType = "none" | "httpGet" | "tcpSocket" | "exec";
 
+function probePortValue(value: string): string | number {
+  return /^\d+$/.test(value) ? Number(value) : value;
+}
+
 const PROBE_LABEL: Record<ProbeKind, string> = {
   readiness: "Readiness probe",
   liveness: "Liveness probe",
@@ -85,9 +89,7 @@ export function ProbeFields({
 
   return (
     <div className="space-y-3 rounded-md border border-border p-3">
-      <p className="text-sm font-medium text-foreground">
-        {PROBE_LABEL[kind]}
-      </p>
+      <p className="text-sm font-medium text-foreground">{PROBE_LABEL[kind]}</p>
       <Field label="Type">
         <Select
           value={type}
@@ -114,7 +116,10 @@ export function ProbeFields({
             <Input
               value={String(httpGet.port ?? "")}
               onChange={(event) =>
-                set([...probePath, "httpGet", "port"], event.target.value)
+                set(
+                  [...probePath, "httpGet", "port"],
+                  probePortValue(event.target.value),
+                )
               }
             />
           </Field>
@@ -137,7 +142,10 @@ export function ProbeFields({
           <Input
             value={String(tcpSocket.port ?? "")}
             onChange={(event) =>
-              set([...probePath, "tcpSocket", "port"], event.target.value)
+              set(
+                [...probePath, "tcpSocket", "port"],
+                probePortValue(event.target.value),
+              )
             }
           />
         </Field>

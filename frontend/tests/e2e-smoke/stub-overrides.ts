@@ -91,6 +91,19 @@ const smokeCluster = {
 };
 
 export const overrides: StubOverride[] = [
+  // A nullable result is genuinely absent. The generated zero-value object
+  // (success + epoch dates + empty ID) is not evidence that a drill ran.
+  {
+    method: "GET",
+    path: "/api/v1/admin/backup-drill",
+    body: {
+      data: {
+        latest: null,
+        latest_success: null,
+        latest_success_age_seconds: null,
+      },
+    },
+  },
   {
     method: "GET",
     path: `/api/v1/clusters/${SMOKE_CLUSTER_ID}/k8s/apis/apiextensions.k8s.io/v1/customresourcedefinitions`,

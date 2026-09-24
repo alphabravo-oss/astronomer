@@ -18,14 +18,15 @@ import type { VirtualRows } from "@/components/ui/use-virtual-rows";
 import { eventStartedInRowAction } from "@/components/ui/data-table-row-actions";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
+import { tableGroupPositions } from "./data-table-grouping";
 
 export function VirtualizedGrid<T extends RowData>({
+  groupBy,
   activeColumns,
   table,
   rows,
   rowVirtualizer,
   scrollRef,
-  totalRows,
   selectable,
   resizable,
   cellPadding,
@@ -45,6 +46,7 @@ export function VirtualizedGrid<T extends RowData>({
   setFocusedRowIndex,
   focusRowAt,
 }: {
+  groupBy?: (row: T) => string;
   activeColumns: Column<T>[];
   table: RtTable<DataTableFeatures, T>;
   rows: RtRow<DataTableFeatures, T>[];
@@ -91,13 +93,17 @@ export function VirtualizedGrid<T extends RowData>({
     );
 
   const virtualItems = rowVirtualizer.items;
+  const groups = tableGroupPositions(
+    rows,
+    groupBy ? (row) => groupBy(row.original) : undefined,
+  );
 
   return (
     <div className="rounded-lg border border-border overflow-hidden">
       <div
         ref={scrollRef}
         role="grid"
-        aria-rowcount={totalRows}
+        aria-rowcount={groups.rowCount}
         aria-colcount={activeColumns.length + (selectable ? 1 : 0)}
         aria-multiselectable={selectable ? true : undefined}
         // The grid container is the single Tab entry point. Rows are focused
@@ -109,7 +115,7 @@ export function VirtualizedGrid<T extends RowData>({
           if (e.target !== e.currentTarget) return;
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
             e.preventDefault();
-            focusRowAt(focusedRowIndex >= 0 ? focusedRowIndex : 0);
+            focusRowAt(Math.min(Math.max(focusedRowIndex, 0), rows.length - 1));
           }
         }}
         className="relative max-h-[28rem] overflow-auto text-sm outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring"
@@ -261,81 +267,107 @@ export function VirtualizedGrid<T extends RowData>({
           >
             {virtualItems.map((virtualRow) => {
               const row = rows[virtualRow.index];
+              // The virtualizer publishes after commit; a filter can shrink
+              // the row model before its previous window has been replaced.
+              if (!row) return null;
               const key = keyExtractor(row.original);
               const isSelected = row.getIsSelected();
+              const group = groups.positions[virtualRow.index];
               return (
                 <div
                   key={key}
-                  // measureElement reads each row's real height for variable-size
-                  // rows; data-index lets the virtualizer key the measurement.
                   ref={rowVirtualizer.measureElement}
                   data-index={virtualRow.index}
-                  data-row-index={virtualRow.index}
-                  role="row"
-                  // 1-based, and +1 again because the sticky header is row 1.
-                  aria-rowindex={virtualRow.index + 2}
-                  aria-selected={selectable ? isSelected : undefined}
-                  // Programmatically focusable only (-1): the grid container owns
-                  // the Tab stop, so a virtualized-out focused row can't strand
-                  // keyboard users outside the grid.
-                  tabIndex={-1}
-                  onFocus={() => setFocusedRowIndex(virtualRow.index)}
-                  onKeyDown={(e) => {
-                    if (e.key === "ArrowDown") {
-                      e.preventDefault();
-                      focusRowAt(virtualRow.index + 1);
-                    } else if (e.key === "ArrowUp") {
-                      e.preventDefault();
-                      focusRowAt(virtualRow.index - 1);
-                    } else if (
-                      e.target === e.currentTarget &&
-                      e.key === "Enter" &&
-                      onRowClick
-                    ) {
-                      e.preventDefault();
-                      onRowClick(row.original);
-                    }
-                  }}
-                  onClick={(event) => {
-                    if (!eventStartedInRowAction(event))
-                      onRowClick?.(row.original);
-                  }}
-                  className={cn(
-                    "absolute left-0 top-0 flex w-full whitespace-nowrap border-b border-border transition-colors",
-                    "focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
-                    onRowClick && "cursor-pointer hover:bg-muted/50",
-                    isSelected && "bg-muted/30",
-                  )}
+                  className="absolute left-0 top-0 w-full"
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
-                  {selectable && (
+                  {group.start && (
                     <div
-                      role="gridcell"
-                      className={cn("flex items-center", selectPadding)}
-                      style={selectColStyle}
+                      role="row"
+                      aria-rowindex={group.rowIndex - 1}
+                      className="bg-muted px-3 py-2 text-xs font-semibold"
                     >
-                      <Checkbox
-                        aria-label={`Select row ${keyExtractor(row.original)}`}
-                        checked={isSelected}
-                        disabled={!row.getCanSelect()}
-                        onChange={row.getToggleSelectedHandler()}
-                      />
+                      <div
+                        role="rowheader"
+                        aria-colspan={
+                          activeColumns.length + (selectable ? 1 : 0)
+                        }
+                      >
+                        {group.label}
+                      </div>
                     </div>
                   )}
-                  {activeColumns.map((col) => (
-                    <div
-                      key={col.key}
-                      role="gridcell"
-                      className={cn(
-                        "flex min-w-0 items-center overflow-hidden whitespace-nowrap",
-                        cellPadding,
-                        alignClass(col),
-                      )}
-                      style={colStyle(col)}
-                    >
-                      {col.accessor(row.original)}
-                    </div>
-                  ))}
+                  <div
+                    key={key}
+                    // measureElement reads each row's real height for variable-size
+                    // rows; data-index lets the virtualizer key the measurement.
+                    data-row-index={virtualRow.index}
+                    role="row"
+                    // 1-based, and +1 again because the sticky header is row 1.
+                    aria-rowindex={group.rowIndex}
+                    aria-selected={selectable ? isSelected : undefined}
+                    // Programmatically focusable only (-1): the grid container owns
+                    // the Tab stop, so a virtualized-out focused row can't strand
+                    // keyboard users outside the grid.
+                    tabIndex={-1}
+                    onFocus={() => setFocusedRowIndex(virtualRow.index)}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        focusRowAt(virtualRow.index + 1);
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        focusRowAt(virtualRow.index - 1);
+                      } else if (
+                        e.target === e.currentTarget &&
+                        e.key === "Enter" &&
+                        onRowClick
+                      ) {
+                        e.preventDefault();
+                        onRowClick(row.original);
+                      }
+                    }}
+                    onClick={(event) => {
+                      if (!eventStartedInRowAction(event))
+                        onRowClick?.(row.original);
+                    }}
+                    className={cn(
+                      "flex w-full whitespace-nowrap border-b border-border transition-colors",
+                      "focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
+                      onRowClick && "cursor-pointer hover:bg-muted/50",
+                      isSelected && "bg-muted/30",
+                    )}
+                  >
+                    {selectable && (
+                      <div
+                        role="gridcell"
+                        className={cn("flex items-center", selectPadding)}
+                        style={selectColStyle}
+                      >
+                        <Checkbox
+                          aria-label={`Select row ${keyExtractor(row.original)}`}
+                          checked={isSelected}
+                          disabled={!row.getCanSelect()}
+                          onChange={row.getToggleSelectedHandler()}
+                        />
+                      </div>
+                    )}
+                    {activeColumns.map((col) => (
+                      <div
+                        key={col.key}
+                        role="gridcell"
+                        className={cn(
+                          "flex min-w-0 items-center overflow-hidden whitespace-nowrap",
+                          cellPadding,
+                          alignClass(col),
+                        )}
+                        style={colStyle(col)}
+                      >
+                        {col.accessor(row.original)}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               );
             })}

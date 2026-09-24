@@ -26,6 +26,8 @@ import { liveFallback } from "@/lib/live/status-store";
 import { getRegistrationStatus } from "@/lib/api/cluster-registration";
 import type { RegistrationStatusView } from "@/lib/api/cluster-registration";
 import { getImageVulnSummary } from "@/lib/api/cluster-vulnerabilities";
+import { vulnerabilityMetric } from "@/components/clusters/vulnerability-metric";
+import { toolStatusMetric } from "@/components/clusters/tool-status-metric";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -69,7 +71,7 @@ import {
   ShieldAlert,
   Package,
 } from "lucide-react";
-import type { Cluster, ClusterCondition } from "@/types";
+import type { ClusterCondition } from "@/types";
 import { WidgetGrid } from "@/components/dashboards/widget-grid";
 import { ExtensionSlot } from "@/components/extensions/ExtensionSlot";
 import { renderForCluster } from "@/lib/api/dashboards";
@@ -87,19 +89,23 @@ export function ClusterDetailPage() {
   const { data: metricsSummary, isError: metricsError } =
     useClusterMetricsSummary(clusterId);
   const { data: events } = useClusterEvents(clusterId, { limit: 10 });
-  const { data: toolsStatus } = useClusterToolsStatus(clusterId);
+  const toolsQuery = useClusterToolsStatus(clusterId);
+  const toolsMetric = toolStatusMetric(toolsQuery);
   // Image-vuln severity rollup — same endpoint the Image Scans tab
   // uses, hoisted onto the overview as a top-line card so operators
   // see "you have 47 criticals" at a glance instead of having to
   // navigate two clicks deep.
-  const { data: vulnSummary } = useQuery({
+  const vulnerabilityQuery = useQuery({
     queryKey: queryKeys.clusterPages.vulnerabilitySummary(clusterId),
     queryFn: () => getImageVulnSummary(clusterId),
     enabled: !!clusterId,
     // `image_scan.changed` refreshes this while the stream is open.
     refetchInterval: liveFallback(5 * 60 * 1000),
     refetchIntervalInBackground: false,
+    throwOnError: false,
   });
+  const criticalMetric = vulnerabilityMetric(vulnerabilityQuery, "critical");
+  const highMetric = vulnerabilityMetric(vulnerabilityQuery, "high");
   const directPermission = useClustersUpdate(clusterId);
   const kubeconfig = useClusterKubeconfig(clusterId, cluster, directPermission);
   const deleteMutation = useDeleteCluster();
@@ -205,7 +211,6 @@ export function ClusterDetailPage() {
                 label={cluster.badgeText}
                 className="shrink-0"
               />
-              <AgentAccessChip cluster={cluster} />
             </>
           }
           meta={clusterMeta}
@@ -403,17 +408,12 @@ export function ClusterDetailPage() {
         >
           <MetricCard
             title="Critical CVEs"
-            value={vulnSummary?.critical ?? 0}
-            subtitle={
-              vulnSummary?.lastScannedAt
-                ? `${vulnSummary.reportCount} reports · last ${formatRelativeTime(vulnSummary.lastScannedAt)}`
-                : vulnSummary && vulnSummary.reportCount > 0
-                  ? `${vulnSummary.reportCount} reports`
-                  : "no scans yet"
-            }
+            value={criticalMetric.value}
+            subtitle={criticalMetric.subtitle}
             icon={<ShieldAlert className="h-4 w-4" />}
             className={
-              (vulnSummary?.critical ?? 0) > 0
+              typeof criticalMetric.value === "number" &&
+              criticalMetric.value > 0
                 ? "cursor-pointer hover:border-status-error/50 transition-colors"
                 : "cursor-pointer hover:border-muted-foreground/50 transition-colors"
             }
@@ -426,12 +426,8 @@ export function ClusterDetailPage() {
         >
           <MetricCard
             title="High CVEs"
-            value={vulnSummary?.high ?? 0}
-            subtitle={
-              vulnSummary
-                ? `${vulnSummary.medium} med · ${vulnSummary.low} low`
-                : "—"
-            }
+            value={highMetric.value}
+            subtitle={highMetric.subtitle}
             icon={<ShieldAlert className="h-4 w-4" />}
             className="cursor-pointer hover:border-muted-foreground/50 transition-colors"
           />
@@ -442,23 +438,9 @@ export function ClusterDetailPage() {
           className="contents"
         >
           <MetricCard
-            title="Baseline Tools"
-            value={
-              toolsStatus
-                ? `${toolsStatus.filter((t) => t.status === "installed").length}/${toolsStatus.length}`
-                : "—"
-            }
-            subtitle={
-              toolsStatus
-                ? toolsStatus.filter((t) => t.status !== "installed").length ===
-                  0
-                  ? "all installed"
-                  : `${toolsStatus
-                      .filter((t) => t.status !== "installed")
-                      .map((t) => t.slug)
-                      .join(", ")} pending`
-                : undefined
-            }
+            title="Tools"
+            value={toolsMetric.value}
+            subtitle={toolsMetric.subtitle}
             icon={<Package className="h-4 w-4" />}
             className="cursor-pointer hover:border-muted-foreground/50 transition-colors"
           />
@@ -474,8 +456,6 @@ export function ClusterDetailPage() {
           icon={<Activity className="h-4 w-4" />}
         />
       </div>
-
-      <AgentPrivilegePanel cluster={cluster} />
 
       {/* Recent Events */}
       <div>
@@ -543,121 +523,6 @@ export function ClusterDetailPage() {
         variant="destructive"
         loading={deleteMutation.isPending}
       />
-    </div>
-  );
-}
-
-// agentAccessSummary derives the agent's access posture once, for both the
-// header chip and the full panel.
-//
-// The local/self-managed cluster runs the in-process management agent (the
-// chart's ServiceAccount + management ClusterRole), not a profile-generated
-// remote agent — so the viewer/operator/admin model doesn't apply. Its stored
-// annotation is empty (which would default to "viewer"), so surface its true
-// posture explicitly instead of mislabeling it read-only.
-function agentAccessSummary(cluster: Cluster) {
-  const isLocal = !!cluster.isLocal;
-  const profile = (cluster.agentPrivilegeProfile || "admin").toLowerCase();
-  const isAdmin = !isLocal && profile === "admin";
-  const label = isLocal
-    ? "Management"
-    : profile === "viewer"
-      ? "Viewer"
-      : profile === "operator"
-        ? "Operator"
-        : "Admin";
-  const detail = isLocal
-    ? "In-cluster management agent — full management RBAC for platform self-management."
-    : profile === "viewer"
-      ? "Read-only inventory, logs, health checks, and discovery."
-      : profile === "operator"
-        ? "Workload operations without ClusterRole or cluster-admin escalation."
-        : "Full API-group, resource, verb, and non-resource URL access.";
-  return { isLocal, profile, isAdmin, label, detail };
-}
-
-// AgentAccessChip states the agent's access mode inline with the other cluster
-// conditions, where it is scannable. Only `admin` — the posture that warrants a
-// warning — escalates to the full AgentPrivilegePanel below; a whole bordered
-// card with an icon, heading and docs link is a lot of chrome to say "Operator".
-function AgentAccessChip({ cluster }: { cluster: Cluster }) {
-  const { isAdmin, isLocal, label, detail } = agentAccessSummary(cluster);
-  const tone = isAdmin
-    ? "bg-status-warning/10 text-status-warning border-status-warning/20"
-    : isLocal
-      ? "bg-status-info/10 text-status-info border-status-info/20"
-      : "bg-status-success/10 text-status-success border-status-success/20";
-  return (
-    <span
-      title={detail}
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs border ${tone}`}
-    >
-      <ShieldAlert className="h-3 w-3" />
-      Access: {label}
-    </span>
-  );
-}
-
-function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
-  const { isAdmin, isLocal, profile, label, detail } =
-    agentAccessSummary(cluster);
-  const isViewer = !isLocal && profile === "viewer";
-  // Admin and viewer are the two postures with a consequence worth spelling out:
-  // admin is a security caveat (near/at cluster-admin, break-glass), viewer is a
-  // capability caveat (read-only → Astronomer can't install baseline monitoring
-  // or tools). Operator and the management cluster are self-explanatory and stay
-  // on the header chip only.
-  if (!isAdmin && !isViewer) return null;
-  const tone = isAdmin
-    ? "border-status-warning/30 bg-status-warning/10 text-status-warning"
-    : "border-status-info/30 bg-status-info/10 text-status-info";
-  const iconTone = isAdmin ? "text-status-warning" : "text-status-info";
-
-  return (
-    <div className="rounded-lg border border-border bg-card">
-      <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-start gap-3 min-w-0">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-            <ShieldAlert className={`h-4 w-4 ${iconTone}`} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-medium text-foreground">
-                Agent access profile
-              </h3>
-              <span
-                className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-xs font-medium ${tone}`}
-              >
-                {label}
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-            {isAdmin && (
-              <p className="mt-1 text-xs text-status-warning">
-                Full-admin agent access should be reserved for compatibility or
-                break-glass workflows.
-              </p>
-            )}
-            {isViewer && (
-              <p className="mt-1 text-xs text-status-info">
-                Read-only: Astronomer can&apos;t install baseline monitoring
-                (kube-state-metrics, node-exporter) or tools on this cluster, so
-                metrics dashboards stay empty. Re-adopt the cluster as Admin to
-                enable monitoring and management.
-              </p>
-            )}
-          </div>
-        </div>
-        <a
-          href="/docs/agent-privilege-profiles.md"
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-sm border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <CircleHelp className="h-3.5 w-3.5" />
-          Profile matrix
-        </a>
-      </div>
     </div>
   );
 }

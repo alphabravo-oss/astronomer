@@ -94,6 +94,8 @@ export function liveTarget(): EventTarget {
  *    `refetchInterval` function re-evaluates and fallback polling actually
  *    restarts (React Query only re-evaluates intervals after a fetch).
  * The FIRST open never invalidates — queries are fetching fresh already.
+ * Catch-up must not cancel in-flight reads or replay failed/denied queries;
+ * their own retry controls and polling policies remain authoritative.
  */
 function setStatus(state: ConnectionState, next: LiveStatus): void {
   const prev = state.status;
@@ -105,14 +107,19 @@ function setStatus(state: ConnectionState, next: LiveStatus): void {
     // gone — the open→closed bulk invalidate below kicks every active query.
     clearPacedInvalidations();
   }
-  if (next === "open") {
-    if (state.everOpened) {
-      liveQueryClient?.invalidateQueries({ refetchType: "active" });
-    }
-    state.everOpened = true;
-  } else if (prev === "open" && next === "closed") {
-    liveQueryClient?.invalidateQueries({ refetchType: "active" });
+  if (
+    (next === "open" && state.everOpened) ||
+    (prev === "open" && next === "closed")
+  ) {
+    void liveQueryClient?.invalidateQueries(
+      {
+        refetchType: "active",
+        predicate: (query) => query.state.status !== "error",
+      },
+      { cancelRefetch: false },
+    );
   }
+  if (next === "open") state.everOpened = true;
 }
 
 /** Build the stream URL with a one-use stream ticket. */
@@ -187,7 +194,6 @@ function openSource(state: ConnectionState): void {
 
       es.onopen = () => {
         setStatus(state, "open");
-        state.retryCount = 0;
         armWatchdog(state);
       };
 
@@ -197,6 +203,9 @@ function openSource(state: ConnectionState): void {
       // dispatcher fans the frame out on `state.target` and routes it into
       // the paced query invalidator (see lib/live/dispatch.ts).
       es.onmessage = (ev) => {
+        // Headers alone do not prove a healthy stream: an immediate EOF must
+        // keep exponential backoff instead of causing a one-second loop.
+        state.retryCount = 0;
         armWatchdog(state);
         dispatchLiveFrame(ev.data, state.target, liveQueryClient);
       };

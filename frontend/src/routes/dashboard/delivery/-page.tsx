@@ -52,7 +52,7 @@ import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
-import { pageRowCount } from "@/lib/api/pagination";
+import { pageRowCount, pageCountLabel } from "@/lib/api/pagination";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
 function isForbiddenError(error: unknown): boolean {
@@ -645,7 +645,7 @@ function ProjectDeliveryOverview({
               sources.isError
                 ? "—"
                 : sources.data
-                  ? pageRowCount(sources.data)
+                  ? pageCountLabel(sources.data)
                   : "—"
             }
             unavailable={sources.isError}
@@ -660,7 +660,7 @@ function ProjectDeliveryOverview({
               bundles.isError
                 ? "—"
                 : bundles.data
-                  ? pageRowCount(bundles.data)
+                  ? pageCountLabel(bundles.data)
                   : "—"
             }
             unavailable={bundles.isError}
@@ -675,7 +675,7 @@ function ProjectDeliveryOverview({
               targets.isError
                 ? "—"
                 : targets.data
-                  ? pageRowCount(targets.data)
+                  ? pageCountLabel(targets.data)
                   : "—"
             }
             unavailable={targets.isError}
@@ -721,7 +721,7 @@ function ProjectDeliveryOverview({
             >
               <span className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-status-warning" />
-                {pageRowCount(unhealthySources.data)} degraded delivery source
+                {pageCountLabel(unhealthySources.data)} degraded delivery source
                 {pageRowCount(unhealthySources.data) === 1 ? "" : "s"}
               </span>
               <DeliveryPhaseBadge value="degraded" />

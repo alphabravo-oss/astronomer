@@ -154,12 +154,12 @@ func TestSharedGrafanaPreviewIsClusterIPWithSameOriginProxy(t *testing.T) {
 	}
 	ini, _ := wrap.Data.Values["grafana.ini"].(map[string]any)
 	server, _ := ini["server"].(map[string]any)
-	if server["root_url"] != "https://astronomer.example.com"+sharedGrafanaProxyPath || server["serve_from_sub_path"] != true {
+	if server["root_url"] != "https://astronomer.example.com"+sharedGrafanaProxyPath || server["serve_from_sub_path"] != false {
 		t.Fatalf("grafana.ini.server = %+v, want same-origin subpath", server)
 	}
 	live, _ := ini["live"].(map[string]any)
-	if live["enabled"] != false {
-		t.Fatalf("live.enabled = %v, want false", live["enabled"])
+	if live["max_connections"] != float64(0) {
+		t.Fatalf("live.max_connections = %v, want 0", live["max_connections"])
 	}
 	proxyAuth, _ := ini["auth.proxy"].(map[string]any)
 	if proxyAuth["enabled"] != true {

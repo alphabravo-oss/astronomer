@@ -1,11 +1,13 @@
 import {
   deleteAdminManagementBackupDestinationsById,
+  getAdminBackupDrill,
   getAdminBackupDrillHistory,
   getAdminManagementBackup,
   postAdminManagementBackupDestinationsByIdRun,
 } from "@/lib/api/generated/client";
 import {
   deleteManagementBackupDestination,
+  getLatestBackupDrill,
   getManagementBackupStatus,
   listBackupDrillHistory,
   runManagementBackupDestination,
@@ -24,9 +26,56 @@ vi.mock("@/lib/api/generated/client", () => ({
 }));
 
 const destinationId = "00000000-0000-4000-8000-000000000001";
+const drill = {
+  id: destinationId,
+  started_at: "2026-09-22T01:00:00Z",
+  finished_at: "2026-09-22T01:00:01Z",
+  status: "success" as const,
+  backup_key: "snapshot",
+  schema_version: 1,
+  error_message: "",
+  created_at: "2026-09-22T01:00:00Z",
+};
 
 describe("generated management backup API", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    { id: "" },
+    { started_at: "1970-01-01T00:00:00Z" },
+    { started_at: "invalid" },
+    { finished_at: null },
+    { finished_at: "2026-09-21T00:00:00Z" },
+  ])("rejects success without valid drill evidence: %j", async (invalid) => {
+    vi.mocked(getAdminBackupDrill).mockResolvedValueOnce({
+      data: {
+        latest: { ...drill, ...invalid },
+        latest_success: null,
+        latest_success_age_seconds: null,
+      },
+    });
+    await expect(getLatestBackupDrill()).rejects.toThrow(
+      /success cannot be verified/,
+    );
+  });
+
+  it("distinguishes absent, running and completed drill results", async () => {
+    for (const latest of [
+      null,
+      { ...drill, status: "running" as const, finished_at: null },
+      drill,
+    ]) {
+      vi.mocked(getAdminBackupDrill).mockResolvedValueOnce({
+        data: {
+          latest,
+          latest_success: null,
+          latest_success_age_seconds: null,
+        },
+      });
+      const result = await getLatestBackupDrill();
+      expect(result.latest?.status ?? null).toBe(latest?.status ?? null);
+    }
+  });
 
   it("maps nullable destination status and propagates cancellation", async () => {
     const signal = new AbortController().signal;

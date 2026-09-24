@@ -1,0 +1,3 @@
+{
+  "text": "Snapshots\n\nVelero-backed workload snapshots for Smoke East.\n\nVelero is not installed\n\nWorkload snapshots show up here after Velero is installed on this cluster. Install it from Cluster Tools, then return to take and schedule snapshots.\n\nInstall Velero"
+}

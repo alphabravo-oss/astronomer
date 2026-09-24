@@ -172,7 +172,7 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		envconfig.Default{Key: "heartbeat_interval", Value: 30},
 		envconfig.Default{Key: "metrics_interval", Value: 60},
 		envconfig.Default{Key: "health_addr", Value: ":8081"},
-		envconfig.Default{Key: "privilege_profile", Value: agenttemplate.PrivilegeProfileViewer},
+		envconfig.Default{Key: "privilege_profile", Value: agenttemplate.PrivilegeProfileAdmin},
 		envconfig.Default{Key: "env", Value: "managed-cluster"},
 		envconfig.Default{Key: "max_inflight_requests", Value: defaultMaxInflightRequests},
 		envconfig.Default{Key: "max_inflight_streams", Value: defaultMaxInflightStreams},
@@ -286,11 +286,8 @@ func LoadUpgradeWatchdogOptions() UpgradeWatchdogOptions {
 	return opts
 }
 
-// resolveConfiguredPrivilegeProfile applies the same fail-closed profile
-// semantics as install-manifest RBAC rendering. The explicit bit is kept
-// separate from the value because Viper supplies the safe viewer default when
-// the environment variable is absent; operators upgrading an old manifest
-// still need a visible warning that implicit admin is no longer supported.
+// resolveConfiguredPrivilegeProfile preserves explicit legacy profile reports
+// until the installation is reapplied. New installations always render admin.
 func resolveConfiguredPrivilegeProfile(raw string, explicitlyConfigured bool, log *slog.Logger) string {
 	profile := agenttemplate.NormalizePrivilegeProfile(raw)
 	if log == nil {
@@ -298,7 +295,7 @@ func resolveConfiguredPrivilegeProfile(raw string, explicitlyConfigured bool, lo
 	}
 	if !explicitlyConfigured {
 		log.Warn(
-			"ASTRONOMER_PRIVILEGE_PROFILE is unset; using least-privilege viewer (set admin explicitly before upgrading only if full-management access is intentionally required)",
+			"ASTRONOMER_PRIVILEGE_PROFILE is unset; using full management, with user access controlled by Astronomer RBAC",
 			"effective_privilege_profile", profile,
 		)
 		return profile

@@ -1,4 +1,3 @@
-
 /**
  * /dashboard/settings/monitoring — lifecycle for the SHARED monitoring
  * stacks: Thanos (long-term metrics), Alertmanager (alert routing), and
@@ -24,14 +23,12 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { PermissionState } from "@/components/ui/empty-state";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { useQuery } from "@tanstack/react-query";
-import { useClusters, useFeatureFlags } from "@/lib/hooks/clusters";
+import { useFeatureFlags } from "@/lib/hooks/clusters";
 import { queryKeys } from "@/lib/query-keys";
 import { getMonitoringSizer } from "@/lib/api/monitoring-stack";
-import { useB2StorageLocations } from "@/components/backups/hooks";
 import {
   StackLifecyclePanel,
   type StackLifecyclePermissions,
-  type StackOption,
 } from "@/components/monitoring/stack-lifecycle-panel";
 import {
   SHARED_ALERTMANAGER_FAMILY,
@@ -67,33 +64,6 @@ export function SharedMonitoringStacksPage() {
     queryFn: getMonitoringSizer,
     enabled: read.allowed && showLoki,
   });
-
-  const clustersQuery = useClusters({ pageSize: 100 });
-  // Backup storage configs double as the object-storage source for Thanos
-  // (the handler resolves storageConfigId through GetBackupStorageConfigByID).
-  // A caller without backups:read gets an empty list; the field then degrades
-  // to a free-text id input rather than blocking the form.
-  const storageQuery = useB2StorageLocations();
-
-  const clusters = clustersQuery.data?.data ?? [];
-  const clusterOptions: StackOption[] = clusters.map((cluster) => ({
-    id: cluster.id,
-    label: cluster.isLocal
-      ? `${cluster.displayName || cluster.name} (management)`
-      : cluster.displayName || cluster.name,
-  }));
-  const storageOptions: StackOption[] = (storageQuery.data?.data ?? []).map(
-    (location) => ({
-      id: location.id,
-      label: `${location.name} — ${location.bucket}`,
-    }),
-  );
-
-  const managementClusterId =
-    clusters.find((cluster) => cluster.isLocal)?.id ?? "";
-  const seedOverrides = managementClusterId
-    ? { managementClusterId }
-    : undefined;
 
   return (
     <PageShell>
@@ -141,17 +111,12 @@ export function SharedMonitoringStacksPage() {
             target={THANOS_TARGET}
             spec={SHARED_THANOS_FAMILY}
             permissions={permissions}
-            clusterOptions={clusterOptions}
-            storageOptions={storageOptions}
-            seedOverrides={seedOverrides}
           />
           {showGrafana ? (
             <StackLifecyclePanel
               target={GRAFANA_TARGET}
               spec={SHARED_GRAFANA_FAMILY}
               permissions={permissions}
-              clusterOptions={clusterOptions}
-              seedOverrides={seedOverrides}
             />
           ) : null}
           {showLoki ? (
@@ -166,9 +131,6 @@ export function SharedMonitoringStacksPage() {
                 target={LOKI_TARGET}
                 spec={SHARED_LOKI_FAMILY}
                 permissions={permissions}
-                clusterOptions={clusterOptions}
-                storageOptions={storageOptions}
-                seedOverrides={seedOverrides}
               />
             </>
           ) : null}
@@ -176,8 +138,6 @@ export function SharedMonitoringStacksPage() {
             target={ALERTMANAGER_TARGET}
             spec={SHARED_ALERTMANAGER_FAMILY}
             permissions={permissions}
-            clusterOptions={clusterOptions}
-            seedOverrides={seedOverrides}
           />
         </div>
       )}

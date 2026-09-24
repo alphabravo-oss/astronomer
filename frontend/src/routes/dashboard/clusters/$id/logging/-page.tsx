@@ -4,9 +4,13 @@ import { useParams } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { useAttachAstronomerLogs, useLoggingAttachStatus } from "@/lib/hooks/logging";
+import {
+  useAttachAstronomerLogs,
+  useLoggingAttachStatus,
+} from "@/lib/hooks/logging";
 import { useCluster } from "@/lib/hooks/clusters";
 import { usePermissionDecision } from "@/lib/permission-hooks";
+import { ClusterGrafanaView } from "@/components/monitoring/cluster-grafana-view";
 import { PipelinesTab } from "@/routes/dashboard/logging/-pipelines-tab";
 import { CreatePipelineModal } from "@/routes/dashboard/logging/-pipeline-modal";
 
@@ -14,6 +18,7 @@ export function ClusterLoggingPage() {
   const params = useParams({ from: "/dashboard/clusters/$id" });
   const clusterId = params.id;
   const { data: cluster } = useCluster(clusterId);
+  const [configure, setConfigure] = useState(false);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const canCreate = usePermissionDecision("logging", "create", {
     type: "cluster",
@@ -25,13 +30,29 @@ export function ClusterLoggingPage() {
   const attached = Boolean(attachStatus.data?.attached);
   const showAttach = ingestPublic && canCreate.allowed;
 
+  if (!configure)
+    return (
+      <ClusterGrafanaView
+        clusterId={clusterId}
+        view="logs"
+        actions={
+          <ActionButton onClick={() => setConfigure(true)}>
+            Configure log collection
+          </ActionButton>
+        }
+      />
+    );
+
   return (
     <PageShell>
       <PageHeader
-        title="Logging"
+        title="Log collection"
         description={`Log pipelines for ${cluster?.displayName || cluster?.name || "this cluster"}`}
         actions={
           <div className="flex items-center gap-2">
+            <ActionButton onClick={() => setConfigure(false)}>
+              View logs in Grafana
+            </ActionButton>
             <RouterLink
               to="/dashboard/logging"
               className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"

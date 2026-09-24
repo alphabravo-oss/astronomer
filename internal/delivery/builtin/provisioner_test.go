@@ -60,14 +60,14 @@ func TestPlanCatalogSourcesReusesCurrentSourceAndPreservesIdentity(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sources) != 1 || len(byURL) != 1 {
-		t.Fatalf("current catalog planned %d sources / %d URL bindings, want one", len(sources), len(byURL))
+	if len(sources) != 2 || len(byURL) != 2 {
+		t.Fatalf("current catalog planned %d sources / %d URL bindings, want two", len(sources), len(byURL))
 	}
 	want := sourceIdentity{
 		id: stableID("source", projectID.String(), systemSourceName), name: systemSourceName, url: systemSourceURL,
 	}
-	if sources[0] != want || byURL[systemSourceURL] != want {
-		t.Fatalf("current source identity = %+v / %+v, want %+v", sources[0], byURL[systemSourceURL], want)
+	if sources[1] != want || byURL[systemSourceURL] != want {
+		t.Fatalf("current source identity = %+v / %+v, want %+v", sources[1], byURL[systemSourceURL], want)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestPlanCatalogSourcesBindsMultipleSourcesDeterministically(t *testing.T) {
 	if !reflect.DeepEqual(first, second) || !reflect.DeepEqual(firstByURL, secondByURL) {
 		t.Fatal("multi-source planning changed across identical retries")
 	}
-	if len(first) != 2 || first[0].url != secondURL || first[1].url != systemSourceURL {
+	if len(first) != 3 || first[0].url != "https://aquasecurity.github.io/helm-charts" || first[1].url != secondURL || first[2].url != systemSourceURL {
 		t.Fatalf("multi-source plan is not URL-sorted and complete: %+v", first)
 	}
 	if firstByURL[secondURL].id == firstByURL[systemSourceURL].id || firstByURL[secondURL].name == firstByURL[systemSourceURL].name {

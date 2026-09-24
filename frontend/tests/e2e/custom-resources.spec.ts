@@ -148,7 +148,26 @@ async function mockApi(page: Page) {
     if (
       path === `/clusters/${CLUSTER_ID}/k8s/apis/${GROUP}/${VERSION}/${PLURAL}`
     ) {
-      return route.fulfill({ json: crList });
+      const offset = Number(url.searchParams.get("continue") || "0");
+      const limit = Number(url.searchParams.get("limit"));
+      // The sidebar separately requests one item for its bounded count.
+      expect([1, 50]).toContain(limit);
+      return route.fulfill({
+        json: {
+          ...crList,
+          items: crList.items.slice(offset, offset + limit),
+          metadata: {
+            continue:
+              offset + limit < crList.items.length
+                ? String(offset + limit)
+                : "",
+            remainingItemCount: Math.max(
+              0,
+              crList.items.length - offset - limit,
+            ),
+          },
+        },
+      });
     }
     // CR events feed (Events tab fieldSelector).
     if (
@@ -177,7 +196,9 @@ test("custom resources: CRD list -> CR list -> CR detail (Overview + YAML)", asy
   await expect(
     page.getByRole("heading", { name: "Custom Resources" }),
   ).toBeVisible();
-  const crdLink = page.getByRole("link", { name: KIND });
+  const crdLink = page
+    .getByRole("region", { name: "Scrollable data table" })
+    .getByRole("link", { name: KIND, exact: true });
   await expect(crdLink).toBeVisible();
 
   // Drill into the CR instance list (E2, virtualized).
@@ -205,11 +226,47 @@ test("custom resources: CRD list -> CR list -> CR detail (Overview + YAML)", asy
   await expect(page.getByRole("heading", { name: CR_NAME })).toBeVisible();
   await expect(page.getByText(`Kind: ${KIND}`)).toBeVisible();
   await expect(page.getByText("Metadata")).toBeVisible();
-  await expect(page.getByText("Labels")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Labels", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("platform")).toBeVisible();
 
   // YAML tab renders the panel (View/Edit toggle). Scope to the tab nav — the
   // header also has a "Download YAML" action button named YAML.
   await page.getByRole("tab", { name: "YAML" }).click();
   await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+});
+
+test("custom resources: server continuation and live YAML actions preserve list navigation", async ({
+  context,
+  page,
+}) => {
+  await seedAuth(context, page, adminUser);
+  const listUrl = `/dashboard/clusters/${CLUSTER_ID}/custom-resources/${GROUP}/${VERSION}/${PLURAL}`;
+  await page.goto(listUrl);
+  await expect(page.getByRole("link", { name: CR_NAME })).toBeVisible();
+  await page.getByRole("button", { name: "Next page", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: "widget-050", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: CR_NAME, exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Previous", exact: true }).click();
+  await expect(page.getByRole("link", { name: CR_NAME })).toBeVisible();
+  const action = page.getByLabel("Open actions menu").first();
+  await action.scrollIntoViewIfNeeded();
+  await action.click();
+  const download = page.waitForEvent("download");
+  await page
+    .getByRole("menuitem", { name: "Download YAML", exact: true })
+    .click();
+  expect((await download).suggestedFilename()).toBe(`${CR_NS}-${CR_NAME}.yaml`);
+  await expect(page).toHaveURL(new RegExp(`${listUrl}$`));
+  await action.click();
+  await page.getByRole("menuitem", { name: "Clone", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: `Clone ${CR_NAME}` }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`${listUrl}$`));
 });

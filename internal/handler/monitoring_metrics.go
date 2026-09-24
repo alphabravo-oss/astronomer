@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -488,7 +488,7 @@ func (h *MonitoringHandler) realWorkloadMetrics(ctx context.Context, clusterID, 
 		return h.zeroMetrics(), true, nil
 	}
 	clusterSelector := labelSelectorForConfig(cfg)
-	workloadSelector := `namespace="` + escapePromLabel(namespace) + `",pod=~"` + regex + `",` + clusterSelector
+	workloadSelector := `namespace="` + escapePromLabel(namespace) + `",pod=~"` + escapePromLabel(regex) + `",` + clusterSelector
 	points, span := metricWindow(rawRange)
 	step := span / time.Duration(points-1)
 	start := time.Now().UTC().Add(-span)
@@ -518,68 +518,19 @@ func (h *MonitoringHandler) realWorkloadMetrics(ctx context.Context, clusterID, 
 	return data, true, nil
 }
 
-func (h *MonitoringHandler) backendClient(ctx context.Context, clusterID string) (*imonitoring.Client, monitoringContext, bool, error) {
-	if h.queries == nil {
-		return nil, monitoringContext{}, false, nil
-	}
-	clusterUUID, err := uuid.Parse(clusterID)
-	if err != nil {
-		return nil, monitoringContext{}, false, err
-	}
-	if joined, err := h.queries.GetClusterMonitoringContext(ctx, clusterUUID); err == nil {
-		client, err := imonitoring.NewClient(imonitoring.BackendConfig{
-			QueryURL:            joined.QueryUrl,
-			TenantID:            joined.TenantID,
-			AuthType:            joined.AuthType,
-			AuthConfig:          joined.AuthConfig,
-			AuthConfigEncrypted: joined.AuthConfigEncrypted,
-			Decryptor:           h.monitoringDecryptor(),
-			Logger:              h.log,
-			DefaultStepSeconds:  joined.DefaultStepSeconds,
-			TimeoutSeconds:      joined.TimeoutSeconds,
-		})
-		if err != nil {
-			return nil, monitoringContext{}, false, err
-		}
-		return client, monitoringContext{
-			ClusterLabel:      joined.ClusterLabel,
-			ClusterLabelValue: defaultString(joined.ClusterLabelValue, clusterID),
-			DefaultStep:       joined.DefaultStepSeconds,
-		}, true, nil
-	} else if err != pgx.ErrNoRows {
-		return nil, monitoringContext{}, false, err
-	}
-	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, monitoringContext{}, false, nil
-		}
-		return nil, monitoringContext{}, false, err
-	}
-	client, err := imonitoring.NewClient(imonitoring.BackendConfig{
-		QueryURL:            backend.QueryUrl,
-		TenantID:            backend.TenantID,
-		AuthType:            backend.AuthType,
-		AuthConfig:          backend.AuthConfig,
-		AuthConfigEncrypted: backend.AuthConfigEncrypted,
-		Decryptor:           h.monitoringDecryptor(),
-		Logger:              h.log,
-		DefaultStepSeconds:  backend.DefaultStepSeconds,
-		TimeoutSeconds:      backend.TimeoutSeconds,
-	})
-	if err != nil {
-		return nil, monitoringContext{}, false, err
-	}
-	return client, monitoringContext{ClusterLabel: "cluster_id", ClusterLabelValue: clusterID, DefaultStep: backend.DefaultStepSeconds}, true, nil
-}
-
 type monitoringContext struct {
+	Local             bool
 	ClusterLabel      string
 	ClusterLabelValue string
 	DefaultStep       int32
 }
 
 func labelSelectorForConfig(cfg monitoringContext) string {
+	// Local TSDB series do not carry externalLabels. The agent transport binds
+	// the query to a single authorized cluster, including workload selectors.
+	if cfg.Local {
+		return `job=~".*"`
+	}
 	return cfg.ClusterLabel + `="` + escapePromLabel(cfg.ClusterLabelValue) + `"`
 }
 
@@ -592,18 +543,13 @@ func podRegex(items []map[string]any) string {
 	names := make([]string, 0, len(items))
 	for _, item := range items {
 		if name, ok := item["name"].(string); ok && name != "" {
-			names = append(names, regexpEscape(name))
+			names = append(names, regexp.QuoteMeta(name))
 		}
 	}
 	if len(names) == 0 {
 		return ""
 	}
 	return "^(" + strings.Join(names, "|") + ")$"
-}
-
-func regexpEscape(value string) string {
-	replacer := strings.NewReplacer(`\`, `\\`, `.`, `\.`, `+`, `\+`, `*`, `\*`, `?`, `\?`, `(`, `\(`, `)`, `\)`, `[`, `\[`, `]`, `\]`, `{`, `\{`, `}`, `\}`, `^`, `\^`, `$`, `\$`, `|`, `\|`, `-`, `\-`)
-	return replacer.Replace(value)
 }
 
 func (h *MonitoringHandler) promSeriesSet(ctx context.Context, client *imonitoring.Client, start, end time.Time, step time.Duration, selector, label string, queries map[string]string) (map[string]any, error) {

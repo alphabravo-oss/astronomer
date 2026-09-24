@@ -16,21 +16,16 @@ import { TabStrip } from "@/components/ui/tabs";
 import { ResourceMasthead } from "@/components/ui/page";
 import { MetricCard } from "@/components/ui/metric-card";
 import {
-  useClusterEvents,
-  useClusterNamespaces,
-  useClusterPods,
-} from "@/lib/hooks/clusters";
-import { useGenericResources } from "@/lib/hooks/kubernetes-proxy";
-import {
-  useIngresses,
-  useNetworkPolicies,
-  usePersistentVolumeClaims,
-  useServices,
-} from "@/lib/hooks/kubernetes-resources";
-import { useWorkloads } from "@/lib/hooks/workloads";
+  useNamespaceQueries,
+  NamespacePageControls,
+} from "./namespace-queries";
+import { QueryStates } from "@/components/ui/query-states";
 import { Link } from "@tanstack/react-router";
 import { cn, formatBytes, formatCPU, formatRelativeTime } from "@/lib/utils";
-import type { GenericK8sResource } from "@/types";
+import {
+  useNamespaceResourceRows,
+  type NamespaceResourceRow,
+} from "./namespace-resource-rows";
 
 type TabId =
   | "overview"
@@ -42,17 +37,6 @@ type TabId =
   | "events"
   | "security"
   | "usage";
-
-interface NamespaceResourceRow {
-  id: string;
-  kind: string;
-  name: string;
-  status: string;
-  detail: string;
-  age: string;
-  createdAt: string;
-  href?: string;
-}
 
 const tabs: Array<{ id: TabId; label: string }> = [
   { id: "overview", label: "Overview" },
@@ -97,26 +81,6 @@ const resourceColumns: Column<NamespaceResourceRow>[] = [
   },
 ];
 
-export const buildGenericNamespaceRows = (
-  clusterId: string,
-  namespace: string,
-  resourceType: string,
-  kind: string,
-  items: GenericK8sResource[] | undefined,
-): NamespaceResourceRow[] =>
-  (items ?? [])
-    .filter((item) => item.namespace === namespace)
-    .map((item) => ({
-      id: `${kind}/${item.name}`,
-      kind,
-      name: item.name,
-      status: item.status || "Active",
-      detail: "",
-      createdAt: item.createdAt || "",
-      age: item.createdAt ? formatRelativeTime(item.createdAt) : "—",
-      href: `/dashboard/clusters/${clusterId}/${resourceType}/${namespace}/${item.name}`,
-    }));
-
 export function NamespaceDetailPage({
   clusterId,
   namespace,
@@ -125,24 +89,14 @@ export function NamespaceDetailPage({
   namespace: string;
 }) {
   const [tab, setTab] = useState<TabId>("overview");
-  const namespaces = useClusterNamespaces(clusterId);
-  const workloads = useWorkloads(clusterId, { namespace, pageSize: 500 });
-  const pods = useClusterPods(clusterId, { namespace });
-  const services = useServices(clusterId);
-  const ingresses = useIngresses(clusterId);
-  const policies = useNetworkPolicies(clusterId);
-  const pvcs = usePersistentVolumeClaims(clusterId);
-  const events = useClusterEvents(clusterId, { limit: 500 });
-  const configMaps = useGenericResources(clusterId, "configmaps");
-  const secrets = useGenericResources(clusterId, "secrets");
-  const quotas = useGenericResources(clusterId, "resourcequotas");
-  const limits = useGenericResources(clusterId, "limitranges");
-  const serviceAccounts = useGenericResources(clusterId, "serviceaccounts");
-  const roles = useGenericResources(clusterId, "k8s-roles");
-  const roleBindings = useGenericResources(clusterId, "k8s-rolebindings");
+  const queries = useNamespaceQueries(clusterId, namespace);
+  const { namespaces, workloads, pods, services, policies, pvcs, events } =
+    queries;
 
-  const ns = namespaces.data?.find((item) => item.name === namespace);
-  const namespaceEvents = (events.data ?? []).filter(
+  const ns = (namespaces.isError ? undefined : namespaces.data)?.find(
+    (item) => item.name === namespace,
+  );
+  const namespaceEvents = (events.isError ? [] : (events.data ?? [])).filter(
     (event) => event.involvedObject.namespace === namespace,
   );
   const warningEvents = namespaceEvents.filter(
@@ -154,173 +108,12 @@ export function NamespaceDetailPage({
   );
   const restarts = namespacePods.reduce((sum, pod) => sum + pod.restarts, 0);
 
-  const rows = useMemo<
-    Record<Exclude<TabId, "overview" | "usage">, NamespaceResourceRow[]>
-  >(
-    () => ({
-      workloads: (workloads.data?.data ?? []).map((item) => ({
-        id: `${item.kind}/${item.name}`,
-        kind: item.kind,
-        name: item.name,
-        status: item.status,
-        detail: item.ready,
-        createdAt: item.createdAt,
-        age: item.age,
-        href: `/dashboard/clusters/${clusterId}/workloads/${item.kind.toLowerCase()}s/${namespace}/${item.name}`,
-      })),
-      pods: namespacePods.map((pod) => ({
-        id: `Pod/${pod.name}`,
-        kind: "Pod",
-        name: pod.name,
-        status: pod.status,
-        detail: `${pod.ready} ready · ${pod.restarts} restarts · ${pod.node || "unscheduled"}`,
-        createdAt: pod.createdAt,
-        age: pod.age,
-        href: `/dashboard/clusters/${clusterId}/pods/${namespace}/${pod.name}`,
-      })),
-      networking: [
-        ...(services.data ?? [])
-          .filter((item) => item.namespace === namespace)
-          .map((item) => ({
-            id: `Service/${item.name}`,
-            kind: "Service",
-            name: item.name,
-            status: "Active",
-            detail: `${item.type} · ${item.clusterIP || "no cluster IP"}`,
-            createdAt: item.createdAt,
-            age: formatRelativeTime(item.createdAt),
-            href: `/dashboard/clusters/${clusterId}/services/${namespace}/${item.name}`,
-          })),
-        ...(ingresses.data ?? [])
-          .filter((item) => item.namespace === namespace)
-          .map((item) => ({
-            id: `Ingress/${item.name}`,
-            kind: "Ingress",
-            name: item.name,
-            status: "Active",
-            detail: item.hosts.join(", ") || "No hosts",
-            createdAt: item.createdAt,
-            age: formatRelativeTime(item.createdAt),
-            href: `/dashboard/clusters/${clusterId}/ingresses/${namespace}/${item.name}`,
-          })),
-        ...(policies.data ?? [])
-          .filter((item) => item.namespace === namespace)
-          .map((item) => ({
-            id: `NetworkPolicy/${item.name}`,
-            kind: "NetworkPolicy",
-            name: item.name,
-            status: "Active",
-            detail: item.policyTypes.join(" + "),
-            createdAt: item.createdAt,
-            age: formatRelativeTime(item.createdAt),
-            href: `/dashboard/clusters/${clusterId}/networkpolicies/${namespace}/${item.name}`,
-          })),
-      ],
-      storage: (pvcs.data ?? [])
-        .filter((item) => item.namespace === namespace)
-        .map((item) => ({
-          id: `PVC/${item.name}`,
-          kind: "PersistentVolumeClaim",
-          name: item.name,
-          status: item.status,
-          detail: `${item.capacity || "unallocated"} · ${item.storageClass || "default class"}`,
-          createdAt: item.createdAt,
-          age: formatRelativeTime(item.createdAt),
-          href: `/dashboard/clusters/${clusterId}/persistentvolumeclaims/${namespace}/${item.name}`,
-        })),
-      configuration: [
-        ...buildGenericNamespaceRows(
-          clusterId,
-          namespace,
-          "configmaps",
-          "ConfigMap",
-          configMaps.data?.data,
-        ),
-        ...buildGenericNamespaceRows(
-          clusterId,
-          namespace,
-          "secrets",
-          "Secret",
-          secrets.data?.data,
-        ),
-        ...buildGenericNamespaceRows(
-          clusterId,
-          namespace,
-          "resourcequotas",
-          "ResourceQuota",
-          quotas.data?.data,
-        ),
-        ...buildGenericNamespaceRows(
-          clusterId,
-          namespace,
-          "limitranges",
-          "LimitRange",
-          limits.data?.data,
-        ),
-      ],
-      events: namespaceEvents.map((event) => ({
-        id: event.id,
-        kind: event.involvedObject.kind,
-        name: event.involvedObject.name,
-        status: event.type,
-        detail: `${event.reason}: ${event.message}`,
-        createdAt: event.lastTimestamp,
-        age: formatRelativeTime(event.lastTimestamp),
-      })),
-      security: [
-        ...buildGenericNamespaceRows(
-          clusterId,
-          namespace,
-          "serviceaccounts",
-          "ServiceAccount",
-          serviceAccounts.data?.data,
-        ),
-        ...buildGenericNamespaceRows(
-          clusterId,
-          namespace,
-          "k8s-roles",
-          "Role",
-          roles.data?.data,
-        ),
-        ...buildGenericNamespaceRows(
-          clusterId,
-          namespace,
-          "k8s-rolebindings",
-          "RoleBinding",
-          roleBindings.data?.data,
-        ),
-        ...(policies.data ?? [])
-          .filter((item) => item.namespace === namespace)
-          .map((item) => ({
-            id: `NetworkPolicy/${item.name}`,
-            kind: "NetworkPolicy",
-            name: item.name,
-            status: "Active",
-            detail: `${item.ingressRules} ingress · ${item.egressRules} egress rules`,
-            createdAt: item.createdAt,
-            age: formatRelativeTime(item.createdAt),
-            href: `/dashboard/clusters/${clusterId}/networkpolicies/${namespace}/${item.name}`,
-          })),
-      ],
-    }),
-    [
-      clusterId,
-      configMaps.data,
-      ingresses.data,
-      limits.data,
-      namespace,
-      namespaceEvents,
-      namespacePods,
-      policies.data,
-      pvcs.data,
-      quotas.data,
-      roleBindings.data,
-      roles.data,
-      secrets.data,
-      serviceAccounts.data,
-      services.data,
-      workloads.data?.data,
-    ],
+  const rows = useNamespaceResourceRows(
+    clusterId,
+    namespace,
+    queries,
+    namespacePods,
+    namespaceEvents,
   );
 
   const loading = workloads.isLoading || pods.isLoading || namespaces.isLoading;
@@ -328,6 +121,22 @@ export function NamespaceDetailPage({
   const memoryPct = ns?.memoryLimit
     ? (ns.memoryUsage / ns.memoryLimit) * 100
     : 0;
+
+  if (namespaces.isError || namespaces.isLoading)
+    return <QueryStates query={namespaces}>{null}</QueryStates>;
+  if (!ns)
+    return (
+      <p role="status">
+        Namespace {namespace} was not found in the accessible cluster inventory.
+      </p>
+    );
+  const activeQueries =
+    tab in queries.groups
+      ? queries.groups[tab as keyof typeof queries.groups]
+      : tab === "events"
+        ? [events]
+        : [];
+  const activeError = activeQueries.find((query) => query.isError);
 
   return (
     <div className="space-y-6">
@@ -342,44 +151,56 @@ export function NamespaceDetailPage({
             title={namespace}
             mono
             status={
-              <StatusBadge status={ns?.status ?? (namespaces.isLoading ? "Loading" : "Unknown")} />
+              <StatusBadge
+                status={
+                  ns?.status ?? (namespaces.isLoading ? "Loading" : "Unknown")
+                }
+              />
             }
             description={
-              ns ? `Created ${formatRelativeTime(ns.createdAt)}` : "Namespace-scoped operations and resources"
+              ns
+                ? `Created ${formatRelativeTime(ns.createdAt)}`
+                : "Namespace-scoped operations and resources"
             }
           />
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
           <Stat
             label="Workloads"
-            value={workloads.data?.data.length ?? 0}
+            value={workloads.data ? workloads.data.data.length : "—"}
             icon={Boxes}
           />
-          <Stat label="Pods" value={namespacePods.length} icon={Server} />
+          <Stat
+            label="Pods"
+            value={pods.data ? namespacePods.length : "—"}
+            icon={Server}
+          />
           <Stat
             label="Unhealthy"
-            value={unhealthyPods.length}
+            value={pods.data ? unhealthyPods.length : "—"}
             icon={TriangleAlert}
             danger={unhealthyPods.length > 0}
           />
           <Stat
             label="Restarts"
-            value={restarts}
+            value={pods.data ? restarts : "—"}
             icon={Activity}
             danger={restarts > 0}
           />
           <Stat
             label="Services"
             value={
-              (services.data ?? []).filter(
-                (item) => item.namespace === namespace,
-              ).length
+              services.data
+                ? services.data.data.filter(
+                    (item) => item.namespace === namespace,
+                  ).length
+                : "—"
             }
             icon={Network}
           />
           <Stat
             label="Warning events"
-            value={warningEvents.length}
+            value={events.data && !events.isError ? warningEvents.length : "—"}
             icon={TriangleAlert}
             danger={warningEvents.length > 0}
           />
@@ -392,6 +213,8 @@ export function NamespaceDetailPage({
         onChange={setTab}
         aria-label="Namespace details"
       />
+
+      <NamespacePageControls queries={queries} tab={tab} />
 
       {tab === "overview" && (
         <div className="grid gap-4 lg:grid-cols-3">
@@ -413,25 +236,28 @@ export function NamespaceDetailPage({
             </div>
             <Signal
               label="Pods healthy"
+              available={!!pods.data}
               value={`${namespacePods.length - unhealthyPods.length}/${namespacePods.length}`}
               good={unhealthyPods.length === 0}
             />
             <Signal
               label="Network policies"
+              available={!!policies.data}
               value={String(
-                (policies.data ?? []).filter(
+                (policies.data?.data ?? []).filter(
                   (item) => item.namespace === namespace,
                 ).length,
               )}
-              good={(policies.data ?? []).some(
+              good={(policies.data?.data ?? []).some(
                 (item) => item.namespace === namespace,
               )}
             />
             <Signal
               label="PVCs bound"
-              value={`${(pvcs.data ?? []).filter((item) => item.namespace === namespace && item.status === "Bound").length}/${(pvcs.data ?? []).filter((item) => item.namespace === namespace).length}`}
+              available={!!pvcs.data}
+              value={`${(pvcs.data?.data ?? []).filter((item) => item.namespace === namespace && item.status === "Bound").length}/${(pvcs.data?.data ?? []).filter((item) => item.namespace === namespace).length}`}
               good={
-                !(pvcs.data ?? []).some(
+                !(pvcs.data?.data ?? []).some(
                   (item) =>
                     item.namespace === namespace && item.status !== "Bound",
                 )
@@ -494,13 +320,16 @@ export function NamespaceDetailPage({
           data={rows[tab]}
           columns={resourceColumns}
           keyExtractor={(row) => row.id}
-          loading={loading}
+          loading={loading || activeQueries.some((query) => query.isLoading)}
+          isError={!!activeError}
+          error={activeError?.error}
+          onRetry={() => activeQueries.forEach((query) => void query.refetch())}
           searchable
-          searchPlaceholder={`Search ${tab} in ${namespace}…`}
+          searchPlaceholder={`Filter loaded ${tab} in ${namespace}…`}
           emptyState={{
-            title: `No ${tab} resources found in ${namespace}`,
+            title: `No ${tab} resources on the loaded pages in ${namespace}`,
             description:
-              "Resources will appear after the cluster reports them.",
+              "Try another resource page. Event history is limited to the recent cluster window.",
           }}
           persistKey={`namespace:${tab}`}
         />
@@ -516,7 +345,7 @@ function Stat({
   danger = false,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   icon: typeof Boxes;
   danger?: boolean;
 }) {
@@ -576,10 +405,12 @@ function Signal({
   label,
   value,
   good,
+  available = true,
 }: {
   label: string;
   value: string;
   good: boolean;
+  available?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between border-t border-border py-2 text-sm first:border-t-0">
@@ -587,10 +418,14 @@ function Signal({
       <span
         className={cn(
           "font-medium tabular-nums",
-          good ? "text-status-success" : "text-status-warning",
+          !available
+            ? "text-muted-foreground"
+            : good
+              ? "text-status-success"
+              : "text-status-warning",
         )}
       >
-        {value}
+        {available ? value : "Unavailable"}
       </span>
     </div>
   );

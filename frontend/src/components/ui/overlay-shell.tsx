@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type OverlayPlacement = "center" | "right";
@@ -65,6 +65,9 @@ export function OverlayShell({
   closeOnBackdrop = true,
 }: OverlayShellProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  // Keep the native listener registered through synchronous parent updates
+  // from other global key handlers, while always calling the latest callback.
+  const close = useEffectEvent(onClose);
 
   useEffect(() => {
     const previousActive =
@@ -98,14 +101,21 @@ export function OverlayShell({
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
+      const root = rootRef.current;
+      // Nested pickers must not dismiss or move focus in the parent form.
+      const overlays = document.querySelectorAll("[data-overlay-root]");
+      if (
+        !root ||
+        e.defaultPrevented ||
+        overlays.item(overlays.length - 1) !== root
+      )
+        return;
       if (e.key === "Escape") {
-        onClose();
+        e.preventDefault();
+        close();
         return;
       }
       if (e.key !== "Tab") return;
-
-      const root = rootRef.current;
-      if (!root) return;
 
       const focusable = getFocusable(root);
       if (focusable.length === 0) {
@@ -134,11 +144,24 @@ export function OverlayShell({
     }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, []);
 
   return (
     <div
       ref={rootRef}
+      data-overlay-root
+      onKeyDownCapture={(event) => {
+        // A search field in a nested picker may inherit the parent's form.
+        // Enter must not implicitly submit that form while the picker is open.
+        const target = event.target;
+        if (
+          event.key === "Enter" &&
+          target instanceof HTMLInputElement &&
+          target.form &&
+          !event.currentTarget.contains(target.form)
+        )
+          event.preventDefault();
+      }}
       tabIndex={-1}
       className={cn(
         "fixed inset-0 z-overlay flex",

@@ -17,7 +17,7 @@ import { useWorkloads } from "@/lib/hooks/workloads";
 import { workloadDetailHref } from "@/components/resources/resource-table-primitives";
 import type { Workload } from "@/types";
 import { Select } from "@/components/ui/select";
-import { pageRowCount } from "@/lib/api/pagination";
+import { pageTableCount } from "@/lib/api/pagination";
 import type { WorkloadSort } from "@/lib/api/workloads";
 import { useSearchParam } from "@/lib/use-search-param";
 
@@ -109,7 +109,7 @@ function WorkloadsPage() {
           filtersActive={filtersActive}
           onClearFilters={clearFilters}
           serverSide={{
-            rowCount: pageRowCount(query.data),
+            ...pageTableCount(query.data),
             pagination: { pageIndex, pageSize: WORKLOAD_PAGE_SIZE },
             onPaginationChange: (next) => setPageIndex(next.pageIndex),
             search: {

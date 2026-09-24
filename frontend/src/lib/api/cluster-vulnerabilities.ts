@@ -3,7 +3,7 @@
 import * as generated from "@/lib/api/generated/client";
 import { requireEnvelopeData } from "@/lib/api/data-envelope";
 import type { OperationSnapshot } from "@/lib/api/operation-polling";
-import { mapPage, pageRowCount } from "@/lib/api/pagination";
+import { mapPage } from "@/lib/api/pagination";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 import type { PaginatedResponse } from "@/types";
 
@@ -70,11 +70,8 @@ export interface CVERow {
 
 export interface ImageVulnReportDetail {
   report: ImageVulnReport;
-  vulnerabilities: CVERow[];
-  vulnerabilityTotal: number;
+  vulnerabilities: PaginatedResponse<CVERow>;
   severityFilter: string;
-  limit: number;
-  offset: number;
 }
 
 type ImageVulnReportWire =
@@ -203,7 +200,7 @@ export async function getImageVulnReport(
   const raw = wire.data;
   return {
     report: mapImageVulnReport(raw.report),
-    vulnerabilities: raw.vulnerabilities.data.map((row) => ({
+    vulnerabilities: mapPage(raw.vulnerabilities, (row) => ({
       id: row.id,
       reportId: row.report_id,
       vulnerabilityId: row.vulnerability_id,
@@ -216,10 +213,7 @@ export async function getImageVulnReport(
       title: row.title,
       description: row.description,
     })),
-    vulnerabilityTotal: pageRowCount(raw.vulnerabilities),
     severityFilter: raw.severity_filter,
-    limit: raw.vulnerabilities.pagination.limit,
-    offset: raw.vulnerabilities.pagination.offset,
   };
 }
 

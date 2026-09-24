@@ -82,7 +82,7 @@ func TestRenderAgentInstallManifestCarriesConfiguredTraceRouting(t *testing.T) {
 	}
 }
 
-func TestRenderAgentInstallManifestHonorsPrivilegeProfileAnnotation(t *testing.T) {
+func TestRenderAgentInstallManifestRetiresViewerAnnotation(t *testing.T) {
 	h := NewClusterHandler(nil)
 	h.SetAgentImage("example.com/astronomer-agent", "v1.2.3")
 
@@ -102,8 +102,8 @@ func TestRenderAgentInstallManifestHonorsPrivilegeProfileAnnotation(t *testing.T
 	if !strings.Contains(manifest, `verbs: ["get", "list", "watch"]`) {
 		t.Fatalf("viewer RBAC not rendered:\n%s", manifest)
 	}
-	if strings.Contains(manifest, `resources: ["*"]`) || strings.Contains(manifest, `verbs: ["*"]`) {
-		t.Fatalf("viewer manifest rendered admin wildcard RBAC:\n%s", manifest)
+	if !strings.Contains(manifest, `PRIVILEGE_PROFILE: "admin"`) || !strings.Contains(manifest, `verbs: ["*"]`) {
+		t.Fatal("legacy viewer annotation prevented full cluster management")
 	}
 }
 

@@ -56,8 +56,8 @@ user authorization decision.
   audit actions.
 - Keep the internal listener out of public ingress. A missing/invalid internal
   credential fails closed even if NetworkPolicy is misconfigured.
-- Render the narrowest agent privilege profile that supports the intended
-  workflows. `viewer` is the default; `admin` is explicit break-glass risk.
+- Render full-management agent permissions. Enforce each user's resource,
+  action, cluster, and namespace grants centrally through Astronomer RBAC.
 
 ## Flux-native delivery is a separate path
 

@@ -141,3 +141,35 @@ func TestInactiveUserRetentionIsDailyAndWorkerOwned(t *testing.T) {
 	}
 	t.Fatalf("task descriptor %q is missing", tasks.InactiveUserRetentionType)
 }
+
+// Standalone Prometheus lives behind the owning agent. Both periodic health
+// checks and alert queries must run in the process that owns that tunnel.
+func TestMonitoringTasksRunWithClusterTunnel(t *testing.T) {
+	for _, taskType := range []string{TypeMonitoringReconcile, TypeAlertEvaluation} {
+		found := false
+		for _, descriptor := range TaskDescriptors() {
+			if descriptor.Type != taskType {
+				continue
+			}
+			found = true
+			if descriptor.Owner != TaskOwnerTunnel || descriptor.Queue != TunnelQueueName {
+				t.Fatalf("%s has no cluster tunnel: %+v", taskType, descriptor)
+			}
+			tunnel := false
+			for _, capability := range descriptor.RequiredCapabilities {
+				tunnel = tunnel || capability == CapabilityTunnel
+			}
+			if !tunnel {
+				t.Fatalf("%s does not require tunnel capability", taskType)
+			}
+		}
+		if !found {
+			t.Fatalf("missing task %s", taskType)
+		}
+		for _, schedule := range scheduledTaskSpecs {
+			if schedule.TaskType == taskType && (schedule.Owner != TaskOwnerTunnel || schedule.Queue != TunnelQueueName) {
+				t.Fatalf("%s scheduled without tunnel", taskType)
+			}
+		}
+	}
+}

@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -175,7 +178,7 @@ func TestRedisOutageRecoveryDurableNotification(t *testing.T) {
 	}
 	assertRedisOutageAuditState(t, ctx, pool, channelID, "delivered", 1, 1)
 
-	recoveredRedisURL, recoveredRedisClient := restartRedisOutageContainer(t, ctx, redisContainer)
+	recoveredRedisURL, recoveredRedisClient := restartRedisOutageContainer(t, ctx, redisContainer, redisURL)
 	defer func() { _ = recoveredRedisClient.Close() }()
 	info, err := recoveredRedisClient.Info(ctx, "server").Result()
 	if err != nil {
@@ -335,7 +338,7 @@ func assertRedisOutageAuditState(t *testing.T, ctx context.Context, pool *pgxpoo
 	}
 }
 
-func restartRedisOutageContainer(t *testing.T, ctx context.Context, container string) (string, *redis.Client) {
+func restartRedisOutageContainer(t *testing.T, ctx context.Context, container, originalURL string) (string, *redis.Client) {
 	t.Helper()
 	output, err := exec.CommandContext(ctx, "docker", "start", container).CombinedOutput()
 	if err != nil {
@@ -345,11 +348,10 @@ func restartRedisOutageContainer(t *testing.T, ctx context.Context, container st
 	if err != nil {
 		t.Fatalf("resolve restarted Redis port: %v: %s", err, portOutput)
 	}
-	endpoint := strings.TrimSpace(strings.Split(string(portOutput), "\n")[0])
-	if !strings.HasPrefix(endpoint, "127.0.0.1:") {
-		t.Fatalf("restarted Redis has unsafe published endpoint %q", endpoint)
+	recoveredURL, err := redisOutageRecoveryURL(string(portOutput), os.Getenv("DOCKER_TEST_BIND_HOST"), originalURL)
+	if err != nil {
+		t.Fatal(err)
 	}
-	recoveredURL := "redis://" + endpoint + "/0"
 	options, err := redis.ParseURL(recoveredURL)
 	if err != nil {
 		t.Fatal(err)
@@ -365,6 +367,70 @@ func restartRedisOutageContainer(t *testing.T, ctx context.Context, container st
 	_ = client.Close()
 	t.Fatal("Redis did not recover within 15 seconds")
 	return "", nil
+}
+
+// A restarted container can receive a new ephemeral port. Validate its binding
+// against the companion script's explicit address, then retain the original
+// client hostname: Local CI reaches the host through host.docker.internal,
+// whereas a directly invoked qualification connects through loopback.
+func redisOutageRecoveryURL(portOutput, bindHost, originalURL string) (string, error) {
+	expected, err := netip.ParseAddr(bindHost)
+	if err != nil || expected.Zone() != "" || (!expected.IsLoopback() && !expected.IsPrivate()) {
+		return "", fmt.Errorf("Redis fixture requires an explicit loopback or private bind address")
+	}
+	endpoint, err := netip.ParseAddrPort(strings.TrimSpace(portOutput))
+	if err != nil || endpoint.Port() == 0 || endpoint.Addr().Zone() != "" || endpoint.Addr().Unmap() != expected.Unmap() {
+		return "", fmt.Errorf("restarted Redis must publish exactly one endpoint on the configured bind address")
+	}
+	original, err := url.Parse(originalURL)
+	if err != nil || original.Hostname() == "" {
+		return "", fmt.Errorf("invalid original Redis fixture URL")
+	}
+	if _, err := redis.ParseURL(originalURL); err != nil {
+		return "", fmt.Errorf("invalid original Redis fixture URL")
+	}
+	original.Host = net.JoinHostPort(original.Hostname(), strconv.Itoa(int(endpoint.Port())))
+	return original.String(), nil
+}
+
+func TestRedisOutageRecoveryURL(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name, published, bindHost, original, want string
+	}{
+		{"loopback", "127.0.0.1:32895\n", "127.0.0.1", "redis://127.0.0.1:32894/0", "redis://127.0.0.1:32895/0"},
+		{"local CI bridge", "172.17.0.1:32895\n", "172.17.0.1", "redis://host.docker.internal:32894/0", "redis://host.docker.internal:32895/0"},
+		{"IPv6 loopback", "[::1]:32895\n", "::1", "redis://[::1]:32894/0", "redis://[::1]:32895/0"},
+		{"preserve connection options", "172.17.0.1:32895", "172.17.0.1", "rediss://fixture:password@host.docker.internal:32894/2?protocol=3", "rediss://fixture:password@host.docker.internal:32895/2?protocol=3"},
+		{"unexpected address", "172.17.0.2:32895", "172.17.0.1", "redis://host.docker.internal:32894/0", ""},
+		{"unexpected bridge", "172.17.0.1:32895", "127.0.0.1", "redis://127.0.0.1:32894/0", ""},
+		{"missing bind address", "127.0.0.1:32895", "", "redis://127.0.0.1:32894/0", ""},
+		{"wildcard bind", "0.0.0.0:32895", "0.0.0.0", "redis://127.0.0.1:32894/0", ""},
+		{"IPv6 wildcard bind", "[::]:32895", "::", "redis://[::1]:32894/0", ""},
+		{"public bind", "192.0.2.1:32895", "192.0.2.1", "redis://192.0.2.1:32894/0", ""},
+		{"multiple bindings", "127.0.0.1:32895\n0.0.0.0:32895\n", "127.0.0.1", "redis://127.0.0.1:32894/0", ""},
+		{"zero port", "127.0.0.1:0", "127.0.0.1", "redis://127.0.0.1:32894/0", ""},
+		{"out of range port", "127.0.0.1:65536", "127.0.0.1", "redis://127.0.0.1:32894/0", ""},
+		{"nonnumeric port", "127.0.0.1:redis", "127.0.0.1", "redis://127.0.0.1:32894/0", ""},
+		{"empty binding", "", "127.0.0.1", "redis://127.0.0.1:32894/0", ""},
+		{"invalid URL", "127.0.0.1:32895", "127.0.0.1", "://broken", ""},
+		{"wrong protocol", "127.0.0.1:32895", "127.0.0.1", "https://127.0.0.1:32894/0", ""},
+		{"missing client hostname", "127.0.0.1:32895", "127.0.0.1", "redis:///0", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := redisOutageRecoveryURL(tt.published, tt.bindHost, tt.original)
+			if tt.want == "" {
+				if err == nil || got != "" {
+					t.Fatalf("unsafe fixture endpoint accepted: result=%q, error=%v", got, err)
+				}
+				return
+			}
+			if err != nil || got != tt.want {
+				t.Fatalf("recovery URL = %q, error=%v; want %q", got, err, tt.want)
+			}
+		})
+	}
 }
 
 func waitForRedisOutageReceiver(t *testing.T, ctx context.Context, receiver *redisOutageReceiver, want int32) {

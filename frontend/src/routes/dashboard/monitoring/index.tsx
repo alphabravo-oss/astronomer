@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { ArrowRight, ExternalLink, Server } from "lucide-react";
-import { useClusters } from "@/lib/hooks/clusters";
+import { useClusterEstateTable } from "@/lib/hooks/cluster-estate-table";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { PageHeader, PageShell } from "@/components/ui/page";
@@ -28,7 +28,7 @@ function MonitoringFleetPage() {
   );
   const clusterId = search.get("cluster");
   const range = search.get("range");
-  const clustersQuery = useClusters({ pageSize: 100 });
+  const { query: clustersQuery, serverSide } = useClusterEstateTable();
   const clusters = useMemo(
     () => clustersQuery.data?.data ?? [],
     [clustersQuery.data],
@@ -138,7 +138,11 @@ function MonitoringFleetPage() {
         loadingTitle="Loading cluster metrics"
         permission="clusters:read"
         errorTitle="Failed to load cluster metrics"
-        isEmpty={(result) => result.data.length === 0}
+        isEmpty={(result) =>
+          result.data.length === 0 &&
+          !serverSide.search.value &&
+          serverSide.pagination.pageIndex === 0
+        }
         empty={
           <EmptyState
             icon={Server}
@@ -151,6 +155,8 @@ function MonitoringFleetPage() {
       >
         <DataTable
           data={clusters}
+          serverSide={serverSide}
+          pageSize={serverSide.pagination.pageSize}
           columns={columns}
           keyExtractor={(row) => row.id}
           searchPlaceholder="Search clusters..."

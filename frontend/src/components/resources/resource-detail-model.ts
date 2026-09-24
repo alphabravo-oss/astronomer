@@ -53,6 +53,7 @@ export interface ContainerStatus {
 }
 
 export interface K8sObject {
+  apiVersion?: string;
   kind?: string;
   type?: string;
   metadata?: {
@@ -62,7 +63,12 @@ export interface K8sObject {
     uid?: string;
     labels?: Record<string, string>;
     annotations?: Record<string, string>;
-    ownerReferences?: Array<{ kind: string; name: string; uid?: string }>;
+    ownerReferences?: Array<{
+      apiVersion?: string;
+      kind: string;
+      name: string;
+      uid?: string;
+    }>;
   };
   spec?: {
     nodeName?: string;

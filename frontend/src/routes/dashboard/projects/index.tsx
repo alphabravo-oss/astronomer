@@ -24,7 +24,7 @@ import { toastError } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm, useStore } from "@/lib/form";
 import { useSearchParam } from "@/lib/use-search-param";
-import { pageRowCount } from "@/lib/api/pagination";
+import { pageTableCount } from "@/lib/api/pagination";
 
 const PROJECTS_PAGE_SIZE = 50;
 
@@ -291,7 +291,7 @@ function ProjectsPage() {
             setPageIndex(0);
           }}
           serverSide={{
-            rowCount: pageRowCount(projectsData),
+            ...pageTableCount(projectsData),
             pagination: { pageIndex, pageSize: PROJECTS_PAGE_SIZE },
             onPaginationChange: (next) => setPageIndex(next.pageIndex),
             search: {

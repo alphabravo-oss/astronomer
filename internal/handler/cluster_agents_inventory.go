@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
@@ -28,6 +29,16 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+	if len(r.URL.Query()["search"]) > 1 || utf8.RuneCountInString(search) > 200 {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "search must be one value of at most 200 characters")
+		return
+	}
+	searchQueries, searchCapable := h.queries.(clusterAgentSearchQuerier)
+	if search != "" && !searchCapable {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cluster-agent search is not available")
+		return
+	}
 	limit := int32(queryLimitMax(r, 100, 500))
 	offset := int32(queryOffset(r))
 	if limit <= 0 {
@@ -44,6 +55,9 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	cursorMode := !offsetProvided
 	cursorBinding := paging.Binding("cluster-agents:v1", "created_at:desc,id:desc")
+	if search != "" {
+		cursorBinding = paging.Binding("cluster-agents:v1", "created_at:desc,id:desc", search)
+	}
 	var cursor paging.Cursor
 	var err error
 	if cursorProvided {
@@ -66,13 +80,24 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 		cursorMode = false
 	}
 
-	total, err := h.queries.CountClusters(r.Context())
+	var total int64
+	if search != "" {
+		total, err = searchQueries.CountClustersFiltered(r.Context(), sqlc.CountClustersFilteredParams{FilterSearch: search})
+	} else {
+		total, err = h.queries.CountClusters(r.Context())
+	}
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
 		return
 	}
 	var clusters []sqlc.Cluster
-	if cursorMode {
+	if search != "" && cursorMode {
+		clusters, err = searchQueries.ListClustersFilteredAfter(r.Context(), sqlc.ListClustersFilteredAfterParams{
+			FilterSearch: search, HasCursor: cursorProvided, AfterCreatedAt: cursor.Time, AfterID: cursor.ID, QueryLimit: limit + 1,
+		})
+	} else if search != "" {
+		clusters, err = searchQueries.ListClustersFiltered(r.Context(), sqlc.ListClustersFilteredParams{FilterSearch: search, QueryLimit: limit, QueryOffset: offset})
+	} else if cursorMode {
 		clusters, err = cursorQueries.ListClustersAfter(r.Context(), sqlc.ListClustersAfterParams{
 			HasCursor: cursorProvided, AfterCreatedAt: cursor.Time, AfterID: cursor.ID, QueryLimit: limit + 1,
 		})
@@ -390,7 +415,7 @@ func agentPrivilegeProfileSelfTestCheck(agent clusterAgentItem) agentSelfTestChe
 		agenttemplate.PrivilegeProfileNamespaceViewer, agenttemplate.PrivilegeProfileNamespaceOperator:
 		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent is using the effective " + effectiveProfile + " privilege profile."}
 	case agenttemplate.PrivilegeProfileAdmin:
-		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent is using the explicit full-management (admin) privilege profile. Apply a viewer/operator profile to scope it down if least privilege is required."}
+		return agentSelfTestCheck{Name: "privilege_profile", Status: "passed", Message: "Agent supports full cluster management. User access is controlled by Astronomer RBAC."}
 	case agenttemplate.PrivilegeProfileCustom:
 		return agentSelfTestCheck{Name: "privilege_profile", Status: "warning", Message: "Agent is using custom RBAC; run live diagnostics to verify required permissions."}
 	default:

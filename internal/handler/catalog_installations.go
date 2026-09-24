@@ -214,6 +214,14 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	if targetHasProject {
 		resolvedProjectID = targetProjectID.String()
 	}
+	if resolvedProjectID == "" && h.delivery != nil {
+		projectID, scopeErr := h.platformCatalogProject(r.Context(), clusterID)
+		if scopeErr != nil {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, scopeErr.Error())
+			return
+		}
+		resolvedProjectID = projectID.String()
+	}
 
 	// Migration 067 — the values blob keeps its ${vault://...} markers in
 	// both the installed_charts row AND the enqueued operation payload.
@@ -471,8 +479,8 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		ChartVersionID string  `json:"chart_version_id"`
 		ValuesOverride *string `json:"values_override"`
 	}
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&req)
+	if !decodeOptionalJSON(w, r, &req) {
+		return
 	}
 	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
 	if err != nil {
@@ -589,8 +597,8 @@ func (h *CatalogHandler) RollbackInstalledChart(w http.ResponseWriter, r *http.R
 	var req struct {
 		Revision int `json:"revision,omitempty"`
 	}
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&req)
+	if !decodeOptionalJSON(w, r, &req) {
+		return
 	}
 	targetRevision := int(max(current.Revision-1, 1))
 	if req.Revision > 0 {

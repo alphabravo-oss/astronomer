@@ -334,10 +334,6 @@ func TestNormalizePrivilegeProfileExplicitProfilesStillResolve(t *testing.T) {
 	}
 }
 
-// TestRenderInstallYAMLDefaultProfileResolvesToViewer: an agent manifest
-// rendered with no explicit profile defaults to least-privilege read-only
-// viewer. Broadening to admin is an explicit opt-in, so a no-annotation
-// adoption is safe by default and must NOT carry full-access RBAC.
 // TestRenderInstallYAMLEscapesScalars (L7) proves a malicious operator-controlled
 // scalar (for example the configured release image) cannot break
 // out of its double-quoted YAML scalar and inject arbitrary manifest content:
@@ -417,79 +413,6 @@ func TestEveryOwnedNamespaceHasExplicitPSA(t *testing.T) {
 	}
 }
 
-func TestRenderInstallYAMLDefaultProfileResolvesToViewer(t *testing.T) {
-	manifest := RenderInstallYAML(InstallTemplateData{
-		ServerURL:         "https://astro.example.com",
-		ClusterID:         "c1",
-		RegistrationToken: "token",
-		AgentImage:        "example.com/agent:v1",
-		// PrivilegeProfile intentionally left empty.
-	})
-	if !strings.Contains(manifest, `PRIVILEGE_PROFILE: "viewer"`) {
-		t.Fatalf("default manifest should resolve to viewer profile:\n%s", manifest)
-	}
-	if !strings.Contains(manifest, `verbs: ["get", "list", "watch"]`) {
-		t.Fatalf("default (viewer) manifest should contain read-only rules:\n%s", manifest)
-	}
-	for _, forbidden := range []string{
-		`resources: ["*"]`,
-		`verbs: ["*"]`,
-		`nonResourceURLs: ["*"]`,
-	} {
-		if strings.Contains(manifest, forbidden) {
-			t.Fatalf("default (viewer) manifest must NOT contain full-access rule %q:\n%s", forbidden, manifest)
-		}
-	}
-}
-
-// TestRenderInstallYAMLExplicitAdminStillRendersFullAccess proves that
-// explicitly choosing admin still renders the full-access RBAC rules.
-func TestRenderInstallYAMLExplicitAdminStillRendersFullAccess(t *testing.T) {
-	manifest := RenderInstallYAML(InstallTemplateData{
-		ServerURL:         "https://astro.example.com",
-		ClusterID:         "c1",
-		RegistrationToken: "token",
-		AgentImage:        "example.com/agent:v1",
-		PrivilegeProfile:  PrivilegeProfileAdmin,
-	})
-	for _, want := range []string{
-		`PRIVILEGE_PROFILE: "admin"`,
-		`resources: ["*"]`,
-		`verbs: ["*"]`,
-	} {
-		if !strings.Contains(manifest, want) {
-			t.Fatalf("explicit admin manifest missing %q:\n%s", want, manifest)
-		}
-	}
-}
-
-func TestRenderInstallYAMLUsesPrivilegeProfile(t *testing.T) {
-	manifest := RenderInstallYAML(InstallTemplateData{
-		ServerURL:         "https://astro.example.com",
-		ClusterID:         "c1",
-		RegistrationToken: "token",
-		AgentImage:        "example.com/agent:v1",
-		PrivilegeProfile:  PrivilegeProfileViewer,
-	})
-	for _, want := range []string{
-		`SERVER_URL: "https://astro.example.com"`,
-		`INSECURE: "false"`,
-		`name: ASTRONOMER_INSECURE`,
-		`image: "example.com/agent:v1"`,
-		`PRIVILEGE_PROFILE: "viewer"`,
-		`verbs: ["get", "list", "watch"]`,
-	} {
-		if !strings.Contains(manifest, want) {
-			t.Fatalf("manifest missing %q", want)
-		}
-	}
-	for _, unwanted := range []string{`{{AGENT_RBAC_RULES}}`, `resources: ["*"]`, `verbs: ["*"]`} {
-		if strings.Contains(manifest, unwanted) {
-			t.Fatalf("manifest unexpectedly contains %q", unwanted)
-		}
-	}
-}
-
 func TestRenderInstallYAMLPlaintextDevelopmentURLAcknowledgesAgentInsecureMode(t *testing.T) {
 	manifest := RenderInstallYAML(InstallTemplateData{
 		ServerURL:         "http://host.k3d.internal:8080",
@@ -499,63 +422,6 @@ func TestRenderInstallYAMLPlaintextDevelopmentURLAcknowledgesAgentInsecureMode(t
 	})
 	if !strings.Contains(manifest, `INSECURE: "true"`) {
 		t.Fatalf("plaintext development manifest did not acknowledge agent insecure mode:\n%s", manifest)
-	}
-}
-
-func TestRenderInstallYAMLUsesNamespacedRoleBinding(t *testing.T) {
-	manifest := RenderInstallYAML(InstallTemplateData{
-		ServerURL:         "https://astro.example.com",
-		ClusterID:         "c1",
-		RegistrationToken: "token",
-		AgentImage:        "example.com/agent:v1",
-		PrivilegeProfile:  PrivilegeProfileNamespaceOperator,
-	})
-	for _, want := range []string{
-		`PRIVILEGE_PROFILE: "namespace-operator"`,
-		`kind: RoleBinding`,
-		`namespace: astronomer-system`,
-		`Namespace-scoped workload operations`,
-		// Credential access has a distinct current-layout RBAC object.
-		`name: astronomer-agent-identity`,
-		`resourceNames: ["astronomer-agent-identity", "astronomer-agent-token"]`,
-	} {
-		if !strings.Contains(manifest, want) {
-			t.Fatalf("manifest missing %q:\n%s", want, manifest)
-		}
-	}
-	for _, unwanted := range []string{`resources: ["*"]`, `verbs: ["*"]`} {
-		if strings.Contains(manifest, unwanted) {
-			t.Fatalf("manifest unexpectedly contains %q:\n%s", unwanted, manifest)
-		}
-	}
-	// The AGENT's user-profile binding must be a namespaced RoleBinding, never a
-	// ClusterRoleBinding to the 'astronomer-agent' ClusterRole. (The bootstrap
-	// ksm read-only ClusterRoleBinding — bound to the kube-state-metrics SA — is a
-	// separate, legitimate object and is excluded from this check by roleRef name.)
-	type bindingDoc struct {
-		Kind    string `yaml:"kind"`
-		RoleRef struct {
-			Name string `yaml:"name"`
-		} `yaml:"roleRef"`
-	}
-	dec := yaml.NewDecoder(strings.NewReader(manifest))
-	for {
-		var d bindingDoc
-		err := dec.Decode(&d)
-		if err != nil {
-			if err.Error() == "EOF" {
-				break
-			}
-			t.Fatalf("decode manifest: %v", err)
-		}
-		if d.Kind == "ClusterRoleBinding" && d.RoleRef.Name == "astronomer-agent" {
-			t.Fatalf("namespace-operator must bind the agent via a namespaced RoleBinding, found a ClusterRoleBinding to %q", d.RoleRef.Name)
-		}
-	}
-	// The only secrets grant must be the resourceName-scoped identity Role — the
-	// namespace-operator's own ClusterRole rules must not include secrets.
-	if strings.Contains(RBACRulesYAML(PrivilegeProfileNamespaceOperator), `"secrets"`) {
-		t.Fatal("namespace-operator RBAC rules must not grant secrets")
 	}
 }
 
@@ -1177,5 +1043,58 @@ func TestRenderInstallYAMLCarriesNonSecretAgentTelemetry(t *testing.T) {
 	}
 	if strings.Contains(manifest, "OTEL_EXPORTER_OTLP_HEADERS") {
 		t.Fatal("agent manifest must not copy management-plane collector credentials")
+	}
+}
+
+// Legacy registration annotations must not recreate a read-only management mode.
+func TestRenderInstallYAMLFullManagement(t *testing.T) {
+	for _, profile := range []string{"", "viewer", "operator", "namespace-viewer", "namespace-operator", "custom", "admin", "unknown"} {
+		t.Run(profile, func(t *testing.T) {
+			manifest := RenderInstallYAML(InstallTemplateData{ServerURL: "https://astro.example.com", ClusterID: "c1", RegistrationToken: "token", AgentImage: "example.com/agent:v1", PrivilegeProfile: profile})
+			decoder := yaml.NewDecoder(strings.NewReader(manifest))
+			foundRole, foundBinding, foundConfig := false, false, false
+			for {
+				var doc struct {
+					Kind     string `yaml:"kind"`
+					Metadata struct {
+						Name string `yaml:"name"`
+					} `yaml:"metadata"`
+					Rules []struct {
+						APIGroups []string `yaml:"apiGroups"`
+						Resources []string `yaml:"resources"`
+						Verbs     []string `yaml:"verbs"`
+					} `yaml:"rules"`
+					RoleRef struct {
+						Name string `yaml:"name"`
+						Kind string `yaml:"kind"`
+					} `yaml:"roleRef"`
+					Data map[string]string `yaml:"data"`
+				}
+				if err := decoder.Decode(&doc); err == io.EOF {
+					break
+				} else if err != nil {
+					t.Fatal(err)
+				}
+				if doc.Kind == "ClusterRole" && doc.Metadata.Name == "astronomer-agent" {
+					for _, rule := range doc.Rules {
+						if strings.Join(rule.APIGroups, ",") == "*" && strings.Join(rule.Resources, ",") == "*" && strings.Join(rule.Verbs, ",") == "*" {
+							foundRole = true
+						}
+					}
+				}
+				if doc.RoleRef.Name == "astronomer-agent" {
+					if doc.Kind != "ClusterRoleBinding" || doc.RoleRef.Kind != "ClusterRole" {
+						t.Fatalf("management binding is %s/%s", doc.Kind, doc.RoleRef.Kind)
+					}
+					foundBinding = true
+				}
+				if doc.Kind == "ConfigMap" && doc.Data["PRIVILEGE_PROFILE"] == "admin" {
+					foundConfig = true
+				}
+			}
+			if !foundRole || !foundBinding || !foundConfig {
+				t.Fatalf("full management missing: role=%v binding=%v config=%v", foundRole, foundBinding, foundConfig)
+			}
+		})
 	}
 }

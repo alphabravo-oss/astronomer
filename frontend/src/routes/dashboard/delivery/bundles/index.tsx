@@ -1,3 +1,4 @@
+import { pageTableCount } from "@/lib/api/pagination";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormShell } from "@/components/ui/form-shell";
@@ -11,8 +12,6 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import {
   DeliveryProjectGate,
   ErrorMessage,
-  RedirectDeliveryList,
-  deliveryPageRowCount,
   inputClass,
   primaryButton,
   secondaryButton,
@@ -137,7 +136,7 @@ export function BundlesPage() {
               void navigate({ to: entityHref("bundles", row.id) })
             }
             serverSide={{
-              rowCount: deliveryPageRowCount(query.data),
+              ...pageTableCount(query.data),
               pagination: { pageIndex, pageSize },
               onPaginationChange: (next) => setPageIndex(next.pageIndex),
             }}
@@ -222,7 +221,5 @@ function CreateBundleDialog({
 }
 
 export const Route = createFileRoute("/dashboard/delivery/bundles/")({
-  component: function DeliveryBundlesRedirect() {
-    return <RedirectDeliveryList tab="bundles" />;
-  },
+  component: BundlesPage,
 });

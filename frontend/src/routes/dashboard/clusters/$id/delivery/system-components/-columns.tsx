@@ -3,6 +3,7 @@ import { DeliveryPhaseBadge } from "@/components/delivery/shared";
 import type { Column } from "@/components/ui/data-table";
 import type { DeliverySystemComponent } from "@/lib/api/delivery-system";
 import { formatBytes, formatRelativeTime } from "@/lib/utils";
+import { replicaRedundancy } from "@/lib/system-component-availability";
 
 function ownerLabel(owner: string) {
   if (owner === "flux") return "Flux";
@@ -91,7 +92,7 @@ export function systemComponentColumns(
     },
     {
       key: "replicas",
-      header: "Replicas",
+      header: "Ready / desired",
       accessor: (row) =>
         row.desiredReplicas ? (
           <div>
@@ -99,7 +100,7 @@ export function systemComponentColumns(
               {row.readyReplicas}/{row.desiredReplicas}
             </span>
             <p className="text-xs text-muted-foreground">
-              {row.highAvailability ? "HA" : "Single replica"}
+              {replicaRedundancy(row)}
             </p>
           </div>
         ) : (

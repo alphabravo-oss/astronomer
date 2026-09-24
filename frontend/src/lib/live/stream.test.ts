@@ -1,4 +1,7 @@
-import type { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
+
+const unavailableKey = ["unavailable"];
+const catchUpKey = ["catch-up"];
 
 // Each connect mints a fresh single-use ticket; number them so tests can
 // assert re-mint-per-(re)connect.
@@ -149,9 +152,10 @@ describe("live stream transport", () => {
     // mounted query's refetchInterval fn to re-evaluate (post-fetch only).
     FakeEventSource.instances[0].onerror?.();
     expect(qc.invalidateQueries).toHaveBeenCalledTimes(1);
-    expect(qc.invalidateQueries).toHaveBeenCalledWith({
-      refetchType: "active",
-    });
+    expect(qc.invalidateQueries).toHaveBeenCalledWith(
+      { refetchType: "active", predicate: expect.any(Function) },
+      { cancelRefetch: false },
+    );
 
     // Backoff (1s) then re-mint + reconnect: single-use tickets mean every
     // (re)connect mints a fresh one — never EventSource auto-reconnect.
@@ -164,6 +168,93 @@ describe("live stream transport", () => {
     es2.emitOpen();
     expect(qc.invalidateQueries).toHaveBeenCalledTimes(2);
     stream.releaseLiveStream();
+  });
+
+  it("backs off headers-only flapping until a frame establishes a healthy stream", async () => {
+    const { createStreamTicket, stream } = await loadLive();
+    stream.acquireLiveStream();
+    await flush();
+    FakeEventSource.instances[0].emitOpen();
+    FakeEventSource.instances[0].onerror?.();
+    await vi.advanceTimersByTimeAsync(1000);
+    FakeEventSource.instances[1].emitOpen();
+    FakeEventSource.instances[1].onerror?.();
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(createStreamTicket).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    const healthy = FakeEventSource.instances[2];
+    healthy.emitOpen();
+    healthy.emitFrame({ type: "sys.ping", time: "2026-09-23T00:00:00Z" });
+    healthy.onerror?.();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(createStreamTicket).toHaveBeenCalledTimes(4);
+    stream.releaseLiveStream();
+  });
+
+  it("does not restart a failed active query when the stream drops or reconnects", async () => {
+    const { stream } = await loadLive();
+    const client = new QueryClient();
+    const read = vi.fn().mockRejectedValue(new Error("Service unavailable"));
+    const observer = new QueryObserver(client, {
+      queryKey: unavailableKey,
+      queryFn: read,
+      retry: false,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    await flush();
+    expect(observer.getCurrentResult().isError).toBe(true);
+    stream.registerLiveQueryClient(client);
+    stream.acquireLiveStream();
+    await flush();
+    FakeEventSource.instances[0].emitOpen();
+    FakeEventSource.instances[0].onerror?.();
+    await vi.advanceTimersByTimeAsync(1000);
+    FakeEventSource.instances[1].emitOpen();
+    await flush();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(observer.getCurrentResult().isError).toBe(true);
+    stream.releaseLiveStream();
+    unsubscribe();
+    client.clear();
+  });
+
+  it("lets an in-flight catch-up read finish through another stream transition", async () => {
+    const { stream } = await loadLive();
+    const client = new QueryClient();
+    let complete!: (value: string) => void;
+    let signal!: AbortSignal;
+    const read = vi.fn(({ signal: nextSignal }: { signal: AbortSignal }) => {
+      signal = nextSignal;
+      return new Promise<string>((resolve) => {
+        complete = resolve;
+      });
+    });
+    const observer = new QueryObserver(client, {
+      queryKey: catchUpKey,
+      queryFn: read,
+      initialData: "cached",
+      staleTime: Infinity,
+      retry: false,
+    });
+    const unsubscribe = observer.subscribe(() => {});
+    stream.registerLiveQueryClient(client);
+    stream.acquireLiveStream();
+    await flush();
+    FakeEventSource.instances[0].emitOpen();
+    FakeEventSource.instances[0].onerror?.();
+    await flush();
+    expect(read).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    FakeEventSource.instances[1].emitOpen();
+    await flush();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(signal.aborted).toBe(false);
+    complete("fresh");
+    await flush();
+    expect(observer.getCurrentResult().data).toBe("fresh");
+    stream.releaseLiveStream();
+    unsubscribe();
+    client.clear();
   });
 
   it("watchdog force-closes a silent connection and re-enters the mint loop", async () => {

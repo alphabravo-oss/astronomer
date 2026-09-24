@@ -26,6 +26,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:browser-components": "playwright test --config=playwright.components.config.ts",
     "pretest:e2e": "node scripts/generate-e2e-stubs.mjs",
     "test:e2e": "playwright test --project=chromium --project=mobile-chromium",
     "pretest:e2e:smoke": "node scripts/generate-route-manifest.mjs && node scripts/generate-e2e-stubs.mjs",

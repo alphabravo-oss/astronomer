@@ -1,4 +1,4 @@
-import { Select } from "@/components/ui/select";
+import { RemoteProjectPicker } from "@/components/projects/remote-project-picker";
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useLocation } from "@tanstack/react-router";
@@ -56,7 +56,7 @@ function ClusterDeliveryLayout() {
   const clusterId = params.id;
   const pathname = useLocation({ select: (location) => location.pathname });
   const { data: cluster } = useCluster(clusterId);
-  const { projectId, projects, setProjectId } = useDeliveryProjectScope({
+  const { projectId, setProjectId } = useDeliveryProjectScope({
     clusterId,
   });
   const base = `/dashboard/clusters/${clusterId}/delivery`;
@@ -90,24 +90,12 @@ function ClusterDeliveryLayout() {
         title={cluster?.displayName || cluster?.name || "Cluster"}
         description="Flux and delivery for this environment. Switch clusters from the sidebar to stay on the same tab."
         actions={
-          projects.length > 1 ? (
-            <label className="flex min-w-56 items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Project</span>
-              <Select
-                aria-label="Delivery project"
-                value={projectId}
-                onChange={(event) => setProjectId(event.target.value)}
-                className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm"
-              >
-                <option value="">Select a project</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.displayName || project.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          ) : null
+          <RemoteProjectPicker
+            value={projectId}
+            onChange={setProjectId}
+            clusterId={clusterId}
+            ariaLabel="Delivery project"
+          />
         }
       />
       <div className="border-b border-border">

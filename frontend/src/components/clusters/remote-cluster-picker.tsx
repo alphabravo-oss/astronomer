@@ -66,7 +66,7 @@ export function RemoteClusterPicker({
   );
   const clusters = useMemo(() => {
     const seen = new Set<string>();
-    return (searchQuery.data?.pages ?? [])
+    return (searchQuery.isError ? [] : (searchQuery.data?.pages ?? []))
       .flatMap((page) => page.data)
       .filter((cluster) => {
         if (seen.has(cluster.id)) return false;
@@ -75,7 +75,7 @@ export function RemoteClusterPicker({
           (!allowed || allowed.has(cluster.id)) && !excluded.has(cluster.id)
         );
       });
-  }, [allowed, excluded, searchQuery.data?.pages]);
+  }, [allowed, excluded, searchQuery.data?.pages, searchQuery.isError]);
 
   const rowCount = clusters.length + (searchQuery.hasNextPage ? 1 : 0);
   // TanStack Virtual intentionally owns mutable measurement callbacks, so the
@@ -112,7 +112,7 @@ export function RemoteClusterPicker({
     onBlur?.();
     requestAnimationFrame(() => triggerRef.current?.focus());
   };
-  const selected = selectedQuery.data;
+  const selected = selectedQuery.isError ? undefined : selectedQuery.data;
   const selectedText = selected ? clusterLabel(selected) : value;
   const listboxID = `${id ?? "remote-cluster"}-listbox`;
 

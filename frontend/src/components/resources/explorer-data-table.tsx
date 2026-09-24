@@ -11,6 +11,17 @@ import { useClusterNamespaceScope } from "@/lib/cluster-scope";
 import { canonicalPermissionResource } from "@/lib/permission-hooks";
 import { queryKeys } from "@/lib/query-keys";
 import { toastSuccess } from "@/lib/toast";
+import { useStorageSnapshot } from "@/lib/hooks/use-storage-snapshot";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  BulkWorkloadActions,
+  type ExplorerBulkWorkloads,
+} from "./bulk-workload-actions";
+import {
+  supportsBulkWorkload,
+  type BulkWorkloadTarget,
+  type BulkWorkloadAction,
+} from "./bulk-workload-model";
 
 export interface BulkDeleteResult {
   key: string;
@@ -35,6 +46,7 @@ type ExplorerDataTableProps<T> = Omit<
   data: T[];
   namespaceAccessor?: (row: T) => string | undefined;
   bulkDelete?: ExplorerBulkDelete<T>;
+  bulkWorkloads?: ExplorerBulkWorkloads<T>;
 };
 
 async function runWithConcurrency<T, R>(
@@ -215,10 +227,17 @@ export function ExplorerDataTable<T extends object>({
   data,
   namespaceAccessor,
   bulkDelete,
+  bulkWorkloads,
   keyExtractor,
   ...tableProps
 }: ExplorerDataTableProps<T>) {
   const scope = useClusterNamespaceScope(clusterId);
+  const [grouping, persistGrouping] = useStorageSnapshot(
+    `explorer:${resourceType}:namespace-grouping`,
+  );
+  const namespaceLabel = (row: T) =>
+    namespaceAccessor?.(row) ?? (row as { namespace?: string }).namespace;
+  const hasNamespaces = data.some((row) => !!namespaceLabel(row));
   const permissionResource = canonicalPermissionResource(resourceType);
   const visibleData = useMemo(
     () =>
@@ -242,24 +261,63 @@ export function ExplorerDataTable<T extends object>({
       return false;
     }
   };
+  const canOperate = (target: BulkWorkloadTarget, action: BulkWorkloadAction) =>
+    supportsBulkWorkload(target, action) &&
+    scope.allows(permissionResource, action, target.namespace);
+  const canSelect = (row: T) =>
+    canDelete(row) ||
+    (!!bulkWorkloads &&
+      (canOperate(bulkWorkloads.target(row), "scale") ||
+        canOperate(bulkWorkloads.target(row), "restart")));
 
   return (
     <DataTable
       {...tableProps}
+      groupBy={
+        grouping === "true" && hasNamespaces
+          ? (row) => `Namespace: ${namespaceLabel(row) || "Cluster-scoped"}`
+          : undefined
+      }
+      toolbar={
+        <>
+          {tableProps.toolbar}
+          {hasNamespaces && (
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox
+                checked={grouping === "true"}
+                onChange={(event) => persistGrouping(event.target.checked)}
+              />
+              Group namespaces{tableProps.serverSide ? " (this page)" : ""}
+            </label>
+          )}
+        </>
+      }
       data={visibleData}
       keyExtractor={keyExtractor}
       persistKey={`explorer:${resourceType}`}
-      selectable={bulkDelete ? canDelete : false}
+      selectable={bulkDelete || bulkWorkloads ? canSelect : false}
       bulkActions={
-        bulkDelete
+        bulkDelete || bulkWorkloads
           ? (selected) => (
-              <BulkDeleteAction
-                clusterId={clusterId}
-                resourceType={resourceType}
-                rows={selected}
-                config={bulkDelete}
-                keyExtractor={keyExtractor}
-              />
+              <>
+                {bulkWorkloads && (
+                  <BulkWorkloadActions
+                    clusterId={clusterId}
+                    rows={selected}
+                    config={bulkWorkloads}
+                    allowed={canOperate}
+                  />
+                )}
+                {bulkDelete && selected.every(canDelete) && (
+                  <BulkDeleteAction
+                    clusterId={clusterId}
+                    resourceType={resourceType}
+                    rows={selected}
+                    config={bulkDelete}
+                    keyExtractor={keyExtractor}
+                  />
+                )}
+              </>
             )
           : undefined
       }

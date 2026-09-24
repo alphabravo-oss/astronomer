@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { toastApiError } from "@/lib/toast";
+import {
+  clusterDiscoveryFromDefinitions,
+  type ClusterDiscovery,
+} from "@/components/layout/cluster-discovery-model";
 
 vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
@@ -9,6 +14,10 @@ vi.mock("@/lib/toast", () => ({
 }));
 
 const mutateAsync = vi.fn().mockResolvedValue([]);
+let discovery: ClusterDiscovery;
+vi.mock("@/components/layout/use-cluster-discovery-nav", () => ({
+  useClusterDiscovery: () => discovery,
+}));
 
 vi.mock("@/lib/hooks/kubernetes-proxy", async (importOriginal) => {
   const actual =
@@ -55,6 +64,21 @@ function wrap(node: ReactNode) {
 describe("CreateResourceDialog without a templateKey (Import YAML)", () => {
   beforeEach(() => {
     mutateAsync.mockClear();
+    vi.mocked(toastApiError).mockClear();
+    discovery = {
+      ...clusterDiscoveryFromDefinitions([
+        {
+          spec: {
+            group: "cert-manager.io",
+            scope: "Namespaced",
+            names: { plural: "certificates", kind: "Certificate" },
+            versions: [{ name: "v1", served: true }],
+          },
+        },
+      ]),
+      isLoading: false,
+      isError: false,
+    };
   });
 
   it("opens directly in YAML mode with the guided/yaml toggle hidden", async () => {
@@ -121,4 +145,57 @@ describe("CreateResourceDialog without a templateKey (Import YAML)", () => {
     );
     expect(call.items[1].path).toBe("api/v1/namespaces/default/services");
   });
+
+  it("imports a CRD through discovery without a template or explicit API path", async () => {
+    render(
+      wrap(
+        <CreateResourceDialog
+          open
+          onClose={vi.fn()}
+          clusterId="cluster-1"
+          title="Import YAML"
+          initialYaml={
+            "apiVersion: cert-manager.io/v1\nkind: Certificate\nmetadata:\n  name: web\n  namespace: team-a"
+          }
+        />,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledOnce());
+    expect(mutateAsync.mock.calls[0][0].items[0].path).toBe(
+      "apis/cert-manager.io/v1/namespaces/team-a/certificates",
+    );
+  });
+
+  it.each(["isError", "isLoading"] as const)(
+    "does not partially apply a mixed import when discovery %s",
+    async (state) => {
+      discovery[state] = true;
+      render(
+        wrap(
+          <CreateResourceDialog
+            open
+            onClose={vi.fn()}
+            clusterId="cluster-1"
+            title="Import YAML"
+            initialYaml={
+              "apiVersion: v1\nkind: ConfigMap\n---\napiVersion: cert-manager.io/v1\nkind: Certificate"
+            }
+          />,
+        ),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+      await waitFor(() =>
+        expect(toastApiError).toHaveBeenCalledWith(
+          "Invalid resource definition",
+          expect.objectContaining({
+            message: expect.stringContaining(
+              "Cannot determine the API endpoint for Certificate",
+            ),
+          }),
+        ),
+      );
+      expect(mutateAsync).not.toHaveBeenCalled();
+    },
+  );
 });

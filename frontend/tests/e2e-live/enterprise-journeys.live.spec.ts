@@ -410,6 +410,7 @@ test("workload snapshot restores deleted member data through the durable Velero 
   test.setTimeout(300_000);
   await loginViaForm(page);
   const snapshotsPath = `/dashboard/clusters/${clusterID}/snapshots`;
+  const resourceListPath = `/dashboard/clusters/${clusterID}/configmaps`;
   const resourcePath = `/dashboard/clusters/${clusterID}/configmaps/${backupNamespace}/${backupConfigMap}`;
 
   await page.goto(snapshotsPath);
@@ -469,11 +470,18 @@ test("workload snapshot restores deleted member data through the durable Velero 
     .getByRole("button", { name: "Delete", exact: true })
     .click();
   expect((await deletion).ok()).toBe(true);
-  await expect(page).toHaveURL(snapshotsPath);
+  await expect(page).toHaveURL(resourceListPath);
   const deletedResource = await page.request.get(
     `/api/v1/clusters/${clusterID}/k8s/api/v1/namespaces/${backupNamespace}/configmaps/${backupConfigMap}`,
   );
   expect(deletedResource.status()).toBe(404);
+
+  // Resource deletion returns to its canonical collection, independent of the
+  // preceding browser history. Re-enter the snapshot workflow explicitly.
+  await page.goto(snapshotsPath);
+  await expect(
+    page.getByRole("heading", { name: "Snapshots", exact: true }),
+  ).toBeVisible();
 
   const completedSnapshotRow = page
     .locator("tbody tr")

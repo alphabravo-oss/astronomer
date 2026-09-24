@@ -215,7 +215,7 @@ test("pod drilldown: row opens pod detail with containers + Logs tab renders", a
   await expect(page.getByText("nginx:1.25")).toBeVisible();
   // Pod summary fields.
   await expect(
-    page.getByRole("link", { name: "node-1", exact: true }),
+    page.getByRole("link", { name: "Node node-1", exact: true }),
   ).toBeVisible();
 
   // Logs tab is present (pods:logs allowed for admin) and renders the viewer.

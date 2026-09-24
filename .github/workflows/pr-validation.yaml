@@ -40,10 +40,25 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ripgrep shellcheck
 
       - name: Migration roundtrip smoke (TEST-05)
-        run: ./scripts/migrate-roundtrip-smoke.sh
+        run: |
+          set +e
+          ./scripts/migrate-roundtrip-smoke.sh > /tmp/astronomer-migration-roundtrip.log 2>&1
+          migration_status=$?
+          set -e
+          cat /tmp/astronomer-migration-roundtrip.log
+          exit "$migration_status"
         env:
           # Job uses service container when present; script also self-starts docker PG.
           DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Preserve migration setup and roundtrip diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: migration-roundtrip-evidence-${{ github.sha }}
+          path: /tmp/astronomer-migration-roundtrip.log
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Supported release-line upgrade matrix
         run: ./scripts/release-upgrade-matrix.sh

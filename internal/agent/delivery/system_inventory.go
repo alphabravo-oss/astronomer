@@ -79,7 +79,7 @@ func (p *ClusterProbe) inspectSystemComponents(ctx context.Context, kubernetesVe
 		components = append(components, protocol.SystemComponent{
 			ID: "cluster/distribution/k3s", Name: "K3s", Category: "kubernetes",
 			Owner: "cluster", ManagementMethod: "distribution", Kind: "KubernetesDistribution",
-			Version: kubernetesVersion, Health: "healthy", HighAvailability: true,
+			Version: kubernetesVersion, Health: "healthy",
 			Detail: "Kubernetes distribution reported by the API server.",
 		})
 	}
@@ -120,7 +120,7 @@ func (p *ClusterProbe) inspectSystemComponents(ctx context.Context, kubernetesVe
 	if len(components) > protocol.MaxDeliveryInventoryEntries {
 		components = components[:protocol.MaxDeliveryInventoryEntries]
 	}
-	return components
+	return boundSystemComponents(components)
 }
 
 func pDiscoveryAPIs(p *ClusterProbe) []string {

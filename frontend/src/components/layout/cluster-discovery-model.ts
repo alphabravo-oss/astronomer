@@ -4,6 +4,7 @@ export const CRD_DISCOVERY_PATH =
 export interface DiscoveredResourceType {
   group: string;
   version: string;
+  servedVersions: string[];
   plural: string;
   kind: string;
   namespaced: boolean;
@@ -35,9 +36,14 @@ export function clusterDiscoveryFromDefinitions(
   const seen = new Set<string>();
   for (const { spec } of definitions) {
     const { group, scope, names, versions = [] } = spec ?? {};
+    const servedVersions = versions.flatMap((v) =>
+      v.served && v.name && /^[a-z0-9][a-z0-9.-]*$/.test(v.name)
+        ? [v.name]
+        : [],
+    );
     const version =
-      versions.find((v) => v.served && v.storage)?.name ??
-      versions.find((v) => v.served)?.name;
+      versions.find((v) => v.storage && servedVersions.includes(v.name ?? ""))
+        ?.name ?? servedVersions[0];
     const plural = names?.plural;
     const kind = names?.kind;
     if (!group || !version || !plural || !kind) continue;
@@ -57,6 +63,7 @@ export function clusterDiscoveryFromDefinitions(
     resources.push({
       group,
       version,
+      servedVersions,
       plural,
       kind,
       namespaced: scope === "Namespaced",

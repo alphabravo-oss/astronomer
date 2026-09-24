@@ -14,10 +14,11 @@ import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import type { PodSecurityTemplate } from "@/types";
 
-export function usePodSecurityTemplates() {
+export function usePodSecurityTemplates(params = { limit: 25, offset: 0 }) {
   return useQuery({
-    queryKey: queryKeys.security.templates,
-    queryFn: getPodSecurityTemplates,
+    queryKey: queryKeys.security.templatePage(params),
+    queryFn: ({ signal }) => getPodSecurityTemplates(params, signal),
+    throwOnError: false,
   });
 }
 
@@ -70,10 +71,11 @@ export function useDeletePodSecurityTemplate() {
   });
 }
 
-export function useClusterSecurityPolicies() {
+export function useClusterSecurityPolicies(params = { limit: 25, offset: 0 }) {
   return useQuery({
-    queryKey: queryKeys.security.policies,
-    queryFn: getClusterSecurityPolicies,
+    queryKey: queryKeys.security.policyPage(params),
+    queryFn: ({ signal }) => getClusterSecurityPolicies(params, signal),
+    throwOnError: false,
     refetchInterval: liveFallback(30000),
   });
 }

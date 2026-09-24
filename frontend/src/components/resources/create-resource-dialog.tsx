@@ -7,10 +7,8 @@ import {
 } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
-import {
-  GuidedResourceForm,
-  type KubernetesManifest,
-} from "@/components/resources/guided-resource-form";
+import { LazyGuidedResourceForm as GuidedResourceForm } from "@/components/resources/lazy-guided-resource-form";
+import type { KubernetesManifest } from "@/components/resources/guided-resource-model";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { YamlEditor } from "@/components/ui/yaml-editor";
 import {
@@ -21,7 +19,12 @@ import type {
   K8sCreateBatchItem,
   K8sCreateBatchResult,
 } from "@/lib/hooks/kubernetes-proxy";
-import type { ResourceSchemaView, ResourceType } from "@/lib/api/resources";
+import type { ResourceType } from "@/lib/api/resources";
+import { useClusterDiscovery } from "@/components/layout/use-cluster-discovery-nav";
+import {
+  createManifestBatch,
+  normalizeManifestDocuments,
+} from "./create-resource-manifest";
 import { k8sTemplates } from "@/lib/k8s-templates";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
@@ -74,29 +77,6 @@ const TEMPLATE_RESOURCE_TYPES: Record<string, ResourceType> = {
   gateway: "gateways",
 };
 
-const KIND_TO_PLURAL: Record<string, string> = {
-  Deployment: "deployments",
-  StatefulSet: "statefulsets",
-  DaemonSet: "daemonsets",
-  Job: "jobs",
-  CronJob: "cronjobs",
-  Service: "services",
-  Ingress: "ingresses",
-  Gateway: "gateways",
-  NetworkPolicy: "networkpolicies",
-  ConfigMap: "configmaps",
-  Secret: "secrets",
-  Namespace: "namespaces",
-  PersistentVolumeClaim: "persistentvolumeclaims",
-  PodDisruptionBudget: "poddisruptionbudgets",
-  HorizontalPodAutoscaler: "horizontalpodautoscalers",
-  ServiceAccount: "serviceaccounts",
-  Role: "roles",
-  RoleBinding: "rolebindings",
-};
-
-const MAX_YAML_DOCUMENTS = 50;
-
 const EDITOR_MODES = ["guided", "yaml"] as const;
 
 /** Arrow/Home/End navigation for the guided/yaml tablist. */
@@ -111,62 +91,6 @@ function nextEditorModeIndex(
   if (key === "Home") return 0;
   if (key === "End") return length - 1;
   return undefined;
-}
-
-export function normalizeManifestDocuments(
-  documents: unknown[],
-): KubernetesManifest[] {
-  const manifests = documents.filter(
-    (document) => document !== null && document !== undefined,
-  );
-  if (manifests.length === 0) {
-    throw new Error("YAML must contain at least one Kubernetes object.");
-  }
-  if (manifests.length > MAX_YAML_DOCUMENTS) {
-    throw new Error(
-      `YAML contains ${manifests.length} objects; the maximum is ${MAX_YAML_DOCUMENTS}.`,
-    );
-  }
-  return manifests.map((document, index) => {
-    if (typeof document !== "object" || Array.isArray(document)) {
-      throw new Error(
-        `YAML document ${index + 1} must be a Kubernetes object.`,
-      );
-    }
-    return document as KubernetesManifest;
-  });
-}
-
-function manifestLabel(body: KubernetesManifest, index: number): string {
-  const metadata = body.metadata as { name?: string } | null | undefined;
-  const kind = typeof body.kind === "string" ? body.kind : "Object";
-  return metadata?.name ? `${kind}/${metadata.name}` : `${kind} #${index + 1}`;
-}
-
-export function createPathForManifest(
-  body: KubernetesManifest,
-  schema?: ResourceSchemaView,
-  explicitPath?: string,
-): string | undefined {
-  if (explicitPath) return explicitPath.replace(/^\//, "");
-  const metadata = body.metadata as { namespace?: string } | null | undefined;
-  const namespace = metadata?.namespace || "default";
-  if (schema?.resource.apiBase && schema.resource.plural) {
-    const base = schema.resource.apiBase.replace(/^\//, "");
-    return schema.resource.namespaced
-      ? `${base}/namespaces/${namespace}/${schema.resource.plural}`
-      : `${base}/${schema.resource.plural}`;
-  }
-  const apiVersion = typeof body.apiVersion === "string" ? body.apiVersion : "";
-  const kind = typeof body.kind === "string" ? body.kind : "";
-  const plural = KIND_TO_PLURAL[kind];
-  if (!apiVersion || !plural) return undefined;
-  const base = apiVersion.includes("/")
-    ? `apis/${apiVersion}`
-    : `api/${apiVersion}`;
-  return kind === "Namespace"
-    ? `${base}/${plural}`
-    : `${base}/namespaces/${namespace}/${plural}`;
 }
 
 export function CreateResourceDialog(props: CreateResourceDialogProps) {
@@ -184,7 +108,8 @@ function CreateResourceEditor({
   clusterId,
   templateKey,
   title,
-  apiPath, resourceType,
+  apiPath,
+  resourceType,
   initialYaml,
 }: CreateResourceDialogProps) {
   const resolvedResourceType =
@@ -194,7 +119,9 @@ function CreateResourceEditor({
     templateKey ? "guided" : "yaml",
   );
   const [yamlContent, setYamlContent] = useState(
-    templateKey ? k8sTemplates[templateKey] || "" : initialYaml ?? IMPORT_YAML_PLACEHOLDER,
+    templateKey
+      ? k8sTemplates[templateKey] || ""
+      : (initialYaml ?? IMPORT_YAML_PLACEHOLDER),
   );
   const [manifest, setManifest] = useState<KubernetesManifest>({});
   const [guidedValid, setGuidedValid] = useState(false);
@@ -202,6 +129,7 @@ function CreateResourceEditor({
   const [applyResults, setApplyResults] = useState<K8sCreateBatchResult[]>([]);
   const modeRequestRef = useRef(0);
   const k8sCreateBatch = useK8sCreateBatch();
+  const discovery = useClusterDiscovery(clusterId);
   const schemaQuery = useResourceSchema(
     clusterId,
     resolvedResourceType ?? "deployments",
@@ -309,29 +237,7 @@ function CreateResourceEditor({
         } else {
           yaml.loadAll(yamlContent, (document) => documents.push(document));
         }
-        const bodies = normalizeManifestDocuments(documents);
-        items = bodies.map((body, index) => {
-          // Discovery and an explicit route describe the dialog's primary
-          // resource only. Mixed-document imports derive each endpoint from
-          // its own apiVersion/kind instead of posting every object to one URL.
-          const singleDocument = bodies.length === 1;
-          const path = createPathForManifest(
-            body,
-            singleDocument ? schema : undefined,
-            singleDocument ? apiPath : undefined,
-          );
-          if (!path) {
-            throw new Error(
-              `Cannot determine the API endpoint for ${manifestLabel(body, index)}.`,
-            );
-          }
-          return {
-            id: String(index),
-            path,
-            body,
-            label: manifestLabel(body, index),
-          };
-        });
+        items = createManifestBatch(documents, schema, apiPath, discovery);
       }
 
       const next = await k8sCreateBatch.mutateAsync({ clusterId, items });

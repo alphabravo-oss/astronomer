@@ -2,9 +2,12 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/gitops"
 )
 
 func clusterRegistrationYAMLWithPresets(name string, registries, toolPresets []string) string {
@@ -24,28 +27,17 @@ func clusterRegistrationYAMLWithPresets(name string, registries, toolPresets []s
 	return y
 }
 
-// auditDetailFor returns the JSON detail bytes of the first audit row with the
-// given action, or nil.
-func auditDetailFor(q *fakeGitOpsQuerier, action string) []byte {
-	for _, r := range q.auditRows {
-		if r.Action == action {
-			return r.Detail
-		}
-	}
-	return nil
-}
-
-// TestSync_SurfacesDeclaredPresets is the regression for the silently-dropped
-// spec.registries / spec.toolPresets: a successful sync of a doc that declares
-// them must NOT look like it applied them. Until the downstream reconcile is
-// wired, the worker surfaces the declared names via a warn log + audit event
-// so an operator is never misled by a green sync.
-func TestSync_SurfacesDeclaredPresets(t *testing.T) {
+// Unsupported desired state must stop the complete source before any cluster
+// mutation, even if another document in the same source is supported.
+func TestSync_RejectsDeclaredPresetsBeforeApplyingAnyCluster(t *testing.T) {
 	q := newFakeQuerier()
 	bare, work := makeBareRepo(t)
 	if err := writeCommit(t, work, "clusters/prod-east.yaml",
 		clusterRegistrationYAMLWithPresets("prod-east", []string{"harbor"}, []string{"cert-manager-prod"}), "add"); err != nil {
 		t.Fatalf("commit: %v", err)
+	}
+	if err := writeCommit(t, work, "clusters/aaa-valid.yaml", clusterRegistrationYAML("valid", nil), "add valid"); err != nil {
+		t.Fatal(err)
 	}
 	if err := pushBranchAsMain(t, work); err != nil {
 		t.Fatalf("push: %v", err)
@@ -53,15 +45,12 @@ func TestSync_SurfacesDeclaredPresets(t *testing.T) {
 	src := setupSource(t, q, bare, "log", "interval")
 	runtime := GitOpsRuntime{Deps: GitOpsDeps{Queries: q, CloneRoot: t.TempDir(), Now: time.Now}}
 
-	if err := runtime.SyncSource(context.Background(), src.ID); err != nil {
-		t.Fatalf("SyncSource: %v", err)
+	err := runtime.SyncSource(context.Background(), src.ID)
+	if !errors.Is(err, gitops.ErrUnsupportedIntent) || !strings.Contains(err.Error(), "spec.registries") || !strings.Contains(err.Error(), "spec.toolPresets") {
+		t.Fatalf("expected explicit unsupported-intent error, got %v", err)
 	}
-	detail := auditDetailFor(q, "gitops.cluster.presets_unreconciled")
-	if detail == nil {
-		t.Fatalf("expected gitops.cluster.presets_unreconciled audit for declared registries/toolPresets; got actions %+v", q.auditRows)
-	}
-	if !strings.Contains(string(detail), "harbor") || !strings.Contains(string(detail), "cert-manager-prod") {
-		t.Fatalf("audit detail should name the dropped registries/toolPresets; got %s", string(detail))
+	if len(q.clusters) != 0 {
+		t.Fatalf("unsupported source applied %d clusters", len(q.clusters))
 	}
 }
 

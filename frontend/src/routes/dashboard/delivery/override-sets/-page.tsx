@@ -1,3 +1,4 @@
+import { pageTableCount } from "@/lib/api/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -8,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
 import { Select } from "@/components/ui/select";
+import { ConfigurationTemplatePicker } from "@/components/delivery/pickers";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DeliveryProjectGate,
@@ -17,13 +19,11 @@ import {
   secondaryButton,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
-  deliveryPageRowCount,
 } from "@/components/delivery/shared";
 import {
   createDeliveryOverrideSet,
   deleteDeliveryOverrideSet,
   listDeliveryOverrideSets,
-  listDeliveryConfigurationTemplates,
   updateDeliveryOverrideSet,
   type DeliveryOverrideSet,
   type DeliveryOverrideSetWrite,
@@ -205,7 +205,7 @@ export function OverrideSetsPage() {
                 description: "Create an ordered override for this project.",
               }}
               serverSide={{
-                rowCount: deliveryPageRowCount(query.data),
+                ...pageTableCount(query.data),
                 pagination: { pageIndex, pageSize },
                 onPaginationChange: (next) => setPageIndex(next.pageIndex),
               }}
@@ -215,6 +215,7 @@ export function OverrideSetsPage() {
       </DeliveryProjectGate>
       {editing !== undefined ? (
         <OverrideEditor
+          key={`${projectId}:${editing?.id ?? "new"}`}
           projectId={projectId}
           item={editing}
           onClose={() => setEditing(undefined)}
@@ -246,13 +247,6 @@ function OverrideEditor({
 }) {
   const client = useQueryClient();
   const [localError, setLocalError] = useState<unknown>();
-  const templates = useQuery({
-    queryKey: queryKeys.delivery.configurationTemplates(projectId, {
-      limit: 200,
-    }),
-    queryFn: ({ signal }) =>
-      listDeliveryConfigurationTemplates(projectId, { limit: 200 }, signal),
-  });
   const mutation = useMutation({
     mutationFn: (body: DeliveryOverrideSetWrite) =>
       item
@@ -310,20 +304,16 @@ function OverrideEditor({
             defaultValue={item?.name}
           />
         </label>
-        <label className="block space-y-1.5 text-sm">
+        <div className="block space-y-1.5 text-sm">
           <span className="font-medium">Configuration template</span>
-          <Select name="templateId" defaultValue={item?.templateId ?? ""}>
-            <option value="">Any selected template</option>
-            {templates.data?.data.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-              </option>
-            ))}
-          </Select>
+          <ConfigurationTemplatePicker
+            projectId={projectId}
+            defaultValue={item?.templateId ?? ""}
+          />
           <span className="text-xs text-muted-foreground">
             When bound, this override can only be used with that template.
           </span>
-        </label>
+        </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <label className="space-y-1.5 text-sm">
             <span className="font-medium">Scope</span>

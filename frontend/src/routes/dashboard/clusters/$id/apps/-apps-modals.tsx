@@ -43,14 +43,15 @@ export function AppsModals({
   onCloseRepoModal: () => void;
   showDeleteFailed: boolean;
   onCloseDeleteFailed: () => void;
-  deleteFailedCount: number;
+  deleteFailedCount: number | undefined;
   deleteFailedPending: boolean;
   onConfirmDeleteFailed: () => void;
 }) {
   return (
     <>
-      {modal.kind === "install" && (
+      {projectId && modal.kind === "install" && (
         <AppInstallModal
+          key={projectId}
           projectId={projectId}
           clusterId={clusterId}
           mode={{
@@ -62,8 +63,9 @@ export function AppsModals({
           onClose={onCloseModal}
         />
       )}
-      {modal.kind === "upgrade" && (
+      {projectId && modal.kind === "upgrade" && (
         <AppInstallModal
+          key={projectId}
           projectId={projectId}
           clusterId={clusterId}
           mode={{

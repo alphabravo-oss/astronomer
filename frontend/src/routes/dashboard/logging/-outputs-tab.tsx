@@ -12,6 +12,7 @@ import {
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
 import { formatRelativeTime } from "@/lib/utils";
@@ -46,7 +47,8 @@ const outputTypeIcons: Record<string, ElementType> = {
 
 export function OutputsTab() {
   const navigate = useNavigate();
-  const pathname = useLocation({ select: (location) => location.pathname }); const queryClient = useQueryClient();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<LoggingOutput | null>(null);
   const [querySelection, setQueryTarget] = useState<LoggingOutput | null>();
   const [sharedFilters] = useState(() =>
@@ -55,7 +57,15 @@ export function OutputsTab() {
       : parseSharedLoggingFilters(window.location.href),
   );
   const [deleting, setDeleting] = useState(false);
-  const { data: outputs, isLoading, isError, refetch } = useLoggingOutputs();
+  const {
+    data: outputs,
+    isLoading,
+    isError,
+    refetch,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useLoggingOutputs();
   const testOutput = useTestLoggingOutput();
 
   const queryTarget =
@@ -68,7 +78,10 @@ export function OutputsTab() {
 
   const closeQueryDialog = () => {
     setQueryTarget(null);
-    void navigate({ to: pathname, replace: true, resetScroll: false,
+    void navigate({
+      to: pathname,
+      replace: true,
+      resetScroll: false,
       search: (prev: Record<string, unknown>) => {
         const next = { ...prev };
         for (const key of SHARED_LOGGING_PARAM_KEYS) delete next[key];
@@ -109,7 +122,64 @@ export function OutputsTab() {
     }
   };
 
-  const columns: Column<LoggingOutput>[] = [
+  const columns = outputColumns(
+    setQueryTarget,
+    setDeleteTarget,
+    handleToggle,
+    testOutput,
+  );
+
+  return (
+    <>
+      <DataTable
+        toolbar={
+          hasNextPage && (
+            <ActionButton
+              loading={isFetchingNextPage}
+              onClick={() => void fetchNextPage()}
+            >
+              Load more destinations ({outputs?.length ?? 0} loaded)
+            </ActionButton>
+          )
+        }
+        data={outputs || []}
+        columns={columns}
+        keyExtractor={(row) => row.id}
+        searchPlaceholder="Search logging outputs..."
+        loading={isLoading}
+        isError={isError}
+        onRetry={() => refetch()}
+        emptyState={{
+          title: "No logging outputs configured",
+          description: "Create the first item to configure this feature.",
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Logging Output"
+        description={`Delete the logging output "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleting}
+      />
+
+      {queryTarget ? (
+        <LoggingQueryDialog output={queryTarget} onClose={closeQueryDialog} />
+      ) : null}
+    </>
+  );
+}
+
+function outputColumns(
+  setQueryTarget: (row: LoggingOutput) => void,
+  setDeleteTarget: (row: LoggingOutput) => void,
+  handleToggle: (row: LoggingOutput) => Promise<void>,
+  testOutput: ReturnType<typeof useTestLoggingOutput>,
+): Column<LoggingOutput>[] {
+  return [
     {
       key: "name",
       header: "Output",
@@ -250,37 +320,4 @@ export function OutputsTab() {
       sortable: false,
     },
   ];
-
-  return (
-    <>
-      <DataTable
-        data={outputs || []}
-        columns={columns}
-        keyExtractor={(row) => row.id}
-        searchPlaceholder="Search logging outputs..."
-        loading={isLoading}
-        isError={isError}
-        onRetry={() => refetch()}
-        emptyState={{
-          title: "No logging outputs configured",
-          description: "Create the first item to configure this feature.",
-        }}
-      />
-
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        title="Delete Logging Output"
-        description={`Delete the logging output "${deleteTarget?.name}"? This action cannot be undone.`}
-        confirmText="Delete"
-        variant="destructive"
-        loading={deleting}
-      />
-
-      {queryTarget ? (
-        <LoggingQueryDialog output={queryTarget} onClose={closeQueryDialog} />
-      ) : null}
-    </>
-  );
 }

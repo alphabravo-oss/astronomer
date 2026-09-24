@@ -17,7 +17,7 @@ import { EditClusterModal } from "@/components/clusters/edit-cluster-modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Cluster } from "@/types";
 import { Plus, SearchX, Server } from "lucide-react";
-import { pageRowCount } from "@/lib/api/pagination";
+import { pageTableCount } from "@/lib/api/pagination";
 
 const CLUSTERS_PAGE_SIZE = 50;
 
@@ -167,7 +167,7 @@ export function ClustersPage() {
             setPageIndex(0);
           }}
           serverSide={{
-            rowCount: pageRowCount(clustersQuery.data),
+            ...pageTableCount(clustersQuery.data),
             pagination: { pageIndex, pageSize: CLUSTERS_PAGE_SIZE },
             onPaginationChange: (next) => setPageIndex(next.pageIndex),
             search: {

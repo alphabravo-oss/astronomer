@@ -13,13 +13,11 @@ import { Plus, Trash2, Users } from "lucide-react";
 
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  useDeleteAccessBinding,
-  useProjectRoleBindings,
-  useProjectRoles,
-} from "@/lib/hooks/rbac";
-import { useUsers } from "@/lib/hooks/user-settings";
-import { RBAC_LIST_LIMIT } from "@/lib/api/rbac";
+import { QueryStates } from "@/components/ui/query-states";
+import { useDeleteAccessBinding } from "@/lib/hooks/rbac";
+import { useProjectBindingPage } from "@/lib/hooks/project-binding-page";
+import { useBindingNames } from "@/components/rbac/use-binding-names";
+import { pageCountLabel } from "@/lib/api/pagination";
 import {
   permissionDeniedReason,
   usePermissionDecision,
@@ -37,9 +35,12 @@ function roleName(binding: AccessBinding, roles: ProjectRole[]): string {
 }
 
 export function ProjectMembersCard({ projectId }: { projectId: string }) {
-  const bindingsQuery = useProjectRoleBindings({ project_id: projectId });
-  const { data: projectRoles } = useProjectRoles();
-  const { data: usersData } = useUsers({ pageSize: 200 });
+  return <ProjectMembersPage key={projectId} projectId={projectId} />;
+}
+
+function ProjectMembersPage({ projectId }: { projectId: string }) {
+  const [pageIndex, setPageIndex] = useState(0);
+  const bindingsQuery = useProjectBindingPage(projectId, pageIndex);
   const deleteBinding = useDeleteAccessBinding();
   const [removeTarget, setRemoveTarget] = useState<AccessBinding | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -48,10 +49,10 @@ export function ProjectMembersCard({ projectId }: { projectId: string }) {
   const addPermission = usePermissionDecision("rbac", "create", scope);
   const removePermission = usePermissionDecision("rbac", "delete", scope);
 
-  const bindings = bindingsQuery.data ?? [];
-  const users = usersData?.data ?? [];
-  const roles = projectRoles ?? [];
-  const truncated = bindings.length === RBAC_LIST_LIMIT;
+  const bindings = bindingsQuery.isError
+    ? []
+    : (bindingsQuery.data?.data ?? []);
+  const { users, roles } = useBindingNames(bindings, "project");
 
   return (
     <section
@@ -64,15 +65,23 @@ export function ProjectMembersCard({ projectId }: { projectId: string }) {
           Members
         </h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Everyone with a project-scoped role binding on this project.
+          Project-scoped role assignments. A member can have more than one
+          binding.
         </p>
       </header>
 
-      {bindingsQuery.isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading members…</p>
-      ) : bindings.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No members yet.</p>
-      ) : (
+      <QueryStates
+        query={bindingsQuery}
+        loadingTitle="Loading members…"
+        errorTitle="Could not load members"
+        permissionDescription="You do not have permission to view this project's members."
+        isEmpty={(data) => data.data.length === 0}
+        empty={
+          <p className="text-xs text-muted-foreground">
+            {pageIndex === 0 ? "No members yet." : "No members on this page."}
+          </p>
+        }
+      >
         <ul className="divide-y divide-border/60">
           {bindings.map((binding) => {
             const subject = bindingSubject(binding, users);
@@ -103,12 +112,37 @@ export function ProjectMembersCard({ projectId }: { projectId: string }) {
             );
           })}
         </ul>
-      )}
+      </QueryStates>
 
-      {truncated && (
+      {!bindingsQuery.isError && bindingsQuery.data && (
         <p className="text-xs text-muted-foreground">
-          Showing first {RBAC_LIST_LIMIT} members.
+          {pageCountLabel(bindingsQuery.data)} role bindings · Page{" "}
+          {pageIndex + 1}
         </p>
+      )}
+      {(pageIndex > 0 ||
+        (!bindingsQuery.isError &&
+          bindingsQuery.data?.pagination.has_more)) && (
+        <nav aria-label="Member pages" className="flex gap-2">
+          <ActionButton
+            size="sm"
+            disabled={pageIndex === 0}
+            onClick={() => setPageIndex((page) => page - 1)}
+          >
+            Previous page
+          </ActionButton>
+          <ActionButton
+            size="sm"
+            disabled={
+              bindingsQuery.isFetching ||
+              bindingsQuery.isError ||
+              !bindingsQuery.data?.pagination.has_more
+            }
+            onClick={() => setPageIndex((page) => page + 1)}
+          >
+            Next page
+          </ActionButton>
+        </nav>
       )}
 
       <ActionButton

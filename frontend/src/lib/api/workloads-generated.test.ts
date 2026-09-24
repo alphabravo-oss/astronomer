@@ -33,6 +33,19 @@ vi.mock("@/lib/api/generated/client", () => ({
 const mockedList = getClustersByClusterIdWorkloads as MockedFunction<
   typeof getClustersByClusterIdWorkloads
 >;
+
+it("forwards an exact nonuniform workload offset without floating-point pagination", async () => {
+  mockedList.mockResolvedValueOnce({
+    data: [],
+    pagination: { limit: 25, offset: 7, has_more: false, next_offset: null },
+  });
+  await getWorkloads("cluster-1", { pageSize: 25, offset: 7 });
+  expect(mockedList).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      query: expect.objectContaining({ limit: 25, offset: 7 }),
+    }),
+  );
+});
 const mockedNamespaces = getClustersByClusterIdNamespaces as MockedFunction<
   typeof getClustersByClusterIdNamespaces
 >;

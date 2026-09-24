@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useToolOperation } from "@/lib/hooks/tools";
+import { QueryStates } from "@/components/ui/query-states";
+import { ActionButton } from "@/components/ui/action-button";
 import {
   CheckCircle2,
   XCircle,
@@ -30,7 +32,8 @@ export function ToolInstallProgress({
   toolName,
   onClose,
 }: ToolInstallProgressProps) {
-  const { data: op } = useToolOperation(operationId);
+  const operationQuery = useToolOperation(operationId);
+  const op = operationQuery.isError ? undefined : operationQuery.data;
   const status = op?.status ?? "pending";
   const isTerminal = TERMINAL.includes(status);
   const failed = status === "failed";
@@ -90,6 +93,22 @@ export function ToolInstallProgress({
         : status === "running"
           ? `${actionLabel}…`
           : "Queued…";
+
+  if (operationQuery.isLoading || operationQuery.isError || !op) {
+    return (
+      <div className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-popover p-4 shadow-2xl">
+        <ActionButton onClick={onClose}>Hide operation status</ActionButton>
+        <QueryStates
+          query={operationQuery}
+          loadingTitle="Loading operation status"
+          errorTitle="Operation status unavailable"
+          permission="tools:read"
+        >
+          {null}
+        </QueryStates>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-popover shadow-2xl">

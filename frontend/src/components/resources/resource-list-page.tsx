@@ -8,13 +8,11 @@ import {
   useRestartWorkload,
 } from "@/lib/hooks/workloads";
 import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
-import { k8sGetYaml } from "@/lib/api/kubernetes-proxy";
 import { getWorkloadPods, type WorkloadSort } from "@/lib/api/workloads";
-import { prepareCloneManifest } from "@/lib/k8s-clone";
-import { downloadBlob } from "@/lib/utils";
 import type { Column } from "@/components/ui/data-table";
 import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
-import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
+import type { ActionMenuItem } from "@/components/ui/action-menu";
+import { ResourceActionMenu } from "./resource-action-menu";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader } from "@/components/ui/page";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -93,11 +91,9 @@ import {
   Code,
   Pencil,
   Plus,
-  Download,
-  Copy,
 } from "lucide-react";
 import { toastError } from "@/lib/toast";
-import { pageRowCount } from "@/lib/api/pagination";
+import { pageTableCount } from "@/lib/api/pagination";
 
 const WORKLOAD_RESOURCE_PAGE_SIZE = 50;
 
@@ -136,39 +132,6 @@ export function WorkloadActions({
     podPermissions.read,
     podPermissions.logs,
   );
-  const [cloneYaml, setCloneYaml] = useState<string | null>(null);
-  const resourcePath = k8sResourcePath(resourceType, row.name, row.namespace);
-
-  const downloadYaml = async () => {
-    try {
-      const yamlStr = await k8sGetYaml(clusterId, resourcePath);
-      downloadBlob(
-        yamlStr,
-        `${row.namespace}-${row.name}.yaml`,
-        "application/x-yaml",
-      );
-    } catch {
-      toastError("Failed to download YAML");
-    }
-  };
-
-  const prepareClone = async () => {
-    try {
-      const yamlStr = await k8sGetYaml(clusterId, resourcePath);
-      const yaml = await import("js-yaml");
-      const parsed = yaml.load(yamlStr);
-      const cloned = prepareCloneManifest(
-        (parsed && typeof parsed === "object" ? parsed : {}) as Record<
-          string,
-          unknown
-        >,
-      );
-      setCloneYaml(yaml.dump(cloned, { lineWidth: -1, noRefs: true }));
-    } catch {
-      toastError("Failed to prepare clone");
-    }
-  };
-
   const items: ActionMenuItem[] = [
     {
       label: "Execute Shell",
@@ -211,21 +174,6 @@ export function WorkloadActions({
       disabled: !permissions.update.allowed,
       disabledReason: permissionDeniedReason(permissions.update),
     },
-    {
-      label: "Download YAML",
-      icon: <Download className="h-3.5 w-3.5" />,
-      onClick: () => void downloadYaml(),
-      disabled: !permissions.read.allowed,
-      disabledReason: permissionDeniedReason(permissions.read),
-    },
-    {
-      label: "Clone",
-      icon: <Copy className="h-3.5 w-3.5" />,
-      onClick: () => void prepareClone(),
-      disabled: !permissions.create.allowed,
-      disabledReason: permissionDeniedReason(permissions.create),
-      separator: true,
-    },
   ];
   if (WORKLOAD_SCALABLE_KINDS.includes(row.kind)) {
     items.push({
@@ -262,16 +210,13 @@ export function WorkloadActions({
   });
   return (
     <StopRowClick>
-      <ActionMenu items={items} />
-      {cloneYaml !== null && (
-        <CreateResourceDialog
-          open
-          onClose={() => setCloneYaml(null)}
-          clusterId={clusterId}
-          title={`Clone ${row.kind}`}
-          initialYaml={cloneYaml}
-        />
-      )}
+      <ResourceActionMenu
+        clusterId={clusterId}
+        resourceType={resourceType}
+        row={row}
+        permissions={permissions}
+        items={items}
+      />
     </StopRowClick>
   );
 }
@@ -412,12 +357,7 @@ function WorkloadsTable({
       restartWorkload,
     ],
   );
-  const sortableKeys = new Set(["name", "namespace", "age"]);
-  const serverColumns = columns.map((column) => ({
-    ...column,
-    sortable: sortableKeys.has(column.key),
-    filter: undefined,
-  }));
+  const serverColumns = workloadServerColumns(columns);
 
   return (
     <>
@@ -465,7 +405,7 @@ function WorkloadsTable({
           setPageIndex(0);
         }}
         serverSide={{
-          rowCount: pageRowCount(data),
+          ...pageTableCount(data),
           pagination: {
             pageIndex,
             pageSize: WORKLOAD_RESOURCE_PAGE_SIZE,
@@ -501,6 +441,7 @@ function WorkloadsTable({
           label: (row) => `${row.namespace}/${row.name}`,
           noun: kind,
         }}
+        bulkWorkloads={{ target: workloadTarget }}
       />
 
       <ScaleDialog
@@ -586,6 +527,19 @@ function WorkloadsTable({
       )}
     </>
   );
+}
+
+function workloadTarget(row: Workload) {
+  return { kind: row.kind, namespace: row.namespace, name: row.name };
+}
+
+function workloadServerColumns(columns: Column<Workload>[]) {
+  const sortable = new Set(["name", "namespace", "age"]);
+  return columns.map((column) => ({
+    ...column,
+    sortable: sortable.has(column.key),
+    filter: undefined,
+  }));
 }
 
 // ── Resource config ──

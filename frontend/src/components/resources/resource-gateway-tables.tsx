@@ -3,7 +3,7 @@ import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
 import { useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/utils";
 import { ActionButton } from "@/components/ui/action-button";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ResourceActionMenu } from "./resource-action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import type { Column } from "@/components/ui/data-table";
@@ -347,6 +347,7 @@ const referenceGrantColumns: Column<ReferenceGrant>[] = [
 // useK8sDelete provides the mutation; per-row dialog state lives in each
 // table. Shared utility to render the action menu for a namespaced row.
 function NamespacedActions<T extends { name: string; namespace: string }>({
+  clusterId,
   resourceType,
   kindLabel,
   row,
@@ -354,6 +355,7 @@ function NamespacedActions<T extends { name: string; namespace: string }>({
   onView,
   onDelete,
 }: {
+  clusterId: string;
   resourceType: NamedResourceType;
   kindLabel: string;
   row: T;
@@ -365,7 +367,11 @@ function NamespacedActions<T extends { name: string; namespace: string }>({
   const title = `${kindLabel}: ${row.namespace}/${row.name}`;
   return (
     <StopRowClick>
-      <ActionMenu
+      <ResourceActionMenu
+        clusterId={clusterId}
+        resourceType={resourceType}
+        row={row}
+        permissions={permissions}
         items={[
           {
             label: "View YAML",
@@ -416,6 +422,7 @@ export function GatewaysTable({ clusterId }: { clusterId: string }) {
         header: "",
         accessor: (row) => (
           <NamespacedActions
+            clusterId={clusterId}
             resourceType="gateways"
             kindLabel="Gateway"
             row={row}
@@ -552,6 +559,7 @@ function RouteTable<T extends GatewayRoute>({
         header: "",
         accessor: (row) => (
           <NamespacedActions
+            clusterId={clusterId}
             resourceType={resourceType}
             kindLabel={kindLabel}
             row={row}
@@ -736,7 +744,11 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
           const title = `GatewayClass: ${row.name}`;
           return (
             <StopRowClick>
-              <ActionMenu
+              <ResourceActionMenu
+                clusterId={clusterId}
+                resourceType="gatewayclasses"
+                row={row}
+                permissions={permissions}
                 items={[
                   {
                     label: "View YAML",
@@ -770,7 +782,7 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
         align: "center" as const,
       },
     ],
-    [clusterId, permissions.delete, permissions.read, permissions.update],
+    [clusterId, permissions],
   );
 
   return (
@@ -859,6 +871,7 @@ export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
         header: "",
         accessor: (row) => (
           <NamespacedActions
+            clusterId={clusterId}
             resourceType="referencegrants"
             kindLabel="ReferenceGrant"
             row={row}

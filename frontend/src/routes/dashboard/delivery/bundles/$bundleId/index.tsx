@@ -1,7 +1,9 @@
+import { pageTableCount } from "@/lib/api/pagination";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormShell } from "@/components/ui/form-shell";
 import { Select } from "@/components/ui/select";
+import { SourcePicker } from "@/components/delivery/pickers";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,12 +26,10 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
-  deliveryPageRowCount,
   inputClass,
   primaryButton,
   secondaryButton,
   textareaClass,
-  RedirectDeliveryDetail,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
   withProjectQuery,
@@ -44,7 +44,6 @@ import {
   type DriftPolicy,
   type RendererKind,
 } from "@/lib/api/delivery-bundles";
-import { listDeliverySources } from "@/lib/api/delivery-sources";
 import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can, isSuperuser } from "@/lib/permissions";
@@ -228,7 +227,7 @@ export function BundleDetailPage() {
                   "Resources will appear here when they are available in this scope.",
               }}
               serverSide={{
-                rowCount: deliveryPageRowCount(versions.data),
+                ...pageTableCount(versions.data),
                 pagination: { pageIndex, pageSize },
                 onPaginationChange: (next) => setPageIndex(next.pageIndex),
               }}
@@ -238,6 +237,7 @@ export function BundleDetailPage() {
       </DeliveryProjectGate>
       {creating && (
         <CreateVersionDialog
+          key={`${projectId}:${bundleId}`}
           projectId={projectId}
           bundleId={bundleId}
           canCreatePlatformVersion={canCreatePlatformVersion}
@@ -264,11 +264,6 @@ function CreateVersionDialog({
   const [scope, setScope] = useState<BundleScope>("namespace");
   const [drift, setDrift] = useState<DriftPolicy>("repair");
   const [formError, setFormError] = useState<Error | null>(null);
-  const sources = useQuery({
-    queryKey: queryKeys.delivery.sources(projectId, { limit: 200 }),
-    queryFn: ({ signal }) =>
-      listDeliverySources(projectId, { limit: 200 }, signal),
-  });
   const mutation = useMutation({
     mutationFn: (body: CreateBundleVersionRequest) =>
       createComponentBundleVersion(bundleId, body, crypto.randomUUID()),
@@ -372,15 +367,8 @@ function CreateVersionDialog({
           <Field label="Version label">
             <Input name="version" required className={inputClass} />
           </Field>
-          <Field label="Source">
-            <Select name="source_id" required className={inputClass}>
-              <option value="">Select source</option>
-              {sources.data?.data.map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.name} · {source.type}
-                </option>
-              ))}
-            </Select>
+          <Field label="Source" htmlFor="delivery-source">
+            <SourcePicker projectId={projectId} />
           </Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
@@ -577,15 +565,6 @@ function CreateVersionDialog({
   );
 }
 
-function DeliveryBundleDetailRedirect() {
-  const { bundleId } = useParams({ strict: false }) as { bundleId: string };
-  return (
-    <RedirectDeliveryDetail tab="bundles" id={bundleId}>
-      <BundleDetailPage />
-    </RedirectDeliveryDetail>
-  );
-}
-
 export const Route = createFileRoute("/dashboard/delivery/bundles/$bundleId/")({
-  component: DeliveryBundleDetailRedirect,
+  component: BundleDetailPage,
 });

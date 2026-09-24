@@ -76,7 +76,7 @@ type CreateClusterRequest struct {
 	Distribution string          `json:"distribution"`
 	Labels       json.RawMessage `json:"labels"`
 	// Annotations carry agent settings at adoption time, notably
-	// astronomer.io/agent-privilege-profile (viewer|admin) from the wizard.
+	// astronomer.io/image-scanning for the default-on scanner opt-out.
 	Annotations json.RawMessage `json:"annotations"`
 	// ApiServerUrl and CaCertificate are optional direct-access coordinates.
 	// They never contain a credential. The download endpoint validates HTTPS,
@@ -476,9 +476,6 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 		labels = json.RawMessage(`{}`)
 	}
 	annotations := req.Annotations
-	if annotations == nil {
-		annotations = json.RawMessage(`{}`)
-	}
 	if err := validateDirectAccessConfig(req.ApiServerUrl, req.CaCertificate); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
@@ -497,6 +494,7 @@ func (h *ClusterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	annotations = fullManagementAnnotations(annotations)
 	agentOverrides, err := marshalAgentOverrides(req.AgentOverrides)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())

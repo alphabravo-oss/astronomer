@@ -10,6 +10,8 @@ const config = [
     ignores: [
       ".next/**",
       "dist/**",
+      ".cache/browser-components/**",
+      ".cache/browser-component-results/**",
       "node_modules/**",
       "public/**",
       "coverage/**",
@@ -181,7 +183,8 @@ const config = [
           message: "Use the shared query-key factory.",
         },
         {
-          selector: "JSXOpeningElement[name.name=/^(input|select|textarea|form)$/]",
+          selector:
+            "JSXOpeningElement[name.name=/^(input|select|textarea|form)$/]",
           message:
             "Use shared Input/Select/Textarea controls and FormShell with useAppForm for editable workflows.",
         },

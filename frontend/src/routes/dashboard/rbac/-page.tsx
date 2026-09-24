@@ -1,22 +1,7 @@
-import { useMemo, useState, type ElementType } from "react";
+import { lazy, Suspense, useState, type ElementType } from "react";
 import { useTabParam } from "@/lib/use-tab-param";
-import {
-  useGlobalRoles,
-  useClusterRoles,
-  useProjectRoles,
-  useClusterRoleBindings,
-  useGlobalRoleBindings,
-  useProjectRoleBindings,
-  useDeleteAccessBinding,
-  useDeleteRole,
-} from "@/lib/hooks/rbac";
-import {
-  useUsers,
-  useDeleteUser,
-  useResetUserPassword,
-} from "@/lib/hooks/user-settings";
-import { useClusters } from "@/lib/hooks/clusters";
-import { useProjects } from "@/lib/hooks/projects";
+import { useDeleteAccessBinding, useDeleteRole } from "@/lib/hooks/rbac";
+import { useDeleteUser, useResetUserPassword } from "@/lib/hooks/user-settings";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { TabStrip, TabsContent } from "@/components/ui/tabs";
 import { ActionButton } from "@/components/ui/action-button";
@@ -29,9 +14,9 @@ import {
 import { Plus, Shield, Users, Key, Lock, ListChecks } from "lucide-react";
 import type { AccessBinding, User } from "@/types";
 import type { RoleScope } from "@/lib/api/rbac";
-import { ClusterRolesTab, GlobalRolesTab, ProjectRolesTab } from "./-roles-tab";
+import { RolesTab } from "./-roles-tab";
 import { UsersTab } from "./-users-tab";
-import { BindingsTab } from "./-bindings-tab";
+import { PagedBindingsTab } from "./-paged-bindings-tab";
 import { EffectiveTab } from "./-effective-tab";
 import {
   CreateUserModal,
@@ -42,7 +27,6 @@ import { CreateClusterBindingModal } from "@/components/rbac/create-binding-moda
 import {
   bindingTarget,
   roleTitle,
-  toAccessBinding,
   type RoleLike,
 } from "@/components/rbac/binding-utils";
 
@@ -51,6 +35,8 @@ type RoleEditorState = {
   scope: RoleScope;
   role?: EditableRole;
 };
+
+const NativeRulesTab = lazy(() => import("./-native-rules-tab"));
 
 type ConcreteRole = RoleLike & { id: string };
 type DeleteRoleTarget = { scope: RoleScope; role: ConcreteRole };
@@ -82,6 +68,7 @@ type TabKey =
   | "project-roles"
   | "users"
   | "bindings"
+  | "native-rules"
   | "effective";
 
 const TAB_KEYS = [
@@ -90,6 +77,7 @@ const TAB_KEYS = [
   "project-roles",
   "users",
   "bindings",
+  "native-rules",
   "effective",
 ] as const;
 
@@ -99,6 +87,7 @@ const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
   { key: "project-roles", label: "Project Roles", icon: Key },
   { key: "users", label: "Users", icon: Users },
   { key: "bindings", label: "Bindings", icon: Shield },
+  { key: "native-rules", label: "Native grants", icon: Key },
   { key: "effective", label: "Effective", icon: ListChecks },
 ];
 
@@ -122,96 +111,10 @@ export default function RBACPage() {
   const [deleteBindingTarget, setDeleteBindingTarget] =
     useState<AccessBinding | null>(null);
 
-  const {
-    data: globalRoles,
-    isLoading: globalLoading,
-    isError: globalError,
-    refetch: refetchGlobal,
-  } = useGlobalRoles();
-  const {
-    data: clusterRoles,
-    isLoading: clusterLoading,
-    isError: clusterError,
-    refetch: refetchCluster,
-  } = useClusterRoles();
-  const {
-    data: projectRoles,
-    isLoading: projectLoading,
-    isError: projectError,
-    refetch: refetchProject,
-  } = useProjectRoles();
-  const {
-    data: usersData,
-    isLoading: usersLoading,
-    isError: usersError,
-    refetch: refetchUsers,
-  } = useUsers({
-    pageSize: 200,
-  });
-  const { data: clustersData } = useClusters({ pageSize: 200 });
-  const { data: projectsData } = useProjects({ pageSize: 200 });
-  const {
-    data: clusterBindings,
-    isLoading: clusterBindingsLoading,
-    isError: clusterBindingsError,
-    refetch: refetchClusterBindings,
-  } = useClusterRoleBindings();
-  const {
-    data: globalBindings,
-    isLoading: globalBindingsLoading,
-    isError: globalBindingsError,
-    refetch: refetchGlobalBindings,
-  } = useGlobalRoleBindings();
-  const {
-    data: projectBindings,
-    isLoading: projectBindingsLoading,
-    isError: projectBindingsError,
-    refetch: refetchProjectBindings,
-  } = useProjectRoleBindings();
-
   const deleteUser = useDeleteUser();
   const resetPassword = useResetUserPassword();
   const deleteBinding = useDeleteAccessBinding();
   const deleteRole = useDeleteRole();
-
-  const clusters = clustersData?.data || [];
-  const projects = projectsData?.data || [];
-  const globalRoleList = useMemo(() => globalRoles ?? [], [globalRoles]);
-  const clusterRoleList = clusterRoles || [];
-  const projectRoleList = projectRoles || [];
-
-  const bindings = useMemo(() => {
-    const global = (globalBindings || []).map((row) =>
-      toAccessBinding("global", row),
-    );
-    const cluster = (clusterBindings || []).map((row) =>
-      toAccessBinding("cluster", row),
-    );
-    const project = (projectBindings || []).map((row) =>
-      toAccessBinding("project", row),
-    );
-    return [...global, ...cluster, ...project];
-  }, [globalBindings, clusterBindings, projectBindings]);
-
-  const users = useMemo(() => {
-    const roleNameById = new Map(
-      globalRoleList.map((role) => [role.id, roleTitle(role)]),
-    );
-    const rolesByUser = new Map<string, string[]>();
-    for (const binding of bindings) {
-      if (binding.scope !== "global" || !binding.userId) continue;
-      const name = roleNameById.get(binding.roleId) || binding.roleId;
-      const current = rolesByUser.get(binding.userId) ?? [];
-      if (!current.includes(name)) current.push(name);
-      rolesByUser.set(binding.userId, current);
-    }
-    return (usersData?.data || []).map((user) => ({
-      ...user,
-      globalRoles: user.globalRoles?.length
-        ? user.globalRoles
-        : (rolesByUser.get(user.id) ?? []),
-    }));
-  }, [usersData, bindings, globalRoleList]);
 
   const confirmDeleteBinding = async () => {
     if (!deleteBindingTarget) return;
@@ -331,41 +234,19 @@ export default function RBACPage() {
 
       <TabsContent>
         {activeTab === "global-roles" && (
-          <GlobalRolesTab
-            data={globalRoleList}
-            loading={globalLoading}
-            isError={globalError}
-            onRetry={() => refetchGlobal()}
-            {...roleActions("global")}
-          />
+          <RolesTab key="global" scope="global" {...roleActions("global")} />
         )}
 
         {activeTab === "cluster-roles" && (
-          <ClusterRolesTab
-            data={clusterRoleList}
-            loading={clusterLoading}
-            isError={clusterError}
-            onRetry={() => refetchCluster()}
-            {...roleActions("cluster")}
-          />
+          <RolesTab key="cluster" scope="cluster" {...roleActions("cluster")} />
         )}
 
         {activeTab === "project-roles" && (
-          <ProjectRolesTab
-            data={projectRoleList}
-            loading={projectLoading}
-            isError={projectError}
-            onRetry={() => refetchProject()}
-            {...roleActions("project")}
-          />
+          <RolesTab key="project" scope="project" {...roleActions("project")} />
         )}
 
         {activeTab === "users" && (
           <UsersTab
-            users={users}
-            loading={usersLoading}
-            isError={usersError}
-            onRetry={() => refetchUsers()}
             onEdit={setEditingUser}
             onResetPassword={setResetPasswordTarget}
             onDelete={setDeleteUserTarget}
@@ -373,34 +254,15 @@ export default function RBACPage() {
         )}
 
         {activeTab === "bindings" && (
-          <BindingsTab
-            bindings={bindings}
-            globalRoles={globalRoleList}
-            clusterRoles={clusterRoleList}
-            projectRoles={projectRoleList}
-            clusters={clusters}
-            projects={projects}
-            users={users}
-            loading={
-              globalBindingsLoading ||
-              clusterBindingsLoading ||
-              projectBindingsLoading
-            }
-            isError={
-              globalBindingsError ||
-              clusterBindingsError ||
-              projectBindingsError
-            }
-            onRetry={() => {
-              void refetchGlobalBindings();
-              void refetchClusterBindings();
-              void refetchProjectBindings();
-            }}
-            onRevoke={setDeleteBindingTarget}
-          />
+          <PagedBindingsTab onRevoke={setDeleteBindingTarget} />
         )}
 
         {activeTab === "effective" && <EffectiveTab />}
+        {activeTab === "native-rules" && (
+          <Suspense fallback={<p role="status">Loading native grants…</p>}>
+            <NativeRulesTab />
+          </Suspense>
+        )}
       </TabsContent>
 
       {roleEditorState && (
@@ -476,7 +338,7 @@ export default function RBACPage() {
         title="Revoke Binding"
         description={
           deleteBindingTarget
-            ? `Revoke this ${deleteBindingTarget.scope} binding for ${bindingTarget(deleteBindingTarget, clusters, projects)}? Access granted by it will be removed.`
+            ? `Revoke this ${deleteBindingTarget.scope} binding for ${bindingTarget(deleteBindingTarget, [], [])}? Access granted by it will be removed.`
             : "Revoke this role binding? Access granted by it will be removed."
         }
         confirmText="Revoke"

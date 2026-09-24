@@ -157,7 +157,21 @@ const families: ResourceFamily[] = [
 ];
 
 function apiResponse<T>(data: T) {
-  return { status: 200, data };
+  return {
+    status: 200,
+    data,
+    ...(Array.isArray(data)
+      ? {
+          pagination: {
+            total: data.length,
+            limit: 25,
+            offset: 0,
+            has_more: false,
+            next_offset: null,
+          },
+        }
+      : {}),
+  };
 }
 
 function objectName(family: ResourceFamily) {
@@ -218,6 +232,8 @@ async function mockApi(page: Page, family: ResourceFamily) {
     }
     if (path === "/settings/features")
       return route.fulfill({ json: apiResponse({}) });
+    if (path === `/clusters/${CLUSTER_ID}/events`)
+      return route.fulfill({ json: apiResponse([]) });
     if (path === `/clusters/${CLUSTER_ID}` && method === "GET") {
       return route.fulfill({
         json: apiResponse({
@@ -261,6 +277,25 @@ for (const family of families) {
   test(`${family.kind} ${expectation}`, async ({ context, page }) => {
     await mockApi(page, family);
     await seedAuth(context, page, adminUser);
+    if (family.kind === "Namespace") {
+      // Override the auth helper's empty shell inventory after registration.
+      await page.route(
+        `**/api/v1/clusters/${CLUSTER_ID}/namespaces/**`,
+        (route) =>
+          route.fulfill({
+            json: apiResponse([
+              {
+                name: objectName(family),
+                clusterId: CLUSTER_ID,
+                status: "Active",
+                createdAt: "2026-08-01T00:00:00Z",
+                labels: {},
+                annotations: {},
+              },
+            ]),
+          }),
+      );
+    }
     await page.goto(detailPath(family));
 
     await expect(
@@ -269,7 +304,9 @@ for (const family of families) {
 
     if (family.kind === "Namespace") {
       await expect(
-        page.getByText("Namespace-scoped operations and resources"),
+        page.getByText(
+          /Resource counts and health indicators describe loaded pages/,
+        ),
       ).toBeVisible();
       await expect(page.getByText("Metadata")).toBeVisible();
       await expect(

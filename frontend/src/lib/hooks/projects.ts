@@ -60,11 +60,12 @@ export function useProjectSearch(
   });
 }
 
-export function useProject(id: string) {
+export function useProject(id: string, options: { throwOnError?: false } = {}) {
   return useQuery({
     queryKey: queryKeys.projects.detail(id),
     queryFn: ({ signal }) => getProject(id, { signal }),
     enabled: !!id,
+    ...options,
   });
 }
 

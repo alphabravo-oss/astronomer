@@ -3,7 +3,15 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { formatRelativeTime } from "@/lib/utils";
-import type { ClusterRole, GlobalRole, ProjectRole } from "@/types";
+import type { GlobalRole } from "@/types";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getRolePage } from "@/lib/api/rbac-role-page";
+import { type RoleScope } from "@/lib/api/rbac";
+import { queryKeys } from "@/lib/query-keys";
+import { pageTableCount } from "@/lib/api/pagination";
+import { usePermissionDecision } from "@/lib/permission-hooks";
+import { PermissionState } from "@/components/ui/empty-state";
 import {
   crdGrantCount,
   isBuiltinRole,
@@ -132,87 +140,50 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
 }
 
 interface RolesTabProps<T extends RoleLike & { id: string }> {
-  data: T[];
-  loading: boolean;
-  isError: boolean;
-  onRetry: () => void;
+  scope: RoleScope;
   onEdit: (role: T) => void;
   onDuplicate: (role: T) => void;
   onDelete: (role: T) => void;
 }
 
-export function GlobalRolesTab({
-  data,
-  loading,
-  isError,
-  onRetry,
+export function RolesTab({
+  scope,
   onEdit,
   onDuplicate,
   onDelete,
 }: RolesTabProps<GlobalRole>) {
-  return (
+  const [pageIndex, setPageIndex] = useState(0);
+  const read = usePermissionDecision("rbac", "read");
+  const query = useQuery({
+    queryKey: queryKeys.rbac.rolePage(scope, pageIndex),
+    queryFn: ({ signal }) => getRolePage(scope, pageIndex * 25, signal),
+    enabled: read.allowed,
+    throwOnError: false,
+  });
+  return !read.allowed ? (
+    <PermissionState permission="rbac:read" />
+  ) : (
     <DataTable
-      data={data}
-      columns={roleColumns<GlobalRole>({ onEdit, onDuplicate, onDelete })}
+      data={query.isError || !read.allowed ? [] : (query.data?.data ?? [])}
+      columns={roleColumns<GlobalRole>({ onEdit, onDuplicate, onDelete }).map(
+        (column) => ({ ...column, sortable: false, filter: undefined }),
+      )}
       keyExtractor={(row) => row.id}
-      searchPlaceholder="Search global roles..."
-      loading={loading}
-      isError={isError}
-      onRetry={onRetry}
-      emptyState={{
-        title: "No global roles defined",
-        description: "Create the first item to configure this feature.",
+      searchable={false}
+      loading={query.isLoading}
+      isError={query.isError}
+      error={query.error}
+      permission="rbac:read"
+      onRetry={() => void query.refetch()}
+      serverSide={{
+        ...pageTableCount(
+          query.isError || !read.allowed ? undefined : query.data,
+        ),
+        pagination: { pageIndex, pageSize: 25 },
+        onPaginationChange: (next) => setPageIndex(next.pageIndex),
       }}
-    />
-  );
-}
-
-export function ClusterRolesTab({
-  data,
-  loading,
-  isError,
-  onRetry,
-  onEdit,
-  onDuplicate,
-  onDelete,
-}: RolesTabProps<ClusterRole>) {
-  return (
-    <DataTable
-      data={data}
-      columns={roleColumns<ClusterRole>({ onEdit, onDuplicate, onDelete })}
-      keyExtractor={(row) => row.id}
-      searchPlaceholder="Search cluster roles..."
-      loading={loading}
-      isError={isError}
-      onRetry={onRetry}
       emptyState={{
-        title: "No cluster roles defined",
-        description: "Create the first item to configure this feature.",
-      }}
-    />
-  );
-}
-
-export function ProjectRolesTab({
-  data,
-  loading,
-  isError,
-  onRetry,
-  onEdit,
-  onDuplicate,
-  onDelete,
-}: RolesTabProps<ProjectRole>) {
-  return (
-    <DataTable
-      data={data}
-      columns={roleColumns<ProjectRole>({ onEdit, onDuplicate, onDelete })}
-      keyExtractor={(row) => row.id}
-      searchPlaceholder="Search project roles..."
-      loading={loading}
-      isError={isError}
-      onRetry={onRetry}
-      emptyState={{
-        title: "No project roles defined",
+        title: `No ${scope} roles defined`,
         description: "Create the first item to configure this feature.",
       }}
     />

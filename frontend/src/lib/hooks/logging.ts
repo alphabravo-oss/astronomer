@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import {
   getLoggingOutputs,
@@ -21,11 +26,36 @@ import type { LoggingOperation, LoggingOutput, LoggingPipeline } from "@/types";
 // Logging Hooks
 // ============================================================
 
-export function useLoggingOutputs() {
-  return useQuery({
-    queryKey: queryKeys.logging.outputs,
-    queryFn: () => getLoggingOutputs(),
+export function useLoggingOutputs(
+  clusterId?: string,
+  options?: { enabled?: boolean },
+) {
+  const query = useInfiniteQuery({
+    queryKey: queryKeys.logging.outputPages(clusterId),
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      getLoggingOutputs(clusterId, pageParam, signal),
+    getNextPageParam: (page) => {
+      const { has_more, next_offset, offset } = page.pagination;
+      return has_more && next_offset !== null && next_offset > offset
+        ? next_offset
+        : undefined;
+    },
+    enabled: options?.enabled,
+    throwOnError: false,
   });
+  return {
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: query.refetch,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
+    fetchNextPage: query.fetchNextPage,
+    data: query.isError
+      ? undefined
+      : query.data?.pages.flatMap((page) => page.data),
+  };
 }
 
 export function useCreateLoggingOutput() {
@@ -115,13 +145,15 @@ export function useLoggingOperations(params?: {
   limit?: number;
   offset?: number;
 }) {
-  return useQuery<LoggingOperation[]>({
+  return useQuery({
     queryKey: queryKeys.logging.operations(params),
-    queryFn: () => getLoggingOperations(params),
+    queryFn: ({ signal }) => getLoggingOperations(params, signal),
+    throwOnError: false,
     // `logging_operation.changed` drives freshness while the stream is open;
     // poll so pending -> running -> completed transitions still appear when
     // it is down.
-    refetchInterval: liveFallback(5000),
+    refetchInterval: (query) =>
+      query.state.status === "error" ? false : liveFallback(5000)(),
   });
 }
 

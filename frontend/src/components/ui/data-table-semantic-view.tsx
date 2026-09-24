@@ -1,5 +1,5 @@
-import { useMemo, type ReactNode } from "react";
-import type { RowData, Table as RtTable } from "@tanstack/react-table";
+import { Fragment, useMemo, type ReactNode } from "react";
+import type { RowData, Row, Table as RtTable } from "@tanstack/react-table";
 
 import type { Column } from "@/components/ui/data-table";
 import {
@@ -22,6 +22,8 @@ import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface SemanticDataTableProps<T extends RowData> {
+  rows: Row<DataTableFeatures, T>[];
+  groupBy?: (row: T) => string;
   table: RtTable<DataTableFeatures, T>;
   activeColumns: Column<T>[];
   selectable: boolean | ((row: T) => boolean);
@@ -41,6 +43,8 @@ interface SemanticDataTableProps<T extends RowData> {
 }
 
 export function SemanticDataTable<T extends RowData>({
+  rows,
+  groupBy,
   table,
   activeColumns,
   selectable,
@@ -58,7 +62,6 @@ export function SemanticDataTable<T extends RowData>({
   keyExtractor,
   onRowClick,
 }: SemanticDataTableProps<T>): ReactNode {
-  const rows = table.getRowModel().rows;
   const headerByKey = useMemo(
     () =>
       new Map(
@@ -165,7 +168,9 @@ export function SemanticDataTable<T extends RowData>({
                         {headerContent}
                       </button>
                     ) : (
-                      <div className={cn("flex items-center gap-1", alignClass)}>
+                      <div
+                        className={cn("flex items-center gap-1", alignClass)}
+                      >
                         {headerContent}
                       </div>
                     )}
@@ -269,60 +274,77 @@ export function SemanticDataTable<T extends RowData>({
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((row) => {
+              rows.map((row, index) => {
                 const key = keyExtractor(row.original);
                 const isSelected = row.getIsSelected();
                 return (
-                  <TableRow
-                    key={key}
-                    className={cn(
-                      "border-b border-border last:border-0 whitespace-nowrap transition-colors",
-                      onRowClick && "cursor-pointer hover:bg-muted/50",
-                      isSelected && "bg-muted/30",
-                    )}
-                    tabIndex={onRowClick ? 0 : undefined}
-                    onKeyDown={(event) => {
-                      if (!onRowClick || event.target !== event.currentTarget)
-                        return;
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        onRowClick(row.original);
-                      }
-                    }}
-                    onClick={(event) => {
-                      if (!eventStartedInRowAction(event))
-                        onRowClick?.(row.original);
-                    }}
-                  >
-                    {selectable && (
-                      <TableCell className={selectPadding}>
-                        <Checkbox
-                          aria-label={`Select row ${keyExtractor(row.original)}`}
-                          checked={isSelected}
-                          disabled={!row.getCanSelect()}
-                          onChange={row.getToggleSelectedHandler()}
-                        />
-                      </TableCell>
-                    )}
-                    {activeColumns.map((col) => (
-                      <TableCell
-                        key={col.key}
-                        className={cn(
-                          cellPadding,
-                          "whitespace-nowrap",
-                          col.align === "center" && "text-center",
-                          col.align === "right" && "text-right",
-                        )}
-                        style={
-                          resizable
-                            ? { width: table.getColumn(col.key)?.getSize() }
-                            : undefined
+                  <Fragment key={key}>
+                    {groupBy &&
+                      (index === 0 ||
+                        groupBy(row.original) !==
+                          groupBy(rows[index - 1].original)) && (
+                        <TableRow>
+                          <TableHead
+                            colSpan={
+                              activeColumns.length + (selectable ? 1 : 0)
+                            }
+                            className="bg-muted px-3 py-2 text-xs font-semibold"
+                          >
+                            {groupBy(row.original)}
+                          </TableHead>
+                        </TableRow>
+                      )}
+                    <TableRow
+                      key={key}
+                      className={cn(
+                        "border-b border-border last:border-0 whitespace-nowrap transition-colors",
+                        onRowClick && "cursor-pointer hover:bg-muted/50",
+                        isSelected && "bg-muted/30",
+                      )}
+                      tabIndex={onRowClick ? 0 : undefined}
+                      onKeyDown={(event) => {
+                        if (!onRowClick || event.target !== event.currentTarget)
+                          return;
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onRowClick(row.original);
                         }
-                      >
-                        {col.accessor(row.original)}
-                      </TableCell>
-                    ))}
-                  </TableRow>
+                      }}
+                      onClick={(event) => {
+                        if (!eventStartedInRowAction(event))
+                          onRowClick?.(row.original);
+                      }}
+                    >
+                      {selectable && (
+                        <TableCell className={selectPadding}>
+                          <Checkbox
+                            aria-label={`Select row ${keyExtractor(row.original)}`}
+                            checked={isSelected}
+                            disabled={!row.getCanSelect()}
+                            onChange={row.getToggleSelectedHandler()}
+                          />
+                        </TableCell>
+                      )}
+                      {activeColumns.map((col) => (
+                        <TableCell
+                          key={col.key}
+                          className={cn(
+                            cellPadding,
+                            "whitespace-nowrap",
+                            col.align === "center" && "text-center",
+                            col.align === "right" && "text-right",
+                          )}
+                          style={
+                            resizable
+                              ? { width: table.getColumn(col.key)?.getSize() }
+                              : undefined
+                          }
+                        >
+                          {col.accessor(row.original)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </Fragment>
                 );
               })
             )}

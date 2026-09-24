@@ -1,5 +1,5 @@
-
 import { useId } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,9 @@ export function DrawerShell({
 }: DrawerShellProps) {
   const titleId = useId();
 
-  return (
+  // Page animations and sticky toolbars create stacking contexts. Mount at
+  // the document root so the drawer always covers the surrounding chrome.
+  return createPortal(
     <OverlayShell
       onClose={onClose}
       placement="right"
@@ -58,6 +60,7 @@ export function DrawerShell({
           <div className="flex shrink-0 items-center gap-2">
             {actions}
             <button
+              type="button"
               onClick={onClose}
               className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               aria-label="Close"
@@ -72,6 +75,7 @@ export function DrawerShell({
           {children}
         </div>
       </aside>
-    </OverlayShell>
+    </OverlayShell>,
+    document.body,
   );
 }

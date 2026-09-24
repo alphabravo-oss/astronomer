@@ -2,7 +2,11 @@ import { useState } from "react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { toastError } from "@/lib/toast";
-import { Server, Info, AlertTriangle } from "lucide-react";
+import { Server, AlertTriangle } from "lucide-react";
+import {
+  RegistrationBaselineOption,
+  RegistrationImageScanningOption,
+} from "@/components/clusters/registration-baseline-options";
 import { createCluster, updateCluster } from "@/lib/api/clusters";
 import { setRegistrationOptions } from "@/lib/api/cluster-registration";
 import { useCluster } from "@/lib/hooks/clusters";
@@ -41,9 +45,10 @@ function registrationDefaults(initialCluster: Cluster | null) {
       (initialCluster?.environment as ClusterEnvironment | undefined) ??
       ("development" as ClusterEnvironment),
     region: initialCluster?.region ?? "",
-    installBaseline: initialCluster?.installBaseline ?? false,
-    privilegeProfile:
-      initialCluster?.agentPrivilegeProfile === "admin" ? "admin" : "viewer",
+    installBaseline: initialCluster?.installBaseline ?? true,
+    installImageScanning:
+      initialCluster?.annotations?.["astronomer.io/image-scanning"] !==
+      "disabled",
     apiServerUrl: initialCluster?.apiServerUrl ?? "",
     caCertificate: initialCluster?.caCertificate ?? "",
     agentRequestCPU:
@@ -147,7 +152,11 @@ function RegisterClusterWizardPage({
       if (!value.name || nameTaken) return;
       try {
         const annotations = {
-          "astronomer.io/agent-privilege-profile": value.privilegeProfile,
+          ...initialCluster?.annotations,
+          "astronomer.io/agent-privilege-profile": "admin",
+          "astronomer.io/image-scanning": value.installImageScanning
+            ? "enabled"
+            : "disabled",
         };
         const agentOverrides = {
           resources: {
@@ -190,14 +199,7 @@ function RegisterClusterWizardPage({
               caCertificate: value.caCertificate || undefined,
               agentOverrides,
             });
-        // Record the operator's choice. The backend keeps install_baseline
-        // NULL until this call so it can distinguish "hasn't decided" from
-        // "opted out". A viewer agent is read-only and physically can't deploy
-        // the baseline, so force it off — the UI disables the checkbox under
-        // viewer, this guards the submit value too.
-        const installBaseline =
-          value.privilegeProfile === "viewer" ? false : value.installBaseline;
-        await setRegistrationOptions(cluster.id, installBaseline);
+        await setRegistrationOptions(cluster.id, value.installBaseline);
         onRegistered(cluster.id);
       } catch (err) {
         setSubmissionError(
@@ -219,10 +221,6 @@ function RegisterClusterWizardPage({
   const [debouncedName] = useDebouncedValue(name.trim(), { wait: 250 });
   const nameMatches = useClusterSearch(debouncedName, debouncedName.length > 0);
   const submitting = useStore(form.store, (s) => s.isSubmitting);
-  const privilegeProfile = useStore(
-    form.store,
-    (s) => s.values.privilegeProfile,
-  );
   const nameTaken =
     name.length > 0 &&
     (nameMatches.data?.pages ?? []).some((page) =>
@@ -232,7 +230,6 @@ function RegisterClusterWizardPage({
           cluster.name.toLowerCase() === name.trim().toLowerCase(),
       ),
     );
-  const isViewer = privilegeProfile === "viewer";
 
   return (
     <div>
@@ -479,107 +476,33 @@ function RegisterClusterWizardPage({
           </div>
         </section>
 
-        <Field label="Agent privilege profile">
-          <form.Field name="privilegeProfile">
-            {(field) => (
-              <Select
-                name={field.name}
-                aria-label="Agent privilege profile"
-                value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-                onBlur={field.handleBlur}
-              >
-                <option value="viewer">
-                  Viewer — Astronomer observes (read-only)
-                </option>
-                <option value="admin">
-                  Admin — Astronomer operates (governed by user RBAC)
-                </option>
-              </Select>
-            )}
-          </form.Field>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Sets the ceiling for what Astronomer can do on this cluster.{" "}
-            <span className="font-medium text-foreground">Viewer</span> is
-            read-only — Astronomer can observe the cluster, and no user can
-            change it regardless of their Astronomer role (safe first adoption,
-            trivially removable).{" "}
-            <span className="font-medium text-foreground">Admin</span> lets
-            Astronomer operate the cluster; what each user can actually do is
-            then governed by their Astronomer RBAC. (Finer-grained operator /
-            namespace-scoped profiles are available via the API.)
-          </p>
-          {isViewer ? (
-            <p className="mt-2 flex items-start gap-1.5 text-xs text-status-warning">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
-              <span>
-                Read-only: Astronomer{" "}
-                <span className="font-medium">
-                  cannot install baseline monitoring
-                </span>{" "}
-                (kube-state-metrics, node-exporter, etc.) on a viewer cluster.
-                You&apos;ll get inventory, logs, and health — but no metrics
-                dashboards until you re-adopt as Admin.
-              </span>
-            </p>
-          ) : (
-            <p className="mt-2 flex items-start gap-1.5 text-xs text-status-success">
-              <Info className="h-3.5 w-3.5 shrink-0 mt-px" />
-              <span>
-                Astronomer can install and manage baseline monitoring and tools
-                on this cluster.
-              </span>
-            </p>
-          )}
-        </Field>
+        <p className="text-sm text-muted-foreground">
+          Astronomer manages this cluster. Each user's RBAC permissions control
+          which resources they can access and which actions they can perform.
+        </p>
 
-        <label
-          className={`flex items-start gap-3 p-4 rounded-lg border border-border transition-colors ${
-            isViewer
-              ? "bg-muted/10 opacity-60 cursor-not-allowed"
-              : "bg-muted/20 cursor-pointer hover:bg-muted/30"
-          }`}
-        >
-          <form.Field name="installBaseline">
-            {(field) => (
-              <Input
-                name={field.name}
-                type="checkbox"
-                // A viewer agent can't deploy — force unchecked and disabled so the
-                // read-only + install-baseline contradiction can't be submitted.
-                checked={isViewer ? false : field.state.value}
-                disabled={isViewer}
-                onChange={(e) => field.handleChange(e.target.checked)}
-                onBlur={field.handleBlur}
-                className="mt-0.5 h-4 w-4 rounded-sm border-border text-primary focus:ring-ring disabled:cursor-not-allowed"
-              />
-            )}
-          </form.Field>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-foreground">
-                Quick Start: Install Platform Baseline after cluster connects
-              </span>
-              <Info
-                className="h-3.5 w-3.5 text-muted-foreground"
-                aria-label="Installs trivy-operator, kube-state-metrics, prometheus-node-exporter, fluent-bit, ingress-nginx, cert-manager, gatekeeper"
-              />
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Installs platform baseline components after the agent connects:
-              trivy-operator, kube-state-metrics, prometheus-node-exporter,
-              fluent-bit, ingress-nginx, cert-manager, and Gatekeeper. Leave
-              unchecked for a bare cluster — you can install these later from
-              the Cluster Tools tab.
-            </p>
-            {isViewer && (
-              <p className="mt-1.5 text-xs font-medium text-status-warning">
-                Unavailable under Viewer — a read-only agent can&apos;t deploy.
-                Choose Admin above to enable.
-              </p>
-            )}
-          </div>
-        </label>
+        <form.Field name="installBaseline">
+          {(field) => (
+            <RegistrationBaselineOption
+              name={field.name}
+              checked={field.state.value}
+              disabled={false}
+              onChange={field.handleChange}
+              onBlur={field.handleBlur}
+            />
+          )}
+        </form.Field>
+        <form.Field name="installImageScanning">
+          {(field) => (
+            <RegistrationImageScanningOption
+              name={field.name}
+              checked={field.state.value}
+              disabled={false}
+              onChange={field.handleChange}
+              onBlur={field.handleBlur}
+            />
+          )}
+        </form.Field>
 
         <div className="flex items-center justify-end gap-2 pt-2">
           <ActionButton

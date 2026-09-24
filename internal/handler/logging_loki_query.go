@@ -176,7 +176,7 @@ func (h *LoggingHandler) queryLoggingOutput(ctx context.Context, output sqlc.Log
 		if output.IsSystem {
 			return h.querySystemLoki(ctx, clusterID, req)
 		}
-		return queryLokiOutput(ctx, output.Configuration, req)
+		return h.queryClusterLoki(ctx, clusterID, output.Configuration, req)
 	case "elasticsearch", "opensearch":
 		return queryElasticsearchOutput(ctx, output.Configuration, clusterID, req)
 	case "splunk":

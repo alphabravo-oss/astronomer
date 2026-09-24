@@ -1,8 +1,68 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import type { FormEvent } from "react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { useState, type FormEvent } from "react";
 import { ModalShell } from "@/components/ui/modal-shell";
 
 describe("ModalShell", () => {
+  it("prevents a nested picker search from implicitly submitting its parent form", () => {
+    render(
+      <ModalShell title="Parent form" onClose={vi.fn()} onSubmit={vi.fn()}>
+        <input aria-label="Parent field" />
+        <ModalShell title="Nested search" onClose={vi.fn()}>
+          <input aria-label="Search targets" />
+        </ModalShell>
+      </ModalShell>,
+    );
+    expect(
+      fireEvent.keyDown(screen.getByLabelText("Search targets"), {
+        key: "Enter",
+      }),
+    ).toBe(false);
+    expect(
+      fireEvent.keyDown(screen.getByLabelText("Parent field"), {
+        key: "Enter",
+      }),
+    ).toBe(true);
+  });
+  it("keeps the parent form open and restores picker-trigger focus on nested Escape", () => {
+    const parentClose = vi.fn();
+    function Nested() {
+      const [open, setOpen] = useState(false);
+      return (
+        <ModalShell title="Parent form" onClose={parentClose}>
+          <input aria-label="Draft name" defaultValue="Keep my draft" />
+          <button type="button" onClick={() => setOpen(true)}>
+            Open picker
+          </button>
+          {open && (
+            <ModalShell title="Child picker" onClose={() => setOpen(false)}>
+              <button type="button">Select target</button>
+            </ModalShell>
+          )}
+        </ModalShell>
+      );
+    }
+    render(<Nested />);
+    const trigger = screen.getByRole("button", { name: "Open picker" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const child = screen.getByRole("dialog", { name: "Child picker" });
+    within(child).getByLabelText("Close").focus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(
+      within(child).getByRole("button", { name: "Select target" }),
+    ).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(within(child).getByLabelText("Close")).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(parentClose).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("dialog", { name: "Child picker" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Draft name")).toHaveValue("Keep my draft");
+    expect(trigger).toHaveFocus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(parentClose).toHaveBeenCalledTimes(1);
+  });
   it("renders title and body content", () => {
     render(
       <ModalShell title="Security action" onClose={vi.fn()}>

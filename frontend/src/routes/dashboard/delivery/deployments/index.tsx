@@ -1,3 +1,4 @@
+import { pageTableCount } from "@/lib/api/pagination";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
@@ -8,8 +9,6 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
-  RedirectDeliveryList,
-  deliveryPageRowCount,
   inputClass,
   useDeliveryWorkspace,
 } from "@/components/delivery/shared";
@@ -233,7 +232,7 @@ export function DeploymentsPage() {
             void navigate({ to: entityHref("deployments", row.id) })
           }
           serverSide={{
-            rowCount: deliveryPageRowCount(query.data),
+            ...pageTableCount(query.data),
             pagination: { pageIndex, pageSize },
             onPaginationChange: (next) =>
               updateSearch({ page: next.pageIndex }),
@@ -244,7 +243,5 @@ export function DeploymentsPage() {
   );
 }
 export const Route = createFileRoute("/dashboard/delivery/deployments/")({
-  component: function DeliveryDeploymentsRedirect() {
-    return <RedirectDeliveryList tab="deployments" />;
-  },
+  component: DeploymentsPage,
 });

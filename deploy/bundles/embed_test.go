@@ -11,8 +11,8 @@ func TestCatalogIsImmutableAndFullyPinned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog.Components) != 2 {
-		t.Fatalf("got %d built-ins, want the two explicitly opted baseline components", len(catalog.Components))
+	if len(catalog.Components) != 3 {
+		t.Fatalf("got %d built-ins, want image scanning and two metrics exporters", len(catalog.Components))
 	}
 	for _, component := range catalog.Components {
 		if !component.DefaultEnabled || strings.Contains(component.Source.Version, "*") || !strings.HasPrefix(component.Source.ChartDigest, "sha256:") {
@@ -85,6 +85,7 @@ func TestCurrentCatalogSourceIdentityInputsRemainUnchanged(t *testing.T) {
 		got = append(got, component.Source.URL)
 	}
 	want := []string{
+		"https://aquasecurity.github.io/helm-charts",
 		"https://prometheus-community.github.io/helm-charts",
 		"https://prometheus-community.github.io/helm-charts",
 	}
@@ -99,6 +100,7 @@ func TestCatalogRejectsConflictingArtifactIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	catalog.Components[1].Source.Chart = catalog.Components[0].Source.Chart
+	catalog.Components[1].Source.URL = catalog.Components[0].Source.URL
 	catalog.Components[1].Source.Version = catalog.Components[0].Source.Version
 	if err := catalog.Validate(); err == nil {
 		t.Fatal("same source/chart/version with a different digest was accepted")

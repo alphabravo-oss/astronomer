@@ -28,6 +28,7 @@ interface ClusterEditForm {
   caCertificate: string;
   badgeText: string;
   badgeColor: ClusterBadgeTone;
+  imageScanning?: { enabled: boolean; annotations: Record<string, string> };
   agentOverrides?: OpenAPIComponents["schemas"]["AgentOverrides"];
 }
 
@@ -35,6 +36,14 @@ export function buildClusterEditRequest(
   form: ClusterEditForm,
 ): UpdateClusterInput {
   return {
+    ...(form.imageScanning && {
+      annotations: {
+        ...form.imageScanning.annotations,
+        "astronomer.io/image-scanning": form.imageScanning.enabled
+          ? "enabled"
+          : "disabled",
+      },
+    }),
     display_name: form.displayName,
     environment: form.environment,
     description: form.description,
@@ -48,17 +57,7 @@ export function buildClusterEditRequest(
 
 export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
   const updateCluster = useUpdateCluster();
-  const [form, setForm] = useState({
-    displayName: cluster.displayName,
-    environment: cluster.environment as ClusterEnvironment,
-    description: cluster.description || "",
-    apiServerUrl: cluster.apiServerUrl || "",
-    caCertificate: cluster.caCertificate || "",
-    badgeText: cluster.badgeText || "",
-    badgeColor: cluster.badgeColor || "slate",
-    agentOverrides: cluster.agentOverrides ?? {},
-  });
-
+  const [form, setForm] = useState(() => clusterEditDefaults(cluster));
   const setAgentResource = (
     group: "requests" | "limits",
     resource: "cpu" | "memory",
@@ -77,7 +76,6 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
         },
       },
     }));
-
   const setAgentProxy = (
     field: "http_proxy" | "https_proxy" | "no_proxy",
     value: string,
@@ -89,7 +87,6 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
         proxy: { ...current.agentOverrides?.proxy, [field]: value },
       },
     }));
-
   const handleSubmit = async () => {
     try {
       await updateCluster.mutateAsync({
@@ -127,6 +124,17 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
         </>
       }
     >
+      {form.imageScanning && (
+        <ImageScanningPreference
+          enabled={form.imageScanning.enabled}
+          onChange={(enabled) =>
+            setForm((current) => ({
+              ...current,
+              imageScanning: { ...current.imageScanning!, enabled },
+            }))
+          }
+        />
+      )}
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -383,5 +391,53 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
         />
       </div>
     </ModalShell>
+  );
+}
+
+function clusterEditDefaults(cluster: Cluster): ClusterEditForm {
+  return {
+    imageScanning: cluster.isLocal
+      ? undefined
+      : {
+          enabled:
+            cluster.annotations?.["astronomer.io/image-scanning"] !==
+            "disabled",
+          annotations: cluster.annotations ?? {},
+        },
+    displayName: cluster.displayName,
+    environment: cluster.environment as ClusterEnvironment,
+    description: cluster.description || "",
+    apiServerUrl: cluster.apiServerUrl || "",
+    caCertificate: cluster.caCertificate || "",
+    badgeText: cluster.badgeText || "",
+    badgeColor: cluster.badgeColor || "slate",
+    agentOverrides: cluster.agentOverrides ?? {},
+  };
+}
+
+function ImageScanningPreference({
+  enabled,
+  onChange,
+}: {
+  enabled: boolean;
+  onChange: (enabled: boolean) => void;
+}) {
+  return (
+    <label className="flex items-start gap-3 rounded-lg border border-border p-3">
+      <Input
+        type="checkbox"
+        aria-label="Automatically install Trivy image scanning"
+        checked={enabled}
+        onChange={(event) => onChange(event.target.checked)}
+        className="mt-0.5 h-4 w-4"
+      />
+      <span className="text-sm">
+        Automatically install Trivy image scanning
+        <span className="mt-1 block text-xs text-muted-foreground">
+          Enabled by default. Turning this off prevents automatic installation;
+          it does not uninstall an existing scanner or remove its reports.
+        </span>
+      </span>
+    </label>
   );
 }

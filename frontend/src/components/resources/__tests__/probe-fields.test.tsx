@@ -84,9 +84,30 @@ describe("ProbeFields", () => {
       spec: {
         template: {
           spec: {
-            containers: [
-              { readinessProbe: { tcpSocket: { port: "5432" } } },
-            ],
+            containers: [{ readinessProbe: { tcpSocket: { port: 5432 } } }],
+          },
+        },
+      },
+    });
+  });
+
+  it("preserves valid named probe ports", () => {
+    let manifest: KubernetesManifest = {};
+    render(<Harness onManifestChange={(next) => (manifest = next)} />);
+    fireEvent.change(screen.getByLabelText("Type"), {
+      target: { value: "httpGet" },
+    });
+    fireEvent.change(screen.getByLabelText("Port", { exact: false }), {
+      target: { value: "http-api" },
+    });
+    expect(validateGuidedResource(manifest)).not.toHaveProperty(
+      "readinessProbe",
+    );
+    expect(manifest).toMatchObject({
+      spec: {
+        template: {
+          spec: {
+            containers: [{ readinessProbe: { httpGet: { port: "http-api" } } }],
           },
         },
       },
@@ -102,9 +123,11 @@ describe("ProbeFields", () => {
     fireEvent.change(screen.getByLabelText("Type"), {
       target: { value: "none" },
     });
-    const container = (
-      manifest.spec as Record<string, unknown>
-    ) as { template?: { spec?: { containers?: Array<Record<string, unknown>> } } };
-    expect(container.template?.spec?.containers?.[0]?.readinessProbe).toBeUndefined();
+    const container = manifest.spec as Record<string, unknown> as {
+      template?: { spec?: { containers?: Array<Record<string, unknown>> } };
+    };
+    expect(
+      container.template?.spec?.containers?.[0]?.readinessProbe,
+    ).toBeUndefined();
   });
 });

@@ -2,7 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { useClusters } from "@/lib/hooks/clusters";
+import { useEntityNames } from "@/lib/hooks/entity-names";
+import { usePermissionDecision } from "@/lib/permission-hooks";
+import { QueryStates } from "@/components/ui/query-states";
+import { EmptyState, PermissionState } from "@/components/ui/empty-state";
 import { useCISScan, useCreateCISScan } from "@/components/security/hooks";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { cisScanReportCSVUrl } from "@/lib/api/security-scans";
@@ -22,6 +25,7 @@ import { formatDate, cn } from "@/lib/utils";
 import type { CISFinding, CISFindingSeverity, CISFindingStatus } from "@/types";
 import {
   ArrowLeft,
+  SearchX,
   ChevronRight,
   Download,
   RefreshCw,
@@ -47,14 +51,13 @@ function ScanDetailPage() {
   const scanId = params.scanId;
   const navigate = useNavigate();
 
-  const { data: scan, isLoading, error } = useCISScan(scanId);
-  const { data: clustersPage } = useClusters({ pageSize: 200 });
+  const read = usePermissionDecision("security", "read");
+  const scanQuery = useCISScan(scanId, { enabled: read.allowed });
+  const scan = read.allowed && !scanQuery.isError ? scanQuery.data : undefined;
+  const create = usePermissionDecision("security", "create");
+  const { clusters } = useEntityNames({ clusterIds: [scan?.clusterId] });
   const createScan = useCreateCISScan();
-
-  const cluster = useMemo(
-    () => clustersPage?.data.find((c) => c.id === scan?.clusterId),
-    [clustersPage, scan?.clusterId],
-  );
+  const cluster = clusters[0];
 
   const isTerminal = scan?.status === "completed" || scan?.status === "failed";
 
@@ -68,32 +71,43 @@ function ScanDetailPage() {
 
   const [showRerun, setShowRerun] = useState(false);
 
-  if (isLoading || !scan) {
+  if (!read.allowed) return <PermissionState permission="security:read" />;
+  if (scanQuery.isLoading || scanQuery.isError || !scan) {
     return (
-      <div className="space-y-4">
-        <div className="h-8 w-48 rounded-sm bg-muted animate-pulse" />
-        <div className="h-32 rounded-lg bg-muted animate-pulse" />
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-4">
-        <p className="text-sm text-status-error">
-          Failed to load scan: {(error as Error)?.message ?? String(error)}
-        </p>
-      </div>
+      <QueryStates
+        query={scanQuery}
+        loadingTitle="Loading CIS scan"
+        errorTitle="Failed to load scan"
+        permission="security:read"
+        notFound={
+          <EmptyState
+            icon={SearchX}
+            title="Scan not found"
+            description="This scan may have been removed, or the link is incorrect."
+            actionLabel="Back to security"
+            actionHref="/dashboard/security"
+          />
+        }
+      >
+        {null}
+      </QueryStates>
     );
   }
 
-  async function handleRerun() {
-    setShowRerun(false);
-    if (!scan) return;
-    const newScan = await createScan.mutateAsync({
-      cluster_id: scan.clusterId,
-      profile: scan.scanType,
-    });
-    void navigate({ to: `/dashboard/security/scans/${newScan.id}` });
+  function handleRerun() {
+    if (!scan || !create.allowed || createScan.isPending) return;
+    createScan.mutate(
+      {
+        cluster_id: scan.clusterId,
+        profile: scan.scanType,
+      },
+      {
+        onSuccess: (newScan) => {
+          setShowRerun(false);
+          void navigate({ to: `/dashboard/security/scans/${newScan.id}` });
+        },
+      },
+    );
   }
 
   return (
@@ -152,7 +166,8 @@ function ScanDetailPage() {
                 navigating. The link goes through the API base URL so the auth
                 cookie / proxy still applies. */}
             <a
-              href={cisScanReportCSVUrl(scan.id)}
+              href={isTerminal ? cisScanReportCSVUrl(scan.id) : undefined}
+              tabIndex={isTerminal ? undefined : -1}
               download={`cis-scan-${scan.id}.csv`}
               className={cn(
                 "inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border",
@@ -174,6 +189,10 @@ function ScanDetailPage() {
               icon={<RefreshCw className="h-4 w-4" />}
               onClick={() => setShowRerun(true)}
               loading={createScan.isPending}
+              disabled={!create.allowed}
+              disabledReason={
+                !create.allowed ? "Requires security:create." : undefined
+              }
             >
               Re-run Scan
             </ActionButton>
@@ -204,6 +223,9 @@ function ScanDetailPage() {
         description={`This will queue a new scan against ${cluster?.displayName ?? "this cluster"} using the ${scan.scanType} profile.`}
         confirmText="Re-run"
         loading={createScan.isPending}
+        confirmDisabledReason={
+          !create.allowed ? "Requires security:create." : undefined
+        }
       />
     </PageShell>
   );
@@ -280,6 +302,13 @@ function FindingsSection({
     "all",
   );
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleFinding = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const filtered = useMemo(() => {
     return findings
@@ -436,14 +465,7 @@ function FindingsSection({
           description:
             "New observations will appear here as they are reported.",
         }}
-        onRowClick={(row) => {
-          setExpanded((prev) => {
-            const next = new Set(prev);
-            if (next.has(row.testId)) next.delete(row.testId);
-            else next.add(row.testId);
-            return next;
-          });
-        }}
+        onRowClick={(row) => toggleFinding(row.testId)}
       />
 
       {/* Expanded remediation panels live below the table — `DataTable`
@@ -457,7 +479,8 @@ function FindingsSection({
             if (!f) return null;
             return (
               <div
-                key={id} id={`finding-${id}`}
+                key={id}
+                id={`finding-${id}`}
                 className="rounded-md border border-border bg-muted/20 p-4 space-y-2"
               >
                 <div className="flex items-center gap-2 flex-wrap">
@@ -481,14 +504,10 @@ function FindingsSection({
                     {f.status}
                   </span>
                   <button
-                    onClick={() =>
-                      setExpanded((p) => {
-                        const next = new Set(p);
-                        next.delete(id);
-                        return next;
-                      })
-                    }
-                    aria-expanded={true} aria-controls={`finding-${id}`} className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => toggleFinding(id)}
+                    aria-expanded={true}
+                    aria-controls={`finding-${id}`}
+                    className="ml-auto text-xs text-muted-foreground hover:text-foreground"
                   >
                     Collapse {f.testId}
                   </button>

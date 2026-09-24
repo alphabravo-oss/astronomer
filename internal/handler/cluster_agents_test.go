@@ -1275,8 +1275,8 @@ func TestAgentPrivilegeProfileSelfTestPasses(t *testing.T) {
 		t.Fatalf("implicit profile message = %q, want normalized effective viewer", implicit.Message)
 	}
 	admin := agentPrivilegeProfileSelfTestCheck(clusterAgentItem{PrivilegeProfile: agenttemplate.PrivilegeProfileAdmin})
-	if !strings.Contains(admin.Message, "explicit full-management") || strings.Contains(admin.Message, "(default)") {
-		t.Fatalf("admin profile message = %q, want explicit full-management and no default claim", admin.Message)
+	if !strings.Contains(admin.Message, "full cluster management") || strings.Contains(admin.Message, "(default)") {
+		t.Fatalf("admin profile message = %q, want full management and RBAC guidance", admin.Message)
 	}
 }
 

@@ -89,6 +89,7 @@ spec:
                   type: object
                   properties:
                     privilegeProfile:
+                      description: "Deprecated enrollment metadata. New agent installation manifests always use full management; user RBAC controls access."
                       type: string
                       enum:
                         - viewer

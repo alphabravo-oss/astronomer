@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import {
   defaultOpenNavGroupLabel,
+  INSTALLED_TOOLS_NAV_GROUP,
   type NavGroup,
 } from "@/components/layout/sidebar-navigation";
 
@@ -35,21 +36,40 @@ function persistOpenGroups(scope: SidebarNavScope, groups: Set<string>): void {
   }
 }
 
-// Sidebar groups stay open across navigation instead of collapsing back to a
-// single accordion section. Open state is remembered per nav scope (global
-// vs. cluster context) in localStorage, and the group containing the active
-// route is always unioned into the open set — navigating never closes a
-// group that was already open.
+function availableGroup(
+  label: string,
+  scope: SidebarNavScope,
+  groups: readonly NavGroup[],
+): boolean {
+  return (
+    groups.some((group) => group.label === label) ||
+    (scope === "cluster" && label === INSTALLED_TOOLS_NAV_GROUP)
+  );
+}
+
+function initialOpenGroups(
+  scope: SidebarNavScope,
+  groups: readonly NavGroup[],
+  pathname: string,
+): Set<string> {
+  const label =
+    defaultOpenNavGroupLabel(groups, pathname) ??
+    loadPersistedOpenGroups(scope)
+      .reverse()
+      .find((value) => availableGroup(value, scope, groups));
+  return new Set(label ? [label] : []);
+}
+
+// One section at a time, with independent global/cluster preferences.
+// Navigation reveals the active section; manual toggles may close every section.
 export function useOpenNavGroups(
   scope: SidebarNavScope,
   navGroups: readonly NavGroup[],
   pathname: string,
 ) {
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
-    const persisted = loadPersistedOpenGroups(scope);
-    const active = defaultOpenNavGroupLabel(navGroups, pathname);
-    return new Set(active ? [...persisted, active] : persisted);
-  });
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() =>
+    initialOpenGroups(scope, navGroups, pathname),
+  );
   const [tracked, setTracked] = useState({ scope, navGroups, pathname });
 
   if (
@@ -58,23 +78,24 @@ export function useOpenNavGroups(
     tracked.pathname !== pathname
   ) {
     const scopeChanged = tracked.scope !== scope;
+    const routeChanged = tracked.pathname !== pathname;
+    const activeChanged =
+      defaultOpenNavGroupLabel(tracked.navGroups, pathname) !==
+      defaultOpenNavGroupLabel(navGroups, pathname);
     setTracked({ scope, navGroups, pathname });
     setOpenGroups((current) => {
-      const next = new Set(current);
-      if (scopeChanged) {
-        for (const group of loadPersistedOpenGroups(scope)) next.add(group);
-      }
-      const active = defaultOpenNavGroupLabel(navGroups, pathname);
-      if (active) next.add(active);
-      return next;
+      if (scopeChanged || routeChanged || activeChanged)
+        return initialOpenGroups(scope, navGroups, pathname);
+      return new Set(
+        [...current].filter((label) => availableGroup(label, scope, navGroups)),
+      );
     });
   }
 
   const toggleGroup = (label: string) => {
     setOpenGroups((current) => {
-      const next = new Set(current);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
+      if (!availableGroup(label, scope, navGroups)) return current;
+      const next = new Set(current.has(label) ? [] : [label]);
       persistOpenGroups(scope, next);
       return next;
     });

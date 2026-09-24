@@ -130,6 +130,20 @@ function requireData<T>(data: T | undefined, operation: string): T {
 }
 
 function mapDrillResult(wire: BackupDrillResult): BackupDrillResultView {
+  const started = Date.parse(wire.started_at);
+  const finished = wire.finished_at ? Date.parse(wire.finished_at) : NaN;
+  if (
+    !wire.id ||
+    !Number.isFinite(started) ||
+    started <= 0 ||
+    !["success", "failure", "partial", "running"].includes(wire.status) ||
+    (wire.status !== "running" &&
+      (!Number.isFinite(finished) || finished < started))
+  ) {
+    throw new Error(
+      "Backup drill response contains incomplete result metadata; restore success cannot be verified.",
+    );
+  }
   return {
     id: wire.id,
     startedAt: wire.started_at,

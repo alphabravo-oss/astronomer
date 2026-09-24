@@ -461,16 +461,16 @@ async function mockApi(page: Page, user = adminUser) {
       });
     }
     if (path === "/catalog/repositories") {
-      return route.fulfill({ json: apiResponse([]) });
+      return route.fulfill({ json: paginated([]) });
     }
     if (path === "/catalog/charts") {
-      return route.fulfill({ json: apiResponse([catalogChart]) });
+      return route.fulfill({ json: paginated([catalogChart]) });
     }
     if (path === `/catalog/charts/${catalogChart.id}/versions`) {
-      return route.fulfill({ json: apiResponse([catalogVersion]) });
+      return route.fulfill({ json: paginated([catalogVersion]) });
     }
     if (path === "/catalog/installed" && method === "GET") {
-      return route.fulfill({ json: apiResponse([]) });
+      return route.fulfill({ json: paginated([]) });
     }
     if (path === "/catalog/installed" && method === "POST") {
       return route.fulfill({
@@ -625,7 +625,10 @@ test("delivery overview renders the Flux-native system for authenticated users",
 
   await expect(page.getByRole("heading", { name: /^Estate$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /flux ready/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^Sources$/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /^Sources$/ })).toHaveAttribute(
+    "href",
+    "/dashboard/delivery/sources",
+  );
 });
 
 test("catalog install modal remains usable on responsive viewports", async ({
@@ -668,8 +671,10 @@ test("settings general form remains usable on responsive viewports", async ({
   await seedAuth(context, page, adminUser);
   await page.goto("/dashboard/settings/general");
 
-  await expect(page.getByRole("heading", { name: /^Settings$/ })).toBeVisible();
-  await page.getByRole("button", { name: /^General$/ }).click();
+  await expect(
+    page.getByRole("heading", { name: /^General$/, level: 1 }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: /^General$/ }).click();
   await page.getByRole("button", { name: /^Edit$/ }).click();
   await page.getByLabel("Platform Name").fill("Astronomer Control Plane");
   await page.getByLabel("Agent Heartbeat Interval").selectOption("60");

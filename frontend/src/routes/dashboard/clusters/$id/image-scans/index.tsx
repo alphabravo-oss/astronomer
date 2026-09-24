@@ -1,3 +1,5 @@
+import { DrawerShell } from "@/components/ui/drawer-shell";
+import { ReportCVEs } from "@/components/security/report-cves";
 import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -32,20 +34,13 @@ import { useClock } from "@/lib/hooks/use-clock";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { QueryStates } from "@/components/ui/query-states";
 import { toastApiError, toastSuccess } from "@/lib/toast";
-import {
-  AlertTriangle,
-  Loader2,
-  RefreshCw,
-  ShieldAlert,
-  X,
-} from "lucide-react";
+import { Loader2, RefreshCw, ShieldAlert } from "lucide-react";
 
 import { queryKeys } from "@/lib/query-keys";
 import { useCluster } from "@/lib/hooks/clusters";
 import { liveFallback } from "@/lib/live/status-store";
 import { SEVERITY } from "@/lib/chart-colors";
 import {
-  getImageVulnReport,
   getImageVulnReportHistory,
   getImageVulnSummary,
   getImageVulnHistory,
@@ -89,21 +84,6 @@ const SEVERITIES: {
   },
 ];
 
-function cveToneFor(severity: CVESeverity): string {
-  switch (severity) {
-    case "CRITICAL":
-      return "bg-status-error/10 text-status-error border-status-error/30";
-    case "HIGH":
-      return "bg-status-high/10 text-status-high border-status-high/30";
-    case "MEDIUM":
-      return "bg-status-warning/10 text-status-warning border-status-warning/30";
-    case "LOW":
-      return "bg-status-info/10 text-status-info border-status-info/30";
-    default:
-      return "bg-muted text-muted-foreground border-border";
-  }
-}
-
 function ClusterImageScansPage() {
   const now = useClock(1000);
   const params = Route.useParams();
@@ -141,24 +121,6 @@ function ClusterImageScansPage() {
     enabled: scansEnabled,
     refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
-  });
-
-  const reportDetail = useQuery({
-    queryKey: openReport
-      ? queryKeys.clusterPages.imageVulnReport(
-          clusterId,
-          openReport.id,
-          severityFilter || "",
-        )
-      : ["noop"],
-    queryFn: () =>
-      openReport
-        ? getImageVulnReport(clusterId, openReport.id, {
-            severity: (severityFilter || undefined) as CVESeverity | undefined,
-            limit: 100,
-          })
-        : Promise.resolve(null),
-    enabled: scansEnabled && !!openReport,
   });
 
   // Per-image scan history for the drawer. Only fires when a row is
@@ -469,7 +431,9 @@ function ClusterImageScansPage() {
                       <span className="text-status-warning tabular-nums">
                         {p.medium}
                       </span>
-                      <span className="text-status-info tabular-nums">{p.low}</span>
+                      <span className="text-status-info tabular-nums">
+                        {p.low}
+                      </span>
                     </span>
                   </div>
                 ))}
@@ -499,26 +463,6 @@ function ClusterImageScansPage() {
               {n}
             </option>
           ))}
-        </Select>
-        <label
-          className="text-sm text-muted-foreground ml-4"
-          htmlFor="field-1a64459b-407"
-        >
-          CVE severity
-        </label>
-        <Select
-          id="field-1a64459b-407"
-          className="border border-border bg-background rounded-md px-2 py-1 text-sm"
-          value={severityFilter}
-          onChange={(e) =>
-            setSeverityFilter(e.target.value as CVESeverity | "")
-          }
-        >
-          <option value="">All</option>
-          <option value="CRITICAL">Critical only</option>
-          <option value="HIGH">High only</option>
-          <option value="MEDIUM">Medium only</option>
-          <option value="LOW">Low only</option>
         </Select>
       </section>
 
@@ -593,7 +537,17 @@ function ClusterImageScansPage() {
                   onClick={() => setOpenReport(r)}
                 >
                   <TableCell className="px-3 py-2 font-mono text-xs">
-                    {r.imageRepo}:{r.imageTag}
+                    <button
+                      type="button"
+                      className="text-primary hover:underline focus-visible:outline focus-visible:outline-ring"
+                      aria-label={`View CVEs for ${r.imageRepo}:${r.imageTag}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setOpenReport(r);
+                      }}
+                    >
+                      {r.imageRepo}:{r.imageTag}
+                    </button>
                   </TableCell>
                   <TableCell className="px-3 py-2">{r.namespace}</TableCell>
                   <TableCell className="px-3 py-2">
@@ -620,155 +574,123 @@ function ClusterImageScansPage() {
 
       {/* Per-image drawer */}
       {openReport && (
-        <aside className="fixed right-0 top-0 z-40 h-full w-full max-w-2xl bg-background border-l border-border shadow-xl overflow-y-auto">
-          <header className="sticky top-0 bg-background border-b border-border px-4 py-3 flex items-start justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-semibold">
-                {openReport.imageRepo}:{openReport.imageTag}
-              </h2>
-              <p className="text-xs text-muted-foreground font-mono mt-1">
+        <DrawerShell
+          title={`${openReport.imageRepo}:${openReport.imageTag}`}
+          onClose={() => setOpenReport(null)}
+          subtitle={
+            <>
+              <p className="font-mono">
                 {openReport.imageDigest || "(no digest)"}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p>
                 {openReport.namespace} · {openReport.workloadKind}/
                 {openReport.workloadName}
               </p>
-            </div>
-            <button
-              className="p-1 rounded-sm hover:bg-muted"
-              onClick={() => setOpenReport(null)}
-              aria-label="Close"
+            </>
+          }
+          bodyClassName="space-y-3"
+        >
+          <div className="flex items-center gap-3">
+            <label
+              className="text-sm text-muted-foreground"
+              htmlFor="field-1a64459b-407"
             >
-              <X className="h-4 w-4" />
-            </button>
-          </header>
-          <div className="p-4 space-y-3">
-            {/* Per-image scan history. Two snapshots minimum to render
+              CVE severity
+            </label>
+            <Select
+              id="field-1a64459b-407"
+              className="border border-border bg-background rounded-md px-2 py-1 text-sm"
+              value={severityFilter}
+              onChange={(e) =>
+                setSeverityFilter(e.target.value as CVESeverity | "")
+              }
+            >
+              <option value="">All</option>
+              <option value="CRITICAL">Critical only</option>
+              <option value="HIGH">High only</option>
+              <option value="MEDIUM">Medium only</option>
+              <option value="LOW">Low only</option>
+            </Select>
+          </div>
+          {/* Per-image scan history. Two snapshots minimum to render
                 the sparkline; until then the panel shows a one-liner
                 so operators know more history will accumulate. */}
-            <section className="border border-border rounded-md p-3 space-y-2 bg-muted/20">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Scan history
-                </h3>
-                <span className="text-[10px] text-muted-foreground tabular-nums">
-                  {reportHistory.data?.totalCount ?? 0} snapshot
-                  {(reportHistory.data?.totalCount ?? 0) === 1 ? "" : "s"}
-                </span>
-              </div>
-              {reportHistory.isLoading && (
-                <div className="text-xs text-muted-foreground">
-                  <Loader2 className="inline h-3 w-3 animate-spin mr-1.5" />
-                  Loading history…
-                </div>
-              )}
-              {reportHistory.data &&
-                reportHistory.data.snapshots.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    No snapshots yet — once trivy-operator re-scans this
-                    workload its history will appear here.
-                  </p>
-                )}
-              {reportHistory.data &&
-                reportHistory.data.snapshots.length > 0 && (
-                  <>
-                    <HistorySparkline
-                      points={reportHistory.data.snapshots.slice().reverse()}
-                    />
-                    <div className="text-xs space-y-1 max-h-40 overflow-y-auto pr-1">
-                      {reportHistory.data.snapshots.slice(0, 10).map((p) => (
-                        <div
-                          key={p.scannedAt}
-                          className="flex items-center justify-between gap-2 py-0.5"
-                        >
-                          <span className="text-muted-foreground tabular-nums">
-                            {new Date(p.scannedAt).toLocaleString()}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <span
-                              className="text-status-error font-medium tabular-nums"
-                              title="Critical"
-                            >
-                              {p.critical}
-                            </span>
-                            <span
-                              className="text-status-high tabular-nums"
-                              title="High"
-                            >
-                              {p.high}
-                            </span>
-                            <span
-                              className="text-status-warning tabular-nums"
-                              title="Medium"
-                            >
-                              {p.medium}
-                            </span>
-                            <span
-                              className="text-status-info tabular-nums"
-                              title="Low"
-                            >
-                              {p.low}
-                            </span>
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-            </section>
-
-            {reportDetail.isLoading && (
-              <div className="text-sm text-muted-foreground">
-                <Loader2 className="inline h-4 w-4 animate-spin mr-2" />
-                Loading CVEs…
+          <section className="border border-border rounded-md p-3 space-y-2 bg-muted/20">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Scan history
+              </h3>
+              <span className="text-[10px] text-muted-foreground tabular-nums">
+                {reportHistory.data?.totalCount ?? 0} snapshot
+                {(reportHistory.data?.totalCount ?? 0) === 1 ? "" : "s"}
+              </span>
+            </div>
+            {reportHistory.isLoading && (
+              <div className="text-xs text-muted-foreground">
+                <Loader2 className="inline h-3 w-3 animate-spin mr-1.5" />
+                Loading history…
               </div>
             )}
-            {reportDetail.data && (
+            {reportHistory.data &&
+              reportHistory.data.snapshots.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No snapshots yet — once trivy-operator re-scans this workload
+                  its history will appear here.
+                </p>
+              )}
+            {reportHistory.data && reportHistory.data.snapshots.length > 0 && (
               <>
-                <div className="text-xs text-muted-foreground">
-                  {reportDetail.data.vulnerabilityTotal} CVE
-                  {reportDetail.data.vulnerabilityTotal === 1 ? "" : "s"}{" "}
-                  matching filter
-                </div>
-                <ul className="space-y-2">
-                  {reportDetail.data.vulnerabilities.map((c) => (
-                    <li
-                      key={c.id}
-                      className={`border rounded-md p-3 ${cveToneFor(c.severity)}`}
+                <HistorySparkline
+                  points={reportHistory.data.snapshots.slice().reverse()}
+                />
+                <div className="text-xs space-y-1 max-h-40 overflow-y-auto pr-1">
+                  {reportHistory.data.snapshots.slice(0, 10).map((p) => (
+                    <div
+                      key={p.scannedAt}
+                      className="flex items-center justify-between gap-2 py-0.5"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <a
-                          href={c.primaryLink || "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-sm font-semibold underline"
+                      <span className="text-muted-foreground tabular-nums">
+                        {new Date(p.scannedAt).toLocaleString()}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        <span
+                          className="text-status-error font-medium tabular-nums"
+                          title="Critical"
                         >
-                          {c.vulnerabilityId}
-                        </a>
-                        <span className="text-xs uppercase tracking-wide">
-                          {c.severity}
-                          {c.cvssScore != null &&
-                            ` · CVSS ${c.cvssScore.toFixed(1)}`}
+                          {p.critical}
                         </span>
-                      </div>
-                      {c.title && <div className="mt-1 text-sm">{c.title}</div>}
-                      <div className="mt-1 text-xs text-muted-foreground font-mono">
-                        {c.pkgName} {c.installedVersion} → fixed in{" "}
-                        {c.fixedVersion || "(no fix yet)"}
-                      </div>
-                    </li>
+                        <span
+                          className="text-status-high tabular-nums"
+                          title="High"
+                        >
+                          {p.high}
+                        </span>
+                        <span
+                          className="text-status-warning tabular-nums"
+                          title="Medium"
+                        >
+                          {p.medium}
+                        </span>
+                        <span
+                          className="text-status-info tabular-nums"
+                          title="Low"
+                        >
+                          {p.low}
+                        </span>
+                      </span>
+                    </div>
                   ))}
-                </ul>
-                {reportDetail.data.vulnerabilities.length === 0 && (
-                  <div className="rounded-md border border-border p-3 text-sm text-muted-foreground inline-flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    No CVEs match the current filter.
-                  </div>
-                )}
+                </div>
               </>
             )}
-          </div>
-        </aside>
+          </section>
+
+          <ReportCVEs
+            clusterId={clusterId}
+            reportId={openReport.id}
+            severity={severityFilter}
+          />
+        </DrawerShell>
       )}
     </div>
   );

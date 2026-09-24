@@ -1,32 +1,26 @@
 import { useAppForm, useStore } from "@/lib/form";
 import { useAssignSecurityPolicy } from "@/lib/hooks/security";
-import { useClusters } from "@/lib/hooks/clusters";
+import { useQuery } from "@tanstack/react-query";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
+import { TemplatePicker } from "./-template-picker";
+import { getPodSecurityTemplate } from "@/lib/api/security-policies";
+import { queryKeys } from "@/lib/query-keys";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { cn } from "@/lib/utils";
-import type { PodSecurityTemplate } from "@/types";
 import { psaLevelColors } from "./-psa-constants";
 
 // ============================================================
 // Assign Template Modal — unchanged from Phase A2
 // ============================================================
 
-export function AssignTemplateModal({
-  templates,
-  onClose,
-}: {
-  templates: PodSecurityTemplate[];
-  onClose: () => void;
-}) {
+export function AssignTemplateModal({ onClose }: { onClose: () => void }) {
   const assignPolicy = useAssignSecurityPolicy();
-  const { data: clustersData } = useClusters({ pageSize: 100 });
-  const clusters = clustersData?.data || [];
 
   const form = useAppForm({
     defaultValues: {
       clusterId: "",
-      templateId:
-        templates.find((t) => t.isDefault)?.id || templates[0]?.id || "",
+      templateId: "",
     },
     validators: {
       onSubmit: ({ value }) =>
@@ -47,9 +41,15 @@ export function AssignTemplateModal({
     },
   });
   const values = useStore(form.store, (state) => state.values);
-  const selectedTemplate = templates.find(
-    (template) => template.id === values.templateId,
-  );
+  const templateQuery = useQuery({
+    queryKey: queryKeys.security.template(values.templateId),
+    queryFn: ({ signal }) => getPodSecurityTemplate(values.templateId, signal),
+    enabled: !!values.templateId,
+    throwOnError: false,
+  });
+  const selectedTemplate = templateQuery.isError
+    ? undefined
+    : templateQuery.data;
 
   return (
     <ModalShell
@@ -64,7 +64,7 @@ export function AssignTemplateModal({
             intent="primary"
             onClick={() => void form.handleSubmit()}
             disabled={
-              assignPolicy.isPending || !values.clusterId || !values.templateId
+              assignPolicy.isPending || !values.clusterId || !selectedTemplate
             }
             loading={assignPolicy.isPending}
           >
@@ -78,26 +78,20 @@ export function AssignTemplateModal({
       </form.AppForm>
       <form.AppField name="clusterId">
         {(field) => (
-          <field.SelectField label="Cluster">
-            <option value="">Select a cluster…</option>
-            {clusters.map((cluster) => (
-              <option key={cluster.id} value={cluster.id}>
-                {cluster.displayName} ({cluster.name})
-              </option>
-            ))}
-          </field.SelectField>
+          <RemoteClusterPicker
+            ariaLabel="Cluster"
+            value={field.state.value}
+            onChange={field.handleChange}
+            onBlur={field.handleBlur}
+          />
         )}
       </form.AppField>
       <form.AppField name="templateId">
         {(field) => (
-          <field.SelectField label="Template">
-            {templates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-                {template.isDefault ? " (Default)" : ""}
-              </option>
-            ))}
-          </field.SelectField>
+          <TemplatePicker
+            value={field.state.value}
+            onChange={(template) => field.handleChange(template.id)}
+          />
         )}
       </form.AppField>
 

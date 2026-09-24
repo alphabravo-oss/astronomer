@@ -4,6 +4,7 @@ import {
   getClusterTemplateBoundClusters,
   getProjectPolicy,
   listProjectCloudCredentials,
+  listClusterTemplates,
   removeProjectNamespace,
   subscribeProjectCatalog,
 } from "./project-detail";
@@ -16,6 +17,7 @@ const operations = vi.hoisted(() => ({
   createTemplate: vi.fn(),
   subscribeCatalog: vi.fn(),
   boundClusters: vi.fn(),
+  templates: vi.fn(),
 }));
 vi.mock("@/lib/api/generated/client", () => ({
   postProjectsByIdAddNamespace: operations.add,
@@ -26,7 +28,20 @@ vi.mock("@/lib/api/generated/client", () => ({
   postProjectsByProjectIdCatalogsByCatalogIdSubscribe:
     operations.subscribeCatalog,
   getClusterTemplatesByIdClusters: operations.boundClusters,
+  getClusterTemplates: operations.templates,
 }));
+
+it("forwards an exact nonuniform template offset without a fractional page conversion", async () => {
+  operations.templates.mockResolvedValueOnce({
+    data: [],
+    pagination: { limit: 25, offset: 7, has_more: false, next_offset: null },
+  });
+  await listClusterTemplates({ pageSize: 25, offset: 7 });
+  expect(operations.templates).toHaveBeenCalledWith({
+    query: { limit: 25, offset: 7 },
+    signal: undefined,
+  });
+});
 
 /**
  * The project→namespace endpoints are the only authoring surface for project

@@ -7,6 +7,14 @@ unavailable because Flux reconciles the last accepted assignment locally.
 
 ## Catalog synchronization
 
+Catalog installations in project-owned namespaces use that project's Delivery
+identity. A cluster-authorized installation into an unowned namespace uses the
+same cluster's system-managed `astronomer-system` project. This is delivery
+ownership only: it neither assigns the namespace nor grants project-scoped
+callers additional access. If that platform project is absent, assign a
+non-reserved namespace to a project first. Requests queued before this ownership
+contract are resolved against the same verified system project when retried.
+
 Symptoms include `AstronomerCatalogSynchronizationFailed`, an unavailable
 repository badge, or a catalog showing cached data.
 

@@ -1,0 +1,406 @@
+{
+  "recordedAtUTC": "2026-09-24T20:18:04.867022+00:00",
+  "astronomerHEAD": "22f633ece6a916a7dae7ca8c9eed5799a2f44cd5",
+  "includesDirtyWorkingTree": true,
+  "catalogHEAD": "3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5",
+  "catalogSHA256": "084aa9dec47d9612fdebd848737f53f9feb70e248a4e8e5ccbc93491e1f4ae0c",
+  "runtimeReconciliation": "NOT_RUN",
+  "liveQualification": "NOT_RUN",
+  "catalogApplications": [
+    {
+      "slug": "constellation",
+      "name": "Constellation",
+      "artifact": {
+        "type": "helm",
+        "repository": "astronomer-first-party",
+        "chart": "constellation",
+        "version": "0.2.0"
+      },
+      "supportTier": "astronomer",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "kube-state-metrics",
+      "name": "Kube State Metrics",
+      "artifact": {
+        "type": "helm",
+        "repository": "prometheus-community",
+        "chart": "kube-state-metrics",
+        "version": "8.4.0"
+      },
+      "supportTier": "astronomer",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "prometheus-node-exporter",
+      "name": "Prometheus Node Exporter",
+      "artifact": {
+        "type": "helm",
+        "repository": "prometheus-community",
+        "chart": "prometheus-node-exporter",
+        "version": "4.56.1"
+      },
+      "supportTier": "astronomer",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "metrics-server",
+      "name": "Metrics Server",
+      "artifact": {
+        "type": "helm",
+        "repository": "metrics-server",
+        "chart": "metrics-server",
+        "version": "3.14.0"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "kube-prometheus-stack",
+      "name": "Kube Prometheus Stack",
+      "artifact": {
+        "type": "helm",
+        "repository": "prometheus-community",
+        "chart": "kube-prometheus-stack",
+        "version": "88.5.4"
+      },
+      "supportTier": "experimental",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": false,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "grafana",
+      "name": "Grafana",
+      "artifact": {
+        "type": "helm",
+        "repository": "grafana",
+        "chart": "grafana",
+        "version": "10.5.15"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "loki",
+      "name": "Loki",
+      "artifact": {
+        "type": "helm",
+        "repository": "grafana",
+        "chart": "loki",
+        "version": "7.3.0"
+      },
+      "supportTier": "experimental",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": false,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "trivy-operator",
+      "name": "Trivy Operator",
+      "artifact": {
+        "type": "helm",
+        "repository": "aqua",
+        "chart": "trivy-operator",
+        "version": "0.36.0"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "cert-manager",
+      "name": "cert-manager",
+      "artifact": {
+        "type": "helm",
+        "repository": "jetstack",
+        "chart": "cert-manager",
+        "version": "v1.21.1"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "ingress-nginx",
+      "name": "Ingress NGINX",
+      "artifact": {
+        "type": "helm",
+        "repository": "ingress-nginx",
+        "chart": "ingress-nginx",
+        "version": "4.15.1"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "external-secrets",
+      "name": "External Secrets Operator",
+      "artifact": {
+        "type": "helm",
+        "repository": "external-secrets",
+        "chart": "external-secrets",
+        "version": "2.9.0"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "kyverno",
+      "name": "Kyverno",
+      "artifact": {
+        "type": "helm",
+        "repository": "kyverno",
+        "chart": "kyverno",
+        "version": "3.9.0"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "longhorn",
+      "name": "Longhorn",
+      "artifact": {
+        "type": "helm",
+        "repository": "longhorn",
+        "chart": "longhorn",
+        "version": "1.12.1"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": false,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "gatekeeper",
+      "name": "OPA Gatekeeper",
+      "artifact": {
+        "type": "helm",
+        "repository": "gatekeeper",
+        "chart": "gatekeeper",
+        "version": "3.23.0"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "fluent-bit",
+      "name": "Fluent Bit",
+      "artifact": {
+        "type": "helm",
+        "repository": "fluent",
+        "chart": "fluent-bit",
+        "version": "0.58.1"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "external-dns",
+      "name": "ExternalDNS",
+      "artifact": {
+        "type": "helm",
+        "repository": "external-dns",
+        "chart": "external-dns",
+        "version": "1.21.1"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "velero",
+      "name": "Velero",
+      "artifact": {
+        "type": "helm",
+        "repository": "vmware-tanzu",
+        "chart": "velero",
+        "version": "12.1.0"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "opentelemetry-collector",
+      "name": "OpenTelemetry Collector",
+      "artifact": {
+        "type": "helm",
+        "repository": "open-telemetry",
+        "chart": "opentelemetry-collector",
+        "version": "0.171.0"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "tempo",
+      "name": "Grafana Tempo",
+      "artifact": {
+        "type": "helm",
+        "repository": "grafana",
+        "chart": "tempo",
+        "version": "1.24.4"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "keda",
+      "name": "KEDA",
+      "artifact": {
+        "type": "helm",
+        "repository": "kedacore",
+        "chart": "keda",
+        "version": "2.20.2"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": true,
+        "uninstall": true
+      }
+    },
+    {
+      "slug": "cloudnative-pg",
+      "name": "CloudNativePG",
+      "artifact": {
+        "type": "helm",
+        "repository": "cnpg",
+        "chart": "cloudnative-pg",
+        "version": "0.29.0"
+      },
+      "supportTier": "upstream",
+      "lifecycle": {
+        "install": true,
+        "upgrade": true,
+        "rollback": false,
+        "uninstall": true
+      }
+    }
+  ],
+  "seededToolSlugs": [
+    "cis-operator",
+    "dex",
+    "fluent-bit",
+    "trivy-operator",
+    "cert-manager",
+    "gatekeeper",
+    "kube-state-metrics",
+    "prometheus-node-exporter",
+    "ingress-nginx",
+    "longhorn",
+    "neuvector",
+    "istio"
+  ],
+  "sourceHashes": {
+    "internal/db/migrations/001_initial.up.sql": "cb6429b4ee3f4074e8921c3923d5ef6daab3032d165c3b2cc1b5f7b53fa0e1df",
+    "internal/db/migrations/042_curated_cluster_tools.up.sql": "55325fd50c256cac848fb1670c05f3b29b20d4d1b526d84b40ab66d1b69119f0",
+    "internal/db/migrations/044_istio_release_plan.up.sql": "cb186e612d000842a28a6bfb9e7fde1d3c77cbb659c8d4a6ec49b9e6b332a465",
+    "deploy/bundles/catalog.json": "04d1e6adafe090c88930bc9a137c736d1a79c10fe9a7cf3c3d5739fb336d5a4e",
+    "deploy/bundles/selection.go": "1140b427894e341a906a35a411e111fdefcebb33c05b901c17f79a0381432caa",
+    "internal/dexconfig/validate.go": "f5b4e4816c0d3fd303ba324c2c60b6db3aa895e0a9d5216ecec37219f5356c59",
+    "internal/handler/sso_presets.go": "b67362f1aef34c6b671decadf65e78d1b940a0cecc2639a3dc4b3b52fb85f601",
+    "internal/cloudcreds/registry.go": "f324ad9b19c7beec493c01dd42c6f6c60492d869b2bcddfe4d123eca5d319ace",
+    "internal/siem/transport.go": "94f96473f1ed20f609a122a34bf77e0d177158ed9180ac48ead42078bb72d120",
+    "internal/siem/format.go": "b6a0bde2c07c9cb5a320fc76c67445016dee25da961f3589d6d246ed53f2802f",
+    "internal/handler/extensions_manifest.go": "a095b9bdf5a4e3f72e7952b0dca748c7843f8a3cc2752d03593bcf5760cbaad4",
+    "internal/server/routes_tools_controlplane.go": "0b72a7117077584a7e538f6643cd396ccdb6049f95b2a0b54bdabac7789208b5",
+    "internal/server/routes_cluster_addons.go": "5e4d04cd30fc111adca7d26ac44dd6f9b147c912a2e25211261a57b7031cc5d2",
+    "internal/server/routes_dex.go": "96efc6b450a6496381e22da58d21de3d1534c244b958c9ed8b8bc798d1884675",
+    "internal/server/routes_monitoring.go": "a3245fd3507057f8008cf4dba3f0af160e885cc2b271afc75b07087e2dffb970",
+    "internal/server/routes_api_entry.go": "21a788a9beeaa24bb7a7bfbf28b0ee9a67699f103f017fa6de887f3c31c1d156",
+    "internal/handler/service_mesh.go": "bf0e5abbaf64c5adc9be57fb3038dd835023a2c3460cee4a4dccb66d87e57ca7",
+    "internal/handler/security_profiles.go": "02d1407d54b10b13312d6e89ce91568e3f5b89215ab367c7cb1ce5b341dd87ba",
+    "internal/vault/client.go": "75d4429d742232b149292029b17603769226ee1694de4327421656b98068b58f",
+    "frontend/src/routes/dashboard/logging/-output-modal.tsx": "b38c4e49b7bf40309352c7248d32c50202356e3adb91ebf903d207b74b2639c5",
+    "frontend/src/routes/dashboard/alerting/-channel-modal.tsx": "aac0f2ffde3a483bfffd8bb8adf036f078771a192b1f304c66067339be68ca40",
+    "docs/openapi.yaml": "6f647d07105fa3ac80744fca45bee9bceb8d7b30bff791999b9704268cbc3266"
+  }
+}

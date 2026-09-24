@@ -18,15 +18,11 @@ import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { ResourceDetail } from "@/components/resources/resource-detail";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import {
-  crListPath,
-  crResourcePath,
-  crListHref,
-  crdListHref,
-  crDetailHref,
-} from "@/lib/k8s-paths";
+import { crResourcePath, crListHref } from "@/lib/k8s-paths";
 import { formatRelativeTime } from "@/lib/utils";
-import { PageHeader, ResourceMasthead } from "@/components/ui/page";
+import { PageHeader } from "@/components/ui/page";
+import { CustomResourceList } from "./custom-resource-list";
+import { QueryStates } from "@/components/ui/query-states";
 
 // CR proxy access is gated server-side on the `custom_resources` RBAC resource
 // (see internal/server/routes.go); mirror that for client gating.
@@ -64,7 +60,8 @@ export function CustomResourcesPage({ slug }: { slug: string[] }) {
   // CR list (E2): [group, version, plural]
   if (rest.length === 0) {
     return (
-      <CRList
+      <CustomResourceList
+        key={`${clusterId}/${group}/${version}/${plural}`}
         clusterId={clusterId}
         group={group}
         version={version}
@@ -193,15 +190,16 @@ const crdColumns: Column<CRDRow>[] = [
 function CRDList({ clusterId }: { clusterId: string }) {
   const navigate = useNavigate();
   // E1: a SINGLE proxy GET to the CRD list endpoint — no /apis discovery walk.
-  const { data, isLoading } = useK8sResource(
+  const query = useK8sResource(
     clusterId,
     "apis/apiextensions.k8s.io/v1/customresourcedefinitions",
   );
 
   const rows = useMemo<CRDRow[]>(() => {
-    const items = (data as { items?: CRDItem[] } | undefined)?.items ?? [];
+    const items =
+      (query.data as { items?: CRDItem[] } | undefined)?.items ?? [];
     return items.map(toCRDRow).filter((r) => r.plural && r.storageVersion);
-  }, [data]);
+  }, [query.data]);
 
   const columns = useMemo<Column<CRDRow>[]>(
     () => [
@@ -230,164 +228,33 @@ function CRDList({ clusterId }: { clusterId: string }) {
   return (
     <div className="space-y-4">
       <PageHeader title="Custom Resources" />
-      <DataTable
-        data={rows}
-        columns={columns}
-        keyExtractor={(r) => r.name}
-        onRowClick={(row) =>
-          void navigate({
-            to: crListHref(
-              clusterId,
-              row.group,
-              row.storageVersion,
-              row.plural,
-            ),
-          })
-        }
-        searchPlaceholder="Search custom resource definitions..."
-        loading={isLoading}
-        emptyState={{
-          title: "No custom resource definitions found",
-          description:
-            "Resources will appear here when they are available in this scope.",
-        }}
-      />
-    </div>
-  );
-}
-
-// ── E2: CR instance list ──
-
-interface CRListItem {
-  metadata?: { name?: string; namespace?: string; creationTimestamp?: string };
-}
-
-interface CRRow {
-  name: string;
-  namespace?: string;
-  createdAt: string;
-}
-
-function CRList({
-  clusterId,
-  group,
-  version,
-  plural,
-}: {
-  clusterId: string;
-  group: string;
-  version: string;
-  plural: string;
-}) {
-  const navigate = useNavigate();
-  // CR lists can be large → virtualized DataTable.
-  const { data, isLoading } = useK8sResource(
-    clusterId,
-    crListPath(group, version, plural),
-  );
-
-  const rows = useMemo<CRRow[]>(() => {
-    const items = (data as { items?: CRListItem[] } | undefined)?.items ?? [];
-    return items.map((it) => ({
-      name: it.metadata?.name ?? "",
-      namespace: it.metadata?.namespace,
-      createdAt: it.metadata?.creationTimestamp ?? "",
-    }));
-  }, [data]);
-
-  // Namespaced CRs carry metadata.namespace; show the column only if any row has one.
-  const namespaced = useMemo(() => rows.some((r) => !!r.namespace), [rows]);
-
-  const columns = useMemo<Column<CRRow>[]>(() => {
-    const cols: Column<CRRow>[] = [
-      {
-        key: "name",
-        header: "Name",
-        accessor: (row) => (
-          <RouterLink
-            to={crDetailHref(
-              clusterId,
-              group,
-              version,
-              plural,
-              row.name,
-              row.namespace,
-            )}
-            onClick={(e) => e.stopPropagation()}
-            // min-w-0 + truncate: without them the <a> refuses to shrink below
-            // its content width inside the virtualized grid's flex cell, spills
-            // under the neighboring gridcell on narrow viewports, and becomes
-            // unclickable (the neighbor intercepts pointer events).
-            className="min-w-0 truncate font-medium text-foreground font-mono text-xs hover:underline"
-          >
-            {row.name}
-          </RouterLink>
-        ),
-        sortAccessor: (row) => row.name,
-      },
-    ];
-    if (namespaced) {
-      cols.push({
-        key: "namespace",
-        header: "Namespace",
-        accessor: (row) => (
-          <span className="text-xs text-muted-foreground font-mono">
-            {row.namespace || "-"}
-          </span>
-        ),
-      });
-    }
-    cols.push({
-      key: "age",
-      header: "Age",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.createdAt ? formatRelativeTime(row.createdAt) : "-"}
-        </span>
-      ),
-    });
-    return cols;
-  }, [clusterId, group, version, plural, namespaced]);
-
-  return (
-    <div className="space-y-4">
-      <ResourceMasthead
-        backTo={crdListHref(clusterId)}
-        title={plural}
-        mono
-        description={
-          <span className="font-mono">
-            {group ? `${group}/${version}` : version}
-          </span>
-        }
-      />
-      <DataTable
-        data={rows}
-        columns={columns}
-        keyExtractor={(r) =>
-          r.namespace ? `${r.namespace}/${r.name}` : r.name
-        }
-        onRowClick={(row) =>
-          void navigate({
-            to: crDetailHref(
-              clusterId,
-              group,
-              version,
-              plural,
-              row.name,
-              row.namespace,
-            ),
-          })
-        }
-        searchPlaceholder={`Search ${plural}...`}
-        loading={isLoading}
-        emptyState={{
-          title: `No ${plural} found`,
-          description:
-            "Resources will appear here when they are available in this scope.",
-        }}
-        virtualized
-      />
+      <QueryStates
+        query={query}
+        permission="custom_resources:read"
+        errorTitle="Custom resource definitions unavailable"
+      >
+        <DataTable
+          data={rows}
+          columns={columns}
+          keyExtractor={(r) => r.name}
+          onRowClick={(row) =>
+            void navigate({
+              to: crListHref(
+                clusterId,
+                row.group,
+                row.storageVersion,
+                row.plural,
+              ),
+            })
+          }
+          searchPlaceholder="Search custom resource definitions..."
+          emptyState={{
+            title: "No custom resource definitions found",
+            description:
+              "Resources will appear here when they are available in this scope.",
+          }}
+        />
+      </QueryStates>
     </div>
   );
 }

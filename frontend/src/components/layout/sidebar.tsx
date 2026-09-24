@@ -24,6 +24,7 @@ import { useProductName } from "@/lib/hooks/public-settings";
 import { useSidebarNavigation } from "./use-sidebar-navigation";
 import { useStarredNavControls } from "./use-starred-nav-controls";
 import { useCRDNavCounts } from "./use-crd-nav-counts";
+import { useVisibleNavGroups } from "./use-visible-nav-groups";
 
 // Vite stamps APP_VERSION from the release tag; local builds use the current
 // package fallback in lib/env.ts.
@@ -66,25 +67,28 @@ export function Sidebar() {
 
   const collapsed = sidebarCollapsed && !mobileSidebarOpen;
 
-  // Sidebar sections stay open across navigation (multi-open, not an
-  // accordion); open state is remembered per scope in localStorage.
+  // Expand one section at a time, independently in global and cluster scope.
   const { openGroups, toggleGroup } = useOpenNavGroups(
     isClusterContext ? "cluster" : "global",
     navGroups,
     pathname,
+  );
+  const { visibleGroups, onFlyoutChange } = useVisibleNavGroups(
+    collapsed,
+    openGroups,
   );
 
   // Fetch resource counts when in cluster context — only for groups that are
   // currently expanded (see useResourceCounts).
   const counts = useSidebarResourceCounts(
     isClusterContext ? clusterId! : "",
-    openGroups,
+    visibleGroups,
   );
   const crdCounts = useCRDNavCounts(
     clusterId ?? "",
     navGroups,
     discovery,
-    openGroups.has("More Resources"),
+    visibleGroups,
   );
 
   return (
@@ -185,6 +189,7 @@ export function Sidebar() {
               stars={isClusterContext ? stars : undefined}
               isOpen={openGroups.has(group.label)}
               onToggle={() => toggleGroup(group.label)}
+              onFlyoutChange={onFlyoutChange}
             />
           ))}
           {isClusterContext && (

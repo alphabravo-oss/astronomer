@@ -24,10 +24,14 @@ import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import type { HelmRepoType } from "@/types";
 
-export function useHelmRepositories(clusterId?: string) {
+export function useHelmRepositories(
+  clusterId?: string,
+  params: { limit?: number; offset?: number } = {},
+) {
   return useQuery({
-    queryKey: queryKeys.catalog.repositoriesFor(clusterId),
-    queryFn: ({ signal }) => getHelmRepositories(clusterId, signal),
+    queryKey: queryKeys.catalog.repositoriesFor(clusterId, params),
+    queryFn: ({ signal }) => getHelmRepositories(clusterId, signal, params),
+    throwOnError: false,
   });
 }
 
@@ -132,6 +136,8 @@ export type HelmChartQuery = Record<string, unknown> & {
   repository?: string;
   category?: string;
   search?: string;
+  limit?: number;
+  offset?: number;
 };
 
 export function useHelmCharts(params: HelmChartQuery) {
@@ -139,6 +145,7 @@ export function useHelmCharts(params: HelmChartQuery) {
     queryKey: queryKeys.catalog.charts(params),
     queryFn: ({ signal }) => getHelmCharts(params, signal),
     enabled: !!params.clusterId || !!params.projectId,
+    throwOnError: false,
   });
 }
 
@@ -146,12 +153,14 @@ export function useHelmChartVersions(
   scopeId: string,
   chartId: string,
   scope: "cluster" | "project" = "project",
+  params: { limit?: number; offset?: number } = {},
 ) {
   return useQuery({
-    queryKey: queryKeys.catalog.chartVersions(scopeId, chartId, scope),
+    queryKey: queryKeys.catalog.chartVersions(scopeId, chartId, scope, params),
     queryFn: ({ signal }) =>
-      getHelmChartVersions(scopeId, chartId, scope, signal),
+      getHelmChartVersions(scopeId, chartId, scope, signal, params),
     enabled: !!scopeId && !!chartId,
+    throwOnError: false,
   });
 }
 
@@ -164,10 +173,15 @@ export function useInstalledChartUpgradeVersions(installationId: string) {
   });
 }
 
-export function useInstalledCharts(params?: { cluster?: string }) {
+export function useInstalledCharts(params?: {
+  cluster?: string;
+  limit?: number;
+  offset?: number;
+}) {
   return useQuery({
     queryKey: queryKeys.catalog.installed(params),
     queryFn: ({ signal }) => getInstalledCharts(params, signal),
+    throwOnError: false,
     refetchInterval: liveFallback(30_000),
   });
 }

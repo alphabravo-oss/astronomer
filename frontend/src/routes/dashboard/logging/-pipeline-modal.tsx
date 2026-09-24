@@ -3,13 +3,15 @@ import {
   useCreateLoggingPipeline,
   useLoggingOutputs,
 } from "@/lib/hooks/logging";
-import { useClusters, useClusterNamespaces } from "@/lib/hooks/clusters";
+import { useClusterNamespaces } from "@/lib/hooks/clusters";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
+import { PipelineOutputs } from "./-pipeline-outputs";
+import { outputsForCluster, validOutputSelection } from "./-output-scope";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
+import { PipelineNamespaces } from "./-pipeline-namespaces";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import { Plus, X } from "lucide-react";
 import { toastError } from "@/lib/toast";
 
@@ -21,10 +23,6 @@ export function CreatePipelineModal({
   clusterId?: string;
 }) {
   const createPipeline = useCreateLoggingPipeline();
-  const { data: clustersData } = useClusters({ pageSize: 50 });
-  const clusters = clustersData?.data || [];
-  const { data: outputs, isLoading: outputsLoading } = useLoggingOutputs();
-  const outputList = outputs || [];
 
   const pipelineForm = useAppForm({
     defaultValues: {
@@ -45,9 +43,11 @@ export function CreatePipelineModal({
           ? "Name is required"
           : !value.clusterId
             ? "Select a cluster"
-            : value.outputIds.length === 0
-              ? "Select at least one output"
-              : undefined,
+            : namespacesQuery.isError || !namespacesQuery.data
+              ? "Load the cluster namespaces before creating a pipeline"
+              : !validOutputSelection(value.outputIds, outputList)
+                ? "Select available outputs belonging to this cluster"
+                : undefined,
     },
     // Same UX as before: the failed check surfaces as a toast, not inline.
     onSubmitInvalid: ({ formApi }) => {
@@ -81,9 +81,15 @@ export function CreatePipelineModal({
   // Chips / KV rows render off the whole value object — same re-render
   // behavior as the previous useState form.
   const form = useStore(pipelineForm.store, (s) => s.values);
+  const outputsQuery = useLoggingOutputs(form.clusterId || undefined, {
+    enabled: !!form.clusterId,
+  });
+  const outputList = outputsForCluster(
+    outputsQuery.isError ? undefined : outputsQuery.data,
+    form.clusterId,
+  );
 
-  const { data: namespacesData } = useClusterNamespaces(form.clusterId);
-  const namespaces = namespacesData || [];
+  const namespacesQuery = useClusterNamespaces(form.clusterId);
 
   const toggleNamespace = (ns: string) => {
     pipelineForm.setFieldValue(
@@ -132,7 +138,11 @@ export function CreatePipelineModal({
             intent="primary"
             onClick={() => void pipelineForm.handleSubmit()}
             disabled={
-              !form.name || !form.clusterId || form.outputIds.length === 0
+              !form.name ||
+              !form.clusterId ||
+              namespacesQuery.isError ||
+              !namespacesQuery.data ||
+              !validOutputSelection(form.outputIds, outputList)
             }
             loading={createPipeline.isPending}
           >
@@ -172,22 +182,16 @@ export function CreatePipelineModal({
             </label>
             <pipelineForm.Field name="clusterId">
               {(field) => (
-                <Select
+                <RemoteClusterPicker
                   id="logging-pipeline-cluster"
                   value={field.state.value}
-                  onChange={(e) => {
-                    field.handleChange(e.target.value);
+                  onChange={(value) => {
+                    field.handleChange(value);
                     pipelineForm.setFieldValue("namespaces", []);
+                    pipelineForm.setFieldValue("outputIds", []);
                   }}
                   onBlur={field.handleBlur}
-                >
-                  <option value="">Select a cluster</option>
-                  {clusters.map((cluster) => (
-                    <option key={cluster.id} value={cluster.id}>
-                      {cluster.displayName}
-                    </option>
-                  ))}
-                </Select>
+                />
               )}
             </pipelineForm.Field>
           </div>
@@ -216,37 +220,11 @@ export function CreatePipelineModal({
       </div>
 
       {form.clusterId && (
-        <div className="space-y-1.5">
-          <p className="text-sm font-medium text-foreground">Namespaces</p>
-          <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 rounded-md border border-border bg-background">
-            {namespaces.length === 0 ? (
-              <span className="text-xs text-muted-foreground">
-                No namespaces found
-              </span>
-            ) : (
-              namespaces.map((ns) => (
-                <button
-                  key={ns.name}
-                  type="button"
-                  onClick={() => toggleNamespace(ns.name)}
-                  className={cn(
-                    "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
-                    form.namespaces.includes(ns.name)
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {ns.name}
-                </button>
-              ))
-            )}
-          </div>
-          {form.namespaces.length === 0 && (
-            <p className="text-xs text-muted-foreground">
-              No namespaces selected (will collect from all)
-            </p>
-          )}
-        </div>
+        <PipelineNamespaces
+          query={namespacesQuery}
+          selected={form.namespaces}
+          onToggle={toggleNamespace}
+        />
       )}
 
       <div className="space-y-2">
@@ -299,38 +277,12 @@ export function CreatePipelineModal({
         )}
       </div>
 
-      <div className="space-y-1.5">
-        <p className="text-sm font-medium text-foreground">Outputs</p>
-        <div className="space-y-1.5 max-h-40 overflow-y-auto p-2 rounded-md border border-border bg-background">
-          {outputsLoading ? (
-            <span className="text-xs text-muted-foreground">
-              Loading outputs…
-            </span>
-          ) : outputList.length === 0 ? (
-            <span className="text-xs text-muted-foreground">
-              No outputs available. Create an output first.
-            </span>
-          ) : (
-            outputList.map((output) => (
-              <label
-                key={output.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-sm text-sm hover:bg-accent cursor-pointer"
-              >
-                <Input
-                  type="checkbox"
-                  checked={form.outputIds.includes(output.id)}
-                  onChange={() => toggleOutput(output.id)}
-                  className="rounded-sm border-border text-primary focus:ring-ring"
-                />
-                <span className="text-foreground">{output.name}</span>
-                <span className="text-xs text-muted-foreground capitalize">
-                  ({output.type})
-                </span>
-              </label>
-            ))
-          )}
-        </div>
-      </div>
+      <PipelineOutputs
+        query={outputsQuery}
+        clusterId={form.clusterId}
+        selected={form.outputIds}
+        onToggle={toggleOutput}
+      />
 
       <label className="flex items-center gap-2 cursor-pointer">
         <pipelineForm.Field name="enabled">

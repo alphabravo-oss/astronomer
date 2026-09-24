@@ -1,15 +1,16 @@
 # Platform baseline
 
 `deploy/bundles/catalog.json` is the sole membership and artifact contract for
-the v1.1 platform baseline. A component is part of the baseline only when it is
+the v1.2 platform baseline. A component is part of the baseline only when it is
 present in that catalog with `default_enabled: true`. The catalog pins the chart
 version, chart archive SHA-256, enabled workload image digests, target namespace,
 release name, Kubernetes range, and required delivery capabilities.
 
-The current v1.1 baseline contains exactly two components:
+The current v1.2 baseline contains three components:
 
 | Component | Chart version | Namespace | Release name |
 | --- | --- | --- | --- |
+| `trivy-operator` | `0.36.0` | `astronomer-trivy-system` | `trivy-operator` |
 | `kube-state-metrics` | `8.0.0` | `astronomer-monitoring` | `kube-state-metrics` |
 | `prometheus-node-exporter` | `4.56.1` | `astronomer-monitoring` | `prometheus-node-exporter` |
 
@@ -17,6 +18,14 @@ The release manifest, built-in bundle archive, air-gap image inventory, and
 runtime provisioner all consume this catalog. Database `cluster_tools` rows,
 Helm repository seeds, cluster templates, documentation lists, and UI labels do
 not add components to the baseline.
+
+Quick Start is selected by default for new registrations and controls the metrics
+exporters. Trivy image scanning has an independent default-on checkbox. The
+cluster annotation `astronomer.io/image-scanning: disabled` opts out; absent or
+`enabled` enables automatic installation. Turning off Quick Start does not turn
+off scanning. Existing Ready remote clusters also receive Trivy when compatible
+Flux inventory is observed. This preference prevents installation; changing it
+does not uninstall a scanner that has already been installed.
 
 ## Registration and reconciliation
 
@@ -48,7 +57,7 @@ delivery and registration status APIs and requires an explicit retry.
 ## Optional tools are not baseline components
 
 The Tools catalog and UI also expose optional integrations such as
-`trivy-operator`, `fluent-bit`, `cert-manager`, `ingress-nginx`, and
+`fluent-bit`, `cert-manager`, `ingress-nginx`, and
 `gatekeeper`. Their presence in the database tool catalog is not an implicit
 installation promise, and registration does not install them unless they are
 promoted into `deploy/bundles/catalog.json` as reviewed, default-enabled

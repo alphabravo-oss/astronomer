@@ -85,8 +85,8 @@ func TestRenderFullFluentbitConfigRoutesOnlySelectedOutputs(t *testing.T) {
 	}
 	routeTag := pipelineRouteTag(pipelineID)
 	for _, want := range []string{
-		"Name rewrite_tag", "Match kube.checkout.*", "Match kube.billing.*",
-		"Rule $TAG ^.+$ " + routeTag + " true", "output: selected via payments", "Match " + routeTag,
+		"Name rewrite_tag", "Match kube.var.log.containers.*_checkout_*.log", "Match kube.var.log.containers.*_billing_*.log",
+		"Rule $log ^.*$ " + routeTag + " true", "output: selected via payments", "Match " + routeTag,
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("routed config missing %q:\n%s", want, cfg)

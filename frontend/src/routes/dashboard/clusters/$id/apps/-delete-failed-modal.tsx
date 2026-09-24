@@ -1,7 +1,10 @@
 import { Trash2 } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { permissionDeniedReason, toastPermissionDenied } from "@/lib/permission-hooks";
+import {
+  permissionDeniedReason,
+  toastPermissionDenied,
+} from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 
 // Confirmation dialog for the bulk "delete failed installs" action. Plain
@@ -14,7 +17,7 @@ export function DeleteFailedModal({
   onConfirm,
   confirmDecision,
 }: {
-  count: number;
+  count: number | undefined;
   pending: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -51,23 +54,23 @@ export function DeleteFailedModal({
             loading={pending}
             icon={<Trash2 className="h-3.5 w-3.5" />}
           >
-            Delete {count} row{count === 1 ? "" : "s"}
+            Delete {count ?? "all failed"} row{count === 1 ? "" : "s"}
           </ActionButton>
         </>
       }
     >
       <p className="text-sm text-muted-foreground">
-        Hard-delete {count} <code className="font-mono">installed_charts</code>{" "}
-        row{count === 1 ? "" : "s"} in{" "}
+        Hard-delete {count ?? "all matching"}{" "}
+        <code className="font-mono">installed_charts</code> row
+        {count === 1 ? "" : "s"} in{" "}
         <code className="font-mono">failed_install</code> /{" "}
         <code className="font-mono">failed_uninstall</code> on this cluster.
       </p>
       <p className="text-xs text-muted-foreground">
-        No helm release uninstall is attempted — by definition these rows never
-        deployed (or already failed to uninstall). If you suspect a stale
-        release exists in-cluster, run{" "}
-        <code className="font-mono">helm uninstall</code> via the kubectl shell
-        first.
+        This removes tracking records only; it does not uninstall Helm releases.
+        Failed releases may still exist in the cluster. Inspect their current
+        state before removing these records. This action covers every matching
+        row in this cluster, including other pages.
       </p>
     </ModalShell>
   );

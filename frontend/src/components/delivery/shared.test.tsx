@@ -1,9 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
+import { pageRowCount } from "@/lib/api/pagination";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clusterDeliveryPath,
   deliveryEntityPath,
-  deliveryPageRowCount,
   deliveryProjectLabel,
   projectBoundToCluster,
   projectClusterId,
@@ -121,10 +121,10 @@ describe("cluster delivery paths", () => {
   });
 });
 
-describe("deliveryPageRowCount", () => {
+describe("pageRowCount", () => {
   it("uses an authoritative total when the server knows it", () => {
     expect(
-      deliveryPageRowCount({
+      pageRowCount({
         data: [{ id: 1 }],
         pagination: {
           total: 87,
@@ -139,7 +139,7 @@ describe("deliveryPageRowCount", () => {
 
   it("enables exactly one next fetch for an unknown total", () => {
     expect(
-      deliveryPageRowCount({
+      pageRowCount({
         data: Array.from({ length: 25 }),
         pagination: {
           limit: 25,
@@ -153,7 +153,7 @@ describe("deliveryPageRowCount", () => {
 
   it("stops at the observed end of an unknown total", () => {
     expect(
-      deliveryPageRowCount({
+      pageRowCount({
         data: Array.from({ length: 7 }),
         pagination: {
           limit: 25,

@@ -117,7 +117,8 @@ describe("logging generated API boundary", () => {
       },
     });
 
-    await expect(getLoggingOutputs()).resolves.toEqual([
+    const page = await getLoggingOutputs("cluster-1", 200);
+    expect(page.data).toEqual([
       expect.objectContaining({
         id: "output-1",
         type: "opensearch",
@@ -131,7 +132,15 @@ describe("logging generated API boundary", () => {
       }),
     ]);
     expect(generated.getLoggingOutputs).toHaveBeenCalledWith({
-      query: { limit: 200 },
+      query: { limit: 50, offset: 200, cluster_id: "cluster-1" },
+      signal: undefined,
+    });
+    expect(page.pagination).toEqual({
+      total: 1,
+      limit: 100,
+      offset: 0,
+      has_more: false,
+      next_offset: null,
     });
   });
 
@@ -253,10 +262,20 @@ describe("logging generated API boundary", () => {
         target_key: "output-1",
         limit: 100,
       }),
-    ).resolves.toEqual([
-      expect.objectContaining({ operation: "apply", status: "running" }),
-    ]);
+    ).resolves.toMatchObject({
+      data: [
+        expect.objectContaining({ operation: "apply", status: "running" }),
+      ],
+      pagination: {
+        total: 1,
+        limit: 100,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
+    });
     expect(generated.getLoggingOperations).toHaveBeenCalledWith({
+      signal: undefined,
       query: {
         status: "running",
         targetType: "output",

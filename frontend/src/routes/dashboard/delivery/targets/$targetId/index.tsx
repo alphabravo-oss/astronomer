@@ -1,7 +1,15 @@
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, Eye, Pause, Pencil, Play, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Eye,
+  Pause,
+  Pencil,
+  Play,
+  Trash2,
+} from "lucide-react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -15,7 +23,6 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
-  RedirectDeliveryDetail,
   useDeliveryWorkspace,
   withProjectQuery,
 } from "@/components/delivery/shared";
@@ -166,10 +173,8 @@ export function TargetDetailPage() {
               query={query}
               permission="delivery_targets:read"
               notFound={
-                <EmptyState
-                  icon={AlertTriangle} title="Target not found"
-                  description="This delivery target no longer exists or is outside the selected project."
-                  actionLabel="Back to targets" actionHref="/dashboard/delivery/targets"
+                <TargetNotFound
+                  href={withProjectQuery(listHref("targets"), projectId)}
                 />
               }
             >
@@ -387,15 +392,18 @@ export function TargetDetailPage() {
   );
 }
 
-function DeliveryTargetDetailRedirect() {
-  const { targetId } = useParams({ strict: false }) as { targetId: string };
+function TargetNotFound({ href }: { href: string }) {
   return (
-    <RedirectDeliveryDetail tab="targets" id={targetId}>
-      <TargetDetailPage />
-    </RedirectDeliveryDetail>
+    <EmptyState
+      icon={AlertTriangle}
+      title="Target not found"
+      description="This delivery target no longer exists or is outside the selected project."
+      actionLabel="Back to targets"
+      actionHref={href}
+    />
   );
 }
 
 export const Route = createFileRoute("/dashboard/delivery/targets/$targetId/")({
-  component: DeliveryTargetDetailRedirect,
+  component: TargetDetailPage,
 });

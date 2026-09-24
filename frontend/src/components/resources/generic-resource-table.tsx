@@ -18,7 +18,8 @@ import {
   nameColumn,
 } from "@/components/resources/resource-table-primitives";
 import { ActionButton } from "@/components/ui/action-button";
-import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
+import type { ActionMenuItem } from "@/components/ui/action-menu";
+import { ResourceActionMenu } from "./resource-action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Column } from "@/components/ui/data-table";
 import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
@@ -34,7 +35,7 @@ import {
   toastPermissionDenied,
 } from "@/lib/permission-hooks";
 import { toastError } from "@/lib/toast";
-import { pageRowCount } from "@/lib/api/pagination";
+import { pageTableCount } from "@/lib/api/pagination";
 import { useClusterNamespaceScope } from "@/lib/cluster-scope";
 import type { GenericK8sResource } from "@/types";
 
@@ -152,13 +153,7 @@ export function GenericResourceTable({
               icon: <Code className="h-3.5 w-3.5" />,
               onClick: () => {
                 try {
-                  const path = row.namespace
-                    ? k8sResourcePath(resourceType, row.name, row.namespace)
-                    : k8sResourcePath(resourceType, row.name);
-                  setYamlTarget({
-                    path,
-                    title: `${title}: ${row.namespace ? `${row.namespace}/` : ""}${row.name}`,
-                  });
+                  setYamlTarget(genericYamlTarget(resourceType, title, row));
                 } catch {
                   toastError("YAML view not available for this resource type");
                 }
@@ -174,13 +169,7 @@ export function GenericResourceTable({
               icon: <Pencil className="h-3.5 w-3.5" />,
               onClick: () => {
                 try {
-                  const path = row.namespace
-                    ? k8sResourcePath(resourceType, row.name, row.namespace)
-                    : k8sResourcePath(resourceType, row.name);
-                  setYamlTarget({
-                    path,
-                    title: `${title}: ${row.namespace ? `${row.namespace}/` : ""}${row.name}`,
-                  });
+                  setYamlTarget(genericYamlTarget(resourceType, title, row));
                 } catch {
                   toastError("Edit not available for this resource type");
                 }
@@ -204,7 +193,13 @@ export function GenericResourceTable({
 
           return (
             <StopRowClick>
-              <ActionMenu items={items} />
+              <ResourceActionMenu
+                clusterId={clusterId}
+                resourceType={resourceType}
+                row={row}
+                permissions={permissions}
+                items={items}
+              />
             </StopRowClick>
           );
         },
@@ -217,9 +212,7 @@ export function GenericResourceTable({
       clusterId,
       isDeletable,
       isEditable,
-      permissions.delete,
-      permissions.read,
-      permissions.update,
+      permissions,
       resourceType,
       title,
     ],
@@ -265,7 +258,7 @@ export function GenericResourceTable({
         searchPlaceholder={`Search ${title.toLowerCase()}...`}
         pageSize={GENERIC_RESOURCE_PAGE_SIZE}
         serverSide={{
-          rowCount: pageRowCount(query.data),
+          ...pageTableCount(query.data),
           pagination: {
             pageIndex,
             pageSize: GENERIC_RESOURCE_PAGE_SIZE,
@@ -372,4 +365,15 @@ export function GenericResourceTable({
       )}
     </>
   );
+}
+
+function genericYamlTarget(
+  resourceType: string,
+  title: string,
+  row: GenericK8sResource,
+) {
+  return {
+    path: k8sResourcePath(resourceType, row.name, row.namespace || undefined),
+    title: `${title}: ${row.namespace ? row.namespace + "/" : ""}${row.name}`,
+  };
 }

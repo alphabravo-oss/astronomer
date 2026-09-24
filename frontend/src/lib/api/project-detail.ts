@@ -757,22 +757,21 @@ export async function listClusterTemplates(params?: {
   search?: string;
   page?: number;
   pageSize?: number;
+  offset?: number;
   signal?: AbortSignal;
 }): Promise<PaginatedResponse<ClusterTemplate>> {
   const response = await getClusterTemplates({
     query: {
       limit: params?.pageSize,
       offset:
-        params?.page && params.pageSize
+        params?.offset ??
+        (params?.page && params.pageSize
           ? Math.max(0, params.page - 1) * params.pageSize
-          : undefined,
+          : undefined),
     },
     signal: params?.signal,
   });
-  return mapPage(
-    { data: response.data ?? [], pagination: response.pagination },
-    mapClusterTemplate,
-  );
+  return mapPage(response, mapClusterTemplate);
 }
 
 export async function getClusterTemplate(

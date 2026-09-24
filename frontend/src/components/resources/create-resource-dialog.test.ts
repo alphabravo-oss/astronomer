@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createPathForManifest,
   normalizeManifestDocuments,
-} from "./create-resource-dialog";
+} from "./create-resource-manifest";
 
 describe("create resource API path", () => {
   it("prefers live discovery over handwritten kind routing", () => {

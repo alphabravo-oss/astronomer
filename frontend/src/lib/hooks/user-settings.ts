@@ -22,10 +22,14 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 
-export function useUsers(params?: UserListParameters) {
+export function useUsers(
+  params?: UserListParameters,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: queryKeys.users.list(params ? { ...params } : undefined),
     queryFn: () => getUsers(params),
+    enabled: options?.enabled,
   });
 }
 

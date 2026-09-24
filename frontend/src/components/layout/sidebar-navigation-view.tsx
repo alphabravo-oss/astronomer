@@ -117,6 +117,7 @@ export function SidebarGroup({
   isOpen,
   onToggle,
   stars,
+  onFlyoutChange,
 }: {
   group: NavGroup;
   pathname: string;
@@ -125,6 +126,7 @@ export function SidebarGroup({
   isOpen: boolean;
   onToggle: () => void;
   stars?: StarredNavControls;
+  onFlyoutChange?: (label: string, open: boolean) => void;
 }) {
   const contentId = useId();
   if (collapsed) {
@@ -136,6 +138,7 @@ export function SidebarGroup({
         pathname={pathname}
         counts={counts}
         stars={stars}
+        onOpenChange={onFlyoutChange}
       />
     );
   }

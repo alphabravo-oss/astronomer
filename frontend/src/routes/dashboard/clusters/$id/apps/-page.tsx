@@ -1,4 +1,7 @@
-import { Select } from "@/components/ui/select";
+import {
+  CatalogProjectPicker,
+  useCatalogProjectScope,
+} from "@/components/catalog/project-scope";
 import { getRouteApi } from "@tanstack/react-router";
 /**
  * Per-cluster Apps tab — sprint 082+.
@@ -28,24 +31,19 @@ import { getRouteApi } from "@tanstack/react-router";
  * operations that the API will reject.
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useDebouncedValue } from "@tanstack/react-pacer";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { Package, Plus } from "lucide-react";
 import { Link as RouterLink } from "@tanstack/react-router";
 
 import { queryKeys } from "@/lib/query-keys";
 import { useCluster } from "@/lib/hooks/clusters";
-import { useProjects } from "@/lib/hooks/projects";
 import {
-  useHelmRepositories,
   useSyncHelmRepository,
   useDeleteHelmRepository,
 } from "@/lib/hooks/catalog";
-import { liveFallback } from "@/lib/live/status-store";
-import { pageRowCount } from "@/lib/api/pagination";
 import {
   usePermissionDecision,
   toastPermissionDenied,
@@ -55,9 +53,6 @@ import { PageHeader } from "@/components/ui/page";
 import { TabStrip } from "@/components/ui/tabs";
 import { useTabParam } from "@/lib/use-tab-param";
 import {
-  listClusterApps,
-  listCatalogCharts,
-  listRecommendedCharts,
   uninstallCatalogRelease,
   deleteFailedClusterApps,
   type ClusterAppRow,
@@ -65,32 +60,12 @@ import {
 import { SECTIONS, type Section, type ModalState } from "./-modal-state";
 import { AppsTabContent } from "./-apps-tab-content";
 import { AppsModals } from "./-apps-modals";
+import { AppsPagination, useAppsQueries } from "./-queries";
 
 export { InstalledView } from "./-installed-tab";
 export { RecommendedView } from "./-recommended-tab";
 
 const routeApi = getRouteApi("/dashboard/clusters/$id/apps/");
-
-function useClusterProjects(clusterId: string, requestedProjectId: string) {
-  const projectsQuery = useProjects({ pageSize: 200 });
-  const clusterProjects = useMemo(
-    () =>
-      (projectsQuery.data?.data ?? []).filter(
-        (project) =>
-          project.clusterId === clusterId ||
-          project.clusterIds?.includes(clusterId),
-      ),
-    [clusterId, projectsQuery.data?.data],
-  );
-  const projectId = clusterProjects.some(
-    (project) => project.id === requestedProjectId,
-  )
-    ? requestedProjectId
-    : clusterProjects.length === 1
-      ? clusterProjects[0].id
-      : "";
-  return { projectsQuery, clusterProjects, projectId };
-}
 
 export function ClusterAppsPage() {
   const params = routeApi.useParams();
@@ -105,10 +80,9 @@ export function ClusterAppsPage() {
     useLocation({ select: (location) => location.searchStr }),
   );
   const navigate = useNavigate();
-  const { projectsQuery, clusterProjects, projectId } = useClusterProjects(
-    clusterId,
-    searchParams.get("project") ?? "",
-  );
+  const requestedProjectId = searchParams.get("project") ?? "";
+  const projectScope = useCatalogProjectScope(requestedProjectId, clusterId);
+  const { projectId } = projectScope;
   const setProjectId = (nextProjectId: string) => {
     const next = new URLSearchParams(searchParams);
     if (nextProjectId) next.set("project", nextProjectId);
@@ -150,14 +124,8 @@ export function ClusterAppsPage() {
     catalogScope,
   );
 
-  const installed = useQuery({
-    queryKey: queryKeys.clusterPages.appsInstalled(clusterId),
-    queryFn: () => listClusterApps(clusterId, { limit: 100 }),
-    // `catalog_release.changed` (server writes) + the Helm-Secret k8s route
-    // (cluster-side churn) refresh this while the stream is open.
-    refetchInterval: liveFallback(30_000),
-    refetchIntervalInBackground: false,
-  });
+  const queries = useAppsQueries(clusterId, projectId, section, searchQ);
+  const { installed, browse, recommended, reposQuery } = queries;
 
   const uninstall = useMutation({
     mutationFn: (id: string) => uninstallCatalogRelease(id),
@@ -188,33 +156,8 @@ export function ClusterAppsPage() {
   });
   const [showDeleteFailed, setShowDeleteFailed] = useState(false);
   const [showRepoModal, setShowRepoModal] = useState(false);
-  const { data: repos, isLoading: reposLoading } = useHelmRepositories();
   const syncRepo = useSyncHelmRepository();
   const deleteRepo = useDeleteHelmRepository();
-
-  // Browse is fetched on mount but the (200ms-debounced) query string
-  // updates the key so typing in the search box re-fetches without
-  // hammering the catalog endpoint on every keystroke.
-  const [debouncedSearchQ] = useDebouncedValue(searchQ, { wait: 200 });
-  const browse = useQuery({
-    queryKey: queryKeys.clusterPages.appCatalogBrowse(
-      projectId,
-      debouncedSearchQ,
-    ),
-    queryFn: () =>
-      listCatalogCharts({
-        projectId,
-        limit: 60,
-        search: debouncedSearchQ || undefined,
-      }),
-    enabled: section === "browse" && !!projectId,
-  });
-
-  const recommended = useQuery({
-    queryKey: queryKeys.clusterPages.appCatalogRecommended(projectId),
-    queryFn: () => listRecommendedCharts(projectId, 12),
-    enabled: section === "recommended" && !!projectId,
-  });
 
   // Deep-link auto-open: when ?install=<chartName> is present and we
   // haven't already opened a modal (so refreshes/re-navigations don't
@@ -345,23 +288,12 @@ export function ClusterAppsPage() {
         actions={
           <>
             {section !== "repositories" && (
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                Project visibility
-                <Select
-                  aria-label="Catalog project"
-                  value={projectId}
-                  onChange={(event) => setProjectId(event.target.value)}
-                  className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm text-foreground"
-                  disabled={projectsQuery.isLoading}
-                >
-                  <option value="">Select a project</option>
-                  {clusterProjects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.displayName || project.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
+              <CatalogProjectPicker
+                scope={projectScope}
+                value={requestedProjectId || projectId}
+                onChange={setProjectId}
+                clusterId={clusterId}
+              />
             )}
             {section === "repositories" && (
               <ActionButton
@@ -382,16 +314,20 @@ export function ClusterAppsPage() {
           label: s[0].toUpperCase() + s.slice(1),
           count:
             s === "installed"
-              ? installed.data
-                ? pageRowCount(installed.data)
+              ? installed.data && !installed.isError
+                ? installed.data.pagination.total
                 : undefined
               : s === "browse"
-                ? browse.data
-                  ? pageRowCount(browse.data)
+                ? browse.data && !browse.isError
+                  ? browse.data.pagination.total
                   : undefined
                 : s === "recommended"
-                  ? recommended.data?.length
-                  : repos?.length,
+                  ? recommended.isError
+                    ? undefined
+                    : recommended.data?.length
+                  : reposQuery.isError
+                    ? undefined
+                    : reposQuery.data?.pagination.total,
         }))}
         value={section}
         onChange={setSection}
@@ -405,8 +341,7 @@ export function ClusterAppsPage() {
         installed={installed}
         browse={browse}
         recommended={recommended}
-        repos={repos}
-        reposLoading={reposLoading}
+        reposQuery={reposQuery}
         onSyncRepo={(id) => syncRepo.mutate(id)}
         onDeleteRepo={(id) => deleteRepo.mutate(id)}
         syncRepoPending={syncRepo.isPending}
@@ -421,6 +356,7 @@ export function ClusterAppsPage() {
         onInstall={openInstall}
       />
 
+      <AppsPagination section={section} queries={queries} />
       <AppsModals
         modal={modal}
         onCloseModal={() => setModal({ kind: "none" })}
@@ -435,9 +371,14 @@ export function ClusterAppsPage() {
         }
         showRepoModal={showRepoModal}
         onCloseRepoModal={() => setShowRepoModal(false)}
-        showDeleteFailed={showDeleteFailed}
+        showDeleteFailed={showDeleteFailed && !installed.isError}
         onCloseDeleteFailed={() => setShowDeleteFailed(false)}
-        deleteFailedCount={failedCount}
+        deleteFailedCount={
+          installed.data?.pagination.has_more ||
+          installed.data?.pagination.offset
+            ? undefined
+            : failedCount
+        }
         deleteFailedPending={deleteFailed.isPending}
         onConfirmDeleteFailed={() => deleteFailed.mutate()}
       />

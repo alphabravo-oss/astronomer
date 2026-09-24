@@ -6,6 +6,10 @@
   "engines": {
     "node": ">=22"
   },
+  "scripts": {
+    "postinstall": "node apply-runner-patch.mjs",
+    "test": "node --test *.test.mjs"
+  },
   "devDependencies": {
     "run-local-ci": "0.18.1"
   }

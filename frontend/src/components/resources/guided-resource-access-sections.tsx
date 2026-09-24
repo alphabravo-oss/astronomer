@@ -13,14 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-function commaSeparated(value: unknown): string {
-  return Array.isArray(value) ? (value as string[]).join(",") : "";
-}
-
-function parseCommaSeparated(value: string): string[] {
-  return value.split(",").map((item) => item.trim());
-}
-
 type SecretType =
   | "Opaque"
   | "kubernetes.io/tls"
@@ -51,9 +43,7 @@ export function SecretSection({ form }: GuidedSectionProps) {
       <Field label="Type">
         <Select
           value={secretType}
-          onChange={(event) =>
-            setSecretType(event.target.value as SecretType)
-          }
+          onChange={(event) => setSecretType(event.target.value as SecretType)}
         >
           <option value="Opaque">Opaque</option>
           <option value="kubernetes.io/tls">TLS (kubernetes.io/tls)</option>
@@ -149,59 +139,6 @@ export function SecretSection({ form }: GuidedSectionProps) {
           />
         </Field>
       )}
-    </section>
-  );
-}
-
-export function RoleSection({ form }: GuidedSectionProps) {
-  const { value, kind, set } = form;
-  if (kind !== "Role") return null;
-  return (
-    <section className="grid gap-4 rounded-lg border border-border bg-card p-4 md:grid-cols-2">
-      <h3 className="font-medium text-foreground md:col-span-2">RBAC rule</h3>
-      <Field
-        label="API groups"
-        description="Comma-separated; use an empty value for core APIs."
-      >
-        <Input
-          value={commaSeparated(
-            manifestValue(value, ["rules", 0, "apiGroups"]),
-          )}
-          onChange={(event) =>
-            set(
-              ["rules", 0, "apiGroups"],
-              parseCommaSeparated(event.target.value),
-            )
-          }
-        />
-      </Field>
-      <Field
-        label="Resources"
-        description="Comma-separated Kubernetes resources."
-      >
-        <Input
-          value={commaSeparated(
-            manifestValue(value, ["rules", 0, "resources"]),
-          )}
-          onChange={(event) =>
-            set(
-              ["rules", 0, "resources"],
-              parseCommaSeparated(event.target.value),
-            )
-          }
-        />
-      </Field>
-      <Field
-        label="Verbs"
-        description="Comma-separated verbs; avoid wildcards."
-      >
-        <Input
-          value={commaSeparated(manifestValue(value, ["rules", 0, "verbs"]))}
-          onChange={(event) =>
-            set(["rules", 0, "verbs"], parseCommaSeparated(event.target.value))
-          }
-        />
-      </Field>
     </section>
   );
 }

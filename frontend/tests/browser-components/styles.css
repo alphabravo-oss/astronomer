@@ -1,0 +1,3 @@
+@import "../../src/styles/globals.css";
+/* This separate Vite root must scan the actual shared component classes. */
+@source "../../src";

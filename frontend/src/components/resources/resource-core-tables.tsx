@@ -15,7 +15,7 @@ import type { PodSort } from "@/lib/api/workloads";
 import { useNavigate } from "@tanstack/react-router";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
 import { ActionButton } from "@/components/ui/action-button";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ResourceActionMenu } from "./resource-action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Column } from "@/components/ui/data-table";
 import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
@@ -39,7 +39,7 @@ import {
   nameColumn,
 } from "@/components/resources/resource-table-primitives";
 import { k8sResourcePath } from "@/lib/k8s-paths";
-import { pageRowCount } from "@/lib/api/pagination";
+import { pageTableCount } from "@/lib/api/pagination";
 import {
   permissionDeniedReason,
   toastPermissionDenied,
@@ -142,7 +142,11 @@ export function NodesTable({ clusterId }: { clusterId: string }) {
         accessor: (row) => {
           const isCordonable = row.status !== "SchedulingDisabled";
           return (
-            <ActionMenu
+            <ResourceActionMenu
+              clusterId={clusterId}
+              resourceType={"nodes"}
+              row={row}
+              permissions={permissions}
               items={[
                 {
                   label: "View YAML",
@@ -184,13 +188,7 @@ export function NodesTable({ clusterId }: { clusterId: string }) {
         align: "center" as const,
       },
     ],
-    [
-      handleCordon,
-      handleUncordon,
-      permissions.manage,
-      permissions.read,
-      permissions.update,
-    ],
+    [handleCordon, handleUncordon, clusterId, permissions],
   );
 
   return (
@@ -294,7 +292,11 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
         header: "",
         accessor: (row) => (
           <StopRowClick>
-            <ActionMenu
+            <ResourceActionMenu
+              clusterId={clusterId}
+              resourceType={"namespaces"}
+              row={row}
+              permissions={permissions}
               items={[
                 {
                   label: "View YAML",
@@ -335,7 +337,7 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
         align: "center" as const,
       },
     ],
-    [clusterId, permissions.delete, permissions.read, permissions.update],
+    [clusterId, permissions],
   );
 
   return (
@@ -471,22 +473,32 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
 }
 
 export function EventsTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useClusterEvents(clusterId, { limit: 200 });
+  const query = useClusterEvents(clusterId, { limit: 200 });
   return (
-    <ExplorerDataTable
-      clusterId={clusterId}
-      resourceType="events"
-      data={data || []}
-      columns={eventColumns}
-      keyExtractor={(r) => r.id}
-      searchPlaceholder="Search events..."
-      loading={isLoading}
-      emptyState={{
-        title: "No events found",
-        description: "New observations will appear here as they are reported.",
-      }}
-      namespaceAccessor={(row) => row.involvedObject.namespace}
-    />
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Recent window: up to 200 cluster events. Filters apply only to this
+        window; this is not complete event history.
+      </p>
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType="events"
+        data={query.isError ? [] : query.data || []}
+        columns={eventColumns}
+        keyExtractor={(r) => r.id}
+        searchPlaceholder="Filter recent events..."
+        loading={query.isLoading}
+        isError={query.isError}
+        error={query.error}
+        onRetry={() => query.refetch()}
+        emptyState={{
+          title: "No events found",
+          description:
+            "New observations will appear here as they are reported.",
+        }}
+        namespaceAccessor={(row) => row.involvedObject.namespace}
+      />
+    </div>
   );
 }
 
@@ -576,65 +588,21 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
         key: "actions",
         header: "",
         accessor: (row) => (
-          <StopRowClick>
-            <ActionMenu
-              items={[
-                {
-                  label: "Execute Shell",
-                  icon: <Terminal className="h-3.5 w-3.5" />,
-                  onClick: () => openExec(row),
-                  disabled:
-                    row.phase !== "Running" || !permissions.exec.allowed,
-                  disabledReason:
-                    row.phase !== "Running"
-                      ? "Pod must be running."
-                      : permissionDeniedReason(permissions.exec),
-                },
-                {
-                  label: "View Logs",
-                  icon: <FileText className="h-3.5 w-3.5" />,
-                  onClick: () => openLogs(row),
-                  disabled: !permissions.logs.allowed,
-                  disabledReason: permissionDeniedReason(permissions.logs),
-                },
-                {
-                  label: "View YAML",
-                  icon: <Code className="h-3.5 w-3.5" />,
-                  onClick: () =>
-                    setYamlTarget({
-                      path: k8sResourcePath("pods", row.name, row.namespace),
-                      title: `Pod: ${row.namespace}/${row.name}`,
-                    }),
-                  disabled: !permissions.read.allowed,
-                  disabledReason: permissionDeniedReason(permissions.read),
-                  separator: true,
-                },
-                {
-                  label: "Delete",
-                  icon: <Trash2 className="h-3.5 w-3.5" />,
-                  onClick: () => setDeleteTarget(row),
-                  variant: "destructive",
-                  disabled: !permissions.delete.allowed,
-                  disabledReason: permissionDeniedReason(permissions.delete),
-                  separator: true,
-                },
-              ]}
-            />
-          </StopRowClick>
+          <PodRowActions
+            clusterId={clusterId}
+            row={row}
+            permissions={permissions}
+            openExec={openExec}
+            openLogs={openLogs}
+            setYamlTarget={setYamlTarget}
+            setDeleteTarget={setDeleteTarget}
+          />
         ),
         sortable: false,
         align: "center",
       },
     ],
-    [
-      clusterId,
-      openExec,
-      openLogs,
-      permissions.delete,
-      permissions.exec,
-      permissions.logs,
-      permissions.read,
-    ],
+    [clusterId, openExec, openLogs, permissions],
   );
   const sortableKeys = new Set([
     "name",
@@ -668,7 +636,7 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
         searchPlaceholder="Search pods..."
         pageSize={pageSize}
         serverSide={{
-          rowCount: pageRowCount(podsQuery.data),
+          ...pageTableCount(podsQuery.data),
           pagination: { pageIndex, pageSize },
           onPaginationChange: (next) => setPageIndex(next.pageIndex),
           search: {
@@ -780,5 +748,74 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
         />
       )}
     </>
+  );
+}
+
+function PodRowActions({
+  clusterId,
+  row,
+  permissions,
+  openExec,
+  openLogs,
+  setYamlTarget,
+  setDeleteTarget,
+}: {
+  clusterId: string;
+  row: Pod;
+  permissions: ReturnType<typeof useClusterResourcePermissions>;
+  openExec: (pod: Pod) => void;
+  openLogs: (pod: Pod) => void;
+  setYamlTarget: (target: { path: string; title: string }) => void;
+  setDeleteTarget: (pod: Pod) => void;
+}) {
+  return (
+    <StopRowClick>
+      <ResourceActionMenu
+        clusterId={clusterId}
+        resourceType={"pods"}
+        row={row}
+        permissions={permissions}
+        items={[
+          {
+            label: "Execute Shell",
+            icon: <Terminal className="h-3.5 w-3.5" />,
+            onClick: () => openExec(row),
+            disabled: row.phase !== "Running" || !permissions.exec.allowed,
+            disabledReason:
+              row.phase !== "Running"
+                ? "Pod must be running."
+                : permissionDeniedReason(permissions.exec),
+          },
+          {
+            label: "View Logs",
+            icon: <FileText className="h-3.5 w-3.5" />,
+            onClick: () => openLogs(row),
+            disabled: !permissions.logs.allowed,
+            disabledReason: permissionDeniedReason(permissions.logs),
+          },
+          {
+            label: "View YAML",
+            icon: <Code className="h-3.5 w-3.5" />,
+            onClick: () =>
+              setYamlTarget({
+                path: k8sResourcePath("pods", row.name, row.namespace),
+                title: `Pod: ${row.namespace}/${row.name}`,
+              }),
+            disabled: !permissions.read.allowed,
+            disabledReason: permissionDeniedReason(permissions.read),
+            separator: true,
+          },
+          {
+            label: "Delete",
+            icon: <Trash2 className="h-3.5 w-3.5" />,
+            onClick: () => setDeleteTarget(row),
+            variant: "destructive",
+            disabled: !permissions.delete.allowed,
+            disabledReason: permissionDeniedReason(permissions.delete),
+            separator: true,
+          },
+        ]}
+      />
+    </StopRowClick>
   );
 }

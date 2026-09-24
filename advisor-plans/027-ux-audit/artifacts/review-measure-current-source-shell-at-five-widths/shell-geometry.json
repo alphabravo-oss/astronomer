@@ -1,0 +1,427 @@
+[
+  {
+    "width": 390,
+    "controls": [
+      {
+        "label": "Open navigation",
+        "x": 12,
+        "right": 44,
+        "width": 32,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Smoke East",
+        "x": 52,
+        "right": 84,
+        "width": 32,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Project scope: All projects",
+        "x": 52,
+        "right": 102,
+        "width": 50,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Namespace scope: All namespaces",
+        "x": 102,
+        "right": 214,
+        "width": 112,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Open cluster shell for Smoke East (Ctrl+`)",
+        "x": 214,
+        "right": 250,
+        "width": 36,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Kubeconfig",
+        "x": 258,
+        "right": 391,
+        "width": 133,
+        "visible": true,
+        "outside": true
+      },
+      {
+        "label": "Apply one or more Kubernetes manifests to this cluster",
+        "x": 399,
+        "right": 484,
+        "width": 85,
+        "visible": true,
+        "outside": true
+      },
+      {
+        "label": "Theme: light",
+        "x": 492,
+        "right": 524,
+        "width": 32,
+        "visible": true,
+        "outside": true
+      },
+      {
+        "label": "Notifications",
+        "x": 532,
+        "right": 564,
+        "width": 32,
+        "visible": true,
+        "outside": true
+      },
+      {
+        "label": "User menu",
+        "x": 572,
+        "right": 628,
+        "width": 56,
+        "visible": true,
+        "outside": true
+      }
+    ]
+  },
+  {
+    "width": 412,
+    "controls": [
+      {
+        "label": "Open navigation",
+        "x": 12,
+        "right": 44,
+        "width": 32,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Smoke East",
+        "x": 52,
+        "right": 84,
+        "width": 32,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Project scope: All projects",
+        "x": 52,
+        "right": 102,
+        "width": 50,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Namespace scope: All namespaces",
+        "x": 102,
+        "right": 214,
+        "width": 112,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Open cluster shell for Smoke East (Ctrl+`)",
+        "x": 214,
+        "right": 250,
+        "width": 36,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Kubeconfig",
+        "x": 258,
+        "right": 391,
+        "width": 133,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Apply one or more Kubernetes manifests to this cluster",
+        "x": 399,
+        "right": 484,
+        "width": 85,
+        "visible": true,
+        "outside": true
+      },
+      {
+        "label": "Theme: light",
+        "x": 492,
+        "right": 524,
+        "width": 32,
+        "visible": true,
+        "outside": true
+      },
+      {
+        "label": "Notifications",
+        "x": 532,
+        "right": 564,
+        "width": 32,
+        "visible": true,
+        "outside": true
+      },
+      {
+        "label": "User menu",
+        "x": 572,
+        "right": 628,
+        "width": 56,
+        "visible": true,
+        "outside": true
+      }
+    ]
+  },
+  {
+    "width": 768,
+    "controls": [
+      {
+        "label": "Open navigation",
+        "x": 24,
+        "right": 56,
+        "width": 32,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Smoke East",
+        "x": 64,
+        "right": 199,
+        "width": 135,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Project scope: All projects",
+        "x": 64,
+        "right": 118,
+        "width": 54,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Namespace scope: All namespaces",
+        "x": 118,
+        "right": 267,
+        "width": 149,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Open cluster shell for Smoke East (Ctrl+`)",
+        "x": 413,
+        "right": 449,
+        "width": 36,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Kubeconfig",
+        "x": 457,
+        "right": 590,
+        "width": 133,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Apply one or more Kubernetes manifests to this cluster",
+        "x": 598,
+        "right": 683,
+        "width": 85,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Theme: light",
+        "x": 691,
+        "right": 723,
+        "width": 32,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Notifications",
+        "x": 731,
+        "right": 763,
+        "width": 32,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "User menu",
+        "x": 771,
+        "right": 827,
+        "width": 56,
+        "visible": true,
+        "outside": true
+      }
+    ]
+  },
+  {
+    "width": 1024,
+    "controls": [
+      {
+        "label": "Open navigation",
+        "x": 0,
+        "right": 0,
+        "width": 0,
+        "visible": false,
+        "outside": false
+      },
+      {
+        "label": "Smoke East",
+        "x": 264,
+        "right": 399,
+        "width": 135,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Project scope: All projects",
+        "x": 264,
+        "right": 387,
+        "width": 123,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Namespace scope: All namespaces",
+        "x": 387,
+        "right": 536,
+        "width": 149,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Open cluster shell for Smoke East (Ctrl+`)",
+        "x": 682,
+        "right": 718,
+        "width": 36,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Kubeconfig",
+        "x": 726,
+        "right": 859,
+        "width": 133,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Apply one or more Kubernetes manifests to this cluster",
+        "x": 867,
+        "right": 952,
+        "width": 85,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Theme: light",
+        "x": 960,
+        "right": 992,
+        "width": 32,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Notifications",
+        "x": 1000,
+        "right": 1032,
+        "width": 32,
+        "visible": true,
+        "outside": true
+      },
+      {
+        "label": "User menu",
+        "x": 1040,
+        "right": 1096,
+        "width": 56,
+        "visible": true,
+        "outside": true
+      }
+    ]
+  },
+  {
+    "width": 1280,
+    "controls": [
+      {
+        "label": "Open navigation",
+        "x": 0,
+        "right": 0,
+        "width": 0,
+        "visible": false,
+        "outside": false
+      },
+      {
+        "label": "Smoke East",
+        "x": 264,
+        "right": 399,
+        "width": 135,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Project scope: All projects",
+        "x": 390,
+        "right": 513,
+        "width": 123,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Namespace scope: All namespaces",
+        "x": 513,
+        "right": 662,
+        "width": 149,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Open cluster shell for Smoke East (Ctrl+`)",
+        "x": 808,
+        "right": 878,
+        "width": 70,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Kubeconfig",
+        "x": 886,
+        "right": 1019,
+        "width": 133,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Apply one or more Kubernetes manifests to this cluster",
+        "x": 1027,
+        "right": 1112,
+        "width": 85,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Theme: light",
+        "x": 1120,
+        "right": 1152,
+        "width": 32,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "Notifications",
+        "x": 1160,
+        "right": 1192,
+        "width": 32,
+        "visible": true,
+        "outside": false
+      },
+      {
+        "label": "User menu",
+        "x": 1200,
+        "right": 1256,
+        "width": 56,
+        "visible": true,
+        "outside": false
+      }
+    ]
+  }
+]

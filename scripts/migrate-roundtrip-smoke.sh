@@ -25,28 +25,7 @@ done
 latest_name="${UP_FILES[${#UP_FILES[@]}-1]##*/}"
 EXPECTED_VERSION="$((10#${latest_name%%_*}))"
 
-if ! command -v migrate >/dev/null 2>&1 && [[ -x "$(go env GOPATH)/bin/migrate" ]]; then
-  gopath_bin="$(go env GOPATH)/bin"
-  export PATH="${gopath_bin}:$PATH"
-fi
-if ! command -v migrate >/dev/null 2>&1; then
-  echo "installing golang-migrate CLI via go install..."
-  go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.1
-  gopath_bin="$(go env GOPATH)/bin"
-  export PATH="${gopath_bin}:$PATH"
-fi
-
-if [[ -n "${DATABASE_URL:-}" ]]; then
-  echo "migrate all up/latest down/up against supplied DATABASE_URL"
-  migrate -database "$DATABASE_URL" -path internal/db/migrations up
-  [[ "$(migrate -database "$DATABASE_URL" -path internal/db/migrations version 2>/dev/null | awk '{print $1}')" == "$EXPECTED_VERSION" ]]
-  migrate -database "$DATABASE_URL" -path internal/db/migrations down 1
-  migrate -database "$DATABASE_URL" -path internal/db/migrations up 1
-  echo "migrate-roundtrip-smoke: supplied database OK"
-  exit 0
-fi
-
-if ! command -v docker >/dev/null 2>&1; then
+if [[ -z "${DATABASE_URL:-}" ]] && ! command -v docker >/dev/null 2>&1; then
   echo "SKIP: Docker or DATABASE_URL is required for the live round-trip" >&2
   exit 0
 fi
@@ -60,6 +39,21 @@ cleanup() {
   rm -rf "$ARTIFACT_DIR"
 }
 trap cleanup EXIT
+
+# Exercise the shipped, dependency-locked migrator, including its advisory-lock
+# semantics. Never select a different CLI from PATH or install an external one.
+MIGRATE_BIN="$ARTIFACT_DIR/astronomer-migrate"
+go build -trimpath -o "$MIGRATE_BIN" ./cmd/migrator
+
+if [[ -n "${DATABASE_URL:-}" ]]; then
+  echo "migrate all up/latest down/up against supplied DATABASE_URL"
+  "$MIGRATE_BIN" -database "$DATABASE_URL" -path internal/db/migrations up
+  [[ "$("$MIGRATE_BIN" -database "$DATABASE_URL" -path internal/db/migrations version 2>/dev/null | awk '{print $1}')" == "$EXPECTED_VERSION" ]]
+  "$MIGRATE_BIN" -database "$DATABASE_URL" -path internal/db/migrations down 1
+  "$MIGRATE_BIN" -database "$DATABASE_URL" -path internal/db/migrations up 1
+  echo "migrate-roundtrip-smoke: supplied database OK"
+  exit 0
+fi
 
 schema_signature_sql="
 WITH catalog AS (
@@ -110,8 +104,11 @@ run_major() {
   database_url="postgres://astro:astro@${DOCKER_TEST_CONNECT_HOST}:${port}/astro?sslmode=disable"
 
   echo "PostgreSQL ${major}: up"
-  migrate -database "$database_url" -path internal/db/migrations up
+  "$MIGRATE_BIN" -database "$database_url" -path internal/db/migrations up
   [[ "$(docker exec "$container" psql -X -U astro -d astro -Atc 'SELECT version || '"'"'|'"'"' || CASE WHEN dirty THEN '"'"'t'"'"' ELSE '"'"'f'"'"' END FROM schema_migrations')" == "${EXPECTED_VERSION}|f" ]]
+  echo "PostgreSQL ${major}: latest-schema durable JSON governance"
+  docker exec -i "$container" psql -X -q -U astro -d astro \
+    < scripts/testdata/durable-json-governance-postgres-smoke.sql
   echo "PostgreSQL ${major}: transactional audit outbox rollback/replay smoke"
   docker exec -i "$container" psql -X -q -U astro -d astro \
     < scripts/testdata/audit-outbox-postgres-smoke.sql
@@ -123,19 +120,21 @@ run_major() {
 
   echo "PostgreSQL ${major}: every reversible down/up edge"
   for ((version=EXPECTED_VERSION; version>=1; version--)); do
-    migrate -database "$database_url" -path internal/db/migrations down 1
+    "$MIGRATE_BIN" -database "$database_url" -path internal/db/migrations down 1
     if (( version > 1 )); then
       [[ "$(docker exec "$container" psql -X -U astro -d astro -Atc 'SELECT version || '"'"'|'"'"' || CASE WHEN dirty THEN '"'"'t'"'"' ELSE '"'"'f'"'"' END FROM schema_migrations')" == "$((version-1))|f" ]]
     fi
-    migrate -database "$database_url" -path internal/db/migrations up 1
+    "$MIGRATE_BIN" -database "$database_url" -path internal/db/migrations up 1
     [[ "$(docker exec "$container" psql -X -U astro -d astro -Atc 'SELECT version || '"'"'|'"'"' || CASE WHEN dirty THEN '"'"'t'"'"' ELSE '"'"'f'"'"' END FROM schema_migrations')" == "${version}|f" ]]
-    migrate -database "$database_url" -path internal/db/migrations down 1
+    "$MIGRATE_BIN" -database "$database_url" -path internal/db/migrations down 1
   done
   remaining_tables="$(docker exec "$container" psql -X -U astro -d astro -Atc "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename <> 'schema_migrations'")"
   [[ "$remaining_tables" == "0" ]]
 
   echo "PostgreSQL ${major}: re-apply"
-  migrate -database "$database_url" -path internal/db/migrations up
+  "$MIGRATE_BIN" -database "$database_url" -path internal/db/migrations up
+  docker exec -i "$container" psql -X -q -U astro -d astro \
+    < scripts/testdata/durable-json-governance-postgres-smoke.sql
   second_schema="$(docker exec "$container" psql -X -U astro -d astro -Atc "$schema_signature_sql")"
   second_seeds="$(docker exec "$container" psql -X -U astro -d astro -Atc "$seed_signature_sql")"
   if [[ "$first_schema" != "$second_schema" ]]; then

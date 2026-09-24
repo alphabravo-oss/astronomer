@@ -64,13 +64,20 @@ export function SidebarRailGroup({
   pathname,
   counts,
   stars,
+  onOpenChange,
 }: {
   group: NavGroup;
   pathname: string;
   counts?: Record<string, number>;
   stars?: StarredNavControls;
+  onOpenChange?: (label: string, open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    onOpenChange?.(group.label, true);
+    return () => onOpenChange?.(group.label, false);
+  }, [open, group.label, onOpenChange]);
   const contentId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const flyoutRef = useRef<HTMLElement>(null);

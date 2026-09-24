@@ -8,10 +8,8 @@ import {
 import { YamlEditor } from "@/components/ui/yaml-editor";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  GuidedResourceForm,
-  type KubernetesManifest,
-} from "@/components/resources/guided-resource-form";
+import { LazyGuidedResourceForm as GuidedResourceForm } from "@/components/resources/lazy-guided-resource-form";
+import type { KubernetesManifest } from "@/components/resources/guided-resource-model";
 import { Loader2, Pencil, Eye, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { k8sGetYaml } from "@/lib/api/kubernetes-proxy";

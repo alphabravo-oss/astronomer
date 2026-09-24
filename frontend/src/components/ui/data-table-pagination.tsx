@@ -9,6 +9,8 @@ interface DataTablePaginationProps<T extends RowData> {
   pageSize: number;
   pageCount: number;
   rowCount: number;
+  rowCountIsLowerBound?: boolean;
+  countUnavailable?: boolean;
   currentRowCount: number;
 }
 
@@ -18,9 +20,11 @@ export function DataTablePagination<T extends RowData>({
   pageSize,
   pageCount,
   rowCount,
+  rowCountIsLowerBound = false,
+  countUnavailable = false,
   currentRowCount,
 }: DataTablePaginationProps<T>) {
-  if (pageCount <= 1) return null;
+  if (pageCount <= 1 && page === 0) return null;
 
   const firstPage = Math.max(0, Math.min(page - 2, pageCount - 5));
   const visiblePages = Array.from(
@@ -31,8 +35,16 @@ export function DataTablePagination<T extends RowData>({
   return (
     <div className="flex items-center justify-between text-sm">
       <span className="text-muted-foreground">
-        Showing {rowCount === 0 ? 0 : page * pageSize + 1}-
-        {page * pageSize + currentRowCount} of {rowCount.toLocaleString()}
+        {countUnavailable ? (
+          "Row count unavailable"
+        ) : (
+          <>
+            Showing {currentRowCount === 0 ? 0 : page * pageSize + 1}-
+            {currentRowCount === 0 ? 0 : page * pageSize + currentRowCount} of{" "}
+            {rowCountIsLowerBound ? "at least " : ""}
+            {rowCount.toLocaleString()}
+          </>
+        )}
       </span>
       <div className="flex items-center gap-1">
         <button

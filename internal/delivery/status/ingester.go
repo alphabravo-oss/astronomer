@@ -334,7 +334,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 }
 
 func sanitizeConditions(input []protocol.DeliveryCondition) []protocol.DeliveryCondition {
-	result := append([]protocol.DeliveryCondition(nil), input...)
+	result := append([]protocol.DeliveryCondition{}, input...)
 	for index := range result {
 		result[index].Message = redaction.String(result[index].Message)
 	}

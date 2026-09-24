@@ -1,3 +1,4 @@
+import { pageTableCount } from "@/lib/api/pagination";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,8 +17,6 @@ import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
   ErrorMessage,
-  RedirectDeliveryList,
-  deliveryPageRowCount,
   inputClass,
   textareaClass,
   useDeliveryPageIndex,
@@ -254,7 +253,7 @@ export function SourcesPage() {
               </Select>
             }
             serverSide={{
-              rowCount: deliveryPageRowCount(query.data),
+              ...pageTableCount(query.data),
               pagination: { pageIndex, pageSize },
               onPaginationChange: (next) => setPageIndex(next.pageIndex),
             }}
@@ -777,7 +776,5 @@ export const Route = createFileRoute("/dashboard/delivery/sources/")({
       ...(status ? { status } : {}),
     };
   },
-  component: function DeliverySourcesRedirect() {
-    return <RedirectDeliveryList tab="sources" />;
-  },
+  component: SourcesPage,
 });

@@ -61,6 +61,7 @@ describe("CIS generated API boundary", () => {
   });
 
   it("maps scan pages and finding fields without global camelization", async () => {
+    const signal = new AbortController().signal;
     vi.mocked(generated.getSecurityScans).mockResolvedValueOnce({
       data: [scanWire],
       pagination: {
@@ -71,7 +72,9 @@ describe("CIS generated API boundary", () => {
         next_offset: 60,
       },
     });
-    await expect(getCISScans({ page: 3, pageSize: 20 })).resolves.toEqual(
+    await expect(
+      getCISScans({ page: 3, pageSize: 20 }, signal),
+    ).resolves.toEqual(
       expect.objectContaining({
         pagination: {
           total: 61,
@@ -93,6 +96,7 @@ describe("CIS generated API boundary", () => {
     );
     expect(generated.getSecurityScans).toHaveBeenCalledWith({
       query: { limit: 20, offset: 40 },
+      signal,
     });
   });
 

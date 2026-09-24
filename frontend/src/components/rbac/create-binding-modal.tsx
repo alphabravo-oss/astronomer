@@ -4,19 +4,17 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { PrincipalPicker } from "@/components/rbac/principal-picker";
 import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
+import { RemoteProjectPicker } from "@/components/projects/remote-project-picker";
+import { RemoteRolePicker } from "./remote-role-picker";
 import { cn } from "@/lib/utils";
 import { toastError } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
 import {
-  useClusterRoles,
   useApplyProjectRoleTemplate,
   useCreateAccessBinding,
-  useGlobalRoles,
-  useProjectRoles,
   useRoleTemplates,
 } from "@/lib/hooks/rbac";
-import { useProjects } from "@/lib/hooks/projects";
-import { isValidNamespace, projectLabel, roleTitle } from "./binding-utils";
+import { isValidNamespace } from "./binding-utils";
 
 function bindingDefaults(fixedScope?: { kind: "project"; projectId: string }) {
   return {
@@ -37,15 +35,10 @@ export function CreateClusterBindingModal({
   onClose: () => void;
   fixedScope?: { kind: "project"; projectId: string };
 }) {
-  const { data: globalRoles } = useGlobalRoles();
-  const { data: clusterRoles } = useClusterRoles();
-  const { data: projectRoles } = useProjectRoles();
-  const { data: templates } = useRoleTemplates();
-  const { data: projectsData } = useProjects({ pageSize: 200 });
+  const templatesQuery = useRoleTemplates();
+  const templates = templatesQuery.isError ? [] : templatesQuery.data;
   const createBinding = useCreateAccessBinding();
   const applyTemplate = useApplyProjectRoleTemplate();
-
-  const projects = projectsData?.data || [];
 
   const form = useAppForm({
     defaultValues: bindingDefaults(fixedScope),
@@ -109,13 +102,6 @@ export function CreateClusterBindingModal({
     if (s.values.scope === "project") return !!s.values.projectId;
     return true;
   });
-
-  const roles =
-    scope === "global"
-      ? globalRoles || []
-      : scope === "project"
-        ? projectRoles || []
-        : clusterRoles || [];
 
   return (
     <ModalShell
@@ -211,24 +197,28 @@ export function CreateClusterBindingModal({
         </label>
         <form.Field name="roleId">
           {(field) => (
-            <Select
-              id="field-b53e75b3-151"
-              name={field.name}
-              value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value)}
-              onBlur={field.handleBlur}
-            >
-              <option value="">Select a {scope} role…</option>
-              {roles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {roleTitle(r)}
-                </option>
-              ))}
+            <div className="space-y-2">
+              <RemoteRolePicker
+                id="field-b53e75b3-151"
+                key={scope}
+                scope={scope}
+                value={field.state.value}
+                onChange={field.handleChange}
+              />
               {scope === "project" &&
                 (templates ?? []).filter(
                   (template) => template.scope === "project",
                 ).length > 0 && (
-                  <optgroup label="Curated templates">
+                  <Select
+                    aria-label="Curated project template"
+                    value={
+                      field.state.value.startsWith("template:")
+                        ? field.state.value
+                        : ""
+                    }
+                    onChange={(event) => field.handleChange(event.target.value)}
+                  >
+                    <option value="">Or select a curated template…</option>
                     {(templates ?? [])
                       .filter((template) => template.scope === "project")
                       .map((template) => (
@@ -239,9 +229,9 @@ export function CreateClusterBindingModal({
                           {template.displayName} ({template.riskLevel} risk)
                         </option>
                       ))}
-                  </optgroup>
+                  </Select>
                 )}
-            </Select>
+            </div>
           )}
         </form.Field>
       </div>
@@ -309,20 +299,11 @@ export function CreateClusterBindingModal({
           </label>
           <form.Field name="projectId">
             {(field) => (
-              <Select
+              <RemoteProjectPicker
                 id="field-b53e75b3-217"
-                name={field.name}
                 value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-                onBlur={field.handleBlur}
-              >
-                <option value="">Select a project…</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {projectLabel(p)}
-                  </option>
-                ))}
-              </Select>
+                onChange={field.handleChange}
+              />
             )}
           </form.Field>
         </div>

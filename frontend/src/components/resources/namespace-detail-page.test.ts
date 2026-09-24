@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildGenericNamespaceRows } from "@/components/resources/namespace-detail-page";
+import { buildGenericNamespaceRows } from "@/components/resources/namespace-resource-rows";
 import type { GenericK8sResource } from "@/types";
 
 const resource = (name: string, namespace: string): GenericK8sResource => ({

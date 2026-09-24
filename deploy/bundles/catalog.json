@@ -3,6 +3,54 @@
   "release": "v1.2.0",
   "components": [
     {
+      "slug": "trivy-operator",
+      "name": "Trivy Image Scanning",
+      "description": "Workload image vulnerability reports for Image Scans and fleet security views.",
+      "default_enabled": true,
+      "source": {
+        "kind": "helm_http",
+        "url": "https://aquasecurity.github.io/helm-charts",
+        "chart": "trivy-operator",
+        "version": "0.36.0",
+        "chart_digest": "sha256:bb0c44bc70e3158cc63ea49d7458ede6db5b6c932f6585a2d787eb9712fd4288"
+      },
+      "scope": "platform",
+      "target_namespace": "astronomer-trivy-system",
+      "release_name": "trivy-operator",
+      "images": [
+        "mirror.gcr.io/aquasec/trivy-operator@sha256:0e4f11e9632f34097f259f3a59d34bab4eea8cee9aef510d15cdfc7481d5e49c",
+        "mirror.gcr.io/aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969"
+      ],
+      "values": {
+        "resources": {"requests": {"cpu": "50m", "memory": "128Mi"}, "limits": {"cpu": "500m", "memory": "512Mi"}},
+        "image": {"tag": "0.34.0@sha256:0e4f11e9632f34097f259f3a59d34bab4eea8cee9aef510d15cdfc7481d5e49c"},
+        "operator": {
+          "vulnerabilityScannerEnabled": true,
+          "sbomGenerationEnabled": false,
+          "configAuditScannerEnabled": false,
+          "rbacAssessmentScannerEnabled": false,
+          "infraAssessmentScannerEnabled": false,
+          "clusterComplianceEnabled": false,
+          "scanJobsConcurrentLimit": 1,
+          "scanJobTimeout": "5m",
+          "scannerReportTTL": "24h"
+        },
+        "trivy": {
+          "image": {"tag": "0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969"},
+          "dbRegistry": "ghcr.io",
+          "dbRepository": "aquasecurity/trivy-db",
+          "javaDbRegistry": "ghcr.io",
+          "javaDbRepository": "aquasecurity/trivy-java-db",
+          "ignoreUnfixed": false
+        }
+      },
+      "requirements": {
+        "kubernetes_minimum": "1.33.0",
+        "kubernetes_maximum": "1.35.99",
+        "capabilities": ["delivery.source.helm_http", "delivery.renderer.helm", "delivery.scope.platform"]
+      }
+    },
+    {
       "slug": "kube-state-metrics",
       "name": "kube-state-metrics",
       "description": "Cluster inventory metrics used by Astronomer dashboards.",

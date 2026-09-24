@@ -36,6 +36,8 @@ import {
 } from "lucide-react";
 
 import { ActionButton } from "@/components/ui/action-button";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
+import { RemoteStoragePicker } from "@/components/backups/remote-storage-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PermissionState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -73,20 +75,10 @@ export interface StackLifecyclePermissions {
   uninstall: PermissionDecision;
 }
 
-export interface StackOption {
-  id: string;
-  label: string;
-  hint?: string;
-}
-
 export interface StackLifecyclePanelProps {
   target: MonitoringStackTarget;
   spec: StackFamilySpec;
   permissions: StackLifecyclePermissions;
-  /** Options for `cluster` fields. Supplied by the page, which owns the fetch. */
-  clusterOptions?: StackOption[];
-  /** Options for `storageConfig` fields (backup storage configs). */
-  storageOptions?: StackOption[];
   /** Applied to fields the recorded state leaves empty, e.g. the local cluster. */
   seedOverrides?: Record<string, string>;
   className?: string;
@@ -103,8 +95,6 @@ export function StackLifecyclePanel({
   target,
   spec,
   permissions,
-  clusterOptions,
-  storageOptions,
   seedOverrides,
   className,
 }: StackLifecyclePanelProps) {
@@ -318,8 +308,6 @@ export function StackLifecyclePanel({
                   field={field}
                   value={values[field.name] ?? ""}
                   onChange={(next) => setField(field.name, next)}
-                  clusterOptions={clusterOptions}
-                  storageOptions={storageOptions}
                 />
               ))}
             </div>
@@ -603,14 +591,10 @@ function StackFieldControl({
   field,
   value,
   onChange,
-  clusterOptions,
-  storageOptions,
 }: {
   field: StackField;
   value: string;
   onChange: (next: string) => void;
-  clusterOptions?: StackOption[];
-  storageOptions?: StackOption[];
 }) {
   const label = (
     <span className="flex items-center gap-1.5 text-xs font-medium text-foreground">
@@ -678,30 +662,22 @@ function StackFieldControl({
     );
   }
 
-  const options =
-    field.kind === "cluster"
-      ? clusterOptions
-      : field.kind === "storageConfig"
-        ? storageOptions
-        : undefined;
-
   return (
-    <label className="block min-w-0">
+    <div className="block min-w-0">
       {label}
-      {options && options.length > 0 ? (
-        <select
+      {field.kind === "cluster" ? (
+        <RemoteClusterPicker
           value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className={cn(inputClass, "mt-1")}
-          aria-label={field.label}
-        >
-          <option value="">{field.required ? "Select…" : "None"}</option>
-          {options.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          onChange={onChange}
+          ariaLabel={field.label}
+          className="mt-1"
+        />
+      ) : field.kind === "storageConfig" ? (
+        <RemoteStoragePicker
+          value={value}
+          onChange={onChange}
+          label={field.label}
+        />
       ) : (
         <input
           type={field.kind === "number" ? "number" : "text"}
@@ -717,6 +693,6 @@ function StackFieldControl({
           {field.help}
         </span>
       )}
-    </label>
+    </div>
   );
 }

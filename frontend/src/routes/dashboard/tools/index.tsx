@@ -2,11 +2,15 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { Server } from "lucide-react";
 
-import { DataTable, type Column } from "@/components/ui/data-table";
+import {
+  DataTable,
+  type Column,
+  type DataTableProps,
+} from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
-import { useClusters } from "@/lib/hooks/clusters";
+import { useClusterEstateTable } from "@/lib/hooks/cluster-estate-table";
 import { useClusterToolsStatus, useTools } from "@/lib/hooks/tools";
 import { normalizeToolStatus } from "@/lib/tool-status";
 import type { Cluster, ClusterTool, ToolStatus } from "@/types";
@@ -43,7 +47,10 @@ function ToolStatusCell({
 }) {
   const statusQuery = useClusterToolsStatus(clusterId);
   const status = normalizeToolStatus(
-    statusQuery.data?.find((item) => item.slug === tool.slug)?.status,
+    statusQuery.isError || !statusQuery.data
+      ? "unknown"
+      : (statusQuery.data.find((item) => item.slug === tool.slug)?.status ??
+          "unknown"),
   );
   const working = ["installing", "upgrading", "uninstalling"].includes(status);
 
@@ -78,9 +85,11 @@ function ToolStatusCell({
 function ManagedToolsTable({
   clusters,
   tools,
+  serverSide,
 }: {
   clusters: Cluster[];
   tools: ClusterTool[];
+  serverSide: DataTableProps<Cluster>["serverSide"];
 }) {
   const navigate = useNavigate();
   const columns = useMemo<Column<Cluster>[]>(
@@ -126,6 +135,8 @@ function ManagedToolsTable({
       columns={columns}
       keyExtractor={(cluster) => cluster.id}
       persistKey="estate-tools"
+      serverSide={serverSide}
+      pageSize={serverSide?.pagination.pageSize}
       searchPlaceholder="Filter clusters…"
       onRowClick={(cluster) =>
         void navigate({
@@ -138,7 +149,7 @@ function ManagedToolsTable({
 }
 
 function ManagedToolsPage() {
-  const clustersQuery = useClusters({ pageSize: 100 });
+  const { query: clustersQuery, serverSide } = useClusterEstateTable();
   const toolsQuery = useTools();
 
   return (
@@ -150,7 +161,11 @@ function ManagedToolsPage() {
       <QueryStates
         query={clustersQuery}
         permission="clusters:read"
-        isEmpty={(page) => page.data.length === 0}
+        isEmpty={(page) =>
+          page.data.length === 0 &&
+          !serverSide.search.value &&
+          serverSide.pagination.pageIndex === 0
+        }
         empty={
           <EmptyState
             icon={Server}
@@ -177,7 +192,11 @@ function ManagedToolsPage() {
             }
           >
             {(tools) => (
-              <ManagedToolsTable clusters={page.data} tools={tools} />
+              <ManagedToolsTable
+                clusters={page.data}
+                tools={tools}
+                serverSide={serverSide}
+              />
             )}
           </QueryStates>
         )}

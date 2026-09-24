@@ -3,6 +3,21 @@ import type {
   ColumnVisibilityState,
 } from "@tanstack/react-table";
 
+export function serverNavigationRowCount(server: {
+  rowCount: number;
+  rowCountIsLowerBound?: boolean;
+  pagination: { pageIndex: number; pageSize: number };
+}): number {
+  // A short page can still advertise continuation. Do not turn its lower
+  // bound into a disabled Next button, or display this navigation sentinel.
+  return server.rowCountIsLowerBound
+    ? Math.max(
+        server.rowCount,
+        (server.pagination.pageIndex + 1) * server.pagination.pageSize + 1,
+      )
+    : server.rowCount;
+}
+
 export interface SortableColumn<T> {
   accessor: (row: T) => unknown;
   sortAccessor?: (row: T) => string | number;

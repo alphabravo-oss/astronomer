@@ -27,3 +27,26 @@ describe("buildClusterEditRequest", () => {
     });
   });
 });
+
+it("persists scanner opt-out while preserving other cluster annotations", () => {
+  const input = buildClusterEditRequest({
+    displayName: "Remote",
+    environment: "development",
+    description: "",
+    apiServerUrl: "",
+    caCertificate: "",
+    badgeText: "",
+    badgeColor: "slate",
+    imageScanning: {
+      enabled: false,
+      annotations: {
+        "example.com/owner": "ops",
+        "astronomer.io/image-scanning": "enabled",
+      },
+    },
+  });
+  expect(input.annotations).toEqual({
+    "example.com/owner": "ops",
+    "astronomer.io/image-scanning": "disabled",
+  });
+});

@@ -5,6 +5,33 @@ wizard plus a server-authoritative phase state machine. This document
 covers the API surface so automation can drive it without going
 through the dashboard.
 
+## GitOps registration intent
+
+`ClusterRegistration` adopts an existing cluster; it does not provision one.
+Nonempty `spec.registries` and `spec.toolPresets` are currently **unsupported**:
+preview, parsing, and apply reject them explicitly. The source worker validates
+all documents before applying registrations, so an unsupported preset also
+prevents otherwise valid registrations in that source from being partially
+applied. This replaces the previous warning-only behavior.
+
+Remove these fields and configure registries and tools through their canonical
+APIs or console workflows. Existing registrations are not removed merely
+because a source fails validation. Durable preset reconciliation is not part of
+this contract; a successful registration sync does not promise tool installation.
+
+## Interpreting agent observations
+
+Agents are installed for full cluster management. User RBAC controls access to
+resources and actions. Historical profile observations are not authorization
+decisions or measurements of the agent's live Kubernetes permissions.
+
+System-component inventories retain aggregate counts and disclose when resource
+observations are truncated to 128 entries per component. Reported multiple
+replicas are not proof of zone/node separation or fault tolerance. Distribution
+version strings and counts of Gateway objects are not high-availability evidence.
+Certificate observations show cert-manager's reported expiry and planned renewal
+timestamps only; they do not read private keys or prove successful renewal.
+
 ## Phases
 
 ```
@@ -111,28 +138,20 @@ curl -fsSL -X POST .../clusters/$cluster_id/registration/confirm/
 curl -fsSL -N .../clusters/$cluster_id/registration/events/
 ```
 
-## Agent privilege profile
+## Agent management
 
-The agent manifest supports `viewer`, `operator`, `namespace-viewer`,
-`namespace-operator`, `custom`, and `admin` RBAC profiles. The selected profile
-is stored on the cluster as annotation
-`astronomer.io/agent-privilege-profile` before the manifest is rendered.
-Missing, blank, or invalid values fail closed to `viewer`. `admin` is available
-only through an explicit annotation or profile selection. Existing deployments
-that intentionally relied on the former implicit-admin behavior must set
-`admin` explicitly before upgrading; see the upgrade note in
-[agent-privilege-profiles.md](agent-privilege-profiles.md).
+Registration manifests always install full-management agent permissions. Legacy
+profile fields no longer select an agent mode. User access is controlled by
+Astronomer RBAC. Referenced `AgentProfile` objects can still project install
+image, ServiceAccount name, and pod labels. Existing restricted installations
+need the current manifest reapplied; see
+[agent management and user RBAC](agent-privilege-profiles.md).
 
-Declarative operators can set `Cluster.spec.agent.privilegeProfile` directly or
-set `Cluster.spec.agent.profileRef` to a same-namespace `AgentProfile`.
-Referenced `AgentProfile` objects can also project `install.image`,
-`install.serviceAccountName`, and `install.podLabels` into the rendered
-manifest.
-API automation can set the reserved annotation when creating or updating
-the cluster row, then fetch `/clusters/{id}/manifest/`.
-
-See [agent-privilege-profiles.md](agent-privilege-profiles.md) for the
-feature/profile matrix.
+Trivy installs automatically on remote clusters unless the annotation
+`astronomer.io/image-scanning` is `disabled`, independently of `install_baseline`.
+With the metrics baseline disabled, registration reaches Ready after connection
+and the scanner is installed through the normal delivery workflow once compatible
+Flux inventory arrives. Existing Ready remote clusters are included.
 
 ## Backwards compatibility
 

@@ -12,9 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { useDexConnectors } from "@/components/auth/hooks";
-import { useGlobalRoles } from "@/lib/hooks/rbac";
-import { useClusters } from "@/lib/hooks/clusters";
-import { useProjects } from "@/lib/hooks/projects";
+import { RemoteRolePicker } from "@/components/rbac/remote-role-picker";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
+import { RemoteProjectPicker } from "@/components/projects/remote-project-picker";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { useCreateGroupMapping } from "@/components/settings/hooks";
 import type { GroupScope } from "@/lib/api/settings";
@@ -23,9 +23,6 @@ function NewGroupMappingForm() {
   const navigate = useNavigate();
   const create = useCreateGroupMapping();
   const { data: connectors } = useDexConnectors();
-  const { data: roles } = useGlobalRoles();
-  const { data: clustersData } = useClusters();
-  const { data: projectsData } = useProjects();
 
   const [connector, setConnector] = useState("");
   const [groupName, setGroupName] = useState("");
@@ -58,7 +55,10 @@ function NewGroupMappingForm() {
     <div className="space-y-6">
       <Card radius="xl" padding="lg" className="space-y-4">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor="gm-connector">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="gm-connector"
+          >
             Connector
           </label>
           <Select
@@ -76,7 +76,10 @@ function NewGroupMappingForm() {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor="gm-group">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="gm-group"
+          >
             Group name
           </label>
           <Input
@@ -90,7 +93,10 @@ function NewGroupMappingForm() {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor="gm-scope">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="gm-scope"
+          >
             Scope
           </label>
           <Select
@@ -99,6 +105,7 @@ function NewGroupMappingForm() {
             onChange={(e) => {
               setScope(e.target.value as GroupScope);
               setTarget("");
+              setRole("");
             }}
           >
             <option value="global">Global</option>
@@ -108,43 +115,39 @@ function NewGroupMappingForm() {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor="gm-role">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="gm-role"
+          >
             Role
           </label>
-          <Select id="gm-role" value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="" disabled>
-              Pick a role…
-            </option>
-            {(roles ?? []).map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.displayName} ({r.name})
-              </option>
-            ))}
-          </Select>
+          <RemoteRolePicker
+            key={scope}
+            scope={scope}
+            id="gm-role"
+            value={role}
+            onChange={setRole}
+          />
         </div>
 
         {scope !== "global" && (
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-foreground capitalize">
+            <p className="text-sm font-medium text-foreground capitalize">
               {scope} target
-            </label>
-            <Select value={target} onChange={(e) => setTarget(e.target.value)}>
-              <option value="" disabled>
-                Pick a {scope}…
-              </option>
-              {scope === "cluster" &&
-                (clustersData?.data ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              {scope === "project" &&
-                (projectsData?.data ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.displayName} ({p.name})
-                  </option>
-                ))}
-            </Select>
+            </p>
+            {scope === "cluster" ? (
+              <RemoteClusterPicker
+                value={target}
+                onChange={setTarget}
+                ariaLabel="Cluster target"
+              />
+            ) : (
+              <RemoteProjectPicker
+                value={target}
+                onChange={setTarget}
+                ariaLabel="Project target"
+              />
+            )}
           </div>
         )}
       </Card>
@@ -196,6 +199,8 @@ function NewGroupMappingPage() {
   );
 }
 
-export const Route = createFileRoute("/dashboard/settings/group-mappings/new/")({
-  component: NewGroupMappingPage,
-});
+export const Route = createFileRoute("/dashboard/settings/group-mappings/new/")(
+  {
+    component: NewGroupMappingPage,
+  },
+);

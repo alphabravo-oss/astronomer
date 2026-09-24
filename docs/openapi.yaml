@@ -4470,6 +4470,7 @@ components:
         external_ref_name: {type: string}
         observed_generation: {type: integer, format: int64, minimum: 0}
         agent_privilege_profile:
+          description: Legacy enrollment metadata. Newly rendered agent installations always support full management; user RBAC controls access. This value is not a live permission measurement.
           type: string
           enum:
             - viewer
@@ -5145,6 +5146,7 @@ components:
         channel_name:
           type: string
         privilege_profile:
+          description: Legacy enrollment metadata for diagnostics, not an authorization gate. New installations use full management with user RBAC.
           type: string
           enum:
             - viewer
@@ -20862,6 +20864,10 @@ paths:
         - Agents
       summary: List adopted-cluster agents
       parameters:
+        - name: search
+          in: query
+          description: Case-insensitive cluster name or display-name filter, applied before pagination. Summary distributions describe this page; total_clusters counts all matching clusters.
+          schema: {type: string, maxLength: 200}
         - name: limit
           in: query
           schema:
@@ -30197,7 +30203,7 @@ paths:
         - rbac
       security:
         - bearerJWT: []
-      description: Requires the `rbac` resource `read` permission. Returns a plain array under `data` (not the paginated envelope); `limit`/`offset` page the underlying query.
+      description: Requires the `rbac` resource `read` permission. Returns a paginated envelope with limit/offset continuation metadata.
       parameters:
         - name: limit
           in: query
@@ -30218,7 +30224,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -30372,7 +30378,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -30505,7 +30511,7 @@ paths:
         - rbac
       security:
         - bearerJWT: []
-      description: Requires the `rbac` resource `read` permission. Returns a plain array under `data`. Optionally filter by `cluster_id`.
+      description: Requires the `rbac` resource `read` permission. Returns a paginated envelope. Optionally filter by `cluster_id`.
       parameters:
         - name: cluster_id
           in: query
@@ -30532,7 +30538,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -30698,7 +30704,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -30837,7 +30843,7 @@ paths:
         - rbac
       security:
         - bearerJWT: []
-      description: Requires the `rbac` resource `read` permission. Returns a plain array under `data`. Optionally filter by `project_id`.
+      description: Requires the `rbac` resource `read` permission. Returns a paginated envelope. Optionally filter by `project_id`.
       parameters:
         - name: project_id
           in: query
@@ -30864,7 +30870,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -31036,7 +31042,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array

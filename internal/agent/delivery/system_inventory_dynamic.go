@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -79,7 +80,7 @@ func (p *ClusterProbe) inspectLonghornNodes(ctx context.Context) (protocol.Syste
 		Category: "storage", Owner: "cluster", ManagementMethod: "longhorn",
 		Namespace: "longhorn-system", Kind: "NodeInventory",
 		Health: replicaHealth(total, ready), DesiredReplicas: total, ReadyReplicas: ready,
-		HighAvailability: total > 1, StorageDriver: "driver.longhorn.io",
+		StorageDriver:           "driver.longhorn.io",
 		StorageProvisionedBytes: maximum, StorageUsedBytes: scheduled,
 		Resources: resources,
 		Detail:    fmt.Sprintf("%d Longhorn nodes observed; %d Ready. %d bytes are currently schedulable.", total, ready, available),
@@ -159,7 +160,8 @@ func (p *ClusterProbe) inspectCertificates(ctx context.Context) (protocol.System
 	resources := make([]protocol.SystemResourceObservation, 0, len(items.Items))
 	for index := range items.Items {
 		item := &items.Items[index]
-		isReady := inventoryConditionTrue(item, "Ready")
+		detail, expired := certificateInventoryDetail(item, time.Now())
+		isReady := inventoryConditionTrue(item, "Ready") && !expired
 		if isReady {
 			ready++
 		}
@@ -170,7 +172,7 @@ func (p *ClusterProbe) inspectCertificates(ctx context.Context) (protocol.System
 		resources = append(resources, protocol.SystemResourceObservation{
 			Name: item.GetName(), Namespace: item.GetNamespace(),
 			Group: "cert-manager.io", Version: "v1", Plural: "certificates", Kind: "Certificate",
-			Health: health, Detail: "Certificate Ready condition from cert-manager.",
+			Health: health, Detail: detail,
 		})
 	}
 	total := int32(len(items.Items))
@@ -222,7 +224,7 @@ func (p *ClusterProbe) inspectGateways(ctx context.Context) (protocol.SystemComp
 		ID: "cluster/gateway.networking.k8s.io/gateways", Name: "Gateway API gateways",
 		Category: "gateway", Owner: "cluster", ManagementMethod: "gateway-api",
 		Kind: "GatewayInventory", Health: replicaHealth(total, ready),
-		DesiredReplicas: total, ReadyReplicas: ready, HighAvailability: total > 1,
+		DesiredReplicas: total, ReadyReplicas: ready,
 		Resources: resources,
 		Detail:    fmt.Sprintf("%d Gateways observed; %d programmed, %d listeners, and %d attached routes.", total, ready, listeners, attachedRoutes),
 	}, true

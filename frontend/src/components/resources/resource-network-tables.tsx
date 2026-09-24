@@ -6,7 +6,7 @@ import {
 } from "@/lib/hooks/kubernetes-resources";
 import { useNavigate } from "@tanstack/react-router";
 import { ActionButton } from "@/components/ui/action-button";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ResourceActionMenu } from "./resource-action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import type { Column } from "@/components/ui/data-table";
@@ -52,7 +52,11 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
         header: "",
         accessor: (row) => (
           <StopRowClick>
-            <ActionMenu
+            <ResourceActionMenu
+              clusterId={clusterId}
+              resourceType={"services"}
+              row={row}
+              permissions={permissions}
               items={[
                 {
                   label: "View YAML",
@@ -101,7 +105,7 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
         align: "center" as const,
       },
     ],
-    [clusterId, permissions.delete, permissions.read, permissions.update],
+    [clusterId, permissions],
   );
 
   return (
@@ -208,7 +212,11 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
         header: "",
         accessor: (row) => (
           <StopRowClick>
-            <ActionMenu
+            <ResourceActionMenu
+              clusterId={clusterId}
+              resourceType={"ingresses"}
+              row={row}
+              permissions={permissions}
               items={[
                 {
                   label: "View YAML",
@@ -257,7 +265,7 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
         align: "center" as const,
       },
     ],
-    [clusterId, permissions.delete, permissions.read, permissions.update],
+    [clusterId, permissions],
   );
 
   return (
@@ -367,7 +375,11 @@ export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
         header: "",
         accessor: (row) => (
           <StopRowClick>
-            <ActionMenu
+            <ResourceActionMenu
+              clusterId={clusterId}
+              resourceType={"networkpolicies"}
+              row={row}
+              permissions={permissions}
               items={[
                 {
                   label: "View YAML",
@@ -416,7 +428,7 @@ export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
         align: "center" as const,
       },
     ],
-    [clusterId, permissions.delete, permissions.read, permissions.update],
+    [clusterId, permissions],
   );
 
   return (

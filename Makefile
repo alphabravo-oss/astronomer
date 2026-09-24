@@ -190,6 +190,8 @@ $(LOCAL_CI_BIN): tools/local-ci/package.json tools/local-ci/package-lock.json
 	npm ci --prefix tools/local-ci
 
 local-ci-install: $(LOCAL_CI_BIN) ## Install the lockfile-pinned Local CI runner
+	node tools/local-ci/apply-runner-patch.mjs
+	npm test --prefix tools/local-ci
 
 local-ci-pr: local-ci-install ## Run the complete pull-request workflow locally before pushing
 	AI_AGENT=1 LOCAL_CI_WORKING_DIR="$(LOCAL_CI_WORKING_DIR)" $(LOCAL_CI_BIN) run \

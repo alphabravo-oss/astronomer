@@ -1,5 +1,9 @@
 import { Trash2 } from "lucide-react";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import {
+  DataTable,
+  type Column,
+  type DataTableProps,
+} from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { ActionButton } from "@/components/ui/action-button";
 import { formatRelativeTime } from "@/lib/utils";
@@ -32,6 +36,7 @@ interface BindingsTabProps {
   permission?: string;
   onRetry: () => void;
   onRevoke: (binding: AccessBinding) => void;
+  serverSide?: DataTableProps<AccessBinding>["serverSide"];
 }
 
 export function BindingsTab({
@@ -48,6 +53,7 @@ export function BindingsTab({
   permission = "rbac:read",
   onRetry,
   onRevoke,
+  serverSide,
 }: BindingsTabProps) {
   const roleName = (binding: AccessBinding) => {
     const roles =
@@ -130,8 +136,18 @@ export function BindingsTab({
 
   return (
     <DataTable
-      data={bindings}
-      columns={columns}
+      data={isError ? [] : bindings}
+      columns={
+        serverSide
+          ? columns.map((column) => ({
+              ...column,
+              sortable: false,
+              filter: undefined,
+            }))
+          : columns
+      }
+      serverSide={serverSide}
+      searchable={!serverSide}
       keyExtractor={(row) => `${row.scope}:${row.id}`}
       searchPlaceholder="Search bindings..."
       loading={loading}

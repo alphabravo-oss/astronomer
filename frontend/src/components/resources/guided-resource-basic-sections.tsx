@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { PortFields } from "./guided-array-fields";
 
 export function IdentitySection({ form }: GuidedSectionProps) {
   const { value, kind, errors, doc, set, identityReadOnly } = form;
@@ -70,8 +71,8 @@ export function PrimaryWorkloadSection({ form }: GuidedSectionProps) {
       <div className="md:col-span-2">
         <h3 className="font-medium text-foreground">Workload</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Configure the primary container. Additional containers remain
-          available in YAML mode.
+          Configure the selected container. Switch containers above; all other
+          fields are preserved.
         </p>
       </div>
       {!["DaemonSet", "Job", "CronJob"].includes(kind) && (
@@ -110,26 +111,7 @@ export function PrimaryWorkloadSection({ form }: GuidedSectionProps) {
           aria-invalid={!!errors.image}
         />
       </Field>
-      <Field label="Container port" error={errors.containerPort}>
-        <Input
-          type="number"
-          min={1}
-          max={65535}
-          value={stringValue(value, [
-            ...containerPath,
-            "ports",
-            0,
-            "containerPort",
-          ])}
-          onChange={(event) =>
-            setNumber(
-              [...containerPath, "ports", 0, "containerPort"],
-              event.target.value,
-            )
-          }
-          aria-invalid={!!errors.containerPort}
-        />
-      </Field>
+      <PortFields form={form} path={[...containerPath, "ports"]} />
       {kind === "CronJob" && (
         <Field label="Schedule" error={errors.schedule}>
           <Input
@@ -144,7 +126,7 @@ export function PrimaryWorkloadSection({ form }: GuidedSectionProps) {
 }
 
 export function ServiceSection({ form }: GuidedSectionProps) {
-  const { value, kind, errors, set, setNumber } = form;
+  const { value, kind, set } = form;
   if (kind !== "Service") return null;
   return (
     <section className="grid gap-4 rounded-lg border border-border bg-card p-4 md:grid-cols-2">
@@ -160,25 +142,7 @@ export function ServiceSection({ form }: GuidedSectionProps) {
           <option value="ExternalName">ExternalName</option>
         </Select>
       </Field>
-      <Field label="Port" error={errors.servicePort}>
-        <Input
-          type="number"
-          min={1}
-          max={65535}
-          value={stringValue(value, ["spec", "ports", 0, "port"])}
-          onChange={(event) =>
-            setNumber(["spec", "ports", 0, "port"], event.target.value)
-          }
-        />
-      </Field>
-      <Field label="Target port">
-        <Input
-          value={stringValue(value, ["spec", "ports", 0, "targetPort"])}
-          onChange={(event) =>
-            set(["spec", "ports", 0, "targetPort"], event.target.value)
-          }
-        />
-      </Field>
+      <PortFields form={form} path={["spec", "ports"]} service />
       <Field label="Pod selector" description="One key=value pair per line.">
         <Textarea
           value={keyValueText(manifestValue(value, ["spec", "selector"]))}
@@ -186,74 +150,6 @@ export function ServiceSection({ form }: GuidedSectionProps) {
             set(["spec", "selector"], parseKeyValueText(event.target.value))
           }
           rows={3}
-        />
-      </Field>
-    </section>
-  );
-}
-
-export function IngressSection({ form }: GuidedSectionProps) {
-  const { value, kind, set, setNumber } = form;
-  if (kind !== "Ingress") return null;
-  const backendPath = [
-    "spec",
-    "rules",
-    0,
-    "http",
-    "paths",
-    0,
-    "backend",
-    "service",
-  ] as const;
-  return (
-    <section className="grid gap-4 rounded-lg border border-border bg-card p-4 md:grid-cols-2">
-      <h3 className="font-medium text-foreground md:col-span-2">
-        Ingress route
-      </h3>
-      <Field label="Host">
-        <Input
-          value={stringValue(value, ["spec", "rules", 0, "host"])}
-          onChange={(event) =>
-            set(["spec", "rules", 0, "host"], event.target.value)
-          }
-        />
-      </Field>
-      <Field label="Path">
-        <Input
-          value={stringValue(value, [
-            "spec",
-            "rules",
-            0,
-            "http",
-            "paths",
-            0,
-            "path",
-          ])}
-          onChange={(event) =>
-            set(
-              ["spec", "rules", 0, "http", "paths", 0, "path"],
-              event.target.value,
-            )
-          }
-        />
-      </Field>
-      <Field label="Backend service">
-        <Input
-          value={stringValue(value, [...backendPath, "name"])}
-          onChange={(event) =>
-            set([...backendPath, "name"], event.target.value)
-          }
-        />
-      </Field>
-      <Field label="Backend port">
-        <Input
-          type="number"
-          min={1}
-          max={65535}
-          value={stringValue(value, [...backendPath, "port", "number"])}
-          onChange={(event) =>
-            setNumber([...backendPath, "port", "number"], event.target.value)
-          }
         />
       </Field>
     </section>

@@ -1,3 +1,6 @@
+import { validateAffinity } from "./guided-affinity-validation";
+import { validateIngress } from "./guided-ingress-validation";
+
 export type KubernetesManifest = Record<string, unknown>;
 
 export type SchemaMap = Record<string, unknown>;
@@ -155,11 +158,22 @@ export function envText(value: unknown): string {
 
 export function parseEnvText(
   value: string,
-): Array<{ name: string; value: string }> {
-  return Object.entries(parseKeyValueText(value)).map(([name, item]) => ({
-    name,
-    value: item,
-  }));
+  existing: unknown = [],
+): Array<Record<string, unknown>> {
+  const literals = new Map(Object.entries(parseKeyValueText(value)));
+  const result: Array<Record<string, unknown>> = [];
+  for (const item of Array.isArray(existing) ? existing : []) {
+    const entry = asRecord(item);
+    const name = String(entry.name ?? "");
+    if ("valueFrom" in entry) result.push(entry);
+    else if (literals.has(name))
+      result.push({ ...entry, value: literals.get(name) });
+    literals.delete(name);
+  }
+  return [
+    ...result,
+    ...Array.from(literals, ([name, item]) => ({ name, value: item })),
+  ];
 }
 
 /** The three probe kinds a container spec accepts, keyed by their manifest field. */
@@ -182,10 +196,19 @@ function probeError(
   const probe = asRecord(manifestValue(manifest, probePath));
   if (Object.keys(probe).length === 0) return null;
   if ("httpGet" in probe || "tcpSocket" in probe) {
-    const target = asRecord("httpGet" in probe ? probe.httpGet : probe.tcpSocket);
-    const port = Number(target.port);
-    if (!target.port || !Number.isInteger(port) || port < 1 || port > 65535) {
-      return "Port must be an integer from 1 to 65535.";
+    const target = asRecord(
+      "httpGet" in probe ? probe.httpGet : probe.tcpSocket,
+    );
+    const port = target.port;
+    const valid =
+      typeof port === "number"
+        ? Number.isInteger(port) && port >= 1 && port <= 65535
+        : typeof port === "string" &&
+          port.length <= 15 &&
+          /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(port) &&
+          /[a-z]/.test(port);
+    if (!valid) {
+      return "Port must be an integer from 1 to 65535 or a valid named port.";
     }
     return null;
   }
@@ -196,6 +219,31 @@ function probeError(
     }
   }
   return null;
+}
+
+export function validateGuidedContainer(
+  manifest: KubernetesManifest,
+  path: ManifestPath,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!stringValue(manifest, [...path, "image"]))
+    errors.image = "A container image is required.";
+  const ports = manifestValue(manifest, [...path, "ports"]);
+  for (const entry of Array.isArray(ports) ? ports : []) {
+    const port = asRecord(entry).containerPort;
+    if (
+      typeof port !== "number" ||
+      !Number.isInteger(port) ||
+      port < 1 ||
+      port > 65535
+    )
+      errors.containerPort = "Port must be an integer from 1 to 65535.";
+  }
+  for (const key of PROBE_KEYS) {
+    const error = probeError(manifest, [...path, key]);
+    if (error) errors[key] = error;
+  }
+  return errors;
 }
 
 export function validateGuidedResource(
@@ -211,25 +259,53 @@ export function validateGuidedResource(
   if (kind !== "Namespace" && namespace && !DNS_LABEL.test(namespace))
     errors.namespace = "Namespace must be a lowercase DNS label.";
 
-  const container = containerPath(kind);
-  if (container) {
-    const image = stringValue(manifest, [...container, "image"]);
-    if (!image) errors.image = "A container image is required.";
-    const port = Number(
-      stringValue(manifest, [...container, "ports", 0, "containerPort"]),
+  const pod = podSpecPath(kind);
+  if (pod) {
+    Object.assign(
+      errors,
+      validateAffinity(manifestValue(manifest, [...pod, "affinity"]), [
+        ...pod,
+        "affinity",
+      ]),
     );
-    if (port && (!Number.isInteger(port) || port < 1 || port > 65535))
-      errors.containerPort = "Port must be an integer from 1 to 65535.";
-    for (const probeKey of PROBE_KEYS) {
-      const message = probeError(manifest, [...container, probeKey]);
-      if (message) errors[probeKey] = message;
+    for (const group of ["containers", "initContainers"]) {
+      const raw = manifestValue(manifest, [...pod, group]);
+      const items = Array.isArray(raw)
+        ? raw
+        : group === "containers"
+          ? [{}]
+          : [];
+      if (group === "containers" && items.length === 0)
+        errors.image = "At least one container is required.";
+      items.forEach((_, index) => {
+        for (const [key, message] of Object.entries(
+          validateGuidedContainer(manifest, [...pod, group, index]),
+        )) {
+          errors[
+            group === "containers" && index === 0
+              ? key
+              : `${group}.${index}.${key}`
+          ] = message;
+        }
+      });
     }
   }
   if (kind === "Service") {
-    const port = Number(stringValue(manifest, ["spec", "ports", 0, "port"]));
-    if (!Number.isInteger(port) || port < 1 || port > 65535)
-      errors.servicePort = "Service port must be an integer from 1 to 65535.";
+    const ports = manifestValue(manifest, ["spec", "ports"]);
+    if (Array.isArray(ports) && ports.length > 0)
+      ports.forEach((_, index) => {
+        const port = Number(
+          stringValue(manifest, ["spec", "ports", index, "port"]),
+        );
+        if (!Number.isInteger(port) || port < 1 || port > 65535)
+          errors[index === 0 ? "servicePort" : `ports.${index}.port`] =
+            "Service port must be an integer from 1 to 65535.";
+      });
+    else if (stringValue(manifest, ["spec", "type"]) !== "ExternalName")
+      errors.servicePort = "At least one Service port is required.";
   }
+  if (kind === "Ingress")
+    Object.assign(errors, validateIngress(manifestValue(manifest, ["spec"])));
   if (kind === "CronJob") {
     const schedule = stringValue(manifest, ["spec", "schedule"]);
     if (schedule.trim().split(/\s+/).length !== 5)

@@ -12,7 +12,7 @@ import {
 } from "@/lib/api/cluster-snapshots";
 import { useCluster } from "@/lib/hooks/clusters";
 import { liveFallback } from "@/lib/live/status-store";
-import { pageRowCount } from "@/lib/api/pagination";
+import { pageTableCount } from "@/lib/api/pagination";
 import { queryKeys } from "@/lib/query-keys";
 import { useClustersUpdate } from "@/lib/permission-hooks";
 import { toastApiError, toastSuccess } from "@/lib/toast";
@@ -351,7 +351,7 @@ export function ClusterControlPlaneSnapshotsPage() {
         }}
         searchPlaceholder="Search snapshots…"
         serverSide={{
-          rowCount: pageRowCount(snapshotsQuery.data),
+          ...pageTableCount(snapshotsQuery.data),
           pagination: { pageIndex, pageSize },
           onPaginationChange: (next) => setPageIndex(next.pageIndex),
         }}

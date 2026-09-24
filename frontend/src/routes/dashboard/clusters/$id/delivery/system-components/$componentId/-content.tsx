@@ -9,6 +9,7 @@ import {
 } from "@/components/delivery/shared";
 import type { DeliverySystemComponent } from "@/lib/api/delivery-system";
 import { formatBytes, formatRelativeTime } from "@/lib/utils";
+import { replicaRedundancy } from "@/lib/system-component-availability";
 import { systemResourceColumns, systemVolumeColumns } from "./-columns";
 
 function ComponentSummary({
@@ -60,8 +61,8 @@ function ComponentSummary({
         }
       />
       <Detail
-        label="High availability"
-        value={component.highAvailability ? "Yes" : "No"}
+        label="Replica redundancy (not a topology check)"
+        value={replicaRedundancy(component)}
       />
       <Detail
         label="Storage class"

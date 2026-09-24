@@ -110,104 +110,15 @@ func (h *MonitoringHandler) ProxyGrafana(w http.ResponseWriter, r *http.Request)
 			copyGrafanaCookie(w.Header(), value)
 			continue
 		}
-		if serviceProxyResponseHeaderAllowed(key) {
-			w.Header().Set(key, value)
-		}
 	}
-	// The global API policy intentionally forbids framing and inline scripts.
-	// Grafana needs both, so loosen them only on this authenticated endpoint.
-	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-	w.Header().Set("Content-Security-Policy", grafanaProxyCSP)
 
 	if isServiceProxyAuditMethod(r.Method) {
 		recordAudit(r, h.queries, "monitoring.grafana.proxy", "cluster", clusterID, service, map[string]any{
 			"namespace": namespace, "method": r.Method, "path": upstreamRequest.URL.Path,
 		})
 	}
-	decoded, decodeErr := decodeResponseBody(resp)
-	if decodeErr != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ProxyError, "Invalid Grafana response")
-		return
-	}
-	statusCode := resp.StatusCode
-	if statusCode == 0 {
-		statusCode = http.StatusOK
-	}
-	w.WriteHeader(statusCode)
-	_, _ = w.Write(decoded)
-}
-
-// ProxyClusterGrafana serves the Grafana bundled with one cluster's
-// kube-prometheus-stack. The service remains ClusterIP-only; the browser sees
-// only this same-origin URL, and the route's cluster-scoped monitoring:read
-// middleware is the authorization boundary. Cluster Grafana is configured as
-// an anonymous Viewer because the request already passed Astronomer RBAC and
-// the service is never published directly.
-func (h *MonitoringHandler) ProxyClusterGrafana(w http.ResponseWriter, r *http.Request) {
-	clusterUUID, ok := parseClusterIDParam(w, r, "id")
-	if !ok {
-		return
-	}
-	if h.requester == nil || h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Cluster Grafana proxy is not configured")
-		return
-	}
-	cfg, err := h.queries.GetClusterMonitoringConfig(r.Context(), clusterUUID)
-	if err != nil || cfg.Status == "not_configured" || cfg.Status == "uninstalled" {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster Grafana is not installed")
-		return
-	}
-	service, err := h.findGrafanaServiceName(r.Context(), clusterUUID.String(), cfg.StackNamespace, cfg.PrometheusReleaseName)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster Grafana is not installed")
-		return
-	}
-
-	suffix := strings.TrimPrefix(chi.URLParam(r, "*"), "/")
-	// Grafana's serve_from_sub_path router expects the configured external
-	// prefix on the upstream request as well. Forwarding only the wildcard
-	// suffix makes / redirect back to Astronomer and turns /api/* into a 404.
-	upstreamPath := clusterGrafanaProxyPath(clusterUUID.String())
-	if suffix != "" {
-		upstreamPath += suffix
-	}
-	proxyPath := fmt.Sprintf("/api/v1/namespaces/%s/services/http:%s:80/proxy%s", cfg.StackNamespace, service, upstreamPath)
-	if r.URL.RawQuery != "" {
-		proxyPath += "?" + r.URL.RawQuery
-	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, serviceProxyMaxBodyBytes))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidBody, "Grafana request exceeds maximum allowed size")
-		return
-	}
-	resp, err := h.requester.Do(r.Context(), clusterUUID.String(), r.Method, proxyPath, body, grafanaRequestHeaders(r.Header))
-	if err != nil || resp == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, "Cluster Grafana is unavailable")
-		return
-	}
-	for key, value := range resp.Headers {
-		if serviceProxyResponseHeaderAllowed(key) {
-			w.Header().Set(key, value)
-		}
-	}
-	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
-	w.Header().Set("Content-Security-Policy", grafanaProxyCSP)
-	if isServiceProxyAuditMethod(r.Method) {
-		recordAudit(r, h.queries, "monitoring.cluster_grafana.proxy", "cluster", clusterUUID.String(), service, map[string]any{
-			"namespace": cfg.StackNamespace, "method": r.Method, "path": "/" + suffix,
-		})
-	}
-	decoded, decodeErr := decodeResponseBody(resp)
-	if decodeErr != nil {
-		RespondRequestError(w, r, http.StatusBadGateway, apierror.ProxyError, "Invalid Grafana response")
-		return
-	}
-	statusCode := resp.StatusCode
-	if statusCode == 0 {
-		statusCode = http.StatusOK
-	}
-	w.WriteHeader(statusCode)
-	_, _ = w.Write(decoded)
+	prefix := fmt.Sprintf("/api/v1/namespaces/%s/services/http:%s:%d/proxy", namespace, service, grafanaProxyListenPort)
+	writeGrafanaResponse(w, r, resp, prefix)
 }
 
 func clusterGrafanaProxyPath(clusterID string) string {
@@ -230,8 +141,8 @@ func (h *MonitoringHandler) grafanaProxyAuth(r *http.Request, user *reqctx.User,
 }
 
 func grafanaRequestHeaders(source http.Header) map[string]string {
-	headers := map[string]string{}
-	for _, key := range []string{"Accept", "Accept-Encoding", "Content-Type", "User-Agent"} {
+	headers := map[string]string{"Accept-Encoding": "identity"}
+	for _, key := range []string{"Accept", "Content-Type", "User-Agent"} {
 		if value := source.Get(key); value != "" {
 			headers[key] = value
 		}

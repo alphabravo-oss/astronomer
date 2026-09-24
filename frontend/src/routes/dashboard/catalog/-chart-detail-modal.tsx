@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { ActionButton } from "@/components/ui/action-button";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { Select } from "@/components/ui/select";
-import { useHelmChartVersions } from "@/lib/hooks/catalog";
+import {
+  CatalogVersionSelect,
+  useCatalogVersionSelection,
+} from "@/components/catalog/version-selection";
 import type { CatalogPresentation } from "@/lib/catalogs/astronomer";
 import type { HelmChart, HelmChartVersion } from "@/types";
 import {
@@ -27,15 +29,14 @@ export function ChartDetailModal({
   onClose: () => void;
   onInstall: (chart: HelmChart, version: HelmChartVersion) => void;
 }) {
-  const { data: versions, isLoading: versionsLoading } = useHelmChartVersions(
+  const [selectedVersionId, setSelectedVersionId] = useState("");
+  const selection = useCatalogVersionSelection(
     projectId,
     chart.id,
-    "project",
+    selectedVersionId,
+    setSelectedVersionId,
   );
-  const [selectedVersionId, setSelectedVersionId] = useState<string>("");
-
-  const selectedVersion =
-    versions?.find((v) => v.id === selectedVersionId) || versions?.[0];
+  const selectedVersion = selection.selected;
 
   const footer = (
     <>
@@ -168,22 +169,7 @@ export function ChartDetailModal({
         >
           Version
         </label>
-        {versionsLoading ? (
-          <div className="h-9 w-48 rounded-md bg-muted animate-pulse" />
-        ) : (
-          <Select
-            id="field-5b7ae739-81"
-            value={selectedVersionId || versions?.[0]?.id || ""}
-            onChange={(e) => setSelectedVersionId(e.target.value)}
-            containerClassName="w-48"
-          >
-            {(versions || []).map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.version} (App: {v.appVersion})
-              </option>
-            ))}
-          </Select>
-        )}
+        <CatalogVersionSelect selection={selection} id="field-5b7ae739-81" />
       </div>
 
       {selectedVersion?.readme && (

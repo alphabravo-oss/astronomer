@@ -55,34 +55,9 @@ func TestRenderAgentManifestPreservesReleaseDigest(t *testing.T) {
 	}
 }
 
-func TestRenderAgentManifestSupportsOperatorPrivilegeProfile(t *testing.T) {
-	manifest := renderAgentManifest(
-		context.Background(),
-		"550e8400-e29b-41d4-a716-446655440000",
-		"reg-token",
-		"https://astro.example.com",
-		"example.com/astronomer-agent",
-		"v1.2.3",
-		"operator",
-	)
-	for _, want := range []string{
-		"pods/exec",
-		// Operator can READ RBAC objects (write belongs to admin only); the
-		// hardened rule lists cluster + namespaced RBAC resources together.
-		`resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]`,
-		`verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]`,
-	} {
-		if !strings.Contains(manifest, want) {
-			t.Fatalf("operator manifest missing %q", want)
-		}
-	}
-	// operator must never be cluster-admin: no wildcard WRITE. A read-only
-	// wildcard IS expected and required: the discovery and inventory paths list
-	// every resource type registered in the cluster, including CRDs added after
-	// enrollment. An enumerated allowlist would eventually miss one and make the
-	// management plane's observed inventory incomplete. The wildcard remains
-	// read-only; TestOperatorWildcardIsReadOnly pins that half of the contract.
-	if strings.Contains(manifest, `verbs: ["*"]`) {
-		t.Fatalf("operator manifest rendered admin wildcard VERBS (cluster-admin):\n%s", manifest)
+func TestRenderAgentManifestUsesFullManagementForLegacyProfile(t *testing.T) {
+	manifest := renderAgentManifest(context.Background(), "cluster", "token", "https://astro.example.com", "example.com/agent", "v1", "operator")
+	if !strings.Contains(manifest, `PRIVILEGE_PROFILE: "admin"`) || !strings.Contains(manifest, `verbs: ["*"]`) {
+		t.Fatal("legacy profile prevented full management")
 	}
 }

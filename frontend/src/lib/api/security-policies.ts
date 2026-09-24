@@ -3,6 +3,7 @@ import {
   deleteSecurityTemplatesById,
   getSecurityPolicies,
   getSecurityTemplates,
+  getSecurityTemplatesById,
   postSecurityPolicies,
   postSecurityPoliciesByIdApply,
   postSecurityTemplates,
@@ -11,7 +12,9 @@ import {
 import type {
   ClusterSecurityPolicy,
   PodSecurityTemplate,
+  PaginatedResponse,
 } from "@/types";
+import { mapPage } from "./pagination";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 
 type Schemas = OpenAPIComponents["schemas"];
@@ -88,11 +91,26 @@ export function mapClusterSecurityPolicy(
   };
 }
 
-export async function getPodSecurityTemplates(): Promise<
-  PodSecurityTemplate[]
-> {
-  const response = await getSecurityTemplates({ query: { limit: 200 } });
-  return (response.data ?? []).map(mapPodSecurityTemplate);
+export async function getPodSecurityTemplates(
+  params = { limit: 25, offset: 0 },
+  signal?: AbortSignal,
+): Promise<PaginatedResponse<PodSecurityTemplate>> {
+  return mapPage(
+    await getSecurityTemplates({ query: params, signal }),
+    mapPodSecurityTemplate,
+  );
+}
+
+export async function getPodSecurityTemplate(
+  id: string,
+  signal?: AbortSignal,
+): Promise<PodSecurityTemplate> {
+  return mapPodSecurityTemplate(
+    requireData(
+      await getSecurityTemplatesById({ path: { id }, signal }),
+      "getPodSecurityTemplate",
+    ),
+  );
 }
 
 export async function createPodSecurityTemplate(
@@ -121,11 +139,14 @@ export async function deletePodSecurityTemplate(id: string): Promise<void> {
   await deleteSecurityTemplatesById({ path: { id } });
 }
 
-export async function getClusterSecurityPolicies(): Promise<
-  ClusterSecurityPolicy[]
-> {
-  const response = await getSecurityPolicies({ query: { limit: 200 } });
-  return (response.data ?? []).map(mapClusterSecurityPolicy);
+export async function getClusterSecurityPolicies(
+  params = { limit: 25, offset: 0 },
+  signal?: AbortSignal,
+): Promise<PaginatedResponse<ClusterSecurityPolicy>> {
+  return mapPage(
+    await getSecurityPolicies({ query: params, signal }),
+    mapClusterSecurityPolicy,
+  );
 }
 
 export async function assignSecurityPolicy(data: {

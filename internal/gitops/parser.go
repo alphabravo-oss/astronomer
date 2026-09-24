@@ -92,6 +92,9 @@ func Parse(content []byte, repoPath string) (ClusterRegistration, error) {
 	if doc.Metadata.Name == "" {
 		return ClusterRegistration{}, ErrMissingName
 	}
+	if err := ValidateSupportedIntent(doc); err != nil {
+		return ClusterRegistration{}, err
+	}
 	if doc.Spec.Labels == nil {
 		doc.Spec.Labels = map[string]string{}
 	}
@@ -143,6 +146,9 @@ func ParseAll(content []byte, repoPath string) ([]ClusterRegistration, error) {
 		}
 		if doc.Metadata.Name == "" {
 			return nil, ErrMissingName
+		}
+		if err := ValidateSupportedIntent(doc); err != nil {
+			return nil, err
 		}
 		if doc.Spec.Labels == nil {
 			doc.Spec.Labels = map[string]string{}

@@ -342,12 +342,185 @@ function mutationStore(pageContext: Page): MutationRecord[] {
   return mutationStores.get(pageContext) ?? [];
 }
 
-async function chooseNextOption(pageContext: Page, label: string) {
-  const select = pageContext.getByLabel(label, { exact: true });
-  await select.focus();
-  await pageContext.keyboard.press("ArrowDown");
-  await pageContext.keyboard.press("Enter");
-}
+test("SSO mapping resets role scope and submits a later-page cluster role", async ({
+  page,
+}) => {
+  const requests: number[] = [];
+  await page.route("**/api/v1/rbac/global-roles/**", (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            id: "global-role",
+            name: "Global viewer",
+            display_name: "Global viewer",
+            created_at: "2026-09-22T00:00:00Z",
+            rules: [],
+          },
+        ],
+        pagination: {
+          total: 1,
+          limit: 25,
+          offset: 0,
+          has_more: false,
+          next_offset: null,
+        },
+      },
+    }),
+  );
+  await page.route("**/api/v1/rbac/cluster-roles/**", async (route) => {
+    const offset = Number(
+      new URL(route.request().url()).searchParams.get("offset"),
+    );
+    requests.push(offset);
+    return route.fulfill({
+      json: {
+        data: Array.from({ length: offset ? 1 : 25 }, (_, i) => ({
+          id: offset ? ROLE_ID : `role-${i}`,
+          name: `Cluster role ${offset + i}`,
+          display_name: `Cluster role ${offset + i}`,
+          created_at: "2026-09-22T00:00:00Z",
+          rules: [],
+        })),
+        pagination: {
+          limit: 25,
+          offset,
+          has_more: offset === 0,
+          next_offset: offset === 0 ? 25 : null,
+        },
+      },
+    });
+  });
+  await page.route("**/api/v1/admin/group-mappings/**", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    mutationStore(page).push({
+      path: "/admin/group-mappings",
+      body: route.request().postDataJSON(),
+    });
+    return route.fulfill({
+      status: 201,
+      json: data({ id: "mapping-1", ...route.request().postDataJSON() }),
+    });
+  });
+  await page.goto("/dashboard/settings/group-mappings/new");
+  await page.getByLabel("Group name").fill("operators");
+  await page.getByLabel("Role", { exact: true }).press("Enter");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Select / })
+    .press("Enter");
+  await page.getByLabel("Scope", { exact: true }).selectOption("cluster");
+  await page.getByRole("button", { name: "Create mapping" }).press("Enter");
+  await expect(
+    page.getByText("Role is required", { exact: true }),
+  ).toBeVisible();
+  expect(mutationStore(page)).toEqual([]);
+  await page.getByLabel("Role", { exact: true }).press("Enter");
+  const picker = page.getByRole("dialog", { name: "Select cluster role" });
+  await expect(picker.getByText("Showing 1-25 of at least 26")).toBeVisible();
+  await picker.getByRole("button", { name: "Next page" }).press("Enter");
+  await picker
+    .getByRole("button", { name: "Select Cluster role 25" })
+    .press("Enter");
+  await chooseRemoteCluster(page, "Cluster target");
+  await page.getByRole("button", { name: "Create mapping" }).press("Enter");
+  await expect
+    .poll(() => mutationStore(page))
+    .toEqual([
+      {
+        path: "/admin/group-mappings",
+        body: {
+          group_name: "operators",
+          scope: "cluster",
+          role_id: ROLE_ID,
+          cluster_id: CLUSTER_ID,
+        },
+      },
+    ]);
+  expect(requests).toEqual([0, 25]);
+});
+
+test("project members reach the tenth page and recover after removing its final binding", async ({
+  page,
+}) => {
+  let removed = false;
+  const offsets: number[] = [];
+  await page.route("**/api/v1/projects/project-members/**", async (route) => {
+    if (
+      new URL(route.request().url()).pathname !==
+      "/api/v1/projects/project-members/"
+    )
+      return route.fallback();
+    return route.fulfill({
+      json: data({
+        id: "project-members",
+        name: "Membership project",
+        display_name: "Membership project",
+        cluster_id: CLUSTER_ID,
+        resource_quota: {},
+        resource_quota_cpu_limit: "",
+        resource_quota_memory_limit: "",
+        resource_quota_pod_count: 0,
+        namespaces: [],
+        created_at: "2026-09-22T00:00:00Z",
+      }),
+    });
+  });
+  await page.route("**/api/v1/rbac/project-role-bindings/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "DELETE") {
+      expect(new URL(request.url()).pathname).toBe(
+        "/api/v1/rbac/project-role-bindings/binding-225/",
+      );
+      removed = true;
+      return route.fulfill({ status: 204 });
+    }
+    const url = new URL(request.url());
+    expect(url.searchParams.get("project_id")).toBe("project-members");
+    expect(url.searchParams.get("limit")).toBe("25");
+    const offset = Number(url.searchParams.get("offset"));
+    offsets.push(offset);
+    const total = removed ? 225 : 226;
+    return route.fulfill({
+      json: {
+        data: Array.from({ length: Math.min(25, total - offset) }, (_, i) => ({
+          id: `binding-${offset + i}`,
+          group: `team-${offset + i}`,
+          role_id: ROLE_ID,
+          project_id: "project-members",
+          created_at: "2026-09-22T00:00:00Z",
+        })),
+        pagination: {
+          limit: 25,
+          offset,
+          total,
+          has_more: offset + 25 < total,
+          next_offset: offset + 25 < total ? offset + 25 : null,
+        },
+      },
+    });
+  });
+  await page.goto("/dashboard/projects/project-members");
+  const members = page.locator("#project-members");
+  for (let i = 1; i <= 9; i++) {
+    await members.getByRole("button", { name: "Next page" }).click();
+    await expect(
+      members.getByText(`226 role bindings · Page ${i + 1}`, { exact: true }),
+    ).toBeVisible();
+  }
+  await members.getByRole("button", { name: "Remove group: team-225" }).click();
+  await page
+    .getByRole("dialog", { name: "Remove member" })
+    .getByRole("button", { name: "Remove", exact: true })
+    .click();
+  await expect(members.getByText("No members on this page.")).toBeVisible();
+  await members.getByRole("button", { name: "Previous page" }).click();
+  await expect(
+    members.getByText("group: team-200", { exact: true }),
+  ).toBeVisible();
+  expect(offsets).toContain(225);
+  expect(removed).toBe(true);
+});
 
 async function chooseRemoteCluster(pageContext: Page, label: string) {
   const picker = pageContext.getByRole("combobox", { name: label });
@@ -362,6 +535,8 @@ async function chooseRemoteCluster(pageContext: Page, label: string) {
       .getByRole("option"),
   ).toHaveCount(1);
   await pageContext.keyboard.press("Enter");
+  await expect(picker).toHaveAttribute("aria-expanded", "false");
+  await expect(picker).toBeFocused();
 }
 
 test("keyboard-only RBAC binding creation submits the selected scope", async ({
@@ -384,7 +559,19 @@ test("keyboard-only RBAC binding creation submits the selected scope", async ({
   const principal = page.getByRole("button", { name: /Admin User/ });
   await principal.focus();
   await page.keyboard.press("Enter");
-  await chooseNextOption(page, "Role");
+  await dialog.getByRole("button", { name: "Role", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  const rolePicker = page.getByRole("dialog", { name: "Select cluster role" });
+  await expect(rolePicker).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(rolePicker).not.toBeVisible();
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Role", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await rolePicker.getByRole("button", { name: /^Select / }).focus();
+  await page.keyboard.press("Enter");
   await chooseRemoteCluster(page, "Cluster");
   const submit = dialog.getByRole("button", { name: "Create Binding" });
   await expect(submit).toBeEnabled();
@@ -519,9 +706,7 @@ test("keyboard-only node detail tab strip moves focus and selection with ArrowRi
   page,
 }) => {
   await page.goto(`/dashboard/clusters/${CLUSTER_ID}/nodes/${NODE_NAME}`);
-  await expect(
-    page.getByRole("heading", { name: NODE_NAME }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: NODE_NAME })).toBeVisible();
 
   const overview = page.getByRole("tab", { name: "Overview" });
   await overview.focus();

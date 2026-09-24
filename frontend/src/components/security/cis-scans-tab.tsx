@@ -1,15 +1,17 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useClock } from "@/lib/hooks/use-clock";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { useCISScans } from "@/components/security/hooks";
-import { useClusters } from "@/lib/hooks/clusters";
+import { useEntityNames } from "@/lib/hooks/entity-names";
+import { usePermissionDecision } from "@/lib/permission-hooks";
+import { PermissionState } from "@/components/ui/empty-state";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
 import { formatRelativeTime, cn } from "@/lib/utils";
-import { pageRowCount } from "@/lib/api/pagination";
+import { pageCountLabel, pageTableCount } from "@/lib/api/pagination";
 import type { CISScanListItem } from "@/types";
 import {
   Plus,
@@ -17,7 +19,6 @@ import {
   CheckCircle2,
   XCircle,
   MinusCircle,
-  ShieldCheck,
 } from "lucide-react";
 
 /**
@@ -27,39 +28,54 @@ import {
  * cluster's K8s state moves we refetch the list — the cis-operator emits a
  * ClusterScan/Report mutation which surfaces through that channel.
  */
+function recentFailedScans(scans: CISScanListItem[], now: number) {
+  const dayMs = 24 * 60 * 60 * 1000;
+  return scans
+    .filter((scan) => {
+      if (!scan.completedAt) return false;
+      const completed = new Date(scan.completedAt).getTime();
+      return (
+        Number.isFinite(completed) &&
+        now - completed < dayMs &&
+        (scan.failed ?? 0) > 0
+      );
+    })
+    .sort((a, b) => (b.failed ?? 0) - (a.failed ?? 0))
+    .slice(0, 3);
+}
+
 export function CISScansTab() {
   const now = useClock();
   const navigate = useNavigate();
-  const { data: scansPage, isLoading, isError, error, refetch } = useCISScans({ pageSize: 100 });
-  const { data: clustersPage } = useClusters({ pageSize: 200 });
+  const [pageIndex, setPageIndex] = useState(0);
+  const read = usePermissionDecision("security", "read");
+  const create = usePermissionDecision("security", "create");
+  const scansQuery = useCISScans(
+    { page: pageIndex + 1, pageSize: 25 },
+    { enabled: read.allowed },
+  );
+  const scansPage =
+    scansQuery.isError || !read.allowed ? undefined : scansQuery.data;
+  const { clusters } = useEntityNames({
+    clusterIds: scansPage?.data.map((scan) => scan.clusterId),
+  });
 
   // Cross-cluster signal: any K8s mutation invalidates the scan list so a
   // newly-completed ingest pops up without a manual refresh.
   useLiveQueryInvalidation("cluster.k8s_changed", [["cis", "scans"]]);
-  const clusterById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const c of clustersPage?.data ?? []) {
-      map.set(c.id, c.displayName || c.name);
-    }
-    return map;
-  }, [clustersPage]);
+  const clusterById = useMemo(
+    () => new Map(clusters.map((c) => [c.id, c.displayName || c.name])),
+    [clusters],
+  );
 
   const scans = useMemo(() => scansPage?.data ?? [], [scansPage]);
 
   // Recent failures = scans with at least one failed check, completed in
   // the last 24h. Surfaces the most actionable item at the top.
-  const recentFailures = useMemo(() => {
-    const dayMs = 24 * 60 * 60 * 1000;
-    return scans
-      .filter((s) => {
-        if (!s.completedAt) return false;
-        const t = new Date(s.completedAt).getTime();
-        if (Number.isNaN(t)) return false;
-        return now - t < dayMs && (s.failed ?? 0) > 0;
-      })
-      .sort((a, b) => (b.failed ?? 0) - (a.failed ?? 0))
-      .slice(0, 3);
-  }, [scans, now]);
+  const recentFailures = useMemo(
+    () => recentFailedScans(scans, now),
+    [scans, now],
+  );
 
   const columns: Column<CISScanListItem>[] = [
     {
@@ -177,51 +193,10 @@ export function CISScansTab() {
     },
   ];
 
-  // Sprint 074 — empty-state CTA. When NO scans have run yet, prompt the
-  // operator to install trivy-operator for image vulnerability scans
-  // (image-scan + CIS are the two complementary "scan results" sources
-  // the dashboard shows). Deep-links to the catalog with the chart
-  // pre-selected via ?search=trivy — the chart-install page does not
-  // currently accept a `cluster_id` query param (deferred, sprint 074),
-  // so the secondary "Platform Baseline" link is the recommended path
-  // for operators who want to bind the cluster atomically.
-  const noScans = !isLoading && scans.length === 0;
+  if (!read.allowed) return <PermissionState permission="security:read" />;
 
   return (
     <div className="space-y-4">
-      {/* Sprint 074 — image-scan empty-state CTA. */}
-      {noScans && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">
-                No vulnerability reports yet
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Install <strong>trivy-operator</strong> to scan every container
-                image running in your clusters for CVEs. Reports appear here
-                automatically once the operator finishes its first scan window.
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                <RouterLink
-                  to="/dashboard/clusters"
-                  className="font-medium text-primary hover:underline"
-                >
-                  Apply the Platform Baseline template to a cluster →
-                </RouterLink>
-                <span className="text-muted-foreground">
-                  (installs trivy-operator + the other baseline tools)
-                </span>
-                <span className="text-muted-foreground">
-                  (auto-applied to newly-registered clusters)
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Recent failure summary — only renders when something needs attention. */}
       {recentFailures.length > 0 && (
         <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-4">
@@ -230,7 +205,8 @@ export function CISScansTab() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground">
                 {recentFailures.reduce((sum, s) => sum + (s.failed ?? 0), 0)}{" "}
-                failed checks across {recentFailures.length} recent scan
+                failed checks on this page across {recentFailures.length} recent
+                scan
                 {recentFailures.length === 1 ? "" : "s"}
               </p>
               <ul className="mt-2 space-y-1.5">
@@ -262,16 +238,22 @@ export function CISScansTab() {
       )}
 
       {/* Aggregate count strip — useful at-a-glance summary. */}
+      {scans.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Check totals on this page
+        </p>
+      )}
       <ScanAggregateStrip scans={scans} />
 
       {/* Header bar with the New Scan CTA. */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {pageRowCount(scansPage)} historical scan
-          {scans.length === 1 ? "" : "s"} across all clusters
+          {pageCountLabel(scansPage)} historical scans
         </p>
         <ActionButton
           intent="primary"
+          disabled={!create.allowed}
+          disabledReason="Starting a scan requires security:create."
           icon={<Plus className="h-4 w-4" />}
           onClick={() => void navigate({ to: "/dashboard/security/scans/new" })}
         >
@@ -281,16 +263,27 @@ export function CISScansTab() {
 
       <DataTable
         data={scans}
-        columns={columns}
+        columns={columns.map((column) => ({ ...column, sortable: false }))}
         keyExtractor={(row) => row.id}
-        loading={isLoading}
-        isError={isError} error={error} errorMessage="Failed to load CIS scans." onRetry={() => void refetch()}
-        searchPlaceholder="Search scans..."
+        loading={scansQuery.isLoading}
+        isError={scansQuery.isError}
+        error={scansQuery.error}
+        errorMessage="Failed to load CIS scans."
+        onRetry={() => void scansQuery.refetch()}
+        searchable={false}
+        pageSize={25}
+        serverSide={{
+          ...pageTableCount(scansPage),
+          pagination: { pageIndex, pageSize: 25 },
+          onPaginationChange: (next) => setPageIndex(next.pageIndex),
+        }}
         emptyState={{
           title: "No CIS scans yet",
           description:
             "Run a benchmark to identify security findings across your clusters.",
-          action: { label: "New scan", href: "/dashboard/security/scans/new" },
+          action: create.allowed
+            ? { label: "New scan", href: "/dashboard/security/scans/new" }
+            : undefined,
         }}
         onRowClick={(row) =>
           void navigate({ to: `/dashboard/security/scans/${row.id}` })
@@ -300,7 +293,7 @@ export function CISScansTab() {
   );
 }
 
-/** Strip of pass/fail/warn/skip totals across the whole scan history. */
+/** Strip of pass/fail/warn/skip totals for the visible page only. */
 function ScanAggregateStrip({ scans }: { scans: CISScanListItem[] }) {
   const totals = useMemo(() => {
     return scans.reduce(

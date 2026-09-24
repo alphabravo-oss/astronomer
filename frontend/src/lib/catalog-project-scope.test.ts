@@ -11,7 +11,6 @@ import {
   installChartOnCluster,
   listCatalogCharts,
   listRecommendedCharts,
-  listChartVersions,
 } from "@/lib/api/cluster-apps";
 
 vi.mock("@/lib/api/generated/client", async (importOriginal) => {
@@ -66,19 +65,19 @@ describe("catalog project isolation", () => {
     });
     vi.mocked(generated.getCatalogChartsByIdVersions).mockResolvedValueOnce({
       data: [],
-      pagination: { limit: 200, offset: 0, has_more: false, next_offset: null },
+      pagination: { limit: 25, offset: 0, has_more: false, next_offset: null },
     });
 
     await getHelmCharts({ projectId: "project-1", search: "metrics" }, signal);
     await getHelmChartVersions("project-1", "chart-1", "project", signal);
 
     expect(generated.getCatalogCharts).toHaveBeenCalledWith({
-      query: { project_id: "project-1", limit: 200 },
+      query: { project_id: "project-1", limit: 25 },
       signal,
     });
     expect(generated.getCatalogChartsByIdVersions).toHaveBeenCalledWith({
       path: { id: "chart-1" },
-      query: { project_id: "project-1", limit: 200 },
+      query: { project_id: "project-1", limit: 25 },
       signal,
     });
   });
@@ -118,7 +117,7 @@ describe("catalog project isolation", () => {
 
     await listCatalogCharts({ projectId: "project-1", limit: 60 });
     await listRecommendedCharts("project-1", 12);
-    await listChartVersions("project-1", "chart-1");
+    await getHelmChartVersions("project-1", "chart-1");
     await getChartDefaultValues("project-1", "chart-1", "1.2.3");
 
     expect(generated.getCatalogCharts).toHaveBeenCalledWith({
@@ -131,7 +130,7 @@ describe("catalog project isolation", () => {
     });
     expect(generated.getCatalogChartsByIdVersions).toHaveBeenCalledWith({
       path: { id: "chart-1" },
-      query: { project_id: "project-1", limit: 50 },
+      query: { project_id: "project-1", limit: 25, offset: undefined },
       signal: undefined,
     });
     expect(generated.getCatalogChartsByIdValues).toHaveBeenCalledWith({

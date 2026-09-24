@@ -1,5 +1,5 @@
-import { pageRowCount } from "@/lib/api/pagination";
-import { useMemo, useState } from "react";
+import { pageRowCount, pageTableCount } from "@/lib/api/pagination";
+import { useState } from "react";
 import { useTabParam } from "@/lib/use-tab-param";
 import {
   usePodSecurityTemplates,
@@ -8,7 +8,7 @@ import {
   useApplySecurityPolicy,
   useRemoveSecurityPolicy,
 } from "@/lib/hooks/security";
-import { useClusters } from "@/lib/hooks/clusters";
+import { usePolicyRows } from "./-policy-rows";
 import { useCISScans } from "@/components/security/hooks";
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -21,6 +21,8 @@ import { PoliciesTab, type SecurityPolicyRow } from "./-policies-tab";
 import { TemplatesTab } from "./-templates-tab";
 import { AssignTemplateModal } from "./-assign-template-modal";
 import { PSATemplateModal } from "./-psa-template-modal";
+import { QueryStates } from "@/components/ui/query-states";
+import { usePermissionDecision } from "@/lib/permission-hooks";
 
 /**
  * Phase B5 — Security overview.
@@ -66,35 +68,24 @@ export function SecurityPage() {
   const [deleteTemplateTarget, setDeleteTemplateTarget] =
     useState<PodSecurityTemplate | null>(null);
 
-  const { data: policies, isLoading: policiesLoading } =
-    useClusterSecurityPolicies();
-  const { data: templates, isLoading: templatesLoading } =
-    usePodSecurityTemplates();
-  const { data: clustersData } = useClusters({ pageSize: 200 });
-
-  const policyRows = useMemo<SecurityPolicyRow[]>(() => {
-    const clusters = new Map(
-      (clustersData?.data ?? []).map((cluster) => [
-        cluster.id,
-        cluster.displayName || cluster.name,
-      ]),
-    );
-    const templateById = new Map(
-      (templates ?? []).map((template) => [template.id, template]),
-    );
-    return (policies ?? []).map((policy) => {
-      const template = templateById.get(policy.templateId);
-      return {
-        ...policy,
-        clusterName:
-          clusters.get(policy.clusterId) || `Unknown (${policy.clusterId})`,
-        templateName: template?.name || `Unknown (${policy.templateId})`,
-        enforceLevel: template?.enforceLevel || "privileged",
-        auditLevel: template?.auditLevel || "privileged",
-        warnLevel: template?.warnLevel || "privileged",
-      };
-    });
-  }, [clustersData?.data, policies, templates]);
+  const [policyPage, setPolicyPage] = useState(0);
+  const [templatePage, setTemplatePage] = useState(0);
+  const policiesQuery = useClusterSecurityPolicies({
+    limit: 25,
+    offset: policyPage * 25,
+  });
+  const templatesQuery = usePodSecurityTemplates({
+    limit: 25,
+    offset: templatePage * 25,
+  });
+  const policies = policiesQuery.isError
+    ? []
+    : (policiesQuery.data?.data ?? []);
+  const templates = templatesQuery.isError
+    ? undefined
+    : templatesQuery.data?.data;
+  const create = usePermissionDecision("security", "create");
+  const policyRows = usePolicyRows(policies);
 
   const applyPolicy = useApplySecurityPolicy();
   const removePolicy = useRemoveSecurityPolicy();
@@ -112,6 +103,12 @@ export function SecurityPage() {
                 intent="primary"
                 icon={<Plus className="h-4 w-4" />}
                 onClick={() => setShowAssignModal(true)}
+                disabled={
+                  !create.allowed || !templates || templatesQuery.isError
+                }
+                disabledReason={
+                  !create.allowed ? "Requires security:create" : undefined
+                }
               >
                 Assign Template
               </ActionButton>
@@ -124,6 +121,10 @@ export function SecurityPage() {
                   setEditingTemplate(null);
                   setShowTemplateModal(true);
                 }}
+                disabled={!create.allowed}
+                disabledReason={
+                  !create.allowed ? "Requires security:create" : undefined
+                }
               >
                 Create Template
               </ActionButton>
@@ -140,33 +141,52 @@ export function SecurityPage() {
         {activeTab === "cis" && <CISScansTab />}
 
         {activeTab === "policies" && (
-          <PoliciesTab
-            rows={policyRows}
-            loading={policiesLoading}
-            onApply={(row) => applyPolicy.mutate(row.id)}
-            applyPending={applyPolicy.isPending}
-            onRemove={setRemovePolicyTarget}
-          />
+          <QueryStates
+            query={policiesQuery}
+            permission="security:read"
+            errorTitle="Policies unavailable"
+          >
+            <PoliciesTab
+              rows={policyRows}
+              serverSide={{
+                ...pageTableCount(policiesQuery.data),
+                pagination: { pageIndex: policyPage, pageSize: 25 },
+                onPaginationChange: (next) => setPolicyPage(next.pageIndex),
+              }}
+              loading={policiesQuery.isLoading}
+              onApply={(row) => applyPolicy.mutate(row.id)}
+              applyPending={applyPolicy.isPending}
+              onRemove={setRemovePolicyTarget}
+            />
+          </QueryStates>
         )}
 
         {activeTab === "templates" && (
-          <TemplatesTab
-            templates={templates || []}
-            loading={templatesLoading}
-            onEdit={(row) => {
-              setEditingTemplate(row);
-              setShowTemplateModal(true);
-            }}
-            onDelete={setDeleteTemplateTarget}
-          />
+          <QueryStates
+            query={templatesQuery}
+            permission="security:read"
+            errorTitle="Templates unavailable"
+          >
+            <TemplatesTab
+              templates={templates || []}
+              serverSide={{
+                ...pageTableCount(templatesQuery.data),
+                pagination: { pageIndex: templatePage, pageSize: 25 },
+                onPaginationChange: (next) => setTemplatePage(next.pageIndex),
+              }}
+              loading={templatesQuery.isLoading}
+              onEdit={(row) => {
+                setEditingTemplate(row);
+                setShowTemplateModal(true);
+              }}
+              onDelete={setDeleteTemplateTarget}
+            />
+          </QueryStates>
         )}
       </div>
 
       {showAssignModal && (
-        <AssignTemplateModal
-          templates={templates || []}
-          onClose={() => setShowAssignModal(false)}
-        />
+        <AssignTemplateModal onClose={() => setShowAssignModal(false)} />
       )}
 
       {showTemplateModal && (

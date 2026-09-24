@@ -13,11 +13,9 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { PermissionState } from "@/components/ui/empty-state";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { useCluster } from "@/lib/hooks/clusters";
-import { useB2StorageLocations } from "@/components/backups/hooks";
 import {
   StackLifecyclePanel,
   type StackLifecyclePermissions,
-  type StackOption,
 } from "@/components/monitoring/stack-lifecycle-panel";
 import { CLUSTER_STACK_FAMILY } from "@/components/monitoring/stack-spec";
 import { useSharedThanosStatus } from "@/components/monitoring/hooks";
@@ -38,13 +36,6 @@ export function ClusterMonitoringStackPage({
   };
 
   const { data: cluster } = useCluster(clusterId);
-  const storageQuery = useB2StorageLocations();
-  const storageOptions: StackOption[] = (storageQuery.data?.data ?? []).map(
-    (location) => ({
-      id: location.id,
-      label: `${location.name} — ${location.bucket}`,
-    }),
-  );
   const thanosQuery = useSharedThanosStatus(permissions.read.allowed);
   const thanos = thanosQuery.data as SharedThanosStatus | undefined;
   const sharedThanosStorageId =
@@ -131,7 +122,6 @@ export function ClusterMonitoringStackPage({
             target={target}
             spec={CLUSTER_STACK_FAMILY}
             permissions={permissions}
-            storageOptions={storageOptions}
             seedOverrides={
               sharedThanosStorageId
                 ? { storageConfigId: sharedThanosStorageId }

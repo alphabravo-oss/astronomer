@@ -24,8 +24,8 @@ func (h *ClusterAgentHandler) UpgradePlan(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var req agentUpgradePlanRequest
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&req)
+	if !decodeOptionalJSON(w, r, &req) {
+		return
 	}
 	_, plan, err := h.buildUpgradePlanForCluster(r.Context(), clusterID, req)
 	if err != nil {
@@ -48,8 +48,8 @@ func (h *ClusterAgentHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req agentUpgradePlanRequest
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&req)
+	if !decodeOptionalJSON(w, r, &req) {
+		return
 	}
 	cluster, plan, err := h.buildUpgradePlanForCluster(r.Context(), clusterID, req)
 	if err != nil {

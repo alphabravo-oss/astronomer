@@ -116,6 +116,9 @@ type Result struct {
 // returns successfully, because the queue handle isn't part of the
 // shared helper's contract (the preview/dry-run path must not enqueue).
 func Apply(ctx context.Context, q ApplyQuerier, in ApplyInput) (Result, error) {
+	if err := ValidateSupportedIntent(in.Doc); err != nil {
+		return Result{}, err
+	}
 	if in.Doc.Metadata.Name == "" {
 		return Result{}, ErrMissingName
 	}

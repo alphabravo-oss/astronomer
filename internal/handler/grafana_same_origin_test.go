@@ -66,6 +66,7 @@ func TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie(t *testing.T) {
 	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.NewString(), Email: "operator@example.com", AuthMethod: "jwt",
 	}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString(), Email: "operator@example.com"}))
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -140,6 +141,8 @@ func TestProxyGrafanaRequiresMonitoringRead(t *testing.T) {
 }
 
 type clusterGrafanaRequesterFake struct {
+	auth protocol.GrafanaProxyAuth
+
 	paths    []string
 	response *protocol.K8sResponsePayload
 }
@@ -153,8 +156,15 @@ func (f *clusterGrafanaRequesterFake) Do(_ context.Context, _, _, path string, _
 	return f.response, nil
 }
 
+func (f *clusterGrafanaRequesterFake) DoWithGrafanaAuth(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string, auth protocol.GrafanaProxyAuth) (*protocol.K8sResponsePayload, error) {
+	f.auth = auth
+	return f.Do(ctx, clusterID, method, path, body, headers)
+}
+
 func TestProxyClusterGrafanaUsesPrivateClusterService(t *testing.T) {
 	h, q := newStackLifecycleHandler(t)
+	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
+	h.SetGrafanaTickets(auth.NewGrafanaTicketStore(time.Minute))
 	q.clusterErr = nil
 	q.clusterCfg = sqlc.ClusterMonitoringConfig{
 		ClusterID:             uuid.MustParse(stackTestClusterID),
@@ -172,23 +182,66 @@ func TestProxyClusterGrafanaUsesPrivateClusterService(t *testing.T) {
 	router := chi.NewRouter()
 	router.Handle("/api/v1/clusters/{id}/observability/grafana/*", http.HandlerFunc(h.ProxyClusterGrafana))
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+stackTestClusterID+"/observability/grafana/d/local?orgId=1", nil)
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString(), Email: "operator@example.com"}))
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK || rec.Body.String() != "<html>cluster grafana</html>" {
 		t.Fatalf("response = %d %q", rec.Code, rec.Body.String())
 	}
-	if len(fake.paths) != 2 {
-		t.Fatalf("paths = %#v, want service discovery plus proxy", fake.paths)
+	if fake.auth.Ticket == "" || fake.auth.Cookie != "" {
+		t.Fatalf("missing fresh server-minted identity: %+v", fake.auth)
 	}
-	wantPath := "/api/v1/namespaces/astronomer-monitoring/services/http:astronomer-monitoring-grafana:80/proxy/api/v1/clusters/" + stackTestClusterID + "/observability/grafana/d/local?orgId=1"
-	if fake.paths[1] != wantPath {
-		t.Fatalf("proxy path = %q, want %q", fake.paths[1], wantPath)
+	identity, err := h.grafanaTickets.Take(fake.auth.Ticket)
+	if err != nil || identity.Email != "operator@example.com" {
+		t.Fatalf("incorrect identity: %+v %v", identity, err)
+	}
+	if len(fake.paths) != 1 {
+		t.Fatalf("paths = %#v, want authenticated proxy", fake.paths)
+	}
+	wantPath := "/api/v1/namespaces/astronomer-monitoring/services/http:astronomer-monitoring-grafana-proxy:8080/proxy/d/local?orgId=1"
+	if fake.paths[0] != wantPath {
+		t.Fatalf("proxy path = %q, want %q", fake.paths[0], wantPath)
 	}
 	if rec.Header().Get("Set-Cookie") != "" {
 		t.Fatal("cluster Grafana cookie crossed the proxy boundary")
 	}
 	if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "script-src 'self' 'unsafe-inline' 'unsafe-eval'") {
 		t.Fatalf("CSP = %q", got)
+	}
+}
+
+func TestClusterGrafanaIdentityUsesCurrentClusterPermissions(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		verbs []string
+		role  string
+	}{{"reader", []string{"read"}, "Viewer"}, {"editor", []string{"read", "update"}, "Editor"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			cid := uuid.MustParse(stackTestClusterID)
+			h := grafanaTicketHandler(t, []rbac.RoleBinding{{ClusterID: cid.String(), RoleRules: []rbac.Rule{{Resource: "monitoring", Verbs: tc.verbs}}}})
+			user := &reqctx.User{ID: uuid.NewString(), Email: "member@example.com", AuthMethod: "jwt"}
+			r := httptest.NewRequest("GET", "/", nil)
+			r = r.WithContext(reqctx.WithUser(r.Context(), user))
+			got := h.clusterGrafanaIdentity(r, user, cid)
+			if got.Role != tc.role || got.Admin || !got.Explore || len(got.ClusterIDs) != 0 {
+				t.Fatalf("identity = %+v", got)
+			}
+		})
+	}
+}
+
+func TestClusterGrafanaRejectsUnauthorizedBeforeTunnel(t *testing.T) {
+	h := grafanaTicketHandler(t, denyMonitoring())
+	fake := &clusterGrafanaRequesterFake{}
+	h.requester = fake
+	router := chi.NewRouter()
+	router.Handle("/api/v1/clusters/{id}/observability/grafana/*", http.HandlerFunc(h.ProxyClusterGrafana))
+	r := httptest.NewRequest("GET", "/api/v1/clusters/"+stackTestClusterID+"/observability/grafana/", nil)
+	r = r.WithContext(reqctx.WithUser(r.Context(), &reqctx.User{ID: uuid.NewString(), Email: "denied@example.com", AuthMethod: "jwt"}))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+	if w.Code != 403 || len(fake.paths) != 0 {
+		t.Fatalf("status=%d tunnel=%v", w.Code, fake.paths)
 	}
 }

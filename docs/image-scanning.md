@@ -1,6 +1,6 @@
 # Image Vulnerability Scanning
 
-Sprint 062 wires astronomer-go to ingest VulnerabilityReport CRDs from
+Astronomer ingests VulnerabilityReport CRDs from
 [Trivy-operator](https://aquasecurity.github.io/trivy-operator/) running
 in each managed cluster, surface them as a per-cluster "Image scans"
 tab, and roll them up across the fleet at `/dashboard/security/`.
@@ -13,17 +13,27 @@ mirror in our agent ships those CRs to the management plane, where
 
 ## Install
 
-```
-Catalog → Aqua Security → trivy-operator → Install in security namespace
-```
+Remote clusters automatically receive the release-pinned Trivy Operator through
+Flux, including existing Ready clusters and registrations with Quick Start off.
+Installation waits for authenticated, ready, compatible Flux inventory. Uncheck
+**Enable image vulnerability scanning** during registration to opt out. API
+callers can set the `astronomer.io/image-scanning: disabled` cluster annotation
+before installation. See [Platform baseline](platform-baseline.md).
 
-The seed in migration `062_image_vulnerabilities.up.sql` adds the Aqua
-Security helm repo + a curated `trivy-operator` chart entry. The seed is
-idempotent — re-running the migration leaves operator-edited rows
-intact.
+On clusters that are already Ready, scanner installation runs as a normal
+system delivery without reopening registration. Progress, failures, and retries
+are visible in delivery. Opting out after installation prevents automatic
+installation but does not remove existing releases or reports; remove the
+scanner through its owning delivery workflow when removal is desired. The
+management cluster currently does not expose Image Scans.
 
-Once installed, the operator starts emitting `VulnerabilityReport` CRs
-on its own scan cadence (default: every 6h). The CRD mirror streams
+The baseline enables image vulnerability scanning only, with one concurrent
+scan job and a 24-hour report TTL. It is not runtime intrusion prevention.
+Scans require access to image registries and Trivy vulnerability databases;
+sideloaded local images without a reachable registry may not be scanned.
+
+Once installed, the operator emits `VulnerabilityReport` CRs as workloads are
+reconciled and reports expire. The CRD mirror streams
 them to the management plane; ingestion is idempotent on
 `(cluster_id, report_name)`.
 
@@ -47,7 +57,7 @@ Fleet-wide (requires `security:read`):
 
 ## Schema
 
-See migration `062_image_vulnerabilities.up.sql`:
+The scanner persists:
 
 - `image_vulnerability_reports` — one row per (cluster, namespace,
   workload, container, image-digest). Aggregate counts stored eagerly

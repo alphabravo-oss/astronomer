@@ -1,7 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const { RouterLinkStub } = await import("@/test/router-link");
@@ -29,6 +28,12 @@ vi.mock("@/lib/hooks/clusters", () => ({
 vi.mock("@/lib/permission-hooks", () => ({
   usePermissionDecision: (...args: unknown[]) =>
     mockUsePermissionDecision(...args),
+}));
+
+vi.mock("@/components/monitoring/cluster-grafana-view", () => ({
+  ClusterGrafanaView: ({ actions }: { actions: ReactNode }) => (
+    <div>Grafana logs{actions}</div>
+  ),
 }));
 
 vi.mock("@/routes/dashboard/logging/-pipelines-tab", () => ({
@@ -65,6 +70,9 @@ describe("ClusterLoggingPage attach CTA", () => {
       data: { ingestPublic: true, attached: false, status: "healthy" },
     });
     render(wrap(<ClusterLoggingPage />));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Configure log collection" }),
+    );
     expect(screen.getByTestId("attach-astronomer-logs")).toHaveTextContent(
       "Ship logs to Astronomer",
     );
@@ -78,6 +86,9 @@ describe("ClusterLoggingPage attach CTA", () => {
       data: { ingestPublic: false, attached: false, status: "healthy" },
     });
     render(wrap(<ClusterLoggingPage />));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Configure log collection" }),
+    );
     expect(
       screen.queryByTestId("attach-astronomer-logs"),
     ).not.toBeInTheDocument();
@@ -92,6 +103,9 @@ describe("ClusterLoggingPage attach CTA", () => {
       data: { ingestPublic: true, attached: false, status: "healthy" },
     });
     render(wrap(<ClusterLoggingPage />));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Configure log collection" }),
+    );
     expect(
       screen.queryByTestId("attach-astronomer-logs"),
     ).not.toBeInTheDocument();

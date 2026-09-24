@@ -4,15 +4,15 @@ import {
   type GuidedSectionProps,
 } from "@/components/resources/guided-resource-fields";
 import { ProbeFields } from "@/components/resources/probe-fields";
+import { EnvironmentFields } from "./guided-env-fields";
+import { VolumeFields } from "./guided-volume-fields";
+import { SchedulingFields } from "./guided-scheduling-fields";
 import {
   booleanValue,
-  envText,
   keyValueText,
   manifestValue,
-  parseEnvText,
   parseKeyValueText,
   stringValue,
-  updateManifest,
 } from "@/components/resources/guided-resource-model";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -54,15 +54,7 @@ function WorkloadRuntimeFields({ form }: GuidedSectionProps) {
   if (!containerPath || !podPath) return null;
   return (
     <>
-      <Field label="Environment" description="One NAME=value pair per line.">
-        <Textarea
-          value={envText(manifestValue(value, [...containerPath, "env"]))}
-          onChange={(event) =>
-            set([...containerPath, "env"], parseEnvText(event.target.value))
-          }
-          rows={4}
-        />
-      </Field>
+      <EnvironmentFields form={form} />
       <Field label="Service account">
         <Input
           value={stringValue(value, [...podPath, "serviceAccountName"])}
@@ -138,96 +130,17 @@ function WorkloadRuntimeFields({ form }: GuidedSectionProps) {
       <ProbeFields form={form} kind="readiness" />
       <ProbeFields form={form} kind="liveness" />
       <ProbeFields form={form} kind="startup" />
-      <Field label="ConfigMap environment source">
-        <Input
-          value={stringValue(value, [
-            ...containerPath,
-            "envFrom",
-            0,
-            "configMapRef",
-            "name",
-          ])}
-          onChange={(event) =>
-            set(
-              [...containerPath, "envFrom", 0, "configMapRef", "name"],
-              event.target.value,
-            )
-          }
-        />
-      </Field>
-      <Field label="Secret environment source">
-        <Input
-          value={stringValue(value, [
-            ...containerPath,
-            "envFrom",
-            1,
-            "secretRef",
-            "name",
-          ])}
-          onChange={(event) =>
-            set(
-              [...containerPath, "envFrom", 1, "secretRef", "name"],
-              event.target.value,
-            )
-          }
-        />
-      </Field>
     </>
   );
 }
 
 function WorkloadStorageFields({ form }: GuidedSectionProps) {
-  const { value, podPath, containerPath, onChange, set } = form;
+  const { value, podPath, containerPath, set } = form;
   if (!containerPath || !podPath) return null;
   return (
     <>
-      <Field label="PVC claim">
-        <Input
-          value={stringValue(value, [
-            ...podPath,
-            "volumes",
-            0,
-            "persistentVolumeClaim",
-            "claimName",
-          ])}
-          onChange={(event) => {
-            let next = updateManifest(
-              value,
-              [...podPath, "volumes", 0, "name"],
-              "data",
-            );
-            next = updateManifest(
-              next,
-              [...podPath, "volumes", 0, "persistentVolumeClaim", "claimName"],
-              event.target.value,
-            );
-            onChange(next);
-          }}
-        />
-      </Field>
-      <Field label="Volume mount path">
-        <Input
-          value={stringValue(value, [
-            ...containerPath,
-            "volumeMounts",
-            0,
-            "mountPath",
-          ])}
-          onChange={(event) => {
-            let next = updateManifest(
-              value,
-              [...containerPath, "volumeMounts", 0, "name"],
-              "data",
-            );
-            next = updateManifest(
-              next,
-              [...containerPath, "volumeMounts", 0, "mountPath"],
-              event.target.value,
-            );
-            onChange(next);
-          }}
-        />
-      </Field>
+      <VolumeFields form={form} />
+      <SchedulingFields form={form} />
       <Field label="Node selector" description="One key=value pair per line.">
         <Textarea
           value={keyValueText(

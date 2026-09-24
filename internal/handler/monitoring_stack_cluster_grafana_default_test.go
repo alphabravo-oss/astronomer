@@ -28,12 +28,12 @@ func TestClusterGrafanaUsesAuthenticatedSameOriginPath(t *testing.T) {
 	ini, _ := grafana["grafana.ini"].(map[string]any)
 	server, _ := ini["server"].(map[string]any)
 	wantRoot := "https://astronomer.example.com" + clusterGrafanaProxyPath(stackTestClusterID)
-	if server["root_url"] != wantRoot || server["serve_from_sub_path"] != true {
+	if server["root_url"] != wantRoot || server["serve_from_sub_path"] != false {
 		t.Fatalf("grafana server config = %#v, want same-origin root %q", server, wantRoot)
 	}
 	anonymous, _ := ini["auth.anonymous"].(map[string]any)
-	if anonymous["enabled"] != true || anonymous["org_role"] != "Viewer" {
-		t.Fatalf("anonymous auth = %#v, want Viewer behind Astronomer RBAC", anonymous)
+	if anonymous["enabled"] != false {
+		t.Fatalf("anonymous auth = %#v, want anonymous authentication disabled", anonymous)
 	}
 }
 

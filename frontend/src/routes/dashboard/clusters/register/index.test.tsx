@@ -1,10 +1,19 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const searchState = vi.hoisted(() => ({ value: {} as { clusterId?: string } }));
 const navigateSpy = vi.hoisted(() => vi.fn());
 const mockUseCluster = vi.hoisted(() => vi.fn());
 const mockUseClusterSearch = vi.hoisted(() => vi.fn());
+const createClusterSpy = vi.hoisted(() => vi.fn());
+const optionsSpy = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/api/clusters", () => ({
+  createCluster: createClusterSpy,
+  updateCluster: vi.fn(),
+}));
+vi.mock("@/lib/api/cluster-registration", () => ({
+  setRegistrationOptions: optionsSpy,
+}));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const original =
@@ -83,6 +92,8 @@ function draftCluster(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  createClusterSpy.mockResolvedValue({ id: "created-cluster" });
+  optionsSpy.mockResolvedValue(undefined);
   searchState.value = {};
   mockUseCluster.mockReturnValue({
     data: undefined,
@@ -94,6 +105,48 @@ beforeEach(() => {
 });
 
 describe("register wizard draft identity", () => {
+  it("defaults to full management and independent scanning with opt-out", () => {
+    render(<RegisterClusterWizardRoute />);
+    expect(
+      screen.queryByRole("combobox", { name: "Agent privilege profile" }),
+    ).not.toBeInTheDocument();
+    const baseline = screen.getByRole("checkbox", { name: /Quick Start/ });
+    const scanning = screen.getByRole("checkbox", {
+      name: /Enable image vulnerability scanning/,
+    });
+    expect(baseline).toBeChecked();
+    expect(scanning).toBeChecked();
+    fireEvent.click(scanning);
+    expect(scanning).not.toBeChecked();
+    expect(baseline).toBeChecked();
+    fireEvent.click(scanning);
+    fireEvent.click(baseline);
+    expect(baseline).not.toBeChecked();
+    expect(scanning).toBeEnabled();
+    expect(scanning).toBeChecked();
+  });
+
+  it("preserves a resumed scanning opt-out", () => {
+    searchState.value = { clusterId: "abc" };
+    mockUseCluster.mockReturnValue({
+      data: draftCluster({
+        installBaseline: true,
+        agentPrivilegeProfile: "admin",
+        annotations: { "astronomer.io/image-scanning": "disabled" },
+      }),
+      isError: false,
+      isLoading: false,
+    });
+    render(<RegisterClusterWizardRoute />);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("checkbox", { name: /Quick Start/ })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", {
+        name: /Enable image vulnerability scanning/,
+      }),
+    ).not.toBeChecked();
+  });
+
   it("keeps the draft alive across Back — never exits to the cluster list — and lets the operator re-edit their own name", () => {
     searchState.value = { clusterId: "abc" };
     mockUseCluster.mockReturnValue({
@@ -150,3 +203,36 @@ describe("register wizard draft identity", () => {
     expect(screen.queryByPlaceholderText("my-cluster")).not.toBeInTheDocument();
   });
 });
+
+it.each([true, false])(
+  "submits scanner enabled=%s independently of the metrics baseline",
+  async (scanningEnabled) => {
+    render(<RegisterClusterWizardRoute />);
+    fireEvent.change(screen.getByPlaceholderText("my-cluster"), {
+      target: { value: "remote-cluster" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Quick Start/ }));
+    if (!scanningEnabled)
+      fireEvent.click(
+        screen.getByRole("checkbox", {
+          name: /Enable image vulnerability scanning/,
+        }),
+      );
+    fireEvent.click(
+      screen.getByRole("button", { name: /Next: Get install command/ }),
+    );
+    await waitFor(() =>
+      expect(optionsSpy).toHaveBeenCalledWith("created-cluster", false),
+    );
+    expect(createClusterSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        annotations: {
+          "astronomer.io/agent-privilege-profile": "admin",
+          "astronomer.io/image-scanning": scanningEnabled
+            ? "enabled"
+            : "disabled",
+        },
+      }),
+    );
+  },
+);

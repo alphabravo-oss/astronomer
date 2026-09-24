@@ -257,20 +257,13 @@ subjects:
 
 ---
 # ============================================================================
-# Astronomer SELF-MANAGEMENT RBAC (two-axis model).
+# Astronomer self-management RBAC.
 #
-# Axis 1 (above): the ClusterRole 'astronomer-agent' = the user-facing privilege
-# profile (viewer/operator/admin/namespace-*). It governs the agent's reach into
-# the CUSTOMER's resources (default/kube-system/app namespaces). A viewer is
-# strictly read-only there.
-#
-# Axis 2 (here): namespaced Roles giving the agent WRITE over Astronomer's OWN
-# footprint — agent, logging stack, delivery control namespaces, and baseline
-# platform components — bounded to the astronomer-* namespaces ONLY. These are
-# emitted for EVERY profile (viewer included) so the agent can manage its exact
-# release-pinned Flux distribution and accepted delivery assignments regardless
-# of how little the user-facing proxy profile grants. The workload grants below
-# are namespaced; reviewed platform bundles use the separate fixed
+# The agent ClusterRole above supports full cluster management. Astronomer
+# authorizes each user's requests through RBAC before sending them to the agent.
+# These separate namespaced roles describe the product-owned footprint and its
+# release-pinned Flux distribution. Accepted workload assignments use scoped
+# delivery service accounts; reviewed platform bundles use the fixed
 # astronomer-delivery-platform-applier boundary.
 #
 # Plus a resourceName-scoped grant on the agent's OWN Deployment so an accepted

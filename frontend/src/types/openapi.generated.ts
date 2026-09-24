@@ -10559,6 +10559,7 @@ export interface OpenAPIOperations {
     path: "/api/v1/cluster-agents/";
     arguments: {
         "query"?: {
+          "search"?: string;
           "limit"?: number;
           "offset"?: number;
           "cursor"?: string;
@@ -13434,7 +13435,7 @@ export interface OpenAPIOperations {
           "offset"?: number;
         };
       };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['RBACGlobalRoleBinding'][];
       };
   };
@@ -13467,7 +13468,7 @@ export interface OpenAPIOperations {
           "offset"?: number;
         };
       };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['RBACGlobalRoleBinding'][];
       };
   };
@@ -13501,7 +13502,7 @@ export interface OpenAPIOperations {
           "offset"?: number;
         };
       };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['RBACClusterRoleBinding'][];
       };
   };
@@ -13535,7 +13536,7 @@ export interface OpenAPIOperations {
           "offset"?: number;
         };
       };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['RBACClusterRoleBinding'][];
       };
   };
@@ -13569,7 +13570,7 @@ export interface OpenAPIOperations {
           "offset"?: number;
         };
       };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['RBACProjectRoleBinding'][];
       };
   };
@@ -13603,7 +13604,7 @@ export interface OpenAPIOperations {
           "offset"?: number;
         };
       };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['RBACProjectRoleBinding'][];
       };
   };

@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
-	"github.com/alphabravocompany/astronomer-go/internal/baseline"
 	"github.com/google/uuid"
 )
 
@@ -243,31 +241,4 @@ func (h *ToolHandler) checkToolScope(ctx context.Context, slug string, clusterID
 		}
 	}
 	return "", true
-}
-
-// checkClusterRBACProfile blocks installing a cluster-RBAC baseline component
-// (one whose chart ships ClusterRole/ClusterRoleBinding, webhooks or CRDs) onto
-// a cluster whose agent runs on a non-admin privilege profile. Such an agent SA
-// is read-only on cluster-scoped RBAC, so the install can never fully converge.
-// Returns ("", true) — allowed — for any component not marked
-// RequiresClusterRBAC, for admin-profile clusters, and (fail-open) when the
-// cluster row can't be loaded, mirroring checkToolScope's tolerance so a
-// transient lookup miss doesn't wrongly block an admin cluster.
-func (h *ToolHandler) checkClusterRBACProfile(ctx context.Context, slug string, clusterID uuid.UUID) (string, bool) {
-	component, ok := baseline.ComponentBySlug(slug)
-	if slug != "istio" && (!ok || !component.RequiresClusterRBAC) {
-		return "", true
-	}
-	cluster, err := h.queries.GetClusterByID(ctx, clusterID)
-	if err != nil {
-		return "", true
-	}
-	profile := agentPrivilegeProfileFromAnnotations(cluster.Annotations)
-	if profile == agenttemplate.PrivilegeProfileAdmin {
-		return "", true
-	}
-	return fmt.Sprintf(
-		"%s installs cluster-scoped RBAC (ClusterRole/ClusterRoleBinding and admission webhooks) that this cluster's %q agent cannot create — only an admin-profile agent can. Re-adopt the cluster with the admin privilege profile before installing this tool.",
-		slug, profile,
-	), false
 }
