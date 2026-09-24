@@ -64,7 +64,7 @@
     "frontend/src/components/projects/cluster-templates/template-form.tsx:TemplateForm": 284,
     "frontend/src/components/rbac/create-binding-modal.tsx:CreateClusterBindingModal": 283,
     "frontend/src/components/rbac/role-editor.tsx:RoleEditor": 375,
-    "frontend/src/components/resources/create-resource-dialog.tsx:CreateResourceEditor": 301,
+    "frontend/src/components/resources/create-resource-dialog.tsx:CreateResourceEditor": 291,
     "frontend/src/components/resources/generic-resource-table.tsx:GenericResourceTable": 280,
     "frontend/src/components/resources/namespace-detail-page.tsx:NamespaceDetailPage": 256,
     "frontend/src/components/resources/resource-core-tables.tsx:PodsTable": 248,

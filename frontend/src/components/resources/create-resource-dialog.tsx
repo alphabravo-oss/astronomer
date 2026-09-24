@@ -102,6 +102,34 @@ export function CreateResourceDialog(props: CreateResourceDialogProps) {
   ) : null;
 }
 
+function useTemplateManifest(
+  open: boolean,
+  templateKey: CreateResourceDialogProps["templateKey"],
+  modeRequestRef: { current: number },
+) {
+  const [manifest, setManifest] = useState<KubernetesManifest>({});
+  useEffect(() => {
+    if (!open || !templateKey) return;
+    modeRequestRef.current += 1;
+    const template = k8sTemplates[templateKey] || "";
+    let cancelled = false;
+    void import("js-yaml").then((yaml) => {
+      if (cancelled) return;
+      const parsed = yaml.load(template);
+      setManifest(
+        parsed && typeof parsed === "object"
+          ? (parsed as KubernetesManifest)
+          : {},
+      );
+    });
+    return () => {
+      cancelled = true;
+      modeRequestRef.current += 1;
+    };
+  }, [open, templateKey, modeRequestRef]);
+  return [manifest, setManifest] as const;
+}
+
 function CreateResourceEditor({
   open,
   onClose,
@@ -123,12 +151,16 @@ function CreateResourceEditor({
       ? k8sTemplates[templateKey] || ""
       : (initialYaml ?? IMPORT_YAML_PLACEHOLDER),
   );
-  const [manifest, setManifest] = useState<KubernetesManifest>({});
   const [guidedValid, setGuidedValid] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [applyResults, setApplyResults] = useState<K8sCreateBatchResult[]>([]);
   const [editorDirty, setEditorDirty] = useState(false);
   const modeRequestRef = useRef(0);
+  const [manifest, setManifest] = useTemplateManifest(
+    open,
+    templateKey,
+    modeRequestRef,
+  );
   const k8sCreateBatch = useK8sCreateBatch();
   const discovery = useClusterDiscovery(clusterId);
   const schemaQuery = useResourceSchema(
@@ -136,26 +168,6 @@ function CreateResourceEditor({
     resolvedResourceType ?? "deployments",
     open && !!resolvedResourceType,
   );
-
-  useEffect(() => {
-    if (!open || !templateKey) return;
-    modeRequestRef.current += 1;
-    const template = k8sTemplates[templateKey] || "";
-    let cancelled = false;
-    void import("js-yaml").then((yaml) => {
-      if (cancelled) return;
-      const parsed = yaml.load(template);
-      setManifest(
-        parsed && typeof parsed === "object"
-          ? (parsed as KubernetesManifest)
-          : {},
-      );
-    });
-    return () => {
-      cancelled = true;
-      modeRequestRef.current += 1;
-    };
-  }, [open, templateKey]);
 
   const schema = schemaQuery.data;
   const hasGuidedTemplate = useMemo(
@@ -166,6 +178,7 @@ function CreateResourceEditor({
   if (!open) return null;
 
   const changeMode = async (next: "guided" | "yaml") => {
+    if (!hasGuidedTemplate) return;
     const request = ++modeRequestRef.current;
     // Selecting the current mode also cancels a superseded async transition.
     if (next === mode) return;
@@ -335,6 +348,7 @@ function CreateResourceEditor({
               id={`resource-editor-tab-${item}`}
               type="button"
               role="tab"
+              disabled={!hasGuidedTemplate}
               aria-selected={mode === item}
               aria-controls={`resource-editor-panel-${item}`}
               tabIndex={mode === item ? 0 : -1}
@@ -377,7 +391,11 @@ function CreateResourceEditor({
         tabIndex={0}
         className="min-h-0 flex-1 overflow-hidden focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {mode === "guided" ? (
+        {templateKey && !hasGuidedTemplate ? (
+          <p role="status" className="p-5 text-sm text-muted-foreground">
+            Loading resource template…
+          </p>
+        ) : mode === "guided" ? (
           <GuidedResourceForm
             value={manifest}
             onChange={(next) => {

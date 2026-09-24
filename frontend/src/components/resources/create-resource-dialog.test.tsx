@@ -298,3 +298,45 @@ it("guided correction resubmits the edited name after failure", async () => {
     "corrected",
   );
 });
+
+it("keeps the template intact when mode switching is attempted during initialization", async () => {
+  mutateAsync.mockReset();
+  mutateAsync.mockImplementation(async ({ items }) =>
+    items.map((item: object) => ({ ...item, ok: true })),
+  );
+  render(
+    wrap(
+      <CreateResourceDialog
+        open
+        onClose={vi.fn()}
+        clusterId="cluster-1"
+        templateKey="deployment"
+        title="Create Deployment"
+      />,
+    ),
+  );
+  const guided = screen.getByRole("tab", { name: "guided" });
+  const yaml = screen.getByRole("tab", { name: "yaml" });
+  expect(guided).toBeDisabled();
+  expect(yaml).toBeDisabled();
+  expect(screen.queryByLabelText("Guided name")).not.toBeInTheDocument();
+  fireEvent.keyDown(guided, { key: "ArrowRight" });
+  fireEvent.click(yaml);
+  expect(guided).toHaveAttribute("aria-selected", "true");
+  await waitFor(() => expect(guided).toBeEnabled());
+  fireEvent.keyDown(guided, { key: "ArrowRight" });
+  const editor = await screen.findByLabelText("yaml-editor");
+  expect((editor as HTMLTextAreaElement).value).toContain("kind: Deployment");
+  fireEvent.keyDown(yaml, { key: "ArrowLeft" });
+  const name = await screen.findByLabelText("Guided name");
+  fireEvent.change(name, { target: { value: "initialized-deployment" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create", exact: true }));
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+  expect(mutateAsync.mock.calls[0][0].items[0].body).toMatchObject({
+    apiVersion: "apps/v1",
+    kind: "Deployment",
+    metadata: { name: "initialized-deployment" },
+    spec: { template: { spec: { containers: expect.any(Array) } } },
+  });
+  await screen.findByRole("button", { name: "Done" });
+});
