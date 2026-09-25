@@ -156,6 +156,8 @@ export function SnapshotSchedulesTable({
       key: "actions",
       header: "",
       sortable: false,
+      rowActions: true,
+      width: "4.5rem",
       align: "right",
       accessor: (schedule) => (
         <div className="flex items-center justify-end gap-1.5">
@@ -285,6 +287,8 @@ export function SnapshotsTable({
       key: "actions",
       header: "",
       sortable: false,
+      rowActions: true,
+      width: "7.5rem",
       align: "right",
       accessor: (snapshot) => {
         const restorable =

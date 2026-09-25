@@ -625,10 +625,9 @@ test("delivery overview renders the Flux-native system for authenticated users",
 
   await expect(page.getByRole("heading", { name: /^Estate$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /flux ready/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /^Sources$/ })).toHaveAttribute(
-    "href",
-    "/dashboard/delivery/sources",
-  );
+  await expect(
+    page.locator('a[href="/dashboard/delivery/sources?project=project-1"]'),
+  ).toHaveCount(1);
 });
 
 test("catalog install modal remains usable on responsive viewports", async ({

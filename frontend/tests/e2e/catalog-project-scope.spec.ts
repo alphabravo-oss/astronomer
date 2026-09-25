@@ -108,35 +108,80 @@ for (const clusterScoped of [false, true]) {
       ? `/dashboard/clusters/${SMOKE_CLUSTER_ID}/apps?section=browse`
       : "/dashboard/catalog";
     await page.goto(path);
-    await page
-      .getByRole("button", { name: "Catalog project", exact: true })
-      .click();
-    const dialog = page.getByRole("dialog", { name: "Select catalog project" });
-    await expect(
-      dialog.getByRole("button", { name: "Select Project 1", exact: true }),
-    ).toBeVisible();
-    await dialog.getByRole("button", { name: "Next page" }).click();
-    await expect(
-      dialog.getByRole("button", { name: "Select Project 26", exact: true }),
-    ).toBeVisible();
-    await dialog.getByPlaceholder("Search...").fill("project-225");
-    await dialog
-      .getByRole("button", { name: "Select Project 225", exact: true })
-      .click();
+    if (clusterScoped) {
+      await page
+        .getByRole("button", {
+          name: "Project scope: All projects",
+          exact: true,
+        })
+        .click();
+      const picker = page.getByRole("listbox");
+      await expect(
+        picker.getByText("Project 1", { exact: true }),
+      ).toBeVisible();
+      await page.getByPlaceholder("Find a project...").fill("project-225");
+      await expect(
+        picker.getByText("Project 225", { exact: true }),
+      ).toBeVisible();
+      await picker.getByText("Project 225", { exact: true }).click();
+    } else {
+      await page
+        .getByRole("button", { name: "Catalog project", exact: true })
+        .click();
+      const dialog = page.getByRole("dialog", {
+        name: "Select catalog project",
+      });
+      await expect(
+        dialog.getByRole("button", { name: "Select Project 1", exact: true }),
+      ).toBeVisible();
+      await dialog.getByRole("button", { name: "Next page" }).click();
+      await expect(
+        dialog.getByRole("button", {
+          name: "Select Project 26",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await dialog.getByPlaceholder("Search...").fill("project-225");
+      await dialog
+        .getByRole("button", { name: "Select Project 225", exact: true })
+        .click();
+    }
     await expect(page).toHaveURL(/project=project-225/);
     await expect.poll(() => catalogScopes.includes("project-225")).toBe(true);
     await page.reload();
-    await expect(
-      page.getByRole("button", { name: "Catalog project", exact: true }),
-    ).toHaveText("Project 225");
-    expect(
-      calls.every((url) =>
-        ["2", "25"].includes(url.searchParams.get("limit") || ""),
-      ),
-    ).toBe(true);
-    expect(calls.some((url) => url.searchParams.get("offset") === "25")).toBe(
-      true,
-    );
+    if (clusterScoped) {
+      await expect(
+        page.getByRole("button", {
+          name: "Project scope: Project 225",
+          exact: true,
+        }),
+      ).toBeVisible();
+    } else {
+      await expect(
+        page.getByRole("button", { name: "Catalog project", exact: true }),
+      ).toHaveText("Project 225");
+    }
+    if (clusterScoped) {
+      expect(
+        calls.some(
+          (url) =>
+            url.searchParams.get("search") === "project-225" &&
+            url.searchParams.get("limit") === "50" &&
+            url.searchParams.get("offset") === "0",
+        ),
+      ).toBe(true);
+    } else {
+      expect(
+        calls.every((url) =>
+          ["2", "25"].includes(url.searchParams.get("limit") || ""),
+        ),
+      ).toBe(true);
+    }
+    if (!clusterScoped) {
+      expect(calls.some((url) => url.searchParams.get("offset") === "25")).toBe(
+        true,
+      );
+    }
     expect(
       calls.some(
         (url) =>

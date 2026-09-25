@@ -32,7 +32,7 @@ test("all header controls fit at the five reviewed widths", async ({
     ).toBeVisible();
     await expect(
       page.locator("header").getByRole("button", { name: /Namespace scope/ }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     for (const name of ["User menu", "Notifications"]) {
       const trigger = page
         .locator("header")
