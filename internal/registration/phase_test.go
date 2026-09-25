@@ -17,6 +17,7 @@ func TestRegistrationWizard_PhaseTransitionsCreatedToReady(t *testing.T) {
 		{"created->awaiting_agent on confirm", PhaseCreated, EventConfirm, PhaseAwaitingAgent},
 		{"awaiting->connected on heartbeat", PhaseAwaitingAgent, EventAgentConnected, PhaseConnected},
 		{"connected->ready when no baseline", PhaseConnected, EventNoProvisioning, PhaseReady},
+		{"connected->ready when reconciled delivery is already applied", PhaseConnected, EventDeliveryApplied, PhaseReady},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

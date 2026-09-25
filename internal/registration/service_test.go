@@ -385,6 +385,25 @@ func TestRegistrationWizard_TemplateApplyAdvancesPhase(t *testing.T) {
 	}
 }
 
+// A failed registration may reconnect while Flux is independently healing the
+// existing release. In that case the next delivery observation can be Ready
+// without another applying event, and registration must still reflect reality.
+func TestRegistrationWizard_ReconnectedDeliverySuccessAdvancesPhase(t *testing.T) {
+	q := newFakeQuerier()
+	id := uuid.New()
+	yes := true
+	q.seed(id, PhaseConnected, &yes)
+	svc := newTestService(q, nil)
+
+	if err := svc.OnDeliveryApplySuccess(context.Background(), id); err != nil {
+		t.Fatalf("apply-success: %v", err)
+	}
+	rec, _ := q.GetClusterRegistrationRecord(context.Background(), id)
+	if rec.RegistrationPhase != string(PhaseReady) {
+		t.Fatalf("after success: want ready, got %s", rec.RegistrationPhase)
+	}
+}
+
 // TestRegistrationWizard_TemplateApplyFailure exercises the failure
 // edge so the operator's retry button has something to retry against.
 func TestRegistrationWizard_TemplateApplyFailureAdvancesToFailed(t *testing.T) {
