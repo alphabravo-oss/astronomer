@@ -39,6 +39,14 @@ import {
 import { getConnectorMeta } from "@/components/auth/connector-meta";
 import type { DexConnector } from "@/types";
 
+function dexInstallState(settings: ReturnType<typeof useDexSettings>["data"]) {
+  return {
+    installed: Boolean(settings?.configured),
+    clusterName: undefined,
+    loading: false,
+  };
+}
+
 function AuthOverviewPage() {
   const navigate = useNavigate();
   const { data: connectors = [], isLoading: connectorsLoading } =
@@ -49,11 +57,7 @@ function AuthOverviewPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<DexConnector | null>(null);
 
-  const dexInstall = {
-    installed: Boolean(settings?.configured),
-    clusterName: undefined,
-    loading: false,
-  };
+  const dexInstall = dexInstallState(settings);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;

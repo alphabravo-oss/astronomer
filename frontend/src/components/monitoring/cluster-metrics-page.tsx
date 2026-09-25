@@ -40,7 +40,6 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
     "1h",
     "range",
   );
-
   const { data: cluster } = useCluster(clusterId);
   const summaryQuery = useClusterMetricsSummary(clusterId);
   const { data: summary } = summaryQuery;

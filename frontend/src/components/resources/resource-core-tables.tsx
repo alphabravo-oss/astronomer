@@ -504,6 +504,12 @@ export function EventsTable({ clusterId }: { clusterId: string }) {
   );
 }
 
+function selectedPodSort(sorting: SortingState): PodSort {
+  return sorting[0]
+    ? (`${sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}` as PodSort)
+    : "namespace_asc";
+}
+
 export function PodsTable({ clusterId }: { clusterId: string }) {
   const navigate = useNavigate();
   const [pageIndex, setPageIndex] = useState(0);
@@ -516,11 +522,7 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
   const [healthFilter, setHealthFilter] = useState<
     "all" | "attention" | "restarted"
   >("all");
-  const sort = (
-    sorting[0]
-      ? `${sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
-      : "namespace_asc"
-  ) as PodSort;
+  const sort = selectedPodSort(sorting);
   // Pod changes are routed by the shared SSE dispatcher to this Query key;
   // the hook polls only while the dashboard event stream is unavailable.
   const podsQuery = useClusterPods(clusterId, {

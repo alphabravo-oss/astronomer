@@ -4827,9 +4827,15 @@ components:
           type: boolean
         feature.backups:
           type: boolean
+        feature.delivery:
+          type: boolean
+        feature.alerting:
+          type: boolean
         feature.charlie:
           type: boolean
         feature.extensions:
+          type: boolean
+        feature.control_plane_snapshots:
           type: boolean
     ExtensionCSP:
       type: object

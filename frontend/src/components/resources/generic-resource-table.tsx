@@ -79,6 +79,12 @@ export interface GenericResourceTableProps {
   baseColumns: Column<GenericK8sResource>[];
 }
 
+function genericResourceSort(sorting: SortingState) {
+  return sorting[0]
+    ? `${sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
+    : "namespace_asc";
+}
+
 /**
  * Adapter for Kubernetes resources served through the generic resource API.
  *
@@ -98,9 +104,7 @@ export function GenericResourceTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: "namespace", desc: false },
   ]);
-  const sort = sorting[0]
-    ? `${sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
-    : "namespace_asc";
+  const sort = genericResourceSort(sorting);
   const namespaceSelection = scope.selectedNamespaces;
   const namespaceKey =
     namespaceSelection === null ? undefined : namespaceSelection?.join(",");

@@ -3133,8 +3133,11 @@ export interface OpenAPIComponents {
           "feature.hosted_loki"?: boolean;
           "feature.security"?: boolean;
           "feature.backups"?: boolean;
+          "feature.delivery"?: boolean;
+          "feature.alerting"?: boolean;
           "feature.charlie"?: boolean;
           "feature.extensions"?: boolean;
+          "feature.control_plane_snapshots"?: boolean;
         };
     FleetVulnerabilityAggregate: {
           "critical": number;

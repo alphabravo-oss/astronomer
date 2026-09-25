@@ -1,10 +1,10 @@
 {
-  "recordedAtUTC": "2026-09-24T20:18:04.867022+00:00",
-  "astronomerHEAD": "22f633ece6a916a7dae7ca8c9eed5799a2f44cd5",
+  "recordedAtUTC": "2026-09-25T03:14:04.145245+00:00",
+  "astronomerHEAD": "1975a32b622b3b094235b8d7ed01a5606a76c530",
   "includesDirtyWorkingTree": true,
   "catalogHEAD": "3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5",
   "catalogSHA256": "084aa9dec47d9612fdebd848737f53f9feb70e248a4e8e5ccbc93491e1f4ae0c",
-  "runtimeReconciliation": "NOT_RUN",
+  "runtimeReconciliation": "PARTIAL_PASS: six initial registry families matched through the live API; functional cases remain NOT_RUN",
   "liveQualification": "NOT_RUN",
   "catalogApplications": [
     {
@@ -391,8 +391,8 @@
     "internal/siem/transport.go": "94f96473f1ed20f609a122a34bf77e0d177158ed9180ac48ead42078bb72d120",
     "internal/siem/format.go": "b6a0bde2c07c9cb5a320fc76c67445016dee25da961f3589d6d246ed53f2802f",
     "internal/handler/extensions_manifest.go": "a095b9bdf5a4e3f72e7952b0dca748c7843f8a3cc2752d03593bcf5760cbaad4",
-    "internal/server/routes_tools_controlplane.go": "0b72a7117077584a7e538f6643cd396ccdb6049f95b2a0b54bdabac7789208b5",
-    "internal/server/routes_cluster_addons.go": "5e4d04cd30fc111adca7d26ac44dd6f9b147c912a2e25211261a57b7031cc5d2",
+    "internal/server/routes_tools_controlplane.go": "2a0ebd457e23a9f2f5c1c7e3217fee12de3a4d268c61b56cdc3c2b170fcce567",
+    "internal/server/routes_cluster_addons.go": "d99f15cfd4dbb788e9f614e41f41b19e38709b8ed54c28e67478a0a443d36544",
     "internal/server/routes_dex.go": "96efc6b450a6496381e22da58d21de3d1534c244b958c9ed8b8bc798d1884675",
     "internal/server/routes_monitoring.go": "a3245fd3507057f8008cf4dba3f0af160e885cc2b271afc75b07087e2dffb970",
     "internal/server/routes_api_entry.go": "21a788a9beeaa24bb7a7bfbf28b0ee9a67699f103f017fa6de887f3c31c1d156",
@@ -401,6 +401,6 @@
     "internal/vault/client.go": "75d4429d742232b149292029b17603769226ee1694de4327421656b98068b58f",
     "frontend/src/routes/dashboard/logging/-output-modal.tsx": "b38c4e49b7bf40309352c7248d32c50202356e3adb91ebf903d207b74b2639c5",
     "frontend/src/routes/dashboard/alerting/-channel-modal.tsx": "aac0f2ffde3a483bfffd8bb8adf036f078771a192b1f304c66067339be68ca40",
-    "docs/openapi.yaml": "6f647d07105fa3ac80744fca45bee9bceb8d7b30bff791999b9704268cbc3266"
+    "docs/openapi.yaml": "9c270dd580eb3ab815b77fa51e1ebc3db06a5fbae338e33cd4c8b72815e03fbe"
   }
 }
