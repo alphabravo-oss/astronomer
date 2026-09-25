@@ -19,24 +19,28 @@ SELECT * FROM project_namespaces
 WHERE cluster_id = $1 AND namespace = $2;
 
 -- name: ListProjects :many
-SELECT * FROM projects
+SELECT p.* FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
 WHERE (
     sqlc.arg(filter_search)::text = ''
-    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.description ILIKE '%' || sqlc.arg(filter_search) || '%'
 )
-ORDER BY created_at DESC
+AND c.decommissioned_at IS NULL
+ORDER BY p.created_at DESC
 LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: CountProjectsFiltered :one
-SELECT count(*) FROM projects
+SELECT count(*) FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
 WHERE (
     sqlc.arg(filter_search)::text = ''
-    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
-);
+    OR p.name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.description ILIKE '%' || sqlc.arg(filter_search) || '%'
+)
+AND c.decommissioned_at IS NULL;
 
 -- name: ListProjectsForScopes :many
 -- Scope-filtered ListProjects: the projects the caller is bound to directly,
@@ -44,55 +48,63 @@ WHERE (
 -- narrowing (a Cluster Owner sees their cluster's projects; a caller confined to
 -- one namespace of that cluster does not — see rbac.NarrowedClustersExcluded).
 -- Same ordering as ListProjects.
-SELECT * FROM projects
+SELECT p.* FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
 WHERE (
-    id = ANY(sqlc.arg(project_ids)::uuid[])
-    OR cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+    p.id = ANY(sqlc.arg(project_ids)::uuid[])
+    OR p.cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
 )
 AND (
     sqlc.arg(filter_search)::text = ''
-    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.description ILIKE '%' || sqlc.arg(filter_search) || '%'
 )
-ORDER BY created_at DESC
+AND c.decommissioned_at IS NULL
+ORDER BY p.created_at DESC
 LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: CountProjectsForScopes :one
 -- Total for a ListProjectsForScopes page; predicate MUST match it exactly (see
 -- CountClustersForScopes).
-SELECT count(*) FROM projects
+SELECT count(*) FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
 WHERE (
-    id = ANY(sqlc.arg(project_ids)::uuid[])
-    OR cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+    p.id = ANY(sqlc.arg(project_ids)::uuid[])
+    OR p.cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
 )
 AND (
     sqlc.arg(filter_search)::text = ''
-    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
-);
+    OR p.name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.description ILIKE '%' || sqlc.arg(filter_search) || '%'
+)
+AND c.decommissioned_at IS NULL;
 
 -- name: ListProjectsByCluster :many
-SELECT * FROM projects
-WHERE cluster_id = sqlc.arg(cluster_id)
+SELECT p.* FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
+WHERE p.cluster_id = sqlc.arg(cluster_id)
+  AND c.decommissioned_at IS NULL
   AND (
     sqlc.arg(filter_search)::text = ''
-    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.description ILIKE '%' || sqlc.arg(filter_search) || '%'
   )
-ORDER BY created_at DESC
+ORDER BY p.created_at DESC
 LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: CountProjectsByClusterFiltered :one
-SELECT count(*) FROM projects
-WHERE cluster_id = sqlc.arg(cluster_id)
+SELECT count(*) FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
+WHERE p.cluster_id = sqlc.arg(cluster_id)
+  AND c.decommissioned_at IS NULL
   AND (
     sqlc.arg(filter_search)::text = ''
-    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
-    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR p.description ILIKE '%' || sqlc.arg(filter_search) || '%'
   );
 
 -- name: CreateProject :one
@@ -139,10 +151,14 @@ RETURNING *;
 DELETE FROM projects WHERE id = $1;
 
 -- name: CountProjects :one
-SELECT count(*) FROM projects;
+SELECT count(*) FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
+WHERE c.decommissioned_at IS NULL;
 
 -- name: CountProjectsByCluster :one
-SELECT count(*) FROM projects WHERE cluster_id = $1;
+SELECT count(*) FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
+WHERE p.cluster_id = $1 AND c.decommissioned_at IS NULL;
 
 -- name: UpsertProjectNamespace :one
 INSERT INTO project_namespaces (project_id, cluster_id, namespace)

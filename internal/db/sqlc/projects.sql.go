@@ -58,7 +58,9 @@ func (q *Queries) ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimP
 }
 
 const countProjects = `-- name: CountProjects :one
-SELECT count(*) FROM projects
+SELECT count(*) FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
+WHERE c.decommissioned_at IS NULL
 `
 
 func (q *Queries) CountProjects(ctx context.Context) (int64, error) {
@@ -69,7 +71,9 @@ func (q *Queries) CountProjects(ctx context.Context) (int64, error) {
 }
 
 const countProjectsByCluster = `-- name: CountProjectsByCluster :one
-SELECT count(*) FROM projects WHERE cluster_id = $1
+SELECT count(*) FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
+WHERE p.cluster_id = $1 AND c.decommissioned_at IS NULL
 `
 
 func (q *Queries) CountProjectsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
@@ -80,13 +84,15 @@ func (q *Queries) CountProjectsByCluster(ctx context.Context, clusterID uuid.UUI
 }
 
 const countProjectsByClusterFiltered = `-- name: CountProjectsByClusterFiltered :one
-SELECT count(*) FROM projects
-WHERE cluster_id = $1
+SELECT count(*) FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
+WHERE p.cluster_id = $1
+  AND c.decommissioned_at IS NULL
   AND (
     $2::text = ''
-    OR name ILIKE '%' || $2 || '%'
-    OR display_name ILIKE '%' || $2 || '%'
-    OR description ILIKE '%' || $2 || '%'
+    OR p.name ILIKE '%' || $2 || '%'
+    OR p.display_name ILIKE '%' || $2 || '%'
+    OR p.description ILIKE '%' || $2 || '%'
   )
 `
 
@@ -103,13 +109,15 @@ func (q *Queries) CountProjectsByClusterFiltered(ctx context.Context, arg CountP
 }
 
 const countProjectsFiltered = `-- name: CountProjectsFiltered :one
-SELECT count(*) FROM projects
+SELECT count(*) FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
 WHERE (
     $1::text = ''
-    OR name ILIKE '%' || $1 || '%'
-    OR display_name ILIKE '%' || $1 || '%'
-    OR description ILIKE '%' || $1 || '%'
+    OR p.name ILIKE '%' || $1 || '%'
+    OR p.display_name ILIKE '%' || $1 || '%'
+    OR p.description ILIKE '%' || $1 || '%'
 )
+AND c.decommissioned_at IS NULL
 `
 
 func (q *Queries) CountProjectsFiltered(ctx context.Context, filterSearch string) (int64, error) {
@@ -120,17 +128,19 @@ func (q *Queries) CountProjectsFiltered(ctx context.Context, filterSearch string
 }
 
 const countProjectsForScopes = `-- name: CountProjectsForScopes :one
-SELECT count(*) FROM projects
+SELECT count(*) FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
 WHERE (
-    id = ANY($1::uuid[])
-    OR cluster_id = ANY($2::uuid[])
+    p.id = ANY($1::uuid[])
+    OR p.cluster_id = ANY($2::uuid[])
 )
 AND (
     $3::text = ''
-    OR name ILIKE '%' || $3 || '%'
-    OR display_name ILIKE '%' || $3 || '%'
-    OR description ILIKE '%' || $3 || '%'
+    OR p.name ILIKE '%' || $3 || '%'
+    OR p.display_name ILIKE '%' || $3 || '%'
+    OR p.description ILIKE '%' || $3 || '%'
 )
+AND c.decommissioned_at IS NULL
 `
 
 type CountProjectsForScopesParams struct {
@@ -522,14 +532,16 @@ func (q *Queries) ListProjectResourceQuotaAllocations(ctx context.Context, proje
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects
+SELECT p.id, p.name, p.display_name, p.description, p.cluster_id, p.namespaces, p.resource_quota, p.created_by_id, p.created_at, p.updated_at, p.limit_range, p.network_policy_mode, p.pod_security_profile, p.resource_quota_cpu_limit, p.resource_quota_memory_limit, p.resource_quota_pod_count, p.quota_plan, p.quota_overrides, p.default_vault_connection_id, p.managed_by, p.external_ref_api_version, p.external_ref_kind, p.external_ref_namespace, p.external_ref_name, p.observed_generation FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
 WHERE (
     $1::text = ''
-    OR name ILIKE '%' || $1 || '%'
-    OR display_name ILIKE '%' || $1 || '%'
-    OR description ILIKE '%' || $1 || '%'
+    OR p.name ILIKE '%' || $1 || '%'
+    OR p.display_name ILIKE '%' || $1 || '%'
+    OR p.description ILIKE '%' || $1 || '%'
 )
-ORDER BY created_at DESC
+AND c.decommissioned_at IS NULL
+ORDER BY p.created_at DESC
 LIMIT $3 OFFSET $2
 `
 
@@ -586,15 +598,17 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 }
 
 const listProjectsByCluster = `-- name: ListProjectsByCluster :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects
-WHERE cluster_id = $1
+SELECT p.id, p.name, p.display_name, p.description, p.cluster_id, p.namespaces, p.resource_quota, p.created_by_id, p.created_at, p.updated_at, p.limit_range, p.network_policy_mode, p.pod_security_profile, p.resource_quota_cpu_limit, p.resource_quota_memory_limit, p.resource_quota_pod_count, p.quota_plan, p.quota_overrides, p.default_vault_connection_id, p.managed_by, p.external_ref_api_version, p.external_ref_kind, p.external_ref_namespace, p.external_ref_name, p.observed_generation FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
+WHERE p.cluster_id = $1
+  AND c.decommissioned_at IS NULL
   AND (
     $2::text = ''
-    OR name ILIKE '%' || $2 || '%'
-    OR display_name ILIKE '%' || $2 || '%'
-    OR description ILIKE '%' || $2 || '%'
+    OR p.name ILIKE '%' || $2 || '%'
+    OR p.display_name ILIKE '%' || $2 || '%'
+    OR p.description ILIKE '%' || $2 || '%'
   )
-ORDER BY created_at DESC
+ORDER BY p.created_at DESC
 LIMIT $4 OFFSET $3
 `
 
@@ -657,18 +671,20 @@ func (q *Queries) ListProjectsByCluster(ctx context.Context, arg ListProjectsByC
 }
 
 const listProjectsForScopes = `-- name: ListProjectsForScopes :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects
+SELECT p.id, p.name, p.display_name, p.description, p.cluster_id, p.namespaces, p.resource_quota, p.created_by_id, p.created_at, p.updated_at, p.limit_range, p.network_policy_mode, p.pod_security_profile, p.resource_quota_cpu_limit, p.resource_quota_memory_limit, p.resource_quota_pod_count, p.quota_plan, p.quota_overrides, p.default_vault_connection_id, p.managed_by, p.external_ref_api_version, p.external_ref_kind, p.external_ref_namespace, p.external_ref_name, p.observed_generation FROM projects p
+JOIN clusters c ON c.id = p.cluster_id
 WHERE (
-    id = ANY($1::uuid[])
-    OR cluster_id = ANY($2::uuid[])
+    p.id = ANY($1::uuid[])
+    OR p.cluster_id = ANY($2::uuid[])
 )
 AND (
     $3::text = ''
-    OR name ILIKE '%' || $3 || '%'
-    OR display_name ILIKE '%' || $3 || '%'
-    OR description ILIKE '%' || $3 || '%'
+    OR p.name ILIKE '%' || $3 || '%'
+    OR p.display_name ILIKE '%' || $3 || '%'
+    OR p.description ILIKE '%' || $3 || '%'
 )
-ORDER BY created_at DESC
+AND c.decommissioned_at IS NULL
+ORDER BY p.created_at DESC
 LIMIT $5 OFFSET $4
 `
 
