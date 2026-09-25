@@ -370,11 +370,12 @@ func (h *MonitoringHandler) findGrafanaServiceName(ctx context.Context, clusterI
 	return "", fmt.Errorf("grafana service not found for release %s", releaseName)
 }
 
-// clusterGrafanaProxyAvailable verifies the service the browser-facing proxy
-// actually targets. A plain Grafana Service is not sufficient: stacks created
-// before the authenticated sidecar was introduced can still expose port 80,
-// while every /observability/grafana request fails against the missing proxy.
-func (h *MonitoringHandler) clusterGrafanaProxyAvailable(ctx context.Context, clusterID, namespace, releaseName string) error {
+// clusterGrafanaAvailable verifies Grafana and the service the browser-facing
+// proxy actually targets in one discovery request. A plain Grafana Service is
+// not sufficient: stacks created before the authenticated sidecar was
+// introduced can still expose port 80, while every /observability/grafana
+// request fails against the missing proxy.
+func (h *MonitoringHandler) clusterGrafanaAvailable(ctx context.Context, clusterID, namespace, releaseName string) error {
 	if h.requester == nil {
 		return fmt.Errorf("kubernetes requester not configured")
 	}
@@ -394,13 +395,21 @@ func (h *MonitoringHandler) clusterGrafanaProxyAvailable(ctx context.Context, cl
 	if err := parseJSONResponse(resp, &payload); err != nil {
 		return err
 	}
+	grafanaFound := false
+	proxyFound := false
 	for _, item := range objectItems(payload) {
 		meta, _ := item["metadata"].(map[string]any)
 		spec, _ := item["spec"].(map[string]any)
 		name, _ := meta["name"].(string)
 		if name == service && serviceExposesPort(spec, grafanaProxyListenPort) {
-			return nil
+			proxyFound = true
 		}
+		if isSafeK8sName(name) && strings.Contains(strings.ToLower(name), "grafana") && serviceExposesPort(spec, 80) {
+			grafanaFound = true
+		}
+	}
+	if grafanaFound && proxyFound {
+		return nil
 	}
 	return fmt.Errorf("Grafana proxy service %s does not expose port %d", service, grafanaProxyListenPort)
 }
