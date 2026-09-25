@@ -72,6 +72,46 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     expect(screen.getByRole("grid")).toHaveClass("overflow-x-auto");
   });
 
+  it("keeps row actions compact and data cells on one line by default", () => {
+    const compactColumns: Column<Row>[] = [
+      ...columns,
+      {
+        key: "actions",
+        header: "",
+        accessor: () => "Menu",
+        sortable: false,
+      },
+    ];
+    const { rerender } = render(
+      <DataTable
+        data={rows}
+        columns={compactColumns}
+        keyExtractor={(row) => row.id}
+      />,
+    );
+
+    const actionHead = document.querySelector("thead th:last-child");
+    expect(actionHead).toHaveStyle({ width: "48px" });
+    expect(actionHead).toHaveClass("px-2");
+    expect(screen.getByText("Banana")).toHaveClass("whitespace-nowrap");
+
+    rerender(
+      <DataTable
+        data={rows}
+        columns={compactColumns}
+        keyExtractor={(row) => row.id}
+        virtualized
+      />,
+    );
+    const gridHeaders = screen.getAllByRole("columnheader");
+    expect(gridHeaders.at(-1)).toHaveStyle({
+      width: "48px",
+      flex: "0 0 3rem",
+      minWidth: "48px",
+    });
+    expect(gridHeaders.at(-1)).toHaveClass("px-2");
+  });
+
   it("groups only the current server page and preserves continuation controls", () => {
     const onPage = vi.fn();
     render(

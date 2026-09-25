@@ -34,6 +34,8 @@ export interface Column<T> {
   hideable?: boolean;
   width?: string;
   align?: "left" | "center" | "right";
+  /** Allow multi-line cell content. Cells stay on one line by default. */
+  wrap?: boolean;
   /**
    * When set, renders a faceted multi-select filter for this column in the
    * toolbar. The facet options are derived automatically from the column's

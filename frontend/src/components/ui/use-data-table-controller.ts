@@ -121,6 +121,7 @@ export function useDataTableController<T extends RowData>({
         id: col.key,
         accessorFn: (row: T) => sortValue(col, row),
         enableSorting: col.sortable !== false,
+        enableResizing: col.key !== "actions" && col.header.trim() !== "",
         enableHiding: col.hideable !== false && col.header.trim() !== "",
         enableColumnFilter: !!col.filter,
         // Faceted multi-select: keep the row when nothing is selected, otherwise

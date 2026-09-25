@@ -38,9 +38,31 @@ describe("Table primitives", () => {
     expect(
       screen.getByRole("columnheader", { name: "Name" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("cell", { name: "astronomer-agent" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "astronomer-agent" })).toHaveClass(
+      "whitespace-nowrap",
+      "text-ellipsis",
+    );
+  });
+
+  it("reserves only a compact width for action headers", () => {
+    render(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+      </Table>,
+    );
+
+    expect(screen.getByRole("columnheader", { name: "Name" })).not.toHaveClass(
+      "w-16",
+    );
+    expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveClass(
+      "w-16",
+      "px-2",
+    );
   });
 
   it("allows genuinely wide tables to opt into scrolling", () => {

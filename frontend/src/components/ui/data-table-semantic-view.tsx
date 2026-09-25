@@ -101,6 +101,8 @@ export function SemanticDataTable<T extends RowData>({
               )}
               {activeColumns.map((col) => {
                 const column = table.getColumn(col.key);
+                const compact =
+                  col.key === "actions" || col.header.trim() === "";
                 const sorted = column?.getIsSorted();
                 const header = resizable ? headerByKey.get(col.key) : undefined;
                 const sortable = col.sortable !== false;
@@ -130,16 +132,19 @@ export function SemanticDataTable<T extends RowData>({
                     className={cn(
                       cellPadding,
                       "min-w-0 overflow-hidden font-medium text-muted-foreground",
+                      compact && "px-2",
                       resizable && "relative",
                       col.align === "center" && "text-center",
                       col.align === "right" && "text-right",
                     )}
                     style={
-                      resizable
-                        ? { width: column?.getSize() }
-                        : col.width
-                          ? { width: col.width }
-                          : undefined
+                      compact
+                        ? { width: col.width ?? "3rem" }
+                        : resizable
+                          ? { width: column?.getSize() }
+                          : col.width
+                            ? { width: col.width }
+                            : undefined
                     }
                     aria-sort={
                       sortable
@@ -247,26 +252,34 @@ export function SemanticDataTable<T extends RowData>({
                       <div className="h-4 w-4 rounded-sm bg-muted animate-pulse" />
                     </TableCell>
                   )}
-                  {activeColumns.map((col) => (
-                    <TableCell
-                      key={col.key}
-                      className={cellPadding}
-                      style={
-                        resizable
-                          ? { width: table.getColumn(col.key)?.getSize() }
-                          : undefined
-                      }
-                    >
-                      <div
-                        className="h-4 w-24 max-w-full rounded-sm bg-muted animate-pulse"
-                        style={{
-                          width: col.width
-                            ? `min(100%, ${col.width})`
-                            : undefined,
-                        }}
-                      />
-                    </TableCell>
-                  ))}
+                  {activeColumns.map((col) => {
+                    const compact =
+                      col.key === "actions" || col.header.trim() === "";
+                    return (
+                      <TableCell
+                        key={col.key}
+                        className={cn(cellPadding, compact && "px-2")}
+                        style={
+                          compact
+                            ? { width: col.width ?? "3rem" }
+                            : resizable
+                              ? {
+                                  width: table.getColumn(col.key)?.getSize(),
+                                }
+                              : undefined
+                        }
+                      >
+                        <div
+                          className="h-4 w-24 max-w-full rounded-sm bg-muted animate-pulse"
+                          style={{
+                            width: col.width
+                              ? `min(100%, ${col.width})`
+                              : undefined,
+                          }}
+                        />
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))
             ) : rows.length === 0 ? (
@@ -332,33 +345,48 @@ export function SemanticDataTable<T extends RowData>({
                           />
                         </TableCell>
                       )}
-                      {activeColumns.map((col) => (
-                        <TableCell
-                          key={col.key}
-                          className={cn(
-                            cellPadding,
-                            "min-w-0 overflow-hidden",
-                            col.align === "center" && "text-center",
-                            col.align === "right" && "text-right",
-                          )}
-                          style={
-                            resizable
-                              ? { width: table.getColumn(col.key)?.getSize() }
-                              : undefined
-                          }
-                        >
-                          <div
+                      {activeColumns.map((col) => {
+                        const compact =
+                          col.key === "actions" || col.header.trim() === "";
+                        return (
+                          <TableCell
+                            key={col.key}
                             className={cn(
-                              "min-w-0",
-                              col.key === "actions" || col.header.trim() === ""
-                                ? "overflow-visible"
-                                : "overflow-hidden text-ellipsis",
+                              cellPadding,
+                              "min-w-0 overflow-hidden",
+                              compact && "px-2",
+                              col.align === "center" && "text-center",
+                              col.align === "right" && "text-right",
                             )}
+                            style={
+                              compact
+                                ? { width: col.width ?? "3rem" }
+                                : resizable
+                                  ? {
+                                      width: table
+                                        .getColumn(col.key)
+                                        ?.getSize(),
+                                    }
+                                  : undefined
+                            }
                           >
-                            {col.accessor(row.original)}
-                          </div>
-                        </TableCell>
-                      ))}
+                            <div
+                              className={cn(
+                                "min-w-0",
+                                compact
+                                  ? "overflow-visible"
+                                  : "overflow-hidden text-ellipsis",
+                                !compact &&
+                                  (col.wrap
+                                    ? "whitespace-normal break-words"
+                                    : "whitespace-nowrap"),
+                              )}
+                            >
+                              {col.accessor(row.original)}
+                            </div>
+                          </TableCell>
+                        );
+                      })}
                     </TableRow>
                   </Fragment>
                 );

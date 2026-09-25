@@ -62,14 +62,28 @@ export function TableRow({
 export function TableHead({
   className,
   scope = "col",
+  children,
   ...props
 }: ThHTMLAttributes<HTMLTableCellElement>) {
+  const label =
+    typeof children === "string" ? children.trim().toLowerCase() : null;
+  const compact =
+    children == null ||
+    label === "" ||
+    label === "action" ||
+    label === "actions";
   return (
     <th
       scope={scope}
-      className={cn("h-10 px-3 text-left text-xs font-semibold", className)}
+      className={cn(
+        "h-10 overflow-hidden text-ellipsis whitespace-nowrap px-3 text-left text-xs font-semibold",
+        compact && "w-16 px-2",
+        className,
+      )}
       {...props}
-    />
+    >
+      {children}
+    </th>
   );
 }
 
@@ -78,6 +92,12 @@ export function TableCell({
   ...props
 }: TdHTMLAttributes<HTMLTableCellElement>) {
   return (
-    <td className={cn("px-3 py-2.5 text-sm leading-5", className)} {...props} />
+    <td
+      className={cn(
+        "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-3 py-2.5 text-sm leading-5",
+        className,
+      )}
+      {...props}
+    />
   );
 }

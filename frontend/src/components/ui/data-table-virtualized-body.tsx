@@ -76,6 +76,11 @@ export function VirtualizedGrid<T extends RowData>({
 }) {
   // Per-column width style shared by header + body cells so they line up.
   const colStyle = (col: Column<T>): React.CSSProperties => {
+    const compact = col.key === "actions" || col.header.trim() === "";
+    if (compact) {
+      const width = col.width ?? "3rem";
+      return { width, flex: `0 0 ${width}`, minWidth: width };
+    }
     const width = resizable
       ? `${table.getColumn(col.key)?.getSize()}px`
       : col.width;
@@ -148,6 +153,7 @@ export function VirtualizedGrid<T extends RowData>({
           )}
           {activeColumns.map((col) => {
             const column = table.getColumn(col.key);
+            const compact = col.key === "actions" || col.header.trim() === "";
             const sorted = column?.getIsSorted();
             return (
               <div
@@ -165,6 +171,7 @@ export function VirtualizedGrid<T extends RowData>({
                 className={cn(
                   cellPadding,
                   "flex min-w-0 items-center gap-1 overflow-hidden font-medium",
+                  compact && "px-2",
                   col.sortable !== false &&
                     "cursor-pointer select-none hover:text-foreground",
                   alignClass(col),
@@ -233,23 +240,31 @@ export function VirtualizedGrid<T extends RowData>({
                     <div className="h-4 w-4 rounded-sm bg-muted animate-pulse" />
                   </div>
                 )}
-                {activeColumns.map((col) => (
-                  <div
-                    key={col.key}
-                    role="gridcell"
-                    className={cn("flex items-center", cellPadding)}
-                    style={colStyle(col)}
-                  >
+                {activeColumns.map((col) => {
+                  const compact =
+                    col.key === "actions" || col.header.trim() === "";
+                  return (
                     <div
-                      className="h-4 w-24 max-w-full rounded-sm bg-muted animate-pulse"
-                      style={{
-                        width: col.width
-                          ? `min(100%, ${col.width})`
-                          : undefined,
-                      }}
-                    />
-                  </div>
-                ))}
+                      key={col.key}
+                      role="gridcell"
+                      className={cn(
+                        "flex items-center",
+                        cellPadding,
+                        compact && "px-2",
+                      )}
+                      style={colStyle(col)}
+                    >
+                      <div
+                        className="h-4 w-24 max-w-full rounded-sm bg-muted animate-pulse"
+                        style={{
+                          width: col.width
+                            ? `min(100%, ${col.width})`
+                            : undefined,
+                        }}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -360,29 +375,38 @@ export function VirtualizedGrid<T extends RowData>({
                         />
                       </div>
                     )}
-                    {activeColumns.map((col) => (
-                      <div
-                        key={col.key}
-                        role="gridcell"
-                        className={cn(
-                          "flex min-w-0 items-center overflow-hidden",
-                          cellPadding,
-                          alignClass(col),
-                        )}
-                        style={colStyle(col)}
-                      >
+                    {activeColumns.map((col) => {
+                      const compact =
+                        col.key === "actions" || col.header.trim() === "";
+                      return (
                         <div
+                          key={col.key}
+                          role="gridcell"
                           className={cn(
-                            "min-w-0",
-                            col.key === "actions" || col.header.trim() === ""
-                              ? "overflow-visible"
-                              : "overflow-hidden text-ellipsis",
+                            "flex min-w-0 items-center overflow-hidden",
+                            cellPadding,
+                            compact && "px-2",
+                            alignClass(col),
                           )}
+                          style={colStyle(col)}
                         >
-                          {col.accessor(row.original)}
+                          <div
+                            className={cn(
+                              "min-w-0",
+                              compact
+                                ? "overflow-visible"
+                                : "overflow-hidden text-ellipsis",
+                              !compact &&
+                                (col.wrap
+                                  ? "whitespace-normal break-words"
+                                  : "whitespace-nowrap"),
+                            )}
+                          >
+                            {col.accessor(row.original)}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
