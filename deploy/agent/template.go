@@ -89,6 +89,13 @@ func CAChecksumFromPEM(caPEM string) string {
 }
 
 func RenderInstallYAML(data InstallTemplateData) string {
+	return fluxdistribution.InstallYAML() + "\n" + RenderAgentYAML(data)
+}
+
+// RenderAgentYAML returns the repeat-apply portion of the bootstrap manifest.
+// Flux controllers take ownership of their own Deployments after the initial
+// install, so a day-two agent refresh must not attempt to reclaim those fields.
+func RenderAgentYAML(data InstallTemplateData) string {
 	// Cluster management is authorized per user by Astronomer RBAC. Legacy
 	// enrollment profiles no longer restrict newly rendered agent installations.
 	profile := PrivilegeProfileAdmin
@@ -158,13 +165,7 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{AGENT_SELF_MANAGEMENT_DEPLOYMENT_RULES}}", SelfManagementOwnDeploymentRulesYAML(),
 		"{{DIRECT_KUBECONFIG_RBAC_RULES}}", viewerRBACRulesYAML,
 	).Replace(installTemplate)
-	// Keep the first-run manifest limited to built-in resources plus CRDs. A
-	// single kubectl apply resolves every resource kind before it creates any
-	// object, so including an OCIRepository or Kustomization beside the Flux
-	// CRDs fails on a clean cluster with a cold discovery cache. The connected
-	// agent owns those system custom resources through SystemManager after the
-	// reviewed Flux controllers and their CRDs are established.
-	return fluxdistribution.InstallYAML() + "\n" + agentManifest
+	return agentManifest
 }
 
 func mustAgentOverridesDigest(overrides AgentOverrides) string {

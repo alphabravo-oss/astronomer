@@ -2439,6 +2439,12 @@ const (
 	GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRangeN7d  GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRange = "7d"
 )
 
+// Defines values for GetClustersByIdManifestParamsScope.
+const (
+	GetClustersByIdManifestParamsScopeAgent GetClustersByIdManifestParamsScope = "agent"
+	GetClustersByIdManifestParamsScopeFull  GetClustersByIdManifestParamsScope = "full"
+)
+
 // Defines values for GetClustersByIdMetricsParamsRange.
 const (
 	GetClustersByIdMetricsParamsRangeN1h  GetClustersByIdMetricsParamsRange = "1h"
@@ -12903,6 +12909,14 @@ type PostClustersByIdLoggingOutputsByOutputIdRotateTokenParams struct {
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetClustersByIdManifestParams defines parameters for GetClustersByIdManifest.
+type GetClustersByIdManifestParams struct {
+	Scope *GetClustersByIdManifestParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
+}
+
+// GetClustersByIdManifestParamsScope defines parameters for GetClustersByIdManifest.
+type GetClustersByIdManifestParamsScope string
+
 // GetClustersByIdMetricsParams defines parameters for GetClustersByIdMetrics.
 type GetClustersByIdMetricsParams struct {
 	Range *GetClustersByIdMetricsParamsRange `form:"range,omitempty" json:"range,omitempty"`
@@ -21986,7 +22000,7 @@ type ClientInterface interface {
 	PostClustersByIdLoggingOutputsByOutputIdRotateToken(ctx context.Context, id openapi_types.UUID, outputId openapi_types.UUID, params *PostClustersByIdLoggingOutputsByOutputIdRotateTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByIdManifest request
-	GetClustersByIdManifest(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetClustersByIdManifest(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdManifestParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByIdMetrics request
 	GetClustersByIdMetrics(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -30889,8 +30903,8 @@ func (c *Client) PostClustersByIdLoggingOutputsByOutputIdRotateToken(ctx context
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetClustersByIdManifest(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetClustersByIdManifestRequest(c.Server, id)
+func (c *Client) GetClustersByIdManifest(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdManifestParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByIdManifestRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -60321,7 +60335,7 @@ func NewPostClustersByIdLoggingOutputsByOutputIdRotateTokenRequest(server string
 }
 
 // NewGetClustersByIdManifestRequest generates requests for GetClustersByIdManifest
-func NewGetClustersByIdManifestRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+func NewGetClustersByIdManifestRequest(server string, id openapi_types.UUID, params *GetClustersByIdManifestParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -60344,6 +60358,28 @@ func NewGetClustersByIdManifestRequest(server string, id openapi_types.UUID) (*h
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -80883,7 +80919,7 @@ type ClientWithResponsesInterface interface {
 	PostClustersByIdLoggingOutputsByOutputIdRotateTokenWithResponse(ctx context.Context, id openapi_types.UUID, outputId openapi_types.UUID, params *PostClustersByIdLoggingOutputsByOutputIdRotateTokenParams, reqEditors ...RequestEditorFn) (*PostClustersByIdLoggingOutputsByOutputIdRotateTokenResponse, error)
 
 	// GetClustersByIdManifestWithResponse request
-	GetClustersByIdManifestWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByIdManifestResponse, error)
+	GetClustersByIdManifestWithResponse(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdManifestParams, reqEditors ...RequestEditorFn) (*GetClustersByIdManifestResponse, error)
 
 	// GetClustersByIdMetricsWithResponse request
 	GetClustersByIdMetricsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdMetricsParams, reqEditors ...RequestEditorFn) (*GetClustersByIdMetricsResponse, error)
@@ -110320,8 +110356,8 @@ func (c *ClientWithResponses) PostClustersByIdLoggingOutputsByOutputIdRotateToke
 }
 
 // GetClustersByIdManifestWithResponse request returning *GetClustersByIdManifestResponse
-func (c *ClientWithResponses) GetClustersByIdManifestWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByIdManifestResponse, error) {
-	rsp, err := c.GetClustersByIdManifest(ctx, id, reqEditors...)
+func (c *ClientWithResponses) GetClustersByIdManifestWithResponse(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdManifestParams, reqEditors ...RequestEditorFn) (*GetClustersByIdManifestResponse, error) {
+	rsp, err := c.GetClustersByIdManifest(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

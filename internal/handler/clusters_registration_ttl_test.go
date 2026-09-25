@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -71,6 +72,39 @@ func TestRegistrationTokenTTLConvergence(t *testing.T) {
 			t.Fatalf("status = %d, want 200", rec.Code)
 		}
 		approxHours(t, q.lastTokenExpiry, time.Hour)
+	})
+
+	t.Run("agent-only-repeat-manifest", func(t *testing.T) {
+		q := &ttlCaptureQuerier{}
+		h := NewClusterHandler(q)
+		setClusterTestRunTx(h, q)
+		r := chi.NewRouter()
+		r.Get("/api/v1/clusters/{id}/manifest/", h.GetManifest)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+id.String()+"/manifest/?scope=agent", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200", rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "name: source-controller") || !strings.Contains(rec.Body.String(), "name: astronomer-agent") {
+			t.Fatal("agent scope did not isolate the repeat-apply manifest")
+		}
+		approxHours(t, q.lastTokenExpiry, time.Hour)
+	})
+
+	t.Run("invalid-manifest-scope-does-not-mint-token", func(t *testing.T) {
+		q := &ttlCaptureQuerier{}
+		h := NewClusterHandler(q)
+		setClusterTestRunTx(h, q)
+		r := chi.NewRouter()
+		r.Get("/api/v1/clusters/{id}/manifest/", h.GetManifest)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+id.String()+"/manifest/?scope=unknown", nil))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400", rec.Code)
+		}
+		if !q.lastTokenExpiry.IsZero() {
+			t.Fatal("invalid manifest scope minted a registration token")
+		}
 	})
 
 	// Overridden TTL flows through every path identically.

@@ -10818,6 +10818,9 @@ export interface OpenAPIOperations {
         "path": {
           "id": string;
         };
+        "query"?: {
+          "scope"?: "full" | "agent";
+        };
       };
     response: string;
   };
