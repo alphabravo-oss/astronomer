@@ -373,8 +373,14 @@ func (h *MonitoringHandler) realNodeSummary(ctx context.Context, clusterID, node
 		return nil, ok, err
 	}
 	selector := labelSelectorForConfig(cfg)
-	instance := `instance="` + escapePromLabel(node) + `",` + selector
 	nodeLabel := `node="` + escapePromLabel(node) + `",` + selector
+	// kube-prometheus-stack keeps the scrape address (IP:port) in the
+	// node-exporter `instance` label. Resolve that address through
+	// node_uname_info, whose `nodename` label is the Kubernetes Node name,
+	// rather than assuming instance was relabelled to the Node name.
+	nodeExporter := func(expr string) string {
+		return `(` + expr + `) * on(instance) group_left(nodename) node_uname_info{nodename="` + escapePromLabel(node) + `",` + selector + `}`
+	}
 	var (
 		cpuUsage, cpuCapacity           float64
 		memoryUsage, memoryCapacity     float64
@@ -393,16 +399,16 @@ func (h *MonitoringHandler) realNodeSummary(ctx context.Context, clusterID, node
 			return nil
 		})
 	}
-	scalar(`sum(rate(node_cpu_seconds_total{mode!="idle",`+instance+`}[5m]))`, &cpuUsage)
-	scalar(`count(node_cpu_seconds_total{mode="idle",`+instance+`})`, &cpuCapacity)
-	scalar(`sum(node_memory_MemTotal_bytes{`+instance+`} - node_memory_MemAvailable_bytes{`+instance+`})`, &memoryUsage)
-	scalar(`sum(node_memory_MemTotal_bytes{`+instance+`})`, &memoryCapacity)
+	scalar(`sum(`+nodeExporter(`rate(node_cpu_seconds_total{mode!="idle",`+selector+`}[5m])`)+`)`, &cpuUsage)
+	scalar(`count(`+nodeExporter(`node_cpu_seconds_total{mode="idle",`+selector+`}`)+`)`, &cpuCapacity)
+	scalar(`sum(`+nodeExporter(`node_memory_MemTotal_bytes{`+selector+`} - node_memory_MemAvailable_bytes{`+selector+`}`)+`)`, &memoryUsage)
+	scalar(`sum(`+nodeExporter(`node_memory_MemTotal_bytes{`+selector+`}`)+`)`, &memoryCapacity)
 	scalar(`count(kube_pod_info{`+nodeLabel+`})`, &podCount)
 	scalar(`sum(kube_node_status_capacity{resource="pods",unit="integer",`+nodeLabel+`})`, &podCapacity)
-	scalar(`sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*",`+instance+`}[5m]))`, &networkReceive)
-	scalar(`sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*",`+instance+`}[5m]))`, &networkTransmit)
-	scalar(`sum(node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+instance+`})`, &diskCapacity)
-	scalar(`sum(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+instance+`})`, &diskAvail)
+	scalar(`sum(`+nodeExporter(`rate(node_network_receive_bytes_total{device!~"lo|veth.*",`+selector+`}[5m])`)+`)`, &networkReceive)
+	scalar(`sum(`+nodeExporter(`rate(node_network_transmit_bytes_total{device!~"lo|veth.*",`+selector+`}[5m])`)+`)`, &networkTransmit)
+	scalar(`sum(`+nodeExporter(`node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+selector+`}`)+`)`, &diskCapacity)
+	scalar(`sum(`+nodeExporter(`node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+selector+`}`)+`)`, &diskAvail)
 	if err := g.Wait(); err != nil {
 		return nil, true, err
 	}
@@ -552,6 +558,32 @@ func podRegex(items []map[string]any) string {
 	return "^(" + strings.Join(names, "|") + ")$"
 }
 
+func (h *MonitoringHandler) resolveLegacyWorkloadKind(ctx context.Context, clusterID, namespace, name string) (string, error) {
+	wh := NewWorkloadHandlerWithRequester(h.requester)
+	items, err := wh.listWorkloads(ctx, clusterID, namespace, "")
+	if err != nil {
+		return "", err
+	}
+	kind := ""
+	for _, item := range items {
+		if item["namespace"] != namespace || item["name"] != name {
+			continue
+		}
+		candidate, _ := item["kind"].(string)
+		if candidate == "" {
+			continue
+		}
+		if kind != "" && !strings.EqualFold(kind, candidate) {
+			return "", fmt.Errorf("workload %s/%s is ambiguous; use the kind-scoped metrics endpoint", namespace, name)
+		}
+		kind = candidate
+	}
+	if kind == "" {
+		return "", fmt.Errorf("workload %s/%s not found", namespace, name)
+	}
+	return kind, nil
+}
+
 func (h *MonitoringHandler) promSeriesSet(ctx context.Context, client *imonitoring.Client, start, end time.Time, step time.Duration, selector, label string, queries map[string]string) (map[string]any, error) {
 	data := h.zeroMetrics()
 	// The range queries are mutually independent, so fan them out concurrently
@@ -692,11 +724,16 @@ func (h *MonitoringHandler) LegacyWorkloadMetrics(w http.ResponseWriter, r *http
 	clusterID := clusterUUID.String()
 	namespace := chi.URLParam(r, "namespace")
 	workload := chi.URLParam(r, "workload")
-	if data, ok, err := h.realWorkloadMetrics(r.Context(), clusterID, "", namespace, workload, r.URL.Query().Get("range")); err == nil && ok {
+	kind, err := h.resolveLegacyWorkloadKind(r.Context(), clusterID, namespace, workload)
+	if err != nil {
+		RespondJSON(w, http.StatusBadGateway, map[string]any{"status": "error", "error": err.Error()})
+		return
+	}
+	if data, ok, err := h.realWorkloadMetrics(r.Context(), clusterID, kind, namespace, workload, r.URL.Query().Get("range")); err == nil && ok {
 		RespondJSON(w, http.StatusOK, map[string]any{"status": "success", "data": data})
 		return
 	}
-	summary, err := h.workloadSummary(r.Context(), clusterID, "", namespace, workload)
+	summary, err := h.workloadSummary(r.Context(), clusterID, kind, namespace, workload)
 	if err != nil {
 		RespondJSON(w, http.StatusBadGateway, map[string]any{"status": "error", "error": err.Error()})
 		return
