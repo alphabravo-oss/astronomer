@@ -158,7 +158,13 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{AGENT_SELF_MANAGEMENT_DEPLOYMENT_RULES}}", SelfManagementOwnDeploymentRulesYAML(),
 		"{{DIRECT_KUBECONFIG_RBAC_RULES}}", viewerRBACRulesYAML,
 	).Replace(installTemplate)
-	return fluxdistribution.InstallYAML() + "\n" + agentManifest + renderSystemBootstrap(data)
+	// Keep the first-run manifest limited to built-in resources plus CRDs. A
+	// single kubectl apply resolves every resource kind before it creates any
+	// object, so including an OCIRepository or Kustomization beside the Flux
+	// CRDs fails on a clean cluster with a cold discovery cache. The connected
+	// agent owns those system custom resources through SystemManager after the
+	// reviewed Flux controllers and their CRDs are established.
+	return fluxdistribution.InstallYAML() + "\n" + agentManifest
 }
 
 func mustAgentOverridesDigest(overrides AgentOverrides) string {
