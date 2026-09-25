@@ -508,8 +508,19 @@ test("workload snapshot restores deleted member data through the durable Velero 
   await restoreDialog
     .getByRole("button", { name: "Restore", exact: true })
     .click();
-  expect((await restoreAccepted).status()).toBe(202);
-  await expect(page.getByText("Restore queued", { exact: true })).toBeVisible();
+  const restoreResponse = await restoreAccepted;
+  expect(restoreResponse.status()).toBe(202);
+  const restorePayload = (await restoreResponse.json()) as {
+    data?: { id?: string };
+  };
+  const restoreID = restorePayload.data?.id;
+  expect(restoreID).toEqual(expect.any(String));
+  if (!restoreID) throw new Error("Restore receipt did not include an id");
+  const receiptDialog = page.getByRole("dialog", {
+    name: "Snapshot restore",
+    exact: true,
+  });
+  await expect(receiptDialog.getByText(restoreID, { exact: true })).toBeVisible();
 
   await expect
     .poll(
