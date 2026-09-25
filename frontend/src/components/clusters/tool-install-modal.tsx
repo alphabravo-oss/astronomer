@@ -250,156 +250,48 @@ export function ToolInstallModal({
         ) : undefined
       }
       footer={
-        <div className="flex items-center justify-between gap-2">
-          <div className="inline-flex rounded-md border border-border bg-background p-1">
-            {hasForm && (
-              <ModeButton
-                active={mode === "form"}
-                onClick={() => switchMode("form")}
-                icon={<SlidersHorizontal className="h-3.5 w-3.5" />}
-                label="Settings"
-              />
-            )}
-            <ModeButton
-              active={mode === "yaml"}
-              onClick={() => switchMode("yaml")}
-              icon={<FileCode2 className="h-3.5 w-3.5" />}
-              label="YAML"
-            />
-            <ModeButton
-              active={mode === "review"}
-              onClick={() => switchMode("review")}
-              icon={<GitCompare className="h-3.5 w-3.5" />}
-              label="Review"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <ActionButton onClick={onClose}>Cancel</ActionButton>
-            <ActionButton
-              intent="primary"
-              onClick={handleConfirm}
-              disabled={
-                installing || isLoading || !!confirmBlockedReason || !!yamlError
-              }
-              disabledReason={confirmBlockedReason}
-              loading={installing}
-            >
-              Install
-            </ActionButton>
-          </div>
-        </div>
+        <ToolInstallFooter
+          hasForm={hasForm}
+          mode={mode}
+          onModeChange={switchMode}
+          onClose={onClose}
+          onConfirm={handleConfirm}
+          installing={installing}
+          disabled={isLoading || !!confirmBlockedReason || !!yamlError}
+          disabledReason={confirmBlockedReason}
+        />
       }
     >
-      <div className="mb-5 space-y-1.5">
-        <label
-          htmlFor="tool-preset"
-          className="text-sm font-medium text-foreground"
-        >
-          Preset
-        </label>
-        <Select
-          id="tool-preset"
-          value={selectedPreset}
-          onChange={(e) => setSelectedPreset(e.target.value)}
-        >
-          {(presetNames.length ? presetNames : [""]).map((name) => (
-            <option key={name} value={name}>
-              {name
-                ? name.charAt(0).toUpperCase() + name.slice(1)
-                : "Chart defaults"}
-            </option>
-          ))}
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          Sizing and replica defaults for this install. Defaults to the
-          cluster&apos;s environment.
-        </p>
-      </div>
+      <PresetSelector
+        names={presetNames}
+        value={selectedPreset}
+        onChange={setSelectedPreset}
+      />
 
       {mode === "form" ? (
-        <div className="space-y-6">
-          <p className="text-xs text-muted-foreground">
-            Configure the common settings below, or switch to{" "}
-            <span className="font-medium">Edit YAML</span> for full control.
-            Anything you leave at its default is taken from the chart.
-          </p>
-          {groups.map(([group, groupFieldsList]) => (
-            <section key={group} className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {group}
-              </h3>
-              <div className="space-y-3">
-                {groupFieldsList.map((f) => (
-                  <FormFieldRow
-                    key={f.path}
-                    field={f}
-                    value={String(
-                      valueAtPath(overrideValues, f.path) ??
-                        presetValues[f.path] ??
-                        f.default ??
-                        "",
-                    )}
-                    classValue={
-                      f.storageClassPath
-                        ? String(
-                            valueAtPath(overrideValues, f.storageClassPath) ??
-                              "",
-                          )
-                        : ""
-                    }
-                    onChange={(v) =>
-                      setOverrideValues((prev) =>
-                        withPath(prev, f.path, coerce(f, v)),
-                      )
-                    }
-                    onClassChange={(v) =>
-                      f.storageClassPath &&
-                      setOverrideValues((prev) =>
-                        withPath(prev, f.storageClassPath as string, v),
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+        <ToolSettingsEditor
+          groups={groups}
+          overrides={overrideValues}
+          presetValues={presetValues}
+          onChange={(field, value) =>
+            setOverrideValues((previous) =>
+              withPath(previous, field.path, coerce(field, value)),
+            )
+          }
+          onStorageClassChange={(path, value) =>
+            setOverrideValues((previous) => withPath(previous, path, value))
+          }
+        />
       ) : mode === "yaml" ? (
-        <div className="space-y-1.5">
-          <label
-            className="text-sm font-medium text-foreground"
-            htmlFor="field-a5c99297-243"
-          >
-            Values override (YAML)
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Merged on top of the chart defaults and the selected preset.
-          </p>
-          <textarea
-            id="field-a5c99297-243"
-            value={yamlText}
-            onChange={(e) => {
-              setYamlText(e.target.value);
-              setYamlError(null);
-            }}
-            onBlur={applyYaml}
-            rows={18}
-            placeholder={
-              "# e.g.\nreplicas: 2\nresources:\n  requests:\n    cpu: 100m"
-            }
-            className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
-              placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring resize-none"
-          />
-          {yamlError && (
-            <p
-              role="alert"
-              className="flex items-center gap-1.5 text-xs text-status-error"
-            >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              {yamlError}
-            </p>
-          )}
-        </div>
+        <ToolYamlEditor
+          value={yamlText}
+          error={yamlError}
+          onChange={(value) => {
+            setYamlText(value);
+            setYamlError(null);
+          }}
+          onBlur={applyYaml}
+        />
       ) : (
         <ToolValuesReview
           baseline={charts}
@@ -409,6 +301,207 @@ export function ToolInstallModal({
         />
       )}
     </ModalShell>
+  );
+}
+
+function ToolInstallFooter({
+  hasForm,
+  mode,
+  onModeChange,
+  onClose,
+  onConfirm,
+  installing,
+  disabled,
+  disabledReason,
+}: {
+  hasForm: boolean;
+  mode: EditorMode;
+  onModeChange: (mode: EditorMode) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+  installing?: boolean;
+  disabled: boolean;
+  disabledReason?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="inline-flex rounded-md border border-border bg-background p-1">
+        {hasForm && (
+          <ModeButton
+            active={mode === "form"}
+            onClick={() => onModeChange("form")}
+            icon={<SlidersHorizontal className="h-3.5 w-3.5" />}
+            label="Settings"
+          />
+        )}
+        <ModeButton
+          active={mode === "yaml"}
+          onClick={() => onModeChange("yaml")}
+          icon={<FileCode2 className="h-3.5 w-3.5" />}
+          label="YAML"
+        />
+        <ModeButton
+          active={mode === "review"}
+          onClick={() => onModeChange("review")}
+          icon={<GitCompare className="h-3.5 w-3.5" />}
+          label="Review"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <ActionButton onClick={onClose}>Cancel</ActionButton>
+        <ActionButton
+          intent="primary"
+          onClick={onConfirm}
+          disabled={installing || disabled}
+          disabledReason={disabledReason}
+          loading={installing}
+        >
+          Install
+        </ActionButton>
+      </div>
+    </div>
+  );
+}
+
+function PresetSelector({
+  names,
+  value,
+  onChange,
+}: {
+  names: string[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="mb-5 space-y-1.5">
+      <label
+        htmlFor="tool-preset"
+        className="text-sm font-medium text-foreground"
+      >
+        Preset
+      </label>
+      <Select
+        id="tool-preset"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {(names.length ? names : [""]).map((name) => (
+          <option key={name} value={name}>
+            {name
+              ? name.charAt(0).toUpperCase() + name.slice(1)
+              : "Chart defaults"}
+          </option>
+        ))}
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        Sizing and replica defaults for this install. Defaults to the
+        cluster&apos;s environment.
+      </p>
+    </div>
+  );
+}
+
+function ToolSettingsEditor({
+  groups,
+  overrides,
+  presetValues,
+  onChange,
+  onStorageClassChange,
+}: {
+  groups: Array<[string, ToolFormField[]]>;
+  overrides: Record<string, unknown>;
+  presetValues: Record<string, unknown>;
+  onChange: (field: ToolFormField, value: string) => void;
+  onStorageClassChange: (path: string, value: string) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <p className="text-xs text-muted-foreground">
+        Configure the common settings below, or switch to{" "}
+        <span className="font-medium">Edit YAML</span> for full control.
+        Anything you leave at its default is taken from the chart.
+      </p>
+      {groups.map(([group, fields]) => (
+        <section key={group} className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {group}
+          </h3>
+          <div className="space-y-3">
+            {fields.map((field) => (
+              <FormFieldRow
+                key={field.path}
+                field={field}
+                value={String(
+                  valueAtPath(overrides, field.path) ??
+                    presetValues[field.path] ??
+                    field.default ??
+                    "",
+                )}
+                classValue={
+                  field.storageClassPath
+                    ? String(
+                        valueAtPath(overrides, field.storageClassPath) ?? "",
+                      )
+                    : ""
+                }
+                onChange={(value) => onChange(field, value)}
+                onClassChange={(value) =>
+                  field.storageClassPath &&
+                  onStorageClassChange(field.storageClassPath, value)
+                }
+              />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function ToolYamlEditor({
+  value,
+  error,
+  onChange,
+  onBlur,
+}: {
+  value: string;
+  error: string | null;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label
+        className="text-sm font-medium text-foreground"
+        htmlFor="tool-values-yaml"
+      >
+        Values override (YAML)
+      </label>
+      <p className="text-xs text-muted-foreground">
+        Merged on top of the chart defaults and the selected preset.
+      </p>
+      <textarea
+        id="tool-values-yaml"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        rows={18}
+        placeholder={
+          "# e.g.\nreplicas: 2\nresources:\n  requests:\n    cpu: 100m"
+        }
+        className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
+          placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring resize-none"
+      />
+      {error && (
+        <p
+          role="alert"
+          className="flex items-center gap-1.5 text-xs text-status-error"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

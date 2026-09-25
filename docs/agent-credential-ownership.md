@@ -12,8 +12,16 @@ agent rotation cannot compete for active credential material.
 Always apply the current registration manifest with:
 
 ```bash
-kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
+kubectl apply --server-side --force-conflicts --field-manager=astronomer-bootstrap -f -
 ```
+
+`astronomer-bootstrap` is authoritative for the product-owned fields in this
+manifest. `--force-conflicts` makes repeat installation deterministic when a
+chart or an administrator has used another Kubernetes field manager for one of
+those fields. It does not claim fields omitted from the manifest. This follows
+the same ownership model Rancher uses when a managed Helm operation explicitly
+takes ownership, while retaining server-side apply so credentials are not
+copied into a client-side last-applied annotation.
 
 The current manifest creates `astronomer-agent-identity` with metadata, type,
 and `astronomer.io/agent-credential-purpose=durable-identity-container`, but no

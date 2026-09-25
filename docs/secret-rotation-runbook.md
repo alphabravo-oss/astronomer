@@ -280,7 +280,7 @@ the server still enforces bootstrap registration-token expiry and cluster
 binding. Generate a fresh manifest if bootstrap has expired, then apply it with:
 
 ```bash
-kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
+kubectl apply --server-side --force-conflicts --field-manager=astronomer-bootstrap -f -
 ```
 
 See [agent-credential-ownership.md](agent-credential-ownership.md) for ownership,

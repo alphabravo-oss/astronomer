@@ -16,7 +16,7 @@ describe("agent bootstrap install commands", () => {
     ];
 
     expect(AGENT_BOOTSTRAP_APPLY).toBe(
-      "kubectl apply --server-side --field-manager=astronomer-bootstrap -f -",
+      "kubectl apply --server-side --force-conflicts --field-manager=astronomer-bootstrap -f -",
     );
     for (const command of variants) {
       expect(command).toContain(AGENT_BOOTSTRAP_APPLY);
@@ -24,6 +24,7 @@ describe("agent bootstrap install commands", () => {
       expect(
         command.match(/--field-manager=astronomer-bootstrap/g),
       ).toHaveLength(1);
+      expect(command.match(/--force-conflicts/g)).toHaveLength(1);
     }
   });
 

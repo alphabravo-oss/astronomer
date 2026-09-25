@@ -1,5 +1,5 @@
 export const AGENT_BOOTSTRAP_APPLY =
-  "kubectl apply --server-side --field-manager=astronomer-bootstrap -f -";
+  "kubectl apply --server-side --force-conflicts --field-manager=astronomer-bootstrap -f -";
 
 export type CurlVariant = "public_ca" | "private_ca" | "insecure";
 
