@@ -9,6 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  offering-qualification-static:
+    name: offering qualification static gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Reject incomplete inventory and false-green evidence
+        run: |
+          go test ./scripts/qualify-offerings -count=1
+          python3 scripts/tests/offering_qualification_test.py
+
   backend:
     name: enterprise backend gate
     runs-on: ubuntu-24.04
@@ -431,6 +447,7 @@ jobs:
     name: same-commit PR qualification aggregate
     if: always()
     needs:
+      - offering-qualification-static
       - backend
       - stateful-qualifications
       - postgres-failover-certification

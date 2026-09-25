@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.dev/schemas/offering-qualification-v1.json",
+  "title": "Astronomer offering qualification evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "generated_at",
+    "mode",
+    "candidate",
+    "target",
+    "inventory",
+    "cases",
+    "summary",
+    "cleanup"
+  ],
+  "properties": {
+    "schema_version": {"const": "astronomer-offering-qualification-v1"},
+    "run_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "mode": {"type": "string", "enum": ["inventory", "qualification"]},
+    "candidate": {"$ref": "#/$defs/candidate"},
+    "target": {"$ref": "#/$defs/target"},
+    "inventory": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/registry_result"}
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/case_result"}
+    },
+    "summary": {"$ref": "#/$defs/summary"},
+    "cleanup": {"$ref": "#/$defs/cleanup"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "staged_diff_sha256", "unstaged_diff_sha256", "untracked_sha256", "dirty"],
+      "properties": {
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+        "staged_diff_sha256": {"$ref": "#/$defs/sha256"},
+        "unstaged_diff_sha256": {"$ref": "#/$defs/sha256"},
+        "untracked_sha256": {"$ref": "#/$defs/sha256"},
+        "dirty": {"type": "boolean"}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_origin", "target_ids"],
+      "properties": {
+        "base_origin": {"type": "string", "format": "uri", "pattern": "^https?://[^/]+$"},
+        "target_ids": {
+          "type": "object",
+          "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+          "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 256}
+        }
+      }
+    },
+    "registry_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path",
+        "pages",
+        "http_statuses",
+        "observed_identities",
+        "expected_identities",
+        "missing_identities",
+        "additional_identities",
+        "status",
+        "reason"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+        "path": {"type": "string", "pattern": "^/api/v1/"},
+        "pages": {"type": "integer", "minimum": 0, "maximum": 100},
+        "http_statuses": {"type": "array", "items": {"type": "integer", "minimum": 100, "maximum": 599}},
+        "observed_identities": {"$ref": "#/$defs/identities"},
+        "expected_identities": {"$ref": "#/$defs/identities"},
+        "missing_identities": {"$ref": "#/$defs/identities"},
+        "additional_identities": {"$ref": "#/$defs/identities"},
+        "observed_values": {
+          "type": "object",
+          "propertyNames": {"type": "string", "minLength": 1, "maxLength": 512},
+          "additionalProperties": {"type": "boolean"}
+        },
+        "status": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2000}
+      }
+    },
+    "identities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 512}
+    },
+    "case_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "state", "reason"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z]+-[0-9]{2}$"},
+        "state": {
+          "type": "string",
+          "enum": ["NOT_RUN", "RUNNING", "PASS", "FAIL", "BLOCKED", "NOT_SUPPORTED"]
+        },
+        "reason": {"type": "string", "maxLength": 4000},
+        "not_supported_contract": {"type": "string", "minLength": 1, "maxLength": 4000}
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "by_state", "inventory_pass", "inventory_fail"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 1},
+        "by_state": {
+          "type": "object",
+          "propertyNames": {"enum": ["NOT_RUN", "RUNNING", "PASS", "FAIL", "BLOCKED", "NOT_SUPPORTED"]},
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "inventory_pass": {"type": "integer", "minimum": 0},
+        "inventory_fail": {"type": "integer", "minimum": 0}
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason"],
+      "properties": {
+        "state": {"type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "NOT_APPLICABLE"]},
+        "reason": {"type": "string", "maxLength": 4000}
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "schema_version": "astronomer-offering-qualification-config-v1",
+  "base_url": "https://astronomer.example.com",
+  "token_file": "/run/secrets/astronomer-qualification-token",
+  "expected_commit": "0000000000000000000000000000000000000000",
+  "target_ids": {
+    "cluster_id": "00000000-0000-0000-0000-000000000000",
+    "project_id": "00000000-0000-0000-0000-000000000000"
+  }
+}

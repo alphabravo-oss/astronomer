@@ -7075,15 +7075,18 @@ type ExtensionValidationCompatibilityStatus string
 
 // FeatureFlags defines model for FeatureFlags.
 type FeatureFlags struct {
-	FeatureBackups       *bool `json:"feature.backups,omitempty"`
-	FeatureCatalog       *bool `json:"feature.catalog,omitempty"`
-	FeatureCharlie       *bool `json:"feature.charlie,omitempty"`
-	FeatureExtensions    *bool `json:"feature.extensions,omitempty"`
-	FeatureHostedLoki    *bool `json:"feature.hosted_loki,omitempty"`
-	FeatureMonitoring    *bool `json:"feature.monitoring,omitempty"`
-	FeatureProjects      *bool `json:"feature.projects,omitempty"`
-	FeatureSecurity      *bool `json:"feature.security,omitempty"`
-	FeatureSharedGrafana *bool `json:"feature.shared_grafana,omitempty"`
+	FeatureAlerting              *bool `json:"feature.alerting,omitempty"`
+	FeatureBackups               *bool `json:"feature.backups,omitempty"`
+	FeatureCatalog               *bool `json:"feature.catalog,omitempty"`
+	FeatureCharlie               *bool `json:"feature.charlie,omitempty"`
+	FeatureControlPlaneSnapshots *bool `json:"feature.control_plane_snapshots,omitempty"`
+	FeatureDelivery              *bool `json:"feature.delivery,omitempty"`
+	FeatureExtensions            *bool `json:"feature.extensions,omitempty"`
+	FeatureHostedLoki            *bool `json:"feature.hosted_loki,omitempty"`
+	FeatureMonitoring            *bool `json:"feature.monitoring,omitempty"`
+	FeatureProjects              *bool `json:"feature.projects,omitempty"`
+	FeatureSecurity              *bool `json:"feature.security,omitempty"`
+	FeatureSharedGrafana         *bool `json:"feature.shared_grafana,omitempty"`
 }
 
 // FleetVulnerabilityAggregate defines model for FleetVulnerabilityAggregate.

@@ -1,0 +1,92 @@
+name: Offering API qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_commit:
+        description: Exact commit being inventoried; must equal the workflow commit
+        required: true
+        type: string
+      base_url:
+        description: HTTPS origin of the release-candidate Astronomer API
+        required: true
+        type: string
+      cluster_id:
+        description: Explicit task-owned member cluster UUID
+        required: true
+        type: string
+      project_id:
+        description: Explicit task-owned project UUID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    name: frozen offering inventory
+    environment: release-candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Require the workflow and candidate to be the same immutable commit
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+        run: |
+          test "$CANDIDATE_COMMIT" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_COMMIT"
+          test -z "$(git status --porcelain)"
+
+      - name: Create permission-restricted runtime configuration
+        env:
+          API_TOKEN: ${{ secrets.OFFERING_QUALIFICATION_API_TOKEN }}
+          BASE_URL: ${{ inputs.base_url }}
+          CLUSTER_ID: ${{ inputs.cluster_id }}
+          PROJECT_ID: ${{ inputs.project_id }}
+          CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+        run: |
+          test -n "$API_TOKEN"
+          umask 077
+          printf '%s' "$API_TOKEN" > "$RUNNER_TEMP/offering-token"
+          jq -n \
+            --arg base_url "$BASE_URL" \
+            --arg token_file "$RUNNER_TEMP/offering-token" \
+            --arg expected_commit "$CANDIDATE_COMMIT" \
+            --arg cluster_id "$CLUSTER_ID" \
+            --arg project_id "$PROJECT_ID" \
+            '{
+              schema_version: "astronomer-offering-qualification-config-v1",
+              base_url: $base_url,
+              token_file: $token_file,
+              expected_commit: $expected_commit,
+              target_ids: {cluster_id: $cluster_id, project_id: $project_id}
+            }' > "$RUNNER_TEMP/offering-config.json"
+
+      - name: Reconcile all configured runtime registry pages
+        run: |
+          mkdir -p offering-qualification
+          go run ./scripts/qualify-offerings inventory \
+            --config "$RUNNER_TEMP/offering-config.json" \
+            --output offering-qualification/inventory.json
+
+      - name: Remove credential material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/offering-token" "$RUNNER_TEMP/offering-config.json"
+
+      - name: Upload immutable inventory evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: offering-qualification-inventory-${{ github.run_id }}
+          path: offering-qualification/
+          if-no-files-found: error
+          retention-days: 90

@@ -59,6 +59,21 @@ const newAutomationRule = (): CharlieTriggerRule => ({
   modeCeiling: "read_only",
 });
 
+function actionPolicyValuesValid(
+  policy: CharlieAutomationView["actionPolicies"][number],
+) {
+  return (
+    policy.maxActionsPerIncident >= 1 &&
+    policy.maxActionsPerIncident <= 100 &&
+    policy.maxActionsPerWindow >= 1 &&
+    policy.maxActionsPerWindow <= 100 &&
+    policy.budgetWindowSeconds >= 60 &&
+    policy.budgetWindowSeconds <= 86400 &&
+    policy.cooldownSeconds >= 30 &&
+    policy.cooldownSeconds <= 604800
+  );
+}
+
 export function AutomationTab() {
   const qc = useQueryClient();
   const q = useQuery({
@@ -230,15 +245,7 @@ export function AutomationTab() {
                     "cooldownSeconds",
                   ] as const
                 ).some((field) => original[field] !== policy[field]);
-              const valuesValid =
-                policy.maxActionsPerIncident >= 1 &&
-                policy.maxActionsPerIncident <= 100 &&
-                policy.maxActionsPerWindow >= 1 &&
-                policy.maxActionsPerWindow <= 100 &&
-                policy.budgetWindowSeconds >= 60 &&
-                policy.budgetWindowSeconds <= 86400 &&
-                policy.cooldownSeconds >= 30 &&
-                policy.cooldownSeconds <= 604800;
+              const valuesValid = actionPolicyValuesValid(policy);
               return (
                 <article
                   key={policy.capability}

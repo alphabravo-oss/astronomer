@@ -2,7 +2,7 @@
 
 ## Status, scope and execution authority
 
-**PLANNED — independently reviewed; no new live qualification has been run for this plan.** Written 2026-09-24 against Astronomer HEAD `22f633ec` **including the current dirty working tree**, and the local catalog HEAD `3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5`. Priority P1; effort L, split by offering; implementation risk medium, live lifecycle tests high unless confined to disposable targets.
+**IN PROGRESS — the evidence harness and read-only Phase 0 inventory are implemented; all 174 functional cases remain NOT_RUN.** The source baseline was refreshed 2026-09-25 against Astronomer base HEAD `1975a32b` plus the recorded working-tree hashes and local catalog HEAD `3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5`. The first live API inventory matched six initial registry families; it is not functional qualification. See [the execution ledger](./028-execution-ledger.md). Priority P1; effort L, split by offering; implementation risk medium, live lifecycle tests high unless confined to disposable targets.
 
 The user's requirement is every offering, not only Dex, Velero and monitoring, and proof through the API without workarounds. The companion [offering-by-offering inventory and test matrix](./028-offering-test-inventory.md) is mandatory scope. It lists the 21 local catalog applications, additional Tools offerings, baseline components, provider variants and platform integrations. Enumerate the deployed API inventories again before execution: this static list is a baseline, not permission to omit a newly offered item.
 
