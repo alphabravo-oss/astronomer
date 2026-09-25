@@ -118,6 +118,24 @@ func TestSchedulerReservesHardUnavailableBudget(t *testing.T) {
 	}
 }
 
+func TestSchedulerReleasesRepairWhenUnavailableBudgetIsConsumed(t *testing.T) {
+	t.Parallel()
+	strategy := testStrategy(model.StrategyAllAtOnce, 1)
+	strategy.MaxUnavailable = model.Amount{Type: model.AmountCount, Value: 1}
+	plan := testPlan(t, 1, strategy, false)
+	runtime := testRuntime(plan, model.RolloutProgressing)
+	runtime.Clusters[0].Available = false
+	runtime.Clusters[0].CurrentGeneration = 1
+
+	decision := mustEvaluate(t, evaluateInput(runtime, testNow))
+	if len(decision.Releases) != 1 || decision.Releases[0].ClusterID != runtime.Clusters[0].ClusterID {
+		t.Fatalf("unavailable target was not released for repair: %+v", decision)
+	}
+	if decision.Blocked != BlockNone {
+		t.Fatalf("repair release was incorrectly reported blocked: %+v", decision)
+	}
+}
+
 func TestSchedulerDisconnectReconnectAndDeadlines(t *testing.T) {
 	t.Parallel()
 	plan := testPlan(t, 3, testStrategy(model.StrategyAllAtOnce, 3), false)
