@@ -127,8 +127,75 @@ async function mockApi(page: Page) {
       return route.fulfill({ json: apiResponse(authMeWire(adminUser)) });
     if (path === "/settings/features")
       return route.fulfill({ json: apiResponse({}) });
+    if (path === `/clusters/${CLUSTER_ID}/namespaces`) {
+      return route.fulfill({
+        json: {
+          data: [
+            {
+              name: CR_NS,
+              cluster_id: CLUSTER_ID,
+              status: "Active",
+              labels: {},
+              annotations: {},
+              created_at: "2024-01-01T00:00:00Z",
+            },
+          ],
+          pagination: {
+            limit: 200,
+            offset: 0,
+            total: 1,
+            has_more: false,
+            next_offset: null,
+          },
+        },
+      });
+    }
+    if (path === "/rbac/my-permissions") {
+      return route.fulfill({
+        json: apiResponse({
+          subject: { user_id: adminUser.id, self: true },
+          superuser: true,
+          context: {
+            cluster_id: CLUSTER_ID,
+            namespace_scoped_bindings_supported: true,
+            warnings: [],
+          },
+          bindings: [],
+          permissions: [
+            {
+              resource: "*",
+              verb: "*",
+              applies_to_context: true,
+              inherited: false,
+              sources: [{ scope: "global" }],
+            },
+          ],
+        }),
+      });
+    }
     if (path === `/clusters/${CLUSTER_ID}` && method === "GET") {
       return route.fulfill({ json: apiResponse(cluster) });
+    }
+    if (path === `/clusters/${CLUSTER_ID}/resources/discovery`) {
+      return route.fulfill({
+        json: apiResponse({
+          cluster_id: CLUSTER_ID,
+          resources: [],
+          crds: [
+            {
+              name: `${PLURAL}.${GROUP}`,
+              group: GROUP,
+              scope: "Namespaced",
+              kind: KIND,
+              plural: PLURAL,
+              versions: [{ name: VERSION, storage: true }],
+            },
+          ],
+          crd_continue: "",
+          partial: false,
+          errors: {},
+        }),
+      });
     }
     // CRD list (E1): single proxy GET to the apiextensions endpoint.
     if (
@@ -197,7 +264,7 @@ test("custom resources: CRD list -> CR list -> CR detail (Overview + YAML)", asy
     page.getByRole("heading", { name: "Custom Resources" }),
   ).toBeVisible();
   const crdLink = page
-    .getByRole("region", { name: "Scrollable data table" })
+    .getByRole("region", { name: "Data table" })
     .getByRole("link", { name: KIND, exact: true });
   await expect(crdLink).toBeVisible();
 
