@@ -1,3 +1,5 @@
+import { SnapshotRestoreHistory } from "./snapshot-restore-tracking";
+import { QueryStates } from "@/components/ui/query-states";
 /**
  * Cluster Snapshots tab.
  *
@@ -49,7 +51,13 @@ import {
 // are distinct capabilities (application/PV backups versus control-plane DR),
 // so they do not share a tab or controller.
 export function ClusterSnapshotsPage() {
-  return <ClusterVeleroSnapshotsPage />;
+  const { id } = useParams({ from: "/dashboard/clusters/$id" });
+  return (
+    <div className="space-y-6">
+      <ClusterVeleroSnapshotsPage />
+      <SnapshotRestoreHistory clusterId={id} />
+    </div>
+  );
 }
 
 // ─── Velero snapshots page (unchanged existing behavior) ─────────────────────
@@ -96,6 +104,17 @@ function ClusterVeleroSnapshotsPage() {
     );
   }
 
+  if (veleroQuery.isError)
+    return (
+      <QueryStates
+        query={veleroQuery}
+        permission="clusters:read"
+        errorTitle="Velero status unavailable"
+      >
+        <></>
+      </QueryStates>
+    );
+
   if (!veleroReady) {
     return (
       <PageShell>
@@ -129,20 +148,8 @@ function ClusterVeleroSnapshotsPage() {
         description={`Velero-backed snapshots and scheduled snapshots for ${cluster.displayName}.`}
       />
 
-      {/* BSL banner */}
       {showBslBanner && (
-        <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-status-warning shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              Backup storage location not ready
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {veleroStatus?.reason ||
-                "Velero is installed but the backup storage location is not yet Available. Snapshots will fail until it reconciles."}
-            </p>
-          </div>
-        </div>
+        <StorageLocationWarning reason={veleroStatus?.reason} />
       )}
 
       {/* Schedules section */}
@@ -285,5 +292,20 @@ function ClusterVeleroSnapshotsPage() {
         loading={snapshotPage.deleteScheduleMutation.isPending}
       />
     </PageShell>
+  );
+}
+
+function StorageLocationWarning({ reason }: { reason?: string | null }) {
+  return (
+    <div className="rounded-lg border border-status-warning/30 bg-status-warning/10 p-4 flex items-start gap-3">
+      <AlertTriangle className="h-5 w-5 text-status-warning shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium">Backup storage location not ready</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          {reason ||
+            "Velero is installed but the backup storage location is not yet Available. Snapshots will fail until it reconciles."}
+        </p>
+      </div>
+    </div>
   );
 }

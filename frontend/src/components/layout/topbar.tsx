@@ -1,15 +1,12 @@
+import { TopbarAccountMenu } from "./topbar-account-menu";
+import { useHeaderPopover } from "./use-header-popover";
 import { useNavigate, useLocation } from "@tanstack/react-router";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/lib/theme";
 import {
   Bell,
-  ChevronDown,
   ChevronRight,
-  LogOut,
-  Settings,
-  Shield,
-  User,
   Sun,
   Moon,
   Monitor,
@@ -17,7 +14,6 @@ import {
   AlertCircle,
   Info,
   Menu,
-  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore, useAuthStore } from "@/lib/store";
@@ -30,8 +26,8 @@ import {
 import { useAlertEvents, useAlertEventSummary } from "@/lib/hooks/alerting";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime } from "@/lib/utils";
+import { ActionButton } from "@/components/ui/action-button";
 import { GlobalSearch } from "@/components/layout/global-search";
-import { logoutCurrentSession } from "@/lib/api/account-security";
 import { listCharlieFindings } from "@/lib/api/charlie";
 import { queryKeys } from "@/lib/query-keys";
 import { selectImportantCharlieFindings } from "@/components/charlie/topbar-findings";
@@ -42,6 +38,7 @@ import {
   ClusterScopeControls,
   clusterIdFromPath,
 } from "@/components/layout/cluster-scope-controls";
+import { clusterScopeApplicability } from "@/components/layout/cluster-scope-applicability";
 import { ClusterShellLauncher } from "@/components/window-manager/cluster-shell-launcher";
 import { ClusterSwitcherMenu } from "@/components/layout/cluster-switcher-menu";
 import { LazyHeaderClusterActions as HeaderClusterActions } from "@/components/layout/lazy-header-cluster-actions";
@@ -111,8 +108,18 @@ function TopbarBreadcrumbs({
 }
 
 export function Topbar() {
-  const pathname = useLocation({ select: (location) => location.pathname });
+  const location = useLocation({
+    select: (current) => ({
+      pathname: current.pathname,
+      searchStr: current.searchStr,
+    }),
+  });
+  const pathname = location.pathname;
   const currentClusterId = clusterIdFromPath(pathname);
+  const applicableScope = clusterScopeApplicability(
+    pathname,
+    location.searchStr,
+  );
   const rememberedClusterId = useClusterScopeStore(
     (state) => state.lastClusterId,
   );
@@ -120,11 +127,12 @@ export function Topbar() {
   const directPermission = useClustersUpdate(currentClusterId ?? "");
   const navigate = useNavigate();
   const { setMobileSidebarOpen } = useUIStore();
-  const { user, logout } = useAuthStore();
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const userRef = useRef<HTMLDivElement>(null);
-  const notificationRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuthStore();
+  const {
+    open: notificationOpen,
+    setOpen: setNotificationOpen,
+    root: notificationRef,
+  } = useHeaderPopover();
   // Clusters are still fetched here so breadcrumbs can resolve the
   // /dashboard/clusters/{id}/... slug into the human-readable cluster name.
   const { data: clustersData } = useClusters({ pageSize: 50 });
@@ -189,23 +197,6 @@ export function Topbar() {
           ? "You need shell:exec access for this cluster"
           : undefined;
 
-  // Close dropdowns on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (userRef.current && !userRef.current.contains(e.target as Node)) {
-        setUserMenuOpen(false);
-      }
-      if (
-        notificationRef.current &&
-        !notificationRef.current.contains(e.target as Node)
-      ) {
-        setNotificationOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
   const cycleTheme = () => {
     if (theme === "light") setTheme("dark");
     else if (theme === "dark") setTheme("system");
@@ -217,7 +208,7 @@ export function Topbar() {
     visibleTheme === "dark" ? Moon : visibleTheme === "light" ? Sun : Monitor;
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
+    <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 py-2 border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
       <button
         type="button"
         onClick={() => setMobileSidebarOpen(true)}
@@ -234,21 +225,31 @@ export function Topbar() {
         clusterId={currentClusterId}
         clusterName={activeCluster?.displayName || activeCluster?.name}
       />
-      {currentClusterId ? (
-        <ClusterScopeControls clusterId={currentClusterId} />
-      ) : (
+      {currentClusterId &&
+      (applicableScope.project || applicableScope.namespaces) ? (
+        <ClusterScopeControls
+          clusterId={currentClusterId}
+          applicability={applicableScope}
+        />
+      ) : currentClusterId ? null : (
         <TopbarBreadcrumbs breadcrumbs={breadcrumbs} navigate={navigate} />
       )}
 
       {/* Center: Cross-cluster Global Search (Phase A3). Its own kbd hint
           covers the command palette shortcut, so the topbar no longer needs
           a separate ⌘K chip. */}
-      <div className="hidden md:flex flex-1 justify-center px-6">
+      <div className="flex min-w-44 max-w-xs flex-1 justify-center px-2">
         <GlobalSearch />
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-2">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
+        <ActionButton
+          size="sm"
+          onClick={() => useUIStore.getState().setCommandPaletteOpen(true)}
+        >
+          Go to page
+        </ActionButton>
         <ClusterShellLauncher
           clusterId={activeClusterId}
           clusterName={
@@ -298,7 +299,10 @@ export function Topbar() {
           </button>
 
           {notificationOpen && (
-            <div className="absolute right-0 top-full mt-1 w-80 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden">
+            <div
+              data-header-popover
+              className="fixed right-3 top-24 mt-1 w-80 max-w-[calc(100vw-1.5rem)] sm:absolute sm:right-0 sm:top-full rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden"
+            >
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <h4 className="text-sm font-medium text-foreground">
                   Notifications
@@ -403,95 +407,7 @@ export function Topbar() {
           )}
         </div>
 
-        {/* User Menu */}
-        <div ref={userRef} className="relative">
-          <button
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
-            aria-label="User menu"
-            className="flex items-center gap-2 h-8 pl-1 pr-2 rounded-md hover:bg-accent transition-colors"
-          >
-            <div className="w-6 h-6 rounded-full bg-linear-to-br from-zinc-600 to-zinc-800 flex items-center justify-center">
-              <User className="h-3 w-3 text-primary-foreground" />
-            </div>
-            <ChevronDown className="h-3 w-3 text-muted-foreground" />
-          </button>
-
-          {userMenuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden">
-              <div className="px-3 py-2.5 border-b border-border">
-                <p className="text-sm font-medium text-foreground">
-                  {user?.displayName || user?.username}
-                </p>
-                <p className="text-xs text-muted-foreground">{user?.email}</p>
-              </div>
-              <div className="p-1">
-                <button
-                  onClick={() => {
-                    void navigate({ to: "/dashboard/account/preferences" });
-                    setUserMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                >
-                  <SlidersHorizontal className="h-4 w-4" />
-                  Preferences
-                </button>
-                <button
-                  onClick={() => {
-                    void navigate({ to: "/dashboard/settings" });
-                    setUserMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                >
-                  <Settings className="h-4 w-4" />
-                  Settings
-                </button>
-                <button
-                  onClick={() => {
-                    void navigate({ to: "/dashboard/account/security" });
-                    setUserMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                >
-                  <Shield className="h-4 w-4" />
-                  Security
-                </button>
-                <button
-                  onClick={async () => {
-                    // POST /auth/logout first so the backend can revoke the
-                    // session and (for SSO users) hand us a Dex end_session
-                    // URL to bounce through. We clear local state regardless
-                    // — even if the call fails the user has clicked "sign
-                    // out" and shouldn't be left looking authenticated.
-                    let redirectUrl: string | undefined;
-                    try {
-                      const res = await logoutCurrentSession();
-                      redirectUrl = res.redirectUrl;
-                    } catch {
-                      // Network failure / 401 — still clear local state.
-                    }
-                    logout();
-                    if (redirectUrl) {
-                      // Top-level navigation to Dex's end_session endpoint.
-                      // Dex eventually redirects back to /api/v1/auth/logout-done/
-                      // which lands the SPA back on /auth/login.
-                      window.location.href = redirectUrl;
-                    } else {
-                      void navigate({ to: "/auth/login" });
-                    }
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign out
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <TopbarAccountMenu />
       </div>
     </header>
   );

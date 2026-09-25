@@ -759,6 +759,11 @@ export interface OpenAPIComponents {
           "catalog_digest": string;
         };
     CatalogOperation: {
+          "events"?: OpenAPIComponents['schemas']['CatalogOperationEvent'][];
+          "journalStatus"?: string;
+          "deliveryPhase"?: string;
+          "deliveryObservedAt"?: string;
+          "deliveryObservationError"?: string;
           "id"?: string;
           "targetType"?: string;
           "targetKey"?: string;
@@ -3468,6 +3473,7 @@ export interface OpenAPIComponents {
           "updated_at": string;
         };
     InstalledAppEnriched: {
+          "notes"?: string;
           "id"?: string;
           "cluster_id"?: string;
           "chart_id"?: string;
@@ -4524,6 +4530,11 @@ export interface OpenAPIComponents {
           "display_name": string;
           "cluster_id": string;
           "description": string;
+          "cluster_ids"?: string[];
+          "namespace_scopes"?: Array<{
+            "cluster_id": string;
+            "namespaces": string[];
+          }>;
           "namespaces": string[];
           "resource_quota": Record<string, unknown>;
           "limit_range": Record<string, unknown>;
@@ -4953,6 +4964,7 @@ export interface OpenAPIComponents {
           "cluster_id": string;
           "resources": OpenAPIComponents['schemas']['ResourceDiscoveryEntry'][];
           "crds": Record<string, unknown>[];
+          "crd_continue": string;
           "partial": boolean;
           "errors": Record<string, string>;
         };
@@ -5430,6 +5442,7 @@ export interface OpenAPIComponents {
           };
         };
     SnapshotRestoreResponse: {
+          "source_cluster_id"?: string;
           "id"?: string;
           "snapshot_id"?: string;
           "target_cluster_id"?: string;
@@ -6819,6 +6832,10 @@ export interface OpenAPIOperations {
         "path": {
           "cluster_id": string;
         };
+        "query"?: {
+          "crd_limit"?: number;
+          "crd_continue"?: string;
+        };
       };
     response: OpenAPIComponents['schemas']['ResourceDiscoveryEnvelope'];
   };
@@ -7485,6 +7502,11 @@ export interface OpenAPIOperations {
     arguments: {
         "path": {
           "cluster_id": string;
+        };
+        "query"?: {
+          "astronomerNamespace"?: string[];
+          "limit"?: number;
+          "continue"?: string;
         };
       };
     response: OpenAPIComponents['schemas']['KubernetesProxyResponse'];
@@ -8301,6 +8323,18 @@ export interface OpenAPIOperations {
         "body": OpenAPIComponents['schemas']['LoggingPipelineWriteRequest'];
       };
     response: OpenAPIComponents['schemas']['LoggingPipelineMutationReceiptEnvelope'];
+  };
+  "getLoggingPipelinesById": {
+    method: "GET";
+    path: "/api/v1/logging/pipelines/{id}";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: Record<string, unknown> & {
+        "data"?: OpenAPIComponents['schemas']['LoggingPipeline'];
+      };
   };
   "deleteLoggingPipelinesById": {
     method: "DELETE";
@@ -12058,6 +12092,35 @@ export interface OpenAPIOperations {
       };
     response: void;
   };
+  "getClustersByClusterIdSnapshotRestores": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/snapshot-restores";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+        };
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['SnapshotRestoreResponse'][];
+      };
+  };
+  "getClustersByClusterIdSnapshotRestoresById": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/snapshot-restores/{id}";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: Record<string, unknown> & {
+        "data"?: OpenAPIComponents['schemas']['SnapshotRestoreResponse'];
+      };
+  };
   "getClustersByClusterIdSnapshots": {
     method: "GET";
     path: "/api/v1/clusters/{cluster_id}/snapshots";
@@ -12396,6 +12459,7 @@ export interface OpenAPIOperations {
     path: "/api/v1/catalog/charts/";
     arguments: {
         "query"?: {
+          "search"?: string;
           "limit"?: number;
           "offset"?: number;
           "tag"?: string;
@@ -12577,6 +12641,18 @@ export interface OpenAPIOperations {
       };
     response: OpenAPIComponents['schemas']['CatalogInstallationAcceptedEnvelope'];
   };
+  "getCatalogInstalledById": {
+    method: "GET";
+    path: "/api/v1/catalog/installed/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: Record<string, unknown> & {
+        "data"?: OpenAPIComponents['schemas']['InstalledAppEnriched'];
+      };
+  };
   "deleteCatalogInstalledById": {
     method: "DELETE";
     path: "/api/v1/catalog/installed/{id}/";
@@ -12654,9 +12730,11 @@ export interface OpenAPIOperations {
         };
       };
     response: {
-        "release_name"?: string;
-        "namespace"?: string;
-        "values_override"?: string;
+        "data": {
+          "release_name": string;
+          "namespace": string;
+          "values_override": string;
+        };
       };
   };
   "getCatalogOperations": {
@@ -12683,8 +12761,10 @@ export interface OpenAPIOperations {
           "id": string;
         };
       };
-    response: OpenAPIComponents['schemas']['CatalogOperation'] & {
-        "events"?: OpenAPIComponents['schemas']['CatalogOperationEvent'][];
+    response: {
+        "data": OpenAPIComponents['schemas']['CatalogOperation'] & {
+          "events"?: OpenAPIComponents['schemas']['CatalogOperationEvent'][];
+        };
       };
   };
   "postCatalogOperationsByIdRetry": {
@@ -12698,7 +12778,7 @@ export interface OpenAPIOperations {
           "Idempotency-Key": string;
         };
       };
-    response: OpenAPIComponents['schemas']['CatalogOperation'];
+    response: OpenAPIComponents['schemas']['CatalogOperationEnvelope'];
   };
   "getCatalogRepositories": {
     method: "GET";
@@ -15528,6 +15608,7 @@ export interface OpenAPIOperations {
           "cluster_id": string;
         };
         "query"?: {
+          "namespaces"?: string[];
           "namespace"?: string;
           "limit"?: number;
           "offset"?: number;
@@ -15593,6 +15674,7 @@ export interface OpenAPIOperations {
           "cluster_id": string;
         };
         "query"?: {
+          "namespaces"?: string[];
           "limit"?: number;
           "offset"?: number;
           "namespace"?: string;
@@ -15981,6 +16063,11 @@ export interface OpenAPIOperations {
         "path": {
           "cluster_id": string;
           "path": string;
+        };
+        "query"?: {
+          "astronomerNamespace"?: string[];
+          "limit"?: number;
+          "continue"?: string;
         };
         "body"?: unknown;
       };

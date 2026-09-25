@@ -543,3 +543,46 @@ func TestScopedCallerSeesEmptyPageWhenGrantedClusterIsGone(t *testing.T) {
 		t.Fatalf("clusters = %d (count %d), want 0/0", len(page.Data), *page.Pagination.Total)
 	}
 }
+
+func (q *scopeFilterProjectQuerier) ListProjectNamespaceScopes(context.Context, []uuid.UUID) ([]sqlc.ProjectNamespace, error) {
+	return nil, nil
+}
+
+func (q *scopeFilterProjectQuerier) ListClusterProjectsForScopes(_ context.Context, arg sqlc.ListClusterProjectsForScopesParams) ([]sqlc.Project, error) {
+	visible := q.projects
+	if !arg.AllScopes {
+		visible = filterProjectsByScope(visible, arg.ProjectIds, arg.ClusterIds)
+	}
+	selected := []sqlc.Project{}
+	for _, p := range visible {
+		if p.ClusterID == arg.SelectedClusterID {
+			selected = append(selected, p)
+		}
+	}
+	return pageProjects(filterProjectsBySearch(selected, arg.FilterSearch), arg.QueryLimit, arg.QueryOffset), nil
+}
+func (q *scopeFilterProjectQuerier) CountClusterProjectsForScopes(ctx context.Context, arg sqlc.CountClusterProjectsForScopesParams) (int64, error) {
+	rows, err := q.ListClusterProjectsForScopes(ctx, sqlc.ListClusterProjectsForScopesParams{SelectedClusterID: arg.SelectedClusterID, AllScopes: arg.AllScopes, ProjectIds: arg.ProjectIds, ClusterIds: arg.ClusterIds, FilterSearch: arg.FilterSearch, QueryLimit: 1000})
+	return int64(len(rows)), err
+}
+func TestClusterProjectCollectionAdmitsDirectProjectGrantWithoutExposingNeighbors(t *testing.T) {
+	cluster := uuid.New()
+	mine := sqlc.Project{ID: uuid.New(), Name: "mine", ClusterID: cluster}
+	neighbor := sqlc.Project{ID: uuid.New(), Name: "neighbor", ClusterID: cluster}
+	rules := []rbac.Rule{{Resource: "projects", Verbs: []string{"list"}}}
+	for _, narrowed := range []bool{false, true} {
+		bindings := []rbac.RoleBinding{{Scope: "project", ProjectID: mine.ID.String(), RoleRules: rules}}
+		if narrowed {
+			bindings = []rbac.RoleBinding{{Scope: "cluster", ClusterID: cluster.String(), Namespace: "mine", RoleRules: rules}}
+		}
+		router, token := newCollectionScopeRouter(t, bindings, nil, []sqlc.Project{mine, neighbor})
+		code, page := getCollection(t, router, "/api/v1/clusters/"+cluster.String()+"/projects/", token)
+		want := 1
+		if narrowed {
+			want = 0
+		}
+		if code != http.StatusOK || len(page.Data) != want || *page.Pagination.Total != int64(want) {
+			t.Fatalf("narrowed=%v: status %d rows %+v", narrowed, code, page)
+		}
+	}
+}

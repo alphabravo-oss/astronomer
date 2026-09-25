@@ -124,24 +124,22 @@ SELECT count(*) FROM logging_pipelines WHERE cluster_id = $1;
 -- pipeline row, reconcile operation, and audit outbox intent. The cluster join
 -- prevents a pipeline from routing one cluster's logs into another cluster's
 -- output, even if a caller supplies a valid foreign output UUID.
-WITH removed AS (
-    DELETE FROM logging_pipeline_outputs
-    WHERE logging_pipeline_outputs.logging_pipeline_id = sqlc.arg(logging_pipeline_id)
-),
-desired AS (
-    SELECT DISTINCT unnest(sqlc.arg(output_ids)::uuid[]) AS output_id
-),
-inserted AS (
-    INSERT INTO logging_pipeline_outputs (logging_pipeline_id, logging_output_id)
-    SELECT p.id, o.id
-    FROM desired d
+WITH desired AS (
+    SELECT DISTINCT o.id AS output_id
+    FROM unnest(sqlc.arg(output_ids)::uuid[]) AS requested(id)
     JOIN logging_pipelines p ON p.id = sqlc.arg(logging_pipeline_id)
-    JOIN logging_outputs o
-      ON o.id = d.output_id
-     AND o.cluster_id = p.cluster_id
+    JOIN logging_outputs o ON o.id = requested.id AND o.cluster_id = p.cluster_id
+), removed AS (
+    DELETE FROM logging_pipeline_outputs
+    WHERE logging_pipeline_id = sqlc.arg(logging_pipeline_id)
+      AND logging_output_id NOT IN (SELECT output_id FROM desired)
+), inserted AS (
+    INSERT INTO logging_pipeline_outputs (logging_pipeline_id, logging_output_id)
+    SELECT sqlc.arg(logging_pipeline_id), output_id FROM desired
+    ON CONFLICT (logging_pipeline_id, logging_output_id) DO NOTHING
     RETURNING logging_output_id
 )
-SELECT count(*) FROM inserted;
+SELECT count(*) FROM desired;
 
 -- name: ListLoggingPipelineOutputDetails :many
 -- One batch query enriches list responses without an N+1 request pattern.

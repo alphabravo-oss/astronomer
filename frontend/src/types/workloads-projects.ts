@@ -125,6 +125,7 @@ export interface Project {
   clusterId?: string;
   clusterIds?: string[];
   namespaces: string[];
+  namespaceScopes?: Array<{ clusterId: string; namespaces: string[] }>;
   /** Loaded by the project RBAC detail API, not project CRUD/list responses. */
   members?: ProjectMember[];
   resourceQuota?: ResourceQuota;

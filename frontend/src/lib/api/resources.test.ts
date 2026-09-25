@@ -53,6 +53,7 @@ describe("resource discovery generated boundary", () => {
     const result = await getResourceDiscovery("cluster-1", signal);
     expect(discovery).toHaveBeenCalledWith({
       path: { cluster_id: "cluster-1" },
+      query: { crd_limit: 500, crd_continue: undefined },
       signal,
     });
     expect(result.resources[0]).toMatchObject({

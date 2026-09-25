@@ -1,3 +1,5 @@
+import { useOperationIntent } from "@/lib/use-operation-intent";
+import { useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -324,6 +326,7 @@ export function RestoreSnapshotDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const form = useAppForm({
     defaultValues: {
       targetClusterId: clusterId,
@@ -333,23 +336,35 @@ export function RestoreSnapshotDialog({
     },
     onSubmit: () => mutation.mutate(),
   });
+  const intent = useOperationIntent();
   const mutation = useMutation({
     mutationFn: () => {
       const values = form.state.values;
-      return restoreSnapshot(clusterId, snapshot.id, {
+      const body = {
         target_cluster_id: values.targetClusterId,
         spec: {
           includedNamespaces: parseCommaSeparated(values.includedNamespaces),
           excludedNamespaces: parseCommaSeparated(values.excludedNamespaces),
           restorePVs: values.restorePVs,
         },
-      });
+      };
+      return restoreSnapshot(
+        clusterId,
+        snapshot.id,
+        body,
+        undefined,
+        intent.keyFor({ clusterId, snapshotId: snapshot.id, body }),
+      );
     },
-    onSuccess: () => {
+    onSuccess: (receipt) => {
+      intent.complete();
       queryClient.invalidateQueries({
         queryKey: queryKeys.clusterPages.snapshots(clusterId),
       });
-      toastSuccess("Restore queued");
+      toastSuccess("Restore queued — follow its status in restore history");
+      void navigate({
+        to: `/dashboard/clusters/${receipt.targetClusterId}/snapshots?restore=${encodeURIComponent(receipt.id)}`,
+      });
       onClose();
     },
     onError: (error: Error) => toastApiError("Restore failed", error),

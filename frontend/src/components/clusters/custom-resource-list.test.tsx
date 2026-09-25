@@ -4,6 +4,7 @@ import type { ResourcePermissionDecisions } from "@/components/resources/resourc
 import type { PermissionDecision } from "@/lib/permissions";
 
 const state = vi.hoisted(() => ({
+  selection: null as readonly string[] | null | undefined,
   query: {
     data: {} as unknown,
     isError: false,
@@ -17,8 +18,35 @@ const state = vi.hoisted(() => ({
   download: vi.fn(),
   useResource: vi.fn(),
 }));
+vi.mock("@/lib/permission-hooks", async (original) => ({
+  ...(await original<typeof import("@/lib/permission-hooks")>()),
+  usePermissionDecision: () => state.permissions.read,
+}));
+vi.mock("@/lib/cluster-scope", () => ({
+  useClusterNamespaceScope: () => ({ selectedNamespaces: state.selection }),
+}));
+vi.mock("@/components/layout/use-cluster-discovery-nav", () => ({
+  useClusterDiscovery: () => ({
+    isLoading: false,
+    isError: false,
+    crdsByGroup: new Map([
+      [
+        "example.io",
+        [
+          {
+            group: "example.io",
+            servedVersions: ["v2"],
+            plural: "widgets",
+            namespaced: true,
+          },
+        ],
+      ],
+    ]),
+  }),
+}));
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => "",
   Link: ({ children }: { children: React.ReactNode }) => (
     <span>{children}</span>
   ),
@@ -86,6 +114,7 @@ const props = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  state.selection = null;
   state.permissions = Object.fromEntries(
     [
       "create",
@@ -181,4 +210,60 @@ it("hides cached rows and actions after a denied refresh", () => {
   render(<CustomResourceList {...props} />);
   expect(screen.queryByText("demo")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Open actions menu")).not.toBeInTheDocument();
+});
+
+it("uses selected namespace in the API path before pagination and resets continuation", () => {
+  state.selection = ["team-b"];
+  const view = render(<CustomResourceList {...props} />);
+  expect(state.useResource).toHaveBeenLastCalledWith(
+    "c",
+    "apis/example.io/v2/namespaces/team-b/widgets?limit=50",
+    true,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  state.selection = ["team-a"];
+  view.rerender(<CustomResourceList {...props} />);
+  expect(state.useResource).toHaveBeenLastCalledWith(
+    "c",
+    "apis/example.io/v2/namespaces/team-a/widgets?limit=50",
+    true,
+  );
+});
+it.each([undefined, []])(
+  "does not issue an unscoped query for unresolved/unsupported scope %s",
+  (selection) => {
+    state.selection = selection;
+    render(<CustomResourceList {...props} />);
+    expect(state.useResource).not.toHaveBeenCalled();
+  },
+);
+
+it("uses the explicit repeated namespace contract for a combined collection", () => {
+  state.selection = ["team-a", "team-b"];
+  render(<CustomResourceList {...props} />);
+  const path = state.useResource.mock.lastCall?.[1] as string;
+  const query = new URLSearchParams(path.split("?")[1]);
+  expect(query.getAll("astronomerNamespace")).toEqual(["team-a", "team-b"]);
+  expect(path).toMatch(/^apis\/example.io\/v2\/widgets\?/);
+});
+it("restarts at the first collection page after an expired cursor", () => {
+  state.query.data = { items: [], metadata: { continue: "opaque-expired" } };
+  const { rerender } = render(<CustomResourceList {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  expect(state.useResource.mock.lastCall?.[1]).toContain(
+    "continue=opaque-expired",
+  );
+  state.query.error = { response: { status: 410 } };
+  state.query.isError = true;
+  rerender(<CustomResourceList {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(state.useResource.mock.lastCall?.[1]).not.toContain("continue=");
+});
+it("drops old collection continuation when the cluster changes", () => {
+  state.query.data = { items: [], metadata: { continue: "old-cluster" } };
+  const { rerender } = render(<CustomResourceList {...props} />);
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  rerender(<CustomResourceList {...props} clusterId="other" />);
+  expect(state.useResource.mock.lastCall?.[0]).toBe("other");
+  expect(state.useResource.mock.lastCall?.[1]).not.toContain("continue=");
 });

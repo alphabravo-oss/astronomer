@@ -76,6 +76,20 @@ func TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted(
 	if err != nil || count != 1 {
 		t.Fatalf("valid replacement count=%d err=%v", count, err)
 	}
+	for attempt := 0; attempt < 2; attempt++ {
+		count, err = q.ReplaceLoggingPipelineOutputs(ctx, ReplaceLoggingPipelineOutputsParams{LoggingPipelineID: pipelineID, OutputIds: []uuid.UUID{outputID, outputID}})
+		if err != nil || count != 1 {
+			t.Fatalf("retained output replacement %d: count=%d err=%v", attempt, count, err)
+		}
+	}
+	count, err = q.ReplaceLoggingPipelineOutputs(ctx, ReplaceLoggingPipelineOutputsParams{LoggingPipelineID: pipelineID, OutputIds: []uuid.UUID{}})
+	if err != nil || count != 0 {
+		t.Fatalf("clear outputs count=%d err=%v", count, err)
+	}
+	count, err = q.ReplaceLoggingPipelineOutputs(ctx, ReplaceLoggingPipelineOutputsParams{LoggingPipelineID: pipelineID, OutputIds: []uuid.UUID{outputID}})
+	if err != nil || count != 1 {
+		t.Fatalf("restore outputs count=%d err=%v", count, err)
+	}
 	details, err := q.ListLoggingPipelineOutputDetails(ctx, []uuid.UUID{pipelineID})
 	if err != nil {
 		t.Fatal(err)

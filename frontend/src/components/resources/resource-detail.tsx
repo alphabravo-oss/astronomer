@@ -1,5 +1,9 @@
+import { useClusterNamespaceScope } from "@/lib/cluster-scope";
+import { canonicalPermissionResource } from "@/lib/permission-hooks";
+import { safeWorkloadOrigin } from "./resource-navigation-context";
+import { useTabParam } from "@/lib/use-tab-param";
 import { useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import {
   ResourceDetailTabPanel,
@@ -27,6 +31,7 @@ interface ResourceDetailProps {
   k8sPath: string;
   /** Override for resources whose canonical RBAC name differs from the route. */
   permissionResource?: string;
+  collectionHref?: string;
 }
 
 const BASE_TABS = [
@@ -52,9 +57,16 @@ export function ResourceDetail({
   name,
   k8sPath,
   permissionResource,
+  collectionHref,
 }: ResourceDetailProps) {
-  const [tab, setTab] = useState<ResourceDetailTabId>("overview");
   const navigate = useNavigate();
+  const searchStr = useLocation({ select: (location) => location.searchStr });
+  const origin = safeWorkloadOrigin(
+    new URLSearchParams(searchStr).get("origin"),
+    clusterId,
+  );
+  const resourceIdentity = `${clusterId}/${k8sPath}`;
+  const [execOpen, setExecOpen] = useState<string | null>(null);
 
   // These decisions intentionally use the same canonical/override resource as
   // list rows. The backend remains the final authorization boundary.
@@ -96,8 +108,17 @@ export function ResourceDetail({
     "monitoring",
   );
 
+  const scope = useClusterNamespaceScope(clusterId);
+  const canRead =
+    read.allowed ||
+    (!!namespace &&
+      scope.allows(
+        permissionResource ?? canonicalPermissionResource(resourceType),
+        "read",
+        namespace,
+      ));
   const isPod = resourceType === "pods";
-  const resourceQuery = useK8sResource(clusterId, k8sPath, read.allowed);
+  const resourceQuery = useK8sResource(clusterId, k8sPath, canRead);
   const { data, isLoading, error } = resourceQuery;
   const obj = data as K8sObject | undefined;
   const conditions = obj?.status?.conditions ?? [];
@@ -139,7 +160,18 @@ export function ResourceDetail({
     resourceType,
   ]);
 
-  if (!read.allowed) {
+  const [urlTab, setUrlTab] = useTabParam<ResourceDetailTabId>(
+    tabs.filter((item) => item.id !== "exec").map((item) => item.id),
+    "overview",
+  );
+
+  const tab =
+    execOpen === resourceIdentity && execPermission.allowed ? "exec" : urlTab;
+  const setTab = (next: ResourceDetailTabId) => {
+    setExecOpen(next === "exec" ? resourceIdentity : null);
+    if (next !== "exec") setUrlTab(next);
+  };
+  if (!canRead) {
     return (
       <PermissionState
         title="Resource access denied"
@@ -153,10 +185,16 @@ export function ResourceDetail({
   const created = obj?.metadata?.creationTimestamp;
   const detailStatus = isPod ? podStatus(obj) : obj?.status?.phase;
 
-  const backTo = `/dashboard/clusters/${clusterId}/${resourceType}`;
+  const backTo =
+    collectionHref ?? `/dashboard/clusters/${clusterId}/${resourceType}`;
 
   return (
     <div className="space-y-6">
+      {isPod && origin && (
+        <Link to={origin} className="text-sm text-primary hover:underline">
+          Back to workload
+        </Link>
+      )}
       <ResourceMasthead
         backTo={backTo}
         title={name}

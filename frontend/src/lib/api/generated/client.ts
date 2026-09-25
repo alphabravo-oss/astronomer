@@ -287,6 +287,7 @@ export const operationMetadata = {
   "getCatalogControllerStatus": { method: "GET", path: "/api/v1/catalog/controller/status/", pathParameters: [], responseType: "json" },
   "getCatalogDiscovery": { method: "GET", path: "/api/v1/catalog/discovery/", pathParameters: [], responseType: "json" },
   "getCatalogInstalled": { method: "GET", path: "/api/v1/catalog/installed/", pathParameters: [], responseType: "json" },
+  "getCatalogInstalledById": { method: "GET", path: "/api/v1/catalog/installed/{id}/", pathParameters: ["id"], responseType: "json" },
   "getCatalogInstalledByIdRevisions": { method: "GET", path: "/api/v1/catalog/installed/{id}/revisions", pathParameters: ["id"], responseType: "json" },
   "getCatalogInstalledByIdUpgradeVersions": { method: "GET", path: "/api/v1/catalog/installed/{id}/upgrade-versions/", pathParameters: ["id"], responseType: "json" },
   "getCatalogInstalledByIdValues": { method: "GET", path: "/api/v1/catalog/installed/{id}/values/", pathParameters: ["id"], responseType: "json" },
@@ -346,6 +347,8 @@ export const operationMetadata = {
   "getClustersByClusterIdServiceMeshMtls": { method: "GET", path: "/api/v1/clusters/{cluster_id}/service-mesh/mtls", pathParameters: ["cluster_id"], responseType: "json" },
   "getClustersByClusterIdShellSessionsById": { method: "GET", path: "/api/v1/clusters/{cluster_id}/shell/sessions/{id}", pathParameters: ["cluster_id","id"], responseType: "json" },
   "getClustersByClusterIdShellSessionsByIdCommands": { method: "GET", path: "/api/v1/clusters/{cluster_id}/shell/sessions/{id}/commands", pathParameters: ["cluster_id","id"], responseType: "json" },
+  "getClustersByClusterIdSnapshotRestores": { method: "GET", path: "/api/v1/clusters/{cluster_id}/snapshot-restores", pathParameters: ["cluster_id"], responseType: "json" },
+  "getClustersByClusterIdSnapshotRestoresById": { method: "GET", path: "/api/v1/clusters/{cluster_id}/snapshot-restores/{id}", pathParameters: ["cluster_id","id"], responseType: "json" },
   "getClustersByClusterIdSnapshots": { method: "GET", path: "/api/v1/clusters/{cluster_id}/snapshots", pathParameters: ["cluster_id"], responseType: "json" },
   "getClustersByClusterIdSnapshotsById": { method: "GET", path: "/api/v1/clusters/{cluster_id}/snapshots/{id}", pathParameters: ["cluster_id","id"], responseType: "json" },
   "getClustersByClusterIdSnapshotSchedules": { method: "GET", path: "/api/v1/clusters/{cluster_id}/snapshot-schedules", pathParameters: ["cluster_id"], responseType: "json" },
@@ -429,6 +432,7 @@ export const operationMetadata = {
   "getLoggingOperationsById": { method: "GET", path: "/api/v1/logging/operations/{id}", pathParameters: ["id"], responseType: "json" },
   "getLoggingOutputs": { method: "GET", path: "/api/v1/logging/outputs", pathParameters: [], responseType: "json" },
   "getLoggingPipelines": { method: "GET", path: "/api/v1/logging/pipelines", pathParameters: [], responseType: "json" },
+  "getLoggingPipelinesById": { method: "GET", path: "/api/v1/logging/pipelines/{id}", pathParameters: ["id"], responseType: "json" },
   "getLoggingPipelinesByIdFluentbitConfig": { method: "GET", path: "/api/v1/logging/pipelines/{id}/fluentbit-config", pathParameters: ["id"], responseType: "json" },
   "getLoggingSavedSearches": { method: "GET", path: "/api/v1/logging/saved-searches", pathParameters: [], responseType: "json" },
   "getMonitoringEndpoints": { method: "GET", path: "/api/v1/monitoring/endpoints", pathParameters: [], responseType: "json" },
@@ -2181,6 +2185,11 @@ export function getCatalogInstalled(args?: OpenAPIArguments<"getCatalogInstalled
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
+export function getCatalogInstalledById(args: OpenAPIArguments<"getCatalogInstalledById">) {
+  const operationId = "getCatalogInstalledById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function getCatalogInstalledByIdRevisions(args: OpenAPIArguments<"getCatalogInstalledByIdRevisions">) {
   const operationId = "getCatalogInstalledByIdRevisions" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -2473,6 +2482,16 @@ export function getClustersByClusterIdShellSessionsById(args: OpenAPIArguments<"
 
 export function getClustersByClusterIdShellSessionsByIdCommands(args: OpenAPIArguments<"getClustersByClusterIdShellSessionsByIdCommands">) {
   const operationId = "getClustersByClusterIdShellSessionsByIdCommands" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getClustersByClusterIdSnapshotRestores(args: OpenAPIArguments<"getClustersByClusterIdSnapshotRestores">) {
+  const operationId = "getClustersByClusterIdSnapshotRestores" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getClustersByClusterIdSnapshotRestoresById(args: OpenAPIArguments<"getClustersByClusterIdSnapshotRestoresById">) {
+  const operationId = "getClustersByClusterIdSnapshotRestoresById" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -2889,6 +2908,11 @@ export function getLoggingOutputs(args?: OpenAPIArguments<"getLoggingOutputs">) 
 export function getLoggingPipelines(args?: OpenAPIArguments<"getLoggingPipelines">) {
   const operationId = "getLoggingPipelines" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getLoggingPipelinesById(args: OpenAPIArguments<"getLoggingPipelinesById">) {
+  const operationId = "getLoggingPipelinesById" as const;
+  return executeOpenAPIOperation(operationId, args);
 }
 
 export function getLoggingPipelinesByIdFluentbitConfig(args: OpenAPIArguments<"getLoggingPipelinesByIdFluentbitConfig">) {

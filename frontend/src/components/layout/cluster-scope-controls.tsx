@@ -1,3 +1,9 @@
+import { ActionButton } from "@/components/ui/action-button";
+import { useProjectSelection } from "@/lib/cluster-scope-project";
+import {
+  projectInCluster,
+  projectNamespacesInCluster,
+} from "@/lib/cluster-scope-collection";
 import { Command } from "cmdk";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import {
@@ -16,6 +22,7 @@ import {
 import { useProject, useProjectSearch } from "@/lib/hooks/projects";
 import { cn } from "@/lib/utils";
 import type { Cluster, ClusterStatus } from "@/types";
+import type { ClusterScopeApplicability } from "./cluster-scope-applicability";
 
 export function clusterIdFromPath(pathname: string): string | undefined {
   const segment = pathname.match(/^\/dashboard\/clusters\/([^/]+)/)?.[1];
@@ -82,12 +89,25 @@ export function ClusterOption({ cluster }: { cluster: Cluster }) {
 }
 
 /** Multi-namespace cluster scope. Restricted callers cannot choose an unsafe all scope. */
-export function ClusterScopeControls({ clusterId }: { clusterId: string }) {
+export function ClusterScopeControls({
+  clusterId,
+  applicability,
+}: {
+  clusterId: string;
+  applicability: ClusterScopeApplicability;
+}) {
   const scope = useClusterNamespaceScope(clusterId);
   return (
     <>
-      <ProjectScopePicker clusterId={clusterId} scope={scope} />
-      <NamespaceScopePicker scope={scope} />
+      {applicability.project ? (
+        <ProjectScopePicker clusterId={clusterId} scope={scope} />
+      ) : null}
+      {applicability.namespaces ? <NamespaceScopePicker scope={scope} /> : null}
+      {scope.error && (
+        <ActionButton size="sm" onClick={scope.retry}>
+          Retry scope
+        </ActionButton>
+      )}
     </>
   );
 }
@@ -112,7 +132,8 @@ function ProjectScopePicker({
   );
   const selectedProject =
     projects.find((project) => project.id === scope.selectedProjectId) ??
-    (selectedProjectQuery.data?.clusterId === clusterId
+    (selectedProjectQuery.data &&
+    projectInCluster(selectedProjectQuery.data, clusterId)
       ? selectedProjectQuery.data
       : undefined);
   useEffect(() => {
@@ -121,9 +142,9 @@ function ProjectScopePicker({
   const close = () => setOpen(false);
   const restoreFocus = () => triggerRef.current?.focus();
   const ref = useDismissable(open, close, restoreFocus);
+  const projectSelection = useProjectSelection(clusterId);
   const selectProject = (projectId: string | null) => {
-    const project = projects.find((candidate) => candidate.id === projectId);
-    scope.setProjectScope(project?.id ?? null, project?.namespaces ?? null);
+    void projectSelection.select(projectId ?? "");
     close();
     requestAnimationFrame(restoreFocus);
   };
@@ -198,8 +219,13 @@ function ProjectScopePicker({
                     {project.displayName || project.name}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {project.namespaces.length} namespace
-                    {project.namespaces.length === 1 ? "" : "s"}
+                    {projectNamespacesInCluster(project, clusterId)?.length ??
+                      0}{" "}
+                    namespace
+                    {projectNamespacesInCluster(project, clusterId)?.length ===
+                    1
+                      ? ""
+                      : "s"}
                   </span>
                 </span>
               </Command.Item>

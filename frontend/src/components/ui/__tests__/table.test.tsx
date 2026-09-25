@@ -28,12 +28,49 @@ describe("Table primitives", () => {
     expect(screen.getByTestId("inventory-table")).toHaveClass(
       "w-full",
       "text-sm",
+      "table-fixed",
+      "max-w-full",
+    );
+    expect(screen.getByTestId("inventory-table")).toHaveAttribute(
+      "data-layout",
+      "fit",
     );
     expect(
       screen.getByRole("columnheader", { name: "Name" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "astronomer-agent" })).toHaveClass(
+      "whitespace-nowrap",
+      "text-ellipsis",
+    );
+  });
+
+  it("does not infer layout from an Actions label", () => {
+    render(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+      </Table>,
+    );
+
+    expect(screen.getByRole("columnheader", { name: "Name" })).not.toHaveClass(
+      "w-16",
+    );
     expect(
-      screen.getByRole("cell", { name: "astronomer-agent" }),
-    ).toBeInTheDocument();
+      screen.getByRole("columnheader", { name: "Actions" }),
+    ).not.toHaveClass("w-16", "px-2");
+  });
+
+  it("allows genuinely wide tables to opt into scrolling", () => {
+    render(<Table layout="scroll" data-testid="wide-table" />);
+
+    expect(screen.getByTestId("wide-table")).toHaveAttribute(
+      "data-layout",
+      "scroll",
+    );
+    expect(screen.getByTestId("wide-table")).not.toHaveClass("table-fixed");
   });
 });

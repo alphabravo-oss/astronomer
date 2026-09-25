@@ -20,6 +20,7 @@ interface MetricsChartProps {
   unit?: string;
   height?: number;
   className?: string;
+  compact?: boolean;
 }
 
 export function MetricsChart({
@@ -28,6 +29,7 @@ export function MetricsChart({
   unit = "",
   height = 280,
   className,
+  compact = false,
 }: MetricsChartProps) {
   // Merge all series data into a single dataset keyed by timestamp
   const chartData = useMemo(() => {
@@ -75,9 +77,20 @@ export function MetricsChart({
   if (!chartData.length) {
     return (
       <div
-        className={cn("rounded-lg border border-border bg-card p-5", className)}
+        className={cn(
+          "rounded-lg border border-border bg-card",
+          compact ? "p-4" : "p-5",
+          className,
+        )}
       >
-        <h3 className="text-sm font-medium text-foreground mb-4">{title}</h3>
+        <h3
+          className={cn(
+            "text-sm font-medium text-foreground",
+            compact ? "mb-3" : "mb-4",
+          )}
+        >
+          {title}
+        </h3>
         <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
           No data available
         </div>
@@ -87,9 +100,20 @@ export function MetricsChart({
 
   return (
     <div
-      className={cn("rounded-lg border border-border bg-card p-5", className)}
+      className={cn(
+        "rounded-lg border border-border bg-card",
+        compact ? "p-4" : "p-5",
+        className,
+      )}
     >
-      <h3 className="text-sm font-medium text-foreground mb-4">{title}</h3>
+      <h3
+        className={cn(
+          "text-sm font-medium text-foreground",
+          compact ? "mb-3" : "mb-4",
+        )}
+      >
+        {title}
+      </h3>
       <ResponsiveContainer width="100%" height={height}>
         <AreaChart
           data={chartData}

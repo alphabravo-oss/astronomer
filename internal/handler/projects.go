@@ -334,22 +334,24 @@ func (h *ProjectHandler) logger() *slog.Logger {
 // fields. They're appended to the response shape; clients that ignore unknown
 // fields keep working unchanged.
 type ProjectResponse struct {
-	ID                       string          `json:"id"`
-	Name                     string          `json:"name"`
-	DisplayName              string          `json:"display_name"`
-	Description              string          `json:"description"`
-	ClusterID                string          `json:"cluster_id"`
-	Namespaces               json.RawMessage `json:"namespaces"`
-	ResourceQuota            json.RawMessage `json:"resource_quota"`
-	LimitRange               json.RawMessage `json:"limit_range"`
-	NetworkPolicyMode        string          `json:"network_policy_mode"`
-	PodSecurityProfile       string          `json:"pod_security_profile"`
-	ResourceQuotaCpuLimit    string          `json:"resource_quota_cpu_limit"`
-	ResourceQuotaMemoryLimit string          `json:"resource_quota_memory_limit"`
-	ResourceQuotaPodCount    int32           `json:"resource_quota_pod_count"`
-	CreatedByID              *string         `json:"created_by_id"`
-	CreatedAt                string          `json:"created_at"`
-	UpdatedAt                string          `json:"updated_at"`
+	ID                       string                          `json:"id"`
+	Name                     string                          `json:"name"`
+	DisplayName              string                          `json:"display_name"`
+	Description              string                          `json:"description"`
+	ClusterID                string                          `json:"cluster_id"`
+	Namespaces               json.RawMessage                 `json:"namespaces"`
+	ClusterIDs               []string                        `json:"cluster_ids,omitempty"`
+	NamespaceScopes          []ProjectNamespaceScopeResponse `json:"namespace_scopes,omitempty"`
+	ResourceQuota            json.RawMessage                 `json:"resource_quota"`
+	LimitRange               json.RawMessage                 `json:"limit_range"`
+	NetworkPolicyMode        string                          `json:"network_policy_mode"`
+	PodSecurityProfile       string                          `json:"pod_security_profile"`
+	ResourceQuotaCpuLimit    string                          `json:"resource_quota_cpu_limit"`
+	ResourceQuotaMemoryLimit string                          `json:"resource_quota_memory_limit"`
+	ResourceQuotaPodCount    int32                           `json:"resource_quota_pod_count"`
+	CreatedByID              *string                         `json:"created_by_id"`
+	CreatedAt                string                          `json:"created_at"`
+	UpdatedAt                string                          `json:"updated_at"`
 }
 
 // ProjectResourceCapResponse is the public, typed representation of a

@@ -1,3 +1,4 @@
+import { resolveClusterTransition } from "./cluster-navigation-transition";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
@@ -95,7 +96,10 @@ function ClusterSwitcherTrigger({
   currentDotClass?: string;
 }) {
   const label = clusterId
-    ? currentCluster?.displayName || currentCluster?.name || clusterName || "Cluster"
+    ? currentCluster?.displayName ||
+      currentCluster?.name ||
+      clusterName ||
+      "Cluster"
     : "Clusters";
 
   return (
@@ -119,7 +123,7 @@ function ClusterSwitcherTrigger({
       {/* Text collapses below `sm` so the always-mounted chip doesn't crowd
           out breadcrumbs on narrow viewports; `aria-label` above keeps the
           button's accessible name stable either way. */}
-      <span className="hidden min-w-0 flex-1 truncate text-left sm:inline">
+      <span className="min-w-0 max-w-32 flex-1 truncate text-left">
         {label}
       </span>
       <ChevronsUpDown className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
@@ -143,13 +147,6 @@ export function ClusterSwitcherMenu({
   /** Display name for the current route's cluster, if any. */
   clusterName?: string;
 }) {
-  const navigate = useNavigate();
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const search = new URLSearchParams(
-    useLocation({ select: (location) => location.searchStr }),
-  );
-  const scopes = useClusterScopeStore((state) => state.namespacesByCluster);
-  const projectScopes = useClusterScopeStore((state) => state.projectByCluster);
   const recentClusterIds = useClusterScopeStore(
     (state) => state.recentClusterIds,
   );
@@ -246,22 +243,10 @@ export function ClusterSwitcherMenu({
     updatePreferences({ pinned_clusters: next });
   };
 
-  const subRoute = clusterId
-    ? pathname.slice(`/dashboard/clusters/${clusterId}`.length)
-    : "";
-  const select = (next: Cluster) => {
-    const nextPath = `/dashboard/clusters/${next.id}${subRoute}`;
-    void navigate({
-      to: withClusterScopeSelection(
-        nextPath,
-        search,
-        scopes[next.id] ?? null,
-        projectScopes[next.id] ?? null,
-      ),
-    });
-    close();
-    requestAnimationFrame(restoreFocus);
-  };
+  const { select, transitionState, failedTarget } = useClusterTransition(
+    close,
+    restoreFocus,
+  );
 
   const currentCluster = clusterId ? detailById.get(clusterId) : undefined;
   const currentDotClass = currentCluster?.badgeColor
@@ -279,7 +264,7 @@ export function ClusterSwitcherMenu({
   );
 
   return (
-    <div ref={ref} className="relative min-w-0">
+    <div ref={ref} className="relative min-w-0 shrink-0">
       <ClusterSwitcherTrigger
         triggerRef={triggerRef}
         open={open}
@@ -305,6 +290,19 @@ export function ClusterSwitcherMenu({
             />
           </div>
           <Command.List className="max-h-96 overflow-y-auto p-1" role="listbox">
+            {transitionState && (
+              <p role="status" className="p-3 text-sm">
+                {transitionState}
+                {failedTarget && (
+                  <button
+                    className="underline"
+                    onClick={() => void select(failedTarget, true)}
+                  >
+                    Clear remembered scope and switch
+                  </button>
+                )}
+              </p>
+            )}
             {pinnedClusters.length > 0 && (
               <Command.Group heading="Pinned" className={GROUP_HEADING_CLASS}>
                 {pinnedClusters.map(renderRow)}
@@ -366,4 +364,57 @@ export function ClusterSwitcherMenu({
       ) : null}
     </div>
   );
+}
+
+function useClusterTransition(close: () => void, restoreFocus: () => void) {
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const scopes = useClusterScopeStore((state) => state.namespacesByCluster);
+  const projectScopes = useClusterScopeStore((state) => state.projectByCluster);
+  const transitionRequest = useRef(0);
+  const [transitionState, setTransitionState] = useState("");
+  const [failedTarget, setFailedTarget] = useState<Cluster | null>(null);
+  useEffect(
+    () => () => {
+      transitionRequest.current++;
+    },
+    [pathname],
+  );
+  const select = async (next: Cluster, clearScope = false) => {
+    const request = ++transitionRequest.current;
+    setTransitionState("Resolving target cluster scope…");
+    setFailedTarget(null);
+    try {
+      const target = await resolveClusterTransition(
+        pathname,
+        next.id,
+        clearScope ? null : (scopes[next.id] ?? null),
+        clearScope ? null : (projectScopes[next.id] ?? null),
+      );
+      if (request !== transitionRequest.current) return;
+      useClusterScopeStore
+        .getState()
+        .setClusterScope(next.id, target.namespaces, target.projectId);
+      void navigate({
+        to: withClusterScopeSelection(
+          target.path,
+          new URLSearchParams(),
+          target.namespaces,
+          target.projectId,
+        ),
+      });
+      setTransitionState("");
+      close();
+      requestAnimationFrame(restoreFocus);
+    } catch {
+      if (request === transitionRequest.current) {
+        setFailedTarget(next);
+        setTransitionState(
+          "Target scope could not be resolved. Retry the cluster or explicitly clear its remembered scope.",
+        );
+      }
+    }
+  };
+
+  return { select, transitionState, failedTarget };
 }

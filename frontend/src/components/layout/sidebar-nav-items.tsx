@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { Star } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { cn } from "@/lib/utils";
@@ -23,18 +23,35 @@ export function SidebarNavItems({
   stars?: StarredNavControls;
   onNavigate?: () => void;
 }) {
+  const searchStr = useLocation({ select: (location) => location.searchStr });
+  const project = new URLSearchParams(searchStr).get("project");
+  const candidates = [
+    ...group.items,
+    ...(group.subgroups?.flatMap((item) => item.items) ?? []),
+  ];
+  const activeHref = candidates
+    .filter((item) =>
+      item.exact
+        ? pathname === item.href
+        : pathname === item.href || pathname.startsWith(`${item.href}/`),
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
   const renderItem = (item: NavItem) => {
     const Icon = item.icon;
-    const active = item.exact
-      ? pathname === item.href
-      : pathname.startsWith(item.href);
+    const active = item.href === activeHref;
     const count = item.countKey ? counts?.[item.countKey] : undefined;
     const starred =
       !!item.resourceType && !!stars?.types.includes(item.resourceType);
     return (
       <div key={item.href} className="group flex items-center gap-1 mx-1">
         <Link
-          to={item.href}
+          to={
+            project && item.href.includes("/delivery")
+              ? `${item.href}?project=${encodeURIComponent(project)}`
+              : item.href
+          }
+          activeOptions={{ exact: true }}
+          activeProps={{ "aria-current": active ? "page" : undefined }}
           onClick={onNavigate}
           aria-current={active ? "page" : undefined}
           className={cn(

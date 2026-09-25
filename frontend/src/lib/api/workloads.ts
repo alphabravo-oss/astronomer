@@ -275,6 +275,7 @@ export async function getWorkloads(
   clusterId: string,
   params?: {
     namespace?: string;
+    namespaces?: string[];
     kind?: string;
     search?: string;
     sort?: WorkloadSort;
@@ -292,6 +293,7 @@ export async function getWorkloads(
       limit: pageSize,
       offset: params?.offset ?? (page - 1) * pageSize,
       namespace: params?.namespace,
+      namespaces: params?.namespaces,
       kind: params?.kind,
       search: params?.search,
       sort: params?.sort,

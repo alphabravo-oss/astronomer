@@ -82,7 +82,10 @@ export function AgentTab() {
         <Meta label="Image digest" value={a.imageDigest} />
       </dl>
       <div className="overflow-x-auto rounded-lg border border-border">
-        <Table className="w-full min-w-[44rem] text-left text-sm">
+        <Table
+          layout="scroll"
+          className="w-full min-w-[44rem] text-left text-sm"
+        >
           <caption className="sr-only">
             Product-observed Charlie agent replica status
           </caption>

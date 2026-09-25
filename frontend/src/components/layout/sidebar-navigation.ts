@@ -1,3 +1,4 @@
+import { DELIVERY_DESTINATIONS } from "./delivery-navigation";
 import {
   Activity,
   BarChart3,
@@ -15,8 +16,6 @@ import {
   Settings,
   Shield,
   ShieldCheck,
-  SlidersHorizontal,
-  SlidersVertical,
   Sparkles,
   Star,
   Wrench,
@@ -46,6 +45,8 @@ export type NavItem = {
     resource: string;
     verb: PermissionVerb | "*";
   };
+  projectPermission?: { resource: string; verb: PermissionVerb | "*" };
+  description?: string;
   superuserOnly?: boolean;
   featureFlag?: FeatureFlagKey;
   // Opt-in flags stay hidden until the flags payload explicitly enables them
@@ -98,11 +99,6 @@ export function defaultOpenNavGroupLabel(
 }
 
 // Default (global) navigation groups
-const deliveryListPermission = {
-  resource: "delivery_targets",
-  verb: "list",
-} as const;
-
 export const globalNavGroups: NavGroup[] = [
   {
     label: "Home",
@@ -138,27 +134,7 @@ export const globalNavGroups: NavGroup[] = [
   {
     label: "Continuous Delivery",
     icon: Rocket,
-    items: [
-      {
-        label: "Estate",
-        href: "/dashboard/delivery",
-        icon: Rocket,
-        permission: deliveryListPermission,
-        exact: true,
-      },
-      {
-        label: "Templates",
-        href: "/dashboard/delivery/configuration-templates",
-        icon: SlidersHorizontal,
-        permission: deliveryListPermission,
-      },
-      {
-        label: "Overrides",
-        href: "/dashboard/delivery/override-sets",
-        icon: SlidersVertical,
-        permission: deliveryListPermission,
-      },
-    ],
+    items: DELIVERY_DESTINATIONS,
   },
   {
     label: "Observability",
@@ -167,6 +143,7 @@ export const globalNavGroups: NavGroup[] = [
       {
         label: "Metrics",
         href: "/dashboard/monitoring",
+        exact: true,
         icon: BarChart3,
         permission: { resource: "monitoring", verb: "read" },
         featureFlag: "feature.monitoring",
@@ -327,6 +304,13 @@ export function filterNavGroups(
     }
     if (item.requiresCharlieActivated && !charlieActivated) return false;
     if (item.superuserOnly) return isSuperuser(user);
+    if (
+      item.projectPermission &&
+      can(user, item.projectPermission.resource, item.projectPermission.verb, {
+        type: "project",
+      })
+    )
+      return true;
     if (!item.permission) return true;
     return can(user, item.permission.resource, item.permission.verb, scope);
   });

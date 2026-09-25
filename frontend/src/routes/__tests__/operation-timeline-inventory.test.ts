@@ -11,9 +11,9 @@ const routeRoot = join(process.cwd(), "src/routes/dashboard");
  */
 const eventCapableRoutes = [
   ["catalog/index.tsx", "CatalogOperationTimeline"],
-  ["delivery/rollouts/$rolloutId/index.tsx", "RolloutEventTimeline"],
+  ["delivery/rollouts/$rolloutId/-page.tsx", "RolloutEventTimeline"],
   ["delivery/rollouts/$rolloutId/-event-timeline.tsx", "OperationTimeline"],
-  ["delivery/deployments/$deploymentId/index.tsx", "DeploymentEventTimeline"],
+  ["delivery/deployments/$deploymentId/-page.tsx", "DeploymentEventTimeline"],
   ["settings/backup/-page.tsx", "OperationMutationTimeline"],
 ] as const;
 

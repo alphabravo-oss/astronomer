@@ -1,3 +1,9 @@
+vi.mock("@/lib/use-tab-param", async () => {
+  const { useState } = await import("react");
+  return {
+    useTabParam: (_keys: string[], fallback: string) => useState(fallback),
+  };
+});
 import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";

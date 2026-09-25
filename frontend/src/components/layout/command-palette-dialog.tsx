@@ -131,8 +131,9 @@ function CommandRow({
 export function CommandPaletteDialog() {
   const routerNavigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const pageHref = useProjectPageHref();
   const currentClusterId = clusterIdFromPath(pathname);
-  const { navGroups } = useSidebarNavigation(currentClusterId);
+  const { navGroups } = useSidebarNavigation(currentClusterId, true);
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const { data: projectsData } = useProjects({ pageSize: 25 });
@@ -164,16 +165,7 @@ export function CommandPaletteDialog() {
     [close, routerNavigate],
   );
 
-  const selectProject = useCallback(
-    (project: Project) => {
-      void routerNavigate({
-        to: "/dashboard/projects/$id",
-        params: { id: project.id },
-      });
-      close();
-    },
-    [close, routerNavigate],
-  );
+  const selectProject = useProjectNavigation(routerNavigate, close);
 
   if (!commandPaletteOpen) return null;
 
@@ -214,11 +206,11 @@ export function CommandPaletteDialog() {
               {globalPages.map((page) => (
                 <CommandRow
                   key={page.href}
-                  value={page.label}
+                  value={`${page.href} ${page.label}`}
                   icon={page.icon}
                   title={page.label}
                   onSelect={() => {
-                    void routerNavigate({ to: page.href });
+                    void routerNavigate({ to: pageHref(page.href) });
                     close();
                   }}
                 />
@@ -255,11 +247,12 @@ export function CommandPaletteDialog() {
                 {clusterContextPages.map((page) => (
                   <CommandRow
                     key={page.href}
-                    value={`${page.label} cluster`}
+                    value={`${page.href} ${page.label} ${page.description} cluster`}
+                    description={page.description}
                     icon={page.icon}
                     title={page.label}
                     onSelect={() => {
-                      void routerNavigate({ to: page.href });
+                      void routerNavigate({ to: pageHref(page.href) });
                       close();
                     }}
                   />
@@ -382,4 +375,32 @@ export function CommandPaletteDialog() {
       </div>
     </OverlayShell>
   );
+}
+
+function useProjectPageHref() {
+  const project = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  ).get("project");
+  const pageHref = (href: string) =>
+    project && href.includes("/delivery")
+      ? `${href}?project=${encodeURIComponent(project)}`
+      : href;
+  return pageHref;
+}
+
+function useProjectNavigation(
+  routerNavigate: ReturnType<typeof useNavigate>,
+  close: () => void,
+) {
+  const selectProject = useCallback(
+    (project: Project) => {
+      void routerNavigate({
+        to: "/dashboard/projects/$id",
+        params: { id: project.id },
+      });
+      close();
+    },
+    [close, routerNavigate],
+  );
+  return selectProject;
 }

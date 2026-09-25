@@ -95,6 +95,10 @@ export const queryKeys = {
     listAll: ["clusters", "list"] as const,
   },
   clusterPages: {
+    snapshotRestores: (id: string, offset = 0) =>
+      ["cluster-pages", id, "snapshot-restores", offset] as const,
+    snapshotRestore: (id: string, restoreId: string) =>
+      ["cluster-pages", id, "snapshot-restore", restoreId] as const,
     appsInstalled: (id: string, params?: Record<string, unknown>) =>
       [
         "clusters",
@@ -302,6 +306,8 @@ export const queryKeys = {
   // routing table for `audit.*` events.
   activityAll: ["activity"] as const,
   alerting: {
+    event: (id: string) => ["alerting", "event", id] as const,
+    rule: (id: string) => ["alerting", "rule", id] as const,
     all: ["alerting"] as const,
     rulesAll: ["alerting", "rules"] as const,
     rules: (clusterId?: string) =>
@@ -340,11 +346,14 @@ export const queryKeys = {
     detail: (id: string) => ["anomaly-baselines", "detail", id] as const,
   },
   logging: {
+    pipeline: (id: string) => ["logging", "pipeline", id] as const,
     all: ["logging"] as const,
     outputs: ["logging", "outputs"] as const,
     outputPages: (clusterId?: string) =>
       ["logging", "outputs", "pages", clusterId] as const,
     pipelinesAll: ["logging", "pipelines"] as const,
+    pipelinePage: (clusterId: string | undefined, offset: number) =>
+      ["logging", "pipelines", clusterId, offset] as const,
     pipelines: (clusterId?: string) =>
       ["logging", "pipelines", clusterId ?? "all"] as const,
     operations: (params?: Record<string, unknown>) =>
@@ -536,6 +545,11 @@ export const queryKeys = {
     detail: (id: string) => ["projects", "detail", id] as const,
   },
   catalog: {
+    release: (id: string) => ["catalog", "release", id] as const,
+    releaseValues: (id: string) =>
+      ["catalog", "release", id, "values"] as const,
+    releaseHistory: (id: string) =>
+      ["catalog", "release", id, "history"] as const,
     all: ["catalog"] as const,
     applications: ["catalog", "applications"] as const,
     applicationSources: ["catalog", "application-sources"] as const,
@@ -645,6 +659,8 @@ export const queryKeys = {
       resourceType: string,
       params?: Record<string, unknown>,
     ) => ["generic", "named", clusterId, resourceType, params] as const,
+    completeDiscovery: (clusterId: string) =>
+      ["generic", "discovery", clusterId, "complete"] as const,
     discovery: (clusterId: string) =>
       ["generic", clusterId, "discovery"] as const,
     schema: (clusterId: string, resourceType: ResourceType) =>

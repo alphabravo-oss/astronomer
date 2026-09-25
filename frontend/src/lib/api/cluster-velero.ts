@@ -256,16 +256,15 @@ export async function restoreSnapshot(
   snapshotId: string,
   body: RestoreSnapshotRequest,
   signal?: AbortSignal,
+  idempotencyKey = createIdempotencyKey(),
 ): Promise<SnapshotRestore> {
   const wire = await generated.postClustersByClusterIdSnapshotsByIdRestore({
     path: { cluster_id: clusterId, id: snapshotId },
-    headerParams: { "Idempotency-Key": createIdempotencyKey() },
+    headerParams: { "Idempotency-Key": idempotencyKey },
     body,
     signal,
   });
-  return mapSnapshotRestore(
-    requireEnvelopeData(wire, "Snapshot restore"),
-  );
+  return mapSnapshotRestore(requireEnvelopeData(wire, "Snapshot restore"));
 }
 
 export async function listSnapshotSchedules(
@@ -276,9 +275,9 @@ export async function listSnapshotSchedules(
     path: { cluster_id: clusterId },
     signal,
   });
-  return (
-    requireEnvelopeData(wire, "Snapshot schedule list").items ?? []
-  ).map(mapSnapshotSchedule);
+  return (requireEnvelopeData(wire, "Snapshot schedule list").items ?? []).map(
+    mapSnapshotSchedule,
+  );
 }
 
 export async function createSnapshotSchedule(
@@ -334,6 +333,29 @@ export async function deleteSnapshotSchedule(
 ): Promise<void> {
   await generated.deleteClustersByClusterIdSnapshotSchedulesById({
     path: { cluster_id: clusterId, id: scheduleId },
+    signal,
+  });
+}
+
+export async function getSnapshotRestore(
+  clusterId: string,
+  id: string,
+  signal?: AbortSignal,
+) {
+  const wire = await generated.getClustersByClusterIdSnapshotRestoresById({
+    path: { cluster_id: clusterId, id },
+    signal,
+  });
+  return requireEnvelopeData(wire, "Snapshot restore");
+}
+export async function getSnapshotRestores(
+  clusterId: string,
+  offset = 0,
+  signal?: AbortSignal,
+) {
+  return generated.getClustersByClusterIdSnapshotRestores({
+    path: { cluster_id: clusterId },
+    query: { limit: 50, offset },
     signal,
   });
 }

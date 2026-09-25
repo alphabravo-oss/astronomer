@@ -91,6 +91,29 @@ const smokeCluster = {
 };
 
 export const overrides: StubOverride[] = [
+  {
+    method: "GET",
+    path: `/api/v1/clusters/${SMOKE_CLUSTER_ID}/resources/discovery`,
+    body: {
+      data: {
+        cluster_id: SMOKE_CLUSTER_ID,
+        resources: [],
+        crds: [
+          {
+            name: "certificates.cert-manager.io",
+            group: "cert-manager.io",
+            kind: "Certificate",
+            plural: "certificates",
+            scope: "Namespaced",
+            versions: [{ name: "v1", storage: true, printer_columns: [] }],
+          },
+        ],
+        crd_continue: "",
+        partial: false,
+        errors: {},
+      },
+    },
+  },
   // A nullable result is genuinely absent. The generated zero-value object
   // (success + epoch dates + empty ID) is not evidence that a drill ran.
   {

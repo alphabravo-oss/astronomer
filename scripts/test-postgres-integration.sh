@@ -52,7 +52,10 @@ export INACTIVE_USER_RETENTION_TEST_DATABASE_URL="$database_url"
 export REFRESH_SESSION_TEST_DATABASE_URL="$database_url"
 
 expected=(
+  TestCatalogSearchFiltersScopeBeforePaginationAndCounts
   TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders
+  TestCatalogOperationStatusReadsExactRolloutAndDeletion
+  TestClusterRestoreHistoryFiltersSourceBeforePagination
   TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted
   TestUpsertCharlieAlertPolicyRevisionSemantics
   TestCharlieAlertReconcileCandidatesRequireFindingScope
@@ -79,7 +82,7 @@ set +e
 go test "${race_args[@]}" -json -p=1 -count=1 -timeout=10m \
   -run "$pattern" \
   ./internal/db/sqlc ./internal/charlie ./internal/delivery/builtin \
-  ./internal/delivery/rollout ./internal/worker/tasks | tee "$report"
+  ./internal/delivery/rollout ./internal/delivery/catalogapp ./internal/worker/tasks | tee "$report"
 test_status=${PIPESTATUS[0]}
 set -e
 (( test_status == 0 )) || exit "$test_status"

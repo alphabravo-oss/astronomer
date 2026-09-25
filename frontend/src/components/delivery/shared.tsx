@@ -1,3 +1,4 @@
+import { useProjectSelection } from "@/lib/cluster-scope-project";
 import { useEffect, useMemo, type ReactNode } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate, useLocation } from "@tanstack/react-router";
@@ -5,7 +6,6 @@ import { useProject } from "@/lib/hooks/projects";
 import { useQuery } from "@tanstack/react-query";
 import { getProjects, getClusterProjects } from "@/lib/api/projects";
 import { queryKeys } from "@/lib/query-keys";
-import { RemoteProjectPicker } from "@/components/projects/remote-project-picker";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   EmptyState,
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/empty-state";
 import { ArrowLeft, FolderKanban, PackageOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useClusterScopeStore } from "@/lib/cluster-scope";
 
 export type DeliveryListTab =
   "sources" | "bundles" | "targets" | "rollouts" | "deployments";
@@ -71,12 +72,14 @@ export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
         : getProjects({ pageSize: 25 }, { signal }),
     throwOnError: false,
   });
-  const pathname = useLocation({ select: (location) => location.pathname });
   const searchStr = useLocation({ select: (location) => location.searchStr });
   const search = useMemo(() => new URLSearchParams(searchStr), [searchStr]);
-  const navigate = useNavigate();
   const clusterId = opts?.clusterId;
-  const requested = search.get("project") ?? "";
+  const rememberedProjectId = useClusterScopeStore((state) =>
+    clusterId ? state.projectByCluster[clusterId] : null,
+  );
+  const requested =
+    search.get("project") ?? (clusterId ? (rememberedProjectId ?? "") : "");
   const selected = useProject(requested);
   const rows = useMemo(() => {
     const all = projects.isError ? [] : [...(projects.data?.data ?? [])];
@@ -105,27 +108,12 @@ export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
         ? rows[0].id
         : "";
 
-  // A one-project user should land on working data immediately. The URL is
-  // still authoritative and is updated so deep links remain shareable.
+  const projectSelection = useProjectSelection(clusterId);
+  const setProjectId = projectSelection.select;
+  // Unique bounded project defaults use the same atomic transaction as all pickers.
   useEffect(() => {
-    if (requested || !onlyProject) return;
-    const next = new URLSearchParams(search);
-    next.set("project", rows[0].id);
-    void navigate({ to: `${pathname}?${next.toString()}`, replace: true });
-  }, [pathname, requested, navigate, rows, search, onlyProject]);
-
-  const setProjectId = (id: string) => {
-    const next = new URLSearchParams(search);
-    if (id) next.set("project", id);
-    else next.delete("project");
-    next.delete("page");
-    next.delete("version_page");
-    next.delete("cluster_page");
-    void navigate({
-      to: `${pathname}${next.size ? `?${next.toString()}` : ""}`,
-      replace: true,
-    });
-  };
+    if (!requested && onlyProject) void setProjectId(rows[0].id);
+  }, [requested, onlyProject, rows, setProjectId]);
 
   const projectQuery = requested ? selected : projects;
   return { projectId, projects: rows, projectQuery, setProjectId };
@@ -181,8 +169,6 @@ export function deliveryProjectLabel(project: {
 
 export function DeliveryShell({
   projectId,
-  setProjectId,
-  showProjectSelect = true,
   children,
 }: {
   projectId: string;
@@ -198,33 +184,19 @@ export function DeliveryShell({
   children: ReactNode;
 }) {
   const { clusterId } = useDeliveryWorkspace();
-  // Cluster delivery layout already owns the tab strip. Detail pages that
-  // still sit on /dashboard/delivery/... only need a way back to the fleet.
+  // Workspace layouts own project selection; detail pages retain a fleet link.
   if (clusterId) return children;
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
         <RouterLink
           to="/dashboard/delivery"
+          search={{ project: projectId }}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to delivery fleet
         </RouterLink>
-        {showProjectSelect ? (
-          <div className="flex min-w-64 items-center gap-2 text-sm">
-            <FolderKanban
-              className="h-4 w-4 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <span className="sr-only">Delivery project</span>
-            <RemoteProjectPicker
-              value={projectId}
-              onChange={setProjectId}
-              ariaLabel="Delivery project"
-            />
-          </div>
-        ) : null}
       </div>
       {children}
     </div>

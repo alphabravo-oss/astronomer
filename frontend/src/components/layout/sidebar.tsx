@@ -1,3 +1,4 @@
+import { useMobileNavigation } from "./use-mobile-navigation";
 import { useEffect } from "react";
 import { Link as RouterLink, useLocation } from "@tanstack/react-router";
 import {
@@ -65,6 +66,9 @@ export function Sidebar() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [mobileSidebarOpen, setMobileSidebarOpen]);
 
+  const { ref: mobileNavigationRef, closed: mobileNavigationClosed } =
+    useMobileNavigation(mobileSidebarOpen, () => setMobileSidebarOpen(false));
+
   const collapsed = sidebarCollapsed && !mobileSidebarOpen;
 
   // Expand one section at a time, independently in global and cluster scope.
@@ -101,6 +105,9 @@ export function Sidebar() {
         />
       )}
       <aside
+        ref={mobileNavigationRef}
+        inert={mobileNavigationClosed}
+        aria-hidden={mobileNavigationClosed || undefined}
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex h-screen w-60 -translate-x-full flex-col border-r border-sidebar-border bg-sidebar transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 lg:transition-[width]",
           mobileSidebarOpen && "translate-x-0",
@@ -112,6 +119,7 @@ export function Sidebar() {
           {!collapsed && (
             <RouterLink
               to="/dashboard"
+              activeOptions={{ exact: true }}
               className="flex items-center gap-2.5 min-w-0"
             >
               <div className="shrink-0 w-7 h-7 rounded-lg bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
@@ -151,6 +159,7 @@ export function Sidebar() {
           <div className="px-2 py-2 border-b border-sidebar-border">
             <RouterLink
               to="/dashboard/clusters"
+              activeOptions={{ exact: true }}
               className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md hover:bg-accent/50"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
@@ -167,6 +176,7 @@ export function Sidebar() {
           <div className="px-2 py-2 border-b border-sidebar-border">
             <RouterLink
               to="/dashboard/clusters"
+              activeOptions={{ exact: true }}
               className="nav-item group justify-center px-0"
               title="Back to Clusters"
             >

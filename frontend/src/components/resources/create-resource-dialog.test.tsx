@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { toastApiError } from "@/lib/toast";
+import { k8sTemplates } from "@/lib/k8s-templates";
 import {
   clusterDiscoveryFromDefinitions,
   type ClusterDiscovery,
@@ -198,4 +199,206 @@ describe("CreateResourceDialog without a templateKey (Import YAML)", () => {
       expect(mutateAsync).not.toHaveBeenCalled();
     },
   );
+  it("applies an edited failed document body without resubmitting successful documents", async () => {
+    const yaml = (value: string) =>
+      `apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: first\n  namespace: default\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: second\n  namespace: default\ndata:\n  value: ${value}`;
+    mutateAsync
+      .mockImplementationOnce(async ({ items }) =>
+        items.map((item: object, index: number) => ({
+          ...item,
+          ok: index === 0,
+          error: index === 0 ? undefined : new Error("Retry me"),
+        })),
+      )
+      .mockImplementationOnce(async ({ items }) =>
+        items.map((item: object) => ({ ...item, ok: true })),
+      );
+    render(
+      wrap(
+        <CreateResourceDialog
+          open
+          onClose={vi.fn()}
+          clusterId="cluster-1"
+          title="Import YAML"
+          initialYaml={yaml("old")}
+        />,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await screen.findByRole("button", { name: "Retry failed" });
+    fireEvent.change(await screen.findByLabelText("yaml-editor"), {
+      target: { value: yaml("corrected") },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry failed" }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+    expect(mutateAsync.mock.calls[1][0].items).toHaveLength(1);
+    expect(mutateAsync.mock.calls[1][0].items[0].body).toMatchObject({
+      metadata: { name: "second" },
+      data: { value: "corrected" },
+    });
+    await screen.findByRole("button", { name: "Done" });
+  });
+});
+
+vi.mock("@/components/resources/lazy-guided-resource-form", () => ({
+  LazyGuidedResourceForm: ({
+    value,
+    onChange,
+    onValidationChange,
+  }: {
+    value: { metadata?: { name?: string } };
+    onChange: (value: unknown) => void;
+    onValidationChange: (valid: boolean) => void;
+  }) => (
+    <input
+      aria-label="Guided name"
+      value={value.metadata?.name ?? ""}
+      onChange={(event) => {
+        onChange({
+          ...value,
+          metadata: { ...value.metadata, name: event.target.value },
+        });
+        onValidationChange(true);
+      }}
+    />
+  ),
+}));
+it("guided correction resubmits the edited name after failure", async () => {
+  mutateAsync.mockReset();
+  mutateAsync
+    .mockImplementationOnce(async ({ items }) =>
+      items.map((item: object) => ({
+        ...item,
+        ok: false,
+        error: new Error("Invalid name"),
+      })),
+    )
+    .mockImplementationOnce(async ({ items }) =>
+      items.map((item: object) => ({ ...item, ok: true })),
+    );
+  render(
+    wrap(
+      <CreateResourceDialog
+        open
+        onClose={vi.fn()}
+        clusterId="cluster-1"
+        templateKey="configmap"
+        title="Create ConfigMap"
+      />,
+    ),
+  );
+  const name = await screen.findByLabelText("Guided name");
+  await waitFor(() => expect(name).not.toHaveValue(""));
+  fireEvent.change(name, { target: { value: "wrong" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create" }));
+  await screen.findByRole("button", { name: "Retry failed" });
+  fireEvent.change(name, { target: { value: "corrected" } });
+  fireEvent.click(screen.getByRole("button", { name: "Retry failed" }));
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+  expect(mutateAsync.mock.calls[1][0].items[0].body.metadata.name).toBe(
+    "corrected",
+  );
+});
+
+it("keeps the template intact when mode switching is attempted during initialization", async () => {
+  mutateAsync.mockReset();
+  mutateAsync.mockImplementation(async ({ items }) =>
+    items.map((item: object) => ({ ...item, ok: true })),
+  );
+  render(
+    wrap(
+      <CreateResourceDialog
+        open
+        onClose={vi.fn()}
+        clusterId="cluster-1"
+        templateKey="deployment"
+        title="Create Deployment"
+      />,
+    ),
+  );
+  const guided = screen.getByRole("tab", { name: "guided" });
+  const yaml = screen.getByRole("tab", { name: "yaml" });
+  expect(guided).toBeDisabled();
+  expect(yaml).toBeDisabled();
+  expect(screen.queryByLabelText("Guided name")).not.toBeInTheDocument();
+  fireEvent.keyDown(guided, { key: "ArrowRight" });
+  fireEvent.click(yaml);
+  expect(guided).toHaveAttribute("aria-selected", "true");
+  await waitFor(() => expect(guided).toBeEnabled());
+  fireEvent.keyDown(guided, { key: "ArrowRight" });
+  const editor = await screen.findByLabelText("yaml-editor");
+  expect((editor as HTMLTextAreaElement).value).toContain("kind: Deployment");
+  fireEvent.keyDown(yaml, { key: "ArrowLeft" });
+  const name = await screen.findByLabelText("Guided name");
+  fireEvent.change(name, { target: { value: "initialized-deployment" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create", exact: true }));
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+  expect(mutateAsync.mock.calls[0][0].items[0].body).toMatchObject({
+    apiVersion: "apps/v1",
+    kind: "Deployment",
+    metadata: { name: "initialized-deployment" },
+    spec: { template: { spec: { containers: expect.any(Array) } } },
+  });
+  await screen.findByRole("button", { name: "Done" });
+});
+
+it("allows correcting an empty edited manifest by returning to YAML", async () => {
+  render(
+    wrap(
+      <CreateResourceDialog
+        open
+        onClose={vi.fn()}
+        clusterId="cluster-1"
+        templateKey="deployment"
+        title="Create Deployment"
+      />,
+    ),
+  );
+  const yaml = screen.getByRole("tab", { name: "yaml" });
+  const guided = screen.getByRole("tab", { name: "guided" });
+  await waitFor(() => expect(yaml).toBeEnabled());
+  fireEvent.click(yaml);
+  fireEvent.change(await screen.findByLabelText("yaml-editor"), {
+    target: { value: "{}" },
+  });
+  fireEvent.click(guided);
+  await screen.findByLabelText("Guided name");
+  expect(
+    screen.queryByText("Loading resource template…"),
+  ).not.toBeInTheDocument();
+  expect(yaml).toBeEnabled();
+  fireEvent.click(yaml);
+  expect(await screen.findByLabelText("yaml-editor")).toHaveValue("{}\n");
+});
+
+it("shows initialization errors and can retry the template load", async () => {
+  const original = k8sTemplates.deployment;
+  try {
+    k8sTemplates.deployment = "kind: [";
+    render(
+      wrap(
+        <CreateResourceDialog
+          open
+          onClose={vi.fn()}
+          clusterId="cluster-1"
+          templateKey="deployment"
+          title="Create Deployment"
+        />,
+      ),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Failed to load resource template",
+    );
+    expect(screen.getByRole("tab", { name: "yaml" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Create", exact: true }),
+    ).toBeDisabled();
+    k8sTemplates.deployment = original;
+    fireEvent.click(screen.getByRole("button", { name: "Retry", exact: true }));
+    const name = await screen.findByLabelText("Guided name");
+    expect(name).toHaveValue("my-deployment");
+    expect(screen.getByRole("tab", { name: "yaml" })).toBeEnabled();
+  } finally {
+    k8sTemplates.deployment = original;
+  }
 });

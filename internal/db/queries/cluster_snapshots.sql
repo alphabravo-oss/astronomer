@@ -95,6 +95,20 @@ FROM cluster_restores
 WHERE target_cluster_id = $1
 ORDER BY created_at DESC;
 
+-- name: ListClusterRestoresPage :many
+SELECT r.*, s.cluster_id AS source_cluster_id FROM cluster_restores r
+JOIN cluster_snapshots s ON s.id = r.snapshot_id
+WHERE r.target_cluster_id = sqlc.arg(target_cluster_id)
+AND (sqlc.arg(all_sources)::boolean OR s.cluster_id = ANY(sqlc.arg(source_cluster_ids)::uuid[]))
+ORDER BY r.created_at DESC, r.id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountClusterRestores :one
+SELECT count(*) FROM cluster_restores r
+JOIN cluster_snapshots s ON s.id = r.snapshot_id
+WHERE r.target_cluster_id = sqlc.arg(target_cluster_id)
+AND (sqlc.arg(all_sources)::boolean OR s.cluster_id = ANY(sqlc.arg(source_cluster_ids)::uuid[]));
+
 -- name: GetClusterRestoreByID :one
 SELECT id, snapshot_id, target_cluster_id, velero_name, velero_namespace,
        spec, phase, start_time, completion_time,

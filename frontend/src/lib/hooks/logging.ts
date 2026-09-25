@@ -11,7 +11,7 @@ import {
   getLoggingAttachStatus,
   attachAstronomerLogs,
   testLoggingOutput,
-  getLoggingPipelines,
+  getLoggingPipelinePage,
   createLoggingPipeline,
   getLoggingOperations,
   getLoggingOperation,
@@ -114,10 +114,12 @@ export function useTestLoggingOutput() {
   });
 }
 
-export function useLoggingPipelines(clusterId?: string) {
+export function useLoggingPipelines(clusterId?: string, offset = 0) {
   return useQuery({
-    queryKey: queryKeys.logging.pipelines(clusterId),
-    queryFn: () => getLoggingPipelines({ clusterId, limit: 200 }),
+    queryKey: queryKeys.logging.pipelinePage(clusterId, offset),
+    queryFn: ({ signal }) =>
+      getLoggingPipelinePage({ clusterId, limit: 50, offset }, signal),
+    throwOnError: false,
   });
 }
 

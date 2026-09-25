@@ -1,0 +1,81 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import { getProject } from "@/lib/api/projects";
+import {
+  projectInCluster,
+  projectNamespacesInCluster,
+  projectSelectionSearch,
+} from "./cluster-scope-collection";
+import { useClusterScopeStore } from "./cluster-scope";
+import { toastApiError } from "./toast";
+
+let latestSelection = 0;
+
+/** All pickers replace project and namespaces together; a late lookup cannot win. */
+export function useProjectSelection(clusterId?: string) {
+  const location = useLocation({ select: (location) => location });
+  const navigate = useNavigate();
+  const ownedSelection = useRef(0);
+  useEffect(
+    () => () => {
+      if (ownedSelection.current === latestSelection) latestSelection++;
+    },
+    [clusterId, location.pathname],
+  );
+  const [pending, setPending] = useState(false);
+  const select = useCallback(
+    async (id: string) => {
+      const request = ++latestSelection;
+      ownedSelection.current = request;
+      const commit = (namespaces?: readonly string[]) => {
+        const search = projectSelectionSearch(
+          new URLSearchParams(location.searchStr),
+          id,
+          namespaces,
+        );
+        if (clusterId)
+          useClusterScopeStore
+            .getState()
+            .setClusterScope(
+              clusterId,
+              id ? [...(namespaces ?? [])] : null,
+              id || null,
+            );
+        void navigate({
+          to: `${location.pathname}${search.size ? `?${search}` : ""}`,
+          replace: true,
+        });
+      };
+      commit();
+      if (!id) {
+        setPending(false);
+        return;
+      }
+      setPending(true);
+      try {
+        const project = await getProject(id);
+        if (request !== latestSelection) return;
+        if (
+          clusterId &&
+          useClusterScopeStore.getState().projectByCluster[clusterId] !== id
+        )
+          return;
+        if (clusterId && !projectInCluster(project, clusterId))
+          throw new Error("Project does not belong to this cluster");
+        const namespaces = projectNamespacesInCluster(project, clusterId);
+        if (!namespaces)
+          throw new Error(
+            "Project namespace scope is unavailable for this cluster",
+          );
+        commit(namespaces);
+      } catch (error) {
+        if (request === latestSelection)
+          toastApiError("Project scope unavailable", error);
+      } finally {
+        if (ownedSelection.current === request) setPending(false);
+      }
+    },
+    [clusterId, location.pathname, location.searchStr, navigate],
+  );
+  return { pending, select };
+}

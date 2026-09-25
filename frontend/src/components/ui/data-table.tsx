@@ -32,8 +32,12 @@ export interface Column<T> {
   hidden?: boolean;
   /** Keep structural columns, such as row actions, visible and out of the selector. */
   hideable?: boolean;
+  /** Render this as Rancher's dedicated three-dot row-action column. */
+  rowActions?: boolean;
   width?: string;
   align?: "left" | "center" | "right";
+  /** Allow multi-line cell content. Cells stay on one line by default. */
+  wrap?: boolean;
   /**
    * When set, renders a faceted multi-select filter for this column in the
    * toolbar. The facet options are derived automatically from the column's
@@ -106,6 +110,11 @@ export interface DataTableProps<T> {
    */
   virtualized?: boolean | "auto";
   /**
+   * Fit columns within the page by default. Horizontal scrolling is an
+   * explicit choice for detail tables that must preserve full-width values.
+   */
+  layout?: "fit" | "scroll";
+  /**
    * Opt into server-driven pagination. `data` should hold only the current
    * page's rows; the table will not slice further. The caller owns the
    * pagination state and feeds it into its query params so each page is a
@@ -170,6 +179,7 @@ export function DataTable<T extends RowData>({
   persistKey,
   resizable = false,
   virtualized = "auto",
+  layout = "fit",
   serverSide,
 }: DataTableProps<T>) {
   const {
@@ -242,6 +252,7 @@ export function DataTable<T extends RowData>({
           totalRows={rows.length}
           selectable={selectable}
           resizable={resizable}
+          layout={layout}
           cellPadding={cellPadding}
           selectPadding={selectPadding}
           rowHeight={estimateSize}
@@ -268,6 +279,7 @@ export function DataTable<T extends RowData>({
           activeColumns={activeColumns}
           selectable={selectable}
           resizable={resizable}
+          layout={layout}
           cellPadding={cellPadding}
           selectPadding={selectPadding}
           loading={loading}

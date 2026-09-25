@@ -9,10 +9,10 @@ import { resolve } from "node:path";
 const actionSurfaces = [
   "src/routes/dashboard/clusters/$id/-page.tsx",
   "src/routes/dashboard/account/security/index.tsx",
-  "src/routes/dashboard/delivery/targets/$targetId/index.tsx",
-  "src/routes/dashboard/delivery/targets/index.tsx",
+  "src/routes/dashboard/delivery/targets/$targetId/-page.tsx",
+  "src/routes/dashboard/delivery/targets/-page.tsx",
   "src/routes/dashboard/settings/widgets/index.tsx",
-  "src/routes/dashboard/delivery/sources/index.tsx",
+  "src/routes/dashboard/delivery/sources/-page.tsx",
 ];
 
 describe("design-system adoption", () => {

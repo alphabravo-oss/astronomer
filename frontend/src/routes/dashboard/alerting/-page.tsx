@@ -13,12 +13,19 @@ import { SilencesTab } from "./-silences-tab";
 import { NotificationChannelModal } from "./-channel-modal";
 import { SilenceModal } from "./-silence-modal";
 
-type TabKey = "active" | "channels" | "silences" | "inhibitions";
+type TabKey = "active" | "history" | "channels" | "silences" | "inhibitions";
 
-const TAB_KEYS = ["active", "channels", "silences", "inhibitions"] as const;
+const TAB_KEYS = [
+  "active",
+  "history",
+  "channels",
+  "silences",
+  "inhibitions",
+] as const;
 
 const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
-  { key: "active", label: "Active Alerts", icon: AlertTriangle },
+  { key: "active", label: "Firing alerts", icon: AlertTriangle },
+  { key: "history", label: "History", icon: Bell },
   { key: "channels", label: "Notification Channels", icon: Bell },
   { key: "silences", label: "Silences", icon: VolumeX },
   { key: "inhibitions", label: "Inhibitions", icon: Ban },
@@ -67,7 +74,8 @@ export function AlertingPage() {
       <TabStrip tabs={tabs} value={activeTab} onChange={setActiveTab} />
 
       <TabsContent>
-        {activeTab === "active" && <EventsTab />}
+        {activeTab === "active" && <EventsTab history={false} />}
+        {activeTab === "history" && <EventsTab />}
         {activeTab === "channels" && <ChannelsTab />}
         {activeTab === "silences" && <SilencesTab />}
         {activeTab === "inhibitions" && <InhibitionPanel />}

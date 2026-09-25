@@ -10,6 +10,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
 )
@@ -52,10 +53,21 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 		}
 		targetID = parsed
 	}
+	if !h.authz.authorizeClusterAction(w, r, targetID, rbac.ResourceClusters, rbac.VerbUpdate) {
+		return
+	}
 	target, err := h.queries.GetClusterByID(r.Context(), targetID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Target cluster not found")
 		return
+	}
+
+	namespace := strings.TrimSpace(req.Namespace)
+	if namespace == "" {
+		namespace = snapshot.VeleroNamespace
+		if namespace == "" {
+			namespace = defaultVeleroNamespace
+		}
 	}
 
 	// Cross-cluster restore pre-flight. The target cluster must have
@@ -64,7 +76,7 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 	// Velero on the target would have nothing to read. We surface a
 	// clear 409 rather than 500ing later in the poller.
 	if targetID != clusterID {
-		bsls, vErr := listVeleroBSLs(r.Context(), h.requester, targetID.String(), defaultVeleroNamespace)
+		bsls, vErr := listVeleroBSLs(r.Context(), h.requester, targetID.String(), namespace)
 		if vErr != nil {
 			RespondRequestError(w, r, http.StatusBadGateway, apierror.VeleroUnreachable, fmt.Sprintf("could not check Velero on target cluster: %v", vErr))
 			return
@@ -89,26 +101,18 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 			RespondRequestError(w, r, http.StatusBadGateway, apierror.VeleroUnreachable, fmt.Sprintf("could not check Velero on source cluster: %v", sErr))
 			return
 		}
-		// Only enforce when we can positively identify the source store —
-		// if the source BSL can't be resolved (bucket unknown) we fall back
-		// to the "any BSL exists" check above rather than block on missing
-		// data.
-		if src, ok := resolveBSLStore(srcBSLs, decodeSpec(snapshot.Spec).StorageLocation); ok && strings.TrimSpace(src.Bucket) != "" {
-			if !targetHasMatchingStore(bsls, src) {
-				RespondRequestError(w, r, http.StatusConflict, apierror.VeleroMissingOnTarget,
-					fmt.Sprintf("Target cluster has no BackupStorageLocation for the snapshot's object store (bucket %q); cross-cluster restore requires a BSL pointing at the same store", src.Bucket))
-				return
-			}
+		src, resolved := resolveBSLStore(srcBSLs, decodeSpec(snapshot.Spec).StorageLocation)
+		if !resolved || strings.TrimSpace(src.Bucket) == "" {
+			RespondRequestError(w, r, http.StatusConflict, apierror.VeleroMissingOnTarget, "Cannot verify the source snapshot object store; restore was not queued")
+			return
 		}
+		if !targetHasMatchingStore(bsls, src) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.VeleroMissingOnTarget, "Target cluster has no BackupStorageLocation matching the source snapshot object store")
+			return
+		}
+
 	}
 
-	namespace := strings.TrimSpace(req.Namespace)
-	if namespace == "" {
-		namespace = snapshot.VeleroNamespace
-		if namespace == "" {
-			namespace = defaultVeleroNamespace
-		}
-	}
 	if h.runTx == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "snapshot transaction runner is not configured")
 		return
@@ -184,10 +188,11 @@ func (h *ClusterSnapshotsHandler) CreateRestore(w http.ResponseWriter, r *http.R
 	row := result.row
 	h.publishSnapshotChanged(row.TargetClusterID, row.ID, "restore")
 	out := restoreToResponse(row)
+	out.SourceClusterID = clusterID
 	if result.remoteErr != nil {
 		out.LastPollError = result.remoteErr.Error()
 	}
-	RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/snapshots/%s/", clusterID, snapshotID), out)
+	RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/snapshot-restores/%s/", row.TargetClusterID, row.ID), out)
 }
 
 // ----------------------------------------------------------------------

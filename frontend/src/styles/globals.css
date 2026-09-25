@@ -244,6 +244,24 @@
     font-weight: 450;
   }
 
+  .app-data-table-fit {
+    table-layout: fixed;
+    max-width: 100%;
+  }
+
+  .app-data-table-fit th,
+  .app-data-table-fit td {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-data-table-fit th > *,
+  .app-data-table-fit td > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .app-data-table thead,
   .app-data-table [role="rowgroup"]:first-child {
     background: var(--table-header-bg);

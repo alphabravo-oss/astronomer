@@ -1,6 +1,24 @@
 # Cluster snapshot restore tracking — contract checkpoint
 
-Reviewed 2026-09-24 at Astronomer `22f633ec` plus the current working tree. This is a read-only contract checkpoint, not authorization to add an API or perform a restore.
+Original review: 2026-09-24 at Astronomer `22f633ec` plus its working tree. The original findings below are retained as baseline evidence. The user subsequently authorized the API extension as part of Plan 027; no live restore has been performed.
+
+## Implemented contract
+
+Integrated runtime commit `ebb22524` adds these canonical management API routes:
+
+| Route | Contract |
+|---|---|
+| `GET /api/v1/clusters/{cluster_id}/snapshot-restores/` | Paged history for the target cluster. Target `clusters:read` is required; source-cluster visibility filters rows before counts and pagination. Stable order is creation time descending, then ID descending. |
+| `GET /api/v1/clusters/{cluster_id}/snapshot-restores/{id}/` | Exact durable `cluster_restores` identity, wrapped in `data`. Target read is required; an unrelated target or inaccessible source returns 404. |
+| `POST /api/v1/clusters/{cluster_id}/snapshots/{id}/restore` | Existing creation flow now checks target `clusters:update` before preflight and returns the target-cluster restore detail as Accepted Location. Source and target backup-storage locations must match. |
+
+`SnapshotRestoreResponse` includes source snapshot, source cluster, target cluster, phase, error/warning counts, start/completion timestamps, and the existing poller's `last_poll_at` / `last_poll_error`. A stale observation is not proof of completion. Queued, running, completed, partial failure and failed phases remain distinct. The original restore worker and durable rows remain authoritative.
+
+The UI addresses history under the target cluster's Snapshots page and selects the receipt with `?restore=<id>`. History remains available even when Velero readiness cannot be established. Source snapshot completion is never substituted for restore completion.
+
+Handler authorization/readback tests pass, and the isolated PostgreSQL gate has verified source-filtered counts and stable pagination. Final integrated browser and enterprise evidence is tracked in [the execution ledger](../027-execution-review.md). Real restores remain part of Plan 028 qualification.
+
+## Original dependency findings (superseded by the extension above)
 
 - Cluster snapshot restore creation endpoint: `POST /api/v1/clusters/{cluster_id}/snapshots/{id}/restore`, `docs/openapi.yaml:25287`.
 - Its returned domain type is `SnapshotRestoreResponse`, `docs/openapi.yaml:5898`; the client maps it to `SnapshotRestore` in `frontend/src/lib/api/cluster-velero.ts:242`.

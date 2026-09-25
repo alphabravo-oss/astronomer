@@ -8,10 +8,31 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countClusterRestores = `-- name: CountClusterRestores :one
+SELECT count(*) FROM cluster_restores r
+JOIN cluster_snapshots s ON s.id = r.snapshot_id
+WHERE r.target_cluster_id = $1
+AND ($2::boolean OR s.cluster_id = ANY($3::uuid[]))
+`
+
+type CountClusterRestoresParams struct {
+	TargetClusterID  uuid.UUID   `json:"target_cluster_id"`
+	AllSources       bool        `json:"all_sources"`
+	SourceClusterIds []uuid.UUID `json:"source_cluster_ids"`
+}
+
+func (q *Queries) CountClusterRestores(ctx context.Context, arg CountClusterRestoresParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countClusterRestores, arg.TargetClusterID, arg.AllSources, arg.SourceClusterIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createClusterRestore = `-- name: CreateClusterRestore :one
 INSERT INTO cluster_restores (
@@ -374,6 +395,87 @@ func (q *Queries) ListClusterRestores(ctx context.Context, targetClusterID uuid.
 			&i.CreatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClusterRestoresPage = `-- name: ListClusterRestoresPage :many
+SELECT r.id, r.snapshot_id, r.target_cluster_id, r.velero_name, r.velero_namespace, r.spec, r.phase, r.start_time, r.completion_time, r.warnings_count, r.errors_count, r.last_poll_at, r.last_poll_error, r.created_by, r.created_at, r.updated_at, s.cluster_id AS source_cluster_id FROM cluster_restores r
+JOIN cluster_snapshots s ON s.id = r.snapshot_id
+WHERE r.target_cluster_id = $1
+AND ($2::boolean OR s.cluster_id = ANY($3::uuid[]))
+ORDER BY r.created_at DESC, r.id DESC
+LIMIT $5 OFFSET $4
+`
+
+type ListClusterRestoresPageParams struct {
+	TargetClusterID  uuid.UUID   `json:"target_cluster_id"`
+	AllSources       bool        `json:"all_sources"`
+	SourceClusterIds []uuid.UUID `json:"source_cluster_ids"`
+	QueryOffset      int32       `json:"query_offset"`
+	QueryLimit       int32       `json:"query_limit"`
+}
+
+type ListClusterRestoresPageRow struct {
+	ID              uuid.UUID          `json:"id"`
+	SnapshotID      uuid.UUID          `json:"snapshot_id"`
+	TargetClusterID uuid.UUID          `json:"target_cluster_id"`
+	VeleroName      string             `json:"velero_name"`
+	VeleroNamespace string             `json:"velero_namespace"`
+	Spec            json.RawMessage    `json:"spec"`
+	Phase           string             `json:"phase"`
+	StartTime       pgtype.Timestamptz `json:"start_time"`
+	CompletionTime  pgtype.Timestamptz `json:"completion_time"`
+	WarningsCount   int32              `json:"warnings_count"`
+	ErrorsCount     int32              `json:"errors_count"`
+	LastPollAt      pgtype.Timestamptz `json:"last_poll_at"`
+	LastPollError   string             `json:"last_poll_error"`
+	CreatedBy       pgtype.UUID        `json:"created_by"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+	SourceClusterID uuid.UUID          `json:"source_cluster_id"`
+}
+
+func (q *Queries) ListClusterRestoresPage(ctx context.Context, arg ListClusterRestoresPageParams) ([]ListClusterRestoresPageRow, error) {
+	rows, err := q.db.Query(ctx, listClusterRestoresPage,
+		arg.TargetClusterID,
+		arg.AllSources,
+		arg.SourceClusterIds,
+		arg.QueryOffset,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListClusterRestoresPageRow{}
+	for rows.Next() {
+		var i ListClusterRestoresPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SnapshotID,
+			&i.TargetClusterID,
+			&i.VeleroName,
+			&i.VeleroNamespace,
+			&i.Spec,
+			&i.Phase,
+			&i.StartTime,
+			&i.CompletionTime,
+			&i.WarningsCount,
+			&i.ErrorsCount,
+			&i.LastPollAt,
+			&i.LastPollError,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SourceClusterID,
 		); err != nil {
 			return nil, err
 		}

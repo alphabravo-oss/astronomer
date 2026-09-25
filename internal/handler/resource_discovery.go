@@ -51,32 +51,28 @@ func (h *ResourceHandler) GetResourceDiscovery(w http.ResponseWriter, r *http.Re
 		return
 	}
 	clusterID := clusterUUID.String()
-	entries := make([]resourceDiscoveryEntry, 0, len(enterpriseResourceMatrix))
-	errorsBySource := map[string]string{}
-	for _, resourceType := range enterpriseResourceMatrix {
-		entry, err := h.discoverResource(r, clusterID, resourceType)
-		if err != nil {
-			def := resourceDefs[resourceType]
-			entry = fallbackResourceDiscovery(resourceType, def)
-			errorsBySource[resourceType] = err.Error()
-		}
-		entries = append(entries, entry)
-	}
-
-	crds := []map[string]any{}
-	crdPayload, err := h.do(r.Context(), clusterID, http.MethodGet,
-		"/apis/apiextensions.k8s.io/v1/customresourcedefinitions?limit=500", nil, requestHeaders(""))
+	options, err := parseCRDDiscoveryPage(r)
 	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
+		return
+	}
+	entries := []resourceDiscoveryEntry{}
+	errorsBySource := map[string]string{}
+	if options.continueToken == "" {
+		entries, errorsBySource = h.discoverBuiltinResources(r, clusterID)
+	}
+	crds, next, err := h.discoverCRDPage(r, clusterID, options)
+	if err != nil {
+		if options.continueToken != "" {
+			RespondRequestError(w, r, discoveryErrorStatus(err), apierror.ProxyError, err.Error())
+			return
+		}
 		errorsBySource["custom_resource_definitions"] = err.Error()
-	} else {
-		crds = summarizeDiscoveredCRDs(crdPayload)
+		crds = []map[string]any{}
 	}
 	RespondJSON(w, http.StatusOK, map[string]any{
-		"cluster_id": clusterID,
-		"resources":  entries,
-		"crds":       crds,
-		"partial":    len(errorsBySource) > 0,
-		"errors":     errorsBySource,
+		"cluster_id": clusterID, "resources": entries, "crds": crds, "crd_continue": next,
+		"partial": len(errorsBySource) > 0, "errors": errorsBySource,
 	})
 }
 
@@ -133,6 +129,10 @@ func (h *ResourceHandler) discoverResource(r *http.Request, clusterID, resourceT
 	if err != nil {
 		return resourceDiscoveryEntry{}, err
 	}
+	return resourceDiscoveryFromPayload(resourceType, def, payload)
+}
+
+func resourceDiscoveryFromPayload(resourceType string, def resourceDef, payload map[string]any) (resourceDiscoveryEntry, error) {
 	resources, _ := payload["resources"].([]any)
 	for _, raw := range resources {
 		item, _ := raw.(map[string]any)

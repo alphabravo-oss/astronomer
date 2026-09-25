@@ -26,7 +26,6 @@ func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clusterID := clusterUUID.String()
-	namespace := r.URL.Query().Get("namespace")
 	kind := r.URL.Query().Get("kind")
 	search := strings.ToLower(r.URL.Query().Get("search"))
 	sortOrder := strings.TrimSpace(r.URL.Query().Get("sort"))
@@ -38,16 +37,24 @@ func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workloads, err := h.listWorkloads(r.Context(), clusterID, namespace, kind)
-	if err != nil {
-		respondClusterAccessError(w, r, err)
-		return
-	}
-
 	all, names, err := h.authz.authorizedNamespaces(r.Context(), clusterUUID, rbac.ResourceWorkloads, rbac.VerbList)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		RespondRequestError(w, r, 500, apierror.InternalError, "Failed to retrieve user permissions")
 		return
+	}
+	all, names, err = selectedNamespaces(r.URL.Query(), all, names)
+	if err != nil {
+		RespondRequestError(w, r, 400, apierror.ValidationError, err.Error())
+		return
+	}
+	var workloads []map[string]any
+	for _, namespace := range namespaceNames(all, names) {
+		rows, readErr := h.listWorkloads(r.Context(), clusterID, namespace, kind)
+		if readErr != nil {
+			respondClusterAccessError(w, r, readErr)
+			return
+		}
+		workloads = append(workloads, rows...)
 	}
 	if !all {
 		workloads = filterItemsByNamespaceKey(workloads, "namespace", names)

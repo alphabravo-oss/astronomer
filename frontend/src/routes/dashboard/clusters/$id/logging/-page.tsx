@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTabParam } from "@/lib/use-tab-param";
 import { Plus, Ship } from "lucide-react";
 import { useParams } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
@@ -18,7 +19,7 @@ export function ClusterLoggingPage() {
   const params = useParams({ from: "/dashboard/clusters/$id" });
   const clusterId = params.id;
   const { data: cluster } = useCluster(clusterId);
-  const [configure, setConfigure] = useState(false);
+  const [view, setView] = useTabParam(["logs", "collection"], "logs", "view");
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const canCreate = usePermissionDecision("logging", "create", {
     type: "cluster",
@@ -30,13 +31,13 @@ export function ClusterLoggingPage() {
   const attached = Boolean(attachStatus.data?.attached);
   const showAttach = ingestPublic && canCreate.allowed;
 
-  if (!configure)
+  if (view === "logs")
     return (
       <ClusterGrafanaView
         clusterId={clusterId}
         view="logs"
         actions={
-          <ActionButton onClick={() => setConfigure(true)}>
+          <ActionButton onClick={() => setView("collection")}>
             Configure log collection
           </ActionButton>
         }
@@ -49,8 +50,8 @@ export function ClusterLoggingPage() {
         title="Log collection"
         description={`Log pipelines for ${cluster?.displayName || cluster?.name || "this cluster"}`}
         actions={
-          <div className="flex items-center gap-2">
-            <ActionButton onClick={() => setConfigure(false)}>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <ActionButton onClick={() => setView("logs")}>
               View logs in Grafana
             </ActionButton>
             <RouterLink
@@ -73,13 +74,15 @@ export function ClusterLoggingPage() {
                   : "Ship logs to Astronomer"}
               </ActionButton>
             ) : null}
-            <ActionButton
-              intent="primary"
-              icon={<Plus className="h-4 w-4" />}
-              onClick={() => setShowPipelineModal(true)}
-            >
-              Create Pipeline
-            </ActionButton>
+            {canCreate.allowed && (
+              <ActionButton
+                intent="primary"
+                icon={<Plus className="h-4 w-4" />}
+                onClick={() => setShowPipelineModal(true)}
+              >
+                Create Pipeline
+              </ActionButton>
+            )}
           </div>
         }
       />
@@ -96,7 +99,7 @@ export function ClusterLoggingPage() {
 
       <PipelinesTab clusterId={clusterId} />
 
-      {showPipelineModal && (
+      {showPipelineModal && canCreate.allowed && (
         <CreatePipelineModal
           clusterId={clusterId}
           onClose={() => setShowPipelineModal(false)}

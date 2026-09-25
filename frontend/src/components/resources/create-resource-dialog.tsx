@@ -1,3 +1,4 @@
+import { ResourceApplyResults } from "./resource-apply-results";
 import {
   useEffect,
   useMemo,
@@ -5,11 +6,12 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { LazyGuidedResourceForm as GuidedResourceForm } from "@/components/resources/lazy-guided-resource-form";
 import type { KubernetesManifest } from "@/components/resources/guided-resource-model";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { ErrorState } from "@/components/ui/empty-state";
 import { YamlEditor } from "@/components/ui/yaml-editor";
 import {
   useK8sCreateBatch,
@@ -26,7 +28,6 @@ import {
   normalizeManifestDocuments,
 } from "./create-resource-manifest";
 import { k8sTemplates } from "@/lib/k8s-templates";
-import { extractApiErrorMessage } from "@/lib/api/errors";
 import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +103,79 @@ export function CreateResourceDialog(props: CreateResourceDialogProps) {
   ) : null;
 }
 
+function useTemplateManifest(
+  open: boolean,
+  templateKey: CreateResourceDialogProps["templateKey"],
+  modeRequestRef: { current: number },
+) {
+  const [manifest, setManifest] = useState<KubernetesManifest>({});
+  const [initialization, setInitialization] = useState({
+    ready: !templateKey,
+    error: "",
+  });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!open || !templateKey) return;
+    modeRequestRef.current += 1;
+    let cancelled = false;
+    void import("js-yaml")
+      .then((yaml) => {
+        if (cancelled) return;
+        const parsed = yaml.load(k8sTemplates[templateKey] || "");
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+          throw new Error(
+            "The resource template must contain a Kubernetes object.",
+          );
+        setManifest(parsed as KubernetesManifest);
+        setInitialization({ ready: true, error: "" });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled)
+          setInitialization({
+            ready: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : "Could not load the resource template.",
+          });
+      });
+    return () => {
+      cancelled = true;
+      modeRequestRef.current += 1;
+    };
+  }, [open, templateKey, modeRequestRef, attempt]);
+  return {
+    manifest,
+    setManifest,
+    templateReady: initialization.ready,
+    templateError: initialization.error,
+    retryTemplate: () => {
+      setInitialization({ ready: false, error: "" });
+      setAttempt((value) => value + 1);
+    },
+  };
+}
+
+function TemplateInitialization({
+  error,
+  onRetry,
+}: {
+  error: string;
+  onRetry: () => void;
+}) {
+  return error ? (
+    <ErrorState
+      title="Failed to load resource template"
+      description={error}
+      onRetry={onRetry}
+    />
+  ) : (
+    <p role="status" className="p-5 text-sm text-muted-foreground">
+      Loading resource template…
+    </p>
+  );
+}
+
 function CreateResourceEditor({
   open,
   onClose,
@@ -123,11 +197,13 @@ function CreateResourceEditor({
       ? k8sTemplates[templateKey] || ""
       : (initialYaml ?? IMPORT_YAML_PLACEHOLDER),
   );
-  const [manifest, setManifest] = useState<KubernetesManifest>({});
   const [guidedValid, setGuidedValid] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [applyResults, setApplyResults] = useState<K8sCreateBatchResult[]>([]);
+  const [editorDirty, setEditorDirty] = useState(false);
   const modeRequestRef = useRef(0);
+  const { manifest, setManifest, templateReady, templateError, retryTemplate } =
+    useTemplateManifest(open, templateKey, modeRequestRef);
   const k8sCreateBatch = useK8sCreateBatch();
   const discovery = useClusterDiscovery(clusterId);
   const schemaQuery = useResourceSchema(
@@ -135,26 +211,6 @@ function CreateResourceEditor({
     resolvedResourceType ?? "deployments",
     open && !!resolvedResourceType,
   );
-
-  useEffect(() => {
-    if (!open || !templateKey) return;
-    modeRequestRef.current += 1;
-    const template = k8sTemplates[templateKey] || "";
-    let cancelled = false;
-    void import("js-yaml").then((yaml) => {
-      if (cancelled) return;
-      const parsed = yaml.load(template);
-      setManifest(
-        parsed && typeof parsed === "object"
-          ? (parsed as KubernetesManifest)
-          : {},
-      );
-    });
-    return () => {
-      cancelled = true;
-      modeRequestRef.current += 1;
-    };
-  }, [open, templateKey]);
 
   const schema = schemaQuery.data;
   const hasGuidedTemplate = useMemo(
@@ -165,6 +221,7 @@ function CreateResourceEditor({
   if (!open) return null;
 
   const changeMode = async (next: "guided" | "yaml") => {
+    if (!templateReady) return;
     const request = ++modeRequestRef.current;
     // Selecting the current mode also cancels a superseded async transition.
     if (next === mode) return;
@@ -195,7 +252,7 @@ function CreateResourceEditor({
       );
       setParseError(null);
     }
-    setApplyResults([]);
+    setEditorDirty(true);
     setMode(next);
   };
 
@@ -223,7 +280,7 @@ function CreateResourceEditor({
     try {
       let items: K8sCreateBatchItem[];
       const failed = applyResults.filter((result) => !result.ok);
-      if (failed.length > 0) {
+      if (failed.length > 0 && !editorDirty) {
         items = failed.map(({ id, path, body, label }) => ({
           id,
           path,
@@ -237,18 +294,26 @@ function CreateResourceEditor({
         } else {
           yaml.loadAll(yamlContent, (document) => documents.push(document));
         }
-        items = createManifestBatch(documents, schema, apiPath, discovery);
+        items = createManifestBatch(
+          documents,
+          schema,
+          apiPath,
+          discovery,
+        ).filter(
+          (item) =>
+            !applyResults.some(
+              (previous) =>
+                previous.ok &&
+                previous.path === item.path &&
+                previous.label === item.label,
+            ),
+        );
       }
 
       const next = await k8sCreateBatch.mutateAsync({ clusterId, items });
-      const merged =
-        failed.length > 0
-          ? applyResults.map(
-              (previous) =>
-                next.find((result) => result.id === previous.id) ?? previous,
-            )
-          : next;
+      const merged = [...applyResults.filter((result) => result.ok), ...next];
       setApplyResults(merged);
+      setEditorDirty(false);
       const failedCount = merged.filter((result) => !result.ok).length;
       if (failedCount === 0) {
         toastSuccess(
@@ -265,8 +330,11 @@ function CreateResourceEditor({
   };
 
   const allApplied =
-    applyResults.length > 0 && applyResults.every((result) => result.ok);
+    !editorDirty &&
+    applyResults.length > 0 &&
+    applyResults.every((result) => result.ok);
   const createDisabled =
+    !templateReady ||
     k8sCreateBatch.isPending ||
     (mode === "guided" && (!guidedValid || !hasGuidedTemplate)) ||
     (mode === "yaml" && !!parseError);
@@ -324,6 +392,7 @@ function CreateResourceEditor({
               id={`resource-editor-tab-${item}`}
               type="button"
               role="tab"
+              disabled={!templateReady}
               aria-selected={mode === item}
               aria-controls={`resource-editor-panel-${item}`}
               tabIndex={mode === item ? 0 : -1}
@@ -357,42 +426,7 @@ function CreateResourceEditor({
         </div>
       )}
 
-      {applyResults.length > 0 && (
-        <div
-          className="max-h-40 overflow-y-auto border-b border-border bg-muted/20"
-          aria-label="Resource creation results"
-        >
-          {applyResults.map((result) => (
-            <div
-              key={result.id}
-              className="flex items-start gap-2 border-b border-border/60 px-5 py-2 text-xs last:border-b-0"
-            >
-              {result.ok ? (
-                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-success" />
-              ) : (
-                <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-error" />
-              )}
-              <span className="min-w-0 flex-1">
-                <span className="font-mono text-foreground">
-                  {result.label}
-                </span>
-                {!result.ok && (
-                  <span className="ml-2 text-status-error">
-                    {extractApiErrorMessage(result.error) ?? "Create failed"}
-                  </span>
-                )}
-              </span>
-              <span
-                className={
-                  result.ok ? "text-status-success" : "text-status-error"
-                }
-              >
-                {result.ok ? "Created" : "Failed"}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      <ResourceApplyResults results={applyResults} />
 
       <div
         id={`resource-editor-panel-${mode}`}
@@ -401,10 +435,18 @@ function CreateResourceEditor({
         tabIndex={0}
         className="min-h-0 flex-1 overflow-hidden focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {mode === "guided" ? (
+        {!templateReady ? (
+          <TemplateInitialization
+            error={templateError}
+            onRetry={retryTemplate}
+          />
+        ) : mode === "guided" ? (
           <GuidedResourceForm
             value={manifest}
-            onChange={setManifest}
+            onChange={(next) => {
+              setManifest(next);
+              setEditorDirty(true);
+            }}
             schema={schema?.schema ?? {}}
             definitions={schema?.definitions ?? {}}
             onValidationChange={setGuidedValid}
@@ -415,7 +457,7 @@ function CreateResourceEditor({
             onChange={(next) => {
               setYamlContent(next);
               setParseError(null);
-              setApplyResults([]);
+              setEditorDirty(true);
             }}
             className="h-full"
           />

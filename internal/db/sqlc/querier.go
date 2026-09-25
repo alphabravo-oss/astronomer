@@ -220,6 +220,8 @@ type Querier interface {
 	CountClusterConditionRemediationSinceForType(ctx context.Context, arg CountClusterConditionRemediationSinceForTypeParams) (int64, error)
 	CountClusterDeploymentEvents(ctx context.Context, arg CountClusterDeploymentEventsParams) (int64, error)
 	CountClusterDeployments(ctx context.Context, arg CountClusterDeploymentsParams) (int64, error)
+	CountClusterProjectsForScopes(ctx context.Context, arg CountClusterProjectsForScopesParams) (int64, error)
+	CountClusterRestores(ctx context.Context, arg CountClusterRestoresParams) (int64, error)
 	// Whether the service user already holds the reserved role on this cluster, so
 	// the connect path doesn't pile up duplicate bindings on every reconnect.
 	CountClusterRoleBindingForUserCluster(ctx context.Context, arg CountClusterRoleBindingForUserClusterParams) (int64, error)
@@ -255,6 +257,7 @@ type Querier interface {
 	CountDeliverySources(ctx context.Context, arg CountDeliverySourcesParams) (int64, error)
 	CountDeliveryTargets(ctx context.Context, projectID uuid.UUID) (int64, error)
 	CountEmailMessages(ctx context.Context) (int64, error)
+	CountFilteredHelmCharts(ctx context.Context, arg CountFilteredHelmChartsParams) (int64, error)
 	CountGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
 	CountGitOpsSources(ctx context.Context) (int64, error)
 	CountGitOpsTombstonedBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
@@ -1302,6 +1305,9 @@ type Querier interface {
 	ListCatalogOperationEvents(ctx context.Context, operationID uuid.UUID) ([]CatalogOperationEvent, error)
 	ListCatalogOperations(ctx context.Context, arg ListCatalogOperationsParams) ([]CatalogOperation, error)
 	ListCatalogOperationsForScopes(ctx context.Context, arg ListCatalogOperationsForScopesParams) ([]CatalogOperation, error)
+	// Catalog visibility includes secondary cluster membership without widening
+	// the general project inventory API's separate authorization contract.
+	ListCatalogProjectsByCluster(ctx context.Context, arg ListCatalogProjectsByClusterParams) ([]Project, error)
 	// Helm Charts
 	ListCatalogUserDiscovery(ctx context.Context, userID uuid.UUID) ([]ListCatalogUserDiscoveryRow, error)
 	// Per-project catalog queries — migration 061.
@@ -1407,6 +1413,7 @@ type Querier interface {
 	ListClusterLivenessForClusters(ctx context.Context, clusterIds []uuid.UUID) ([]ClusterLiveness, error)
 	// Resume bounded probe sweeps by stable identity, independent of fleet churn.
 	ListClusterProbeTargets(ctx context.Context, arg ListClusterProbeTargetsParams) ([]uuid.UUID, error)
+	ListClusterProjectsForScopes(ctx context.Context, arg ListClusterProjectsForScopesParams) ([]Project, error)
 	ListClusterRegistrationSteps(ctx context.Context, clusterID uuid.UUID) ([]ClusterRegistrationStep, error)
 	// Migration 050: multi-registry-per-cluster CRUD. The legacy
 	// Get/Upsert/Delete by cluster_id above is kept for back-compat with the old
@@ -1415,6 +1422,7 @@ type Querier interface {
 	ListClusterRegistryConfigs(ctx context.Context, clusterID uuid.UUID) ([]ClusterRegistryConfig, error)
 	// ====== cluster_restores =================================================
 	ListClusterRestores(ctx context.Context, targetClusterID uuid.UUID) ([]ClusterRestore, error)
+	ListClusterRestoresPage(ctx context.Context, arg ListClusterRestoresPageParams) ([]ListClusterRestoresPageRow, error)
 	ListClusterRoleBindings(ctx context.Context, arg ListClusterRoleBindingsParams) ([]ClusterRoleBinding, error)
 	ListClusterRoleBindingsByCluster(ctx context.Context, arg ListClusterRoleBindingsByClusterParams) ([]ClusterRoleBinding, error)
 	ListClusterRoles(ctx context.Context, arg ListClusterRolesParams) ([]ClusterRole, error)
@@ -1565,6 +1573,7 @@ type Querier interface {
 	// can shrink it). The partial index idx_gitops_tombstoned_clusters
 	// keeps this scan cheap as the table grows.
 	ListExpiredTombstones(ctx context.Context, tombstonedAt pgtype.Timestamptz) ([]GitopsRegisteredCluster, error)
+	ListFilteredHelmCharts(ctx context.Context, arg ListFilteredHelmChartsParams) ([]HelmChart, error)
 	// Registered clusters --------------------------------------------------
 	ListGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) ([]GitopsRegisteredCluster, error)
 	// Admin list projection joins display metadata in the same bounded query,
@@ -1786,6 +1795,8 @@ type Querier interface {
 	// string.
 	ListPlatformSettingsByPrefix(ctx context.Context, prefix string) ([]PlatformSetting, error)
 	ListPodSecurityTemplates(ctx context.Context, arg ListPodSecurityTemplatesParams) ([]PodSecurityTemplate, error)
+	// Only the already authorized page of projects; no estate-wide namespace scan.
+	ListProjectNamespaceScopes(ctx context.Context, projectIds []uuid.UUID) ([]ProjectNamespace, error)
 	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]ProjectNamespace, error)
 	ListProjectOwnedCatalogs(ctx context.Context, projectID uuid.UUID) ([]HelmRepository, error)
 	// Usage snapshots for the admin dashboard --------------------------------

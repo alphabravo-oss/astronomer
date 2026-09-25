@@ -208,11 +208,10 @@ function ClusterImageScansPage() {
   });
 
   // Distinct namespace pick list, derived from the loaded reports.
-  const namespaces = useMemo(() => {
-    const set = new Set<string>();
-    images.data?.data.forEach((r) => r.namespace && set.add(r.namespace));
-    return Array.from(set).sort();
-  }, [images.data]);
+  const namespaces = useMemo(
+    () => reportNamespaces(images.data?.data ?? []),
+    [images.data],
+  );
 
   // Selection belongs to the current result set, not an asynchronous effect.
   if (
@@ -223,22 +222,7 @@ function ClusterImageScansPage() {
     setOpenReport(null);
   }
 
-  if (cluster?.isLocal) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2 max-w-md mx-auto text-center p-4">
-        <ShieldAlert className="h-8 w-8 mb-2" />
-        <p className="text-sm font-medium text-foreground">
-          Image scans aren&apos;t available on the management plane&apos;s own
-          cluster.
-        </p>
-        <p className="text-xs">
-          Image scanning depends on trivy-operator running in a remote cluster
-          and reachable over the agent tunnel. Register a managed cluster,
-          install trivy-operator from the Catalog, and scans will appear here.
-        </p>
-      </div>
-    );
-  }
+  if (cluster?.isLocal) return <LocalClusterScanUnavailable />;
 
   if (scansEnabled && summary.isError)
     return (
@@ -259,6 +243,10 @@ function ClusterImageScansPage() {
         {rescan.isPending
           ? `Vulnerability rescan ${rescan.operationState.phase}`
           : ""}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Cluster-wide security inventory. Use this page’s namespace filter; the
+        navigation namespace selection does not filter these reports.
       </p>
       <PageHeader
         title={
@@ -905,3 +893,28 @@ function ScanProgressBanner({
 export const Route = createFileRoute("/dashboard/clusters/$id/image-scans/")({
   component: ClusterImageScansPage,
 });
+
+function reportNamespaces(reports: Array<{ namespace?: string }>) {
+  return [
+    ...new Set(
+      reports.flatMap((report) => (report.namespace ? [report.namespace] : [])),
+    ),
+  ].sort();
+}
+
+function LocalClusterScanUnavailable() {
+  return (
+    <div className="flex flex-col items-center justify-center h-64 text-muted-foreground gap-2 max-w-md mx-auto text-center p-4">
+      <ShieldAlert className="h-8 w-8 mb-2" />
+      <p className="text-sm font-medium text-foreground">
+        Image scans aren&apos;t available on the management plane&apos;s own
+        cluster.
+      </p>
+      <p className="text-xs">
+        Image scanning depends on trivy-operator running in a remote cluster and
+        reachable over the agent tunnel. Register a managed cluster, install
+        trivy-operator from the Catalog, and scans will appear here.
+      </p>
+    </div>
+  );
+}

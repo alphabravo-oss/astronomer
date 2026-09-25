@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { TargetsPage } from "@/routes/dashboard/delivery/targets/index";
+import { TargetsPage } from "@/routes/dashboard/delivery/targets/-page";
 
 export const Route = createFileRoute(
   "/dashboard/clusters/$id/delivery/targets/",

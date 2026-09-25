@@ -3849,11 +3849,12 @@ components:
     ResourceDiscoveryResponse:
       type: object
       additionalProperties: false
-      required: [cluster_id, resources, crds, partial, errors]
+      required: [cluster_id, resources, crds, crd_continue, partial, errors]
       properties:
         cluster_id: {type: string, format: uuid}
         resources: {type: array, items: {$ref: '#/components/schemas/ResourceDiscoveryEntry'}}
         crds: {type: array, items: {type: object, additionalProperties: true}}
+        crd_continue: {type: string, description: Opaque Kubernetes CRD continuation; empty when complete.}
         partial: {type: boolean}
         errors: {type: object, additionalProperties: {type: string}}
     ResourceDiscoveryEnvelope:
@@ -5898,6 +5899,7 @@ components:
     SnapshotRestoreResponse:
       type: object
       properties:
+        source_cluster_id: {type: string, format: uuid}
         id:
           type: string
           format: uuid
@@ -6915,6 +6917,11 @@ components:
     CatalogOperation:
       type: object
       properties:
+        events: {type: array, items: {$ref: '#/components/schemas/CatalogOperationEvent'}}
+        journalStatus: {type: string, description: Durable catalog worker state; only failed/retryable journal entries can use catalog retry.}
+        deliveryPhase: {type: string, description: Exact operation rollout or deletion outcome; unknown means no reliable observation is available.}
+        deliveryObservedAt: {type: string, format: date-time}
+        deliveryObservationError: {type: string}
         id:
           type: string
           format: uuid
@@ -7022,6 +7029,7 @@ components:
     InstalledAppEnriched:
       type: object
       properties:
+        notes: {type: string}
         id:
           type: string
           format: uuid
@@ -7095,7 +7103,29 @@ components:
           format: uuid
         description:
           type: string
+        cluster_ids:
+          type: array
+          description: Authoritative primary and secondary cluster memberships, returned on project reads and lists. Secondary membership derives from assigned project namespaces.
+          items:
+            type: string
+            format: uuid
+        namespace_scopes:
+          type: array
+          description: Namespace assignments grouped by their actual cluster. Includes the primary cluster even when empty. Never apply a namespace from one scope to another cluster.
+          items:
+            type: object
+            additionalProperties: false
+            required: [cluster_id, namespaces]
+            properties:
+              cluster_id:
+                type: string
+                format: uuid
+              namespaces:
+                type: array
+                items:
+                  type: string
         namespaces:
+          description: Legacy primary-cluster namespace assignments only.
           type: array
           items:
             type: string
@@ -13088,11 +13118,13 @@ paths:
       operationId: getClustersByClusterIdResourcesDiscovery
       tags: [Clusters]
       summary: "Read clusters/{cluster_id}/resources/discovery"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Requires clusters:read. Returns one bounded CRD page. Follow crd_continue until empty for the complete custom type index. Built-in resource discovery appears only on the first page; continuation pages return resources=[] and preserve partial/errors diagnostics.
       x-astronomer-route-class: public-api
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       parameters:
+        - {name: crd_limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 500}}
+        - {name: crd_continue, in: query, schema: {type: string, maxLength: 32768}}
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
@@ -13103,6 +13135,9 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '410': {description: CRD continuation expired; restart discovery.}
+        '429': {description: Kubernetes API rate limit exceeded.}
+        '502': {description: Kubernetes transport or malformed discovery response.}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/clusters/{cluster_id}/resources/schema:
@@ -14574,9 +14609,35 @@ paths:
       operationId: getClustersByClusterIdK8sProxy
       tags: [Clusters]
       summary: "Read clusters/{cluster_id}/k8s/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: |
+        Native Kubernetes proxy semantics remain unchanged when astronomerNamespace is omitted.
+        Repeated astronomerNamespace selects 1–100 nonempty DNS1123 namespaces for ordinary
+        grouped collection GET /apis/{group}/{version}/{resource}. Every selected namespace is
+        authorized on every page. Namespaces are sorted and deduplicated; each response holds
+        one namespace's native page (possibly empty with continuation). No aggregate count or
+        cross-namespace atomic snapshot is promised. metadata.remainingItemCount, resourceVersion,
+        and selfLink are omitted. Continue is a signed opaque cursor bound to caller, cluster,
+        resource, selection, limit and selectors; it expires after 15 minutes. Expiry, restart,
+        owner reassignment or changed scope returns 410: restart at the first page.
+        Native upstream status codes are preserved. Extension use on mutation, watch,
+        discovery, object, or already-namespaced paths is rejected with 400.
       x-astronomer-route-class: proxy
       parameters:
+        - name: astronomerNamespace
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 100
+            items: {type: string, minLength: 1, maxLength: 63}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 500, default: 50}
+        - name: continue
+          in: query
+          schema: {type: string}
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
@@ -14586,6 +14647,8 @@ paths:
               schema: {$ref: '#/components/schemas/KubernetesProxyResponse'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '410':
+          description: Scoped continuation expired or changed; restart the collection from its first page.
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -16315,6 +16378,44 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/logging/pipelines/{id}:
+    get:
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
+      x-astronomer-route-class: public-api
+      tags:
+      - operator-workflows
+      operationId: getLoggingPipelinesById
+      summary: Get logging pipeline
+      description: Requires logging:read on the owning cluster. Returns output associations, labels, and opaque filter JSON unchanged for full replacement editing.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Authorized resource representation.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - type: object
+                  required: [data]
+                - properties:
+                    data:
+                      $ref: '#/components/schemas/LoggingPipeline'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500': {description: Database or permission lookup failed.}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       x-astronomer-auth: "bearer-or-session"
       x-astronomer-rbac: "handler-and-route-policy"
@@ -25124,6 +25225,91 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '500':
           $ref: '#/components/responses/ErrorResponse'
+  /api/v1/clusters/{cluster_id}/snapshot-restores:
+    get:
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
+      x-astronomer-route-class: public-api
+      tags: [operator-workflows]
+      operationId: getClustersByClusterIdSnapshotRestores
+      summary: List snapshot restores
+      description: Requires clusters:read on both target and source clusters. Source visibility filters history before pagination and counts. Reports durable restore status and poller freshness. History is ordered by created_at DESC, id DESC. A completed source snapshot does not prove restore completion.
+      parameters:
+      - name: cluster_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Authorized resource representation.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/PageEnvelope'
+                - properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/SnapshotRestoreResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500': {description: Database or permission lookup failed.}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/clusters/{cluster_id}/snapshot-restores/{id}:
+    get:
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
+      x-astronomer-route-class: public-api
+      tags: [operator-workflows]
+      operationId: getClustersByClusterIdSnapshotRestoresById
+      summary: Get snapshot restore
+      description: Requires clusters:read on both target and source clusters. Reports durable restore status and poller freshness. A completed source snapshot does not prove restore completion.
+      parameters:
+      - name: cluster_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Authorized resource representation.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - type: object
+                  required: [data]
+                - properties:
+                    data:
+                      $ref: '#/components/schemas/SnapshotRestoreResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500': {description: Database or permission lookup failed.}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/clusters/{cluster_id}/snapshots:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -26122,6 +26308,10 @@ paths:
       security:
         - bearerJWT: []
       parameters:
+        - name: search
+          in: query
+          description: Case-insensitive literal substring of chart name, display name or description; filters authorized repositories before pagination and count.
+          schema: {type: string, maxLength: 256}
         - name: limit
           in: query
           schema:
@@ -26144,12 +26334,12 @@ paths:
           schema:
             type: string
             format: uuid
-          description: Select the project-scoped catalog union. Omit only for the globally managed catalog view.
+          description: Select the project-scoped catalog union. Mutually exclusive with cluster_id. Omit both for the globally managed catalog view.
         - name: cluster_id
           in: query
           required: false
           schema: {type: string, format: uuid}
-          description: Select the caller-visible catalog union for a cluster. Preferred by cluster Apps pages.
+          description: Select the caller-visible catalog union for a cluster. Mutually exclusive with project_id. Preferred by cluster Apps pages.
       responses:
         '200':
           description: Paginated page of charts.
@@ -26729,6 +26919,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/catalog/installed/{id}/:
+    get:
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
+      x-astronomer-route-class: public-api
+      tags:
+      - operator-workflows
+      operationId: getCatalogInstalledById
+      summary: Get installed release
+      description: Requires catalog:read on the owning cluster. Includes authoritative Flux status and app/tool provenance. Values are excluded; use the separately authorized
+        values endpoint.
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Authorized resource representation.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - type: object
+                  required: [data]
+                - properties:
+                    data:
+                      $ref: '#/components/schemas/InstalledAppEnriched'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500': {description: Database or permission lookup failed.}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
       x-astronomer-auth: "bearer/session auth"
       x-astronomer-rbac: "authenticated catalog surface; explicit catalog RBAC audit remains open"
@@ -27004,13 +27233,15 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [data]
                 properties:
-                  release_name:
-                    type: string
-                  namespace:
-                    type: string
-                  values_override:
-                    type: string
+                  data:
+                    type: object
+                    required: [release_name, namespace, values_override]
+                    properties:
+                      release_name: {type: string}
+                      namespace: {type: string}
+                      values_override: {type: string}
         '400':
           description: Invalid release ID.
           content:
@@ -27110,14 +27341,17 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/CatalogOperation'
-                  - type: object
-                    properties:
-                      events:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/CatalogOperationEvent'
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/CatalogOperation'
+                      - type: object
+                        properties:
+                          events:
+                            type: array
+                            items: {$ref: '#/components/schemas/CatalogOperationEvent'}
         '400':
           description: Invalid operation ID.
           content:
@@ -27173,7 +27407,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CatalogOperation'
+                $ref: '#/components/schemas/CatalogOperationEnvelope'
         '400':
           description: Invalid operation ID.
           content:
@@ -27641,7 +27875,7 @@ paths:
         Per-cluster Apps tab listing: installed_charts rows for the cluster with
         LEFT-joined chart metadata. Tool installs (chart_version_id NULL) come
         back with empty chart_* fields, a non-empty tool_slug, and
-        source_kind="tool". Requires RBAC `clusters:read`. Paginated envelope.
+        source_kind="tool". Requires RBAC `clusters:read`. Paginated envelope; values_override is excluded. Use the catalog-authorized values endpoint for release values.
       tags:
         - catalog
       security:
@@ -37274,6 +37508,18 @@ paths:
         is supplied the listing is scoped to that namespace, otherwise
         all namespaces are returned. RBAC: pods:list.
       parameters:
+        - name: namespaces
+          in: query
+          required: false
+          style: form
+          explode: true
+          description: Repeated selection intersected with RBAC before pagination. Omit for all authorized namespaces; a single empty value selects none. Mutually exclusive
+            with namespace.
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
         - name: cluster_id
           in: path
           required: true
@@ -37530,6 +37776,18 @@ paths:
         filtering. Returns a DRF-style paginated envelope (always 200).
         RBAC: workloads:list.
       parameters:
+        - name: namespaces
+          in: query
+          required: false
+          style: form
+          explode: true
+          description: Repeated selection intersected with RBAC before pagination. Omit for all authorized namespaces; a single empty value selects none. Mutually exclusive
+            with namespace.
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
         - {$ref: '#/components/parameters/Limit'}
         - {$ref: '#/components/parameters/Offset'}
         - name: cluster_id
@@ -39233,6 +39491,18 @@ paths:
         - Platform
       security:
         - bearerJWT: []
+      description: |
+        Native Kubernetes proxy semantics remain unchanged when astronomerNamespace is omitted.
+        Repeated astronomerNamespace selects 1–100 nonempty DNS1123 namespaces for ordinary
+        grouped collection GET /apis/{group}/{version}/{resource}. Every selected namespace is
+        authorized on every page. Namespaces are sorted and deduplicated; each response holds
+        one namespace's native page (possibly empty with continuation). No aggregate count or
+        cross-namespace atomic snapshot is promised. metadata.remainingItemCount, resourceVersion,
+        and selfLink are omitted. Continue is a signed opaque cursor bound to caller, cluster,
+        resource, selection, limit and selectors; it expires after 15 minutes. Expiry, restart,
+        owner reassignment or changed scope returns 410: restart at the first page.
+        Native upstream status codes are preserved. Extension use on mutation, watch,
+        discovery, object, or already-namespaced paths is rejected with 400.
       requestBody:
         required: false
         description: Opaque request body forwarded unchanged to the apiserver.
@@ -39246,6 +39516,22 @@ paths:
             schema:
               type: string
               format: binary
+      parameters:
+        - name: astronomerNamespace
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 100
+            items: {type: string, minLength: 1, maxLength: 63}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 500, default: 50}
+        - name: continue
+          in: query
+          schema: {type: string}
       responses:
         '200':
           description: Proxied apiserver response (status, headers and body forwarded through).
@@ -39264,6 +39550,8 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '410':
+          description: Scoped continuation expired or changed; restart the collection from its first page.
         '403':
           $ref: '#/components/responses/Forbidden'
         '502':

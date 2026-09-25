@@ -19,6 +19,10 @@ import (
 // --- Helm Charts ---
 
 func catalogProjectQuery(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool, bool) {
+	if strings.TrimSpace(r.URL.Query().Get("project_id")) != "" && strings.TrimSpace(r.URL.Query().Get("cluster_id")) != "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Select project_id or cluster_id, not both")
+		return uuid.Nil, false, false
+	}
 	raw := strings.TrimSpace(r.URL.Query().Get("project_id"))
 	if raw == "" {
 		return uuid.Nil, false, true
@@ -51,7 +55,9 @@ func (h *CatalogHandler) visibleCatalogRepositoryIDs(ctx context.Context, cluste
 	if !ok {
 		return nil, errors.New("cluster project resolver is unavailable")
 	}
-	projects, err := resolver.ListProjectsByCluster(ctx, sqlc.ListProjectsByClusterParams{ClusterID: clusterID, QueryLimit: 10_000, QueryOffset: 0})
+	projects, err := collectCatalogVisibilityPages(ctx, func(limit, offset int32) ([]sqlc.Project, error) {
+		return resolver.ListCatalogProjectsByCluster(ctx, sqlc.ListCatalogProjectsByClusterParams{ClusterID: clusterID, QueryLimit: limit, QueryOffset: offset})
+	}, func(row sqlc.Project) uuid.UUID { return row.ID })
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +97,9 @@ func (h *CatalogHandler) visibleCatalogRepositoryIDs(ctx context.Context, cluste
 		return nil, errCatalogClusterAccessDenied
 	}
 	repositories := make(map[uuid.UUID]struct{})
-	globals, err := h.queries.ListGlobalHelmRepositories(ctx, sqlc.ListGlobalHelmRepositoriesParams{Limit: 10_000, Offset: 0})
+	globals, err := collectCatalogVisibilityPages(ctx, func(limit, offset int32) ([]sqlc.HelmRepository, error) {
+		return h.queries.ListGlobalHelmRepositories(ctx, sqlc.ListGlobalHelmRepositoriesParams{Limit: limit, Offset: offset})
+	}, func(row sqlc.HelmRepository) uuid.UUID { return row.ID })
 	if err != nil {
 		return nil, err
 	}
@@ -188,127 +196,29 @@ func catalogVisibleToProject(ctx context.Context, queries CatalogQuerier, projec
 // Migration 071: also accepts ?tag= to filter on helm_chart_tags (used by
 // the service-mesh tab "Install" deep-link).
 func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
-	tag := strings.TrimSpace(r.URL.Query().Get("tag"))
-	pid, projectScoped, ok := catalogProjectQuery(w, r)
+	filter, ok := h.catalogChartFilter(w, r)
 	if !ok {
 		return
 	}
-	clusterID, clusterScoped, ok := catalogClusterQuery(w, r)
-	if !ok {
+	limit, offset := queryLimit(r, 20), queryOffset(r)
+	if !filter.GlobalScope && len(filter.RepositoryIds) == 0 {
+		paging.Write(w, []sqlc.HelmChart{}, paging.Exact(0, limit, offset, 0))
 		return
 	}
-	if projectScoped && !h.authz.authorizeProjectAction(w, r, pid, rbac.ResourceCatalog, rbac.VerbRead) {
-		return
-	}
-	if !projectScoped && !clusterScoped && !h.authz.authorizeGlobalAction(w, r, rbac.ResourceCatalog, rbac.VerbRead) {
-		return
-	}
-
-	if tag != "" {
-		if projectScoped {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "tag filtering is available only on the global catalog")
-			return
-		}
-		charts, err := h.queries.ListHelmChartsByTag(r.Context(), sqlc.ListHelmChartsByTagParams{
-			Tag:    tag,
-			Limit:  limit,
-			Offset: offset,
-		})
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts by tag")
-			return
-		}
-		total, err := h.queries.CountHelmChartsByTag(r.Context(), tag)
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count charts by tag")
-			return
-		}
-		paging.Write(w, charts, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(charts)))
-		return
-	}
-
-	if projectScoped {
-		visibleCatalogs, err := h.queries.ListCatalogsForProject(r.Context(), pid)
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to resolve project catalogs")
-			return
-		}
-		// Single IN-list query over the project's visible catalog set with
-		// real LIMIT/OFFSET + COUNT. The old path fanned out a Limit:1000
-		// query per catalog and sliced in Go, which silently truncated any
-		// catalog holding more than 1000 charts.
-		repoIDs := make([]uuid.UUID, 0, len(visibleCatalogs))
-		for _, cat := range visibleCatalogs {
-			repoIDs = append(repoIDs, cat.ID)
-		}
-		if len(repoIDs) == 0 {
-			paging.Write(w, []sqlc.HelmChart{}, paging.Exact(0, queryLimit(r, 20), queryOffset(r), len([]sqlc.HelmChart{})))
-			return
-		}
-		charts, err := h.queries.ListChartsByRepositoryIDs(r.Context(), sqlc.ListChartsByRepositoryIDsParams{
-			RepositoryIds: repoIDs,
-			QueryLimit:    limit,
-			QueryOffset:   offset,
-		})
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project charts")
-			return
-		}
-		total, err := h.queries.CountChartsByRepositoryIDs(r.Context(), repoIDs)
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count project charts")
-			return
-		}
-		paging.Write(w, charts, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(charts)))
-		return
-	}
-
-	if clusterScoped {
-		repoIDs, visibilityErr := h.visibleCatalogRepositoryIDs(r.Context(), clusterID)
-		if visibilityErr != nil {
-			if errors.Is(visibilityErr, errCatalogClusterAccessDenied) {
-				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have catalog access on this cluster")
-			} else {
-				RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to resolve cluster catalogs")
-			}
-			return
-		}
-		if len(repoIDs) == 0 {
-			paging.Write(w, []sqlc.HelmChart{}, paging.Exact(0, int(limit), int(offset), 0))
-			return
-		}
-		charts, listErr := h.queries.ListChartsByRepositoryIDs(r.Context(), sqlc.ListChartsByRepositoryIDsParams{RepositoryIds: repoIDs, QueryLimit: limit, QueryOffset: offset})
-		if listErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster charts")
-			return
-		}
-		total, countErr := h.queries.CountChartsByRepositoryIDs(r.Context(), repoIDs)
-		if countErr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count cluster charts")
-			return
-		}
-		paging.Write(w, charts, paging.Exact(total, int(limit), int(offset), len(charts)))
-		return
-	}
-
-	charts, err := h.queries.ListHelmCharts(r.Context(), sqlc.ListHelmChartsParams{
-		Limit:  limit,
-		Offset: offset,
+	charts, err := h.queries.ListFilteredHelmCharts(r.Context(), sqlc.ListFilteredHelmChartsParams{
+		GlobalScope: filter.GlobalScope, RepositoryIds: filter.RepositoryIds,
+		Tag: filter.Tag, SearchPattern: filter.SearchPattern, QueryLimit: int32(limit), QueryOffset: int32(offset),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")
 		return
 	}
-
-	total, err := h.queries.CountHelmCharts(r.Context())
+	total, err := h.queries.CountFilteredHelmCharts(r.Context(), filter)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count charts")
 		return
 	}
-
-	paging.Write(w, charts, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(charts)))
+	paging.Write(w, charts, paging.Exact(total, limit, offset, len(charts)))
 }
 
 // GetChart handles GET /api/v1/catalog/charts/{id}/.

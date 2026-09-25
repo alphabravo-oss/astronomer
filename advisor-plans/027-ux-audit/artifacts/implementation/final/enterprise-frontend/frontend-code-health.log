@@ -1,0 +1,12 @@
+
+> astronomer-frontend@1.2.0 code-health
+> npm run openapi:check && node ../scripts/check-frontend-raw-transport.mjs && node ../scripts/check-frontend-query-cancellation.mjs && node ../scripts/check-node-version-alignment.mjs && node ../scripts/code-health-inventory.mjs --check --verify-doc && node ../scripts/operation-task-inventory.mjs --check --verify-doc
+
+
+> astronomer-frontend@1.2.0 openapi:check
+> node ../scripts/generate-openapi-types.mjs --check && node ../scripts/generate-openapi-client.mjs --check
+
+Generated OpenAPI frontend client is current.
+Frontend raw transport inventory: 25 intentional Kubernetes adapter call(s); ordinary JSON calls must use generated operations.
+frontend query cancellation contract passed: 10 core hook modules
+Node runtime alignment passed: 24.21.0

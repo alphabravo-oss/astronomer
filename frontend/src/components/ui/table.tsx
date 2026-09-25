@@ -8,11 +8,19 @@ import { cn } from "@/lib/utils";
 
 export function Table({
   className,
+  layout = "fit",
   ...props
-}: TableHTMLAttributes<HTMLTableElement>) {
+}: TableHTMLAttributes<HTMLTableElement> & {
+  layout?: "fit" | "scroll";
+}) {
   return (
     <table
-      className={cn("app-data-table w-full text-sm", className)}
+      className={cn(
+        "app-data-table w-full text-sm",
+        layout === "fit" && "app-data-table-fit table-fixed max-w-full",
+        className,
+      )}
+      data-layout={layout}
       {...props}
     />
   );
@@ -59,7 +67,10 @@ export function TableHead({
   return (
     <th
       scope={scope}
-      className={cn("h-10 px-3 text-left text-xs font-semibold", className)}
+      className={cn(
+        "h-10 overflow-hidden text-ellipsis whitespace-nowrap px-3 text-left text-xs font-semibold",
+        className,
+      )}
       {...props}
     />
   );
@@ -70,6 +81,12 @@ export function TableCell({
   ...props
 }: TdHTMLAttributes<HTMLTableCellElement>) {
   return (
-    <td className={cn("px-3 py-2.5 text-sm leading-5", className)} {...props} />
+    <td
+      className={cn(
+        "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-3 py-2.5 text-sm leading-5",
+        className,
+      )}
+      {...props}
+    />
   );
 }

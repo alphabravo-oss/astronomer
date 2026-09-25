@@ -607,7 +607,10 @@ export function AutomationTab() {
           />
         ) : deadLetters.data?.length ? (
           <div className="overflow-x-auto">
-            <Table className="w-full min-w-[760px] text-left text-sm">
+            <Table
+              layout="scroll"
+              className="w-full min-w-[760px] text-left text-sm"
+            >
               <caption className="sr-only">
                 Charlie dead-letter trigger lifecycle metadata
               </caption>

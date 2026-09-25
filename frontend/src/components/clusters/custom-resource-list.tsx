@@ -1,5 +1,10 @@
+import { apiErrorStatus } from "@/lib/api/errors";
+import { usePermissionDecision } from "@/lib/permission-hooks";
+import { collectionScope } from "@/lib/cluster-scope-collection";
+import { useClusterNamespaceScope } from "@/lib/cluster-scope";
+import { useClusterDiscovery } from "@/components/layout/use-cluster-discovery-nav";
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useLocation } from "@tanstack/react-router";
 import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
 import {
   crListPath,
@@ -12,7 +17,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { ResourceMasthead } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
 import { ActionButton } from "@/components/ui/action-button";
-import { PermissionState } from "@/components/ui/empty-state";
+import { PermissionState, ErrorState } from "@/components/ui/empty-state";
 import { ResourceActionMenu } from "@/components/resources/resource-action-menu";
 import { useClusterResourcePermissions } from "@/components/resources/resource-action-policy";
 
@@ -26,30 +31,95 @@ interface CRRow {
 }
 
 /** One server page at a time; proxy continuation tokens remain opaque. */
-export function CustomResourceList({
+export function CustomResourceList(props: {
+  clusterId: string;
+  group: string;
+  version: string;
+  plural: string;
+}) {
+  const scope = useClusterNamespaceScope(props.clusterId);
+  const discovery = useClusterDiscovery(props.clusterId);
+  const type = [...discovery.crdsByGroup.values()]
+    .flat()
+    .find(
+      (item) =>
+        item.group === props.group &&
+        item.servedVersions.includes(props.version) &&
+        item.plural === props.plural,
+    );
+  if (discovery.isLoading)
+    return <p role="status">Resolving resource scope…</p>;
+  if (discovery.isError || !type)
+    return (
+      <div role="alert">
+        <p>Resource scope unavailable.</p>
+        <ActionButton onClick={() => void discovery.retry?.()}>
+          Retry discovery
+        </ActionButton>
+      </div>
+    );
+  if (type.namespaced && scope.error)
+    return (
+      <ErrorState title="Namespace scope unavailable" onRetry={scope.retry} />
+    );
+  const selection = collectionScope(
+    type.namespaced ? scope.selectedNamespaces : null,
+  );
+  if (!selection.enabled) return <p role="status">{selection.message}</p>;
+  return (
+    <ScopedCustomResourceList
+      key={`${props.clusterId}/${props.group}/${props.version}/${props.plural}/${JSON.stringify(selection)}`}
+      {...props}
+      namespace={selection.namespace}
+      namespaces={selection.namespaces}
+      namespaced={type.namespaced}
+    />
+  );
+}
+
+function ScopedCustomResourceList({
+  namespace,
+  namespaces,
+  namespaced,
   clusterId,
   group,
   version,
   plural,
 }: {
+  namespace?: string;
+  namespaces?: string[];
+  namespaced: boolean;
   clusterId: string;
   group: string;
   version: string;
   plural: string;
 }) {
   const navigate = useNavigate();
+  const search = useLocation({ select: (location) => location.searchStr });
+  const scope = useClusterNamespaceScope(clusterId);
+  const clusterList = usePermissionDecision("custom_resources", "list", {
+    type: "cluster",
+    id: clusterId,
+  });
+  const selected = namespace ? [namespace] : namespaces;
+  const canList =
+    clusterList.allowed ||
+    (namespaced &&
+      !!selected?.length &&
+      selected.every((ns) => scope.allows("custom_resources", "list", ns)));
   const [tokens, setTokens] = useState([""]);
   const permissions = useClusterResourcePermissions(
     clusterId,
     "custom_resources",
   );
   const params = new URLSearchParams({ limit: "50" });
+  for (const ns of namespaces ?? []) params.append("astronomerNamespace", ns);
   const token = tokens.at(-1);
   if (token) params.set("continue", token);
   const query = useK8sResource(
     clusterId,
-    `${crListPath(group, version, plural)}?${params}`,
-    permissions.read.allowed,
+    `${namespace ? crResourcePath(group, version, plural, "", namespace).replace(/\/$/, "") : crListPath(group, version, plural)}?${params}`,
+    canList,
   );
   const rows = useMemo<CRRow[]>(() => {
     const items =
@@ -73,14 +143,16 @@ export function CustomResourceList({
         sortAccessor: (row) => row.name,
         accessor: (row) => (
           <Link
-            to={crDetailHref(
-              clusterId,
-              group,
-              version,
-              plural,
-              row.name,
-              row.namespace,
-            )}
+            to={
+              crDetailHref(
+                clusterId,
+                group,
+                version,
+                plural,
+                row.name,
+                row.namespace,
+              ) + search
+            }
             onClick={(event) => event.stopPropagation()}
             className="min-w-0 truncate font-medium text-foreground font-mono text-xs hover:underline"
           >
@@ -107,11 +179,10 @@ export function CustomResourceList({
         ),
       },
     ],
-    [clusterId, group, version, plural],
+    [clusterId, group, version, plural, search],
   );
 
-  if (!permissions.read.allowed)
-    return <PermissionState permission="custom_resources:read" />;
+  if (!canList) return <PermissionState permission="custom_resources:list" />;
 
   return (
     <div className="space-y-4">
@@ -121,14 +192,28 @@ export function CustomResourceList({
         mono
         description={
           <span className="font-mono">
-            {group ? `${group}/${version}` : version}
+            {group ? `${group}/${version}` : version} ·{" "}
+            {namespaced
+              ? (namespace ??
+                namespaces?.join(", ") ??
+                "All authorized namespaces")
+              : "Cluster scoped — namespace selection does not apply"}
           </span>
         }
       />
       <QueryStates
-        query={query}
-        permission="custom_resources:read"
+        query={
+          apiErrorStatus(query.error) === 410
+            ? { ...query, refetch: () => setTokens([""]) }
+            : query
+        }
+        permission="custom_resources:list"
         errorTitle="Custom resources unavailable"
+        errorDescription={
+          apiErrorStatus(query.error) === 410
+            ? "The collection cursor expired or its scope changed. Retry to restart at the first page."
+            : undefined
+        }
       >
         <DataTable
           data={rows}
@@ -137,9 +222,9 @@ export function CustomResourceList({
             {
               key: "actions",
               header: "Actions",
+              rowActions: true,
               sortable: false,
               hideable: false,
-              width: "60px",
               accessor: (row) => (
                 <ResourceActionMenu
                   clusterId={clusterId}
@@ -163,14 +248,15 @@ export function CustomResourceList({
           }
           onRowClick={(row) =>
             void navigate({
-              to: crDetailHref(
-                clusterId,
-                group,
-                version,
-                plural,
-                row.name,
-                row.namespace,
-              ),
+              to:
+                crDetailHref(
+                  clusterId,
+                  group,
+                  version,
+                  plural,
+                  row.name,
+                  row.namespace,
+                ) + search,
             })
           }
           searchPlaceholder={`Search this page of ${plural}...`}

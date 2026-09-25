@@ -12,9 +12,11 @@
 // URL never has an empty path segment — see crListHref/crDetailHref.
 
 import { useMemo } from "react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
+import { useQuery } from "@tanstack/react-query";
+import { getCompleteResourceDiscovery } from "@/lib/api/resources";
+import { queryKeys } from "@/lib/query-keys";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { ResourceDetail } from "@/components/resources/resource-detail";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -35,8 +37,9 @@ function decodeGroup(seg: string): string {
 export function CustomResourcesPage({ slug }: { slug: string[] }) {
   const params = useParams({ from: "/dashboard/clusters/$id" });
   const clusterId = params.id;
+  const searchStr = useLocation({ select: (location) => location.searchStr });
 
-  const read = usePermissionDecision(CR_PERMISSION, "read", {
+  const read = usePermissionDecision("clusters", "read", {
     type: "cluster",
     id: clusterId,
   });
@@ -83,21 +86,12 @@ export function CustomResourcesPage({ slug }: { slug: string[] }) {
       name={name}
       k8sPath={k8sPath}
       permissionResource={CR_PERMISSION}
+      collectionHref={`${crListHref(clusterId, group, version, plural)}${searchStr}`}
     />
   );
 }
 
 // ── E1: CRD list ──
-
-interface CRDItem {
-  metadata?: { name?: string; creationTimestamp?: string };
-  spec?: {
-    group?: string;
-    scope?: string;
-    names?: { kind?: string; plural?: string };
-    versions?: Array<{ name?: string; served?: boolean; storage?: boolean }>;
-  };
-}
 
 interface CRDRow {
   name: string;
@@ -108,24 +102,6 @@ interface CRDRow {
   storageVersion: string;
   scope: string;
   createdAt: string;
-}
-
-function toCRDRow(item: CRDItem): CRDRow {
-  const spec = item.spec ?? {};
-  const versions = (spec.versions ?? [])
-    .map((v) => v.name ?? "")
-    .filter(Boolean);
-  const storage = (spec.versions ?? []).find((v) => v.storage)?.name;
-  return {
-    name: item.metadata?.name ?? "",
-    group: spec.group ?? "",
-    kind: spec.names?.kind ?? "",
-    plural: spec.names?.plural ?? "",
-    versions,
-    storageVersion: storage ?? versions[0] ?? "",
-    scope: spec.scope ?? "",
-    createdAt: item.metadata?.creationTimestamp ?? "",
-  };
 }
 
 const crdColumns: Column<CRDRow>[] = [
@@ -189,17 +165,34 @@ const crdColumns: Column<CRDRow>[] = [
 
 function CRDList({ clusterId }: { clusterId: string }) {
   const navigate = useNavigate();
-  // E1: a SINGLE proxy GET to the CRD list endpoint — no /apis discovery walk.
-  const query = useK8sResource(
-    clusterId,
-    "apis/apiextensions.k8s.io/v1/customresourcedefinitions",
+  const search = useLocation({ select: (location) => location.searchStr });
+  const query = useQuery({
+    queryKey: queryKeys.generic.completeDiscovery(clusterId),
+    queryFn: ({ signal }) => getCompleteResourceDiscovery(clusterId, signal),
+    staleTime: 5 * 60_000,
+    throwOnError: false,
+  });
+  const rows = useMemo<CRDRow[]>(
+    () =>
+      (query.data?.crds ?? [])
+        .map((item) => ({
+          name: String(item.name ?? ""),
+          group: String(item.group ?? ""),
+          kind: String(item.kind ?? ""),
+          plural: String(item.plural ?? ""),
+          versions: ((item.versions as Array<{ name: string }>) ?? []).map(
+            (version) => version.name,
+          ),
+          storageVersion:
+            (
+              (item.versions as Array<{ name: string; storage: boolean }>) ?? []
+            ).find((version) => version.storage)?.name ?? "",
+          scope: String(item.scope ?? ""),
+          createdAt: "",
+        }))
+        .filter((row) => row.plural && row.storageVersion),
+    [query.data],
   );
-
-  const rows = useMemo<CRDRow[]>(() => {
-    const items =
-      (query.data as { items?: CRDItem[] } | undefined)?.items ?? [];
-    return items.map(toCRDRow).filter((r) => r.plural && r.storageVersion);
-  }, [query.data]);
 
   const columns = useMemo<Column<CRDRow>[]>(
     () => [
@@ -207,12 +200,10 @@ function CRDList({ clusterId }: { clusterId: string }) {
         ...crdColumns[0],
         accessor: (row) => (
           <RouterLink
-            to={crListHref(
-              clusterId,
-              row.group,
-              row.storageVersion,
-              row.plural,
-            )}
+            to={
+              crListHref(clusterId, row.group, row.storageVersion, row.plural) +
+              search
+            }
             onClick={(e) => e.stopPropagation()}
             className="font-medium text-foreground text-xs hover:underline"
           >
@@ -222,7 +213,7 @@ function CRDList({ clusterId }: { clusterId: string }) {
       },
       ...crdColumns.slice(1),
     ],
-    [clusterId],
+    [clusterId, search],
   );
 
   return (
@@ -230,7 +221,7 @@ function CRDList({ clusterId }: { clusterId: string }) {
       <PageHeader title="Custom Resources" />
       <QueryStates
         query={query}
-        permission="custom_resources:read"
+        permission="clusters:read"
         errorTitle="Custom resource definitions unavailable"
       >
         <DataTable
@@ -239,12 +230,13 @@ function CRDList({ clusterId }: { clusterId: string }) {
           keyExtractor={(r) => r.name}
           onRowClick={(row) =>
             void navigate({
-              to: crListHref(
-                clusterId,
-                row.group,
-                row.storageVersion,
-                row.plural,
-              ),
+              to:
+                crListHref(
+                  clusterId,
+                  row.group,
+                  row.storageVersion,
+                  row.plural,
+                ) + search,
             })
           }
           searchPlaceholder="Search custom resource definitions..."

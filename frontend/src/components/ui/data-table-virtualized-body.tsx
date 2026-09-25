@@ -29,6 +29,7 @@ export function VirtualizedGrid<T extends RowData>({
   scrollRef,
   selectable,
   resizable,
+  layout,
   cellPadding,
   selectPadding,
   rowHeight,
@@ -55,6 +56,7 @@ export function VirtualizedGrid<T extends RowData>({
   totalRows: number;
   selectable: boolean | ((row: T) => boolean);
   resizable: boolean;
+  layout: "fit" | "scroll";
   cellPadding: string;
   selectPadding: string;
   rowHeight: number;
@@ -74,11 +76,17 @@ export function VirtualizedGrid<T extends RowData>({
 }) {
   // Per-column width style shared by header + body cells so they line up.
   const colStyle = (col: Column<T>): React.CSSProperties => {
+    if (col.rowActions === true) {
+      const width = col.width ?? "2.5rem";
+      return { width, flex: `0 0 ${width}`, minWidth: width };
+    }
     const width = resizable
       ? `${table.getColumn(col.key)?.getSize()}px`
       : col.width;
     return width
-      ? { width, flex: `0 0 ${width}`, minWidth: width }
+      ? layout === "scroll"
+        ? { width, flex: `0 0 ${width}`, minWidth: width }
+        : { width, flex: `0 1 ${width}`, minWidth: 0 }
       : { flex: "1 1 0", minWidth: 0 };
   };
   const selectColStyle: React.CSSProperties = {
@@ -118,7 +126,10 @@ export function VirtualizedGrid<T extends RowData>({
             focusRowAt(Math.min(Math.max(focusedRowIndex, 0), rows.length - 1));
           }
         }}
-        className="relative max-h-[28rem] overflow-auto text-sm outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring"
+        className={cn(
+          "relative max-h-[28rem] overflow-y-auto text-sm outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
+          layout === "scroll" ? "overflow-x-auto" : "overflow-x-hidden",
+        )}
       >
         {/* Sticky header row */}
         <div
@@ -141,13 +152,15 @@ export function VirtualizedGrid<T extends RowData>({
           )}
           {activeColumns.map((col) => {
             const column = table.getColumn(col.key);
+            const rowActions = col.rowActions === true;
+            const sortable = !rowActions && col.sortable !== false;
             const sorted = column?.getIsSorted();
             return (
               <div
                 key={col.key}
                 role="columnheader"
                 aria-sort={
-                  col.sortable !== false
+                  sortable
                     ? sorted === "asc"
                       ? "ascending"
                       : sorted === "desc"
@@ -157,28 +170,28 @@ export function VirtualizedGrid<T extends RowData>({
                 }
                 className={cn(
                   cellPadding,
-                  "flex items-center gap-1 font-medium whitespace-nowrap",
-                  col.sortable !== false &&
+                  "flex min-w-0 items-center gap-1 overflow-hidden font-medium",
+                  rowActions && "px-1.5",
+                  sortable &&
                     "cursor-pointer select-none hover:text-foreground",
                   alignClass(col),
                 )}
                 style={colStyle(col)}
-                tabIndex={col.sortable !== false ? 0 : undefined}
-                onClick={() =>
-                  col.sortable !== false && column?.toggleSorting()
-                }
+                tabIndex={sortable ? 0 : undefined}
+                onClick={() => sortable && column?.toggleSorting()}
                 onKeyDown={(event) => {
-                  if (
-                    col.sortable === false ||
-                    (event.key !== "Enter" && event.key !== " ")
-                  )
+                  if (!sortable || (event.key !== "Enter" && event.key !== " "))
                     return;
                   event.preventDefault();
                   column?.toggleSorting();
                 }}
               >
-                {col.header}
-                {col.sortable !== false && (
+                <span
+                  className={cn("min-w-0 truncate", rowActions && "sr-only")}
+                >
+                  {col.header || (rowActions ? "Actions" : "")}
+                </span>
+                {sortable && (
                   <span className="text-muted-foreground/50">
                     {sorted === "asc" ? (
                       <ChevronUp className="h-3.5 w-3.5" />
@@ -226,23 +239,30 @@ export function VirtualizedGrid<T extends RowData>({
                     <div className="h-4 w-4 rounded-sm bg-muted animate-pulse" />
                   </div>
                 )}
-                {activeColumns.map((col) => (
-                  <div
-                    key={col.key}
-                    role="gridcell"
-                    className={cn("flex items-center", cellPadding)}
-                    style={colStyle(col)}
-                  >
+                {activeColumns.map((col) => {
+                  const rowActions = col.rowActions === true;
+                  return (
                     <div
-                      className="h-4 w-24 max-w-full rounded-sm bg-muted animate-pulse"
-                      style={{
-                        width: col.width
-                          ? `min(100%, ${col.width})`
-                          : undefined,
-                      }}
-                    />
-                  </div>
-                ))}
+                      key={col.key}
+                      role="gridcell"
+                      className={cn(
+                        "flex items-center",
+                        cellPadding,
+                        rowActions && "px-1.5",
+                      )}
+                      style={colStyle(col)}
+                    >
+                      <div
+                        className="h-4 w-24 max-w-full rounded-sm bg-muted animate-pulse"
+                        style={{
+                          width: col.width
+                            ? `min(100%, ${col.width})`
+                            : undefined,
+                        }}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -333,7 +353,7 @@ export function VirtualizedGrid<T extends RowData>({
                         onRowClick?.(row.original);
                     }}
                     className={cn(
-                      "flex w-full whitespace-nowrap border-b border-border transition-colors",
+                      "flex w-full border-b border-border transition-colors",
                       "focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
                       onRowClick && "cursor-pointer hover:bg-muted/50",
                       isSelected && "bg-muted/30",
@@ -353,20 +373,37 @@ export function VirtualizedGrid<T extends RowData>({
                         />
                       </div>
                     )}
-                    {activeColumns.map((col) => (
-                      <div
-                        key={col.key}
-                        role="gridcell"
-                        className={cn(
-                          "flex min-w-0 items-center overflow-hidden whitespace-nowrap",
-                          cellPadding,
-                          alignClass(col),
-                        )}
-                        style={colStyle(col)}
-                      >
-                        {col.accessor(row.original)}
-                      </div>
-                    ))}
+                    {activeColumns.map((col) => {
+                      const rowActions = col.rowActions === true;
+                      return (
+                        <div
+                          key={col.key}
+                          role="gridcell"
+                          className={cn(
+                            "flex min-w-0 items-center overflow-hidden",
+                            cellPadding,
+                            rowActions && "px-1.5",
+                            alignClass(col),
+                          )}
+                          style={colStyle(col)}
+                        >
+                          <div
+                            className={cn(
+                              "min-w-0",
+                              rowActions
+                                ? "overflow-visible"
+                                : "overflow-hidden text-ellipsis",
+                              !rowActions &&
+                                (col.wrap
+                                  ? "whitespace-normal break-words"
+                                  : "whitespace-nowrap"),
+                            )}
+                          >
+                            {col.accessor(row.original)}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );

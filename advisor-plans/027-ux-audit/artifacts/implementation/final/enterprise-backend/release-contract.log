@@ -1,0 +1,23 @@
+make[1]: Entering directory '/root/astronomer-all/astronomer'
+./scripts/check-build-capacity.sh --path .
+check-build-capacity: path=. mount=/ available=65GiB free=20% required=20GiB/20%
+./scripts/compatibility-contract.py check
+compatibility contract: valid; generated views are current
+python3 -m unittest scripts/tests/release_manifest_test.py scripts/tests/mirror_release_test.py scripts/tests/resolve_release_images_test.py scripts/tests/airgap_kit_test.py
+........airgap-kit: air-gap kit commands do not accept credentials, tokens, or secret values
+airgap-kit: air-gap kit commands do not accept credentials, tokens, or secret values
+......
+----------------------------------------------------------------------
+Ran 14 tests in 0.470s
+
+OK
+./scripts/tests/release_artifacts_test.sh
+release-artifacts-test: OK
+walk.go:75: found symbolic link in path: /root/astronomer-all/astronomer/deploy/chart/dashboards resolves to /root/astronomer-all/astronomer/deploy/dashboards. Contents of linked file included and used
+walk.go:75: found symbolic link in path: /root/astronomer-all/astronomer/deploy/chart/dashboards resolves to /root/astronomer-all/astronomer/deploy/dashboards. Contents of linked file included and used
+walk.go:75: found symbolic link in path: /root/astronomer-all/astronomer/deploy/chart/dashboards resolves to /root/astronomer-all/astronomer/deploy/dashboards. Contents of linked file included and used
+go test ./deploy/bundles ./internal/releasecontract ./deploy -run 'TestRelease|TestInterruptedRelease|TestExactRelease|TestSixImage' -count=1
+ok  	github.com/alphabravocompany/astronomer-go/deploy/bundles	0.213s
+ok  	github.com/alphabravocompany/astronomer-go/internal/releasecontract	0.003s [no tests to run]
+ok  	github.com/alphabravocompany/astronomer-go/deploy	0.576s
+make[1]: Leaving directory '/root/astronomer-all/astronomer'

@@ -124,7 +124,7 @@ async function mockApi(page: Page, mutations: MutationRecord[]) {
     }
     if (path === `/clusters/${CLUSTER_ID}/resources/schema`) {
       return route.fulfill({
-        json: {
+        json: apiResponse({
           resource: {
             resource_type: "deployments",
             api_base: "apis/apps/v1",
@@ -147,7 +147,7 @@ async function mockApi(page: Page, mutations: MutationRecord[]) {
           schema_available: true,
           definitions: {},
           definitions_truncated: false,
-        },
+        }),
       });
     }
     if (path.endsWith("/events")) {
@@ -240,6 +240,7 @@ test("keyboard-only resource create, scale, restart, YAML preview/apply, and del
   const createDialog = page.getByRole("dialog", { name: "Create Deployment" });
   await expect(createDialog).toBeVisible();
   const guidedTab = createDialog.getByRole("tab", { name: "guided" });
+  await expect(guidedTab).toBeEnabled();
   await guidedTab.focus();
   await page.keyboard.press("ArrowRight");
   const yamlEditorTab = createDialog.getByRole("tab", { name: "yaml" });

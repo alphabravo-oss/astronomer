@@ -8,6 +8,22 @@ const USER_ID = "1fa85f64-5717-4562-b3fc-2c963f66afa6";
 const ROLE_ID = "2fa85f64-5717-4562-b3fc-2c963f66afa6";
 const SNAPSHOT_ID = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
 
+const restoreWire = {
+  id: "restore-keyboard",
+  snapshot_id: SNAPSHOT_ID,
+  source_cluster_id: CLUSTER_ID,
+  target_cluster_id: CLUSTER_ID,
+  velero_name: "restore-nightly-prod",
+  phase: "New",
+  spec: { restorePVs: true },
+  created_at: "2026-08-23T00:00:00Z",
+  errors_count: 0,
+  warnings_count: 0,
+  last_poll_error: "",
+  start_time: null,
+  completion_time: null,
+};
+
 const adminUser = {
   id: USER_ID,
   username: "admin",
@@ -283,6 +299,24 @@ async function mockApi(pageContext: Page, mutations: MutationRecord[]) {
         }),
       });
     }
+    if (
+      path === `/clusters/${CLUSTER_ID}/snapshot-restores` &&
+      method === "GET"
+    ) {
+      return route.fulfill({
+        json: page(
+          mutations.some((row) => row.path.endsWith("/restore"))
+            ? [restoreWire]
+            : [],
+        ),
+      });
+    }
+    if (
+      path === `/clusters/${CLUSTER_ID}/snapshot-restores/restore-keyboard` &&
+      method === "GET"
+    ) {
+      return route.fulfill({ json: data(restoreWire) });
+    }
     if (path === `/clusters/${CLUSTER_ID}/snapshots` && method === "GET") {
       return route.fulfill({
         json: data({
@@ -317,13 +351,7 @@ async function mockApi(pageContext: Page, mutations: MutationRecord[]) {
       record();
       return route.fulfill({
         status: 202,
-        json: data({
-          id: "restore-keyboard",
-          name: "restore-nightly-prod",
-          snapshotId: SNAPSHOT_ID,
-          targetClusterId: CLUSTER_ID,
-          phase: "New",
-        }),
+        json: data(restoreWire),
       });
     }
 

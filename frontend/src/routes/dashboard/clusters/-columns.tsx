@@ -151,6 +151,7 @@ export function clusterColumns(
     {
       key: "actions",
       header: "",
+      rowActions: true,
       accessor: (row) => (
         <ActionMenu
           items={[

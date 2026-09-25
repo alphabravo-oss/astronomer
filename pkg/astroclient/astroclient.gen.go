@@ -3576,11 +3576,20 @@ type CatalogInstallationPreview struct {
 
 // CatalogOperation defines model for CatalogOperation.
 type CatalogOperation struct {
-	AttemptCount *int                `json:"attemptCount,omitempty"`
-	CompletedAt  *time.Time          `json:"completedAt"`
-	CreatedAt    *time.Time          `json:"createdAt,omitempty"`
-	ErrorMessage *string             `json:"errorMessage,omitempty"`
-	Id           *openapi_types.UUID `json:"id,omitempty"`
+	AttemptCount             *int       `json:"attemptCount,omitempty"`
+	CompletedAt              *time.Time `json:"completedAt"`
+	CreatedAt                *time.Time `json:"createdAt,omitempty"`
+	DeliveryObservationError *string    `json:"deliveryObservationError,omitempty"`
+	DeliveryObservedAt       *time.Time `json:"deliveryObservedAt,omitempty"`
+
+	// DeliveryPhase Exact operation rollout or deletion outcome; unknown means no reliable observation is available.
+	DeliveryPhase *string                  `json:"deliveryPhase,omitempty"`
+	ErrorMessage  *string                  `json:"errorMessage,omitempty"`
+	Events        *[]CatalogOperationEvent `json:"events,omitempty"`
+	Id            *openapi_types.UUID      `json:"id,omitempty"`
+
+	// JournalStatus Durable catalog worker state; only failed/retryable journal entries can use catalog retry.
+	JournalStatus *string `json:"journalStatus,omitempty"`
 
 	// OperationType install / upgrade / rollback / uninstall
 	OperationType *string    `json:"operationType,omitempty"`
@@ -7616,6 +7625,7 @@ type InstalledAppEnriched struct {
 	DisplayName      *string                         `json:"display_name,omitempty"`
 	Id               *openapi_types.UUID             `json:"id,omitempty"`
 	Namespace        *string                         `json:"namespace,omitempty"`
+	Notes            *string                         `json:"notes,omitempty"`
 	PresetUsed       *string                         `json:"preset_used,omitempty"`
 	ReleaseName      *string                         `json:"release_name,omitempty"`
 	RepoName         *string                         `json:"repo_name,omitempty"`
@@ -9132,14 +9142,25 @@ type PrincipalSearchResponse struct {
 
 // Project Project row (cluster-scoped namespace policy container).
 type Project struct {
-	ClusterId                openapi_types.UUID       `json:"cluster_id"`
-	CreatedAt                time.Time                `json:"created_at"`
-	CreatedById              *openapi_types.UUID      `json:"created_by_id"`
-	Description              string                   `json:"description"`
-	DisplayName              string                   `json:"display_name"`
-	Id                       openapi_types.UUID       `json:"id"`
-	LimitRange               map[string]interface{}   `json:"limit_range"`
-	Name                     string                   `json:"name"`
+	ClusterId openapi_types.UUID `json:"cluster_id"`
+
+	// ClusterIds Authoritative primary and secondary cluster memberships, returned on project reads and lists. Secondary membership derives from assigned project namespaces.
+	ClusterIds  *[]openapi_types.UUID  `json:"cluster_ids,omitempty"`
+	CreatedAt   time.Time              `json:"created_at"`
+	CreatedById *openapi_types.UUID    `json:"created_by_id"`
+	Description string                 `json:"description"`
+	DisplayName string                 `json:"display_name"`
+	Id          openapi_types.UUID     `json:"id"`
+	LimitRange  map[string]interface{} `json:"limit_range"`
+	Name        string                 `json:"name"`
+
+	// NamespaceScopes Namespace assignments grouped by their actual cluster. Includes the primary cluster even when empty. Never apply a namespace from one scope to another cluster.
+	NamespaceScopes *[]struct {
+		ClusterId  openapi_types.UUID `json:"cluster_id"`
+		Namespaces []string           `json:"namespaces"`
+	} `json:"namespace_scopes,omitempty"`
+
+	// Namespaces Legacy primary-cluster namespace assignments only.
 	Namespaces               []string                 `json:"namespaces"`
 	NetworkPolicyMode        ProjectNetworkPolicyMode `json:"network_policy_mode"`
 	PodSecurityProfile       string                   `json:"pod_security_profile"`
@@ -9766,11 +9787,14 @@ type ResourceDiscoveryEnvelope struct {
 
 // ResourceDiscoveryResponse defines model for ResourceDiscoveryResponse.
 type ResourceDiscoveryResponse struct {
-	ClusterId openapi_types.UUID       `json:"cluster_id"`
-	Crds      []map[string]interface{} `json:"crds"`
-	Errors    map[string]string        `json:"errors"`
-	Partial   bool                     `json:"partial"`
-	Resources []ResourceDiscoveryEntry `json:"resources"`
+	ClusterId openapi_types.UUID `json:"cluster_id"`
+
+	// CrdContinue Opaque Kubernetes CRD continuation; empty when complete.
+	CrdContinue string                   `json:"crd_continue"`
+	Crds        []map[string]interface{} `json:"crds"`
+	Errors      map[string]string        `json:"errors"`
+	Partial     bool                     `json:"partial"`
+	Resources   []ResourceDiscoveryEntry `json:"resources"`
 }
 
 // ResourceOperation defines model for ResourceOperation.
@@ -10461,6 +10485,7 @@ type SnapshotRestoreResponse struct {
 	LastPollError   *string                 `json:"last_poll_error,omitempty"`
 	Phase           *string                 `json:"phase,omitempty"`
 	SnapshotId      *openapi_types.UUID     `json:"snapshot_id,omitempty"`
+	SourceClusterId *openapi_types.UUID     `json:"source_cluster_id,omitempty"`
 	Spec            *map[string]interface{} `json:"spec,omitempty"`
 	StartTime       *time.Time              `json:"start_time"`
 	TargetClusterId *openapi_types.UUID     `json:"target_cluster_id,omitempty"`
@@ -12016,16 +12041,18 @@ type PostCatalogApplicationsPreviewJSONBody struct {
 
 // GetCatalogChartsParams defines parameters for GetCatalogCharts.
 type GetCatalogChartsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	// Search Case-insensitive literal substring of chart name, display name or description; filters authorized repositories before pagination and count.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int    `form:"offset,omitempty" json:"offset,omitempty"`
 
 	// Tag Filter charts by helm_chart_tags tag.
 	Tag *string `form:"tag,omitempty" json:"tag,omitempty"`
 
-	// ProjectId Select the project-scoped catalog union. Omit only for the globally managed catalog view.
+	// ProjectId Select the project-scoped catalog union. Mutually exclusive with cluster_id. Omit both for the globally managed catalog view.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
 
-	// ClusterId Select the caller-visible catalog union for a cluster. Preferred by cluster Apps pages.
+	// ClusterId Select the caller-visible catalog union for a cluster. Mutually exclusive with project_id. Preferred by cluster Apps pages.
 	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 }
 
@@ -12368,6 +12395,13 @@ type GetClustersByClusterIdIngressClassesParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetClustersByClusterIdK8sProxyParams defines parameters for GetClustersByClusterIdK8sProxy.
+type GetClustersByClusterIdK8sProxyParams struct {
+	AstronomerNamespace *[]string `form:"astronomerNamespace,omitempty" json:"astronomerNamespace,omitempty"`
+	Limit               *int      `form:"limit,omitempty" json:"limit,omitempty"`
+	Continue            *string   `form:"continue,omitempty" json:"continue,omitempty"`
+}
+
 // PatchClustersByClusterIdK8sProxyJSONBody defines parameters for PatchClustersByClusterIdK8sProxy.
 type PatchClustersByClusterIdK8sProxyJSONBody = interface{}
 
@@ -12382,6 +12416,13 @@ type K8sProxyDeleteJSONBody = interface{}
 
 // K8sProxyGetJSONBody defines parameters for K8sProxyGet.
 type K8sProxyGetJSONBody = interface{}
+
+// K8sProxyGetParams defines parameters for K8sProxyGet.
+type K8sProxyGetParams struct {
+	AstronomerNamespace *[]string `form:"astronomerNamespace,omitempty" json:"astronomerNamespace,omitempty"`
+	Limit               *int      `form:"limit,omitempty" json:"limit,omitempty"`
+	Continue            *string   `form:"continue,omitempty" json:"continue,omitempty"`
+}
 
 // K8sProxyHeadJSONBody defines parameters for K8sProxyHead.
 type K8sProxyHeadJSONBody = interface{}
@@ -12444,6 +12485,9 @@ type GetClustersByClusterIdNodesParams struct {
 
 // GetClustersByClusterIdPodsParams defines parameters for GetClustersByClusterIdPods.
 type GetClustersByClusterIdPodsParams struct {
+	// Namespaces Repeated selection intersected with RBAC before pagination. Omit for all authorized namespaces; a single empty value selects none. Mutually exclusive with namespace.
+	Namespaces *[]string `form:"namespaces,omitempty" json:"namespaces,omitempty"`
+
 	// Namespace Restrict to a single namespace.
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
 
@@ -12560,6 +12604,12 @@ type GetClustersByClusterIdResourceQuotasParams struct {
 	Offset    *int    `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetClustersByClusterIdResourcesDiscoveryParams defines parameters for GetClustersByClusterIdResourcesDiscovery.
+type GetClustersByClusterIdResourcesDiscoveryParams struct {
+	CrdLimit    *int    `form:"crd_limit,omitempty" json:"crd_limit,omitempty"`
+	CrdContinue *string `form:"crd_continue,omitempty" json:"crd_continue,omitempty"`
+}
+
 // ListGenericClusterResourcesParams defines parameters for ListGenericClusterResources.
 type ListGenericClusterResourcesParams struct {
 	// Namespace Restrict the listing to a single namespace (ignored for cluster-scoped types).
@@ -12669,6 +12719,15 @@ type GetClustersByClusterIdShellSessionsByIdCommandsParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetClustersByClusterIdSnapshotRestoresParams defines parameters for GetClustersByClusterIdSnapshotRestores.
+type GetClustersByClusterIdSnapshotRestoresParams struct {
+	// Limit Bounded page size; the server clamps ordinary lists to at most 200.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Zero-based offset into the authorized, filtered result.
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // PostClustersByClusterIdSnapshotsParams defines parameters for PostClustersByClusterIdSnapshots.
 type PostClustersByClusterIdSnapshotsParams struct {
 	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
@@ -12724,6 +12783,9 @@ type PostClustersByClusterIdVulnerabilitiesRescanParams struct {
 
 // GetClustersByClusterIdWorkloadsParams defines parameters for GetClustersByClusterIdWorkloads.
 type GetClustersByClusterIdWorkloadsParams struct {
+	// Namespaces Repeated selection intersected with RBAC before pagination. Omit for all authorized namespaces; a single empty value selects none. Mutually exclusive with namespace.
+	Namespaces *[]string `form:"namespaces,omitempty" json:"namespaces,omitempty"`
+
 	// Limit Bounded page size; the server clamps ordinary lists to at most 200.
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 
@@ -21079,6 +21141,9 @@ type ClientInterface interface {
 	// DeleteCatalogInstalledById request
 	DeleteCatalogInstalledById(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCatalogInstalledById request
+	GetCatalogInstalledById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetCatalogInstalledByIdRevisions request
 	GetCatalogInstalledByIdRevisions(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -21414,7 +21479,7 @@ type ClientInterface interface {
 	DeleteClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByClusterIdK8sProxy request
-	GetClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, params *GetClustersByClusterIdK8sProxyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// HeadClustersByClusterIdK8sProxy request
 	HeadClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -21446,9 +21511,9 @@ type ClientInterface interface {
 	K8sProxyDelete(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// K8sProxyGetWithBody request with any body
-	K8sProxyGetWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	K8sProxyGetWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	K8sProxyGet(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	K8sProxyGet(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// K8sProxyHeadWithBody request with any body
 	K8sProxyHeadWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -21657,7 +21722,7 @@ type ClientInterface interface {
 	GetClustersByClusterIdResourceQuotas(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourceQuotasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByClusterIdResourcesDiscovery request
-	GetClustersByClusterIdResourcesDiscovery(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetClustersByClusterIdResourcesDiscovery(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourcesDiscoveryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListGenericClusterResources request
 	ListGenericClusterResources(ctx context.Context, clusterId string, resourceType string, params *ListGenericClusterResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -21716,6 +21781,12 @@ type ClientInterface interface {
 
 	// GetClustersByClusterIdShellSessionsByIdCommands request
 	GetClustersByClusterIdShellSessionsByIdCommands(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, params *GetClustersByClusterIdShellSessionsByIdCommandsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetClustersByClusterIdSnapshotRestores request
+	GetClustersByClusterIdSnapshotRestores(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdSnapshotRestoresParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetClustersByClusterIdSnapshotRestoresById request
+	GetClustersByClusterIdSnapshotRestoresById(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByClusterIdSnapshotSchedules request
 	GetClustersByClusterIdSnapshotSchedules(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -22389,6 +22460,9 @@ type ClientInterface interface {
 
 	// DeleteLoggingPipelinesById request
 	DeleteLoggingPipelinesById(ctx context.Context, id string, params *DeleteLoggingPipelinesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLoggingPipelinesById request
+	GetLoggingPipelinesById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutLoggingPipelinesByIdWithBody request with any body
 	PutLoggingPipelinesByIdWithBody(ctx context.Context, id openapi_types.UUID, params *PutLoggingPipelinesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -27224,6 +27298,18 @@ func (c *Client) DeleteCatalogInstalledById(ctx context.Context, id openapi_type
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetCatalogInstalledById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogInstalledByIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetCatalogInstalledByIdRevisions(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCatalogInstalledByIdRevisionsRequest(c.Server, id)
 	if err != nil {
@@ -28676,8 +28762,8 @@ func (c *Client) DeleteClustersByClusterIdK8sProxy(ctx context.Context, clusterI
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetClustersByClusterIdK8sProxyRequest(c.Server, clusterId)
+func (c *Client) GetClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, params *GetClustersByClusterIdK8sProxyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByClusterIdK8sProxyRequest(c.Server, clusterId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -28820,8 +28906,8 @@ func (c *Client) K8sProxyDelete(ctx context.Context, clusterId openapi_types.UUI
 	return c.Client.Do(req)
 }
 
-func (c *Client) K8sProxyGetWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewK8sProxyGetRequestWithBody(c.Server, clusterId, path, contentType, body)
+func (c *Client) K8sProxyGetWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewK8sProxyGetRequestWithBody(c.Server, clusterId, path, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -28832,8 +28918,8 @@ func (c *Client) K8sProxyGetWithBody(ctx context.Context, clusterId openapi_type
 	return c.Client.Do(req)
 }
 
-func (c *Client) K8sProxyGet(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewK8sProxyGetRequest(c.Server, clusterId, path, body)
+func (c *Client) K8sProxyGet(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewK8sProxyGetRequest(c.Server, clusterId, path, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -29780,8 +29866,8 @@ func (c *Client) GetClustersByClusterIdResourceQuotas(ctx context.Context, clust
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetClustersByClusterIdResourcesDiscovery(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetClustersByClusterIdResourcesDiscoveryRequest(c.Server, clusterId)
+func (c *Client) GetClustersByClusterIdResourcesDiscovery(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourcesDiscoveryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByClusterIdResourcesDiscoveryRequest(c.Server, clusterId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -30022,6 +30108,30 @@ func (c *Client) GetClustersByClusterIdShellSessionsById(ctx context.Context, cl
 
 func (c *Client) GetClustersByClusterIdShellSessionsByIdCommands(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, params *GetClustersByClusterIdShellSessionsByIdCommandsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetClustersByClusterIdShellSessionsByIdCommandsRequest(c.Server, clusterId, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetClustersByClusterIdSnapshotRestores(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdSnapshotRestoresParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByClusterIdSnapshotRestoresRequest(c.Server, clusterId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetClustersByClusterIdSnapshotRestoresById(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByClusterIdSnapshotRestoresByIdRequest(c.Server, clusterId, id)
 	if err != nil {
 		return nil, err
 	}
@@ -32950,6 +33060,18 @@ func (c *Client) PostLoggingPipelines(ctx context.Context, params *PostLoggingPi
 
 func (c *Client) DeleteLoggingPipelinesById(ctx context.Context, id string, params *DeleteLoggingPipelinesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteLoggingPipelinesByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLoggingPipelinesById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLoggingPipelinesByIdRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -47593,6 +47715,22 @@ func NewGetCatalogChartsRequest(server string, params *GetCatalogChartsParams) (
 	if params != nil {
 		queryValues := queryURL.Query()
 
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		if params.Limit != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
@@ -48351,6 +48489,40 @@ func NewDeleteCatalogInstalledByIdRequest(server string, id openapi_types.UUID, 
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewGetCatalogInstalledByIdRequest generates requests for GetCatalogInstalledById
+func NewGetCatalogInstalledByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/installed/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -52815,7 +52987,7 @@ func NewDeleteClustersByClusterIdK8sProxyRequest(server string, clusterId string
 }
 
 // NewGetClustersByClusterIdK8sProxyRequest generates requests for GetClustersByClusterIdK8sProxy
-func NewGetClustersByClusterIdK8sProxyRequest(server string, clusterId string) (*http.Request, error) {
+func NewGetClustersByClusterIdK8sProxyRequest(server string, clusterId string, params *GetClustersByClusterIdK8sProxyParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -52838,6 +53010,60 @@ func NewGetClustersByClusterIdK8sProxyRequest(server string, clusterId string) (
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.AstronomerNamespace != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "astronomerNamespace", runtime.ParamLocationQuery, *params.AstronomerNamespace); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Continue != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "continue", runtime.ParamLocationQuery, *params.Continue); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -53146,18 +53372,18 @@ func NewK8sProxyDeleteRequestWithBody(server string, clusterId openapi_types.UUI
 }
 
 // NewK8sProxyGetRequest calls the generic K8sProxyGet builder with application/json body
-func NewK8sProxyGetRequest(server string, clusterId openapi_types.UUID, path string, body K8sProxyGetJSONRequestBody) (*http.Request, error) {
+func NewK8sProxyGetRequest(server string, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, body K8sProxyGetJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewK8sProxyGetRequestWithBody(server, clusterId, path, "application/json", bodyReader)
+	return NewK8sProxyGetRequestWithBody(server, clusterId, path, params, "application/json", bodyReader)
 }
 
 // NewK8sProxyGetRequestWithBody generates requests for K8sProxyGet with any type of body
-func NewK8sProxyGetRequestWithBody(server string, clusterId openapi_types.UUID, path string, contentType string, body io.Reader) (*http.Request, error) {
+func NewK8sProxyGetRequestWithBody(server string, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -53187,6 +53413,60 @@ func NewK8sProxyGetRequestWithBody(server string, clusterId openapi_types.UUID, 
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.AstronomerNamespace != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "astronomerNamespace", runtime.ParamLocationQuery, *params.AstronomerNamespace); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Continue != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "continue", runtime.ParamLocationQuery, *params.Continue); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), body)
@@ -54101,6 +54381,22 @@ func NewGetClustersByClusterIdPodsRequest(server string, clusterId openapi_types
 
 	if params != nil {
 		queryValues := queryURL.Query()
+
+		if params.Namespaces != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespaces", runtime.ParamLocationQuery, *params.Namespaces); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
 
 		if params.Namespace != nil {
 
@@ -56239,7 +56535,7 @@ func NewGetClustersByClusterIdResourceQuotasRequest(server string, clusterId str
 }
 
 // NewGetClustersByClusterIdResourcesDiscoveryRequest generates requests for GetClustersByClusterIdResourcesDiscovery
-func NewGetClustersByClusterIdResourcesDiscoveryRequest(server string, clusterId string) (*http.Request, error) {
+func NewGetClustersByClusterIdResourcesDiscoveryRequest(server string, clusterId string, params *GetClustersByClusterIdResourcesDiscoveryParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -56262,6 +56558,44 @@ func NewGetClustersByClusterIdResourcesDiscoveryRequest(server string, clusterId
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.CrdLimit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "crd_limit", runtime.ParamLocationQuery, *params.CrdLimit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.CrdContinue != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "crd_continue", runtime.ParamLocationQuery, *params.CrdContinue); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -57321,6 +57655,119 @@ func NewGetClustersByClusterIdShellSessionsByIdCommandsRequest(server string, cl
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetClustersByClusterIdSnapshotRestoresRequest generates requests for GetClustersByClusterIdSnapshotRestores
+func NewGetClustersByClusterIdSnapshotRestoresRequest(server string, clusterId openapi_types.UUID, params *GetClustersByClusterIdSnapshotRestoresParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/snapshot-restores", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetClustersByClusterIdSnapshotRestoresByIdRequest generates requests for GetClustersByClusterIdSnapshotRestoresById
+func NewGetClustersByClusterIdSnapshotRestoresByIdRequest(server string, clusterId openapi_types.UUID, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/snapshot-restores/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -58463,6 +58910,22 @@ func NewGetClustersByClusterIdWorkloadsRequest(server string, clusterId openapi_
 
 	if params != nil {
 		queryValues := queryURL.Query()
+
+		if params.Namespaces != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespaces", runtime.ParamLocationQuery, *params.Namespaces); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
 
 		if params.Limit != nil {
 
@@ -67095,6 +67558,40 @@ func NewDeleteLoggingPipelinesByIdRequest(server string, id string, params *Dele
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewGetLoggingPipelinesByIdRequest generates requests for GetLoggingPipelinesById
+func NewGetLoggingPipelinesByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/logging/pipelines/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -79541,6 +80038,9 @@ type ClientWithResponsesInterface interface {
 	// DeleteCatalogInstalledByIdWithResponse request
 	DeleteCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error)
 
+	// GetCatalogInstalledByIdWithResponse request
+	GetCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdResponse, error)
+
 	// GetCatalogInstalledByIdRevisionsWithResponse request
 	GetCatalogInstalledByIdRevisionsWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdRevisionsResponse, error)
 
@@ -79876,7 +80376,7 @@ type ClientWithResponsesInterface interface {
 	DeleteClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*DeleteClustersByClusterIdK8sProxyResponse, error)
 
 	// GetClustersByClusterIdK8sProxyWithResponse request
-	GetClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdK8sProxyResponse, error)
+	GetClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdK8sProxyParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdK8sProxyResponse, error)
 
 	// HeadClustersByClusterIdK8sProxyWithResponse request
 	HeadClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*HeadClustersByClusterIdK8sProxyResponse, error)
@@ -79908,9 +80408,9 @@ type ClientWithResponsesInterface interface {
 	K8sProxyDeleteWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*K8sProxyDeleteResponse, error)
 
 	// K8sProxyGetWithBodyWithResponse request with any body
-	K8sProxyGetWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error)
+	K8sProxyGetWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error)
 
-	K8sProxyGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error)
+	K8sProxyGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error)
 
 	// K8sProxyHeadWithBodyWithResponse request with any body
 	K8sProxyHeadWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*K8sProxyHeadResponse, error)
@@ -80119,7 +80619,7 @@ type ClientWithResponsesInterface interface {
 	GetClustersByClusterIdResourceQuotasWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourceQuotasParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourceQuotasResponse, error)
 
 	// GetClustersByClusterIdResourcesDiscoveryWithResponse request
-	GetClustersByClusterIdResourcesDiscoveryWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourcesDiscoveryResponse, error)
+	GetClustersByClusterIdResourcesDiscoveryWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourcesDiscoveryParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourcesDiscoveryResponse, error)
 
 	// ListGenericClusterResourcesWithResponse request
 	ListGenericClusterResourcesWithResponse(ctx context.Context, clusterId string, resourceType string, params *ListGenericClusterResourcesParams, reqEditors ...RequestEditorFn) (*ListGenericClusterResourcesResponse, error)
@@ -80178,6 +80678,12 @@ type ClientWithResponsesInterface interface {
 
 	// GetClustersByClusterIdShellSessionsByIdCommandsWithResponse request
 	GetClustersByClusterIdShellSessionsByIdCommandsWithResponse(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, params *GetClustersByClusterIdShellSessionsByIdCommandsParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdShellSessionsByIdCommandsResponse, error)
+
+	// GetClustersByClusterIdSnapshotRestoresWithResponse request
+	GetClustersByClusterIdSnapshotRestoresWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdSnapshotRestoresParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdSnapshotRestoresResponse, error)
+
+	// GetClustersByClusterIdSnapshotRestoresByIdWithResponse request
+	GetClustersByClusterIdSnapshotRestoresByIdWithResponse(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdSnapshotRestoresByIdResponse, error)
 
 	// GetClustersByClusterIdSnapshotSchedulesWithResponse request
 	GetClustersByClusterIdSnapshotSchedulesWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdSnapshotSchedulesResponse, error)
@@ -80851,6 +81357,9 @@ type ClientWithResponsesInterface interface {
 
 	// DeleteLoggingPipelinesByIdWithResponse request
 	DeleteLoggingPipelinesByIdWithResponse(ctx context.Context, id string, params *DeleteLoggingPipelinesByIdParams, reqEditors ...RequestEditorFn) (*DeleteLoggingPipelinesByIdResponse, error)
+
+	// GetLoggingPipelinesByIdWithResponse request
+	GetLoggingPipelinesByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetLoggingPipelinesByIdResponse, error)
 
 	// PutLoggingPipelinesByIdWithBodyWithResponse request with any body
 	PutLoggingPipelinesByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutLoggingPipelinesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutLoggingPipelinesByIdResponse, error)
@@ -88559,6 +89068,35 @@ func (r DeleteCatalogInstalledByIdResponse) StatusCode() int {
 	return 0
 }
 
+type GetCatalogInstalledByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data InstalledAppEnriched `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogInstalledByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogInstalledByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetCatalogInstalledByIdRevisionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -88671,9 +89209,11 @@ type GetCatalogInstalledByIdValuesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Namespace      *string `json:"namespace,omitempty"`
-		ReleaseName    *string `json:"release_name,omitempty"`
-		ValuesOverride *string `json:"values_override,omitempty"`
+		Data struct {
+			Namespace      string `json:"namespace"`
+			ReleaseName    string `json:"release_name"`
+			ValuesOverride string `json:"values_override"`
+		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON404 *ErrorEnvelope
@@ -88725,20 +89265,30 @@ type GetCatalogOperationsByIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		AttemptCount *int                     `json:"attemptCount,omitempty"`
-		CompletedAt  *time.Time               `json:"completedAt"`
-		CreatedAt    *time.Time               `json:"createdAt,omitempty"`
-		ErrorMessage *string                  `json:"errorMessage,omitempty"`
-		Events       *[]CatalogOperationEvent `json:"events,omitempty"`
-		Id           *openapi_types.UUID      `json:"id,omitempty"`
+		Data struct {
+			AttemptCount             *int       `json:"attemptCount,omitempty"`
+			CompletedAt              *time.Time `json:"completedAt"`
+			CreatedAt                *time.Time `json:"createdAt,omitempty"`
+			DeliveryObservationError *string    `json:"deliveryObservationError,omitempty"`
+			DeliveryObservedAt       *time.Time `json:"deliveryObservedAt,omitempty"`
 
-		// OperationType install / upgrade / rollback / uninstall
-		OperationType *string    `json:"operationType,omitempty"`
-		StartedAt     *time.Time `json:"startedAt"`
-		Status        *string    `json:"status,omitempty"`
-		TargetKey     *string    `json:"targetKey,omitempty"`
-		TargetType    *string    `json:"targetType,omitempty"`
-		UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+			// DeliveryPhase Exact operation rollout or deletion outcome; unknown means no reliable observation is available.
+			DeliveryPhase *string                  `json:"deliveryPhase,omitempty"`
+			ErrorMessage  *string                  `json:"errorMessage,omitempty"`
+			Events        *[]CatalogOperationEvent `json:"events,omitempty"`
+			Id            *openapi_types.UUID      `json:"id,omitempty"`
+
+			// JournalStatus Durable catalog worker state; only failed/retryable journal entries can use catalog retry.
+			JournalStatus *string `json:"journalStatus,omitempty"`
+
+			// OperationType install / upgrade / rollback / uninstall
+			OperationType *string    `json:"operationType,omitempty"`
+			StartedAt     *time.Time `json:"startedAt"`
+			Status        *string    `json:"status,omitempty"`
+			TargetKey     *string    `json:"targetKey,omitempty"`
+			TargetType    *string    `json:"targetType,omitempty"`
+			UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON403 *ErrorEnvelope
@@ -88765,7 +89315,7 @@ func (r GetCatalogOperationsByIdResponse) StatusCode() int {
 type PostCatalogOperationsByIdRetryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *CatalogOperation
+	JSON202      *CatalogOperationEnvelope
 	JSON400      *ErrorEnvelope
 	JSON403      *ErrorEnvelope
 	JSON404      *ErrorEnvelope
@@ -93052,6 +93602,65 @@ func (r GetClustersByClusterIdShellSessionsByIdCommandsResponse) Status() string
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetClustersByClusterIdShellSessionsByIdCommandsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetClustersByClusterIdSnapshotRestoresResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data       []SnapshotRestoreResponse `json:"data"`
+		Pagination PaginationMetadata        `json:"pagination"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersByClusterIdSnapshotRestoresResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersByClusterIdSnapshotRestoresResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetClustersByClusterIdSnapshotRestoresByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data SnapshotRestoreResponse `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersByClusterIdSnapshotRestoresByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersByClusterIdSnapshotRestoresByIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -97704,6 +98313,35 @@ func (r DeleteLoggingPipelinesByIdResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r DeleteLoggingPipelinesByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLoggingPipelinesByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data LoggingPipeline `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLoggingPipelinesByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLoggingPipelinesByIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -107055,6 +107693,15 @@ func (c *ClientWithResponses) DeleteCatalogInstalledByIdWithResponse(ctx context
 	return ParseDeleteCatalogInstalledByIdResponse(rsp)
 }
 
+// GetCatalogInstalledByIdWithResponse request returning *GetCatalogInstalledByIdResponse
+func (c *ClientWithResponses) GetCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdResponse, error) {
+	rsp, err := c.GetCatalogInstalledById(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogInstalledByIdResponse(rsp)
+}
+
 // GetCatalogInstalledByIdRevisionsWithResponse request returning *GetCatalogInstalledByIdRevisionsResponse
 func (c *ClientWithResponses) GetCatalogInstalledByIdRevisionsWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdRevisionsResponse, error) {
 	rsp, err := c.GetCatalogInstalledByIdRevisions(ctx, id, reqEditors...)
@@ -108116,8 +108763,8 @@ func (c *ClientWithResponses) DeleteClustersByClusterIdK8sProxyWithResponse(ctx 
 }
 
 // GetClustersByClusterIdK8sProxyWithResponse request returning *GetClustersByClusterIdK8sProxyResponse
-func (c *ClientWithResponses) GetClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdK8sProxyResponse, error) {
-	rsp, err := c.GetClustersByClusterIdK8sProxy(ctx, clusterId, reqEditors...)
+func (c *ClientWithResponses) GetClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdK8sProxyParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdK8sProxyResponse, error) {
+	rsp, err := c.GetClustersByClusterIdK8sProxy(ctx, clusterId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -108220,16 +108867,16 @@ func (c *ClientWithResponses) K8sProxyDeleteWithResponse(ctx context.Context, cl
 }
 
 // K8sProxyGetWithBodyWithResponse request with arbitrary body returning *K8sProxyGetResponse
-func (c *ClientWithResponses) K8sProxyGetWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error) {
-	rsp, err := c.K8sProxyGetWithBody(ctx, clusterId, path, contentType, body, reqEditors...)
+func (c *ClientWithResponses) K8sProxyGetWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error) {
+	rsp, err := c.K8sProxyGetWithBody(ctx, clusterId, path, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseK8sProxyGetResponse(rsp)
 }
 
-func (c *ClientWithResponses) K8sProxyGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error) {
-	rsp, err := c.K8sProxyGet(ctx, clusterId, path, body, reqEditors...)
+func (c *ClientWithResponses) K8sProxyGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error) {
+	rsp, err := c.K8sProxyGet(ctx, clusterId, path, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -108911,8 +109558,8 @@ func (c *ClientWithResponses) GetClustersByClusterIdResourceQuotasWithResponse(c
 }
 
 // GetClustersByClusterIdResourcesDiscoveryWithResponse request returning *GetClustersByClusterIdResourcesDiscoveryResponse
-func (c *ClientWithResponses) GetClustersByClusterIdResourcesDiscoveryWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourcesDiscoveryResponse, error) {
-	rsp, err := c.GetClustersByClusterIdResourcesDiscovery(ctx, clusterId, reqEditors...)
+func (c *ClientWithResponses) GetClustersByClusterIdResourcesDiscoveryWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourcesDiscoveryParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourcesDiscoveryResponse, error) {
+	rsp, err := c.GetClustersByClusterIdResourcesDiscovery(ctx, clusterId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -109095,6 +109742,24 @@ func (c *ClientWithResponses) GetClustersByClusterIdShellSessionsByIdCommandsWit
 		return nil, err
 	}
 	return ParseGetClustersByClusterIdShellSessionsByIdCommandsResponse(rsp)
+}
+
+// GetClustersByClusterIdSnapshotRestoresWithResponse request returning *GetClustersByClusterIdSnapshotRestoresResponse
+func (c *ClientWithResponses) GetClustersByClusterIdSnapshotRestoresWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdSnapshotRestoresParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdSnapshotRestoresResponse, error) {
+	rsp, err := c.GetClustersByClusterIdSnapshotRestores(ctx, clusterId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersByClusterIdSnapshotRestoresResponse(rsp)
+}
+
+// GetClustersByClusterIdSnapshotRestoresByIdWithResponse request returning *GetClustersByClusterIdSnapshotRestoresByIdResponse
+func (c *ClientWithResponses) GetClustersByClusterIdSnapshotRestoresByIdWithResponse(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdSnapshotRestoresByIdResponse, error) {
+	rsp, err := c.GetClustersByClusterIdSnapshotRestoresById(ctx, clusterId, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersByClusterIdSnapshotRestoresByIdResponse(rsp)
 }
 
 // GetClustersByClusterIdSnapshotSchedulesWithResponse request returning *GetClustersByClusterIdSnapshotSchedulesResponse
@@ -111232,6 +111897,15 @@ func (c *ClientWithResponses) DeleteLoggingPipelinesByIdWithResponse(ctx context
 		return nil, err
 	}
 	return ParseDeleteLoggingPipelinesByIdResponse(rsp)
+}
+
+// GetLoggingPipelinesByIdWithResponse request returning *GetLoggingPipelinesByIdResponse
+func (c *ClientWithResponses) GetLoggingPipelinesByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetLoggingPipelinesByIdResponse, error) {
+	rsp, err := c.GetLoggingPipelinesById(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLoggingPipelinesByIdResponse(rsp)
 }
 
 // PutLoggingPipelinesByIdWithBodyWithResponse request with arbitrary body returning *PutLoggingPipelinesByIdResponse
@@ -127208,6 +127882,69 @@ func ParseDeleteCatalogInstalledByIdResponse(rsp *http.Response) (*DeleteCatalog
 	return response, nil
 }
 
+// ParseGetCatalogInstalledByIdResponse parses an HTTP response from a GetCatalogInstalledByIdWithResponse call
+func ParseGetCatalogInstalledByIdResponse(rsp *http.Response) (*GetCatalogInstalledByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogInstalledByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data InstalledAppEnriched `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetCatalogInstalledByIdRevisionsResponse parses an HTTP response from a GetCatalogInstalledByIdRevisionsWithResponse call
 func ParseGetCatalogInstalledByIdRevisionsResponse(rsp *http.Response) (*GetCatalogInstalledByIdRevisionsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -127450,9 +128187,11 @@ func ParseGetCatalogInstalledByIdValuesResponse(rsp *http.Response) (*GetCatalog
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Namespace      *string `json:"namespace,omitempty"`
-			ReleaseName    *string `json:"release_name,omitempty"`
-			ValuesOverride *string `json:"values_override,omitempty"`
+			Data struct {
+				Namespace      string `json:"namespace"`
+				ReleaseName    string `json:"release_name"`
+				ValuesOverride string `json:"values_override"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -127530,20 +128269,30 @@ func ParseGetCatalogOperationsByIdResponse(rsp *http.Response) (*GetCatalogOpera
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			AttemptCount *int                     `json:"attemptCount,omitempty"`
-			CompletedAt  *time.Time               `json:"completedAt"`
-			CreatedAt    *time.Time               `json:"createdAt,omitempty"`
-			ErrorMessage *string                  `json:"errorMessage,omitempty"`
-			Events       *[]CatalogOperationEvent `json:"events,omitempty"`
-			Id           *openapi_types.UUID      `json:"id,omitempty"`
+			Data struct {
+				AttemptCount             *int       `json:"attemptCount,omitempty"`
+				CompletedAt              *time.Time `json:"completedAt"`
+				CreatedAt                *time.Time `json:"createdAt,omitempty"`
+				DeliveryObservationError *string    `json:"deliveryObservationError,omitempty"`
+				DeliveryObservedAt       *time.Time `json:"deliveryObservedAt,omitempty"`
 
-			// OperationType install / upgrade / rollback / uninstall
-			OperationType *string    `json:"operationType,omitempty"`
-			StartedAt     *time.Time `json:"startedAt"`
-			Status        *string    `json:"status,omitempty"`
-			TargetKey     *string    `json:"targetKey,omitempty"`
-			TargetType    *string    `json:"targetType,omitempty"`
-			UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+				// DeliveryPhase Exact operation rollout or deletion outcome; unknown means no reliable observation is available.
+				DeliveryPhase *string                  `json:"deliveryPhase,omitempty"`
+				ErrorMessage  *string                  `json:"errorMessage,omitempty"`
+				Events        *[]CatalogOperationEvent `json:"events,omitempty"`
+				Id            *openapi_types.UUID      `json:"id,omitempty"`
+
+				// JournalStatus Durable catalog worker state; only failed/retryable journal entries can use catalog retry.
+				JournalStatus *string `json:"journalStatus,omitempty"`
+
+				// OperationType install / upgrade / rollback / uninstall
+				OperationType *string    `json:"operationType,omitempty"`
+				StartedAt     *time.Time `json:"startedAt"`
+				Status        *string    `json:"status,omitempty"`
+				TargetKey     *string    `json:"targetKey,omitempty"`
+				TargetType    *string    `json:"targetType,omitempty"`
+				UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -127598,7 +128347,7 @@ func ParsePostCatalogOperationsByIdRetryResponse(rsp *http.Response) (*PostCatal
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest CatalogOperation
+		var dest CatalogOperationEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -135544,6 +136293,133 @@ func ParseGetClustersByClusterIdShellSessionsByIdCommandsResponse(rsp *http.Resp
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetClustersByClusterIdSnapshotRestoresResponse parses an HTTP response from a GetClustersByClusterIdSnapshotRestoresWithResponse call
+func ParseGetClustersByClusterIdSnapshotRestoresResponse(rsp *http.Response) (*GetClustersByClusterIdSnapshotRestoresResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersByClusterIdSnapshotRestoresResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data       []SnapshotRestoreResponse `json:"data"`
+			Pagination PaginationMetadata        `json:"pagination"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetClustersByClusterIdSnapshotRestoresByIdResponse parses an HTTP response from a GetClustersByClusterIdSnapshotRestoresByIdWithResponse call
+func ParseGetClustersByClusterIdSnapshotRestoresByIdResponse(rsp *http.Response) (*GetClustersByClusterIdSnapshotRestoresByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersByClusterIdSnapshotRestoresByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data SnapshotRestoreResponse `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -143568,6 +144444,69 @@ func ParseDeleteLoggingPipelinesByIdResponse(rsp *http.Response) (*DeleteLogging
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLoggingPipelinesByIdResponse parses an HTTP response from a GetLoggingPipelinesByIdWithResponse call
+func ParseGetLoggingPipelinesByIdResponse(rsp *http.Response) (*GetLoggingPipelinesByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLoggingPipelinesByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data LoggingPipeline `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest

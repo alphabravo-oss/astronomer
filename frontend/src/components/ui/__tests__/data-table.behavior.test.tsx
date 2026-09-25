@@ -27,6 +27,117 @@ const bodyRowText = () =>
     .map((r) => r.textContent ?? "");
 
 describe("DataTable behavior (TanStack Table engine)", () => {
+  it("fits every table to its page unless scrolling is explicitly requested", () => {
+    const { rerender } = render(
+      <DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} />,
+    );
+
+    const fittedRegion = screen.getByRole("region", { name: "Data table" });
+    expect(fittedRegion).toHaveClass("overflow-x-hidden");
+    expect(fittedRegion.querySelector("table")).toHaveClass("table-fixed");
+
+    rerender(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(r) => r.id}
+        layout="scroll"
+      />,
+    );
+    const scrollRegion = screen.getByRole("region", {
+      name: "Scrollable data table",
+    });
+    expect(scrollRegion).toHaveClass("overflow-x-auto");
+    expect(scrollRegion.querySelector("table")).not.toHaveClass("table-fixed");
+
+    rerender(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(r) => r.id}
+        virtualized
+      />,
+    );
+    expect(screen.getByRole("grid")).toHaveClass("overflow-x-hidden");
+
+    rerender(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(r) => r.id}
+        virtualized
+        layout="scroll"
+      />,
+    );
+    expect(screen.getByRole("grid")).toHaveClass("overflow-x-auto");
+  });
+
+  it("keeps row actions compact and data cells on one line by default", () => {
+    const compactColumns: Column<Row>[] = [
+      ...columns,
+      {
+        key: "actions",
+        header: "",
+        rowActions: true,
+        accessor: () => "Menu",
+      },
+    ];
+    const { rerender } = render(
+      <DataTable
+        data={rows}
+        columns={compactColumns}
+        keyExtractor={(row) => row.id}
+      />,
+    );
+
+    const actionHead = document.querySelector("thead th:last-child");
+    expect(actionHead).toHaveStyle({ width: "40px" });
+    expect(actionHead).toHaveClass("px-1.5");
+    expect(actionHead).toHaveAccessibleName("Actions");
+    expect(screen.getByText("Banana")).toHaveClass("whitespace-nowrap");
+
+    rerender(
+      <DataTable
+        data={rows}
+        columns={compactColumns}
+        keyExtractor={(row) => row.id}
+        virtualized
+      />,
+    );
+    const gridHeaders = screen.getAllByRole("columnheader");
+    expect(gridHeaders.at(-1)).toHaveStyle({
+      width: "40px",
+      flex: "0 0 2.5rem",
+      minWidth: "40px",
+    });
+    expect(gridHeaders.at(-1)).toHaveClass("px-1.5");
+    expect(gridHeaders.at(-1)).toHaveAccessibleName("Actions");
+  });
+
+  it("does not compress an unlabeled inline-action column", () => {
+    const inlineActionColumns: Column<Row>[] = [
+      ...columns,
+      {
+        key: "open",
+        header: "",
+        accessor: () => "Open metrics",
+        sortable: false,
+      },
+    ];
+
+    render(
+      <DataTable
+        data={rows}
+        columns={inlineActionColumns}
+        keyExtractor={(row) => row.id}
+      />,
+    );
+
+    const actionHead = document.querySelector("thead th:last-child");
+    expect(actionHead).not.toHaveStyle({ width: "40px" });
+    expect(actionHead).not.toHaveClass("px-1.5");
+  });
+
   it("groups only the current server page and preserves continuation controls", () => {
     const onPage = vi.fn();
     render(

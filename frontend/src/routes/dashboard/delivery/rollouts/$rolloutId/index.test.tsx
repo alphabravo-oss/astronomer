@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntityResponse } from "@/lib/api/delivery-common";
 import * as api from "@/lib/api/delivery-rollouts";
 import { can } from "@/lib/permissions";
-import { RolloutDetailPage } from "./index";
+import { RolloutDetailPage } from "./-page";
 
 const access = vi.hoisted(() => ({ denied: new Set<string>() }));
 vi.mock("@/lib/hooks/auth", () => ({

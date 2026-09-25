@@ -420,6 +420,7 @@ export function GatewaysTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <NamespacedActions
             clusterId={clusterId}
@@ -557,6 +558,7 @@ function RouteTable<T extends GatewayRoute>({
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <NamespacedActions
             clusterId={clusterId}
@@ -739,6 +741,7 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => {
           const path = k8sResourcePath("gatewayclasses", row.name);
           const title = `GatewayClass: ${row.name}`;
@@ -869,6 +872,7 @@ export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <NamespacedActions
             clusterId={clusterId}

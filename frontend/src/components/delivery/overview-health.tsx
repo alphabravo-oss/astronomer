@@ -6,7 +6,10 @@ import type { DeliveryRollout } from "@/lib/api/delivery-rollouts";
 import type { DeliverySystemCompatibility } from "@/lib/api/delivery-system";
 import type { PaginatedResponse } from "@/types";
 
-export type DeliveryQueryHealthEntry = { label: string; query: UseQueryResult<unknown> };
+export type DeliveryQueryHealthEntry = {
+  label: string;
+  query: UseQueryResult<unknown>;
+};
 
 // Pure post-processing over the seven overview queries — which failed (danger
 // panel + tile dashes) and the derived counts that must never fall back to
@@ -20,8 +23,15 @@ export function useDeliveryOverviewHealth(queries: {
   deployments: UseQueryResult<PaginatedResponse<ClusterDeployment>>;
   system: UseQueryResult<DeliverySystemCompatibility>;
 }) {
-  const { sources, unhealthySources, bundles, targets, rollouts, deployments, system } =
-    queries;
+  const {
+    sources,
+    unhealthySources,
+    bundles,
+    targets,
+    rollouts,
+    deployments,
+    system,
+  } = queries;
   const failedQueries: DeliveryQueryHealthEntry[] = [
     { label: "Sources", query: sources },
     { label: "Degraded sources", query: unhealthySources },
@@ -40,26 +50,39 @@ export function useDeliveryOverviewHealth(queries: {
       item.phase === "degraded" ||
       item.phase === "unknown",
   );
-  const drifted = deployments.isError
-    ? undefined
-    : deploymentRows.filter((item) =>
-        item.conditions.some(
-          (c) => c.type === "Drifted" && c.status === "True",
-        ),
-      ).length;
-  const activeRollouts = rollouts.isError
-    ? undefined
-    : (rollouts.data?.data ?? []).filter((row) =>
-        ["queued", "progressing", "paused", "awaiting_approval", "rolling_back"].includes(
-          row.state,
-        ),
-      ).length;
-  const incompatibleClusters = system.isError
-    ? undefined
-    : (system.data?.observedInventory ?? [])
-        .filter((item) => item.compatibilityStatus !== "compatible")
-        .reduce((total, item) => total + item.clusterCount, 0);
-  return { failedQueries, failures, drifted, activeRollouts, incompatibleClusters };
+  const drifted =
+    !deployments.data || deployments.isError
+      ? undefined
+      : deploymentRows.filter((item) =>
+          item.conditions.some(
+            (c) => c.type === "Drifted" && c.status === "True",
+          ),
+        ).length;
+  const activeRollouts =
+    !rollouts.data || rollouts.isError
+      ? undefined
+      : (rollouts.data?.data ?? []).filter((row) =>
+          [
+            "queued",
+            "progressing",
+            "paused",
+            "awaiting_approval",
+            "rolling_back",
+          ].includes(row.state),
+        ).length;
+  const incompatibleClusters =
+    !system.data || system.isError
+      ? undefined
+      : (system.data?.observedInventory ?? [])
+          .filter((item) => item.compatibilityStatus !== "compatible")
+          .reduce((total, item) => total + item.clusterCount, 0);
+  return {
+    failedQueries,
+    failures,
+    drifted,
+    activeRollouts,
+    incompatibleClusters,
+  };
 }
 
 export function DeliveryUnavailablePanel({
@@ -76,7 +99,9 @@ export function DeliveryUnavailablePanel({
       title="Delivery status unavailable"
       description={`${failedQueries.map((entry) => entry.label).join(", ")} could not be loaded. Counts below are hidden until this recovers.`}
       actionLabel="Retry"
-      onAction={() => failedQueries.forEach((entry) => void entry.query.refetch())}
+      onAction={() =>
+        failedQueries.forEach((entry) => void entry.query.refetch())
+      }
     />
   );
 }

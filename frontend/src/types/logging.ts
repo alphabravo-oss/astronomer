@@ -49,6 +49,8 @@ export type LoggingPipeline = Omit<
   namespaces: string[];
   outputIds: string[];
   outputNames: string[];
+  labels?: Record<string, string>;
+  rawFilters?: unknown;
   filters: LoggingFilter[];
   enabled: boolean;
   createdAt: string;

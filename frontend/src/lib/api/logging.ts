@@ -7,6 +7,7 @@ import {
   getLoggingOperationsById as getLoggingOperationOperation,
   getLoggingOutputs as listLoggingOutputsOperation,
   getLoggingPipelines as listLoggingPipelinesOperation,
+  getLoggingPipelinesById,
   getLoggingSavedSearches as listLoggingSavedSearchesOperation,
   postClustersByIdLoggingOutputsAttachAstronomer as attachAstronomerLogsOperation,
   postLoggingOperationsByIdRetry as retryLoggingOperationOperation,
@@ -323,6 +324,8 @@ export function mapLoggingPipeline(wire: LoggingPipelineWire): LoggingPipeline {
     namespaces: wire.namespaces,
     outputIds: wire.output_ids,
     outputNames: wire.output_names,
+    labels: wire.labels,
+    rawFilters: wire.filters,
     filters: Array.isArray(wire.filters)
       ? (wire.filters as LoggingPipeline["filters"])
       : [],
@@ -339,23 +342,34 @@ function loggingPipelineBody(
     name: requiredName(data.name, "Logging pipeline"),
     cluster_id: data.clusterId,
     namespaces: data.namespaces,
-    filters: data.filters,
+    filters: data.rawFilters ?? data.filters,
+    labels: data.labels,
     output_ids: data.outputIds ?? [],
     enabled: data.enabled,
   };
 }
 
-export async function getLoggingPipelines(params?: {
-  clusterId?: string;
-  limit?: number;
-}): Promise<LoggingPipeline[]> {
+export async function getLoggingPipelines(
+  params?: { clusterId?: string; limit?: number },
+  signal?: AbortSignal,
+): Promise<LoggingPipeline[]> {
+  return (
+    await getLoggingPipelinePage({ ...params, limit: params?.limit }, signal)
+  ).data;
+}
+export async function getLoggingPipelinePage(
+  params: { clusterId?: string; limit?: number; offset?: number } = {},
+  signal?: AbortSignal,
+) {
   const page = await listLoggingPipelinesOperation({
     query: {
-      cluster_id: params?.clusterId,
-      limit: params?.limit,
+      cluster_id: params.clusterId,
+      limit: params.limit ?? 50,
+      offset: params.offset,
     },
+    signal,
   });
-  return (page.data ?? []).map(mapLoggingPipeline);
+  return mapPage(page, mapLoggingPipeline);
 }
 
 export async function createLoggingPipeline(
@@ -470,4 +484,12 @@ export async function retryLoggingOperation(
       "retryLoggingOperation",
     ),
   );
+}
+
+export async function getLoggingPipeline(
+  id: string,
+  signal?: AbortSignal,
+): Promise<LoggingPipeline> {
+  const response = await getLoggingPipelinesById({ path: { id }, signal });
+  return mapLoggingPipeline(requireData(response, "getLoggingPipeline"));
 }

@@ -118,6 +118,7 @@ function AuthOverviewPage() {
     {
       key: "actions",
       header: "",
+      rowActions: true,
       sortable: false,
       align: "center",
       accessor: (row) => (

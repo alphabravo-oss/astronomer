@@ -1,3 +1,5 @@
+import { useOperationIntent } from "@/lib/use-operation-intent";
+import { useUpgradeValues } from "./app-upgrade-values";
 import {
   CatalogVersionSelect,
   useCatalogVersionSelection,
@@ -26,10 +28,8 @@ import {
  *     out of scope. YAML correctness isn't validated client-side;
  *     helm install will fail clearly on bad YAML.
  *
- * The submit is async via the asynq queue (existing /catalog/installed/
- * handler enqueues a HelmInstall through the tunnel). The modal just
- * reports success when the row is created — the actual install state
- * surfaces through the Installed view's polling.
+ * Submission returns a durable catalog operation receipt. The caller tracks
+ * that operation and its Flux rollout; acceptance is not workload readiness.
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -43,8 +43,8 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import {
   getChartDefaultValues,
   installChartOnCluster,
+  upgradeClusterApp,
 } from "@/lib/api/cluster-apps";
-import { upgradeInstalledChart } from "@/lib/api/catalog";
 import { queryKeys } from "@/lib/query-keys";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
@@ -67,6 +67,7 @@ interface AppInstallModalProps {
   clusterId: string;
   mode: Mode;
   onClose: () => void;
+  onOperationStarted?: (id: string) => void;
   submitDecision?: PermissionDecision;
 }
 
@@ -103,6 +104,7 @@ export function AppInstallModal({
   mode,
   onClose,
   submitDecision,
+  onOperationStarted,
 }: AppInstallModalProps) {
   const qc = useQueryClient();
   const isUpgrade = mode.kind === "upgrade";
@@ -120,6 +122,10 @@ export function AppInstallModal({
     },
     onSubmit: () => install.mutate(),
   });
+  const upgradeValues = useUpgradeValues(
+    mode.kind === "upgrade" ? mode.installedChartId : "",
+    (values) => form.setFieldValue("valuesYaml", values),
+  );
   const selectedVersionId = useStore(
     form.store,
     (s) => s.values.selectedVersionId,
@@ -176,9 +182,18 @@ export function AppInstallModal({
     isUpgrade,
   ]);
 
+  const intent = useOperationIntent();
   const install = useMutation({
     mutationFn: async () => {
+      if (isUpgrade && (!upgradeValues.isSuccess || upgradeValues.isError))
+        throw new Error("Load the saved release values before upgrading");
       const value = form.state.values;
+      const idempotencyKey = intent.keyFor({
+        mode,
+        clusterId,
+        projectId,
+        ...value,
+      });
       if (
         !selectedVersion ||
         selectedVersion.id !== value.selectedVersionId ||
@@ -193,6 +208,7 @@ export function AppInstallModal({
         return installChartOnCluster({
           projectId,
           clusterId,
+          idempotencyKey,
           chartVersionId: value.selectedVersionId,
           releaseName: value.releaseName.trim(),
           namespace: value.namespace.trim(),
@@ -200,16 +216,22 @@ export function AppInstallModal({
         });
       }
       // Upgrade — uses the existing /catalog/installed/{id}/upgrade/ endpoint.
-      return upgradeInstalledChart(mode.installedChartId, {
-        chart_version_id: value.selectedVersionId,
-        values_override: value.valuesYaml,
-      });
+      return upgradeClusterApp(
+        mode.installedChartId,
+        {
+          chart_version_id: value.selectedVersionId,
+          values_override: value.valuesYaml,
+        },
+        idempotencyKey,
+      );
     },
-    onSuccess: () => {
+    onSuccess: (receipt) => {
+      intent.complete();
+      if (receipt.operation?.id) onOperationStarted?.(receipt.operation.id);
       toastSuccess(
         isUpgrade
           ? `Upgrade dispatched — ${mode.kind === "upgrade" ? mode.releaseName : ""} will reflect new revision shortly`
-          : `Install dispatched — "${releaseName}" will appear in Installed once helm completes`,
+          : `Install accepted — track "${releaseName}" and its Flux rollout in the operation timeline`,
       );
       qc.invalidateQueries({
         queryKey: queryKeys.clusterPages.appsInstalled(clusterId),
@@ -228,7 +250,8 @@ export function AppInstallModal({
     releaseName.trim() !== "" &&
     namespace.trim() !== "" &&
     !install.isPending &&
-    !submitBlockedReason;
+    !submitBlockedReason &&
+    (!isUpgrade || (upgradeValues.isSuccess && !upgradeValues.isError));
 
   const handleSubmit = () => {
     if (submitBlockedReason) {
@@ -255,55 +278,32 @@ export function AppInstallModal({
       bodyClassName="p-0"
       footerClassName="bg-muted/30 shrink-0"
       footer={
-        <div className="flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
-            disabled={install.isPending}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!submittable}
-            title={submitBlockedReason}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            {install.isPending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />{" "}
-                {isUpgrade ? "Upgrading" : "Installing"}…
-              </>
-            ) : (
-              <>{isUpgrade ? "Upgrade" : "Install"}</>
-            )}
-          </button>
-        </div>
+        <AppInstallFooter
+          onClose={onClose}
+          pending={install.isPending}
+          onSubmit={handleSubmit}
+          submittable={submittable}
+          reason={submitBlockedReason}
+          upgrade={isUpgrade}
+        />
       }
     >
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {(slowInstall || hasCRDs) && (
-          <div className="rounded-md border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
-            <Info className="h-4 w-4 text-status-warning mt-0.5 shrink-0" />
-            <div className="space-y-0.5 text-foreground">
-              {slowInstall && (
-                <div>
-                  First install of{" "}
-                  <span className="font-medium">{mode.chartName}</span>{" "}
-                  typically takes 3–10 minutes — sub-charts and CRDs land before
-                  the workloads come up.
-                </div>
-              )}
-              {hasCRDs && !isUpgrade && (
-                <div>
-                  This chart ships CRDs. The CRDs will <em>not</em> be removed
-                  automatically on uninstall (helm leaves them to protect data)
-                  — pick a stable namespace from the start.
-                </div>
-              )}
-            </div>
-          </div>
+        {isUpgrade && (
+          <QueryStates
+            query={upgradeValues}
+            permission="catalog:read"
+            errorTitle="Saved release values unavailable"
+          >
+            <></>
+          </QueryStates>
         )}
+        <ChartInstallationNotes
+          slowInstall={slowInstall}
+          hasCRDs={hasCRDs}
+          isUpgrade={isUpgrade}
+          chartName={mode.chartName}
+        />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="space-y-1.5">
@@ -538,5 +538,88 @@ export function AppUninstallModal({
         />
       </div>
     </ModalShell>
+  );
+}
+
+function AppInstallFooter({
+  onClose,
+  pending,
+  onSubmit,
+  submittable,
+  reason,
+  upgrade,
+}: {
+  onClose: () => void;
+  pending: boolean;
+  onSubmit: () => void;
+  submittable: boolean;
+  reason?: string;
+  upgrade: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <button
+        onClick={onClose}
+        className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
+        disabled={pending}
+      >
+        Cancel
+      </button>
+      <button
+        onClick={onSubmit}
+        disabled={!submittable}
+        title={reason}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+      >
+        {pending ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />{" "}
+            {upgrade ? "Upgrading" : "Installing"}…
+          </>
+        ) : (
+          <>{upgrade ? "Upgrade" : "Install"}</>
+        )}
+      </button>
+    </div>
+  );
+}
+
+function ChartInstallationNotes({
+  slowInstall,
+  hasCRDs,
+  isUpgrade,
+  chartName,
+}: {
+  slowInstall: boolean;
+  hasCRDs: boolean;
+  isUpgrade: boolean;
+  chartName: string;
+}) {
+  return (
+    <>
+      {" "}
+      {(slowInstall || hasCRDs) && (
+        <div className="rounded-md border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
+          <Info className="h-4 w-4 text-status-warning mt-0.5 shrink-0" />
+          <div className="space-y-0.5 text-foreground">
+            {slowInstall && (
+              <div>
+                First install of{" "}
+                <span className="font-medium">{chartName}</span> typically takes
+                3–10 minutes — sub-charts and CRDs land before the workloads
+                come up.
+              </div>
+            )}
+            {hasCRDs && !isUpgrade && (
+              <div>
+                This chart ships CRDs. The CRDs will <em>not</em> be removed
+                automatically on uninstall (helm leaves them to protect data) —
+                pick a stable namespace from the start.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

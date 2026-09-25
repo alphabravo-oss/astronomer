@@ -36,6 +36,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	clusterSnapshotsHandler := handler.NewClusterSnapshotsHandler(queries)
 	clusterSnapshotsHandler.SetRunTx(sqlcMutationTxRunner[handler.ClusterSnapshotMutationTx](database))
 	clusterSnapshotsHandler.SetRequester(requester)
+	clusterSnapshotsHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	clusterSnapshotsHandler.SetEventBus(bus)
 	// Control-plane (etcd) DR snapshots — OFF unless an operator opts in via
 	// config (control_plane_snapshots_enabled). Left nil, the etcd routes below

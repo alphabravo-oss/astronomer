@@ -415,6 +415,9 @@ type nodeList struct {
 }
 
 type eventList struct {
+	Metadata struct {
+		Continue string `json:"continue"`
+	} `json:"metadata"`
 	Items []struct {
 		Metadata struct {
 			UID string `json:"uid"`

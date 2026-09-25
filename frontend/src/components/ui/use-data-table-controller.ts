@@ -120,8 +120,10 @@ export function useDataTableController<T extends RowData>({
       columns.map((col) => ({
         id: col.key,
         accessorFn: (row: T) => sortValue(col, row),
-        enableSorting: col.sortable !== false,
-        enableHiding: col.hideable !== false && col.header.trim() !== "",
+        enableSorting: !col.rowActions && col.sortable !== false,
+        enableResizing: !col.rowActions && col.header.trim() !== "",
+        enableHiding:
+          !col.rowActions && col.hideable !== false && col.header.trim() !== "",
         enableColumnFilter: !!col.filter,
         // Faceted multi-select: keep the row when nothing is selected, otherwise
         // when its (stringified) value is among the selected facet values.
@@ -225,6 +227,7 @@ export function useDataTableController<T extends RowData>({
         // Never allow hiding the last visible column.
         const visibleCount = columns.filter(
           (c) =>
+            !c.rowActions &&
             c.hideable !== false &&
             c.header.trim() !== "" &&
             next[c.key] !== false,

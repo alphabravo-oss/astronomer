@@ -698,19 +698,10 @@ function ProjectDeliveryOverview({
             value={drifted ?? "—"}
             unavailable={deployments.isError}
           />
-          <RouterLink
-            to="/dashboard/agents"
-            className="block rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
-            aria-label={
-              system.isError ? "Incompatible clusters unavailable" : undefined
-            }
-          >
-            <MetricCard
-              icon={<ServerCog className="h-4 w-4" />}
-              title="Incompatible clusters"
-              value={system.isLoading ? "—" : (incompatibleClusters ?? "—")}
-            />
-          </RouterLink>
+          <SystemCompatibilityMetric
+            system={system}
+            count={incompatibleClusters}
+          />
         </div>
         {unhealthySources.isSuccess &&
           pageRowCount(unhealthySources.data) > 0 && (
@@ -789,7 +780,12 @@ function ProjectDeliveryOverview({
           title="Recent operator attention"
           description="Failures, degraded convergence, stale state, and rollback failures from the latest server page."
         >
-          {deployments.isError || rollouts.isError ? (
+          {!deployments.data && !rollouts.data ? (
+            <p className="text-sm text-muted-foreground">
+              Recent operator attention is unavailable for the current access or
+              while data loads.
+            </p>
+          ) : deployments.isError || rollouts.isError ? (
             <div
               className="rounded-lg border border-dashed border-border bg-card p-6 text-sm text-muted-foreground"
               aria-label="unavailable"
@@ -852,6 +848,31 @@ function ProjectDeliveryOverview({
   );
 }
 
+function SystemCompatibilityMetric({
+  system,
+  count,
+}: {
+  system: ReturnType<typeof useProjectDeliveryQueries>["system"];
+  count?: number;
+}) {
+  if (!system.data && !system.isFetching && !system.isError) return null;
+  return (
+    <RouterLink
+      to="/dashboard/agents"
+      className="block rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
+      aria-label={
+        system.isError ? "Incompatible clusters unavailable" : undefined
+      }
+    >
+      <MetricCard
+        icon={<ServerCog className="h-4 w-4" />}
+        title="Incompatible clusters"
+        value={system.isLoading ? "—" : (count ?? "—")}
+      />
+    </RouterLink>
+  );
+}
+
 function MetricLink({
   section,
   projectId,
@@ -869,6 +890,14 @@ function MetricLink({
   value: string | number;
   unavailable?: boolean;
 }) {
+  const { data: user } = useCurrentUser();
+  if (
+    !can(user, `delivery_${section}`, "list", {
+      type: "project",
+      id: projectId,
+    })
+  )
+    return null;
   const card = (
     <MetricCard
       icon={<Icon className="h-4 w-4" />}

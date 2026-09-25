@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as sourcesApi from "@/lib/api/delivery-sources";
@@ -149,8 +149,10 @@ describe("delivery overview error roll-up", () => {
 
     const activeTile = screen.getByText("Active (latest 10)").closest("a");
     const driftedTile = screen.getByText("Drifted (loaded page)").closest("a");
-    expect(activeTile?.textContent).toContain("0");
-    expect(driftedTile?.textContent).toContain("0");
+    await waitFor(() => {
+      expect(activeTile?.textContent).toContain("0");
+      expect(driftedTile?.textContent).toContain("0");
+    });
     expect(
       await screen.findByText(/No recent delivery failures/),
     ).toBeInTheDocument();

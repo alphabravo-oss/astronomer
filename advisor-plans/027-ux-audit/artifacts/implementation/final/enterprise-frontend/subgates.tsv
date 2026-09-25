@@ -1,0 +1,10 @@
+tool-prerequisites	passed	0
+frontend-code-health	passed	0
+frontend-lint	passed	0
+frontend-type-check	passed	0
+frontend-formatter-tests	passed	0
+frontend-unit-tests	passed	0
+frontend-build	passed	0
+frontend-bundle-budget	passed	0
+frontend-routetree-drift	passed	0
+frontend-npm-audit	passed	0

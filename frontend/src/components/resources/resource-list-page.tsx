@@ -1,13 +1,12 @@
+import { ErrorState } from "@/components/ui/empty-state";
+import { WorkloadTableDialogs } from "./workload-table-dialogs";
+import { collectionScope } from "@/lib/cluster-scope-collection";
+import { useClusterNamespaceScope } from "@/lib/cluster-scope";
 import { useCallback, useMemo, useState } from "react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import type { SortingState } from "@tanstack/react-table";
 import { useCluster } from "@/lib/hooks/clusters";
-import {
-  useWorkloads,
-  useScaleWorkload,
-  useRestartWorkload,
-} from "@/lib/hooks/workloads";
-import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
+import { useWorkloads, useRestartWorkload } from "@/lib/hooks/workloads";
 import { getWorkloadPods, type WorkloadSort } from "@/lib/api/workloads";
 import type { Column } from "@/components/ui/data-table";
 import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
@@ -15,11 +14,7 @@ import type { ActionMenuItem } from "@/components/ui/action-menu";
 import { ResourceActionMenu } from "./resource-action-menu";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader } from "@/components/ui/page";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ScaleDialog } from "@/components/workloads/scale-dialog";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
-import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
-import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import { GenericResourceTable } from "@/components/resources/generic-resource-table";
 import {
   EventsTable,
@@ -52,7 +47,6 @@ import {
   genericColumnMap,
   workloadColumns,
 } from "@/components/resources/resource-list-columns";
-import { resourceDeletionImpact } from "@/components/resources/resource-deletion-impact";
 import {
   k8sResourcePath,
   kindToResourceType,
@@ -73,7 +67,6 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import {
   RESOURCE_TITLES,
   WORKLOAD_KINDS,
-  WORKLOAD_TEMPLATE_BY_KIND,
   isGenericResourceType,
 } from "@/components/resources/resource-route-config";
 import {
@@ -223,12 +216,51 @@ export function WorkloadActions({
 
 function WorkloadsTable({
   clusterId,
+  ...props
+}: {
+  clusterId: string;
+  kind: string;
+  title: string;
+}) {
+  const scope = useClusterNamespaceScope(clusterId);
+  const selection = collectionScope(scope.selectedNamespaces);
+  if (scope.error)
+    return (
+      <ErrorState
+        title="Namespace scope unavailable"
+        description="The selected project or authorized namespaces could not be resolved."
+        onRetry={scope.retry}
+      />
+    );
+  if (!selection.enabled)
+    return (
+      <p role="status" className="p-6 text-sm text-muted-foreground">
+        {selection.message}
+      </p>
+    );
+  return (
+    <ScopedWorkloadsTable
+      key={`${clusterId}/${props.kind}/${JSON.stringify(scope.selectedNamespaces)}`}
+      clusterId={clusterId}
+      namespace={selection.namespace}
+      namespaces={selection.namespaces}
+      {...props}
+    />
+  );
+}
+
+function ScopedWorkloadsTable({
+  namespace,
+  namespaces,
+  clusterId,
   kind,
   title,
 }: {
   clusterId: string;
   kind: string;
   title: string;
+  namespace?: string;
+  namespaces?: string[];
 }) {
   const [pageIndex, setPageIndex] = useState(0);
   const [search, setSearch] = useState("");
@@ -236,12 +268,10 @@ function WorkloadsTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: "namespace", desc: false },
   ]);
-  const sort = (
-    sorting[0]
-      ? `${sorting[0].id === "age" ? "created" : sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
-      : "namespace_asc"
-  ) as WorkloadSort;
+  const sort = workloadSort(sorting);
   const workloadQuery = useWorkloads(clusterId, {
+    namespace,
+    namespaces,
     kind,
     search: debouncedSearch.trim() || undefined,
     sort,
@@ -252,9 +282,7 @@ function WorkloadsTable({
   const resourceType = kindToResourceType(kind);
   const navigate = useNavigate();
   const workloads = data?.data || [];
-  const scaleWorkload = useScaleWorkload();
   const restartWorkload = useRestartWorkload();
-  const k8sDeleteMut = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, "workloads");
   const podPermissions = useClusterResourcePermissions(clusterId, "pods");
 
@@ -326,6 +354,7 @@ function WorkloadsTable({
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <WorkloadActions
             row={row}
@@ -444,87 +473,18 @@ function WorkloadsTable({
         bulkWorkloads={{ target: workloadTarget }}
       />
 
-      <ScaleDialog
-        open={!!scaleTarget}
-        onClose={() => setScaleTarget(null)}
-        onScale={(replicas) => {
-          if (!permissions.scale.allowed) {
-            toastPermissionDenied(permissions.scale);
-            return;
-          }
-          if (scaleTarget) {
-            scaleWorkload.mutate(
-              {
-                clusterId,
-                kind: scaleTarget.kind,
-                namespace: scaleTarget.namespace,
-                name: scaleTarget.name,
-                replicas,
-              },
-              { onSuccess: () => setScaleTarget(null) },
-            );
-          }
-        }}
-        workloadName={scaleTarget?.name || ""}
-        currentReplicas={scaleTarget?.replicas || 0}
-        loading={scaleWorkload.isPending}
+      <WorkloadTableDialogs
+        clusterId={clusterId}
+        kind={kind}
+        scaleTarget={scaleTarget}
+        setScaleTarget={setScaleTarget}
+        yamlTarget={yamlTarget}
+        setYamlTarget={setYamlTarget}
+        deleteTarget={deleteTarget}
+        setDeleteTarget={setDeleteTarget}
+        showCreate={showCreate}
+        setShowCreate={setShowCreate}
       />
-
-      {yamlTarget && (
-        <YamlViewDialog
-          open={!!yamlTarget}
-          onClose={() => setYamlTarget(null)}
-          clusterId={clusterId}
-          k8sPath={yamlTarget.path}
-          title={yamlTarget.title}
-          allowEdit={permissions.update.allowed}
-          forceConflictPermission={permissions.manage}
-        />
-      )}
-
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (!permissions.delete.allowed) {
-            toastPermissionDenied(permissions.delete);
-            return;
-          }
-          if (deleteTarget) {
-            const resType = kindToResourceType(deleteTarget.kind);
-            k8sDeleteMut.mutate(
-              {
-                clusterId,
-                path: k8sResourcePath(
-                  resType,
-                  deleteTarget.name,
-                  deleteTarget.namespace,
-                ),
-              },
-              { onSuccess: () => setDeleteTarget(null) },
-            );
-          }
-        }}
-        title={`Delete ${deleteTarget?.kind || "Workload"}`}
-        description={`This will permanently delete ${deleteTarget?.name}. Managed pods will also be terminated.`}
-        impact={resourceDeletionImpact(
-          deleteTarget ? kindToResourceType(deleteTarget.kind) : kind,
-          deleteTarget,
-        )}
-        confirmValue={deleteTarget?.name}
-        variant="destructive"
-        loading={k8sDeleteMut.isPending}
-      />
-
-      {WORKLOAD_TEMPLATE_BY_KIND[kind] && (
-        <CreateResourceDialog
-          open={showCreate}
-          onClose={() => setShowCreate(false)}
-          clusterId={clusterId}
-          templateKey={WORKLOAD_TEMPLATE_BY_KIND[kind]}
-          title={`Create ${kind}`}
-        />
-      )}
     </>
   );
 }
@@ -653,4 +613,12 @@ export function ClusterResourcePage() {
       {renderTable()}
     </div>
   );
+}
+
+function workloadSort(sorting: SortingState): WorkloadSort {
+  return (
+    sorting[0]
+      ? `${sorting[0].id === "age" ? "created" : sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
+      : "namespace_asc"
+  ) as WorkloadSort;
 }

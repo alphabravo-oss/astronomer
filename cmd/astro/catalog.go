@@ -721,9 +721,9 @@ func newCatalogInstalledGetValuesCmd() *cobra.Command {
 			if resp.JSON200 == nil {
 				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON404)
 			}
-			return render(cmd, resp.JSON200, func(w io.Writer) error {
-				if resp.JSON200.ValuesOverride != nil {
-					_, err := io.WriteString(w, *resp.JSON200.ValuesOverride)
+			return render(cmd, resp.JSON200.Data, func(w io.Writer) error {
+				if resp.JSON200.Data.ValuesOverride != "" {
+					_, err := io.WriteString(w, resp.JSON200.Data.ValuesOverride)
 					return err
 				}
 				_, err := fmt.Fprintln(w, "(no values override)")
@@ -996,7 +996,7 @@ func newCatalogOpsGetCmd() *cobra.Command {
 			// The detail body is an anonymous struct (with events); just defer
 			// to the generic renderer so all fields show in json/yaml and a
 			// KV table by default.
-			return renderSDK(cmd, resp.JSON200)
+			return renderSDK(cmd, resp.JSON200.Data)
 		},
 	}
 	return cmd
@@ -1024,8 +1024,8 @@ func newCatalogOpRetryCmd() *cobra.Command {
 			if resp.JSON202 == nil {
 				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON403, resp.JSON404, resp.JSON409, resp.JSON500)
 			}
-			return render(cmd, resp.JSON202, func(w io.Writer) error {
-				return writeOperationsTable(w, []astroclient.CatalogOperation{*resp.JSON202})
+			return render(cmd, resp.JSON202.Data, func(w io.Writer) error {
+				return writeOperationsTable(w, []astroclient.CatalogOperation{resp.JSON202.Data})
 			})
 		},
 	}

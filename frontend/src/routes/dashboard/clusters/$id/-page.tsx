@@ -192,12 +192,7 @@ export function ClusterDetailPage() {
     );
   }
 
-  const distribution = distributionDisplayName(cluster.distribution);
-  const clusterMeta = [
-    { label: "Distribution", value: distribution },
-    { label: "Version", value: formatK8sVersion(cluster.kubernetesVersion) },
-    { label: "Environment", value: capitalize(cluster.environment ?? "") },
-  ];
+  const clusterMeta = clusterOverviewMetadata(cluster);
 
   return (
     <div className="space-y-6">
@@ -354,6 +349,7 @@ export function ClusterDetailPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <MetricCard
                 title="CPU Usage"
+                href={`/dashboard/clusters/${clusterId}/metrics`}
                 value={formatPercentage(cpuPct)}
                 percentage={cpuPct ?? undefined}
                 subtitle={
@@ -365,6 +361,7 @@ export function ClusterDetailPage() {
               />
               <MetricCard
                 title="Memory Usage"
+                href={`/dashboard/clusters/${clusterId}/metrics`}
                 value={formatPercentage(memPct)}
                 percentage={memPct ?? undefined}
                 subtitle={
@@ -376,11 +373,13 @@ export function ClusterDetailPage() {
               />
               <MetricCard
                 title="Nodes"
+                href={`/dashboard/clusters/${clusterId}/nodes`}
                 value={metricsSummary?.nodeCount ?? cluster.nodeCount ?? 0}
                 icon={<Server className="h-4 w-4" />}
               />
               <MetricCard
                 title="Pods"
+                href={`/dashboard/clusters/${clusterId}/pods`}
                 value={metricsSummary?.podCount ?? cluster.podCount ?? 0}
                 subtitle={
                   metricsSummary && Number.isFinite(metricsSummary.podCapacity)
@@ -808,4 +807,19 @@ export function AnomalyBaselinesPanel({ clusterId }: { clusterId: string }) {
       </QueryStates>
     </div>
   );
+}
+
+function clusterOverviewMetadata(cluster: {
+  distribution?: string | null;
+  kubernetesVersion?: string | null;
+  environment?: string | null;
+}) {
+  return [
+    {
+      label: "Distribution",
+      value: distributionDisplayName(cluster.distribution ?? ""),
+    },
+    { label: "Version", value: formatK8sVersion(cluster.kubernetesVersion) },
+    { label: "Environment", value: capitalize(cluster.environment ?? "") },
+  ];
 }

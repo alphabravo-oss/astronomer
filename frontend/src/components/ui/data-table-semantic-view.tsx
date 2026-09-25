@@ -28,6 +28,7 @@ interface SemanticDataTableProps<T extends RowData> {
   activeColumns: Column<T>[];
   selectable: boolean | ((row: T) => boolean);
   resizable: boolean;
+  layout: "fit" | "scroll";
   cellPadding: string;
   selectPadding: string;
   loading: boolean;
@@ -49,6 +50,7 @@ export function SemanticDataTable<T extends RowData>({
   activeColumns,
   selectable,
   resizable,
+  layout,
   cellPadding,
   selectPadding,
   loading,
@@ -75,12 +77,17 @@ export function SemanticDataTable<T extends RowData>({
   return (
     <div className="rounded-lg border border-border overflow-hidden">
       <div
-        className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className={cn(
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          layout === "scroll" ? "overflow-x-auto" : "overflow-x-hidden",
+        )}
         role="region"
-        aria-label="Scrollable data table"
+        aria-label={
+          layout === "scroll" ? "Scrollable data table" : "Data table"
+        }
         tabIndex={0}
       >
-        <Table className="w-full text-sm">
+        <Table layout={layout} className="w-full text-sm">
           <TableHeader>
             <TableRow className="border-b border-border bg-muted/50">
               {selectable && (
@@ -94,12 +101,20 @@ export function SemanticDataTable<T extends RowData>({
               )}
               {activeColumns.map((col) => {
                 const column = table.getColumn(col.key);
+                const rowActions = col.rowActions === true;
                 const sorted = column?.getIsSorted();
                 const header = resizable ? headerByKey.get(col.key) : undefined;
-                const sortable = col.sortable !== false;
+                const sortable = !rowActions && col.sortable !== false;
                 const headerContent = (
                   <>
-                    {col.header}
+                    <span
+                      className={cn(
+                        "min-w-0 truncate",
+                        rowActions && "sr-only",
+                      )}
+                    >
+                      {col.header || (rowActions ? "Actions" : "")}
+                    </span>
                     {sortable && (
                       <span className="text-muted-foreground/50">
                         {sorted === "asc" ? (
@@ -122,17 +137,20 @@ export function SemanticDataTable<T extends RowData>({
                     key={col.key}
                     className={cn(
                       cellPadding,
-                      "font-medium text-muted-foreground whitespace-nowrap",
+                      "min-w-0 overflow-hidden font-medium text-muted-foreground",
+                      rowActions && "px-1.5",
                       resizable && "relative",
                       col.align === "center" && "text-center",
                       col.align === "right" && "text-right",
                     )}
                     style={
-                      resizable
-                        ? { width: column?.getSize() }
-                        : col.width
-                          ? { width: col.width }
-                          : undefined
+                      rowActions
+                        ? { width: col.width ?? "2.5rem" }
+                        : resizable
+                          ? { width: column?.getSize() }
+                          : col.width
+                            ? { width: col.width }
+                            : undefined
                     }
                     aria-sort={
                       sortable
@@ -150,7 +168,7 @@ export function SemanticDataTable<T extends RowData>({
                         aria-label={`Sort by ${col.header}`}
                         onClick={() => column?.toggleSorting()}
                         className={cn(
-                          "flex items-center gap-1 p-0 cursor-pointer select-none hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                          "flex min-w-0 items-center gap-1 overflow-hidden p-0 cursor-pointer select-none hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                           // Narrower than the full header width when a resize
                           // handle shares this header, so the two adjacent
                           // touch targets have clear space between them
@@ -240,26 +258,33 @@ export function SemanticDataTable<T extends RowData>({
                       <div className="h-4 w-4 rounded-sm bg-muted animate-pulse" />
                     </TableCell>
                   )}
-                  {activeColumns.map((col) => (
-                    <TableCell
-                      key={col.key}
-                      className={cellPadding}
-                      style={
-                        resizable
-                          ? { width: table.getColumn(col.key)?.getSize() }
-                          : undefined
-                      }
-                    >
-                      <div
-                        className="h-4 w-24 max-w-full rounded-sm bg-muted animate-pulse"
-                        style={{
-                          width: col.width
-                            ? `min(100%, ${col.width})`
-                            : undefined,
-                        }}
-                      />
-                    </TableCell>
-                  ))}
+                  {activeColumns.map((col) => {
+                    const rowActions = col.rowActions === true;
+                    return (
+                      <TableCell
+                        key={col.key}
+                        className={cn(cellPadding, rowActions && "px-1.5")}
+                        style={
+                          rowActions
+                            ? { width: col.width ?? "2.5rem" }
+                            : resizable
+                              ? {
+                                  width: table.getColumn(col.key)?.getSize(),
+                                }
+                              : undefined
+                        }
+                      >
+                        <div
+                          className="h-4 w-24 max-w-full rounded-sm bg-muted animate-pulse"
+                          style={{
+                            width: col.width
+                              ? `min(100%, ${col.width})`
+                              : undefined,
+                          }}
+                        />
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               ))
             ) : rows.length === 0 ? (
@@ -297,7 +322,7 @@ export function SemanticDataTable<T extends RowData>({
                     <TableRow
                       key={key}
                       className={cn(
-                        "border-b border-border last:border-0 whitespace-nowrap transition-colors",
+                        "border-b border-border last:border-0 transition-colors",
                         onRowClick && "cursor-pointer hover:bg-muted/50",
                         isSelected && "bg-muted/30",
                       )}
@@ -325,24 +350,47 @@ export function SemanticDataTable<T extends RowData>({
                           />
                         </TableCell>
                       )}
-                      {activeColumns.map((col) => (
-                        <TableCell
-                          key={col.key}
-                          className={cn(
-                            cellPadding,
-                            "whitespace-nowrap",
-                            col.align === "center" && "text-center",
-                            col.align === "right" && "text-right",
-                          )}
-                          style={
-                            resizable
-                              ? { width: table.getColumn(col.key)?.getSize() }
-                              : undefined
-                          }
-                        >
-                          {col.accessor(row.original)}
-                        </TableCell>
-                      ))}
+                      {activeColumns.map((col) => {
+                        const rowActions = col.rowActions === true;
+                        return (
+                          <TableCell
+                            key={col.key}
+                            className={cn(
+                              cellPadding,
+                              "min-w-0 overflow-hidden",
+                              rowActions && "px-1.5",
+                              col.align === "center" && "text-center",
+                              col.align === "right" && "text-right",
+                            )}
+                            style={
+                              rowActions
+                                ? { width: col.width ?? "2.5rem" }
+                                : resizable
+                                  ? {
+                                      width: table
+                                        .getColumn(col.key)
+                                        ?.getSize(),
+                                    }
+                                  : undefined
+                            }
+                          >
+                            <div
+                              className={cn(
+                                "min-w-0",
+                                rowActions
+                                  ? "overflow-visible"
+                                  : "overflow-hidden text-ellipsis",
+                                !rowActions &&
+                                  (col.wrap
+                                    ? "whitespace-normal break-words"
+                                    : "whitespace-nowrap"),
+                              )}
+                            >
+                              {col.accessor(row.original)}
+                            </div>
+                          </TableCell>
+                        );
+                      })}
                     </TableRow>
                   </Fragment>
                 );

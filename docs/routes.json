@@ -1001,6 +1001,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/catalog/installed/{id}"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/catalog/installed/{id}/revisions"
   },
   {
@@ -1646,6 +1650,14 @@
   {
     "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/shell/sessions/{id}/commands"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshot-restores"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/snapshot-restores/{id}"
   },
   {
     "method": "GET",
@@ -2397,6 +2409,10 @@
   },
   {
     "method": "DELETE",
+    "pattern": "/api/v1/logging/pipelines/{id}"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/logging/pipelines/{id}"
   },
   {

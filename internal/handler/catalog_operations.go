@@ -106,52 +106,6 @@ func (h *CatalogHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, resp)
 }
 
-// enrichCatalogOperationDeliveryStatus projects the asynchronous Flux
-// workload outcome without holding a catalog worker claim for the rollout's
-// full convergence deadline.
-func (h *CatalogHandler) enrichCatalogOperationDeliveryStatus(ctx context.Context, op sqlc.CatalogOperation, resp map[string]any) {
-	if h.delivery == nil || op.TargetType != "installed_chart" {
-		return
-	}
-	installationID, err := uuid.Parse(op.TargetKey)
-	if err != nil {
-		return
-	}
-	installation, err := h.queries.GetInstalledChartByID(ctx, installationID)
-	if err != nil || !installation.RequestID.Valid {
-		return
-	}
-	status, err := h.delivery.Status(ctx, uuid.UUID(installation.RequestID.Bytes))
-	if err != nil {
-		return
-	}
-	phase := strings.TrimSpace(status.Phase)
-	if phase == "" {
-		phase = "pending"
-	}
-	resp["deliveryPhase"] = phase
-	events, _ := resp["events"].([]map[string]any)
-	level, message, terminal := "info", "Flux is reconciling the application", false
-	switch phase {
-	case "ready":
-		resp["status"], message, terminal = "completed", "Flux reports the application workloads ready", true
-	case "removed":
-		resp["status"], message, terminal = "completed", "Flux reports the application removed", true
-	case "failed", "timed_out", "rollback_failed":
-		resp["status"], level, message, terminal = "failed", "error", "Flux could not converge the application", true
-	case "degraded":
-		resp["status"], level, message = "running", "warn", "Flux reports degraded workloads and is continuing remediation"
-	default:
-		resp["status"] = "running"
-	}
-	events = append(events, map[string]any{
-		"id": "delivery-" + phase, "level": level, "stage": "workloads", "message": message,
-		"detail":    map[string]any{"phase": phase, "errorCode": status.LastErrorCode, "terminal": terminal},
-		"createdAt": time.Now().UTC().Format(time.RFC3339),
-	})
-	resp["events"] = events
-}
-
 func (h *CatalogHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -335,6 +289,7 @@ func catalogOperationResponse(op sqlc.CatalogOperation) map[string]any {
 		"targetKey":     op.TargetKey,
 		"operationType": op.OperationType,
 		"status":        op.Status,
+		"journalStatus": op.Status,
 		"attemptCount":  op.AttemptCount,
 		"startedAt":     nullablePgTime(op.StartedAt),
 		"completedAt":   nullablePgTime(op.CompletedAt),
@@ -544,6 +499,9 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 		h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "requesting fenced Flux application deletion", map[string]any{
 			"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
 		})
+		if installation.RequestID.Valid {
+			h.recordCatalogOperationEvent(ctx, op.ID, "info", "deletion", "Flux target deletion requested", map[string]any{"targetId": uuid.UUID(installation.RequestID.Bytes).String()})
+		}
 		if deliveryErr := h.delivery.Uninstall(ctx, installation.ID, op.CreatedByID); deliveryErr != nil {
 			_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_uninstall", Revision: installation.Revision})
 			return deliveryErr

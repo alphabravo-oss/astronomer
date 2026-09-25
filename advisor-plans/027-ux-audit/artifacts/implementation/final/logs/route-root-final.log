@@ -1,0 +1,27 @@
+
+> astronomer-frontend@1.2.0 pretest:e2e:smoke
+> node scripts/generate-route-manifest.mjs && node scripts/generate-e2e-stubs.mjs
+
+route-manifest: 146 routes -> tests/e2e-smoke/route-manifest.generated.json
+e2e-stubs: 357 GET stubs -> tests/e2e-smoke/openapi-stubs.generated.json (18 GETs without a JSON success schema skipped)
+
+> astronomer-frontend@1.2.0 test:e2e:smoke
+> playwright test --project=route-smoke --project=route-smoke-mobile --workers=2
+
+
+Running 308 tests using 2 workers
+(node:3295996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··(node:3296143) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3296144) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··············································································
+··········································································(node:3307486) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··(node:3307641) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+····
+················································································
+····································································
+  308 passed (5.1m)

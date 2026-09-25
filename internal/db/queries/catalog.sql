@@ -14,7 +14,7 @@ SELECT * FROM helm_repositories ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 -- excluded.
 SELECT * FROM helm_repositories
 WHERE owner_project_id IS NULL
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountGlobalHelmRepositories :one

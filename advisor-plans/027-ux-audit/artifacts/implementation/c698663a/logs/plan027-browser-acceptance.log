@@ -1,0 +1,110 @@
+
+> astronomer-frontend@1.2.0 pretest:e2e
+> node scripts/generate-e2e-stubs.mjs
+
+e2e-stubs: 357 GET stubs -> tests/e2e-smoke/openapi-stubs.generated.json (18 GETs without a JSON success schema skipped)
+
+> astronomer-frontend@1.2.0 test:e2e
+> playwright test --project=chromium --project=mobile-chromium operator- pod-drilldown.spec.ts resource-drilldown.spec.ts critical-workflows-keyboard.spec.ts resource-actions-keyboard.spec.ts --workers=1
+
+
+Running 102 tests using 1 worker
+(node:3171216) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+··(node:3171330) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+····F(node:3171952) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·············································(node:3175497) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+····F(node:3176166) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+·······················
+······················
+
+  1) [chromium] › tests/e2e/critical-workflows-keyboard.spec.ts:623:1 › keyboard-only snapshot restore queues the selected backup 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'Snapshots', exact: true })
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('heading', { name: 'Snapshots', exact: true }) with timeout 10000ms
+      - waiting for getByRole('heading', { name: 'Snapshots', exact: true })
+
+
+      627 |   await expect(
+      628 |     page.getByRole("heading", { name: "Snapshots", exact: true }),
+    > 629 |   ).toBeVisible();
+          |     ^
+      630 |
+      631 |   const restore = page.getByRole("button", { name: "Restore", exact: true });
+      632 |   await restore.focus();
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/critical-workflows-keyboard.spec.ts:629:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-acceptance/critical-workflows-keyboar-c24df--queues-the-selected-backup-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-acceptance/critical-workflows-keyboar-c24df--queues-the-selected-backup-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-acceptance/critical-workflows-keyboar-c24df--queues-the-selected-backup-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-acceptance/critical-workflows-keyboar-c24df--queues-the-selected-backup-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-acceptance/critical-workflows-keyboar-c24df--queues-the-selected-backup-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [mobile-chromium] › tests/e2e/critical-workflows-keyboard.spec.ts:623:1 › keyboard-only snapshot restore queues the selected backup 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'Snapshots', exact: true })
+    Expected: visible
+    Timeout: 10000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('heading', { name: 'Snapshots', exact: true }) with timeout 10000ms
+      - waiting for getByRole('heading', { name: 'Snapshots', exact: true })
+
+
+      627 |     body: { cluster_id: CLUSTER_ID, profile: "eks-cis-1.5" },
+      628 |   });
+    > 629 | });
+          |    ^
+      630 |
+      631 | test("keyboard-only snapshot restore queues the selected backup", async ({
+      632 |   page,
+        at /root/astronomer-all/astronomer-plan027/frontend/tests/e2e/critical-workflows-keyboard.spec.ts:629:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/operator-acceptance/critical-workflows-keyboar-c24df--queues-the-selected-backup-mobile-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/operator-acceptance/critical-workflows-keyboar-c24df--queues-the-selected-backup-mobile-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/operator-acceptance/critical-workflows-keyboar-c24df--queues-the-selected-backup-mobile-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/operator-acceptance/critical-workflows-keyboar-c24df--queues-the-selected-backup-mobile-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/operator-acceptance/critical-workflows-keyboar-c24df--queues-the-selected-backup-mobile-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [chromium] › tests/e2e/critical-workflows-keyboard.spec.ts:623:1 › keyboard-only snapshot restore queues the selected backup 
+    [mobile-chromium] › tests/e2e/critical-workflows-keyboard.spec.ts:623:1 › keyboard-only snapshot restore queues the selected backup 
+  100 passed (3.2m)

@@ -142,7 +142,6 @@ func enrichedInstalledRowJSON(row sqlc.InstalledChartWithMetadata) map[string]an
 		"namespace":         row.Namespace,
 		"status":            row.Status,
 		"revision":          row.Revision,
-		"values_override":   row.ValuesOverride,
 		"tool_slug":         pgTextString(row.ToolSlug),
 		"preset_used":       pgTextString(row.PresetUsed),
 		"source_kind":       sourceKind,

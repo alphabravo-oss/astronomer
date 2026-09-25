@@ -102,6 +102,7 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
     {
       key: "actions",
       header: "",
+      rowActions: true,
       accessor: (row) => {
         const builtin = isBuiltinRole(row);
         return (

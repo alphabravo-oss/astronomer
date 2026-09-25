@@ -14,13 +14,14 @@ import { RulesTab } from "@/routes/dashboard/alerting/-rules-tab";
 import { EventsTab } from "@/routes/dashboard/alerting/-events-tab";
 import { AlertRuleModal } from "@/routes/dashboard/alerting/-rule-modal";
 
-type TabKey = "rules" | "active";
+type TabKey = "rules" | "active" | "history";
 
-const TAB_KEYS = ["rules", "active"] as const;
+const TAB_KEYS = ["rules", "active", "history"] as const;
 
 const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
   { key: "rules", label: "Alert Rules", icon: Shield },
-  { key: "active", label: "Active Alerts", icon: AlertTriangle },
+  { key: "history", label: "History", icon: AlertTriangle },
+  { key: "active", label: "Firing alerts", icon: AlertTriangle },
 ];
 
 function ClusterAlertingPage() {
@@ -72,7 +73,10 @@ function ClusterAlertingPage() {
             }}
           />
         )}
-        {activeTab === "active" && <EventsTab clusterId={clusterId} />}
+        {activeTab === "active" && (
+          <EventsTab clusterId={clusterId} history={false} />
+        )}
+        {activeTab === "history" && <EventsTab clusterId={clusterId} />}
       </TabsContent>
 
       {showRuleModal && (

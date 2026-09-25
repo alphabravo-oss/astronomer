@@ -1,14 +1,22 @@
-import { useCluster, useClusterNodes, useClusterNamespaces } from "@/lib/hooks/clusters";
-import { useClusterMetrics, useClusterMetricsSummary } from "@/lib/hooks/workloads";
+import { MetricsReadError } from "./metrics-read-error";
+import { clusterMetricColumns } from "./cluster-metric-columns";
+import {
+  useCluster,
+  useClusterNodes,
+  useClusterNamespaces,
+} from "@/lib/hooks/clusters";
+import {
+  useClusterMetrics,
+  useClusterMetricsSummary,
+} from "@/lib/hooks/workloads";
 import { useTabParam } from "@/lib/use-tab-param";
 import { useRollingMetrics } from "@/lib/use-rolling-metrics";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { MetricsChart } from "@/components/monitoring/metrics-chart";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import { DataTable } from "@/components/ui/data-table";
 import { formatBytes, formatCPU, formatPercentage, cn } from "@/lib/utils";
-import type { ClusterNode, Namespace } from "@/types";
 import { LineChart, ArrowRight } from "lucide-react";
 import {
   Cpu,
@@ -34,11 +42,10 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
   );
 
   const { data: cluster } = useCluster(clusterId);
-  const { data: summary } = useClusterMetricsSummary(clusterId);
-  const { data: metrics, isLoading: metricsLoading } = useClusterMetrics(
-    clusterId,
-    timeRange,
-  );
+  const summaryQuery = useClusterMetricsSummary(clusterId);
+  const { data: summary } = summaryQuery;
+  const metricsQuery = useClusterMetrics(clusterId, timeRange);
+  const { data: metrics, isLoading: metricsLoading } = metricsQuery;
   const {
     data: nodes,
     isLoading: nodesLoading,
@@ -55,125 +62,7 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
   const hasProm = metrics?.available === true;
   const rolling = useRollingMetrics(clusterId, summary);
 
-  const nodeColumns: Column<ClusterNode>[] = [
-    {
-      key: "name",
-      header: "Node",
-      accessor: (row) => (
-        <span className="font-mono text-xs text-foreground">{row.name}</span>
-      ),
-    },
-    {
-      key: "cpu",
-      header: "CPU",
-      accessor: (row) => {
-        const pct =
-          row.cpuCapacity > 0 ? (row.cpuUsage / row.cpuCapacity) * 100 : 0;
-        return (
-          <div className="flex items-center gap-2">
-            <div className="w-20 gauge-bar">
-              <div
-                className={cn(
-                  "gauge-bar-fill",
-                  pct >= 90
-                    ? "bg-status-error"
-                    : pct >= 75
-                      ? "bg-status-warning"
-                      : "bg-status-success",
-                )}
-                style={{ width: `${Math.min(pct, 100)}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground tabular-nums w-10">
-              {formatPercentage(pct, 0)}
-            </span>
-          </div>
-        );
-      },
-      sortAccessor: (row) => row.cpuUsage / Math.max(row.cpuCapacity, 1),
-    },
-    {
-      key: "memory",
-      header: "Memory",
-      accessor: (row) => {
-        const pct =
-          row.memoryCapacity > 0
-            ? (row.memoryUsage / row.memoryCapacity) * 100
-            : 0;
-        return (
-          <div className="flex items-center gap-2">
-            <div className="w-20 gauge-bar">
-              <div
-                className={cn(
-                  "gauge-bar-fill",
-                  pct >= 90
-                    ? "bg-status-error"
-                    : pct >= 75
-                      ? "bg-status-warning"
-                      : "bg-status-success",
-                )}
-                style={{ width: `${Math.min(pct, 100)}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground tabular-nums w-10">
-              {formatPercentage(pct, 0)}
-            </span>
-          </div>
-        );
-      },
-      sortAccessor: (row) => row.memoryUsage / Math.max(row.memoryCapacity, 1),
-    },
-    {
-      key: "pods",
-      header: "Pods",
-      accessor: (row) => (
-        <span className="text-xs tabular-nums text-muted-foreground">
-          {row.podCount}/{row.podCapacity}
-        </span>
-      ),
-      sortAccessor: (row) => row.podCount,
-      align: "center",
-    },
-  ];
-
-  const nsColumns: Column<Namespace>[] = [
-    {
-      key: "name",
-      header: "Namespace",
-      accessor: (row) => (
-        <span className="font-mono text-xs text-foreground">{row.name}</span>
-      ),
-    },
-    {
-      key: "pods",
-      header: "Pods",
-      accessor: (row) => (
-        <span className="tabular-nums text-xs">{row.podCount}</span>
-      ),
-      sortAccessor: (row) => row.podCount,
-      align: "center",
-    },
-    {
-      key: "cpu",
-      header: "CPU Usage",
-      accessor: (row) => (
-        <span className="text-xs tabular-nums text-muted-foreground">
-          {formatCPU(row.cpuUsage)}
-        </span>
-      ),
-      sortAccessor: (row) => row.cpuUsage,
-    },
-    {
-      key: "memory",
-      header: "Memory Usage",
-      accessor: (row) => (
-        <span className="text-xs tabular-nums text-muted-foreground">
-          {formatBytes(row.memoryUsage)}
-        </span>
-      ),
-      sortAccessor: (row) => row.memoryUsage,
-    },
-  ];
+  const { nodeColumns, nsColumns } = clusterMetricColumns(clusterId);
 
   return (
     <PageShell>
@@ -202,6 +91,12 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
         }
       />
 
+      {summaryQuery.isError && (
+        <MetricsReadError
+          query={summaryQuery}
+          title="Metrics summary unavailable"
+        />
+      )}
       <div
         className={cn(
           "grid grid-cols-1 sm:grid-cols-2 gap-4",
@@ -256,7 +151,12 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
         />
       </div>
 
-      {metricsLoading && !hasProm && rolling.count === 0 ? (
+      {metricsQuery.isError ? (
+        <MetricsReadError
+          query={metricsQuery}
+          title="Metrics history unavailable"
+        />
+      ) : metricsLoading && !hasProm && rolling.count === 0 ? (
         <div className="flex items-center justify-center h-48">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
           <span className="text-sm text-muted-foreground">
@@ -264,23 +164,35 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
           </span>
         </div>
       ) : hasProm && metrics ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <MetricsChart
             title="CPU Usage"
             series={[metrics.cpuUsage, metrics.cpuCapacity]}
             unit="millicores"
+            height={220}
+            compact
           />
           <MetricsChart
             title="Memory Usage"
             series={[metrics.memoryUsage, metrics.memoryCapacity]}
             unit="bytes"
+            height={220}
+            compact
           />
           <MetricsChart
             title="Network I/O"
             series={[metrics.networkReceive, metrics.networkTransmit]}
             unit="bytes/s"
+            height={220}
+            compact
           />
-          <MetricsChart title="Pod Count" series={[metrics.podCount]} unit="" />
+          <MetricsChart
+            title="Pod Count"
+            series={[metrics.podCount]}
+            unit=""
+            height={220}
+            compact
+          />
         </div>
       ) : (
         <div className="space-y-4">
@@ -295,28 +207,35 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
               </p>
             </div>
             <RouterLink
-              to="/dashboard/clusters/$id/monitoring-stack" params={{ id: clusterId }}
+              to="/dashboard/clusters/$id/monitoring-stack"
+              params={{ id: clusterId }}
               className="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium hover:bg-accent transition-colors"
             >
               Set up monitoring stack
               <ArrowRight className="h-3.5 w-3.5" />
             </RouterLink>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             <MetricsChart
               title="CPU Usage (live)"
               series={[rolling.cpu]}
               unit="%"
+              height={200}
+              compact
             />
             <MetricsChart
               title="Memory Usage (live)"
               series={[rolling.mem]}
               unit="%"
+              height={200}
+              compact
             />
             <MetricsChart
               title="Pod Count (live)"
               series={[rolling.pods]}
               unit=""
+              height={200}
+              compact
             />
           </div>
         </div>

@@ -1145,7 +1145,7 @@ func (q *Queries) ListEnabledHelmRepositories(ctx context.Context) ([]HelmReposi
 const listGlobalHelmRepositories = `-- name: ListGlobalHelmRepositories :many
 SELECT id, name, url, repo_type, description, is_default, auth_type, auth_config, enabled, last_synced_at, created_by_id, created_at, updated_at, owner_project_id, last_sync_error, last_sync_attempted_at, auth_config_encrypted FROM helm_repositories
 WHERE owner_project_id IS NULL
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2
 `
 

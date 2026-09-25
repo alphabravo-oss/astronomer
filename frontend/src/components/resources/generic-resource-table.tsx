@@ -146,6 +146,7 @@ export function GenericResourceTable({
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => {
           const items: ActionMenuItem[] = [
             {

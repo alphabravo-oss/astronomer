@@ -16,6 +16,7 @@ export interface ClusterDiscovery {
   crdsByGroup: Map<string, DiscoveredResourceType[]>;
   isLoading: boolean;
   isError: boolean;
+  retry?: () => unknown;
 }
 
 interface CRDDefinition {
@@ -71,4 +72,24 @@ export function clusterDiscoveryFromDefinitions(
     crdsByGroup.set(group, resources);
   }
   return { groups, kinds, crdsByGroup };
+}
+
+export function clusterDiscoveryFromSummaries(
+  summaries: Array<Record<string, unknown>>,
+) {
+  return clusterDiscoveryFromDefinitions(
+    summaries.map((summary) => ({
+      spec: {
+        group: summary.group as string,
+        scope: summary.scope as string,
+        names: {
+          kind: summary.kind as string,
+          plural: summary.plural as string,
+        },
+        versions: (
+          (summary.versions as Array<{ name: string; storage?: boolean }>) ?? []
+        ).map((version) => ({ ...version, served: true })),
+      },
+    })),
+  );
 }

@@ -5,7 +5,14 @@ import type { NavGroup } from "./sidebar-navigation";
 
 vi.mock("@tanstack/react-router", async () => {
   const { RouterLinkStub } = await import("@/test/router-link");
-  return { Link: RouterLinkStub };
+  return {
+    Link: RouterLinkStub,
+    useLocation: ({
+      select,
+    }: {
+      select: (value: { searchStr: string }) => unknown;
+    }) => select({ searchStr: "" }),
+  };
 });
 
 const group: NavGroup = {

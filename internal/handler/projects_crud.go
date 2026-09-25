@@ -91,9 +91,10 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	items := make([]ProjectResponse, 0, len(projects))
-	for _, p := range projects {
-		items = append(items, projectToResponse(p))
+	items, err := h.projectNavigationResponses(r.Context(), projects)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to read project namespace scopes")
+		return
 	}
 
 	paging.Write(w, items, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(items)))
@@ -199,7 +200,12 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
 		return
 	}
-	RespondJSON(w, http.StatusOK, projectToResponse(project))
+	items, err := h.projectNavigationResponses(r.Context(), []sqlc.Project{project})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to read project namespace scopes")
+		return
+	}
+	RespondJSON(w, http.StatusOK, items[0])
 }
 
 // Update handles PUT /api/v1/projects/{id}/.

@@ -399,6 +399,9 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier rbac.BindingQuerier,
 			}
 			ref := parseK8sProxyObjectRef(k8sPath)
 			namespace := ref["namespace"]
+			if handleSelectedNamespaceAuthorization(w, r, next, engine, native, bindings, user.ID, clusterID, projectID, resource, verb, ref) {
+				return
+			}
 			// F1 (M5): a mutating nodes/{name}/proxy request reaches the
 			// kubelet's own HTTP surface, whose /run/ and /exec/ endpoints run
 			// arbitrary commands in any container on the node. That is pod exec
@@ -497,17 +500,6 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier rbac.BindingQuerier,
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-func canonicalK8sProxyPath(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		canonical, err := tunnel.CanonicalK8sProxyPath(r)
-		if err != nil {
-			writeRouteAuthError(w, http.StatusBadRequest, "invalid_k8s_path", "Kubernetes proxy path is not canonical")
-			return
-		}
-		next.ServeHTTP(w, tunnel.WithCanonicalK8sProxyPath(r, canonical))
-	})
 }
 
 func requireK8sProxyScope() func(http.Handler) http.Handler {

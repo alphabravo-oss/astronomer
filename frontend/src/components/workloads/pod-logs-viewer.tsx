@@ -1,3 +1,4 @@
+import { useInvestigationParam } from "@/components/resources/resource-navigation-context";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { usePodLogs } from "@/lib/hooks/workloads";
 import type { Pod, PodLog } from "@/types";
@@ -33,16 +34,21 @@ export function PodLogsViewer({
 }: PodLogsViewerProps) {
   const [follow, setFollow] = useState(true);
   const [showTimestamps, setShowTimestamps] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
-  const [tailLines, setTailLines] = useState(500);
+  const [searchQuery, setSearchQuery] = useInvestigationParam("logFilter");
+  const [showSearch, setShowSearch] = useState(Boolean(searchQuery));
+  const [tailChoice, setTailChoice] = useInvestigationParam("tail", "500");
+  const tailLines = [100, 500, 1000, 5000].includes(Number(tailChoice))
+    ? Number(tailChoice)
+    : 500;
+  const setTailLines = (value: number) => setTailChoice(String(value));
   const [previous, setPrevious] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const activePod = pods.find((p) => p.name === selectedPod) || pods[0];
   const podName = activePod?.name || "";
   const containers = useMemo(() => activePod?.containers ?? [], [activePod]);
-  const [containerChoice, setSelectedContainer] = useState("");
+  const [containerChoice, setSelectedContainer] =
+    useInvestigationParam("container");
   const defaultContainer =
     containers.find((container) => !container.init)?.name ??
     containers[0]?.name ??
@@ -120,7 +126,7 @@ export function PodLogsViewer({
     }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, []);
+  }, [setSearchQuery]);
 
   const handleDownload = useCallback(() => {
     if (!filteredLogs.length) return;
@@ -137,21 +143,6 @@ export function PodLogsViewer({
     a.click();
     URL.revokeObjectURL(url);
   }, [filteredLogs, podName, selectedContainer, showTimestamps]);
-
-  const getLogLineClass = (log: PodLog) => {
-    const msg = (log.message || "").toLowerCase();
-    if (
-      log.level === "error" ||
-      msg.includes("error") ||
-      msg.includes("fatal")
-    ) {
-      return "log-error";
-    }
-    if (log.level === "warn" || msg.includes("warn")) {
-      return "log-warn";
-    }
-    return "";
-  };
 
   if (!activePod) {
     return (
@@ -423,4 +414,15 @@ export function PodLogsViewer({
       )}
     </div>
   );
+}
+
+function getLogLineClass(log: PodLog) {
+  const msg = (log.message || "").toLowerCase();
+  if (log.level === "error" || msg.includes("error") || msg.includes("fatal")) {
+    return "log-error";
+  }
+  if (log.level === "warn" || msg.includes("warn")) {
+    return "log-warn";
+  }
+  return "";
 }

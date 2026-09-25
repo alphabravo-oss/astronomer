@@ -116,6 +116,7 @@ export async function listCatalogCharts(params: {
   const wire = await generated.getCatalogCharts({
     query: {
       project_id: params.projectId,
+      search: params.search?.trim() || undefined,
       limit: params.limit,
       offset: params.offset,
     },
@@ -137,20 +138,7 @@ export async function listCatalogCharts(params: {
       deprecated: raw.deprecated ?? false,
     }),
   );
-  const term = params.search?.trim().toLocaleLowerCase();
-  return {
-    ...page,
-    data: term
-      ? page.data.filter((chart) =>
-          [
-            chart.name,
-            chart.displayName,
-            chart.description,
-            ...chart.keywords,
-          ].some((value) => value.toLocaleLowerCase().includes(term)),
-        )
-      : page.data,
-  };
+  return page;
 }
 
 // Recommended view: wraps /catalog/recommendations/popular which
@@ -216,7 +204,10 @@ export async function installChartOnCluster(req: {
   valuesOverride: string;
   idempotencyKey?: string;
   signal?: AbortSignal;
-}): Promise<{ id: string }> {
+}): Promise<{
+  id: string;
+  operation: OpenAPIComponents["schemas"]["CatalogOperation"];
+}> {
   const wire = await generated.postCatalogInstalled({
     headerParams: {
       "Idempotency-Key": req.idempotencyKey ?? createIdempotencyKey(),
@@ -231,20 +222,24 @@ export async function installChartOnCluster(req: {
     },
     signal: req.signal,
   });
-  return { id: wire.data.installation.id ?? "" };
+  return {
+    id: wire.data.installation.id ?? "",
+    operation: wire.data.operation,
+  };
 }
 
 export async function uninstallCatalogRelease(
   installedChartId: string,
   options: { idempotencyKey?: string; signal?: AbortSignal } = {},
-): Promise<void> {
-  await generated.deleteCatalogInstalledById({
+): Promise<OpenAPIComponents["schemas"]["CatalogOperation"]> {
+  const wire = await generated.deleteCatalogInstalledById({
     path: { id: installedChartId },
     headerParams: {
       "Idempotency-Key": options.idempotencyKey ?? createIdempotencyKey(),
     },
     signal: options.signal,
   });
+  return wire.data;
 }
 
 // Rancher-style bulk-delete of stuck releases. Backend hard-deletes any
@@ -259,4 +254,48 @@ export async function deleteFailedClusterApps(
     signal,
   });
   return { deleted: wire.deleted ?? 0 };
+}
+
+export async function upgradeClusterApp(
+  id: string,
+  body: { chart_version_id: string; values_override?: string },
+  idempotencyKey = createIdempotencyKey(),
+) {
+  const wire = await generated.putCatalogInstalledByIdUpgrade({
+    path: { id },
+    headerParams: { "Idempotency-Key": idempotencyKey },
+    body,
+  });
+  return {
+    id: wire.data.installation.id ?? "",
+    operation: wire.data.operation,
+  };
+}
+
+export async function getClusterAppValues(
+  id: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const wire = await generated.getCatalogInstalledByIdValues({
+    path: { id },
+    signal,
+  });
+  if (typeof wire.data.values_override !== "string")
+    throw new Error("Release values are unavailable");
+  return wire.data.values_override;
+}
+export async function getClusterAppHistory(id: string, signal?: AbortSignal) {
+  const wire = await generated.getCatalogInstalledByIdRevisions({
+    path: { id },
+    signal,
+  });
+  return wire.data;
+}
+
+export async function getClusterApp(id: string, signal?: AbortSignal) {
+  const wire = await generated.getCatalogInstalledById({
+    path: { id },
+    signal,
+  });
+  return wire.data;
 }

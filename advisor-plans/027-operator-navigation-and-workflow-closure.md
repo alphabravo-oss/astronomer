@@ -1,10 +1,10 @@
 # Plan 027 — Make navigation and operator workflows predictable
 
-> Execution is not started. This plan includes the second review of the current working tree and an independent cold review for executability. Complete each phase's verification before advancing; preserve existing unrelated changes. Do not infer that a previous plan marked DONE closes a newly reproduced behavior.
+> Execution is in progress on `feat/027-operator-navigation-workflows` from preserved main `89229ce5`. This plan includes the second review of the current working tree and an independent cold review for executability. Complete each phase's verification before advancing; preserve existing unrelated changes. Do not infer that a previous plan marked DONE closes a newly reproduced behavior.
 
 ## Status and baseline
 
-- Status: PLANNED — SECOND REVIEW COMPLETE; implementation not started. Contract-dependent increments remain explicitly gated.
+- Status: DONE — implemented and reviewed; frontend/backend enterprise gates and browser acceptance passed. See [final evidence](./027-ux-audit/artifacts/implementation/final/README.md).
 - Priority: P1 for misleading state, scope/navigation mistakes and interrupted operational workflows; P2 for discoverability and presentation improvements.
 - Effort: L overall; execute in bounded phases below, not one large change.
 - Risk: MEDIUM overall: route/search state, permissions, operation ownership and responsiveness must stay coherent.
@@ -69,7 +69,9 @@ Second-review additions to allowed scope, only for the named behaviors:
 - `frontend/scripts/generate-route-manifest.mjs`, `frontend/tests/e2e-smoke/stub-overrides.ts`: reviewed route count/fixture updates for newly added routes. Do not hand-edit generated stubs/route trees.
 - Generated code-health/operation inventory documents: only if the canonical inventory scripts report that scoped additions require regeneration; retain the exact generator command and inspect the diff. No baseline inflation or unrelated normalization.
 
-Out of scope: backend authorization/tenancy semantics, database migrations, new API contracts, runtime ownership changes, authentication redesign, external-tool internals, global visual rebranding, unrelated test cleanup, provisioning/Fleet, protected release qualifications. Escalate a demonstrated contract gap into a separately scoped follow-up rather than silently expanding this frontend plan.
+Execution scope amendment, 2026-09-24: the user explicitly authorized fixing underlying problems wherever found, including API limits. Required workload/custom-resource multi-namespace collection contracts, cluster snapshot restore list/detail/Location, installed-release metadata by ID, catalog search and operation outcome/envelope correctness, complete paged CRD discovery, and logging-pipeline by-ID retrieval and correct update behavior are now part of this execution. Include their authorization, SQL, OpenAPI, generated clients and regression tests. Preserve tenant boundaries and lifecycle ownership. Earlier phase instructions to defer a missing API are superseded for these increments: implement and verify the supported contract before claiming workflow completion.
+
+Out of scope: runtime ownership changes, authentication redesign, external-tool internals, global visual rebranding, unrelated test cleanup, provisioning/Fleet, protected release qualifications and the separate all-offerings live qualification campaign. Evidence and contract decisions are recorded in [the execution review](./027-execution-review.md).
 
 ## Commands and conventions
 
@@ -141,7 +143,7 @@ Steps:
 1. Define destination/tab scope applicability: global, cluster, project-filtered, namespaced, or mixed with explicitly labeled subsections. Add this to the route/scope matrix and shared navigation model. Cluster-wide inventory can stay cluster-wide if labeled and not represented as filtered by the selected namespace.
 2. Route every project picker through one transaction: validate project membership including secondary cluster membership; replace project-derived namespaces; retain only explicitly selected valid overrides under a documented rule; reset pagination and object selection. Clearing project restores only authorized scope. Pending/failed scope resolution must not launch dependent collection queries as all-namespaces.
 3. For one namespace, send that namespace before workload pagination, include scope in query identity, and reset page on scope changes. For all authorized namespaces retain the server authorization filter. For empty selection show an explicit no-namespaces state without an all-cluster query.
-4. For multi-namespace workloads, first map the existing contract. If no existing bounded collection supports a correct combined page/count, write the exact missing contract and tests into the matrix and gate that increment. Do not download the entire cluster, merge independently paginated pages as a global page, or show false totals. Keep independently correct single-namespace support and explicit multi-scope limitation until a scoped API extension is approved.
+4. Implement the authorized bounded multi-namespace workload contract and supported custom-resource collection traversal. Filter and authorize before pagination; document continuation semantics. Do not download the entire cluster in the browser, merge independently paginated browser pages as a global page, or show false totals. Update OpenAPI/clients and consume the supported contract in the UI; an unsupported multi-scope message is only an intermediate milestone, not completion.
 5. For CRs, use discovery scope and namespaced API paths; reset continuation tokens when scope/type changes. Multiple namespaces require a truthful bounded pagination model; if unsupported, gate the combined view rather than quietly ignoring selection. Label cluster-scoped CRs explicitly.
 6. Bind Image Scans and supported Apps inventories to shared scope or explicitly label them cluster-wide and make the scope control's applicability clear on those tabs. Do not imply chart repository or cluster-wide health cards are namespace-filtered.
 
@@ -300,7 +302,7 @@ Global Catalog retains `receipt.operation.id` (`routes/dashboard/catalog/-instal
 
 Tests: install/upgrade/uninstall accepted, running, failed and complete; revisit operation; missing release; permission failure; tool-owned release; namespace/resource pivots; no invented success on a failed poll.
 
-Verify: adapter tests under `src/lib/api/cluster-apps.test.ts`, existing cluster Apps modal tests, new `tests/e2e/apps-operation-navigation.spec.ts` desktop/mobile, type-check/lint. A full release-detail route is a bounded second increment after receipt/progress parity. Stop that increment if existing APIs cannot provide its promised content; retain and complete independent receipt work.
+Verify: adapter tests under `src/lib/api/cluster-apps.test.ts`, existing cluster Apps modal tests, new `tests/e2e/apps-operation-navigation.spec.ts` desktop/mobile, type-check/lint. A full release-detail route is a bounded second increment after receipt/progress parity. Implement the authorized metadata GET-by-ID alongside existing values/revisions/operation contracts, with authorization and redaction tests.
 
 ## Phase 9 — Inspect and edit logging pipelines without recreating them
 
@@ -311,7 +313,7 @@ Priority P1/P2; dependencies: Phase 1 scope semantics. Current `routes/dashboard
 3. Initialize edits from the complete existing pipeline payload. Preserve unsupported filter variants verbatim; the current create form's include-label mapping must not flatten or delete other existing filter types. If editing a variant cannot be represented safely, show read-only details and explain the limitation.
 4. Save via existing `updateLoggingPipeline`; preserve cluster/namespace/output eligibility and feedback on pending/failure. Do not implement delete/recreate as an edit. Add an unsaved-changes guard using the established form pattern.
 
-Verify: new `src/routes/dashboard/logging/pipeline-editor.test.tsx` covering no-op round-trip, supported field changes, unknown filters, missing destinations and failed save; browser `tests/e2e/logging-pipeline-edit.spec.ts` via the phase pattern; existing `src/lib/api/logging.test.ts`; type-check/lint and smoke generator after route additions. If the existing list payload/update API cannot round-trip all fields, gate editing and deliver truthful inspection independently.
+Verify: new `src/routes/dashboard/logging/pipeline-editor.test.tsx` covering no-op round-trip, supported field changes, unknown filters, missing destinations and failed save; browser `tests/e2e/logging-pipeline-edit.spec.ts` via the phase pattern; existing `src/lib/api/logging.test.ts`; type-check/lint and smoke generator after route additions. Implement the authorized GET-by-ID contract and repair relevant update/association defects so editing does not depend on a bounded list lookup. Preserve unknown supported filters and verify the complete round trip.
 
 ## Phase 10 — Restore receipt continuity and resolve the tracking contract
 
@@ -321,7 +323,7 @@ Current `components/clusters/snapshot-dialogs.tsx:348` ignores the returned rest
 
 1. Preserve the cluster snapshot restore receipt in UI state and show source snapshot, source/target cluster, restore ID and queued status explicitly. Do not label the source backup's Completed status as the restore outcome.
 2. Trace the **cluster snapshot** restore ID through the generated contracts and handlers before selecting a polling API. `docs/openapi.yaml` defines SnapshotRestoreResponse separately from RestoreOperationResponse; `/api/v1/backups/restores/{id}` and general Velero backup restore history exist but are not automatically the same identity or storage domain. `internal/handler/cluster_snapshots_restore.go:134` stores `cluster_restores`, with separate query interfaces in `cluster_snapshots.go:66`. Do not substitute the similarly named general Velero backup endpoint.
-3. Record the verified retrieval route/permission/state contract, or its absence, in `advisor-plans/027-ux-audit/restore-tracking-contract.md`. If no mounted authorized API can retrieve this receipt's evolving state/history, specify the smallest backend/OpenAPI/client extension as a separate bounded follow-up. No new API is implemented under the frontend-only scope by implication.
+3. Record the verified retrieval route/permission/state contract in `advisor-plans/027-ux-audit/restore-tracking-contract.md`. Implement the now-authorized target-cluster restore list/detail backend/OpenAPI/client extension, source/target authorization and correct Accepted Location. Reuse the existing durable restore rows and poller.
 4. Once retrieval is verified/authorized, add a durable linked restore detail/history surface in the correct cluster context. Support queued/running/completed/partial/failed, source/target distinctions, refresh/back and read denial. While retrieval is unavailable, state that outcome tracking is unavailable and expose the receipt; do not show an endless invented progress state.
 
 Verify the existing client adapter using `npm test -- src/lib/api/cluster-velero.test.ts` after creating/extending that exact file, new `src/components/clusters/snapshot-restore-receipt.test.tsx`, and browser `tests/e2e/snapshot-restore-tracking.spec.ts` via the phase pattern. Fixture tests must assert source/target identity and must not treat queued as successful restore. Real restore verification remains separately authorized under the existing live qualification plan; never restore into a live cluster to complete this planning task.
@@ -355,17 +357,17 @@ Required task evidence:
 
 ## Done criteria
 
-- [ ] All required behavioral tests exist and pass; all common commands exit 0.
-- [ ] Navigation/route inclusion and scope matrix is current; intentional omissions are documented.
-- [ ] Every P1 finding from the final second-review addendum is either implemented with evidence or explicitly respecified with a concrete blocker.
-- [ ] Source drift and unrelated changes are preserved; no unexplained out-of-scope modifications.
-- [ ] Fresh reviewed screenshots and exact test commands/results are retained with the implementation handoff.
-- [ ] Remaining external/live qualifications stay open under the owning plans.
-- [ ] Update this plan and its README row only when work actually meets these criteria.
+- [x] All required behavioral tests exist and pass; all common commands exit 0.
+- [x] Navigation/route inclusion and scope matrix is current; intentional omissions are documented.
+- [x] Every P1 finding from the final second-review addendum is either implemented with evidence or explicitly respecified with a concrete blocker.
+- [x] Source drift and unrelated changes are preserved; no unexplained out-of-scope modifications.
+- [x] Fresh reviewed screenshots and exact test commands/results are retained with the implementation handoff.
+- [x] Remaining external/live qualifications stay open under the owning plans.
+- [x] Update this plan and its README row only when work actually meets these criteria.
 
 ## STOP conditions and maintenance
 
-Stop the affected phase and report when the code/response shapes no longer match, a change needs a new backend contract or lifecycle owner, permissions cannot support the proposed links, or a route/namespace decision would broaden the user's effective scope. Continue independent authorized phases when possible; do not use one unknown to abandon the entire plan.
+Investigate and repair contract/permission problems on the authorized workflows; update canonical specifications and tests together. Stop the affected phase only for an unresolved external dependency, a required lifecycle ownership change, or a route/namespace decision that would broaden the user's effective scope. Continue independent authorized phases when possible; do not use one unknown to abandon the entire plan.
 
 Future routes must enter the canonical navigation/scope model and its behavior tests. Search indexing may be complete while sidebar rendering/count queries stay bounded. Review cross-cluster transitions, query state and operation receipt persistence whenever new resource types or Apps owners are added.
 
@@ -377,6 +379,15 @@ The second review adds namespace pagination/CR scope, inconsistent project trans
 
 Independent cold review revisions are incorporated: realistic restricted-role fixtures, exact baseline/browser commands and prerequisites, corrected allowed file scope, route generator prerequisites, source snapshot hashes, cluster transition policy, explicit history semantics and unique palette identities. The initial report's "solid foundation" assessment remains about category coverage and shared primitives; scope correctness and recovery are now the first implementation priorities.
 
-Recommended execution waves: (A) Phases 0, 1 supported contracts, 2 and 11 functional defects; (B) Phases 3–6 navigation coherence; (C) Phases 7–9 and verified portions of 10 workflow completion; (D) Phase 12 integration. These numbers identify work packages, not an instruction to postpone responsive defects until after all other phases. Scope/API-gated increments in Phases 1 and 10 must remain explicit and must not block independent fixes.
+Recommended execution waves: (A) Phases 0, 1 supported contracts, 2 and 11 functional defects; (B) Phases 3–6 navigation coherence; (C) Phases 7–9 and verified portions of 10 workflow completion; (D) Phase 12 integration. These numbers identify work packages, not an instruction to postpone responsive defects until after all other phases. Required API increments in Phases 1, 8, 9 and 10 run in isolated worktrees and are integrated before final acceptance; they must not delay independent frontend fixes.
 
 API functionality qualification is tracked separately in [Plan 028](./028-all-offerings-api-qualification.md) and its [complete offering test matrix](./028-offering-test-inventory.md). Fixture-based navigation checks in this plan do not qualify an integration as working.
+
+
+## Completion record
+
+Completed on `feat/027-operator-navigation-workflows`, with the original work preserved on `main`/`origin/main` at `89229ce5`. Final production acceptance is bound to `5b4c2bc8`; `b137a31d` adds a separately verified permission-change browser case. All phases 0–12 are implemented, including necessary API, SQL, generated-client, CLI and transport corrections. Consolidated test filenames are mapped in the retained evidence rather than duplicating the proposed filenames from this plan.
+
+Both enterprise gates pass. Frontend: 289 files/1,792 tests. Backend: 111 packages ordinary and 111 race. Required disposable PostgreSQL: 18/18, zero required skips. Browser:134 operator/keyboard/resource cases,308 route/accessibility cases,4 tablet cases, and14 history/permission cases pass; counts include setup and overlap. All 146 representative routes are covered. See [exact commands, source identities, reports and screenshot limitations](./027-ux-audit/artifacts/implementation/final/README.md).
+
+The complete route matrix and all P1 findings are closed by the implementation and tests. Additional concrete findings from integration—Delivery bootstrap loading and create-template initialization—were fixed before acceptance. No API cap was bypassed, no budget ceiling increased, and no live integration was marked qualified by fixture results. Plan 028 and protected release qualifications remain open under their existing authority.

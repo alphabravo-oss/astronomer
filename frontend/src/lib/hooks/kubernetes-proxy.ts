@@ -5,7 +5,7 @@ import {
   getClusterResourceCounts,
 } from "@/lib/api/resource-search";
 import {
-  getResourceDiscovery,
+  getCompleteResourceDiscovery,
   ResourceType,
   getResourceSchema,
 } from "@/lib/api/resources";
@@ -75,8 +75,8 @@ export function useClusterResourceCounts(
 
 export function useResourceDiscovery(clusterId: string) {
   return useQuery({
-    queryKey: queryKeys.generic.discovery(clusterId),
-    queryFn: ({ signal }) => getResourceDiscovery(clusterId, signal),
+    queryKey: queryKeys.generic.completeDiscovery(clusterId),
+    queryFn: ({ signal }) => getCompleteResourceDiscovery(clusterId, signal),
     enabled: !!clusterId,
     staleTime: 5 * 60_000,
   });

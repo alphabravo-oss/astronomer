@@ -1,7 +1,8 @@
-import {
-  CatalogProjectPicker,
-  useCatalogProjectScope,
-} from "@/components/catalog/project-scope";
+import { useOperationIntent } from "@/lib/use-operation-intent";
+import { InstalledReleaseDetail } from "@/components/catalog/installed-release-detail";
+import { CatalogOperationTimeline } from "@/components/catalog/catalog-operation-timeline";
+import { useCatalogProjectScope } from "@/components/catalog/project-scope";
+import { useClusterScopeStore } from "@/lib/cluster-scope";
 import { getRouteApi } from "@tanstack/react-router";
 /**
  * Per-cluster Apps tab — sprint 082+.
@@ -72,6 +73,7 @@ export function ClusterAppsPage() {
   const clusterId = params.id;
   const { data: cluster } = useCluster(clusterId);
   const qc = useQueryClient();
+  const navigate = useNavigate();
   // Deep-link support: feature pages (image-scans, monitoring, etc.)
   // can drop the user here with ?install=<chartName> to auto-open the
   // install modal for that chart. Reads the search params once and
@@ -79,19 +81,20 @@ export function ClusterAppsPage() {
   const searchParams = new URLSearchParams(
     useLocation({ select: (location) => location.searchStr }),
   );
-  const navigate = useNavigate();
-  const requestedProjectId = searchParams.get("project") ?? "";
+  const rememberedProjectId = useClusterScopeStore(
+    (state) => state.projectByCluster[clusterId],
+  );
+  const requestedProjectId =
+    searchParams.get("project") ?? rememberedProjectId ?? "";
   const projectScope = useCatalogProjectScope(requestedProjectId, clusterId);
   const { projectId } = projectScope;
-  const setProjectId = (nextProjectId: string) => {
+  const operationId = searchParams.get("operation") ?? "";
+  const onOperationStarted = (id: string) => {
     const next = new URLSearchParams(searchParams);
-    if (nextProjectId) next.set("project", nextProjectId);
-    else next.delete("project");
-    void navigate({
-      to: `/dashboard/clusters/${clusterId}/apps${next.size ? `?${next.toString()}` : ""}`,
-      replace: true,
-    });
-    setModal({ kind: "none" });
+    next.set("operation", id);
+    next.set("section", "installed");
+    next.delete("install");
+    void navigate({ to: `/dashboard/clusters/${clusterId}/apps?${next}` });
   };
   const requestedInstall = searchParams?.get("install") ?? "";
 
@@ -127,9 +130,15 @@ export function ClusterAppsPage() {
   const queries = useAppsQueries(clusterId, projectId, section, searchQ);
   const { installed, browse, recommended, reposQuery } = queries;
 
+  const uninstallIntent = useOperationIntent();
   const uninstall = useMutation({
-    mutationFn: (id: string) => uninstallCatalogRelease(id),
-    onSuccess: () => {
+    mutationFn: (id: string) =>
+      uninstallCatalogRelease(id, {
+        idempotencyKey: uninstallIntent.keyFor({ id }),
+      }),
+    onSuccess: (operation) => {
+      uninstallIntent.complete();
+      if (operation?.id) onOperationStarted(operation.id);
       toastSuccess("Uninstall dispatched");
       qc.invalidateQueries({
         queryKey: queryKeys.clusterPages.appsInstalled(clusterId),
@@ -182,12 +191,15 @@ export function ClusterAppsPage() {
         });
         return;
       }
-      setModal({ kind: "install", chartId: match.id, chartName: match.name });
-      // Drop the query param so a back-button + re-navigate doesn't loop.
-      void navigate({
-        to: `/dashboard/clusters/${clusterId}/apps?${remainingSearch}`,
-        replace: true,
+      const frame = requestAnimationFrame(() => {
+        setModal({ kind: "install", chartId: match.id, chartName: match.name });
+        // Drop the query param so a back-button + re-navigate doesn't loop.
+        void navigate({
+          to: `/dashboard/clusters/${clusterId}/apps?${remainingSearch}`,
+          replace: true,
+        });
       });
+      return () => cancelAnimationFrame(frame);
     }
   }, [
     requestedInstall,
@@ -247,14 +259,15 @@ export function ClusterAppsPage() {
     setShowDeleteFailed(true);
   };
 
-  const failedCount =
-    installed.data?.data.filter((r) => {
-      const s = r.status.toLowerCase();
-      return s === "failed_install" || s === "failed_uninstall";
-    }).length ?? 0;
+  const failedCount = countFailedReleases(installed.data?.data ?? []);
 
   return (
     <div className="space-y-6 p-4">
+      <p className="text-xs text-muted-foreground">
+        Installed releases are cluster-wide. Project visibility controls catalog
+        choices; namespace selection does not filter installed releases or
+        repositories.
+      </p>
       <PageHeader
         title={
           <span className="inline-flex items-center gap-2">
@@ -262,39 +275,10 @@ export function ClusterAppsPage() {
           </span>
         }
         description={
-          <>
-            Browse, install, and manage helm-packaged applications on
-            {cluster?.displayName ? (
-              <>
-                {" "}
-                <span className="font-medium text-foreground">
-                  {cluster.displayName}
-                </span>
-              </>
-            ) : (
-              " this cluster"
-            )}
-            . Releases managed by the{" "}
-            <RouterLink
-              to="/dashboard/clusters/$id/tools"
-              params={{ id: clusterId }}
-              className="underline"
-            >
-              Tools tab
-            </RouterLink>{" "}
-            appear here too with a &quot;Managed by Tools&quot; pivot.
-          </>
+          <AppsDescription clusterId={clusterId} name={cluster?.displayName} />
         }
         actions={
           <>
-            {section !== "repositories" && (
-              <CatalogProjectPicker
-                scope={projectScope}
-                value={requestedProjectId || projectId}
-                onChange={setProjectId}
-                clusterId={clusterId}
-              />
-            )}
             {section === "repositories" && (
               <ActionButton
                 intent="primary"
@@ -357,8 +341,16 @@ export function ClusterAppsPage() {
       />
 
       <AppsPagination section={section} queries={queries} />
+      {operationId && <CatalogOperationTimeline operationId={operationId} />}
+      {searchParams.get("release") && (
+        <InstalledReleaseDetail
+          id={searchParams.get("release")!}
+          clusterId={clusterId}
+        />
+      )}
       <AppsModals
         modal={modal}
+        onOperationStarted={onOperationStarted}
         onCloseModal={() => setModal({ kind: "none" })}
         projectId={projectId}
         clusterId={clusterId}
@@ -384,4 +376,35 @@ export function ClusterAppsPage() {
       />
     </div>
   );
+}
+
+function AppsDescription({
+  clusterId,
+  name,
+}: {
+  clusterId: string;
+  name?: string;
+}) {
+  return (
+    <>
+      Browse, install, and manage helm-packaged applications on{" "}
+      {name || "this cluster"}. Releases managed by the{" "}
+      <RouterLink
+        to="/dashboard/clusters/$id/tools"
+        params={{ id: clusterId }}
+        className="underline"
+      >
+        Tools tab
+      </RouterLink>{" "}
+      appear here too with a &quot;Managed by Tools&quot; pivot.
+    </>
+  );
+}
+
+function countFailedReleases(releases: ClusterAppRow[]) {
+  return releases.filter((release) =>
+    ["failed_install", "failed_uninstall"].includes(
+      release.status.toLowerCase(),
+    ),
+  ).length;
 }

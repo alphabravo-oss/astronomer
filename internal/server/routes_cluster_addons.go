@@ -116,6 +116,8 @@ func registerClusterAddonRoutes(r chi.Router, deps RouterDependencies) {
 	// reader.
 	if deps.ClusterResources.ClusterSnapshots != nil {
 		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/snapshots/", deps.ClusterResources.ClusterSnapshots.ListSnapshots)
+		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/snapshot-restores/", deps.ClusterResources.ClusterSnapshots.ListRestores)
+		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/snapshot-restores/{id}/", deps.ClusterResources.ClusterSnapshots.GetRestore)
 		r.With(writeClusters, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Post("/clusters/{cluster_id}/snapshots/", deps.ClusterResources.ClusterSnapshots.CreateSnapshot)
 		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/clusters/{cluster_id}/snapshots/{id}/", deps.ClusterResources.ClusterSnapshots.GetSnapshot)
 		r.With(writeClusters, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbUpdate)).Delete("/clusters/{cluster_id}/snapshots/{id}/", deps.ClusterResources.ClusterSnapshots.DeleteSnapshot)

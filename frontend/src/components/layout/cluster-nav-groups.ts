@@ -383,6 +383,12 @@ export function getClusterNavGroups(
       items: [
         { label: "Adoption", href: `${base}/adoption`, icon: Activity },
         {
+          label: "Onboarding template",
+          href: `${base}/template`,
+          icon: Settings2,
+          permission: { resource: "clusters", verb: "read" },
+        },
+        {
           label: "Service Mesh",
           href: `${base}/service-mesh`,
           icon: Waypoints,

@@ -27,7 +27,7 @@ The family-level entries below record static review and selected fresh source br
 | Forms / errors / dialogs | Shared primitives plus individual resource flows | Guided create retry reuses old failed manifest. Existing ModalShell focus behavior present; sidebar assessed separately. |
 | Mobile / tablet shell | Header + off-canvas sidebar | Fresh geometry verifies clipping/overlap. Closed-sidebar keyboard focus separately reproduced/tested in evidence. |
 
-## Generated route inventory (144 representative route records)
+## Planning snapshot route inventory (144 representative route records)
 
 Source: `frontend/tests/e2e-smoke/route-manifest.generated.json`, read without regeneration. Each row is an existing route fixture, not a claim of a separate UX page or successful live workflow.
 
@@ -177,3 +177,28 @@ Source: `frontend/tests/e2e-smoke/route-manifest.generated.json`, read without r
 | `/dashboard/tools/index.tsx` | `/dashboard/tools` | app |
 | `/dashboard/workloads/index.tsx` | `/dashboard/workloads` | app |
 | `/index.tsx` | `/` | app |
+
+
+## Implementation route and scope update
+
+The planning observations above remain historical evidence. The current generator deliberately expects **146** route fixtures: the 144 preserved routes plus `/dashboard/logging/pipelines/$pipelineId/` and `/dashboard/logging/pipelines/$pipelineId/edit/`. Logging pipeline rows link to inspect; authorized users can enter edit. Detail and edit use exact-ID reads and do not require the row to appear on the current collection page. Existing parameterized detail routes remain contextual destinations, not duplicate sidebar entries.
+
+| Surface | Implemented scope and entry contract | Final acceptance evidence |
+|---|---|---|
+| Workloads and pods | Shared all/one/multiple/empty namespace selection reaches the server before page/count; URL and query identity include selection | PASS: handler tests and actual repeated-query browser assertions; explicit empty/single/multiple scope |
+| Custom resources | Complete paged discovery index; sidebar stays bounded; visible resource search reaches the full index; namespaced collections enforce authorized selection and opaque continuation | PASS: proxy/discovery/cross-owner tests, complete search index and scoped CR delete/return browser cases |
+| Project selection | API provides primary/secondary cluster membership and exact per-cluster namespaces; all pickers apply a shared transaction | PASS: real PostgreSQL/handler proof and secondary-cluster/refresh browser cases |
+| Cluster switching | Destination model retains supported collection context and drops object identity; target capabilities and scope resolve before inventory loads | PASS: transaction tests plus rapid-switch/latest-selection, invalid remembered project and recovery browser cases |
+| Delivery | Common eight-destination registry; each destination uses its actual permission; explicit estate versus project scope | PASS: all eight destinations, one project picker, permission-aware summary links and restricted-role browser cases |
+| Resource investigation | URL tabs/log choices and bounded contextual return retain the originating workload; cluster-local identities remain separate | PASS: history, logs/container/tail/filter, invalid/Exec URL, inaccessible parent and permission-change browser cases |
+| Apps | Shared project scope; exact release readback; owner-aware inspection; durable Catalog operation URL and exact-rollout outcome | Desktop/mobile release inspection, failure and lifecycle browser journeys pass |
+| Alerts | Filter-preserving investigation dialog with permission-gated cluster/rule links and honest mutation state | Desktop/mobile browser journeys pass; root reviewed mobile overlay screenshot |
+| Logging pipelines | Global server paging; row inspect and edit routes; exact-ID PUT preserves opaque filters and output associations | Desktop/mobile success/failure/permission browser journeys and real SQL association test pass |
+| Snapshot restores | Source operation returns target-cluster receipt; target list/detail tracks durable restore identity and observation errors | Desktop/mobile cross-cluster/reload/denied/stale browser journeys and SQL visibility tests pass |
+| Metrics | Native node/namespace drill-down must be reachable alongside existing Grafana integration | PASS: reachable Overview/Grafana views, exact node/namespace links, failed-read Retry and truthful unavailable state |
+| Shell and search | Pointer-accessible search, unique active destination, responsive controls and inert closed mobile sidebar | PASS: unique keyboard command identities, five loaded widths, long names, focus/overlays/inertness, full desktop/mobile axe crawl and tablet check |
+| Other unchanged families | Existing Services, Storage, Policy, Tools, Settings, Audit, Account and security entries retain their established scope/capability gates | PASS: full146-route desktop/mobile crawl; contextual detail pages and intentional omissions retained |
+
+These entries track fixture/contract acceptance. They do not certify real extension installation, reconciliation, backup recovery, or protected production qualifications; those remain in Plan 028 and the existing release plans.
+
+Final acceptance: [source identities, exact test commands and retained reports](./artifacts/implementation/final/README.md). All146 generated route fixtures passed on desktop/mobile; the later create-editor fix and permission-change addition passed their final affected workflows. The original144-route planning snapshot above remains historical.

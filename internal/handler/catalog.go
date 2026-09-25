@@ -37,6 +37,8 @@ type CatalogQuerier interface {
 	DeleteHelmRepository(ctx context.Context, id uuid.UUID) error
 	CountHelmRepositories(ctx context.Context) (int64, error)
 	// Charts
+	ListFilteredHelmCharts(context.Context, sqlc.ListFilteredHelmChartsParams) ([]sqlc.HelmChart, error)
+	CountFilteredHelmCharts(context.Context, sqlc.CountFilteredHelmChartsParams) (int64, error)
 	ListHelmCharts(ctx context.Context, arg sqlc.ListHelmChartsParams) ([]sqlc.HelmChart, error)
 	// ListHelmChartsByTag + CountHelmChartsByTag drive the ?tag= filter
 	// (migration 071). The handler falls back to the unfiltered list
