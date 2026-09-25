@@ -8,7 +8,7 @@ describe("shouldRetryQuery", () => {
     },
   );
 
-  it.each([408, 429, 500, 502, 503])(
+  it.each([408, 429, 500, 502])(
     "retries transient HTTP %i responses within the budget",
     (status) => {
       expect(shouldRetryQuery(0, { response: { status } })).toBe(true);
@@ -16,6 +16,12 @@ describe("shouldRetryQuery", () => {
       expect(shouldRetryQuery(2, { status })).toBe(false);
     },
   );
+
+  it("keeps retrying a 503 through a bounded reconnect window", () => {
+    expect(shouldRetryQuery(0, { status: 503 })).toBe(true);
+    expect(shouldRetryQuery(5, { response: { status: 503 } })).toBe(true);
+    expect(shouldRetryQuery(6, { status: 503 })).toBe(false);
+  });
 
   it("retries transport errors without an HTTP status within the budget", () => {
     expect(shouldRetryQuery(0, new Error("connection reset"))).toBe(true);
