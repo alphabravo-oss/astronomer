@@ -118,6 +118,79 @@ func TestInventoryRegistryAcceptsExplicitlyDisabledFeatureRoute(t *testing.T) {
 	}
 }
 
+func TestEstatePreflightRequiresTwoDistinctExplicitTargets(t *testing.T) {
+	t.Parallel()
+	target := memberTarget{
+		Name: "primary", ClusterID: "00000000-0000-0000-0000-000000000001",
+		ProjectID: "00000000-0000-0000-0000-000000000011",
+		Namespace: "qualification-primary", ExpectedPrivilegeProfile: "admin",
+	}
+	if reasons := validateMemberTargetConfig([]memberTarget{target}); len(reasons) != 1 || !strings.Contains(reasons[0], "at least 2") {
+		t.Fatalf("single target reasons = %#v", reasons)
+	}
+	duplicate := target
+	duplicate.Name = "secondary"
+	duplicate.ProjectID = "00000000-0000-0000-0000-000000000012"
+	duplicate.Namespace = "qualification-secondary"
+	if reasons := validateMemberTargetConfig([]memberTarget{target, duplicate}); len(reasons) != 1 || !strings.Contains(reasons[0], "cluster_id") {
+		t.Fatalf("duplicate cluster reasons = %#v", reasons)
+	}
+}
+
+func TestEstatePreflightValidatesMemberProjectNamespaceAndHeartbeat(t *testing.T) {
+	t.Parallel()
+	clusterID := "00000000-0000-0000-0000-000000000001"
+	projectID := "00000000-0000-0000-0000-000000000011"
+	now := time.Now().UTC()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer test-secret-token" {
+			t.Fatalf("authorization header = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/clusters/" + clusterID + "/":
+			_, _ = w.Write([]byte(`{"data":{"id":"` + clusterID + `","status":"active","is_local":false,"decommissioned_at":null,"registration_phase":"ready","last_heartbeat":"` + now.Add(-30*time.Second).Format(time.RFC3339Nano) + `","agent_privilege_profile":"admin"}}`))
+		case "/api/v1/projects/" + projectID + "/":
+			_, _ = w.Write([]byte(`{"data":{"id":"` + projectID + `","cluster_id":"` + clusterID + `","cluster_ids":["` + clusterID + `"],"namespace_scopes":[{"cluster_id":"` + clusterID + `","namespaces":["qualification-primary"]}],"namespaces":["qualification-primary"]}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	base, _ := url.Parse(server.URL)
+	result := inspectMemberTarget(context.Background(), server.Client(), base, "test-secret-token", memberTarget{
+		Name: "primary", ClusterID: clusterID, ProjectID: projectID,
+		Namespace: "qualification-primary", ExpectedPrivilegeProfile: "admin",
+	}, now)
+	if result.Status != "PASS" {
+		t.Fatalf("member result = %#v", result)
+	}
+}
+
+func TestEstatePreflightBlocksManagementCluster(t *testing.T) {
+	t.Parallel()
+	clusterID := "00000000-0000-0000-0000-000000000001"
+	projectID := "00000000-0000-0000-0000-000000000011"
+	now := time.Now().UTC()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/clusters/") {
+			_, _ = w.Write([]byte(`{"data":{"id":"` + clusterID + `","status":"active","is_local":true,"decommissioned_at":null,"registration_phase":"ready","last_heartbeat":"` + now.Format(time.RFC3339Nano) + `","agent_privilege_profile":"admin"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"id":"` + projectID + `","cluster_id":"` + clusterID + `","cluster_ids":["` + clusterID + `"],"namespace_scopes":[{"cluster_id":"` + clusterID + `","namespaces":["qualification-primary"]}],"namespaces":["qualification-primary"]}}`))
+	}))
+	t.Cleanup(server.Close)
+	base, _ := url.Parse(server.URL)
+	result := inspectMemberTarget(context.Background(), server.Client(), base, "token", memberTarget{
+		Name: "primary", ClusterID: clusterID, ProjectID: projectID,
+		Namespace: "qualification-primary", ExpectedPrivilegeProfile: "admin",
+	}, now)
+	if result.Status != "BLOCKED" || !strings.Contains(strings.Join(result.Reasons, " "), "management/local") {
+		t.Fatalf("member result = %#v", result)
+	}
+}
+
 func TestVerifyRejectsEveryFalseGreenState(t *testing.T) {
 	t.Parallel()
 	manifest := testManifest()
@@ -190,6 +263,55 @@ func TestReportsMatchClosedEvidenceSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(rawReport))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(document); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEstatePreflightMatchesClosedEvidenceSchema(t *testing.T) {
+	t.Parallel()
+	qualificationRaw, err := os.ReadFile("../../deploy/release/offering-qualification.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	preflightRaw, err := os.ReadFile("../../deploy/release/offering-estate-preflight.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	qualificationDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(qualificationRaw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	preflightDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(preflightRaw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.AssertFormat()
+	if err := compiler.AddResource("https://astronomer.dev/schemas/offering-qualification-v1.json", qualificationDocument); err != nil {
+		t.Fatal(err)
+	}
+	if err := compiler.AddResource("offering-estate-preflight.schema.json", preflightDocument); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := compiler.Compile("offering-estate-preflight.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := estatePreflightReport{
+		SchemaVersion: estatePreflightSchema, RunID: "preflight-1", GeneratedAt: time.Now().UTC(),
+		Candidate:  candidate{Commit: "0123456789abcdef0123456789abcdef01234567", StagedDiffSHA: digest(nil), UnstagedDiffSHA: digest(nil), UntrackedSHA: digest(nil)},
+		BaseOrigin: "https://astronomer.example.com", Status: "BLOCKED", Reason: "two member targets are required",
+		RequiredMemberClusters: minimumMemberTargets, ConfiguredMemberTargets: 0, Members: []memberTargetResult{},
+	}
+	raw, err := json.Marshal(evidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,6 +21,10 @@ provider, extension, lifecycle action or functional canary is qualified.
   inconsistent summaries.
 - A closed JSON evidence schema, offline false-green tests, a PR static gate
   and a protected manual release-candidate inventory workflow.
+- A GET-only mutation-estate preflight that refuses the management cluster,
+  duplicate or implicit targets, stale/disconnected agents, privilege-profile
+  drift, and projects that do not own the configured namespace. Its closed
+  evidence records PASS or BLOCKED without exposing credentials.
 
 ### Live inventory result
 
@@ -64,10 +68,11 @@ inventory now fails if a future runtime feature key lacks a frozen contract.
 ### Required next execution
 
 The current environment has only the management cluster and does not satisfy
-the dedicated two-member test-estate prerequisite. Before any mutating case,
-create and adopt task-owned member clusters through the documented environment
-and registration flow, assign explicit projects/namespaces, freeze their IDs
-and deploy an immutable build from this branch. Then expand executable runtime
+the dedicated two-member test-estate prerequisite. The runner and protected
+workflow now enforce this prerequisite before any mutating case. Create and
+adopt task-owned member clusters through the documented environment and
+registration flow, assign explicit projects/namespaces, freeze their IDs and
+deploy an immutable build from this branch. Then expand executable runtime
 reconciliation across the remaining registries and implement the dependency
 DAG, lifecycle executors, functional canaries, durable readback and API-owned
 cleanup. External provider accounts and destinations that are not configured

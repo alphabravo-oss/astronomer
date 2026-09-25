@@ -40,15 +40,17 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: qualify-offerings inventory|verify [flags]")
+		return errors.New("usage: qualify-offerings inventory|preflight|verify [flags]")
 	}
 	switch args[0] {
 	case "inventory":
 		return runInventory(ctx, args[1:])
+	case "preflight":
+		return runPreflight(ctx, args[1:])
 	case "verify":
 		return runVerify(args[1:])
 	default:
-		return fmt.Errorf("unsupported mode %q (expected inventory or verify)", args[0])
+		return fmt.Errorf("unsupported mode %q (expected inventory, preflight, or verify)", args[0])
 	}
 }
 

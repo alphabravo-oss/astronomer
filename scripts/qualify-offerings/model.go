@@ -35,6 +35,15 @@ type qualificationConfig struct {
 	ExpectedCommit    string            `json:"expected_commit"`
 	AllowLoopbackHTTP bool              `json:"allow_loopback_http,omitempty"`
 	TargetIDs         map[string]string `json:"target_ids"`
+	MemberTargets     []memberTarget    `json:"member_targets,omitempty"`
+}
+
+type memberTarget struct {
+	Name                     string `json:"name"`
+	ClusterID                string `json:"cluster_id"`
+	ProjectID                string `json:"project_id"`
+	Namespace                string `json:"namespace"`
+	ExpectedPrivilegeProfile string `json:"expected_privilege_profile"`
 }
 
 type report struct {
@@ -94,4 +103,28 @@ type resultSummary struct {
 type cleanupResult struct {
 	State  string `json:"state"`
 	Reason string `json:"reason"`
+}
+
+type estatePreflightReport struct {
+	SchemaVersion           string               `json:"schema_version"`
+	RunID                   string               `json:"run_id"`
+	GeneratedAt             time.Time            `json:"generated_at"`
+	Candidate               candidate            `json:"candidate"`
+	BaseOrigin              string               `json:"base_origin"`
+	Status                  string               `json:"status"`
+	Reason                  string               `json:"reason"`
+	RequiredMemberClusters  int                  `json:"required_member_clusters"`
+	ConfiguredMemberTargets int                  `json:"configured_member_targets"`
+	Members                 []memberTargetResult `json:"members"`
+}
+
+type memberTargetResult struct {
+	Name                     string   `json:"name"`
+	ClusterID                string   `json:"cluster_id"`
+	ProjectID                string   `json:"project_id"`
+	Namespace                string   `json:"namespace"`
+	ExpectedPrivilegeProfile string   `json:"expected_privilege_profile"`
+	ObservedPrivilegeProfile string   `json:"observed_privilege_profile,omitempty"`
+	Status                   string   `json:"status"`
+	Reasons                  []string `json:"reasons"`
 }

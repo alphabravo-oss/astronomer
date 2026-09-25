@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.dev/schemas/offering-estate-preflight-v1.json",
+  "title": "Astronomer offering qualification estate preflight",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "generated_at",
+    "candidate",
+    "base_origin",
+    "status",
+    "reason",
+    "required_member_clusters",
+    "configured_member_targets",
+    "members"
+  ],
+  "properties": {
+    "schema_version": {"const": "astronomer-offering-estate-preflight-v1"},
+    "run_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "candidate": {"$ref": "https://astronomer.dev/schemas/offering-qualification-v1.json#/$defs/candidate"},
+    "base_origin": {"type": "string", "format": "uri", "pattern": "^https?://[^/]+$"},
+    "status": {"type": "string", "enum": ["PASS", "BLOCKED"]},
+    "reason": {"type": "string", "minLength": 1, "maxLength": 4000},
+    "required_member_clusters": {"const": 2},
+    "configured_member_targets": {"type": "integer", "minimum": 0},
+    "members": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/member"}
+    }
+  },
+  "$defs": {
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "cluster_id",
+        "project_id",
+        "namespace",
+        "expected_privilege_profile",
+        "status",
+        "reasons"
+      ],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 100},
+        "cluster_id": {"type": "string", "format": "uuid"},
+        "project_id": {"type": "string", "format": "uuid"},
+        "namespace": {"type": "string", "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$", "maxLength": 63},
+        "expected_privilege_profile": {"type": "string", "minLength": 1, "maxLength": 100},
+        "observed_privilege_profile": {"type": "string", "maxLength": 100},
+        "status": {"type": "string", "enum": ["PASS", "BLOCKED"]},
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1, "maxLength": 1000}
+        }
+      }
+    }
+  }
+}

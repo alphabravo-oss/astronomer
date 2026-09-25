@@ -11,13 +11,39 @@ on:
         description: HTTPS origin of the release-candidate Astronomer API
         required: true
         type: string
-      cluster_id:
-        description: Explicit task-owned member cluster UUID
+      primary_cluster_id:
+        description: First explicit task-owned member cluster UUID
         required: true
         type: string
-      project_id:
-        description: Explicit task-owned project UUID
+      primary_project_id:
+        description: First explicit task-owned project UUID
         required: true
+        type: string
+      primary_namespace:
+        description: First task-owned namespace
+        required: true
+        type: string
+      primary_privilege_profile:
+        description: Expected first member agent privilege profile
+        required: true
+        default: admin
+        type: string
+      secondary_cluster_id:
+        description: Second explicit task-owned member cluster UUID
+        required: true
+        type: string
+      secondary_project_id:
+        description: Second explicit task-owned project UUID
+        required: true
+        type: string
+      secondary_namespace:
+        description: Second task-owned namespace
+        required: true
+        type: string
+      secondary_privilege_profile:
+        description: Expected second member agent privilege profile
+        required: true
+        default: admin
         type: string
 
 permissions:
@@ -25,7 +51,7 @@ permissions:
 
 jobs:
   inventory:
-    name: frozen offering inventory
+    name: estate preflight and frozen offering inventory
     environment: release-candidate
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -50,8 +76,14 @@ jobs:
         env:
           API_TOKEN: ${{ secrets.OFFERING_QUALIFICATION_API_TOKEN }}
           BASE_URL: ${{ inputs.base_url }}
-          CLUSTER_ID: ${{ inputs.cluster_id }}
-          PROJECT_ID: ${{ inputs.project_id }}
+          PRIMARY_CLUSTER_ID: ${{ inputs.primary_cluster_id }}
+          PRIMARY_PROJECT_ID: ${{ inputs.primary_project_id }}
+          PRIMARY_NAMESPACE: ${{ inputs.primary_namespace }}
+          PRIMARY_PRIVILEGE_PROFILE: ${{ inputs.primary_privilege_profile }}
+          SECONDARY_CLUSTER_ID: ${{ inputs.secondary_cluster_id }}
+          SECONDARY_PROJECT_ID: ${{ inputs.secondary_project_id }}
+          SECONDARY_NAMESPACE: ${{ inputs.secondary_namespace }}
+          SECONDARY_PRIVILEGE_PROFILE: ${{ inputs.secondary_privilege_profile }}
           CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
         run: |
           test -n "$API_TOKEN"
@@ -61,15 +93,44 @@ jobs:
             --arg base_url "$BASE_URL" \
             --arg token_file "$RUNNER_TEMP/offering-token" \
             --arg expected_commit "$CANDIDATE_COMMIT" \
-            --arg cluster_id "$CLUSTER_ID" \
-            --arg project_id "$PROJECT_ID" \
+            --arg primary_cluster_id "$PRIMARY_CLUSTER_ID" \
+            --arg primary_project_id "$PRIMARY_PROJECT_ID" \
+            --arg primary_namespace "$PRIMARY_NAMESPACE" \
+            --arg primary_privilege_profile "$PRIMARY_PRIVILEGE_PROFILE" \
+            --arg secondary_cluster_id "$SECONDARY_CLUSTER_ID" \
+            --arg secondary_project_id "$SECONDARY_PROJECT_ID" \
+            --arg secondary_namespace "$SECONDARY_NAMESPACE" \
+            --arg secondary_privilege_profile "$SECONDARY_PRIVILEGE_PROFILE" \
             '{
               schema_version: "astronomer-offering-qualification-config-v1",
               base_url: $base_url,
               token_file: $token_file,
               expected_commit: $expected_commit,
-              target_ids: {cluster_id: $cluster_id, project_id: $project_id}
+              target_ids: {cluster_id: $primary_cluster_id, project_id: $primary_project_id},
+              member_targets: [
+                {
+                  name: "primary",
+                  cluster_id: $primary_cluster_id,
+                  project_id: $primary_project_id,
+                  namespace: $primary_namespace,
+                  expected_privilege_profile: $primary_privilege_profile
+                },
+                {
+                  name: "secondary",
+                  cluster_id: $secondary_cluster_id,
+                  project_id: $secondary_project_id,
+                  namespace: $secondary_namespace,
+                  expected_privilege_profile: $secondary_privilege_profile
+                }
+              ]
             }' > "$RUNNER_TEMP/offering-config.json"
+
+      - name: Prove the isolated two-member qualification estate
+        run: |
+          mkdir -p offering-qualification
+          go run ./scripts/qualify-offerings preflight \
+            --config "$RUNNER_TEMP/offering-config.json" \
+            --output offering-qualification/estate-preflight.json
 
       - name: Reconcile all configured runtime registry pages
         run: |
@@ -82,11 +143,11 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/offering-token" "$RUNNER_TEMP/offering-config.json"
 
-      - name: Upload immutable inventory evidence
+      - name: Upload immutable preflight and inventory evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: offering-qualification-inventory-${{ github.run_id }}
+          name: offering-qualification-preflight-inventory-${{ github.run_id }}
           path: offering-qualification/
           if-no-files-found: error
           retention-days: 90

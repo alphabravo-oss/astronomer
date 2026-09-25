@@ -2,7 +2,7 @@
 
 ## Status, scope and execution authority
 
-**IN PROGRESS — the evidence harness and read-only Phase 0 inventory are implemented; all 174 functional cases remain NOT_RUN.** The source baseline was refreshed 2026-09-25 against Astronomer base HEAD `1975a32b` plus the recorded working-tree hashes and local catalog HEAD `3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5`. The first live API inventory matched six initial registry families; it is not functional qualification. See [the execution ledger](./028-execution-ledger.md). Priority P1; effort L, split by offering; implementation risk medium, live lifecycle tests high unless confined to disposable targets.
+**IN PROGRESS — the evidence harness, read-only Phase 0 inventory and API-backed mutation-estate preflight are implemented; all 174 functional cases remain NOT_RUN.** The source baseline was refreshed 2026-09-25 against Astronomer base HEAD `1975a32b` plus the recorded working-tree hashes and local catalog HEAD `3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5`. The first live API inventory matched six initial registry families; it is not functional qualification. See [the execution ledger](./028-execution-ledger.md). Priority P1; effort L, split by offering; implementation risk medium, live lifecycle tests high unless confined to disposable targets.
 
 The user's requirement is every offering, not only Dex, Velero and monitoring, and proof through the API without workarounds. The companion [offering-by-offering inventory and test matrix](./028-offering-test-inventory.md) is mandatory scope. It lists the 21 local catalog applications, additional Tools offerings, baseline components, provider variants and platform integrations. Enumerate the deployed API inventories again before execution: this static list is a baseline, not permission to omit a newly offered item.
 
@@ -100,14 +100,18 @@ Build a dependency DAG before scheduling: metrics/exporter tests depend on a qua
 
 Runner tests must prove false-green rejection: 202 forever; 200/ok=false; operation success with no effect; stale previous-generation samples; wrong-cluster data; omitted pagination; missing provider credentials; unexpected skips; failed cleanup; transient error followed by actual recovery; duplicate/replayed mutation; unknown/new offering; missing test for a preset; disabled flag hiding an unqualified opt-in. Fixtures test the runner, and are labeled synthetic; they never count as live qualification.
 
-**Proposed interface to implement, not existing commands:**
+**Current checkpoint interface:**
 
 ```sh
 go test ./scripts/qualify-offerings/... -count=1
-go run ./scripts/qualify-offerings --mode inventory --config "$QUAL_CONFIG" --out "$QUAL_EVIDENCE"
-go run ./scripts/qualify-offerings --mode run --config "$QUAL_CONFIG" --inventory "$QUAL_EVIDENCE/inventory.json" --out "$QUAL_EVIDENCE"
-go run ./scripts/qualify-offerings --mode verify --inventory "$QUAL_EVIDENCE/inventory.json" --results "$QUAL_EVIDENCE/results.json"
+go run ./scripts/qualify-offerings inventory --config "$QUAL_CONFIG" --output "$QUAL_EVIDENCE/inventory.json"
+go run ./scripts/qualify-offerings preflight --config "$QUAL_CONFIG" --output "$QUAL_EVIDENCE/estate-preflight.json"
+go run ./scripts/qualify-offerings verify --cases scripts/testdata/offering-qualification/cases.json --report "$QUAL_EVIDENCE/results.json"
 ```
+
+The functional `run` mode remains to be implemented after the estate preflight
+passes. It must consume the frozen inventory and write resumable results under
+the same evidence directory.
 
 `QUAL_CONFIG` identifies a permission-restricted configuration file with explicit targets and credential-file references, not inline credentials. `QUAL_EVIDENCE` is a run-specific ignored artifact directory. `inventory` exits nonzero on unknown/unmapped offers; `run` checkpoints failures and may continue independent cases; `verify` exits 0 only when every required case PASSes and every NOT_SUPPORTED action has a verified contract. FAIL/BLOCKED/NOT_RUN/RUNNING, stale artifacts, missing cleanup or missing cases make it nonzero. A partial report remains useful but is never labeled “all working.”
 
