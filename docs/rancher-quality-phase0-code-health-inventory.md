@@ -130,7 +130,7 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 
 Owner: database/backend. Classification rule: remove only after confirming no handler, worker, CLI, migration test, or planned compatibility path uses the query.
 
-- `ListProjectResourceQuotaAllocations` declared at [`internal/db/queries/projects.sql:179`](internal/db/queries/projects.sql:179) has no non-generated Go reference
+- `ListProjectResourceQuotaAllocations` declared at [`internal/db/queries/projects.sql:195`](internal/db/queries/projects.sql:195) has no non-generated Go reference
 - `UpsertCloudCredentialMaterialization` declared at [`internal/db/queries/cloud_credentials.sql:67`](internal/db/queries/cloud_credentials.sql:67) has no non-generated Go reference
 
 Owner: frontend/platform. Classification rule: verify relative imports and dynamic imports before removal.
