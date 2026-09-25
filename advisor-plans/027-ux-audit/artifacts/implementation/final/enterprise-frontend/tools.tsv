@@ -1,0 +1,7 @@
+go	available	go version go1.26.6 linux/amd64
+node	available	v24.21.0
+npm	available	9.2.0
+helm	available	v3.21.0+ge0878d4
+python	available	Python 3.14.4
+sqlc	available	go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+shellcheck	available	ShellCheck - shell script analysis tool version: 0.11.0 license: GNU General Public License, version 3 website: https://www.shellcheck.net

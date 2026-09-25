@@ -4,7 +4,7 @@
 
 ## Status and baseline
 
-- Status: IN PROGRESS — frontend and required API workflow increments authorized; independent review pending.
+- Status: DONE — implemented and reviewed; frontend/backend enterprise gates and browser acceptance passed. See [final evidence](./027-ux-audit/artifacts/implementation/final/README.md).
 - Priority: P1 for misleading state, scope/navigation mistakes and interrupted operational workflows; P2 for discoverability and presentation improvements.
 - Effort: L overall; execute in bounded phases below, not one large change.
 - Risk: MEDIUM overall: route/search state, permissions, operation ownership and responsiveness must stay coherent.
@@ -357,13 +357,13 @@ Required task evidence:
 
 ## Done criteria
 
-- [ ] All required behavioral tests exist and pass; all common commands exit 0.
-- [ ] Navigation/route inclusion and scope matrix is current; intentional omissions are documented.
-- [ ] Every P1 finding from the final second-review addendum is either implemented with evidence or explicitly respecified with a concrete blocker.
-- [ ] Source drift and unrelated changes are preserved; no unexplained out-of-scope modifications.
-- [ ] Fresh reviewed screenshots and exact test commands/results are retained with the implementation handoff.
-- [ ] Remaining external/live qualifications stay open under the owning plans.
-- [ ] Update this plan and its README row only when work actually meets these criteria.
+- [x] All required behavioral tests exist and pass; all common commands exit 0.
+- [x] Navigation/route inclusion and scope matrix is current; intentional omissions are documented.
+- [x] Every P1 finding from the final second-review addendum is either implemented with evidence or explicitly respecified with a concrete blocker.
+- [x] Source drift and unrelated changes are preserved; no unexplained out-of-scope modifications.
+- [x] Fresh reviewed screenshots and exact test commands/results are retained with the implementation handoff.
+- [x] Remaining external/live qualifications stay open under the owning plans.
+- [x] Update this plan and its README row only when work actually meets these criteria.
 
 ## STOP conditions and maintenance
 
@@ -382,3 +382,12 @@ Independent cold review revisions are incorporated: realistic restricted-role fi
 Recommended execution waves: (A) Phases 0, 1 supported contracts, 2 and 11 functional defects; (B) Phases 3–6 navigation coherence; (C) Phases 7–9 and verified portions of 10 workflow completion; (D) Phase 12 integration. These numbers identify work packages, not an instruction to postpone responsive defects until after all other phases. Required API increments in Phases 1, 8, 9 and 10 run in isolated worktrees and are integrated before final acceptance; they must not delay independent frontend fixes.
 
 API functionality qualification is tracked separately in [Plan 028](./028-all-offerings-api-qualification.md) and its [complete offering test matrix](./028-offering-test-inventory.md). Fixture-based navigation checks in this plan do not qualify an integration as working.
+
+
+## Completion record
+
+Completed on `feat/027-operator-navigation-workflows`, with the original work preserved on `main`/`origin/main` at `89229ce5`. Final production acceptance is bound to `5b4c2bc8`; `b137a31d` adds a separately verified permission-change browser case. All phases 0–12 are implemented, including necessary API, SQL, generated-client, CLI and transport corrections. Consolidated test filenames are mapped in the retained evidence rather than duplicating the proposed filenames from this plan.
+
+Both enterprise gates pass. Frontend: 289 files/1,792 tests. Backend: 111 packages ordinary and 111 race. Required disposable PostgreSQL: 18/18, zero required skips. Browser:134 operator/keyboard/resource cases,308 route/accessibility cases,4 tablet cases, and14 history/permission cases pass; counts include setup and overlap. All 146 representative routes are covered. See [exact commands, source identities, reports and screenshot limitations](./027-ux-audit/artifacts/implementation/final/README.md).
+
+The complete route matrix and all P1 findings are closed by the implementation and tests. Additional concrete findings from integration—Delivery bootstrap loading and create-template initialization—were fixed before acceptance. No API cap was bypassed, no budget ceiling increased, and no live integration was marked qualified by fixture results. Plan 028 and protected release qualifications remain open under their existing authority.

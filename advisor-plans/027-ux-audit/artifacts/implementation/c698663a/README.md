@@ -1,5 +1,7 @@
 # Plan 027 implementation browser evidence
 
+Historical checkpoint. All pending acceptance cases below are resolved by the [final combined acceptance](../final/README.md); retain this record to distinguish original failures and subsequent verification.
+
 Production frontend source: `c698663a` (metrics read-state correction), following `d2a19257` (mobile logging action layout) and `c879acf6` (scope/navigation completion). API implementations and final combined enterprise gates belong to the parent integration branch. These browser runs use intercepted canonical API fixtures; they do not qualify live extensions or restore a live cluster. Plan 028 remains separate.
 
 ## Results and provenance
