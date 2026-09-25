@@ -25,12 +25,11 @@ func (f clusterGrafanaAvailabilityRequester) Do(_ context.Context, _, _, path st
 	}
 	switch {
 	case strings.Contains(path, "/services?labelSelector="):
-		return response(http.StatusOK, `{"items":[{"metadata":{"name":"astronomer-monitoring-grafana"},"spec":{"ports":[{"port":80}]}}]}`), nil
-	case strings.HasSuffix(path, "/services/astronomer-monitoring-grafana-proxy"):
-		if !f.proxyPresent {
-			return response(http.StatusNotFound, `{"kind":"Status","code":404}`), nil
+		items := `{"metadata":{"name":"astronomer-monitoring-grafana"},"spec":{"ports":[{"port":80}]}}`
+		if f.proxyPresent {
+			items += `,{"metadata":{"name":"astronomer-monitoring-grafana-proxy"},"spec":{"ports":[{"port":8080}]}}`
 		}
-		return response(http.StatusOK, `{"metadata":{"name":"astronomer-monitoring-grafana-proxy"},"spec":{"ports":[{"port":8080}]}}`), nil
+		return response(http.StatusOK, `{"items":[`+items+`]}`), nil
 	case strings.Contains(path, "/pods?"):
 		return response(http.StatusOK, `{"items":[]}`), nil
 	default:

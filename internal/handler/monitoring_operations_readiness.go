@@ -382,7 +382,7 @@ func (h *MonitoringHandler) clusterGrafanaProxyAvailable(ctx context.Context, cl
 	if !isSafeK8sName(namespace) || !isSafeK8sName(service) {
 		return fmt.Errorf("invalid Grafana proxy target")
 	}
-	path := fmt.Sprintf("/api/v1/namespaces/%s/services/%s", namespace, service)
+	path := fmt.Sprintf("/api/v1/namespaces/%s/services?labelSelector=%s", namespace, url.QueryEscape("app.kubernetes.io/instance="+releaseName))
 	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
 	if err != nil {
 		return err
@@ -394,11 +394,15 @@ func (h *MonitoringHandler) clusterGrafanaProxyAvailable(ctx context.Context, cl
 	if err := parseJSONResponse(resp, &payload); err != nil {
 		return err
 	}
-	spec, _ := payload["spec"].(map[string]any)
-	if !serviceExposesPort(spec, grafanaProxyListenPort) {
-		return fmt.Errorf("Grafana proxy service %s does not expose port %d", service, grafanaProxyListenPort)
+	for _, item := range objectItems(payload) {
+		meta, _ := item["metadata"].(map[string]any)
+		spec, _ := item["spec"].(map[string]any)
+		name, _ := meta["name"].(string)
+		if name == service && serviceExposesPort(spec, grafanaProxyListenPort) {
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("Grafana proxy service %s does not expose port %d", service, grafanaProxyListenPort)
 }
 
 func serviceExposesPort(spec map[string]any, port int) bool {
