@@ -20,7 +20,11 @@ type manifest struct {
 			MatchLabels map[string]string `yaml:"matchLabels"`
 		} `yaml:"podSelector"`
 		Egress []struct {
-			To    []any `yaml:"to"`
+			To []struct {
+				IPBlock struct {
+					CIDR string `yaml:"cidr"`
+				} `yaml:"ipBlock"`
+			} `yaml:"to"`
 			Ports []struct {
 				Port     int    `yaml:"port"`
 				Protocol string `yaml:"protocol"`
@@ -55,8 +59,13 @@ func TestAllowDNSIsPortableAcrossServiceDNATImplementations(t *testing.T) {
 			t.Fatalf("allow-dns has %d egress rules, want 1", len(resource.Spec.Egress))
 		}
 		rule := resource.Spec.Egress[0]
-		if len(rule.To) != 0 {
-			t.Fatalf("allow-dns restricts destinations (%v); service-IP DNS must work before or after DNAT", rule.To)
+		gotCIDRs := make(map[string]bool, len(rule.To))
+		for _, peer := range rule.To {
+			gotCIDRs[peer.IPBlock.CIDR] = true
+		}
+		wantCIDRs := map[string]bool{"0.0.0.0/0": true, "::/0": true}
+		if !reflect.DeepEqual(gotCIDRs, wantCIDRs) {
+			t.Fatalf("allow-dns peers = %v, want %v so service-IP DNS works before or after DNAT", gotCIDRs, wantCIDRs)
 		}
 		if len(rule.Ports) != 2 {
 			t.Fatalf("allow-dns exposes %d ports, want 2", len(rule.Ports))

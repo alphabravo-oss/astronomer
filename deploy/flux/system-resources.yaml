@@ -174,9 +174,17 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # Leave the destination unrestricted because some CNIs enforce policy against
-    # the DNS Service IP before kube-proxy translates it to a CoreDNS pod IP.
-    - ports:
+    # Explicit all-address peers keep the rule portable across CNIs. In
+    # particular, K3s' network-policy controller does not reliably program a
+    # ports-only egress rule. Restricting this peer to DNS ports still permits
+    # both Service-IP and post-DNAT CoreDNS traffic without assuming a cluster
+    # service or pod CIDR.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+        - ipBlock:
+            cidr: ::/0
+      ports:
         - port: 53
           protocol: UDP
         - port: 53
