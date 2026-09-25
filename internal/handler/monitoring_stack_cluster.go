@@ -378,7 +378,7 @@ func (h *MonitoringHandler) GetStackStatus(w http.ResponseWriter, r *http.Reques
 		status["operation"] = op
 	}
 	if h.requester != nil {
-		if grafanaErr := h.clusterGrafanaAvailable(r.Context(), clusterID, cfg.StackNamespace, cfg.PrometheusReleaseName); grafanaErr == nil {
+		if _, grafanaErr := h.findGrafanaServiceName(r.Context(), clusterID, cfg.StackNamespace, cfg.PrometheusReleaseName); grafanaErr == nil {
 			status["grafanaAvailable"] = true
 			status["grafanaProxyPath"] = clusterGrafanaProxyPath(clusterID)
 		} else {

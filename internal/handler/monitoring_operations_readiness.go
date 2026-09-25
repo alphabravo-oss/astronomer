@@ -370,50 +370,6 @@ func (h *MonitoringHandler) findGrafanaServiceName(ctx context.Context, clusterI
 	return "", fmt.Errorf("grafana service not found for release %s", releaseName)
 }
 
-// clusterGrafanaAvailable verifies Grafana and the service the browser-facing
-// proxy actually targets in one discovery request. A plain Grafana Service is
-// not sufficient: stacks created before the authenticated sidecar was
-// introduced can still expose port 80, while every /observability/grafana
-// request fails against the missing proxy.
-func (h *MonitoringHandler) clusterGrafanaAvailable(ctx context.Context, clusterID, namespace, releaseName string) error {
-	if h.requester == nil {
-		return fmt.Errorf("kubernetes requester not configured")
-	}
-	service := grafanaProxyServiceName(releaseName)
-	if !isSafeK8sName(namespace) || !isSafeK8sName(service) {
-		return fmt.Errorf("invalid Grafana proxy target")
-	}
-	path := fmt.Sprintf("/api/v1/namespaces/%s/services?labelSelector=%s", namespace, url.QueryEscape("app.kubernetes.io/instance="+releaseName))
-	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
-	if err != nil {
-		return err
-	}
-	if err := ensureSuccess(resp); err != nil {
-		return err
-	}
-	var payload map[string]any
-	if err := parseJSONResponse(resp, &payload); err != nil {
-		return err
-	}
-	grafanaFound := false
-	proxyFound := false
-	for _, item := range objectItems(payload) {
-		meta, _ := item["metadata"].(map[string]any)
-		spec, _ := item["spec"].(map[string]any)
-		name, _ := meta["name"].(string)
-		if name == service && serviceExposesPort(spec, grafanaProxyListenPort) {
-			proxyFound = true
-		}
-		if isSafeK8sName(name) && strings.Contains(strings.ToLower(name), "grafana") && serviceExposesPort(spec, 80) {
-			grafanaFound = true
-		}
-	}
-	if grafanaFound && proxyFound {
-		return nil
-	}
-	return fmt.Errorf("Grafana proxy service %s does not expose port %d", service, grafanaProxyListenPort)
-}
-
 func serviceExposesPort(spec map[string]any, port int) bool {
 	ports, _ := spec["ports"].([]any)
 	for _, item := range ports {
