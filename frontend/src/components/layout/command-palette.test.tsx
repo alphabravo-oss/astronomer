@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CommandPalette } from "@/components/layout/command-palette";
+import { CommandPaletteDialog } from "@/components/layout/command-palette-dialog";
 import { globalNavGroups } from "@/components/layout/sidebar-navigation";
 import { useUIStore, useAuthStore } from "@/lib/store";
 
@@ -67,12 +68,10 @@ beforeEach(() => {
 });
 
 describe("CommandPalette", () => {
-  it("surfaces every global nav destination by label search", async () => {
-    render(<CommandPalette />);
-    const input = await screen.findByPlaceholderText(
+  it("surfaces every global nav destination by label search", () => {
+    render(<CommandPaletteDialog />);
+    const input = screen.getByPlaceholderText(
       "Search clusters, pages, actions...",
-      {},
-      { timeout: 5000 },
     );
     for (const group of globalNavGroups) {
       for (const item of group.items) {
