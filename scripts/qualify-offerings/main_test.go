@@ -99,6 +99,47 @@ func TestInventoryClientDoesNotFollowRedirects(t *testing.T) {
 	}
 }
 
+func TestQualificationAPIRejectsHTTP200FalseBody(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":false,"error":"not actually accepted"}`))
+	}))
+	t.Cleanup(server.Close)
+	base, _ := url.Parse(server.URL)
+	if _, err := requestAPI(context.Background(), server.Client(), base, "token", http.MethodGet, "/api/v1/test", nil, "", http.StatusOK); err == nil || !strings.Contains(err.Error(), "ok:false") {
+		t.Fatalf("HTTP 200 ok:false was accepted: %v", err)
+	}
+}
+
+func TestPollOperationRejectsPerpetualPending(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"id":"op-1","status":"pending"}}`))
+	}))
+	t.Cleanup(server.Close)
+	base, _ := url.Parse(server.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	if _, err := pollOperation(ctx, server.Client(), base, "token", "/api/v1/operations/op-1", "op-1", time.Millisecond); err == nil || !strings.Contains(err.Error(), "did not complete") {
+		t.Fatalf("perpetual pending operation was accepted: %v", err)
+	}
+}
+
+func TestPollOperationRejectsWrongOperation(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"id":"other","status":"completed"}}`))
+	}))
+	t.Cleanup(server.Close)
+	base, _ := url.Parse(server.URL)
+	if _, err := pollOperation(context.Background(), server.Client(), base, "token", "/api/v1/operations/op-1", "op-1", time.Millisecond); err == nil || !strings.Contains(err.Error(), "instead of") {
+		t.Fatalf("wrong operation was accepted: %v", err)
+	}
+}
+
 func TestInventoryRegistryAcceptsExplicitlyDisabledFeatureRoute(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.NotFoundHandler())
@@ -214,12 +255,20 @@ func TestVerifyRejectsEveryFalseGreenState(t *testing.T) {
 		"unmatched offering": func(value *report) {
 			value.Inventory[0].AdditionalIdentities = []string{"surprise"}
 		},
-		"false summary": func(value *report) { value.Summary.Total++ },
+		"false summary":      func(value *report) { value.Summary.Total++ },
+		"missing dimensions": func(value *report) { value.Cases[0].Dimensions = nil },
+		"failed dimension":   func(value *report) { value.Cases[0].Dimensions[0].State = "FAIL" },
+		"duplicate dimension": func(value *report) {
+			value.Cases[0].Dimensions = append(value.Cases[0].Dimensions, value.Cases[0].Dimensions[0])
+		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
 			value := base
 			value.Cases = append([]caseResult(nil), base.Cases...)
+			for index := range value.Cases {
+				value.Cases[index].Dimensions = append([]dimensionResult(nil), base.Cases[index].Dimensions...)
+			}
 			value.Inventory = append([]registryResult(nil), base.Inventory...)
 			value.Summary = resultSummary{Total: base.Summary.Total, InventoryOK: base.Summary.InventoryOK, InventoryBad: base.Summary.InventoryBad, ByState: cloneIntMap(base.Summary.ByState)}
 			mutate(&value)
@@ -348,7 +397,31 @@ func passingReport(manifest caseManifest) report {
 		Cleanup: cleanupResult{State: "PASS", Reason: "removed run-owned resources"},
 	}
 	for _, definition := range manifest.Cases {
-		value.Cases = append(value.Cases, caseResult{ID: definition.ID, State: "PASS"})
+		started := time.Now().UTC().Add(-time.Minute)
+		completed := time.Now().UTC()
+		dimensions := make([]dimensionResult, 0, len(requiredDimensions(definition.Category)))
+		for _, name := range requiredDimensions(definition.Category) {
+			dimension := dimensionResult{Name: name, State: "PASS", Reason: "synthetic test evidence", ObservedAt: completed}
+			if name == "functional_canary" {
+				dimension.ArtifactSHA = digest([]byte(definition.ID))
+				dimension.SampleAt = &completed
+			}
+			if name == "reconciliation" {
+				generation := int64(1)
+				dimension.OperationID = "operation-1"
+				dimension.DesiredGeneration = &generation
+				dimension.ObservedGeneration = &generation
+			}
+			if (definition.Category == "app" || definition.Category == "tool") && (name == "install" || name == "upgrade" || name == "rollback" || name == "uninstall_cleanup") {
+				dimension.HTTPStatus = http.StatusAccepted
+				dimension.OperationID = "operation-1"
+				dimension.IdempotencyKey = "idempotency-1"
+			}
+			dimensions = append(dimensions, dimension)
+		}
+		value.Cases = append(value.Cases, caseResult{
+			ID: definition.ID, State: "PASS", Attempts: 1, StartedAt: &started, CompletedAt: &completed, Dimensions: dimensions,
+		})
 	}
 	value.Summary = summarize(value)
 	return value
