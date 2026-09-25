@@ -42,14 +42,14 @@ evidence. The local catalog was clean at
 `3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5`, digest
 `084aa9dec47d9612fdebd848737f53f9feb70e248a4e8e5ccbc93491e1f4ae0c`.
 
-| Registry family | Result | Observed |
-| --- | --- | --- |
-| Feature flags | PASS | 12 exact keys; extensions, hosted Loki and control-plane snapshots disabled in this profile |
-| Curated applications | PASS | 21 exact slugs |
-| Tools | PASS | 12 exact slugs |
-| Dex connector types | PASS | 10 exact connector types |
-| Cloud-credential providers | PASS | AWS, Azure, DigitalOcean, GCP and Generic |
-| Extensions | PASS for disabled profile | Public route returned 404 while `feature.extensions=false`, matching the explicit fail-closed contract |
+| Registry family            | Result                    | Observed                                                                                               |
+| -------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Feature flags              | PASS                      | 12 exact keys; extensions, hosted Loki and control-plane snapshots disabled in this profile            |
+| Curated applications       | PASS                      | 21 exact slugs                                                                                         |
+| Tools                      | PASS                      | 12 exact slugs                                                                                         |
+| Dex connector types        | PASS                      | 10 exact connector types                                                                               |
+| Cloud-credential providers | PASS                      | AWS, Azure, DigitalOcean, GCP and Generic                                                              |
+| Extensions                 | PASS for disabled profile | Public route returned 404 while `feature.extensions=false`, matching the explicit fail-closed contract |
 
 The schema-valid local evidence is ignored under
 `test-artifacts/offering-qualification/2026-09-25-phase0/inventory.json`; SHA-256
@@ -92,3 +92,48 @@ reconciliation across the remaining registries and implement the dependency
 DAG, lifecycle executors, functional canaries, durable readback and API-owned
 cleanup. External provider accounts and destinations that are not configured
 must remain BLOCKED while independent local lanes continue.
+
+## 2026-09-25 — merged-main inventory and estate gate
+
+Status: **BLOCKED before mutation**. Navigation and workflow changes through
+PRs 29–40 are merged on clean `main` at
+`9e74ea94664bdc82550778fd6471116c9794a966`. The frontend from that commit is
+running on the development management plane as Helm revision 143, pinned to
+`localhost/astronomer-frontend@sha256:84986d07dee5f94aacdebf2654a94fb173093b34d8ef4ecac041d7050ac8360b`.
+Public `/healthz` returned 200 and server `/readyz` reported healthy database,
+Redis, schema, critical runtime and tunnel checks.
+
+This deployment remains a development checkpoint rather than a qualified
+release candidate. Its server and worker images predate the frontend commit,
+and the Helm release reports the explicit schema-skew development override.
+No functional result from this checkpoint may be carried into release evidence.
+
+The GET-only inventory ran through normal local login and one-day API-token
+issuance. The token was revoked through the public API immediately afterward,
+and its local credential material was destroyed. The six implemented registry
+contracts all passed with the same denominator: 12 feature flags, 21 curated
+applications, 12 Tools, 10 Dex connector types, five cloud-credential
+providers and the disabled/fail-closed extensions contract. All 174 functional
+cases remain `NOT_RUN`; an inventory pass is not an install pass. Evidence:
+
+- `test-artifacts/offering-qualification/2026-09-25-main-merged/inventory.json`
+- SHA-256 `617318e141a6b03edec6c7f92c11e6d5e2b677d9857ed22006326f0143a4ecc4`
+
+The API-backed estate preflight then ran against the same clean commit and
+returned `BLOCKED`. Cluster `900db10f-b2cd-41e4-9603-0fa4d3fc8657` is still
+the local management cluster and exposes the `viewer` agent profile; it is not
+an allowed install target. The explicit second-member sentinel returned 404,
+so the estate still lacks the required two distinct, non-local, ready member
+clusters with matching admin profiles, projects and namespaces. No mutating
+request ran. Evidence:
+
+- `test-artifacts/offering-qualification/2026-09-25-main-merged/estate-preflight.json`
+- SHA-256 `b1b38217a341ddcbb57341b229d7411c0bb7616f2d73b1826ce846070a89c03a`
+
+Harness verification passed with `go test ./scripts/qualify-offerings/...` and
+all six offline schema/false-green tests. Functional install validation may
+start only after an immutable, internally consistent candidate is deployed and
+the preflight passes with two explicit disposable member targets. Supplying
+those clusters through the normal adoption flow is an environment prerequisite;
+using the management cluster, direct Helm installation, namespace aliases or
+new K3d residue would violate the qualification contract.
