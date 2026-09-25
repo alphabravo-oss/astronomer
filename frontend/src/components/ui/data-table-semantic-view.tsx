@@ -87,9 +87,7 @@ export function SemanticDataTable<T extends RowData>({
         }
         tabIndex={0}
       >
-        <Table
-          className={cn("w-full text-sm", layout === "fit" && "table-fixed")}
-        >
+        <Table layout={layout} className="w-full text-sm">
           <TableHeader>
             <TableRow className="border-b border-border bg-muted/50">
               {selectable && (

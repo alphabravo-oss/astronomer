@@ -28,6 +28,12 @@ describe("Table primitives", () => {
     expect(screen.getByTestId("inventory-table")).toHaveClass(
       "w-full",
       "text-sm",
+      "table-fixed",
+      "max-w-full",
+    );
+    expect(screen.getByTestId("inventory-table")).toHaveAttribute(
+      "data-layout",
+      "fit",
     );
     expect(
       screen.getByRole("columnheader", { name: "Name" }),
@@ -35,5 +41,15 @@ describe("Table primitives", () => {
     expect(
       screen.getByRole("cell", { name: "astronomer-agent" }),
     ).toBeInTheDocument();
+  });
+
+  it("allows genuinely wide tables to opt into scrolling", () => {
+    render(<Table layout="scroll" data-testid="wide-table" />);
+
+    expect(screen.getByTestId("wide-table")).toHaveAttribute(
+      "data-layout",
+      "scroll",
+    );
+    expect(screen.getByTestId("wide-table")).not.toHaveClass("table-fixed");
   });
 });

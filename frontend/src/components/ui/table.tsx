@@ -8,11 +8,19 @@ import { cn } from "@/lib/utils";
 
 export function Table({
   className,
+  layout = "fit",
   ...props
-}: TableHTMLAttributes<HTMLTableElement>) {
+}: TableHTMLAttributes<HTMLTableElement> & {
+  layout?: "fit" | "scroll";
+}) {
   return (
     <table
-      className={cn("app-data-table w-full text-sm", className)}
+      className={cn(
+        "app-data-table w-full text-sm",
+        layout === "fit" && "app-data-table-fit table-fixed max-w-full",
+        className,
+      )}
+      data-layout={layout}
       {...props}
     />
   );
