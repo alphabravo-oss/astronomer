@@ -21,6 +21,10 @@ provider, extension, lifecycle action or functional canary is qualified.
   inconsistent summaries.
 - A closed JSON evidence schema, offline false-green tests, a PR static gate
   and a protected manual release-candidate inventory workflow.
+- A GET-only mutation-estate preflight that refuses the management cluster,
+  duplicate or implicit targets, stale/disconnected agents, privilege-profile
+  drift, and projects that do not own the configured namespace. Its closed
+  evidence records PASS or BLOCKED without exposing credentials.
 
 ### Live inventory result
 
@@ -53,6 +57,21 @@ The schema-valid local evidence is ignored under
 The summary is 6 inventory PASS, 0 inventory FAIL, and 174 functional NOT_RUN.
 Running comprehensive `verify` against it fails as required.
 
+### Live mutation-estate preflight
+
+The API-backed preflight ran against clean candidate
+`03ec3c1421e9ea34673d4430c253d4bdffba8c2f` and correctly returned **BLOCKED**.
+The only real target is cluster `900db10f-b2cd-41e4-9603-0fa4d3fc8657`:
+the API identified it as the local management cluster with the `viewer` agent
+profile, so the runner refused it as an install target. The API returned 404
+for the explicit second-member sentinel, confirming there is no second adopted
+member available to satisfy the estate contract. No mutating request ran.
+
+The temporary one-day API token was issued and revoked through the public API,
+and its local material was removed. The ignored evidence is
+`test-artifacts/offering-qualification/2026-09-25-estate-preflight/estate-preflight.json`;
+SHA-256 `c853f712aca7e35e7b0137f2a69a39ae7049596c625aa1940bb9dafd47790cfc`.
+
 ### Defect found and corrected
 
 The live feature endpoint returned `feature.alerting`, `feature.delivery` and
@@ -64,10 +83,11 @@ inventory now fails if a future runtime feature key lacks a frozen contract.
 ### Required next execution
 
 The current environment has only the management cluster and does not satisfy
-the dedicated two-member test-estate prerequisite. Before any mutating case,
-create and adopt task-owned member clusters through the documented environment
-and registration flow, assign explicit projects/namespaces, freeze their IDs
-and deploy an immutable build from this branch. Then expand executable runtime
+the dedicated two-member test-estate prerequisite. The runner and protected
+workflow now enforce this prerequisite before any mutating case. Create and
+adopt task-owned member clusters through the documented environment and
+registration flow, assign explicit projects/namespaces, freeze their IDs and
+deploy an immutable build from this branch. Then expand executable runtime
 reconciliation across the remaining registries and implement the dependency
 DAG, lifecycle executors, functional canaries, durable readback and API-owned
 cleanup. External provider accounts and destinations that are not configured
