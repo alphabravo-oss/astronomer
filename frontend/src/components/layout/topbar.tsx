@@ -353,13 +353,12 @@ export function Topbar() {
         clusterId={currentClusterId}
         clusterName={activeCluster?.displayName || activeCluster?.name}
       />
-      {currentClusterId &&
-      (applicableScope.project || applicableScope.namespaces) ? (
+      {currentClusterId ? (
         <ClusterScopeControls
           clusterId={currentClusterId}
           applicability={applicableScope}
         />
-      ) : currentClusterId ? null : (
+      ) : (
         <TopbarBreadcrumbs breadcrumbs={breadcrumbs} navigate={navigate} />
       )}
 
