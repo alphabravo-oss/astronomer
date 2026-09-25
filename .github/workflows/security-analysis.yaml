@@ -44,4 +44,4 @@ jobs:
           category: gosec
 
       - name: Scan complete Git history without printing secret values
-        run: go run github.com/zricethezav/gitleaks/v8@v8.27.2 git --redact=100 --no-banner --log-opts=--all .
+        run: go run github.com/zricethezav/gitleaks/v8@v8.27.2 git --config=.gitleaks.toml --redact=100 --no-banner --log-opts=--all .
