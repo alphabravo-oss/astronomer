@@ -103,7 +103,7 @@ export function ClusterScopeControls({
         <ProjectScopePicker clusterId={clusterId} scope={scope} />
       ) : null}
       {applicability.namespaces ? <NamespaceScopePicker scope={scope} /> : null}
-      {scope.error && (
+      {(applicability.project || applicability.namespaces) && scope.error && (
         <ActionButton size="sm" onClick={scope.retry}>
           Retry scope
         </ActionButton>
