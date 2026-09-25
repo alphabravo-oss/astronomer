@@ -582,12 +582,35 @@ export function isNoisyCapabilityCondition(c: ClusterCondition): boolean {
   return CAPABILITY_CONDITIONS.has(c.type) && c.status !== "True";
 }
 
+// Connected is the operator-facing rollup for tunnel health. AgentReachable
+// proves a request can make a round trip through that tunnel, which is useful
+// when it disagrees with Connected but repeats the same good news when both are
+// healthy. Keep the diagnostic condition visible whenever it is not healthy or
+// the rollup is absent.
+export function isRedundantHealthyConnectivityCondition(
+  condition: ClusterCondition,
+  conditions: ClusterCondition[],
+): boolean {
+  return (
+    condition.type === "AgentReachable" &&
+    condition.status === "True" &&
+    conditions.some(
+      (candidate) =>
+        candidate.type === "Connected" && candidate.status === "True",
+    )
+  );
+}
+
 function ClusterConditionsBar({
   conditions,
 }: {
   conditions: ClusterCondition[];
 }) {
-  const visible = conditions.filter((c) => !isNoisyCapabilityCondition(c));
+  const visible = conditions.filter(
+    (c) =>
+      !isNoisyCapabilityCondition(c) &&
+      !isRedundantHealthyConnectivityCondition(c, conditions),
+  );
   if (visible.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -703,9 +726,9 @@ function MeshHeaderBadge({
 }
 
 // Compact pill showing the cluster's adoption phase next to its status badge.
-// Yellow spinner on awaiting_agent + baseline apply, green check on ready,
-// red X on failed. Links to the Adoption tab so one click drills into the
-// full timeline. Hidden when the cluster has no registration record.
+// Yellow progress indicator while adoption is active and red on failure. Links
+// to the Adoption tab so one click drills into the full timeline. Hidden when
+// the cluster has no registration record or adoption is complete.
 function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
   const { data } = useQuery<RegistrationStatusView | null>({
     queryKey: queryKeys.clusterPages.registrationStatus(clusterId),
@@ -736,15 +759,19 @@ function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
       : phase === "provisioning"
         ? "applying baseline"
         : phase === "connected"
-          ? "connected"
+          ? "preparing baseline"
           : phase === "failed"
             ? "failed"
             : phase;
+  const title =
+    phase === "connected"
+      ? "The agent is connected and Astronomer is preparing the cluster baseline. Open the adoption timeline."
+      : "Open the adoption timeline";
   return (
     <RouterLink
       to="/dashboard/clusters/$id/adoption"
       params={{ id: clusterId }}
-      title="Adoption phase - click for step timeline"
+      title={title}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
