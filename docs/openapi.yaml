@@ -21551,7 +21551,7 @@ paths:
         Returns a kubectl-applyable YAML manifest that installs the
         Astronomer agent into the target cluster. Each call mints a
         fresh registration token bound to the cluster ID; tokens
-        expire 24h after issue. The manifest includes the agent's
+        expire 1h after issue. The manifest includes the agent's
         ServiceAccount + ClusterRole + Secret + Deployment + Service +
         NetworkPolicy + PodDisruptionBudget.
       responses:
