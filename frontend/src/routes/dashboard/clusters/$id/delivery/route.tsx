@@ -1,4 +1,3 @@
-import { RemoteProjectPicker } from "@/components/projects/remote-project-picker";
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useLocation } from "@tanstack/react-router";
@@ -56,9 +55,7 @@ function ClusterDeliveryLayout() {
   const clusterId = params.id;
   const pathname = useLocation({ select: (location) => location.pathname });
   const { data: cluster } = useCluster(clusterId);
-  const { projectId, setProjectId } = useDeliveryProjectScope({
-    clusterId,
-  });
+  const { projectId } = useDeliveryProjectScope({ clusterId });
   const base = `/dashboard/clusters/${clusterId}/delivery`;
   const projectQuery = projectId
     ? `?project=${encodeURIComponent(projectId)}`
@@ -89,14 +86,6 @@ function ClusterDeliveryLayout() {
         eyebrow="Cluster delivery"
         title={cluster?.displayName || cluster?.name || "Cluster"}
         description="Flux and delivery for this environment. Switch clusters from the sidebar to stay on the same tab."
-        actions={
-          <RemoteProjectPicker
-            value={projectId}
-            onChange={setProjectId}
-            clusterId={clusterId}
-            ariaLabel="Delivery project"
-          />
-        }
       />
       <div className="border-b border-border">
         <nav
