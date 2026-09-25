@@ -57,6 +57,21 @@ The schema-valid local evidence is ignored under
 The summary is 6 inventory PASS, 0 inventory FAIL, and 174 functional NOT_RUN.
 Running comprehensive `verify` against it fails as required.
 
+### Live mutation-estate preflight
+
+The API-backed preflight ran against clean candidate
+`03ec3c1421e9ea34673d4430c253d4bdffba8c2f` and correctly returned **BLOCKED**.
+The only real target is cluster `900db10f-b2cd-41e4-9603-0fa4d3fc8657`:
+the API identified it as the local management cluster with the `viewer` agent
+profile, so the runner refused it as an install target. The API returned 404
+for the explicit second-member sentinel, confirming there is no second adopted
+member available to satisfy the estate contract. No mutating request ran.
+
+The temporary one-day API token was issued and revoked through the public API,
+and its local material was removed. The ignored evidence is
+`test-artifacts/offering-qualification/2026-09-25-estate-preflight/estate-preflight.json`;
+SHA-256 `c853f712aca7e35e7b0137f2a69a39ae7049596c625aa1940bb9dafd47790cfc`.
+
 ### Defect found and corrected
 
 The live feature endpoint returned `feature.alerting`, `feature.delivery` and
