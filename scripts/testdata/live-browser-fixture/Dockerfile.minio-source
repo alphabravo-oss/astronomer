@@ -1,0 +1,4 @@
+FROM alpine@sha256:365499d9dccb7c8cfaffef995a6c382e71174585e0556f6476ead1c5971c39fb
+COPY minio /usr/local/bin/minio
+COPY mc /usr/local/bin/mc
+ENTRYPOINT ["/usr/local/bin/minio"]

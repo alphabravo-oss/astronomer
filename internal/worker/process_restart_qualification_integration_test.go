@@ -529,15 +529,17 @@ func connectRestartQualificationAgent(t *testing.T, ctx context.Context, address
 func assertRestartCISTaskRows(t *testing.T, ctx context.Context, pool *pgxpool.Pool, scanID uuid.UUID, delivered, pending int) {
 	t.Helper()
 	var total, gotDelivered, gotPending, attemptSum int
-	if err := pool.QueryRow(ctx, `
-		SELECT count(*),count(*) FILTER (WHERE status='delivered'),count(*) FILTER (WHERE status='pending'),coalesce(sum(attempt_count),0)
-		FROM task_outbox WHERE task_type=$1 AND convert_from(payload,'UTF8') LIKE '%' || $2::text || '%'`, tasks.SecurityIngestType, scanID).
-		Scan(&total, &gotDelivered, &gotPending, &attemptSum); err != nil {
-		t.Fatal(err)
-	}
-	if total != delivered+pending || gotDelivered != delivered || gotPending != pending || attemptSum != delivered {
+	wantTotal := delivered + pending
+	waitRestartQualification(t, ctx, func() (bool, error) {
+		err := pool.QueryRow(ctx, `
+			SELECT count(*),count(*) FILTER (WHERE status='delivered'),count(*) FILTER (WHERE status='pending'),coalesce(sum(attempt_count),0)
+			FROM task_outbox WHERE task_type=$1 AND convert_from(payload,'UTF8') LIKE '%' || $2::text || '%'`, tasks.SecurityIngestType, scanID).
+			Scan(&total, &gotDelivered, &gotPending, &attemptSum)
+		return err == nil && total == wantTotal && gotDelivered == delivered && gotPending == pending && attemptSum == delivered, err
+	})
+	if total != wantTotal || gotDelivered != delivered || gotPending != pending || attemptSum != delivered {
 		t.Fatalf("CIS task rows = total:%d delivered:%d pending:%d attempts:%d, want %d/%d/%d/%d",
-			total, gotDelivered, gotPending, attemptSum, delivered+pending, delivered, pending, delivered)
+			total, gotDelivered, gotPending, attemptSum, wantTotal, delivered, pending, delivered)
 	}
 }
 
