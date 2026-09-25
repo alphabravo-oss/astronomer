@@ -5203,17 +5203,6 @@ spec:
       protocol: UDP
     - port: 53
       protocol: TCP
-    to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: kube-system
-      podSelector:
-        matchExpressions:
-        - key: k8s-app
-          operator: In
-          values:
-          - kube-dns
-          - coredns
   podSelector:
     matchLabels:
       app.kubernetes.io/part-of: flux

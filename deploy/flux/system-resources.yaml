@@ -174,18 +174,9 @@ spec:
   policyTypes:
     - Egress
   egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchExpressions:
-              - key: k8s-app
-                operator: In
-                values:
-                  - kube-dns
-                  - coredns
-      ports:
+    # Leave the destination unrestricted because some CNIs enforce policy against
+    # the DNS Service IP before kube-proxy translates it to a CoreDNS pod IP.
+    - ports:
         - port: 53
           protocol: UDP
         - port: 53
