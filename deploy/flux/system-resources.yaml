@@ -180,6 +180,15 @@ spec:
     # both Service-IP and post-DNAT CoreDNS traffic without assuming a cluster
     # service or pod CIDR.
     - to:
+        # CNIs that enforce after Service DNAT match the CoreDNS endpoint.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+        # CNIs that enforce before Service DNAT match the DNS ClusterIP. The
+        # ports below keep these otherwise broad peers limited to DNS.
         - ipBlock:
             cidr: 0.0.0.0/0
         - ipBlock:

@@ -24,6 +24,12 @@ type manifest struct {
 				IPBlock struct {
 					CIDR string `yaml:"cidr"`
 				} `yaml:"ipBlock"`
+				NamespaceSelector struct {
+					MatchLabels map[string]string `yaml:"matchLabels"`
+				} `yaml:"namespaceSelector"`
+				PodSelector struct {
+					MatchLabels map[string]string `yaml:"matchLabels"`
+				} `yaml:"podSelector"`
 			} `yaml:"to"`
 			Ports []struct {
 				Port     int    `yaml:"port"`
@@ -60,12 +66,22 @@ func TestAllowDNSIsPortableAcrossServiceDNATImplementations(t *testing.T) {
 		}
 		rule := resource.Spec.Egress[0]
 		gotCIDRs := make(map[string]bool, len(rule.To))
+		foundCoreDNS := false
 		for _, peer := range rule.To {
-			gotCIDRs[peer.IPBlock.CIDR] = true
+			if peer.IPBlock.CIDR != "" {
+				gotCIDRs[peer.IPBlock.CIDR] = true
+			}
+			if reflect.DeepEqual(peer.NamespaceSelector.MatchLabels, map[string]string{"kubernetes.io/metadata.name": "kube-system"}) &&
+				reflect.DeepEqual(peer.PodSelector.MatchLabels, map[string]string{"k8s-app": "kube-dns"}) {
+				foundCoreDNS = true
+			}
 		}
 		wantCIDRs := map[string]bool{"0.0.0.0/0": true, "::/0": true}
 		if !reflect.DeepEqual(gotCIDRs, wantCIDRs) {
 			t.Fatalf("allow-dns peers = %v, want %v so service-IP DNS works before or after DNAT", gotCIDRs, wantCIDRs)
+		}
+		if !foundCoreDNS {
+			t.Fatal("allow-dns lacks the kube-system/kube-dns endpoint peer required by post-DNAT CNIs")
 		}
 		if len(rule.Ports) != 2 {
 			t.Fatalf("allow-dns exposes %d ports, want 2", len(rule.Ports))
