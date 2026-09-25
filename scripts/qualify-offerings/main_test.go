@@ -51,6 +51,65 @@ func TestInventoryRegistryFollowsEveryCanonicalPage(t *testing.T) {
 	}
 }
 
+func TestResumeRetriesLocallyBlockedCasesButPreservesExternalBlocks(t *testing.T) {
+	local := caseDefinition{ID: "TOOL-01"}
+	external := caseDefinition{ID: "CLOUD-01"}
+	blocked := caseResult{State: "BLOCKED"}
+	if shouldSkipResumedCase(local, blocked) {
+		t.Fatal("resume skipped a locally blocked case after its executor may have been added")
+	}
+	if !shouldSkipResumedCase(external, blocked) {
+		t.Fatal("resume retried a case whose declared external fixture is still unavailable")
+	}
+	if !shouldSkipResumedCase(local, caseResult{State: "PASS"}) {
+		t.Fatal("resume retried a passing case")
+	}
+}
+
+func TestDexToolExecutorPassesOnlyOnExplicitManagementOnlyRejection(t *testing.T) {
+	clusterID := "00000000-0000-0000-0000-000000000001"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/tools/status/"):
+			_, _ = w.Write([]byte(`{"data":[{"slug":"dex","status":"not_installed"}]}`))
+		case strings.Contains(r.URL.Path, "/tools/dex/"):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"Dex is bundled with the Astronomer management chart; use the Auth settings workflow"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now().UTC()
+	result := caseResult{ID: "TOOL-02", State: "RUNNING", Attempts: 1, StartedAt: &started}
+	result = toolLifecycleExecutor{slug: "dex"}.Run(context.Background(), executionContext{
+		Base: base, Token: "token", RunID: "test-run",
+		Config: qualificationConfig{MemberTargets: []memberTarget{{ClusterID: clusterID, ExpectedPrivilegeProfile: "admin"}}},
+	}, caseDefinition{ID: "TOOL-02", Category: "tool"}, result, func(caseResult) error { return nil })
+	if result.State != "PASS" {
+		t.Fatalf("Dex rejection case state=%s reason=%s dimensions=%+v", result.State, result.Reason, result.Dimensions)
+	}
+	if err := verifyPassingCase(caseDefinition{ID: "TOOL-02", Category: "tool"}, result); err != nil {
+		t.Fatalf("Dex rejection evidence did not satisfy the formal verifier: %v", err)
+	}
+}
+
+func TestQualificationCleanupFailsOnUnprovenExecutorCleanup(t *testing.T) {
+	evidence := report{Cases: []caseResult{{ID: "TOOL-05", Dimensions: []dimensionResult{{Name: "uninstall_cleanup", State: "FAIL"}}}}}
+	if cleanup := qualificationCleanup(evidence); cleanup.State != "FAIL" {
+		t.Fatalf("cleanup state=%s, want FAIL", cleanup.State)
+	}
+	evidence.Cases[0].Dimensions[0].State = "PASS"
+	if cleanup := qualificationCleanup(evidence); cleanup.State != "PASS" {
+		t.Fatalf("cleanup state=%s, want PASS", cleanup.State)
+	}
+}
+
 func TestInventoryRegistryFailsClosedOnUnknownOffering(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

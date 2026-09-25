@@ -250,6 +250,17 @@ func TestBuildToolPlanOrdersChartsAndIsolatesValues(t *testing.T) {
 	}
 }
 
+func TestBuildToolReleasePlanRejectsMemberClusterDex(t *testing.T) {
+	tool := sqlc.ClusterTool{
+		Slug:              DexToolSlug,
+		VersionConstraint: "0.24.0",
+		Charts:            json.RawMessage(`[{"order":0,"repo_url":"https://charts.dexidp.io","namespace":"dex","chart_name":"dex"}]`),
+	}
+	if _, err := buildToolReleasePlan(tool, "", ""); err == nil || !strings.Contains(err.Error(), "management chart") {
+		t.Fatalf("member-cluster Dex release plan was not rejected: %v", err)
+	}
+}
+
 func TestToolPlanRejectsExternalRevisionAfterCrash(t *testing.T) {
 	h, q, helm, op := newPlanFixture(t, 1)
 	q.failCheckpoint = "release.completed"

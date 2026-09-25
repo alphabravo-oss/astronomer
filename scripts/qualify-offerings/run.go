@@ -118,7 +118,7 @@ func runQualification(ctx context.Context, args []string) error {
 	execution := executionContext{Base: base, Token: token, Config: config, RunID: result.RunID}
 	for _, definition := range selected {
 		current := result.Cases[index[definition.ID]]
-		if current.State == "PASS" || current.State == "NOT_SUPPORTED" || current.State == "BLOCKED" {
+		if shouldSkipResumedCase(definition, current) {
 			continue
 		}
 		now := time.Now().UTC()
@@ -147,7 +147,7 @@ func runQualification(ctx context.Context, args []string) error {
 			return err
 		}
 	}
-	result.Cleanup = cleanupResult{State: "PASS", Reason: "no run-owned resources remain after reverse-order executor cleanup"}
+	result.Cleanup = qualificationCleanup(result)
 	result.GeneratedAt = time.Now().UTC()
 	result.Summary = summarize(result)
 	if err := writeJSONAtomic(*outputPath, result); err != nil {
@@ -155,6 +155,28 @@ func runQualification(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("qualify-offerings: run checkpointed; cases=%d states=%v evidence=%s\n", len(selected), result.Summary.ByState, *outputPath)
 	return nil
+}
+
+func qualificationCleanup(result report) cleanupResult {
+	for _, item := range result.Cases {
+		for _, dimension := range item.Dimensions {
+			if dimension.Name == "uninstall_cleanup" && dimension.State == "FAIL" {
+				return cleanupResult{State: "FAIL", Reason: "one or more executors could not prove removal of run-owned resources"}
+			}
+		}
+	}
+	return cleanupResult{State: "PASS", Reason: "no executor reported a remaining run-owned resource after reverse-order cleanup"}
+}
+
+func shouldSkipResumedCase(definition caseDefinition, result caseResult) bool {
+	if result.State == "PASS" || result.State == "NOT_SUPPORTED" {
+		return true
+	}
+	if result.State == "BLOCKED" {
+		_, external := externalFixtureReason(definition.ID)
+		return external
+	}
+	return false
 }
 
 func loadPassingInventory(path string, manifest caseManifest, identity candidate, base *url.URL) ([]registryResult, error) {
@@ -258,6 +280,9 @@ func selectCases(definitions []caseDefinition, raw string) ([]caseDefinition, er
 func executorFor(definition caseDefinition) caseExecutor {
 	if reason, external := externalFixtureReason(definition.ID); external {
 		return blockedExecutor{reason: reason}
+	}
+	if slug, ok := toolCases[definition.ID]; ok {
+		return toolLifecycleExecutor{slug: slug}
 	}
 	return blockedExecutor{reason: "no compiled functional executor exists for this locally testable case yet"}
 }
