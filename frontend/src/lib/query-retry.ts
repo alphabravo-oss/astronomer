@@ -19,8 +19,13 @@ export function shouldRetryQuery(
   return status < 400 || status >= 500;
 }
 
-/** Route error boundaries own server failures; pages retain control of 4xx UI. */
+/**
+ * Route error boundaries own unexpected server failures. A 503 is a normal,
+ * recoverable state while an adopted cluster's agent reconnects, so keep it in
+ * the query result for the affected panel to render without replacing the
+ * entire route.
+ */
 export function shouldThrowQueryError(error: unknown): boolean {
   const status = apiErrorStatus(error);
-  return status != null && status >= 500;
+  return status != null && status >= 500 && status !== 503;
 }

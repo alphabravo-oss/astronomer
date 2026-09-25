@@ -1,7 +1,4 @@
-import {
-  shouldRetryQuery,
-  shouldThrowQueryError,
-} from "@/lib/query-retry";
+import { shouldRetryQuery, shouldThrowQueryError } from "@/lib/query-retry";
 
 describe("shouldRetryQuery", () => {
   it.each([400, 401, 403, 404, 409, 422])(
@@ -27,12 +24,16 @@ describe("shouldRetryQuery", () => {
 });
 
 describe("shouldThrowQueryError", () => {
-  it.each([500, 502, 503])(
+  it.each([500, 502, 504])(
     "routes HTTP %i through the error boundary",
     (status) => {
       expect(shouldThrowQueryError({ status })).toBe(true);
     },
   );
+
+  it("keeps a transient 503 available to the affected panel", () => {
+    expect(shouldThrowQueryError({ status: 503 })).toBe(false);
+  });
 
   it.each([400, 401, 403, 404, 409, 422])(
     "leaves HTTP %i available for page-specific states",

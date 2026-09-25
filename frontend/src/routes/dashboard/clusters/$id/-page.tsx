@@ -70,6 +70,7 @@ import {
   CircleHelp,
   ShieldAlert,
   Package,
+  RotateCcw,
 } from "lucide-react";
 import type { ClusterCondition } from "@/types";
 import { WidgetGrid } from "@/components/dashboards/widget-grid";
@@ -88,7 +89,8 @@ export function ClusterDetailPage() {
   const { data: conditions } = useClusterConditions(clusterId);
   const { data: metricsSummary, isError: metricsError } =
     useClusterMetricsSummary(clusterId);
-  const { data: events } = useClusterEvents(clusterId, { limit: 10 });
+  const eventsQuery = useClusterEvents(clusterId, { limit: 10 });
+  const { data: events } = eventsQuery;
   const toolsQuery = useClusterToolsStatus(clusterId);
   const toolsMetric = toolStatusMetric(toolsQuery);
   // Image-vuln severity rollup — same endpoint the Image Scans tab
@@ -462,7 +464,24 @@ export function ClusterDetailPage() {
           Recent Events
         </h3>
         <div className="rounded-lg border border-border overflow-hidden">
-          {events && events.length > 0 ? (
+          {eventsQuery.isError ? (
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 text-sm"
+              role="status"
+            >
+              <span className="text-muted-foreground">
+                Recent events are temporarily unavailable while the cluster
+                reconnects.
+              </span>
+              <ActionButton
+                size="sm"
+                icon={<RotateCcw className="h-3.5 w-3.5" />}
+                onClick={() => void eventsQuery.refetch()}
+              >
+                Retry
+              </ActionButton>
+            </div>
+          ) : events && events.length > 0 ? (
             <div className="divide-y divide-border">
               {events.slice(0, 8).map((event) => (
                 <div
