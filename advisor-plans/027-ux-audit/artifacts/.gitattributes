@@ -1,0 +1,3 @@
+# Retained verifier output is byte-exact, including reporter whitespace.
+# Keep whitespace enforcement on handwritten source and documentation.
+*.log -whitespace
