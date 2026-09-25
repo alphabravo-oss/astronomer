@@ -86,8 +86,8 @@ export function ClusterGrafanaView({
           ) : (
             <EmptyState
               icon={BarChart3}
-              title="Cluster Grafana is not installed"
-              description="Enable Grafana in this cluster’s monitoring stack to add its private dashboard here."
+              title="Cluster Grafana is unavailable"
+              description="Install, upgrade, or repair this cluster’s monitoring stack to make its private Grafana dashboard available."
               actionLabel="Open monitoring stack"
               actionHref={`/dashboard/clusters/${id}/monitoring-stack`}
             />

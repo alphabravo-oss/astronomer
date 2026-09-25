@@ -370,6 +370,37 @@ func (h *MonitoringHandler) findGrafanaServiceName(ctx context.Context, clusterI
 	return "", fmt.Errorf("grafana service not found for release %s", releaseName)
 }
 
+// clusterGrafanaProxyAvailable verifies the service the browser-facing proxy
+// actually targets. A plain Grafana Service is not sufficient: stacks created
+// before the authenticated sidecar was introduced can still expose port 80,
+// while every /observability/grafana request fails against the missing proxy.
+func (h *MonitoringHandler) clusterGrafanaProxyAvailable(ctx context.Context, clusterID, namespace, releaseName string) error {
+	if h.requester == nil {
+		return fmt.Errorf("kubernetes requester not configured")
+	}
+	service := grafanaProxyServiceName(releaseName)
+	if !isSafeK8sName(namespace) || !isSafeK8sName(service) {
+		return fmt.Errorf("invalid Grafana proxy target")
+	}
+	path := fmt.Sprintf("/api/v1/namespaces/%s/services/%s", namespace, service)
+	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if err != nil {
+		return err
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return err
+	}
+	var payload map[string]any
+	if err := parseJSONResponse(resp, &payload); err != nil {
+		return err
+	}
+	spec, _ := payload["spec"].(map[string]any)
+	if !serviceExposesPort(spec, grafanaProxyListenPort) {
+		return fmt.Errorf("Grafana proxy service %s does not expose port %d", service, grafanaProxyListenPort)
+	}
+	return nil
+}
+
 func serviceExposesPort(spec map[string]any, port int) bool {
 	ports, _ := spec["ports"].([]any)
 	for _, item := range ports {
