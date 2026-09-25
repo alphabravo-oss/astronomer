@@ -44,7 +44,7 @@ describe("Table primitives", () => {
     );
   });
 
-  it("reserves only a compact width for action headers", () => {
+  it("does not infer layout from an Actions label", () => {
     render(
       <Table>
         <TableHeader>
@@ -59,10 +59,9 @@ describe("Table primitives", () => {
     expect(screen.getByRole("columnheader", { name: "Name" })).not.toHaveClass(
       "w-16",
     );
-    expect(screen.getByRole("columnheader", { name: "Actions" })).toHaveClass(
-      "w-16",
-      "px-2",
-    );
+    expect(
+      screen.getByRole("columnheader", { name: "Actions" }),
+    ).not.toHaveClass("w-16", "px-2");
   });
 
   it("allows genuinely wide tables to opt into scrolling", () => {

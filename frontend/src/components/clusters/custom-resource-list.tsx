@@ -222,9 +222,9 @@ function ScopedCustomResourceList({
             {
               key: "actions",
               header: "Actions",
+              rowActions: true,
               sortable: false,
               hideable: false,
-              width: "60px",
               accessor: (row) => (
                 <ResourceActionMenu
                   clusterId={clusterId}

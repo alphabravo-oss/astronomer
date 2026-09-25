@@ -101,14 +101,20 @@ export function SemanticDataTable<T extends RowData>({
               )}
               {activeColumns.map((col) => {
                 const column = table.getColumn(col.key);
-                const compact =
-                  col.key === "actions" || col.header.trim() === "";
+                const rowActions = col.rowActions === true;
                 const sorted = column?.getIsSorted();
                 const header = resizable ? headerByKey.get(col.key) : undefined;
-                const sortable = col.sortable !== false;
+                const sortable = !rowActions && col.sortable !== false;
                 const headerContent = (
                   <>
-                    <span className="min-w-0 truncate">{col.header}</span>
+                    <span
+                      className={cn(
+                        "min-w-0 truncate",
+                        rowActions && "sr-only",
+                      )}
+                    >
+                      {col.header || (rowActions ? "Actions" : "")}
+                    </span>
                     {sortable && (
                       <span className="text-muted-foreground/50">
                         {sorted === "asc" ? (
@@ -132,14 +138,14 @@ export function SemanticDataTable<T extends RowData>({
                     className={cn(
                       cellPadding,
                       "min-w-0 overflow-hidden font-medium text-muted-foreground",
-                      compact && "px-2",
+                      rowActions && "px-1.5",
                       resizable && "relative",
                       col.align === "center" && "text-center",
                       col.align === "right" && "text-right",
                     )}
                     style={
-                      compact
-                        ? { width: col.width ?? "3rem" }
+                      rowActions
+                        ? { width: col.width ?? "2.5rem" }
                         : resizable
                           ? { width: column?.getSize() }
                           : col.width
@@ -253,15 +259,14 @@ export function SemanticDataTable<T extends RowData>({
                     </TableCell>
                   )}
                   {activeColumns.map((col) => {
-                    const compact =
-                      col.key === "actions" || col.header.trim() === "";
+                    const rowActions = col.rowActions === true;
                     return (
                       <TableCell
                         key={col.key}
-                        className={cn(cellPadding, compact && "px-2")}
+                        className={cn(cellPadding, rowActions && "px-1.5")}
                         style={
-                          compact
-                            ? { width: col.width ?? "3rem" }
+                          rowActions
+                            ? { width: col.width ?? "2.5rem" }
                             : resizable
                               ? {
                                   width: table.getColumn(col.key)?.getSize(),
@@ -346,21 +351,20 @@ export function SemanticDataTable<T extends RowData>({
                         </TableCell>
                       )}
                       {activeColumns.map((col) => {
-                        const compact =
-                          col.key === "actions" || col.header.trim() === "";
+                        const rowActions = col.rowActions === true;
                         return (
                           <TableCell
                             key={col.key}
                             className={cn(
                               cellPadding,
                               "min-w-0 overflow-hidden",
-                              compact && "px-2",
+                              rowActions && "px-1.5",
                               col.align === "center" && "text-center",
                               col.align === "right" && "text-right",
                             )}
                             style={
-                              compact
-                                ? { width: col.width ?? "3rem" }
+                              rowActions
+                                ? { width: col.width ?? "2.5rem" }
                                 : resizable
                                   ? {
                                       width: table
@@ -373,10 +377,10 @@ export function SemanticDataTable<T extends RowData>({
                             <div
                               className={cn(
                                 "min-w-0",
-                                compact
+                                rowActions
                                   ? "overflow-visible"
                                   : "overflow-hidden text-ellipsis",
-                                !compact &&
+                                !rowActions &&
                                   (col.wrap
                                     ? "whitespace-normal break-words"
                                     : "whitespace-nowrap"),

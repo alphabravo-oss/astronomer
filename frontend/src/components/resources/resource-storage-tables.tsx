@@ -55,6 +55,7 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -187,6 +188,7 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -367,6 +369,7 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu

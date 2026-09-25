@@ -32,6 +32,8 @@ export interface Column<T> {
   hidden?: boolean;
   /** Keep structural columns, such as row actions, visible and out of the selector. */
   hideable?: boolean;
+  /** Render this as Rancher's dedicated three-dot row-action column. */
+  rowActions?: boolean;
   width?: string;
   align?: "left" | "center" | "right";
   /** Allow multi-line cell content. Cells stay on one line by default. */

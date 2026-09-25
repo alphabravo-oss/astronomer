@@ -78,8 +78,8 @@ describe("DataTable behavior (TanStack Table engine)", () => {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: () => "Menu",
-        sortable: false,
       },
     ];
     const { rerender } = render(
@@ -91,8 +91,9 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     );
 
     const actionHead = document.querySelector("thead th:last-child");
-    expect(actionHead).toHaveStyle({ width: "48px" });
-    expect(actionHead).toHaveClass("px-2");
+    expect(actionHead).toHaveStyle({ width: "40px" });
+    expect(actionHead).toHaveClass("px-1.5");
+    expect(actionHead).toHaveAccessibleName("Actions");
     expect(screen.getByText("Banana")).toHaveClass("whitespace-nowrap");
 
     rerender(
@@ -105,11 +106,36 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     );
     const gridHeaders = screen.getAllByRole("columnheader");
     expect(gridHeaders.at(-1)).toHaveStyle({
-      width: "48px",
-      flex: "0 0 3rem",
-      minWidth: "48px",
+      width: "40px",
+      flex: "0 0 2.5rem",
+      minWidth: "40px",
     });
-    expect(gridHeaders.at(-1)).toHaveClass("px-2");
+    expect(gridHeaders.at(-1)).toHaveClass("px-1.5");
+    expect(gridHeaders.at(-1)).toHaveAccessibleName("Actions");
+  });
+
+  it("does not compress an unlabeled inline-action column", () => {
+    const inlineActionColumns: Column<Row>[] = [
+      ...columns,
+      {
+        key: "open",
+        header: "",
+        accessor: () => "Open metrics",
+        sortable: false,
+      },
+    ];
+
+    render(
+      <DataTable
+        data={rows}
+        columns={inlineActionColumns}
+        keyExtractor={(row) => row.id}
+      />,
+    );
+
+    const actionHead = document.querySelector("thead th:last-child");
+    expect(actionHead).not.toHaveStyle({ width: "40px" });
+    expect(actionHead).not.toHaveClass("px-1.5");
   });
 
   it("groups only the current server page and preserves continuation controls", () => {

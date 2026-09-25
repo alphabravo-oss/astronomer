@@ -76,9 +76,8 @@ export function VirtualizedGrid<T extends RowData>({
 }) {
   // Per-column width style shared by header + body cells so they line up.
   const colStyle = (col: Column<T>): React.CSSProperties => {
-    const compact = col.key === "actions" || col.header.trim() === "";
-    if (compact) {
-      const width = col.width ?? "3rem";
+    if (col.rowActions === true) {
+      const width = col.width ?? "2.5rem";
       return { width, flex: `0 0 ${width}`, minWidth: width };
     }
     const width = resizable
@@ -153,14 +152,15 @@ export function VirtualizedGrid<T extends RowData>({
           )}
           {activeColumns.map((col) => {
             const column = table.getColumn(col.key);
-            const compact = col.key === "actions" || col.header.trim() === "";
+            const rowActions = col.rowActions === true;
+            const sortable = !rowActions && col.sortable !== false;
             const sorted = column?.getIsSorted();
             return (
               <div
                 key={col.key}
                 role="columnheader"
                 aria-sort={
-                  col.sortable !== false
+                  sortable
                     ? sorted === "asc"
                       ? "ascending"
                       : sorted === "desc"
@@ -171,28 +171,27 @@ export function VirtualizedGrid<T extends RowData>({
                 className={cn(
                   cellPadding,
                   "flex min-w-0 items-center gap-1 overflow-hidden font-medium",
-                  compact && "px-2",
-                  col.sortable !== false &&
+                  rowActions && "px-1.5",
+                  sortable &&
                     "cursor-pointer select-none hover:text-foreground",
                   alignClass(col),
                 )}
                 style={colStyle(col)}
-                tabIndex={col.sortable !== false ? 0 : undefined}
-                onClick={() =>
-                  col.sortable !== false && column?.toggleSorting()
-                }
+                tabIndex={sortable ? 0 : undefined}
+                onClick={() => sortable && column?.toggleSorting()}
                 onKeyDown={(event) => {
-                  if (
-                    col.sortable === false ||
-                    (event.key !== "Enter" && event.key !== " ")
-                  )
+                  if (!sortable || (event.key !== "Enter" && event.key !== " "))
                     return;
                   event.preventDefault();
                   column?.toggleSorting();
                 }}
               >
-                <span className="min-w-0 truncate">{col.header}</span>
-                {col.sortable !== false && (
+                <span
+                  className={cn("min-w-0 truncate", rowActions && "sr-only")}
+                >
+                  {col.header || (rowActions ? "Actions" : "")}
+                </span>
+                {sortable && (
                   <span className="text-muted-foreground/50">
                     {sorted === "asc" ? (
                       <ChevronUp className="h-3.5 w-3.5" />
@@ -241,8 +240,7 @@ export function VirtualizedGrid<T extends RowData>({
                   </div>
                 )}
                 {activeColumns.map((col) => {
-                  const compact =
-                    col.key === "actions" || col.header.trim() === "";
+                  const rowActions = col.rowActions === true;
                   return (
                     <div
                       key={col.key}
@@ -250,7 +248,7 @@ export function VirtualizedGrid<T extends RowData>({
                       className={cn(
                         "flex items-center",
                         cellPadding,
-                        compact && "px-2",
+                        rowActions && "px-1.5",
                       )}
                       style={colStyle(col)}
                     >
@@ -376,8 +374,7 @@ export function VirtualizedGrid<T extends RowData>({
                       </div>
                     )}
                     {activeColumns.map((col) => {
-                      const compact =
-                        col.key === "actions" || col.header.trim() === "";
+                      const rowActions = col.rowActions === true;
                       return (
                         <div
                           key={col.key}
@@ -385,7 +382,7 @@ export function VirtualizedGrid<T extends RowData>({
                           className={cn(
                             "flex min-w-0 items-center overflow-hidden",
                             cellPadding,
-                            compact && "px-2",
+                            rowActions && "px-1.5",
                             alignClass(col),
                           )}
                           style={colStyle(col)}
@@ -393,10 +390,10 @@ export function VirtualizedGrid<T extends RowData>({
                           <div
                             className={cn(
                               "min-w-0",
-                              compact
+                              rowActions
                                 ? "overflow-visible"
                                 : "overflow-hidden text-ellipsis",
-                              !compact &&
+                              !rowActions &&
                                 (col.wrap
                                   ? "whitespace-normal break-words"
                                   : "whitespace-nowrap"),

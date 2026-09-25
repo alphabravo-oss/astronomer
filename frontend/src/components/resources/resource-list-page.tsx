@@ -354,6 +354,7 @@ function ScopedWorkloadsTable({
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <WorkloadActions
             row={row}

@@ -139,6 +139,7 @@ export function NodesTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => {
           const isCordonable = row.status !== "SchedulingDisabled";
           return (
@@ -290,6 +291,7 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -587,6 +589,7 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <PodRowActions
             clusterId={clusterId}

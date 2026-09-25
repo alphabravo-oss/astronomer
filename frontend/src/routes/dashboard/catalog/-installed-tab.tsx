@@ -101,6 +101,7 @@ export function InstalledTab({
     {
       key: "actions",
       header: "",
+      rowActions: true,
       accessor: (row) => {
         const items: ActionMenuItem[] = [
           {

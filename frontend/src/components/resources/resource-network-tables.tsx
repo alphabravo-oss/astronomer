@@ -50,6 +50,7 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -210,6 +211,7 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -373,6 +375,7 @@ export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
       {
         key: "actions",
         header: "",
+        rowActions: true,
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
