@@ -965,6 +965,7 @@ func TestClusterAgentUpgradePlanAcceptsRolloutControls(t *testing.T) {
 	body := `{
 		"target_version":"v1.3.0",
 		"target_image":"registry.example/astronomer-agent:v1.3.0",
+		"target_pull_policy":"IfNotPresent",
 		"strategy":"canary_batches",
 		"canary_cluster_ids":["` + clusterID.String() + `","` + clusterID.String() + `","canary-b"],
 		"batch_size":5,
@@ -987,7 +988,7 @@ func TestClusterAgentUpgradePlanAcceptsRolloutControls(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	got := envelope.Data
-	if !got.Ready || got.BatchSize != 5 || got.MaxUnavailable != 2 || got.Strategy != "canary_batches" {
+	if !got.Ready || got.BatchSize != 5 || got.MaxUnavailable != 2 || got.Strategy != "canary_batches" || got.TargetPullPolicy != "IfNotPresent" {
 		t.Fatalf("rollout controls = %+v", got)
 	}
 	if got.RollbackImage != "registry.example/astronomer-agent:v1.0.0" {

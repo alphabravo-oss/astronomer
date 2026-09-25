@@ -55,6 +55,10 @@ func (h *ClusterAgentHandler) buildUpgradePlan(cluster sqlc.Cluster, agent clust
 	if targetImage == "" {
 		targetImage = targetAgentImage(h.agentImageRepository, targetVersion)
 	}
+	targetPullPolicy := strings.TrimSpace(req.TargetPullPolicy)
+	if targetPullPolicy == "" {
+		targetPullPolicy = "Always"
+	}
 	currentImage := ""
 	if agent.AgentVersion != "" {
 		currentImage = targetAgentImage(h.agentImageRepository, agent.AgentVersion)
@@ -86,6 +90,12 @@ func (h *ClusterAgentHandler) buildUpgradePlan(cluster sqlc.Cluster, agent clust
 	if targetImage == "" {
 		blockers = append(blockers, "target image is not configured")
 	}
+	if targetPullPolicy != "Always" && targetPullPolicy != "IfNotPresent" && targetPullPolicy != "Never" {
+		blockers = append(blockers, "target_pull_policy must be Always, IfNotPresent, or Never")
+	}
+	if targetPullPolicy == "Never" && !strings.Contains(targetImage, "@sha256:") {
+		blockers = append(blockers, "target_pull_policy Never requires an immutable sha256 digest reference")
+	}
 	if cluster.IsLocal {
 		blockers = append(blockers, "local management-cluster agent is upgraded with the Astronomer server release")
 	}
@@ -114,6 +124,7 @@ func (h *ClusterAgentHandler) buildUpgradePlan(cluster sqlc.Cluster, agent clust
 		TargetVersion:       targetVersion,
 		CurrentImage:        currentImage,
 		TargetImage:         targetImage,
+		TargetPullPolicy:    targetPullPolicy,
 		RollbackImage:       rollbackImage,
 		PrivilegeProfile:    profile,
 		AgentOverrides:      overrides,
@@ -127,7 +138,7 @@ func (h *ClusterAgentHandler) buildUpgradePlan(cluster sqlc.Cluster, agent clust
 		PreflightChecks: []string{
 			"Agent self-test returns passed or only approved warnings.",
 			"Agent tunnel is connected and heartbeat/ping are fresh.",
-			"Target image is configured and pullable from the adopted cluster.",
+			"Target image is configured and available under the selected pull policy on the adopted cluster.",
 			"Rollback image is known before patching the Deployment.",
 			"Canary cluster list is approved for the first rollout batch.",
 			"max_unavailable is less than or equal to batch_size.",

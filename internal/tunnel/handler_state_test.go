@@ -672,7 +672,7 @@ func TestHandleAgentUpgradeResultFailsOperationOnRollback(t *testing.T) {
 func TestAgentUpgradeDispatchCarriesRollbackImageFromOperationSpec(t *testing.T) {
 	clusterID := uuid.New()
 	opID := uuid.New()
-	spec := []byte(`{"plan":{"rollback_image":"example.com/astronomer-agent:v1.0.0"}}`)
+	spec := []byte(`{"plan":{"rollback_image":"example.com/astronomer-agent:v1.0.0","target_pull_policy":"Never"}}`)
 	validator := &recordingValidator{
 		heartbeatCommandsPending: true,
 		pendingOp: &sqlc.AgentLifecycleOperation{
@@ -700,6 +700,9 @@ func TestAgentUpgradeDispatchCarriesRollbackImageFromOperationSpec(t *testing.T)
 		}
 		if payload.RollbackImage != "example.com/astronomer-agent:v1.0.0" {
 			t.Fatalf("rollback image = %q", payload.RollbackImage)
+		}
+		if payload.TargetPullPolicy != "Never" {
+			t.Fatalf("target pull policy = %q", payload.TargetPullPolicy)
 		}
 	default:
 		t.Fatal("expected agent upgrade command")

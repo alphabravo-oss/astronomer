@@ -93,6 +93,20 @@ const (
 	AgentTolerationOperatorExists AgentTolerationOperator = "Exists"
 )
 
+// Defines values for AgentUpgradePlanTargetPullPolicy.
+const (
+	AgentUpgradePlanTargetPullPolicyAlways       AgentUpgradePlanTargetPullPolicy = "Always"
+	AgentUpgradePlanTargetPullPolicyIfNotPresent AgentUpgradePlanTargetPullPolicy = "IfNotPresent"
+	AgentUpgradePlanTargetPullPolicyNever        AgentUpgradePlanTargetPullPolicy = "Never"
+)
+
+// Defines values for AgentUpgradePlanRequestTargetPullPolicy.
+const (
+	AgentUpgradePlanRequestTargetPullPolicyAlways       AgentUpgradePlanRequestTargetPullPolicy = "Always"
+	AgentUpgradePlanRequestTargetPullPolicyIfNotPresent AgentUpgradePlanRequestTargetPullPolicy = "IfNotPresent"
+	AgentUpgradePlanRequestTargetPullPolicyNever        AgentUpgradePlanRequestTargetPullPolicy = "Never"
+)
+
 // Defines values for AlertEventSeverity.
 const (
 	AlertEventSeverityCritical AlertEventSeverity = "critical"
@@ -2838,29 +2852,33 @@ type AgentUpgradeOperationResponse struct {
 // AgentUpgradePlan defines model for AgentUpgradePlan.
 type AgentUpgradePlan struct {
 	// AgentOverrides Bounded per-cluster agent PodSpec customization. Platform-owned Linux placement and security settings remain immutable.
-	AgentOverrides          AgentOverrides     `json:"agent_overrides"`
-	BatchSize               int                `json:"batch_size"`
-	Blockers                *[]string          `json:"blockers,omitempty"`
-	CanaryClusterIds        *[]string          `json:"canary_cluster_ids,omitempty"`
-	ClusterId               openapi_types.UUID `json:"cluster_id"`
-	ClusterName             string             `json:"cluster_name"`
-	ConfigurationDigest     string             `json:"configuration_digest"`
-	CurrentImage            *string            `json:"current_image,omitempty"`
-	CurrentVersion          *string            `json:"current_version,omitempty"`
-	MaxUnavailable          int                `json:"max_unavailable"`
-	PlanDigest              string             `json:"plan_digest"`
-	PostUpgradeHealthChecks []string           `json:"post_upgrade_health_checks"`
-	PreflightChecks         []string           `json:"preflight_checks"`
-	PrivilegeProfile        string             `json:"privilege_profile"`
-	Ready                   bool               `json:"ready"`
-	Rollback                []string           `json:"rollback"`
-	RollbackImage           *string            `json:"rollback_image,omitempty"`
-	Steps                   []string           `json:"steps"`
-	Strategy                string             `json:"strategy"`
-	TargetImage             string             `json:"target_image"`
-	TargetVersion           string             `json:"target_version"`
-	Validation              []string           `json:"validation"`
+	AgentOverrides          AgentOverrides                   `json:"agent_overrides"`
+	BatchSize               int                              `json:"batch_size"`
+	Blockers                *[]string                        `json:"blockers,omitempty"`
+	CanaryClusterIds        *[]string                        `json:"canary_cluster_ids,omitempty"`
+	ClusterId               openapi_types.UUID               `json:"cluster_id"`
+	ClusterName             string                           `json:"cluster_name"`
+	ConfigurationDigest     string                           `json:"configuration_digest"`
+	CurrentImage            *string                          `json:"current_image,omitempty"`
+	CurrentVersion          *string                          `json:"current_version,omitempty"`
+	MaxUnavailable          int                              `json:"max_unavailable"`
+	PlanDigest              string                           `json:"plan_digest"`
+	PostUpgradeHealthChecks []string                         `json:"post_upgrade_health_checks"`
+	PreflightChecks         []string                         `json:"preflight_checks"`
+	PrivilegeProfile        string                           `json:"privilege_profile"`
+	Ready                   bool                             `json:"ready"`
+	Rollback                []string                         `json:"rollback"`
+	RollbackImage           *string                          `json:"rollback_image,omitempty"`
+	Steps                   []string                         `json:"steps"`
+	Strategy                string                           `json:"strategy"`
+	TargetImage             string                           `json:"target_image"`
+	TargetPullPolicy        AgentUpgradePlanTargetPullPolicy `json:"target_pull_policy"`
+	TargetVersion           string                           `json:"target_version"`
+	Validation              []string                         `json:"validation"`
 }
+
+// AgentUpgradePlanTargetPullPolicy defines model for AgentUpgradePlan.TargetPullPolicy.
+type AgentUpgradePlanTargetPullPolicy string
 
 // AgentUpgradePlanRequest defines model for AgentUpgradePlanRequest.
 type AgentUpgradePlanRequest struct {
@@ -2870,8 +2888,14 @@ type AgentUpgradePlanRequest struct {
 	RollbackImage    *string   `json:"rollback_image,omitempty"`
 	Strategy         *string   `json:"strategy,omitempty"`
 	TargetImage      *string   `json:"target_image,omitempty"`
-	TargetVersion    *string   `json:"target_version,omitempty"`
+
+	// TargetPullPolicy Use Never only with an immutable sha256 digest that has been staged on every eligible cluster node.
+	TargetPullPolicy *AgentUpgradePlanRequestTargetPullPolicy `json:"target_pull_policy,omitempty"`
+	TargetVersion    *string                                  `json:"target_version,omitempty"`
 }
+
+// AgentUpgradePlanRequestTargetPullPolicy Use Never only with an immutable sha256 digest that has been staged on every eligible cluster node.
+type AgentUpgradePlanRequestTargetPullPolicy string
 
 // AgentUpgradeRecommendation defines model for AgentUpgradeRecommendation.
 type AgentUpgradeRecommendation struct {

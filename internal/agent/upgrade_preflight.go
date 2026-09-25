@@ -68,12 +68,12 @@ var imagePresentWaitingReasons = map[string]bool{
 // It fails CLOSED: an inconclusive result (pod never scheduled, pull still in
 // flight at the deadline) is reported as an error and the upgrade is abandoned
 // with the Deployment untouched.
-func (h *SelfUpgradeHandler) verifyImagePullable(ctx context.Context, namespace, image, operationID, role string, template corev1.PodSpec) error {
+func (h *SelfUpgradeHandler) verifyImagePullable(ctx context.Context, namespace, image, operationID, role string, pullPolicy corev1.PullPolicy, template corev1.PodSpec) error {
 	if h == nil || h.client == nil {
 		return fmt.Errorf("kubernetes client is not configured")
 	}
 	name := preflightPodName(operationID, role, image)
-	pod := preflightPod(name, namespace, image, operationID, template)
+	pod := preflightPod(name, namespace, image, operationID, pullPolicy, template)
 
 	created, err := h.adoptOrCreatePreflightPod(ctx, namespace, name, operationID, pod)
 	if err != nil {
@@ -239,7 +239,10 @@ func preflightPodName(operationID, role, image string) string {
 	return "astronomer-agent-preflight-" + role + "-" + hex.EncodeToString(sum[:])[:12]
 }
 
-func preflightPod(name, namespace, image, operationID string, template corev1.PodSpec) *corev1.Pod {
+func preflightPod(name, namespace, image, operationID string, pullPolicy corev1.PullPolicy, template corev1.PodSpec) *corev1.Pod {
+	if pullPolicy == "" {
+		pullPolicy = corev1.PullAlways
+	}
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -269,7 +272,7 @@ func preflightPod(name, namespace, image, operationID string, template corev1.Po
 				Image: image,
 				// Always, not IfNotPresent: a node that already cached this tag
 				// would otherwise pass a tag that no longer exists upstream.
-				ImagePullPolicy: corev1.PullAlways,
+				ImagePullPolicy: pullPolicy,
 				Command:         []string{preflightSentinelCommand},
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{

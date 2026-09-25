@@ -210,6 +210,7 @@ export interface OpenAPIComponents {
           "target_version": string;
           "current_image"?: string;
           "target_image": string;
+          "target_pull_policy": "Always" | "IfNotPresent" | "Never";
           "rollback_image"?: string;
           "privilege_profile": string;
           "agent_overrides": OpenAPIComponents['schemas']['AgentOverrides'];
@@ -230,6 +231,7 @@ export interface OpenAPIComponents {
     AgentUpgradePlanRequest: {
           "target_version"?: string;
           "target_image"?: string;
+          "target_pull_policy"?: "Always" | "IfNotPresent" | "Never";
           "strategy"?: string;
           "canary_cluster_ids"?: string[];
           "batch_size"?: number;

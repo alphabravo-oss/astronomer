@@ -5419,6 +5419,11 @@ components:
           type: string
         target_image:
           type: string
+        target_pull_policy:
+          type: string
+          enum: [Always, IfNotPresent, Never]
+          default: Always
+          description: Use Never only with an immutable sha256 digest that has been staged on every eligible cluster node.
         strategy:
           type: string
           default: agent_self_rollout
@@ -5439,7 +5444,7 @@ components:
     AgentUpgradePlan:
       type: object
       additionalProperties: false
-      required: [cluster_id, cluster_name, target_version, target_image, privilege_profile, agent_overrides, configuration_digest, plan_digest, strategy, batch_size, max_unavailable, ready, preflight_checks, steps, post_upgrade_health_checks, validation, rollback]
+      required: [cluster_id, cluster_name, target_version, target_image, target_pull_policy, privilege_profile, agent_overrides, configuration_digest, plan_digest, strategy, batch_size, max_unavailable, ready, preflight_checks, steps, post_upgrade_health_checks, validation, rollback]
       properties:
         cluster_id:
           type: string
@@ -5454,6 +5459,9 @@ components:
           type: string
         target_image:
           type: string
+        target_pull_policy:
+          type: string
+          enum: [Always, IfNotPresent, Never]
         rollback_image:
           type: string
         privilege_profile:

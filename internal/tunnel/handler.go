@@ -296,10 +296,11 @@ func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.Age
 	switch op.OperationType {
 	case agentlifecycle.OperationTypeUpgrade:
 		payload := protocol.AgentUpgradePayload{
-			OperationID:   op.ID.String(),
-			ClusterID:     conn.ClusterID,
-			TargetVersion: op.TargetVersion,
-			TargetImage:   op.TargetImage,
+			OperationID:      op.ID.String(),
+			ClusterID:        conn.ClusterID,
+			TargetVersion:    op.TargetVersion,
+			TargetImage:      op.TargetImage,
+			TargetPullPolicy: agentUpgradeTargetPullPolicy(op.OperationSpec),
 			// The plan's rollback image, persisted in operation_spec when the
 			// operation was queued. Empty is fine and common: the agent then
 			// falls back to the image it is currently running, which is the
@@ -367,6 +368,21 @@ func agentUpgradeRollbackImage(spec json.RawMessage) string {
 		return ""
 	}
 	return strings.TrimSpace(envelope.Plan.RollbackImage)
+}
+
+func agentUpgradeTargetPullPolicy(spec json.RawMessage) string {
+	if len(spec) == 0 {
+		return ""
+	}
+	var envelope struct {
+		Plan struct {
+			TargetPullPolicy string `json:"target_pull_policy"`
+		} `json:"plan"`
+	}
+	if err := json.Unmarshal(spec, &envelope); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(envelope.Plan.TargetPullPolicy)
 }
 
 func (h *Hub) handleAgentUpgradeResult(conn *AgentConnection, msg *protocol.Message) {
