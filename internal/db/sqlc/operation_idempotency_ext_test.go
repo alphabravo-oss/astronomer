@@ -147,6 +147,14 @@ func TestSpecialOperationQueriesInitializeFirstClaim(t *testing.T) {
 					t.Fatalf("first idempotency claim is incomplete; missing %q:\n%s", fragment, tt.query)
 				}
 			}
+			for _, ambiguous := range []string{
+				"CASE WHEN operation_table = ''",
+				"COALESCE(operation_id, gen_random_uuid())",
+			} {
+				if strings.Contains(tt.query, ambiguous) {
+					t.Fatalf("idempotency conflict update contains ambiguous target-column reference %q:\n%s", ambiguous, tt.query)
+				}
+			}
 		})
 	}
 }
