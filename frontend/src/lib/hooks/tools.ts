@@ -70,8 +70,21 @@ export function useInstallTool() {
 export function useUninstallTool() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ slug, cluster_id }: { slug: string; cluster_id: string }) =>
-      uninstallTool(slug, { cluster_id }),
+    mutationFn: ({
+      slug,
+      cluster_id,
+      confirm_data_deletion,
+    }: {
+      slug: string;
+      cluster_id: string;
+      confirm_data_deletion?: boolean;
+    }) =>
+      uninstallTool(slug, {
+        cluster_id,
+        ...(confirm_data_deletion === undefined
+          ? {}
+          : { confirm_data_deletion }),
+      }),
     onSuccess: (_, { cluster_id }) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.tools.clusterStatus(cluster_id),

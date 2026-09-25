@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -28,6 +29,11 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 	}
 	if h.helm == nil {
 		return errors.New("helm requester not configured")
+	}
+	if op.OperationType == "uninstall" && env.ToolSlug == "longhorn" {
+		if err := h.prepareLonghornUninstall(ctx, op, env); err != nil {
+			return err
+		}
 	}
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
@@ -77,6 +83,28 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 			return err
 		}
 	}
+	return nil
+}
+
+func (h *ToolHandler) prepareLonghornUninstall(ctx context.Context, op sqlc.ToolOperation, env toolOperationEnvelope) error {
+	if !env.ConfirmDataDeletion {
+		return errors.New("Longhorn uninstall is missing explicit persistent-data deletion confirmation")
+	}
+	if h.k8s == nil {
+		return errors.New("kubernetes requester not configured for Longhorn uninstall")
+	}
+	const path = "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings/deleting-confirmation-flag"
+	resp, err := h.k8s.Do(ctx, env.ClusterID, http.MethodPatch, path, []byte(`{"value":"true"}`), requestHeaders("application/merge-patch+json"))
+	if err != nil {
+		return fmt.Errorf("enable Longhorn deletion confirmation: %w", err)
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return fmt.Errorf("enable Longhorn deletion confirmation: %w", err)
+	}
+	h.recordToolOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn persistent-data deletion confirmed", map[string]any{
+		"namespace": "longhorn-system",
+		"setting":   "deleting-confirmation-flag",
+	})
 	return nil
 }
 

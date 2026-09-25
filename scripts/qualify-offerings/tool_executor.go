@@ -61,7 +61,7 @@ func (executor toolLifecycleExecutor) Run(ctx context.Context, execution executi
 		if installed {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			defer cancel()
-			operation, key, cleanupErr := executeToolMutation(cleanupCtx, client, execution, http.MethodDelete, basePath+"/uninstall", map[string]any{"cluster_id": target.ClusterID}, definition.ID+"-deferred-cleanup")
+			operation, key, cleanupErr := executeToolMutation(cleanupCtx, client, execution, http.MethodDelete, basePath+"/uninstall", toolUninstallBody(executor.slug, target.ClusterID), definition.ID+"-deferred-cleanup")
 			if cleanupErr != nil {
 				final = upsertDimension(final, failedDimension("uninstall_cleanup", cleanupErr))
 				final.State = "FAIL"
@@ -109,7 +109,7 @@ func (executor toolLifecycleExecutor) Run(ctx context.Context, execution executi
 	}
 
 	result = addDimension(result, evaluateToolRestartRecovery(ctx, client, execution, executor.slug, target.ClusterID), checkpoint)
-	uninstall, uninstallKey, err := executeToolMutation(ctx, client, execution, http.MethodDelete, basePath+"/uninstall", map[string]any{"cluster_id": target.ClusterID}, definition.ID+"-uninstall")
+	uninstall, uninstallKey, err := executeToolMutation(ctx, client, execution, http.MethodDelete, basePath+"/uninstall", toolUninstallBody(executor.slug, target.ClusterID), definition.ID+"-uninstall")
 	if err != nil {
 		return finishCase(addDimension(result, failedDimension("uninstall_cleanup", err), checkpoint), "FAIL", "tool lifecycle left cleanup unproven", checkpoint)
 	}
@@ -126,6 +126,14 @@ func (executor toolLifecycleExecutor) Run(ctx context.Context, execution executi
 		result = addDimension(result, operationDimension("uninstall_cleanup", "run-owned releases were removed and status converged", target.ClusterID, uninstallKey, uninstall), checkpoint)
 	}
 	return finalizeDimensions(result, checkpoint)
+}
+
+func toolUninstallBody(slug, clusterID string) map[string]any {
+	body := map[string]any{"cluster_id": clusterID}
+	if slug == "longhorn" {
+		body["confirm_data_deletion"] = true
+	}
+	return body
 }
 
 func toolTarget(config qualificationConfig) (memberTarget, error) {

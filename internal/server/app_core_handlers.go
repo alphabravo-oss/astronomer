@@ -114,6 +114,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	// a document it could not read.
 	alertingHandler.SetEncryptor(encryptor)
 	toolHandler := handler.NewToolHandlerWithHelm(queries, helmRequester)
+	toolHandler.SetK8sRequester(requester)
 	toolHandler.SetRunTx(sqlcMutationTxRunner[handler.ToolMutationTx](database))
 	toolHandler.SetLogger(logger)
 	toolHandler.SetEventBus(bus)

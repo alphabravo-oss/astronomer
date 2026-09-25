@@ -165,6 +165,26 @@ describe("useClusterToolActions", () => {
     expect(result.current.progress?.operationId).toBe("uninstall-operation");
   });
 
+  it("requires explicit persistent-data deletion for Longhorn", () => {
+    const longhorn = { ...tool, slug: "longhorn", name: "Longhorn" };
+    const { result } = renderHook(() =>
+      useClusterToolActions({ ...props, tools: [longhorn] }),
+    );
+    act(() => result.current.cardProps(longhorn).onUninstall(longhorn.slug));
+    expect(result.current.confirmation?.confirmValue).toBe("Longhorn");
+    expect(result.current.confirmation?.impact?.consequences).toContain(
+      "Longhorn volumes and their stored data may be permanently deleted by the chart's uninstall job.",
+    );
+    act(() => {
+      void result.current.confirmation?.onConfirm();
+    });
+    expect(mocks.uninstall.mock.calls[0][0]).toEqual({
+      slug: "longhorn",
+      cluster_id: "cluster",
+      confirm_data_deletion: true,
+    });
+  });
+
   it("denies recovery before opening a dialog and preserves adoption scope", () => {
     mocks.grants.update = false;
     const { result } = renderHook(() => useClusterToolActions(props));

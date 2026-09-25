@@ -629,8 +629,20 @@ export const queryKeys = {
     detail: (slug: string) => ["tools", "detail", slug] as const,
     clusterStatus: (clusterId: string) =>
       ["tools", "clusterStatus", clusterId] as const,
-    preview: (toolSlug: string, clusterId: string, preset: string) =>
-      ["tools", "preview", toolSlug, clusterId, preset] as const,
+    preview: (
+      toolSlug: string,
+      clusterId: string,
+      preset: string,
+      valuesOverride = "",
+    ) =>
+      [
+        "tools",
+        "preview",
+        toolSlug,
+        clusterId,
+        preset,
+        valuesOverride,
+      ] as const,
     operation: (operationId: string) =>
       ["tools", "operation", operationId] as const,
   },

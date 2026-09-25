@@ -105,7 +105,13 @@ export function useClusterToolActions({
   function confirmRemoval() {
     if (dialog?.kind !== "uninstall" || !authorize(remove)) return;
     uninstall.mutate(
-      { slug: dialog.tool.slug, cluster_id: clusterId },
+      {
+        slug: dialog.tool.slug,
+        cluster_id: clusterId,
+        ...(dialog.tool.slug === "longhorn"
+          ? { confirm_data_deletion: true }
+          : {}),
+      },
       { onSuccess: trackOperation(dialog.tool) },
     );
   }
@@ -144,9 +150,25 @@ export function useClusterToolActions({
                 confirmDisabledReason: disabledReason(update),
               }
             : {
-                title: "Disable Tool",
-                description: `This will uninstall ${dialog.tool.name} from the cluster. All related resources will be removed.`,
-                confirmText: "Disable",
+                title: `Uninstall ${dialog.tool.name}`,
+                description: `Astronomer will uninstall each managed ${dialog.tool.name} release in reverse installation order.`,
+                confirmText: "Uninstall",
+                confirmValue: dialog.tool.name,
+                impact: {
+                  scope: `${clusterId} / ${dialog.tool.name}`,
+                  consequences:
+                    dialog.tool.slug === "longhorn"
+                      ? [
+                          "Astronomer will enable Longhorn's deletion-confirmation setting before uninstalling the release.",
+                          "Longhorn volumes and their stored data may be permanently deleted by the chart's uninstall job.",
+                        ]
+                      : [
+                          "Managed Helm releases and their chart-owned resources will be removed.",
+                          "Persistent data and custom resources follow the chart's own deletion policy.",
+                        ],
+                  recovery:
+                    "The operation remains visible with per-release progress and errors. Reinstalling does not guarantee recovery of deleted data.",
+                },
                 onConfirm: confirmRemoval,
                 loading: uninstall.isPending,
                 confirmDisabledReason: disabledReason(remove),

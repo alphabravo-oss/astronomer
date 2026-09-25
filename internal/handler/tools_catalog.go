@@ -231,7 +231,11 @@ func (h *ToolHandler) queueToolReversal(w http.ResponseWriter, r *http.Request, 
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, verb) {
 		return
 	}
-	restoreToolActionRequestBody(r, toolActionRequest{ClusterID: req.ClusterID})
+	if operation == "uninstall" && slug == "longhorn" && !req.ConfirmDataDeletion {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Longhorn uninstall requires explicit confirmation that persistent data may be deleted")
+		return
+	}
+	restoreToolActionRequestBody(r, req)
 	// Migration 057: maintenance window gate.
 	if blocked := h.checkToolMaintenanceWindow(w, r, clusterID, "tool."+operation); blocked {
 		return
@@ -271,11 +275,14 @@ func (h *ToolHandler) queueToolReversal(w http.ResponseWriter, r *http.Request, 
 			}
 		}
 	}
+	if operation == "uninstall" {
+		env.ConfirmDataDeletion = req.ConfirmDataDeletion
+	}
 	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	op, err := h.createAuditedToolOperation(r, "tool_installation", operationTargetKey(clusterID, slug), operation, env, currentUserUUID(r), mutationAuditEvent{action: "tool." + operation, resourceType: "tool", resourceID: tool.ID.String(), resourceName: slug, status: http.StatusAccepted, detail: map[string]any{
-		"cluster_id": req.ClusterID, "releases": toolPlanAudit(env), "source_operation_id": previous.ID.String(),
+		"cluster_id": req.ClusterID, "releases": toolPlanAudit(env), "source_operation_id": previous.ID.String(), "confirm_data_deletion": req.ConfirmDataDeletion,
 	}})
 	if err != nil {
 		respondToolMutationError(w, r, err, apierror.EnqueueError, "Failed to enqueue tool "+operation)

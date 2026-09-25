@@ -6820,6 +6820,9 @@ components:
       required: [cluster_id]
       properties:
         cluster_id: {type: string, format: uuid}
+        confirm_data_deletion:
+          type: boolean
+          description: Required for tools such as Longhorn whose uninstall can delete persistent data.
     ToolPreview:
       type: object
       additionalProperties: false

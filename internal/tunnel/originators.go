@@ -165,7 +165,8 @@ func roundTrip[Resp any](
 }
 
 // SendHelmRequest dispatches a HELM_INSTALL / UPGRADE / UNINSTALL / ROLLBACK
-// / STATUS message through the tunnel and waits for the matching HELM_RESULT.
+// / STATUS / HISTORY message through the tunnel and waits for the matching
+// HELM_RESULT.
 //
 // The msgType MUST be one of the Helm constants in pkg/protocol.
 func (h *Hub) SendHelmRequest(ctx context.Context, clusterID string, msgType protocol.MessageType, payload protocol.HelmRequestPayload) (reply *HelmReply, err error) {
@@ -188,7 +189,8 @@ func (h *Hub) SendHelmRequest(ctx context.Context, clusterID string, msgType pro
 
 	switch msgType {
 	case protocol.MsgHelmInstall, protocol.MsgHelmUpgrade,
-		protocol.MsgHelmUninstall, protocol.MsgHelmRollback, protocol.MsgHelmStatus:
+		protocol.MsgHelmUninstall, protocol.MsgHelmRollback, protocol.MsgHelmStatus,
+		protocol.MsgHelmHistory:
 	default:
 		return nil, fmt.Errorf("invalid helm message type %q", msgType)
 	}

@@ -124,6 +124,7 @@ describe("tools generated API boundary", () => {
       previewToolInstall("fluent-bit", {
         cluster_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
         preset: "production",
+        values_override: "replicas: 2",
       }),
     ).resolves.toEqual({
       charts: [
@@ -135,6 +136,14 @@ describe("tools generated API boundary", () => {
         },
       ],
       preset: "production",
+    });
+    expect(generated.postToolsBySlugPreview).toHaveBeenCalledWith({
+      path: { slug: "fluent-bit" },
+      body: {
+        cluster_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        preset: "production",
+        values_override: "replicas: 2",
+      },
     });
   });
 
@@ -150,6 +159,27 @@ describe("tools generated API boundary", () => {
       path: { slug: "fluent-bit" },
       headerParams: { "Idempotency-Key": expect.stringMatching(UUID_V4) },
       body: { cluster_id: clusterId },
+    });
+  });
+
+  it("sends explicit persistent-data confirmation on destructive uninstall", async () => {
+    vi.mocked(generated.deleteToolsBySlugUninstall).mockResolvedValueOnce({
+      data: operationWire,
+    });
+    const clusterId = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+
+    await uninstallTool("longhorn", {
+      cluster_id: clusterId,
+      confirm_data_deletion: true,
+    });
+
+    expect(generated.deleteToolsBySlugUninstall).toHaveBeenCalledWith({
+      path: { slug: "longhorn" },
+      headerParams: { "Idempotency-Key": expect.stringMatching(UUID_V4) },
+      body: {
+        cluster_id: clusterId,
+        confirm_data_deletion: true,
+      },
     });
   });
 });

@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,6 +15,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+type longhornUninstallRequester struct {
+	method, path string
+	body         []byte
+	headers      map[string]string
+	status       int
+}
+
+func (r *longhornUninstallRequester) Do(_ context.Context, _ string, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error) {
+	r.method, r.path, r.body, r.headers = method, path, body, headers
+	return &protocol.K8sResponsePayload{StatusCode: r.status}, nil
+}
 
 type plannedHelm struct {
 	releases    map[string]protocol.HelmResultPayload
@@ -179,6 +193,38 @@ func TestToolPlanUninstallReversesOrderAndResumes(t *testing.T) {
 	}
 	if len(q.installedByRef) != 0 {
 		t.Fatalf("installed rows remain: %v", q.installedByRef)
+	}
+}
+
+func TestLonghornUninstallPreparesDeletionThroughClusterAgent(t *testing.T) {
+	h, q, _, op := newPlanFixture(t, 1)
+	req := &longhornUninstallRequester{status: http.StatusOK}
+	h.k8s = req
+	env := toolOperationEnvelope{
+		ClusterID:           q.clusterID.String(),
+		ToolSlug:            "longhorn",
+		ConfirmDataDeletion: true,
+	}
+	if err := h.prepareLonghornUninstall(context.Background(), op, env); err != nil {
+		t.Fatal(err)
+	}
+	if req.method != http.MethodPatch || req.path != "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings/deleting-confirmation-flag" {
+		t.Fatalf("request = %s %s", req.method, req.path)
+	}
+	if !bytes.Equal(req.body, []byte(`{"value":"true"}`)) || req.headers["Content-Type"] != "application/merge-patch+json" {
+		t.Fatalf("body=%s headers=%v", req.body, req.headers)
+	}
+	if len(q.events) != 1 || q.events[0].Stage != "uninstall.prepared" {
+		t.Fatalf("events=%+v", q.events)
+	}
+}
+
+func TestLonghornUninstallRefusesMissingDeletionConfirmation(t *testing.T) {
+	h, _, _, op := newPlanFixture(t, 1)
+	h.k8s = &longhornUninstallRequester{status: http.StatusOK}
+	err := h.prepareLonghornUninstall(context.Background(), op, toolOperationEnvelope{ToolSlug: "longhorn"})
+	if err == nil || !strings.Contains(err.Error(), "explicit") {
+		t.Fatalf("error=%v", err)
 	}
 }
 

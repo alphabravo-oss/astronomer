@@ -5625,6 +5625,7 @@ export interface OpenAPIComponents {
         };
     ToolUninstallRequest: {
           "cluster_id": string;
+          "confirm_data_deletion"?: boolean;
         };
     UpdateClusterGroupRequest: {
           "name": string;

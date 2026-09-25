@@ -73,6 +73,7 @@ type ToolHandler struct {
 	queries ToolQuerier
 	runTx   toolRunTxFunc
 	helm    HelmRequester
+	k8s     K8sRequester
 	log     *slog.Logger
 	authz   authorizationSupport
 	bus     *events.Bus
@@ -88,6 +89,16 @@ type ToolHandler struct {
 	// YAML right before the tool install / upgrade task is enqueued.
 	// Migration 067. Nil-safe — see vaultResolveBlob in vault_hook.go.
 	vaultResolver *avault.Resolver
+}
+
+// SetK8sRequester wires the same tunnel-backed Kubernetes requester used by
+// the other cluster controllers. Tool lifecycle preparation must go through
+// the adopted cluster's agent rather than requiring an out-of-band kubectl
+// repair.
+func (h *ToolHandler) SetK8sRequester(requester K8sRequester) {
+	if h != nil {
+		h.k8s = requester
+	}
 }
 
 func (h *ToolHandler) SetRunTx(runTx toolRunTxFunc) {
@@ -209,14 +220,16 @@ type toolActionRequest struct {
 
 // openapi:request ToolUninstallRequest
 type toolUninstallRequest struct {
-	ClusterID string `json:"cluster_id"`
+	ClusterID           string `json:"cluster_id"`
+	ConfirmDataDeletion bool   `json:"confirm_data_deletion"`
 }
 
 type toolOperationEnvelope struct {
-	ClusterID string        `json:"clusterId"`
-	ToolSlug  string        `json:"toolSlug"`
-	Preset    string        `json:"preset,omitempty"`
-	Releases  []toolRelease `json:"releases"`
+	ClusterID           string        `json:"clusterId"`
+	ToolSlug            string        `json:"toolSlug"`
+	Preset              string        `json:"preset,omitempty"`
+	ConfirmDataDeletion bool          `json:"confirmDataDeletion,omitempty"`
+	Releases            []toolRelease `json:"releases"`
 }
 
 // toolReleaseExecution combines immutable scope with one release for the Helm

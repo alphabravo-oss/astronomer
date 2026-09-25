@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import * as yaml from "js-yaml";
 import { previewToolInstall } from "@/lib/api/tools";
@@ -7,12 +7,18 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { FileCode2, SlidersHorizontal } from "lucide-react";
+import {
+  AlertTriangle,
+  FileCode2,
+  GitCompare,
+  SlidersHorizontal,
+} from "lucide-react";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import type { ClusterTool, ToolFormField } from "@/types";
 import { toastWarning } from "@/lib/toast";
 import { previewToolFieldValues } from "./tool-values";
+import { buildYamlDiff } from "@/components/ui/yaml-apply-preview";
 
 interface ToolInstallModalProps {
   tool: ClusterTool;
@@ -25,6 +31,32 @@ interface ToolInstallModalProps {
 }
 
 const EMPTY_TOOL_FIELDS: ToolFormField[] = [];
+
+type EditorMode = "form" | "yaml" | "review";
+
+function parseOverride(raw: string): Record<string, unknown> | null {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = yaml.load(raw);
+    if (!parsed) return {};
+    return typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function valueAtPath(root: Record<string, unknown>, path: string): unknown {
+  let value: unknown = root;
+  for (const segment of path.split(".")) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return undefined;
+    }
+    value = (value as Record<string, unknown>)[segment];
+  }
+  return value;
+}
 
 // setPath writes value into a nested object at a dot-path, creating intermediate
 // objects as needed: setPath({}, "a.b.c", 1) => { a: { b: { c: 1 } } }.
@@ -39,6 +71,16 @@ function setPath(root: Record<string, unknown>, path: string, value: unknown) {
   node[parts[parts.length - 1]] = value;
 }
 
+function withPath(
+  root: Record<string, unknown>,
+  path: string,
+  value: unknown,
+): Record<string, unknown> {
+  const next = structuredClone(root);
+  setPath(next, path, value);
+  return next;
+}
+
 function coerce(field: ToolFormField, raw: string): unknown {
   if (field.type === "number") {
     const n = Number(raw);
@@ -46,28 +88,6 @@ function coerce(field: ToolFormField, raw: string): unknown {
   }
   if (field.type === "boolean") return raw === "true";
   return raw;
-}
-
-// Build a values-override object from the form field values, including every
-// field with a non-empty value (their real chart paths, so Helm accepts them).
-function buildOverride(
-  fields: ToolFormField[],
-  values: Record<string, string>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const f of fields) {
-    const raw = values[f.path];
-    if (raw === undefined || raw === "") continue;
-    setPath(out, f.path, coerce(f, raw));
-    if (
-      f.type === "storage" &&
-      f.storageClassPath &&
-      values[f.storageClassPath]
-    ) {
-      setPath(out, f.storageClassPath, values[f.storageClassPath]);
-    }
-  }
-  return out;
 }
 
 function groupFields(
@@ -96,7 +116,7 @@ export function ToolInstallModal({
 }: ToolInstallModalProps) {
   const fields = tool.formSchema?.fields ?? EMPTY_TOOL_FIELDS;
   const hasForm = fields.length > 0;
-  const [mode, setMode] = useState<"form" | "yaml">(hasForm ? "form" : "yaml");
+  const [mode, setMode] = useState<EditorMode>(hasForm ? "form" : "yaml");
   // The preset is an install-time choice, so it lives here rather than on the
   // card: on the card it rendered next to every tool (installed ones included),
   // reading as a per-tool environment switch instead of "which chart values to
@@ -113,8 +133,11 @@ export function ToolInstallModal({
 
   // Only operator edits override the selected preset. Schema display defaults
   // must never silently replace development/production sizing.
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [overrideValues, setOverrideValues] = useState<Record<string, unknown>>(
+    {},
+  );
   const [yamlText, setYamlText] = useState("");
+  const [yamlError, setYamlError] = useState<string | null>(null);
 
   // Chart metadata (name/version/namespace) for the header.
   const { data: preview, isLoading } = useQuery({
@@ -133,11 +156,54 @@ export function ToolInstallModal({
 
   const groups = useMemo(() => groupFields(fields), [fields]);
 
+  const overrideYaml = useMemo(
+    () =>
+      Object.keys(overrideValues).length
+        ? yaml.dump(overrideValues, { lineWidth: -1, noRefs: true })
+        : "",
+    [overrideValues],
+  );
+
+  const effectivePreview = useQuery({
+    queryKey: queryKeys.tools.preview(
+      tool.slug,
+      clusterId,
+      selectedPreset,
+      overrideYaml,
+    ),
+    queryFn: () =>
+      previewToolInstall(tool.slug, {
+        cluster_id: clusterId,
+        preset: selectedPreset,
+        values_override: overrideYaml || undefined,
+      }),
+    enabled: mode === "review" && !yamlError,
+  });
+
   const switchToYaml = () => {
-    // Regenerate the YAML from the current form values so the two stay in sync.
-    const override = buildOverride(fields, values);
-    setYamlText(Object.keys(override).length ? yaml.dump(override) : "");
+    setYamlText(overrideYaml);
+    setYamlError(null);
     setMode("yaml");
+  };
+
+  const applyYaml = (): boolean => {
+    const parsed = parseOverride(yamlText);
+    if (parsed == null) {
+      setYamlError("Values override must be valid YAML containing an object.");
+      return false;
+    }
+    setOverrideValues(parsed);
+    setYamlError(null);
+    return true;
+  };
+
+  const switchMode = (next: EditorMode) => {
+    if (mode === "yaml" && !applyYaml()) return;
+    if (next === "yaml") {
+      switchToYaml();
+      return;
+    }
+    setMode(next);
   };
 
   const confirmBlockedReason =
@@ -152,10 +218,10 @@ export function ToolInstallModal({
     }
     let override: string | undefined;
     if (mode === "yaml") {
+      if (!applyYaml()) return;
       override = yamlText.trim() || undefined;
     } else {
-      const obj = buildOverride(fields, values);
-      override = Object.keys(obj).length ? yaml.dump(obj) : undefined;
+      override = overrideYaml || undefined;
     }
     onConfirm(override, selectedPreset);
   };
@@ -185,30 +251,36 @@ export function ToolInstallModal({
       }
       footer={
         <div className="flex items-center justify-between gap-2">
-          {hasForm ? (
-            <button
-              onClick={() =>
-                mode === "form" ? switchToYaml() : setMode("form")
-              }
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-xs font-medium
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              {mode === "form" ? (
-                <FileCode2 className="h-3.5 w-3.5" />
-              ) : (
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-              )}
-              {mode === "form" ? "Edit YAML" : "Back to form"}
-            </button>
-          ) : (
-            <span />
-          )}
+          <div className="inline-flex rounded-md border border-border bg-background p-1">
+            {hasForm && (
+              <ModeButton
+                active={mode === "form"}
+                onClick={() => switchMode("form")}
+                icon={<SlidersHorizontal className="h-3.5 w-3.5" />}
+                label="Settings"
+              />
+            )}
+            <ModeButton
+              active={mode === "yaml"}
+              onClick={() => switchMode("yaml")}
+              icon={<FileCode2 className="h-3.5 w-3.5" />}
+              label="YAML"
+            />
+            <ModeButton
+              active={mode === "review"}
+              onClick={() => switchMode("review")}
+              icon={<GitCompare className="h-3.5 w-3.5" />}
+              label="Review"
+            />
+          </div>
           <div className="flex items-center gap-2">
             <ActionButton onClick={onClose}>Cancel</ActionButton>
             <ActionButton
               intent="primary"
               onClick={handleConfirm}
-              disabled={installing || isLoading || !!confirmBlockedReason}
+              disabled={
+                installing || isLoading || !!confirmBlockedReason || !!yamlError
+              }
               disabledReason={confirmBlockedReason}
               loading={installing}
             >
@@ -261,23 +333,30 @@ export function ToolInstallModal({
                   <FormFieldRow
                     key={f.path}
                     field={f}
-                    value={
-                      values[f.path] ?? presetValues[f.path] ?? f.default ?? ""
-                    }
+                    value={String(
+                      valueAtPath(overrideValues, f.path) ??
+                        presetValues[f.path] ??
+                        f.default ??
+                        "",
+                    )}
                     classValue={
                       f.storageClassPath
-                        ? (values[f.storageClassPath] ?? "")
+                        ? String(
+                            valueAtPath(overrideValues, f.storageClassPath) ??
+                              "",
+                          )
                         : ""
                     }
                     onChange={(v) =>
-                      setValues((prev) => ({ ...prev, [f.path]: v }))
+                      setOverrideValues((prev) =>
+                        withPath(prev, f.path, coerce(f, v)),
+                      )
                     }
                     onClassChange={(v) =>
                       f.storageClassPath &&
-                      setValues((prev) => ({
-                        ...prev,
-                        [f.storageClassPath as string]: v,
-                      }))
+                      setOverrideValues((prev) =>
+                        withPath(prev, f.storageClassPath as string, v),
+                      )
                     }
                   />
                 ))}
@@ -285,7 +364,7 @@ export function ToolInstallModal({
             </section>
           ))}
         </div>
-      ) : (
+      ) : mode === "yaml" ? (
         <div className="space-y-1.5">
           <label
             className="text-sm font-medium text-foreground"
@@ -299,7 +378,11 @@ export function ToolInstallModal({
           <textarea
             id="field-a5c99297-243"
             value={yamlText}
-            onChange={(e) => setYamlText(e.target.value)}
+            onChange={(e) => {
+              setYamlText(e.target.value);
+              setYamlError(null);
+            }}
+            onBlur={applyYaml}
             rows={18}
             placeholder={
               "# e.g.\nreplicas: 2\nresources:\n  requests:\n    cpu: 100m"
@@ -307,9 +390,148 @@ export function ToolInstallModal({
             className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
               placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring resize-none"
           />
+          {yamlError && (
+            <p
+              role="alert"
+              className="flex items-center gap-1.5 text-xs text-status-error"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {yamlError}
+            </p>
+          )}
         </div>
+      ) : (
+        <ToolValuesReview
+          baseline={charts}
+          effective={effectivePreview.data?.charts ?? []}
+          loading={effectivePreview.isLoading}
+          error={effectivePreview.error}
+        />
       )}
     </ModalShell>
+  );
+}
+
+function ModeButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors ${
+        active
+          ? "bg-muted text-foreground shadow-xs"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function ToolValuesReview({
+  baseline,
+  effective,
+  loading,
+  error,
+}: {
+  baseline: Array<{
+    chartName: string;
+    chartVersion: string;
+    releaseName?: string;
+    namespace: string;
+    valuesYaml: string;
+  }>;
+  effective: Array<{
+    chartName: string;
+    chartVersion: string;
+    releaseName?: string;
+    namespace: string;
+    valuesYaml: string;
+  }>;
+  loading: boolean;
+  error: Error | null;
+}) {
+  if (loading) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Building server-validated preview…
+      </p>
+    );
+  }
+  if (error) {
+    return (
+      <p role="alert" className="text-sm text-status-error">
+        Could not build the effective values preview: {error.message}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-muted-foreground">
+        Server-validated effective values after distribution defaults, the
+        selected preset, and your overrides are merged. Each release is shown
+        separately in installation order.
+      </p>
+      {effective.map((chart, index) => {
+        const before = baseline[index]?.valuesYaml ?? "";
+        const diff = buildYamlDiff(before, chart.valuesYaml);
+        return (
+          <section
+            key={`${chart.namespace}/${chart.releaseName ?? chart.chartName}`}
+            className="overflow-hidden rounded-lg border border-border"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-3 py-2">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">
+                  {index + 1}. {chart.releaseName ?? chart.chartName}
+                </h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {chart.chartName}@{chart.chartVersion} · {chart.namespace}
+                </p>
+              </div>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                +{diff.added} / -{diff.removed}
+              </span>
+            </div>
+            <pre className="max-h-64 overflow-auto p-3 text-xs leading-5">
+              {diff.lines.map((line) => (
+                <div
+                  key={line.key}
+                  className={`min-w-max font-mono ${
+                    line.type === "add"
+                      ? "bg-status-success/10 text-status-success"
+                      : line.type === "remove"
+                        ? "bg-status-error/10 text-status-error"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  <span className="inline-block w-4 select-none">
+                    {line.type === "add"
+                      ? "+"
+                      : line.type === "remove"
+                        ? "-"
+                        : " "}
+                  </span>
+                  {line.text}
+                </div>
+              ))}
+            </pre>
+          </section>
+        );
+      })}
+    </div>
   );
 }
 

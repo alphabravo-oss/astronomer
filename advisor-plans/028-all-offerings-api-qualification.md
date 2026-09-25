@@ -8,6 +8,8 @@ The user's requirement is every offering, not only Dex, Velero and monitoring, a
 
 Plan 016 remains the release/GA evidence authority. Plan 026 owns existing robustness remediation and Plan 027 owns navigation/workflow presentation. This plan supplies functional evidence and concrete defect handoffs to those owners; it does not reopen completed implementation or imply that documentation, mocks or prior test runs qualify current artifacts. Writing this plan performs no installations, provider sends, upgrades or destructive recovery drills.
 
+Chart configuration and lifecycle presentation are benchmarked against the local Rancher implementation in [Plan 030](./030-rancher-tool-configuration-ux.md). Every Tool case must also prove that its curated form uses real chart paths, advanced YAML survives form round-trips, the Review view matches the API's effective ordered release plan, and lifecycle errors remain actionable in the operation UI.
+
 ## What counts as working
 
 For **each offering × exposed variant × supported lifecycle action × deployment profile**, require:

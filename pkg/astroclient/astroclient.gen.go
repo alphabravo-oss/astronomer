@@ -10754,6 +10754,9 @@ type ToolPreview struct {
 // ToolUninstallRequest defines model for ToolUninstallRequest.
 type ToolUninstallRequest struct {
 	ClusterId openapi_types.UUID `json:"cluster_id"`
+
+	// ConfirmDataDeletion Required for tools such as Longhorn whose uninstall can delete persistent data.
+	ConfirmDataDeletion *bool `json:"confirm_data_deletion,omitempty"`
 }
 
 // UpdateClusterGroupRequest defines model for UpdateClusterGroupRequest.

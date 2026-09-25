@@ -129,4 +129,63 @@ describe("ToolInstallModal release plans", () => {
       istiod: { replicaCount: 3 },
     });
   });
+
+  it("round-trips advanced YAML through the settings form without losing it", () => {
+    const confirm = vi.fn();
+    render(
+      <ToolInstallModal
+        tool={tool}
+        clusterId="cluster"
+        preset="development"
+        onConfirm={confirm}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Values override (YAML)" }),
+      {
+        target: {
+          value:
+            "istiod:\n  replicaCount: 4\n  advancedSetting:\n    enabled: true\n",
+        },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("spinbutton", { name: "Replicas" })).toHaveValue(4);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Replicas" }), {
+      target: { value: "5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Install" }));
+    expect(yaml.load(confirm.mock.calls[0][0])).toEqual({
+      istiod: {
+        replicaCount: 5,
+        advancedSetting: { enabled: true },
+      },
+    });
+  });
+
+  it("blocks invalid YAML from review and install", () => {
+    const confirm = vi.fn();
+    render(
+      <ToolInstallModal
+        tool={tool}
+        clusterId="cluster"
+        preset="development"
+        onConfirm={confirm}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Values override (YAML)" }),
+      {
+        target: { value: "istiod: [" },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("valid YAML");
+    expect(screen.getByRole("button", { name: "Install" })).toBeDisabled();
+    expect(confirm).not.toHaveBeenCalled();
+  });
 });

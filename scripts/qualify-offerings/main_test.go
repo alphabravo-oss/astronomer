@@ -99,6 +99,17 @@ func TestDexToolExecutorPassesOnlyOnExplicitManagementOnlyRejection(t *testing.T
 	}
 }
 
+func TestToolUninstallBodyRequiresExplicitLonghornDeletionConfirmation(t *testing.T) {
+	longhorn := toolUninstallBody("longhorn", "cluster-1")
+	if longhorn["cluster_id"] != "cluster-1" || longhorn["confirm_data_deletion"] != true {
+		t.Fatalf("longhorn uninstall body = %#v", longhorn)
+	}
+	standard := toolUninstallBody("cert-manager", "cluster-1")
+	if _, present := standard["confirm_data_deletion"]; present {
+		t.Fatalf("standard uninstall unexpectedly confirms data deletion: %#v", standard)
+	}
+}
+
 func TestQualificationCleanupFailsOnUnprovenExecutorCleanup(t *testing.T) {
 	evidence := report{Cases: []caseResult{{ID: "TOOL-05", Dimensions: []dimensionResult{{Name: "uninstall_cleanup", State: "FAIL"}}}}}
 	if cleanup := qualificationCleanup(evidence); cleanup.State != "FAIL" {

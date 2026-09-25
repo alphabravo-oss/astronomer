@@ -150,7 +150,11 @@ export async function getClusterToolsStatus(
 
 export async function previewToolInstall(
   slug: string,
-  data: { cluster_id: string; preset: string },
+  data: {
+    cluster_id: string;
+    preset: string;
+    values_override?: string;
+  },
 ): Promise<ToolPreviewResponse> {
   const response = await postToolsBySlugPreview({
     path: { slug },
@@ -194,7 +198,7 @@ export async function upgradeTool(
 
 export async function uninstallTool(
   slug: string,
-  data: { cluster_id: string },
+  data: { cluster_id: string; confirm_data_deletion?: boolean },
 ): Promise<ToolOperation> {
   const response = await deleteToolsBySlugUninstall({
     path: { slug },

@@ -49,6 +49,11 @@ func resourceFields(prefix, cpuReq, memReq, memLim string) []ToolFormField {
 
 // toolFormSchemas is keyed by tool slug. Absent slug → raw-YAML editor only.
 var toolFormSchemas = map[string]ToolFormSchema{
+	"cis-operator": {Fields: append([]ToolFormField{
+		{Path: "alerts.enabled", Label: "Create Prometheus alerts", Type: toolFieldBoolean, Group: "Monitoring", Default: "false", Help: "Enable CIS scan alert rules when a compatible Prometheus stack is present."},
+		{Path: "alerts.severity", Label: "Alert severity", Type: toolFieldSelect, Group: "Monitoring", Default: "warning", Options: []string{"info", "warning", "critical"}},
+		{Path: "securityScanJob.overrideTolerations", Label: "Override scan job tolerations", Type: toolFieldBoolean, Group: "Scheduling", Default: "false", Help: "Use only when scan jobs need a different toleration policy from the operator."},
+	}, resourceFields("resources.", "100m", "128Mi", "256Mi")...)},
 	"istio": {Fields: append([]ToolFormField{
 		{Path: "base.defaultRevision", Label: "Default control plane revision", Type: toolFieldString, Group: "Base CRDs", Default: "default", Help: "Base CRDs are installed before the control plane."},
 		{Path: "istiod.autoscaleEnabled", Label: "Autoscale the control plane", Type: toolFieldBoolean, Group: "Control plane", Default: "true"},
