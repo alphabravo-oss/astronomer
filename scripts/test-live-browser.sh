@@ -26,6 +26,8 @@ trivy_chart_version="0.36.0"
 trivy_chart_digest="sha256:bb0c44bc70e3158cc63ea49d7458ede6db5b6c932f6585a2d787eb9712fd4288"
 trivy_rollout_id=""
 trivy_target_id=""
+minio_server_commit="0d7408fc9969caf07de6a8c3a84f9fbb10a6739e"
+minio_client_commit="b00526b153a31b36767991a4f5ce2cced435ee8e"
 
 for tool in base64 curl docker git go helm k3d kubectl npm openssl python3 setsid sha256sum; do
   command -v "$tool" >/dev/null 2>&1 || {
@@ -42,11 +44,13 @@ suffix="$$-$(date +%s)-$(openssl rand -hex 4)"
 artifact_dir="${LIVE_BROWSER_ARTIFACT_DIR:-${TMPDIR:-/tmp}/astronomer-live-browser-$suffix}"
 mkdir -p "$artifact_dir/bin" "$artifact_dir/playwright-report" "$artifact_dir/test-results"
 artifact_dir="$(cd "$artifact_dir" && pwd)"
+minio_build_dir="$(mktemp -d)"
 
 postgres_container="astronomer-live-browser-pg-$suffix"
 redis_container="astronomer-live-browser-redis-$suffix"
 flux_fixture_container="astronomer-live-browser-flux-$suffix"
 flux_fixture_runtime_image="astronomer-flux-fixture-runtime:alpine-3.22-git-2.49.1"
+minio_fixture_image="astronomer-minio-fixture:$suffix"
 postgres_user="live_browser"
 postgres_database="live_browser"
 postgres_credential="$(openssl rand -hex 24)"
@@ -132,7 +136,7 @@ run_minio_client() {
 	KUBECONFIG="$flux_kubeconfig" kubectl -n minio delete pod "$pod_name" \
 		--ignore-not-found --wait=true >/dev/null
 	KUBECONFIG="$flux_kubeconfig" kubectl -n minio run "$pod_name" \
-		--image=quay.io/minio/mc@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4fe09728e3 \
+		--image="$minio_fixture_image" --image-pull-policy=Never \
 		--restart=Never --command -- sh -c "$client_command" >/dev/null
 	for _ in $(seq 1 120); do
 		phase="$(KUBECONFIG="$flux_kubeconfig" kubectl -n minio get pod "$pod_name" \
@@ -238,6 +242,8 @@ cleanup() {
 		k3d cluster delete "$flux_cluster" >/dev/null 2>&1 || true
 	fi
   docker rm -f "$postgres_container" "$redis_container" "$flux_fixture_container" >/dev/null 2>&1 || true
+	docker image rm "$minio_fixture_image" >/dev/null 2>&1 || true
+	rm -rf -- "$minio_build_dir"
   printf 'exit_status=%d\n' "$status" >"$artifact_dir/result.txt"
   echo "test-live-browser: artifacts: $artifact_dir"
   exit "$status"
@@ -394,6 +400,13 @@ git -C "$artifact_dir/flux-worktree" commit -m "live browser Flux fixture" >/dev
 git_revision="$(git -C "$artifact_dir/flux-worktree" rev-parse HEAD)"
 git clone --bare "$artifact_dir/flux-worktree" "$flux_fixture_root/git/repository.git" >/dev/null
 git_digest="sha256:$(git -C "$artifact_dir/flux-worktree" archive HEAD | sha256sum | awk '{print $1}')"
+CGO_ENABLED=0 GOBIN="$minio_build_dir" go install \
+	"github.com/minio/minio@$minio_server_commit" >"$artifact_dir/build-minio-server.log" 2>&1
+CGO_ENABLED=0 GOBIN="$minio_build_dir" go install \
+	"github.com/minio/mc@$minio_client_commit" >"$artifact_dir/build-minio-client.log" 2>&1
+docker build --pull=false -t "$minio_fixture_image" \
+	-f scripts/testdata/live-browser-fixture/Dockerfile.minio-source "$minio_build_dir" \
+	>"$artifact_dir/build-minio-image.log"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
 	-subj '/CN=host.k3d.internal' \
 	-addext 'subjectAltName=DNS:host.k3d.internal,DNS:host.docker.internal,DNS:localhost,IP:127.0.0.1' \
@@ -436,6 +449,7 @@ k3d cluster create "$flux_cluster" --servers 1 --agents 0 --no-lb \
 flux_created=1
 k3d kubeconfig get "$flux_cluster" >"$flux_kubeconfig"
 chmod 0600 "$flux_kubeconfig"
+k3d image import "$minio_fixture_image" -c "$flux_cluster" >"$artifact_dir/import-minio-image.log"
 KUBECONFIG="$flux_kubeconfig" kubectl config view --raw \
 	-o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d >"$direct_api_ca"
 chmod 0600 "$direct_api_ca"
@@ -464,8 +478,10 @@ echo "test-live-browser: installing disposable MinIO and Velero backup stack"
 KUBECONFIG="$flux_kubeconfig" kubectl create namespace minio >/dev/null
 KUBECONFIG="$flux_kubeconfig" kubectl -n minio create secret generic minio-root \
 	--from-literal=username="$minio_user" --from-literal=password="$minio_password" >/dev/null
+sed "s|__MINIO_FIXTURE_IMAGE__|$minio_fixture_image|g" \
+	scripts/testdata/live-browser-fixture/velero-minio.yaml.tmpl >"$artifact_dir/velero-minio.yaml"
 KUBECONFIG="$flux_kubeconfig" kubectl apply \
-	-f scripts/testdata/live-browser-fixture/velero-minio.yaml >"$artifact_dir/minio-install.log"
+	-f "$artifact_dir/velero-minio.yaml" >"$artifact_dir/minio-install.log"
 KUBECONFIG="$flux_kubeconfig" kubectl -n minio rollout status deployment/minio --timeout=3m
 run_minio_client minio-mc-bootstrap "$artifact_dir/minio-bootstrap.log" \
 	"mc alias set local http://minio.minio.svc.cluster.local:9000 '$minio_user' '$minio_password' >/dev/null && mc mb --ignore-existing local/velero"

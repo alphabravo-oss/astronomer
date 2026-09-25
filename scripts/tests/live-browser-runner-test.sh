@@ -49,6 +49,12 @@ required_patterns=(
 	'LIVE_FIXTURE_BACKUP_NAMESPACE="$backup_namespace"'
 	'app.kubernetes.io/managed-by=astronomer-go'
 	'mc stat --json'
+	'minio_server_commit="0d7408fc9969caf07de6a8c3a84f9fbb10a6739e"'
+	'minio_client_commit="b00526b153a31b36767991a4f5ce2cced435ee8e"'
+	'github.com/minio/minio@$minio_server_commit'
+	'github.com/minio/mc@$minio_client_commit'
+	'k3d image import "$minio_fixture_image"'
+	'--image-pull-policy=Never'
 	'backups/$velero_backup_name/$velero_backup_name.tar.gz'
 	'velero-durable-state.log'
 	'LIVE_FIXTURE_DIRECT_ENDPOINT="$direct_api_endpoint"'
@@ -101,6 +107,14 @@ grep -Fq 'agent.NewMirrorSubscriber(proxy.Client(), deliveryDynamic, client, log
 grep -Fq 'FeatureDeliveryRendererHelm' "$ROOT/scripts/testdata/live-browser-fixture/main.go"
 grep -Fq 'mirror.gcr.io/library/alpine:3.18.0@sha256:' \
 	"$ROOT/scripts/testdata/live-browser-fixture/trivy-scan-target.yaml"
+grep -Fq 'FROM alpine@sha256:' \
+	"$ROOT/scripts/testdata/live-browser-fixture/Dockerfile.minio-source"
+grep -Fq 'image: __MINIO_FIXTURE_IMAGE__' \
+	"$ROOT/scripts/testdata/live-browser-fixture/velero-minio.yaml.tmpl"
+if grep -Rq 'quay.io/minio/' "$ROOT/scripts/test-live-browser.sh" "$ROOT/scripts/testdata/live-browser-fixture"; then
+	echo "live-browser runner must build its pinned MinIO fixture from source" >&2
+	exit 1
+fi
 
 grep -Fq 'test-live-browser:' "$ROOT/Makefile"
 grep -Fq 'make test-live-browser' "$ROOT/.github/workflows/pr-validation.yaml"
