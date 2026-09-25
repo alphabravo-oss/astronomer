@@ -29,6 +29,7 @@ export function VirtualizedGrid<T extends RowData>({
   scrollRef,
   selectable,
   resizable,
+  layout,
   cellPadding,
   selectPadding,
   rowHeight,
@@ -55,6 +56,7 @@ export function VirtualizedGrid<T extends RowData>({
   totalRows: number;
   selectable: boolean | ((row: T) => boolean);
   resizable: boolean;
+  layout: "fit" | "scroll";
   cellPadding: string;
   selectPadding: string;
   rowHeight: number;
@@ -78,7 +80,9 @@ export function VirtualizedGrid<T extends RowData>({
       ? `${table.getColumn(col.key)?.getSize()}px`
       : col.width;
     return width
-      ? { width, flex: `0 0 ${width}`, minWidth: width }
+      ? layout === "scroll"
+        ? { width, flex: `0 0 ${width}`, minWidth: width }
+        : { width, flex: `0 1 ${width}`, minWidth: 0 }
       : { flex: "1 1 0", minWidth: 0 };
   };
   const selectColStyle: React.CSSProperties = {
@@ -118,7 +122,10 @@ export function VirtualizedGrid<T extends RowData>({
             focusRowAt(Math.min(Math.max(focusedRowIndex, 0), rows.length - 1));
           }
         }}
-        className="relative max-h-[28rem] overflow-auto text-sm outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring"
+        className={cn(
+          "relative max-h-[28rem] overflow-y-auto text-sm outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
+          layout === "scroll" ? "overflow-x-auto" : "overflow-x-hidden",
+        )}
       >
         {/* Sticky header row */}
         <div
@@ -157,7 +164,7 @@ export function VirtualizedGrid<T extends RowData>({
                 }
                 className={cn(
                   cellPadding,
-                  "flex items-center gap-1 font-medium whitespace-nowrap",
+                  "flex min-w-0 items-center gap-1 overflow-hidden font-medium",
                   col.sortable !== false &&
                     "cursor-pointer select-none hover:text-foreground",
                   alignClass(col),
@@ -177,7 +184,7 @@ export function VirtualizedGrid<T extends RowData>({
                   column?.toggleSorting();
                 }}
               >
-                {col.header}
+                <span className="min-w-0 truncate">{col.header}</span>
                 {col.sortable !== false && (
                   <span className="text-muted-foreground/50">
                     {sorted === "asc" ? (
@@ -333,7 +340,7 @@ export function VirtualizedGrid<T extends RowData>({
                         onRowClick?.(row.original);
                     }}
                     className={cn(
-                      "flex w-full whitespace-nowrap border-b border-border transition-colors",
+                      "flex w-full border-b border-border transition-colors",
                       "focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
                       onRowClick && "cursor-pointer hover:bg-muted/50",
                       isSelected && "bg-muted/30",
@@ -358,13 +365,22 @@ export function VirtualizedGrid<T extends RowData>({
                         key={col.key}
                         role="gridcell"
                         className={cn(
-                          "flex min-w-0 items-center overflow-hidden whitespace-nowrap",
+                          "flex min-w-0 items-center overflow-hidden",
                           cellPadding,
                           alignClass(col),
                         )}
                         style={colStyle(col)}
                       >
-                        {col.accessor(row.original)}
+                        <div
+                          className={cn(
+                            "min-w-0",
+                            col.key === "actions" || col.header.trim() === ""
+                              ? "overflow-visible"
+                              : "overflow-hidden text-ellipsis",
+                          )}
+                        >
+                          {col.accessor(row.original)}
+                        </div>
                       </div>
                     ))}
                   </div>

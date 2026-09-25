@@ -38,6 +38,7 @@ import {
   ClusterScopeControls,
   clusterIdFromPath,
 } from "@/components/layout/cluster-scope-controls";
+import { clusterScopeApplicability } from "@/components/layout/cluster-scope-applicability";
 import { ClusterShellLauncher } from "@/components/window-manager/cluster-shell-launcher";
 import { ClusterSwitcherMenu } from "@/components/layout/cluster-switcher-menu";
 import { LazyHeaderClusterActions as HeaderClusterActions } from "@/components/layout/lazy-header-cluster-actions";
@@ -107,8 +108,18 @@ function TopbarBreadcrumbs({
 }
 
 export function Topbar() {
-  const pathname = useLocation({ select: (location) => location.pathname });
+  const location = useLocation({
+    select: (current) => ({
+      pathname: current.pathname,
+      searchStr: current.searchStr,
+    }),
+  });
+  const pathname = location.pathname;
   const currentClusterId = clusterIdFromPath(pathname);
+  const applicableScope = clusterScopeApplicability(
+    pathname,
+    location.searchStr,
+  );
   const rememberedClusterId = useClusterScopeStore(
     (state) => state.lastClusterId,
   );
@@ -214,9 +225,13 @@ export function Topbar() {
         clusterId={currentClusterId}
         clusterName={activeCluster?.displayName || activeCluster?.name}
       />
-      {currentClusterId ? (
-        <ClusterScopeControls clusterId={currentClusterId} />
-      ) : (
+      {currentClusterId &&
+      (applicableScope.project || applicableScope.namespaces) ? (
+        <ClusterScopeControls
+          clusterId={currentClusterId}
+          applicability={applicableScope}
+        />
+      ) : currentClusterId ? null : (
         <TopbarBreadcrumbs breadcrumbs={breadcrumbs} navigate={navigate} />
       )}
 

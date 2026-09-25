@@ -1,8 +1,9 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDeliveryProjectScope } from "./shared";
+import { useClusterScopeStore } from "@/lib/cluster-scope";
 const state = vi.hoisted(() => ({
-  requested: "later",
+  requested: "later" as string | null,
   selected: {} as Record<string, unknown>,
   page: {} as Record<string, unknown>,
   navigate: vi.fn(),
@@ -13,7 +14,7 @@ vi.mock("@tanstack/react-router", () => ({
   useLocation: (options?: { select?: (value: unknown) => unknown }) => {
     const value = {
       pathname: "/dashboard/delivery/bundles",
-      searchStr: `?project=${state.requested}`,
+      searchStr: state.requested === null ? "" : `?project=${state.requested}`,
     };
     return options?.select ? options.select(value) : value;
   },
@@ -23,6 +24,10 @@ vi.mock("@/lib/hooks/projects", () => ({ useProject: () => state.selected }));
 describe("delivery project scope", () => {
   beforeEach(() => {
     state.navigate.mockClear();
+    useClusterScopeStore.setState({
+      projectByCluster: {},
+      namespacesByCluster: {},
+    });
     state.requested = "later";
     state.page = {
       data: {
@@ -61,5 +66,15 @@ describe("delivery project scope", () => {
       renderHook(() => useDeliveryProjectScope()).result.current.projectId,
     ).toBe("");
     expect(state.navigate).not.toHaveBeenCalled();
+  });
+  it("uses the top-bar project remembered for a cluster route", () => {
+    state.requested = null;
+    useClusterScopeStore
+      .getState()
+      .setClusterScope("cluster", ["team-a"], "later");
+    expect(
+      renderHook(() => useDeliveryProjectScope({ clusterId: "cluster" })).result
+        .current.projectId,
+    ).toBe("later");
   });
 });

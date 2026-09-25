@@ -28,6 +28,7 @@ interface SemanticDataTableProps<T extends RowData> {
   activeColumns: Column<T>[];
   selectable: boolean | ((row: T) => boolean);
   resizable: boolean;
+  layout: "fit" | "scroll";
   cellPadding: string;
   selectPadding: string;
   loading: boolean;
@@ -49,6 +50,7 @@ export function SemanticDataTable<T extends RowData>({
   activeColumns,
   selectable,
   resizable,
+  layout,
   cellPadding,
   selectPadding,
   loading,
@@ -75,12 +77,19 @@ export function SemanticDataTable<T extends RowData>({
   return (
     <div className="rounded-lg border border-border overflow-hidden">
       <div
-        className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className={cn(
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          layout === "scroll" ? "overflow-x-auto" : "overflow-x-hidden",
+        )}
         role="region"
-        aria-label="Scrollable data table"
+        aria-label={
+          layout === "scroll" ? "Scrollable data table" : "Data table"
+        }
         tabIndex={0}
       >
-        <Table className="w-full text-sm">
+        <Table
+          className={cn("w-full text-sm", layout === "fit" && "table-fixed")}
+        >
           <TableHeader>
             <TableRow className="border-b border-border bg-muted/50">
               {selectable && (
@@ -99,7 +108,7 @@ export function SemanticDataTable<T extends RowData>({
                 const sortable = col.sortable !== false;
                 const headerContent = (
                   <>
-                    {col.header}
+                    <span className="min-w-0 truncate">{col.header}</span>
                     {sortable && (
                       <span className="text-muted-foreground/50">
                         {sorted === "asc" ? (
@@ -122,7 +131,7 @@ export function SemanticDataTable<T extends RowData>({
                     key={col.key}
                     className={cn(
                       cellPadding,
-                      "font-medium text-muted-foreground whitespace-nowrap",
+                      "min-w-0 overflow-hidden font-medium text-muted-foreground",
                       resizable && "relative",
                       col.align === "center" && "text-center",
                       col.align === "right" && "text-right",
@@ -150,7 +159,7 @@ export function SemanticDataTable<T extends RowData>({
                         aria-label={`Sort by ${col.header}`}
                         onClick={() => column?.toggleSorting()}
                         className={cn(
-                          "flex items-center gap-1 p-0 cursor-pointer select-none hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                          "flex min-w-0 items-center gap-1 overflow-hidden p-0 cursor-pointer select-none hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                           // Narrower than the full header width when a resize
                           // handle shares this header, so the two adjacent
                           // touch targets have clear space between them
@@ -297,7 +306,7 @@ export function SemanticDataTable<T extends RowData>({
                     <TableRow
                       key={key}
                       className={cn(
-                        "border-b border-border last:border-0 whitespace-nowrap transition-colors",
+                        "border-b border-border last:border-0 transition-colors",
                         onRowClick && "cursor-pointer hover:bg-muted/50",
                         isSelected && "bg-muted/30",
                       )}
@@ -330,7 +339,7 @@ export function SemanticDataTable<T extends RowData>({
                           key={col.key}
                           className={cn(
                             cellPadding,
-                            "whitespace-nowrap",
+                            "min-w-0 overflow-hidden",
                             col.align === "center" && "text-center",
                             col.align === "right" && "text-right",
                           )}
@@ -340,7 +349,16 @@ export function SemanticDataTable<T extends RowData>({
                               : undefined
                           }
                         >
-                          {col.accessor(row.original)}
+                          <div
+                            className={cn(
+                              "min-w-0",
+                              col.key === "actions" || col.header.trim() === ""
+                                ? "overflow-visible"
+                                : "overflow-hidden text-ellipsis",
+                            )}
+                          >
+                            {col.accessor(row.original)}
+                          </div>
                         </TableCell>
                       ))}
                     </TableRow>

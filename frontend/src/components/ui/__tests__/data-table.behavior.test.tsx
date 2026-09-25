@@ -27,6 +27,51 @@ const bodyRowText = () =>
     .map((r) => r.textContent ?? "");
 
 describe("DataTable behavior (TanStack Table engine)", () => {
+  it("fits every table to its page unless scrolling is explicitly requested", () => {
+    const { rerender } = render(
+      <DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} />,
+    );
+
+    const fittedRegion = screen.getByRole("region", { name: "Data table" });
+    expect(fittedRegion).toHaveClass("overflow-x-hidden");
+    expect(fittedRegion.querySelector("table")).toHaveClass("table-fixed");
+
+    rerender(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(r) => r.id}
+        layout="scroll"
+      />,
+    );
+    const scrollRegion = screen.getByRole("region", {
+      name: "Scrollable data table",
+    });
+    expect(scrollRegion).toHaveClass("overflow-x-auto");
+    expect(scrollRegion.querySelector("table")).not.toHaveClass("table-fixed");
+
+    rerender(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(r) => r.id}
+        virtualized
+      />,
+    );
+    expect(screen.getByRole("grid")).toHaveClass("overflow-x-hidden");
+
+    rerender(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(r) => r.id}
+        virtualized
+        layout="scroll"
+      />,
+    );
+    expect(screen.getByRole("grid")).toHaveClass("overflow-x-auto");
+  });
+
   it("groups only the current server page and preserves continuation controls", () => {
     const onPage = vi.fn();
     render(

@@ -22,6 +22,7 @@ import {
 import { useProject, useProjectSearch } from "@/lib/hooks/projects";
 import { cn } from "@/lib/utils";
 import type { Cluster, ClusterStatus } from "@/types";
+import type { ClusterScopeApplicability } from "./cluster-scope-applicability";
 
 export function clusterIdFromPath(pathname: string): string | undefined {
   const segment = pathname.match(/^\/dashboard\/clusters\/([^/]+)/)?.[1];
@@ -88,12 +89,20 @@ export function ClusterOption({ cluster }: { cluster: Cluster }) {
 }
 
 /** Multi-namespace cluster scope. Restricted callers cannot choose an unsafe all scope. */
-export function ClusterScopeControls({ clusterId }: { clusterId: string }) {
+export function ClusterScopeControls({
+  clusterId,
+  applicability,
+}: {
+  clusterId: string;
+  applicability: ClusterScopeApplicability;
+}) {
   const scope = useClusterNamespaceScope(clusterId);
   return (
     <>
-      <ProjectScopePicker clusterId={clusterId} scope={scope} />
-      <NamespaceScopePicker scope={scope} />
+      {applicability.project ? (
+        <ProjectScopePicker clusterId={clusterId} scope={scope} />
+      ) : null}
+      {applicability.namespaces ? <NamespaceScopePicker scope={scope} /> : null}
       {scope.error && (
         <ActionButton size="sm" onClick={scope.retry}>
           Retry scope

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/empty-state";
 import { ArrowLeft, FolderKanban, PackageOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useClusterScopeStore } from "@/lib/cluster-scope";
 
 export type DeliveryListTab =
   "sources" | "bundles" | "targets" | "rollouts" | "deployments";
@@ -74,7 +75,11 @@ export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
   const searchStr = useLocation({ select: (location) => location.searchStr });
   const search = useMemo(() => new URLSearchParams(searchStr), [searchStr]);
   const clusterId = opts?.clusterId;
-  const requested = search.get("project") ?? "";
+  const rememberedProjectId = useClusterScopeStore((state) =>
+    clusterId ? state.projectByCluster[clusterId] : null,
+  );
+  const requested =
+    search.get("project") ?? (clusterId ? (rememberedProjectId ?? "") : "");
   const selected = useProject(requested);
   const rows = useMemo(() => {
     const all = projects.isError ? [] : [...(projects.data?.data ?? [])];

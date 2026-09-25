@@ -1,11 +1,8 @@
 import { useOperationIntent } from "@/lib/use-operation-intent";
 import { InstalledReleaseDetail } from "@/components/catalog/installed-release-detail";
 import { CatalogOperationTimeline } from "@/components/catalog/catalog-operation-timeline";
-import { useProjectSelection } from "@/lib/cluster-scope-project";
-import {
-  CatalogProjectPicker,
-  useCatalogProjectScope,
-} from "@/components/catalog/project-scope";
+import { useCatalogProjectScope } from "@/components/catalog/project-scope";
+import { useClusterScopeStore } from "@/lib/cluster-scope";
 import { getRouteApi } from "@tanstack/react-router";
 /**
  * Per-cluster Apps tab — sprint 082+.
@@ -84,14 +81,13 @@ export function ClusterAppsPage() {
   const searchParams = new URLSearchParams(
     useLocation({ select: (location) => location.searchStr }),
   );
-  const requestedProjectId = searchParams.get("project") ?? "";
+  const rememberedProjectId = useClusterScopeStore(
+    (state) => state.projectByCluster[clusterId],
+  );
+  const requestedProjectId =
+    searchParams.get("project") ?? rememberedProjectId ?? "";
   const projectScope = useCatalogProjectScope(requestedProjectId, clusterId);
   const { projectId } = projectScope;
-  const projectSelection = useProjectSelection(clusterId);
-  const setProjectId = (nextProjectId: string) => {
-    void projectSelection.select(nextProjectId);
-    setModal({ kind: "none" });
-  };
   const operationId = searchParams.get("operation") ?? "";
   const onOperationStarted = (id: string) => {
     const next = new URLSearchParams(searchParams);
@@ -195,12 +191,15 @@ export function ClusterAppsPage() {
         });
         return;
       }
-      setModal({ kind: "install", chartId: match.id, chartName: match.name });
-      // Drop the query param so a back-button + re-navigate doesn't loop.
-      void navigate({
-        to: `/dashboard/clusters/${clusterId}/apps?${remainingSearch}`,
-        replace: true,
+      const frame = requestAnimationFrame(() => {
+        setModal({ kind: "install", chartId: match.id, chartName: match.name });
+        // Drop the query param so a back-button + re-navigate doesn't loop.
+        void navigate({
+          to: `/dashboard/clusters/${clusterId}/apps?${remainingSearch}`,
+          replace: true,
+        });
       });
+      return () => cancelAnimationFrame(frame);
     }
   }, [
     requestedInstall,
@@ -280,14 +279,6 @@ export function ClusterAppsPage() {
         }
         actions={
           <>
-            {section !== "repositories" && (
-              <CatalogProjectPicker
-                scope={projectScope}
-                value={requestedProjectId || projectId}
-                onChange={setProjectId}
-                clusterId={clusterId}
-              />
-            )}
             {section === "repositories" && (
               <ActionButton
                 intent="primary"

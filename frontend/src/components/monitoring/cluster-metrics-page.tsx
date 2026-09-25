@@ -164,23 +164,35 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
           </span>
         </div>
       ) : hasProm && metrics ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <MetricsChart
             title="CPU Usage"
             series={[metrics.cpuUsage, metrics.cpuCapacity]}
             unit="millicores"
+            height={220}
+            compact
           />
           <MetricsChart
             title="Memory Usage"
             series={[metrics.memoryUsage, metrics.memoryCapacity]}
             unit="bytes"
+            height={220}
+            compact
           />
           <MetricsChart
             title="Network I/O"
             series={[metrics.networkReceive, metrics.networkTransmit]}
             unit="bytes/s"
+            height={220}
+            compact
           />
-          <MetricsChart title="Pod Count" series={[metrics.podCount]} unit="" />
+          <MetricsChart
+            title="Pod Count"
+            series={[metrics.podCount]}
+            unit=""
+            height={220}
+            compact
+          />
         </div>
       ) : (
         <div className="space-y-4">
@@ -203,21 +215,27 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
               <ArrowRight className="h-3.5 w-3.5" />
             </RouterLink>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             <MetricsChart
               title="CPU Usage (live)"
               series={[rolling.cpu]}
               unit="%"
+              height={200}
+              compact
             />
             <MetricsChart
               title="Memory Usage (live)"
               series={[rolling.mem]}
               unit="%"
+              height={200}
+              compact
             />
             <MetricsChart
               title="Pod Count (live)"
               series={[rolling.pods]}
               unit=""
+              height={200}
+              compact
             />
           </div>
         </div>
