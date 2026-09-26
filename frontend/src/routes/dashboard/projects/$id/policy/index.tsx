@@ -77,13 +77,13 @@ const netpolOptions: {
     value: "isolated",
     label: "Isolated",
     description:
-      "Default-deny ingress to project namespaces; only explicit NetworkPolicies allow traffic.",
+      "Allow platform controllers; block workload ingress unless another NetworkPolicy allows it.",
   },
   {
     value: "allow-same-project",
     label: "Allow same project",
     description:
-      "Allow pods within the project to talk freely; deny ingress from other namespaces.",
+      "Allow platform controllers and pods in this project; block ingress from other projects.",
   },
   {
     value: "none",
