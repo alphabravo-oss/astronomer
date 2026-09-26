@@ -43,7 +43,7 @@ func upgradeRecommendation(agent clusterAgentItem) agentUpgradeRecommendation {
 	}
 }
 
-func (h *ClusterAgentHandler) buildUpgradePlan(cluster sqlc.Cluster, agent clusterAgentItem, req agentUpgradePlanRequest) (agentUpgradePlanResponse, error) {
+func (h *ClusterAgentHandler) buildUpgradePlan(cluster sqlc.Cluster, agent clusterAgentItem, observedCurrentImage string, req agentUpgradePlanRequest) (agentUpgradePlanResponse, error) {
 	targetVersion := strings.TrimSpace(req.TargetVersion)
 	if targetVersion == "" {
 		targetVersion = h.agentImageTag
@@ -59,8 +59,8 @@ func (h *ClusterAgentHandler) buildUpgradePlan(cluster sqlc.Cluster, agent clust
 	if targetPullPolicy == "" {
 		targetPullPolicy = "Always"
 	}
-	currentImage := ""
-	if agent.AgentVersion != "" {
+	currentImage := strings.TrimSpace(observedCurrentImage)
+	if currentImage == "" && agent.AgentVersion != "" {
 		currentImage = targetAgentImage(h.agentImageRepository, agent.AgentVersion)
 	}
 	rollbackImage := strings.TrimSpace(req.RollbackImage)

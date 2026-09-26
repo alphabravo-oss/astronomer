@@ -13,6 +13,7 @@ import (
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
+	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
@@ -929,6 +930,45 @@ func TestClusterAgentUpgradePlanReadyForConnectedRemoteAgent(t *testing.T) {
 	}
 	if len(got.PreflightChecks) == 0 || len(got.PostUpgradeHealthChecks) == 0 || len(got.Steps) == 0 || len(got.Validation) == 0 || len(got.Rollback) == 0 {
 		t.Fatalf("expected actionable rollout plan: %+v", got)
+	}
+}
+
+func TestClusterAgentUpgradePlanUsesLastSucceededImageForRollback(t *testing.T) {
+	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+	clusterID := uuid.New()
+	actualImage := "registry.example/astronomer-agent@sha256:" + strings.Repeat("a", 64)
+	q := &fakeClusterAgentQuerier{
+		clusters: []sqlc.Cluster{{ID: clusterID, Name: "prod", DisplayName: "Production", Status: "active"}},
+		history: map[uuid.UUID][]sqlc.AgentConnection{clusterID: {{
+			ID: uuid.New(), ClusterID: clusterID, AgentID: "agent-prod", SessionID: "sess-prod", Status: "connected",
+			ConnectedAt: now.Add(-20 * time.Minute), LastPing: ts(now.Add(-20 * time.Second)), AgentVersion: "v1.1.0",
+		}}},
+		operations: map[uuid.UUID][]sqlc.AgentLifecycleOperation{clusterID: {{
+			ID: uuid.New(), ClusterID: clusterID, OperationType: agentlifecycle.OperationTypeUpgrade,
+			Status: agentlifecycle.StatusSucceeded, TargetVersion: "v1.1.0", TargetImage: actualImage,
+		}}},
+	}
+	h := NewClusterAgentHandler(q)
+	h.now = func() time.Time { return now }
+	h.SetAgentUpgradeTarget("registry.example/new-agent", "v1.2.0")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("cluster_id", clusterID.String())
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/cluster-agents/"+clusterID.String()+"/upgrade-plan/", nil)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+	h.UpgradePlan(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var envelope struct {
+		Data agentUpgradePlanResponse `json:"data"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Data.CurrentImage != actualImage || envelope.Data.RollbackImage != actualImage {
+		t.Fatalf("plan images current=%q rollback=%q, want %q", envelope.Data.CurrentImage, envelope.Data.RollbackImage, actualImage)
 	}
 }
 

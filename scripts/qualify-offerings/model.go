@@ -37,6 +37,7 @@ type qualificationConfig struct {
 	AllowLoopbackHTTP   bool              `json:"allow_loopback_http,omitempty"`
 	TargetIDs           map[string]string `json:"target_ids"`
 	MemberTargets       []memberTarget    `json:"member_targets,omitempty"`
+	CaseTargets         map[string]string `json:"case_targets,omitempty"`
 }
 
 type memberTarget struct {

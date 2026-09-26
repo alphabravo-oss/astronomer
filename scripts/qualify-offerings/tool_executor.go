@@ -25,11 +25,11 @@ func (executor toolLifecycleExecutor) Run(ctx context.Context, execution executi
 		return runMemberDexRejection(ctx, execution, result, checkpoint)
 	}
 	client := qualificationHTTPClient()
-	target, err := toolTarget(execution.Config)
+	target, err := toolTarget(execution.Config, definition.ID)
 	if err != nil {
 		return finishCase(result, "BLOCKED", err.Error(), checkpoint)
 	}
-	request := map[string]any{"cluster_id": target.ClusterID, "preset": "default"}
+	request := toolActionBody(executor.slug, target.ClusterID)
 	basePath := "/api/v1/tools/" + url.PathEscape(executor.slug)
 
 	statusResponse, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodGet,
@@ -92,7 +92,7 @@ func (executor toolLifecycleExecutor) Run(ctx context.Context, execution executi
 	generation := int64(1)
 	result = addDimension(result, dimensionResult{Name: "reconciliation", State: "PASS", Reason: "durable operation and cluster-scoped installed status agree", ObservedAt: time.Now().UTC(), OperationID: install.ID, TargetClusterID: target.ClusterID, DesiredGeneration: &generation, ObservedGeneration: &generation}, checkpoint)
 
-	result = addDimension(result, evaluateToolCanary(ctx, client, execution, executor.slug, target.ClusterID, status), checkpoint)
+	result = addDimension(result, evaluateToolCanary(ctx, client, execution, executor.slug, target.ClusterID, status, "functional"), checkpoint)
 	result = addDimension(result, evaluateToolIsolation(ctx, client, execution, executor.slug, target.ClusterID), checkpoint)
 
 	upgrade, upgradeKey, err := executeToolMutation(ctx, client, execution, http.MethodPut, basePath+"/upgrade", request, definition.ID+"-upgrade")
@@ -129,6 +129,17 @@ func (executor toolLifecycleExecutor) Run(ctx context.Context, execution executi
 	return finalizeDimensions(result, checkpoint)
 }
 
+func toolActionBody(slug, clusterID string) map[string]any {
+	body := map[string]any{"cluster_id": clusterID, "preset": "default"}
+	switch slug {
+	case "fluent-bit":
+		body["values_override"] = "config:\n  outputs: |\n    [OUTPUT]\n        Name stdout\n        Match *\n"
+	case "prometheus-node-exporter":
+		body["values_override"] = "hostNetwork: false\nhostPID: false\n"
+	}
+	return body
+}
+
 func toolUninstallBody(slug, clusterID string) map[string]any {
 	body := map[string]any{
 		"cluster_id":                     clusterID,
@@ -140,11 +151,15 @@ func toolUninstallBody(slug, clusterID string) map[string]any {
 	return body
 }
 
-func toolTarget(config qualificationConfig) (memberTarget, error) {
+func toolTarget(config qualificationConfig, caseID string) (memberTarget, error) {
+	requested := strings.TrimSpace(config.CaseTargets[caseID])
 	for _, target := range config.MemberTargets {
-		if target.ExpectedPrivilegeProfile == "admin" {
+		if target.ExpectedPrivilegeProfile == "admin" && (requested == "" || target.ClusterID == requested) {
 			return target, nil
 		}
+	}
+	if requested != "" {
+		return memberTarget{}, fmt.Errorf("case %s targets cluster %s, but it is not an explicit admin-profile member target", caseID, requested)
 	}
 	return memberTarget{}, fmt.Errorf("no explicit admin-profile member target is configured")
 }
@@ -206,15 +221,6 @@ func findToolStatus(body any, slug string) (map[string]any, bool) {
 func stringField(object map[string]any, key string) string {
 	value, _ := object[key].(string)
 	return strings.TrimSpace(value)
-}
-
-func evaluateToolCanary(ctx context.Context, client *http.Client, execution executionContext, slug, clusterID string, status map[string]any) dimensionResult {
-	if slug == "cis-operator" {
-		return evaluateCISCanary(ctx, client, execution, clusterID, 2*time.Second)
-	}
-	now := time.Now().UTC()
-	raw, _ := json.Marshal(status)
-	return dimensionResult{Name: "functional_canary", State: "FAIL", Reason: fmt.Sprintf("%s installed, but its product-specific API canary has not produced evidence; release readiness is insufficient", slug), ObservedAt: now, ArtifactSHA: digest(raw), SampleAt: &now, TargetClusterID: clusterID}
 }
 
 func evaluateCISCanary(ctx context.Context, client *http.Client, execution executionContext, clusterID string, interval time.Duration) dimensionResult {
@@ -387,7 +393,7 @@ func evaluateToolRestartRecovery(ctx context.Context, client *http.Client, execu
 		result.TargetClusterID = clusterID
 		return result
 	}
-	canary := evaluateToolCanary(ctx, client, execution, slug, clusterID, status)
+	canary := evaluateToolCanary(ctx, client, execution, slug, clusterID, status, "post-restart")
 	if canary.State != "PASS" {
 		result := failedDimension("restart_recovery", fmt.Errorf("post-restart functional canary failed: %s", canary.Reason))
 		result.TargetClusterID = clusterID
@@ -415,7 +421,17 @@ type toolRestartTarget struct {
 
 func toolRestartTargetFor(slug string) (toolRestartTarget, bool) {
 	targets := map[string]toolRestartTarget{
-		"cis-operator": {Kind: "Deployment", Namespace: "cis-operator-system", Name: "cis-operator"},
+		"cis-operator":             {Kind: "Deployment", Namespace: "cis-operator-system", Name: "cis-operator"},
+		"fluent-bit":               {Kind: "DaemonSet", Namespace: "astronomer-logging", Name: "fluent-bit"},
+		"trivy-operator":           {Kind: "Deployment", Namespace: "astronomer-trivy-system", Name: "trivy-operator"},
+		"cert-manager":             {Kind: "Deployment", Namespace: "astronomer-cert-manager", Name: "cert-manager"},
+		"gatekeeper":               {Kind: "Deployment", Namespace: "astronomer-gatekeeper-system", Name: "gatekeeper-controller-manager"},
+		"kube-state-metrics":       {Kind: "Deployment", Namespace: "astronomer-monitoring", Name: "kube-state-metrics"},
+		"prometheus-node-exporter": {Kind: "DaemonSet", Namespace: "astronomer-monitoring", Name: "prometheus-node-exporter"},
+		"ingress-nginx":            {Kind: "Deployment", Namespace: "astronomer-ingress-nginx", Name: "ingress-nginx-controller"},
+		"longhorn":                 {Kind: "DaemonSet", Namespace: "longhorn-system", Name: "longhorn-manager"},
+		"neuvector":                {Kind: "Deployment", Namespace: "cattle-neuvector-system", Name: "neuvector-controller-pod"},
+		"istio":                    {Kind: "Deployment", Namespace: "istio-system", Name: "istiod"},
 	}
 	target, ok := targets[slug]
 	return target, ok
@@ -470,7 +486,7 @@ func finalizeDimensions(result caseResult, checkpoint checkpointFunc) caseResult
 }
 
 func runMemberDexRejection(ctx context.Context, execution executionContext, result caseResult, checkpoint checkpointFunc) caseResult {
-	target, err := toolTarget(execution.Config)
+	target, err := toolTarget(execution.Config, "TOOL-02")
 	if err != nil {
 		return finishCase(result, "BLOCKED", err.Error(), checkpoint)
 	}

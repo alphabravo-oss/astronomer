@@ -19,6 +19,12 @@ type apiResponse struct {
 	Body     any
 }
 
+type rawAPIResponse struct {
+	Status      int
+	ContentType string
+	Body        []byte
+}
+
 func qualificationHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout:       30 * time.Second,
@@ -73,6 +79,35 @@ func requestAPI(ctx context.Context, client *http.Client, base *url.URL, token, 
 			}
 		}
 	}
+	for _, status := range expected {
+		if resp.StatusCode == status {
+			return result, nil
+		}
+	}
+	return result, fmt.Errorf("%s %s returned HTTP %d", method, path, resp.StatusCode)
+}
+
+func requestRawAPI(ctx context.Context, client *http.Client, base *url.URL, token, method, path string, expected ...int) (rawAPIResponse, error) {
+	target, err := relativeAPIURL(base, path)
+	if err != nil {
+		return rawAPIResponse{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target.String(), nil)
+	if err != nil {
+		return rawAPIResponse{}, err
+	}
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		return rawAPIResponse{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
+	if err != nil || len(raw) > maxBodyBytes {
+		return rawAPIResponse{}, errors.New("response body could not be read within the size limit")
+	}
+	result := rawAPIResponse{Status: resp.StatusCode, ContentType: resp.Header.Get("Content-Type"), Body: raw}
 	for _, status := range expected {
 		if resp.StatusCode == status {
 			return result, nil

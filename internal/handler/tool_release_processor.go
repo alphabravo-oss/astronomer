@@ -98,6 +98,13 @@ func (h *ToolHandler) prepareLonghornUninstall(ctx context.Context, op sqlc.Tool
 	if err != nil {
 		return fmt.Errorf("enable Longhorn deletion confirmation: %w", err)
 	}
+	if resp != nil && resp.StatusCode == http.StatusNotFound && env.ConfirmFailedReleaseCleanup {
+		h.recordToolOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn deletion confirmation was absent during failed-release cleanup", map[string]any{
+			"namespace": "longhorn-system",
+			"setting":   "deleting-confirmation-flag",
+		})
+		return nil
+	}
 	if err := ensureSuccess(resp); err != nil {
 		return fmt.Errorf("enable Longhorn deletion confirmation: %w", err)
 	}

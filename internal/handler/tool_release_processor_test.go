@@ -230,6 +230,23 @@ func TestLonghornUninstallRefusesMissingDeletionConfirmation(t *testing.T) {
 	}
 }
 
+func TestLonghornFailedReleaseCleanupToleratesMissingDeletionSetting(t *testing.T) {
+	h, q, _, op := newPlanFixture(t, 1)
+	h.k8s = &longhornUninstallRequester{status: http.StatusNotFound}
+	env := toolOperationEnvelope{
+		ClusterID:                   q.clusterID.String(),
+		ToolSlug:                    "longhorn",
+		ConfirmDataDeletion:         true,
+		ConfirmFailedReleaseCleanup: true,
+	}
+	if err := h.prepareLonghornUninstall(context.Background(), op, env); err != nil {
+		t.Fatal(err)
+	}
+	if len(q.events) != 1 || q.events[0].Stage != "uninstall.prepared" || !strings.Contains(q.events[0].Message, "absent") {
+		t.Fatalf("events=%+v", q.events)
+	}
+}
+
 func TestToolPlanRollbackReversesOrder(t *testing.T) {
 	h, q, helm, op := newPlanFixture(t, 2)
 	if err := h.executeOperation(context.Background(), op); err != nil {
