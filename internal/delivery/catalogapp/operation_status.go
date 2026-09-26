@@ -22,9 +22,12 @@ func (s *Service) RolloutStatus(ctx context.Context, targetID, rolloutID uuid.UU
 }
 
 func readRolloutStatus(ctx context.Context, q operationStatusQuerier, targetID, rolloutID uuid.UUID) (Status, error) {
-	var state string
+	var state, deletionState string
 	var result Status
-	if err := q.QueryRow(ctx, `SELECT state,last_error_code FROM delivery_rollouts WHERE id=$1 AND target_id=$2`, rolloutID, targetID).Scan(&state, &result.LastErrorCode); err != nil {
+	if err := q.QueryRow(ctx, `SELECT r.state,r.last_error_code,t.deletion_state
+		FROM delivery_rollouts r
+		JOIN delivery_targets t ON t.id=r.target_id
+		WHERE r.id=$1 AND r.target_id=$2`, rolloutID, targetID).Scan(&state, &result.LastErrorCode, &deletionState); err != nil {
 		return Status{}, err
 	}
 	switch state {
@@ -32,10 +35,17 @@ func readRolloutStatus(ctx context.Context, q operationStatusQuerier, targetID, 
 		result.Phase = "ready"
 	case "failed", "rejected", "aborted", "rolled_back", "rollback_failed":
 		result.Phase = "failed"
-	case "paused":
-		result.Phase = "degraded"
 	default:
-		result.Phase = "pending"
+		if deletionState == "deleting" || deletionState == "deleted" {
+			result.Phase = "failed"
+			if result.LastErrorCode == "" {
+				result.LastErrorCode = "target_removed"
+			}
+		} else if state == "paused" {
+			result.Phase = "degraded"
+		} else {
+			result.Phase = "pending"
+		}
 	}
 	return result, nil
 }

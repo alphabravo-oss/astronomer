@@ -47,11 +47,11 @@ func (executor appLifecycleExecutor) Run(ctx context.Context, execution executio
 	if err != nil {
 		return finishCase(result, "BLOCKED", err.Error(), checkpoint)
 	}
-	spec := appSpec(executor.slug, target)
 	application, release, err := resolveCatalogRelease(ctx, client, execution, executor.slug, target.ClusterID)
 	if err != nil {
 		return failDimension(result, "inventory", err, checkpoint)
 	}
+	spec := appSpec(executor.slug, target, release.Version)
 	installed, err := listCatalogInstallations(ctx, client, execution, target.ClusterID)
 	if err != nil {
 		return failDimension(result, "inventory", err, checkpoint)
@@ -155,7 +155,7 @@ func (executor appLifecycleExecutor) Run(ctx context.Context, execution executio
 	return finalizeLifecycleDimensions(result, "application", checkpoint)
 }
 
-func appSpec(slug string, target memberTarget) appInstallSpec {
+func appSpec(slug string, target memberTarget, chartVersion string) appInstallSpec {
 	namespaces := map[string]string{
 		"constellation": "astronomer-constellation", "kube-state-metrics": "astronomer-monitoring", "prometheus-node-exporter": "astronomer-monitoring",
 		"metrics-server": "astronomer-metrics-server", "kube-prometheus-stack": "astronomer-kube-prometheus", "grafana": "astronomer-grafana",
@@ -165,7 +165,12 @@ func appSpec(slug string, target memberTarget) appInstallSpec {
 		"external-dns": "astronomer-external-dns", "velero": "velero", "opentelemetry-collector": "astronomer-opentelemetry",
 		"tempo": "astronomer-tempo", "keda": "astronomer-keda", "cloudnative-pg": "cnpg-system",
 	}
+	constellationTag := strings.TrimSpace(chartVersion)
+	if constellationTag != "" && !strings.HasPrefix(constellationTag, "v") {
+		constellationTag = "v" + constellationTag
+	}
 	values := map[string]string{
+		"constellation":            fmt.Sprintf("image:\n  tag: %s\n", constellationTag),
 		"prometheus-node-exporter": "hostNetwork: false\nhostPID: false\n",
 		"fluent-bit":               "config:\n  outputs: |\n    [OUTPUT]\n        Name stdout\n        Match *\n",
 		"cert-manager":             "crds:\n  enabled: true\nstartupapicheck:\n  enabled: true\n",

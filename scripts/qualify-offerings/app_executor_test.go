@@ -27,7 +27,7 @@ func TestAppCasesCoverFrozenCatalog(t *testing.T) {
 		if !want[id] || slug == "" {
 			t.Fatalf("invalid app executor mapping %s=%q", id, slug)
 		}
-		spec := appSpec(slug, memberTarget{Namespace: "qualification"})
+		spec := appSpec(slug, memberTarget{Namespace: "qualification"}, "1.2.3")
 		if spec.Namespace == "" || spec.ReleaseName == "" {
 			t.Fatalf("%s has incomplete install spec: %#v", slug, spec)
 		}
@@ -35,9 +35,15 @@ func TestAppCasesCoverFrozenCatalog(t *testing.T) {
 }
 
 func TestConstellationUsesSystemNamespace(t *testing.T) {
-	spec := appSpec("constellation", memberTarget{Namespace: "project-isolated"})
+	spec := appSpec("constellation", memberTarget{Namespace: "project-isolated"}, "0.2.0")
 	if spec.Namespace != "astronomer-constellation" {
 		t.Fatalf("constellation namespace = %q, want dedicated system namespace", spec.Namespace)
+	}
+	if spec.Values != "image:\n  tag: v0.2.0\n" {
+		t.Fatalf("constellation values = %q, want the published v-prefixed release tag", spec.Values)
+	}
+	if got := appSpec("constellation", memberTarget{}, "v0.2.0").Values; got != spec.Values {
+		t.Fatalf("v-prefixed catalog version was changed: %q", got)
 	}
 }
 

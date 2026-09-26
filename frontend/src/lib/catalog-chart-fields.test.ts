@@ -108,6 +108,43 @@ it("adds audited required metadata to a field declared by the chart", () => {
   );
 });
 
+it("projects Constellation's real operational values and supplies its image tag field", () => {
+  const curated = curateHelmValuesSchema("constellation", {
+    type: "object",
+    properties: {
+      highAvailability: {
+        type: "object",
+        properties: { enabled: { type: "boolean", default: false } },
+      },
+      api: {
+        type: "object",
+        properties: { replicas: { type: "integer", default: 2 } },
+      },
+      scanner: {
+        type: "object",
+        properties: { enabled: { type: "boolean", default: true } },
+      },
+      obsolete: { type: "string" },
+    },
+  })!;
+
+  expect(curated.properties?.image?.properties?.tag).toEqual(
+    expect.objectContaining({ type: "string", title: "Image tag" }),
+  );
+  expect(curated.properties?.highAvailability?.properties?.enabled).toEqual(
+    expect.objectContaining({ type: "boolean", default: false }),
+  );
+  expect(curated.properties?.api?.properties?.replicas).toEqual(
+    expect.objectContaining({ type: "integer", default: 2 }),
+  );
+  expect(curated.properties?.scanner?.properties?.enabled).toEqual(
+    expect.objectContaining({ type: "boolean", default: true }),
+  );
+  expect(curated.properties).not.toHaveProperty("replicaCount");
+  expect(curated.properties).not.toHaveProperty("service");
+  expect(curated.properties).not.toHaveProperty("obsolete");
+});
+
 it("exposes audited kube-prometheus-stack subchart values", () => {
   const curated = curateHelmValuesSchema("kube-prometheus-stack", {
     type: "object",
