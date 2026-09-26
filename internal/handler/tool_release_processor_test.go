@@ -285,6 +285,19 @@ func TestLonghornFailedReleaseCleanupToleratesMissingDeletionCRD(t *testing.T) {
 	}
 }
 
+func TestFailedHelmReleaseStatusesIncludeInterruptedUninstall(t *testing.T) {
+	for _, status := range []string{"failed", "uninstalling", "pending-install", "pending-upgrade", "pending-rollback", "pending-uninstall"} {
+		if !isFailedHelmReleaseStatus(status) {
+			t.Errorf("status %q was not recognized as failed cleanup state", status)
+		}
+	}
+	for _, status := range []string{"deployed", "superseded", "uninstalled", "unknown"} {
+		if isFailedHelmReleaseStatus(status) {
+			t.Errorf("status %q was recognized as failed cleanup state", status)
+		}
+	}
+}
+
 func TestToolPlanRollbackReversesOrder(t *testing.T) {
 	h, q, helm, op := newPlanFixture(t, 2)
 	if err := h.executeOperation(context.Background(), op); err != nil {

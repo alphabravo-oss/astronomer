@@ -346,7 +346,7 @@ func (h *ToolHandler) toolReleaseHasMarker(ctx context.Context, env toolOperatio
 
 func isFailedHelmReleaseStatus(status string) bool {
 	switch status {
-	case "failed", "pending-install", "pending-upgrade", "pending-rollback", "pending-uninstall":
+	case "failed", "uninstalling", "pending-install", "pending-upgrade", "pending-rollback", "pending-uninstall":
 		return true
 	default:
 		return false
