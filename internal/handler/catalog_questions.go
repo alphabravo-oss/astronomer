@@ -107,7 +107,11 @@ func overlayRancherQuestion(root map[string]any, question rancherQuestion, inher
 		if defaultNull {
 			node["type"] = []any{questionType, "null"}
 			delete(node, "x-astronomer-default-null")
-		} else {
+		} else if _, hasChartType := node["type"]; !hasChartType {
+			// questions.yaml sometimes presents structured chart values through a
+			// JSON text box (for example an array question declared as "string").
+			// Keep the values.yaml/upstream schema type authoritative and only use
+			// the question type when the chart supplied no type information.
 			node["type"] = questionType
 		}
 	}

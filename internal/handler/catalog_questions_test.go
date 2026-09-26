@@ -121,6 +121,32 @@ func TestEnrichSchemaKeepsNullChartDefaultValid(t *testing.T) {
 	}
 }
 
+func TestEnrichSchemaKeepsStructuredChartTypeAuthoritative(t *testing.T) {
+	base := inferSchema(map[string]any{
+		"httproute": map[string]any{"hostnames": []any{}},
+	})
+	raw := []byte(`questions:
+- variable: httproute.hostnames
+  type: string
+  label: Hostnames (JSON array)
+`)
+	enriched := enrichSchemaWithRancherQuestions(base, raw)
+	var schema map[string]any
+	if err := json.Unmarshal(enriched, &schema); err != nil {
+		t.Fatal(err)
+	}
+	node := schema["properties"].(map[string]any)["httproute"].(map[string]any)["properties"].(map[string]any)["hostnames"].(map[string]any)
+	if node["type"] != "array" {
+		t.Fatalf("chart array type was replaced by question input type: %#v", node)
+	}
+	if node["title"] != "Hostnames (JSON array)" {
+		t.Fatalf("question presentation metadata was not retained: %#v", node)
+	}
+	if err := validateCatalogValuesSchema(enriched, map[string]any{"httproute": map[string]any{"hostnames": []any{}}}); err != nil {
+		t.Fatalf("chart array default should validate: %v", err)
+	}
+}
+
 func TestEnrichSchemaRejectsUnsafeQuestionPath(t *testing.T) {
 	base := inferSchema(map[string]any{"safe": "value"})
 	enriched := enrichSchemaWithRancherQuestions(base, []byte("questions:\n- variable: __proto__.polluted\n  label: Bad\n"))
