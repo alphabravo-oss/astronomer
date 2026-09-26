@@ -292,6 +292,9 @@ func executorFor(definition caseDefinition) caseExecutor {
 	if slug, ok := toolCases[definition.ID]; ok {
 		return toolLifecycleExecutor{slug: slug}
 	}
+	if slug, ok := appCases[definition.ID]; ok {
+		return appLifecycleExecutor{slug: slug}
+	}
 	return blockedExecutor{reason: "no compiled functional executor exists for this locally testable case yet"}
 }
 
