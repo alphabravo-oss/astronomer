@@ -11,7 +11,7 @@ it("keeps upstream values while disabling duplicate monitoring controllers", () 
 
   expect(result).toMatchObject({
     prometheus: { prometheusSpec: { retention: "15d" } },
-    prometheusOperator: { enabled: false },
+    prometheusOperator: { enabled: true },
     nodeExporter: { enabled: false },
     kubeStateMetrics: { enabled: false },
   });

@@ -7,15 +7,14 @@ import {
 
 // These are compatibility defaults for a fresh install, kept deliberately
 // small and visible in the values editor. They prevent a supported App from
-// competing with components Astronomer already installed on the cluster while
+// competing with exporters Astronomer already installed on the cluster while
 // leaving every switch available to an operator who intentionally wants a
-// separate stack.
+// separate metrics source.
 const INSTALL_DEFAULT_OVERRIDES: Record<
   string,
   Array<{ path: string[]; value: unknown }>
 > = {
   "kube-prometheus-stack": [
-    { path: ["prometheusOperator", "enabled"], value: false },
     { path: ["nodeExporter", "enabled"], value: false },
     { path: ["kubeStateMetrics", "enabled"], value: false },
   ],

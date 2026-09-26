@@ -498,6 +498,14 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	}
 	grafanaValues := h.clusterGrafanaValues(req, clusterID, enableGrafana)
 	values := map[string]any{
+		// The managed baseline operator owns only this release namespace. A
+		// cluster-wide watch makes any separately installed Prometheus stack's
+		// operator race this one for the same CRs, producing alternating pod
+		// templates and transiently healthy Helm releases with no stable
+		// service endpoints.
+		"prometheusOperator": map[string]any{
+			"namespaces": map[string]any{"releaseNamespace": true},
+		},
 		"additionalPrometheusRulesMap": map[string]any{
 			"astronomer-cluster-metadata": map[string]any{
 				"groups": []any{

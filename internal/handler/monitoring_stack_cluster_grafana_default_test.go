@@ -37,6 +37,20 @@ func TestClusterGrafanaUsesAuthenticatedSameOriginPath(t *testing.T) {
 	}
 }
 
+func TestClusterMonitoringOperatorIsScopedToItsReleaseNamespace(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
+	_, _, values, err := h.monitoringStackPayload(context.Background(), req, stackTestClusterID, rbac.VerbRead)
+	if err != nil {
+		t.Fatalf("monitoringStackPayload: %v", err)
+	}
+	operator, _ := values["prometheusOperator"].(map[string]any)
+	namespaces, _ := operator["namespaces"].(map[string]any)
+	if namespaces["releaseNamespace"] != true {
+		t.Fatalf("prometheus operator namespace scope = %#v, want releaseNamespace=true", operator)
+	}
+}
+
 func TestMonitoringStackPayloadOmitsGrafanaWhenFleetHealthyAndNotConfigured(t *testing.T) {
 	t.Parallel()
 

@@ -68,7 +68,7 @@ describe("AppInstallModal", () => {
       chart: "kube-prometheus-stack",
       version: "91.5.2",
       defaultValues:
-        "prometheus:\n  prometheusSpec:\n    scrapeInterval: 30s\n",
+        "prometheus:\n  prometheusSpec:\n    scrapeInterval: 30s\nprometheusOperator:\n  enabled: true\n",
       valuesSchema: {
         type: "object",
         properties: {
@@ -105,7 +105,7 @@ describe("AppInstallModal", () => {
     ).toHaveValue("30s");
     expect(
       screen.getByRole("checkbox", { name: "Deploy Prometheus Operator" }),
-    ).not.toBeChecked();
+    ).toBeChecked();
 
     fireEvent.click(screen.getByRole("button", { name: "YAML" }));
     await waitFor(() =>
