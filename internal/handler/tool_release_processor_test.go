@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -29,6 +30,23 @@ type longhornUninstallRequest struct {
 	method, path string
 	body         []byte
 	headers      map[string]string
+}
+
+type cisUninstallRequester struct {
+	responses map[string]*protocol.K8sResponsePayload
+	requests  []longhornUninstallRequest
+}
+
+func (r *cisUninstallRequester) Do(_ context.Context, _ string, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error) {
+	r.requests = append(r.requests, longhornUninstallRequest{method: method, path: path, body: body, headers: headers})
+	if response, ok := r.responses[method+" "+path]; ok {
+		return response, nil
+	}
+	return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
+}
+
+func jsonK8sResponse(status int, body string) *protocol.K8sResponsePayload {
+	return &protocol.K8sResponsePayload{StatusCode: status, Body: base64.StdEncoding.EncodeToString([]byte(body))}
 }
 
 func (r *longhornUninstallRequester) Do(_ context.Context, _ string, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error) {
@@ -232,6 +250,50 @@ func TestLonghornUninstallPreparesDeletionThroughClusterAgent(t *testing.T) {
 	}
 	if len(q.events) != 1 || q.events[0].Stage != "uninstall.prepared" {
 		t.Fatalf("events=%+v", q.events)
+	}
+}
+
+func TestCISUninstallRemovesManagedScansAndOwnedRunnerService(t *testing.T) {
+	h, q, _, op := newPlanFixture(t, 1)
+	req := &cisUninstallRequester{responses: map[string]*protocol.K8sResponsePayload{
+		"GET /apis/cis.cattle.io/v1/clusterscans":                                              jsonK8sResponse(http.StatusOK, `{"items":[{"metadata":{"name":"astronomer-cis-one","labels":{"app.kubernetes.io/managed-by":"astronomer-go"}}},{"metadata":{"name":"other","labels":{"app.kubernetes.io/managed-by":"someone-else"}}}]}`),
+		"DELETE /apis/cis.cattle.io/v1/clusterscans/astronomer-cis-one":                        {StatusCode: http.StatusOK},
+		"GET /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark":    jsonK8sResponse(http.StatusOK, `{"metadata":{"labels":{"app.kubernetes.io/name":"rancher-cis-benchmark","app.kubernetes.io/instance":"security-scan-runner-astronomer-cis-one"}}}`),
+		"DELETE /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark": {StatusCode: http.StatusOK},
+	}}
+	h.k8s = req
+	env := toolOperationEnvelope{ClusterID: q.clusterID.String(), ToolSlug: "cis-operator"}
+	if err := h.prepareCISUninstall(context.Background(), op, env); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"GET /apis/cis.cattle.io/v1/clusterscans",
+		"DELETE /apis/cis.cattle.io/v1/clusterscans/astronomer-cis-one",
+		"GET /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark",
+		"DELETE /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark",
+	}
+	got := make([]string, 0, len(req.requests))
+	for _, request := range req.requests {
+		got = append(got, request.method+" "+request.path)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("requests=%v, want %v", got, want)
+	}
+	if len(q.events) != 2 || q.events[0].Stage != "uninstall.prepared" || q.events[1].Stage != "uninstall.prepared" {
+		t.Fatalf("events=%+v", q.events)
+	}
+}
+
+func TestCISUninstallRefusesUnownedRunnerService(t *testing.T) {
+	h, q, _, op := newPlanFixture(t, 1)
+	req := &cisUninstallRequester{responses: map[string]*protocol.K8sResponsePayload{
+		"GET /apis/cis.cattle.io/v1/clusterscans":                                           {StatusCode: http.StatusNotFound},
+		"GET /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark": jsonK8sResponse(http.StatusOK, `{"metadata":{"labels":{"app.kubernetes.io/name":"rancher-cis-benchmark","app.kubernetes.io/instance":"manually-owned"}}}`),
+	}}
+	h.k8s = req
+	err := h.prepareCISUninstall(context.Background(), op, toolOperationEnvelope{ClusterID: q.clusterID.String(), ToolSlug: "cis-operator"})
+	if err == nil || !strings.Contains(err.Error(), "without Astronomer scan ownership") {
+		t.Fatalf("error=%v", err)
 	}
 }
 

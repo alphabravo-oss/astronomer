@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -29,9 +32,16 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 	if h.helm == nil {
 		return errors.New("helm requester not configured")
 	}
-	if op.OperationType == "uninstall" && env.ToolSlug == "longhorn" {
-		if err := h.prepareLonghornUninstall(ctx, op, env); err != nil {
-			return err
+	if op.OperationType == "uninstall" {
+		switch env.ToolSlug {
+		case "longhorn":
+			if err := h.prepareLonghornUninstall(ctx, op, env); err != nil {
+				return err
+			}
+		case "cis-operator":
+			if err := h.prepareCISUninstall(ctx, op, env); err != nil {
+				return err
+			}
 		}
 	}
 	ctx, cancel := context.WithCancelCause(ctx)
@@ -82,6 +92,103 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 			return err
 		}
 	}
+	return nil
+}
+
+// prepareCISUninstall removes scan-owned resources while the operator and its
+// CRDs are still present. The upstream chart creates a fixed-name Sonobuoy
+// service outside the Helm release. If it survives an uninstall, the next
+// ClusterScan remains Pending forever with "Waiting for another scan to
+// finish". Keeping this cleanup in the API lifecycle makes reinstall reliable
+// without requiring users to repair adopted clusters out of band.
+func (h *ToolHandler) prepareCISUninstall(ctx context.Context, op sqlc.ToolOperation, env toolOperationEnvelope) error {
+	if h.k8s == nil {
+		return errors.New("Kubernetes requester is required to clean up CIS scan resources")
+	}
+	const scansPath = "/apis/cis.cattle.io/v1/clusterscans"
+	response, err := h.k8s.Do(ctx, env.ClusterID, http.MethodGet, scansPath, nil, requestHeaders(""))
+	if err != nil {
+		return fmt.Errorf("list CIS scans before uninstall: %w", err)
+	}
+	if response == nil {
+		return errors.New("list CIS scans before uninstall: empty response")
+	}
+	if response.StatusCode != http.StatusNotFound {
+		if err := ensureSuccess(response); err != nil {
+			return fmt.Errorf("list CIS scans before uninstall: %w", err)
+		}
+		var list struct {
+			Items []struct {
+				Metadata struct {
+					Name   string            `json:"name"`
+					Labels map[string]string `json:"labels"`
+				} `json:"metadata"`
+			} `json:"items"`
+		}
+		if err := parseJSONResponse(response, &list); err != nil {
+			return fmt.Errorf("decode CIS scans before uninstall: %w", err)
+		}
+		removed := 0
+		for _, scan := range list.Items {
+			if scan.Metadata.Labels["app.kubernetes.io/managed-by"] != "astronomer-go" || strings.TrimSpace(scan.Metadata.Name) == "" {
+				continue
+			}
+			path := scansPath + "/" + url.PathEscape(scan.Metadata.Name)
+			deleted, deleteErr := h.k8s.Do(ctx, env.ClusterID, http.MethodDelete, path, nil, requestHeaders(""))
+			if deleteErr != nil {
+				return fmt.Errorf("delete CIS scan %s before uninstall: %w", scan.Metadata.Name, deleteErr)
+			}
+			if deleted == nil {
+				return fmt.Errorf("delete CIS scan %s before uninstall: empty response", scan.Metadata.Name)
+			}
+			if deleted.StatusCode != http.StatusNotFound && deleted.StatusCode >= http.StatusBadRequest {
+				return fmt.Errorf("delete CIS scan %s before uninstall: %w", scan.Metadata.Name, responseError(deleted))
+			}
+			removed++
+		}
+		h.recordToolOperationEvent(ctx, op.ID, "info", "uninstall.prepared", "Astronomer-managed CIS scans were removed before chart uninstall", map[string]any{"scan_count": removed})
+	}
+
+	// A terminated or previously uninstalled operator can leave this singleton
+	// service behind even after its ClusterScan CR has disappeared. Delete it
+	// only when its labels prove that it belongs to an Astronomer CIS scan.
+	const servicePath = "/api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark"
+	service, err := h.k8s.Do(ctx, env.ClusterID, http.MethodGet, servicePath, nil, requestHeaders(""))
+	if err != nil {
+		return fmt.Errorf("inspect CIS runner service before uninstall: %w", err)
+	}
+	if service == nil {
+		return errors.New("inspect CIS runner service before uninstall: empty response")
+	}
+	if service.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	if err := ensureSuccess(service); err != nil {
+		return fmt.Errorf("inspect CIS runner service before uninstall: %w", err)
+	}
+	var object struct {
+		Metadata struct {
+			Labels map[string]string `json:"labels"`
+		} `json:"metadata"`
+	}
+	if err := parseJSONResponse(service, &object); err != nil {
+		return fmt.Errorf("decode CIS runner service before uninstall: %w", err)
+	}
+	instance := object.Metadata.Labels["app.kubernetes.io/instance"]
+	if object.Metadata.Labels["app.kubernetes.io/name"] != "rancher-cis-benchmark" || !strings.HasPrefix(instance, "security-scan-runner-astronomer-cis-") {
+		return errors.New("CIS runner service exists without Astronomer scan ownership labels")
+	}
+	deleted, err := h.k8s.Do(ctx, env.ClusterID, http.MethodDelete, servicePath, nil, requestHeaders(""))
+	if err != nil {
+		return fmt.Errorf("delete CIS runner service before uninstall: %w", err)
+	}
+	if deleted == nil {
+		return errors.New("delete CIS runner service before uninstall: empty response")
+	}
+	if deleted.StatusCode != http.StatusNotFound && deleted.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("delete CIS runner service before uninstall: %w", responseError(deleted))
+	}
+	h.recordToolOperationEvent(ctx, op.ID, "info", "uninstall.prepared", "Stale CIS runner service was removed before chart uninstall", map[string]any{"service": "cis-operator-system/service-rancher-cis-benchmark"})
 	return nil
 }
 
