@@ -157,7 +157,7 @@ func (executor appLifecycleExecutor) Run(ctx context.Context, execution executio
 
 func appSpec(slug string, target memberTarget) appInstallSpec {
 	namespaces := map[string]string{
-		"constellation": target.Namespace, "kube-state-metrics": "astronomer-monitoring", "prometheus-node-exporter": "astronomer-monitoring",
+		"constellation": "astronomer-constellation", "kube-state-metrics": "astronomer-monitoring", "prometheus-node-exporter": "astronomer-monitoring",
 		"metrics-server": "astronomer-metrics-server", "kube-prometheus-stack": "astronomer-kube-prometheus", "grafana": "astronomer-grafana",
 		"loki": "astronomer-loki", "trivy-operator": "astronomer-trivy-system", "cert-manager": "astronomer-cert-manager",
 		"ingress-nginx": "astronomer-ingress-nginx", "external-secrets": "astronomer-external-secrets", "kyverno": "astronomer-kyverno",

@@ -12,7 +12,7 @@ import {
  * "Upgrade" action). Two key differences between the modes:
  *
  *   • mode='install' → POST /catalog/installed/, release_name + ns are
- *     editable, defaults to chart name / 'default'.
+ *     editable, defaults to the chart name and its supported system namespace.
  *   • mode='upgrade' → PUT /catalog/installed/{id}/upgrade/, release_name
  *     + ns are read-only (those are the release identity), version
  *     dropdown is the user's actual control.
@@ -68,7 +68,10 @@ import {
   type HelmValuesSchemaNode,
 } from "@/lib/helm-values-schema";
 import { cn } from "@/lib/utils";
-import { curateHelmValuesSchema } from "@/lib/catalog-chart-fields";
+import {
+  curateHelmValuesSchema,
+  recommendedCatalogNamespace,
+} from "@/lib/catalog-chart-fields";
 
 type Mode =
   | { kind: "install"; chartId: string; chartName: string }
@@ -138,7 +141,10 @@ export function AppInstallModal({
     defaultValues: {
       selectedVersionId: mode.kind === "upgrade" ? mode.currentVersionId : "",
       releaseName: mode.kind === "upgrade" ? mode.releaseName : mode.chartName,
-      namespace: mode.kind === "upgrade" ? mode.namespace : "default",
+      namespace:
+        mode.kind === "upgrade"
+          ? mode.namespace
+          : recommendedCatalogNamespace(mode.chartName),
       valuesYaml: mode.kind === "upgrade" ? mode.currentValues : "",
     },
     onSubmit: () => install.mutate(),

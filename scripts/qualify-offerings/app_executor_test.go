@@ -34,6 +34,13 @@ func TestAppCasesCoverFrozenCatalog(t *testing.T) {
 	}
 }
 
+func TestConstellationUsesSystemNamespace(t *testing.T) {
+	spec := appSpec("constellation", memberTarget{Namespace: "project-isolated"})
+	if spec.Namespace != "astronomer-constellation" {
+		t.Fatalf("constellation namespace = %q, want dedicated system namespace", spec.Namespace)
+	}
+}
+
 func TestValidateAppPreviewBindsImmutableInputs(t *testing.T) {
 	release := catalogRelease{VersionID: "version-1", Version: "1.2.3", Digest: "sha256:abc"}
 	body := map[string]any{"data": map[string]any{
