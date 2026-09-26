@@ -21,10 +21,11 @@ type caseExecutor interface {
 }
 
 type executionContext struct {
-	Base   *url.URL
-	Token  string
-	Config qualificationConfig
-	RunID  string
+	Base            *url.URL
+	Token           string
+	RestrictedToken string
+	Config          qualificationConfig
+	RunID           string
 }
 
 type checkpointFunc func(caseResult) error
@@ -87,6 +88,13 @@ func runQualification(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	restrictedToken := ""
+	if config.RestrictedTokenFile != "" {
+		restrictedToken, err = readToken(config.RestrictedTokenFile)
+		if err != nil {
+			return fmt.Errorf("read restricted qualification token: %w", err)
+		}
+	}
 	inventory, err := loadPassingInventory(*inventoryPath, manifest, identity, base)
 	if err != nil {
 		return err
@@ -115,7 +123,7 @@ func runQualification(ctx context.Context, args []string) error {
 		return writeJSONAtomic(*outputPath, result)
 	}
 
-	execution := executionContext{Base: base, Token: token, Config: config, RunID: result.RunID}
+	execution := executionContext{Base: base, Token: token, RestrictedToken: restrictedToken, Config: config, RunID: result.RunID}
 	for _, definition := range selected {
 		current := result.Cases[index[definition.ID]]
 		if shouldSkipResumedCase(definition, current) {

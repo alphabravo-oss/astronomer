@@ -29,13 +29,14 @@ type registryContract struct {
 }
 
 type qualificationConfig struct {
-	SchemaVersion     string            `json:"schema_version"`
-	BaseURL           string            `json:"base_url"`
-	TokenFile         string            `json:"token_file"`
-	ExpectedCommit    string            `json:"expected_commit"`
-	AllowLoopbackHTTP bool              `json:"allow_loopback_http,omitempty"`
-	TargetIDs         map[string]string `json:"target_ids"`
-	MemberTargets     []memberTarget    `json:"member_targets,omitempty"`
+	SchemaVersion       string            `json:"schema_version"`
+	BaseURL             string            `json:"base_url"`
+	TokenFile           string            `json:"token_file"`
+	RestrictedTokenFile string            `json:"restricted_token_file,omitempty"`
+	ExpectedCommit      string            `json:"expected_commit"`
+	AllowLoopbackHTTP   bool              `json:"allow_loopback_http,omitempty"`
+	TargetIDs           map[string]string `json:"target_ids"`
+	MemberTargets       []memberTarget    `json:"member_targets,omitempty"`
 }
 
 type memberTarget struct {

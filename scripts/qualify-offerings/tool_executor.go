@@ -343,21 +343,82 @@ func evaluateToolIsolation(ctx context.Context, client *http.Client, execution e
 		if !found || status["status"] != "not_installed" {
 			return failedDimension("authorization_isolation", fmt.Errorf("tool effect appeared on non-target cluster %s", other.ClusterID))
 		}
-		return dimensionResult{Name: "authorization_isolation", State: "FAIL", Reason: "cross-cluster isolation passed, but no restricted qualification credential is configured to prove RBAC denial", ObservedAt: time.Now().UTC(), TargetClusterID: targetClusterID}
+		if execution.RestrictedToken == "" {
+			return dimensionResult{Name: "authorization_isolation", State: "FAIL", Reason: "cross-cluster isolation passed, but no restricted qualification credential is configured to prove authorization denial", ObservedAt: time.Now().UTC(), TargetClusterID: targetClusterID}
+		}
+		key := "qualification-" + execution.RunID + "-" + slug + "-restricted-denial"
+		denied, requestErr := requestAPI(ctx, client, execution.Base, execution.RestrictedToken, http.MethodPost,
+			"/api/v1/tools/"+url.PathEscape(slug)+"/install", map[string]any{"cluster_id": targetClusterID, "preset": "default"}, key, http.StatusForbidden)
+		if requestErr != nil {
+			return failedDimension("authorization_isolation", fmt.Errorf("restricted credential was not explicitly denied: %w", requestErr))
+		}
+		if !responseMentions(denied.Body, "scope_denied") && !responseMentions(denied.Body, "forbidden") && !responseMentions(denied.Body, "permission") {
+			return failedDimension("authorization_isolation", fmt.Errorf("restricted credential returned 403 without an authorization-denial code"))
+		}
+		return dimensionResult{Name: "authorization_isolation", State: "PASS", Reason: "tool effect remained confined to the target cluster and a read-only API token was denied mutation", ObservedAt: time.Now().UTC(), HTTPStatus: http.StatusForbidden, IdempotencyKey: key, TargetClusterID: targetClusterID}
 	}
 	return failedDimension("authorization_isolation", fmt.Errorf("a second member target is required for cross-cluster isolation"))
 }
 
 func evaluateToolRestartRecovery(ctx context.Context, client *http.Client, execution executionContext, slug, clusterID string) dimensionResult {
-	response, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodGet, "/api/v1/clusters/"+url.PathEscape(clusterID)+"/tools/status/", nil, "", http.StatusOK)
+	target, found := toolRestartTargetFor(slug)
+	if !found {
+		return dimensionResult{Name: "restart_recovery", State: "FAIL", Reason: "no supported API restart target is defined for this chart workload", ObservedAt: time.Now().UTC(), TargetClusterID: clusterID}
+	}
+	path := fmt.Sprintf("/api/v1/clusters/%s/workloads/%s/%s/%s/restart/",
+		url.PathEscape(clusterID), url.PathEscape(target.Kind), url.PathEscape(target.Namespace), url.PathEscape(target.Name))
+	restart, key, err := executeToolMutation(ctx, client, execution, http.MethodPost, path, nil, slug+"-restart-recovery")
 	if err != nil {
-		return failedDimension("restart_recovery", err)
+		result := failedDimension("restart_recovery", fmt.Errorf("restart core workload through API: %w", err))
+		result.TargetClusterID = clusterID
+		return result
+	}
+
+	response, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodGet,
+		"/api/v1/clusters/"+url.PathEscape(clusterID)+"/tools/status/", nil, "", http.StatusOK)
+	if err != nil {
+		result := failedDimension("restart_recovery", fmt.Errorf("read tool status after restart: %w", err))
+		result.TargetClusterID = clusterID
+		return result
 	}
 	status, found := findToolStatus(response.Body, slug)
 	if !found || status["status"] != "installed" {
-		return failedDimension("restart_recovery", fmt.Errorf("tool did not remain installed before restart validation"))
+		result := failedDimension("restart_recovery", fmt.Errorf("tool did not remain installed after API restart"))
+		result.TargetClusterID = clusterID
+		return result
 	}
-	return dimensionResult{Name: "restart_recovery", State: "FAIL", Reason: "durable state survived lifecycle operations, but no supported API restart was identified for this chart workload", ObservedAt: time.Now().UTC(), TargetClusterID: clusterID}
+	canary := evaluateToolCanary(ctx, client, execution, slug, clusterID, status)
+	if canary.State != "PASS" {
+		result := failedDimension("restart_recovery", fmt.Errorf("post-restart functional canary failed: %s", canary.Reason))
+		result.TargetClusterID = clusterID
+		return result
+	}
+	return dimensionResult{
+		Name:            "restart_recovery",
+		State:           "PASS",
+		Reason:          fmt.Sprintf("API restart operation completed and post-restart canary passed: %s", canary.Reason),
+		ObservedAt:      time.Now().UTC(),
+		HTTPStatus:      http.StatusAccepted,
+		OperationID:     restart.ID,
+		ArtifactSHA:     canary.ArtifactSHA,
+		IdempotencyKey:  key,
+		SampleAt:        canary.SampleAt,
+		TargetClusterID: clusterID,
+	}
+}
+
+type toolRestartTarget struct {
+	Kind      string
+	Namespace string
+	Name      string
+}
+
+func toolRestartTargetFor(slug string) (toolRestartTarget, bool) {
+	targets := map[string]toolRestartTarget{
+		"cis-operator": {Kind: "Deployment", Namespace: "cis-operator-system", Name: "cis-operator"},
+	}
+	target, ok := targets[slug]
+	return target, ok
 }
 
 func operationDimension(name, reason, clusterID, key string, operation operationObservation) dimensionResult {
