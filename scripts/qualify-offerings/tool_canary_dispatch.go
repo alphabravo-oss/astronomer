@@ -33,7 +33,7 @@ func evaluateToolCanary(ctx context.Context, client *http.Client, execution exec
 		return evaluateNeuVectorCanary(ctx, client, execution, clusterID)
 	}
 	if slug == "ingress-nginx" {
-		return evaluateIngressCanary(ctx, client, execution, clusterID)
+		return evaluateIngressCanary(ctx, client, execution, clusterID, phase)
 	}
 	if spec, ok := metricCanaryFor(slug); ok {
 		return evaluateMetricCanary(ctx, client, execution, slug, clusterID, spec)

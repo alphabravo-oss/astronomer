@@ -10,27 +10,113 @@ import (
 	"time"
 )
 
-func evaluateIngressCanary(ctx context.Context, client *http.Client, execution executionContext, clusterID string) dimensionResult {
-	base := "/api/v1/clusters/" + url.PathEscape(clusterID) + "/k8s/api/v1/namespaces/astronomer-ingress-nginx/services/"
-	routed, err := requestRawAPI(ctx, client, execution.Base, execution.Token, http.MethodGet,
-		base+"http:ingress-nginx-controller:80/proxy/", http.StatusNotFound)
-	if err != nil {
-		return failedCanary(clusterID, fmt.Errorf("send request through ingress controller service: %w", err))
+func evaluateIngressCanary(ctx context.Context, client *http.Client, execution executionContext, clusterID, phase string) (result dimensionResult) {
+	namespace := memberNamespace(execution.Config, clusterID)
+	if namespace == "" {
+		return failedCanary(clusterID, fmt.Errorf("no qualification namespace is configured for the ingress target"))
 	}
-	if !strings.Contains(strings.ToLower(string(routed.Body)), "404") {
-		return failedCanary(clusterID, fmt.Errorf("ingress controller did not return its expected unmatched-route response"))
+	suffix := digest([]byte(execution.RunID + "-ingress-" + phase))[:10]
+	name := "astr-qual-ingress-" + suffix
+	marker := "astronomer-ingress-" + suffix
+	route := "/" + name
+	clusterBase := "/api/v1/clusters/" + url.PathEscape(clusterID) + "/k8s"
+	coreBase := clusterBase + "/api/v1/namespaces/" + url.PathEscape(namespace)
+	ingressBase := clusterBase + "/apis/networking.k8s.io/v1/namespaces/" + url.PathEscape(namespace)
+	podPath, servicePath, ingressPath := coreBase+"/pods/"+name, coreBase+"/services/"+name, ingressBase+"/ingresses/"+name
+	podCreated, serviceCreated, ingressCreated := false, false, false
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		cleanupErrors := []string{}
+		for _, item := range []struct {
+			created bool
+			path    string
+		}{{ingressCreated, ingressPath}, {serviceCreated, servicePath}, {podCreated, podPath}} {
+			if !item.created {
+				continue
+			}
+			if _, err := requestAPI(cleanupCtx, client, execution.Base, execution.Token, http.MethodDelete, item.path, nil, "", http.StatusOK, http.StatusAccepted, http.StatusNotFound); err != nil {
+				cleanupErrors = append(cleanupErrors, err.Error())
+				continue
+			}
+			if err := waitK8sDeleted(cleanupCtx, client, execution, item.path, time.Second); err != nil {
+				cleanupErrors = append(cleanupErrors, err.Error())
+			}
+		}
+		if len(cleanupErrors) > 0 {
+			result = failedCanary(clusterID, fmt.Errorf("ingress canary cleanup failed: %s", strings.Join(cleanupErrors, "; ")))
+		}
+	}()
+
+	labels := map[string]any{"app.kubernetes.io/name": name, "app.kubernetes.io/managed-by": "astronomer-qualification"}
+	pod := map[string]any{
+		"apiVersion": "v1", "kind": "Pod",
+		"metadata": map[string]any{"name": name, "namespace": namespace, "labels": labels},
+		"spec": map[string]any{
+			"containers": []any{map[string]any{
+				"name": "backend", "image": "busybox:1.36",
+				"command":        []any{"sh", "-ec", "mkdir -p /www; printf '%s\\n' \"$MARKER\" > /www/index.html; exec httpd -f -p 8080 -h /www"},
+				"env":            []any{map[string]any{"name": "MARKER", "value": marker}},
+				"ports":          []any{map[string]any{"name": "http", "containerPort": 8080}},
+				"readinessProbe": map[string]any{"httpGet": map[string]any{"path": "/", "port": 8080}, "periodSeconds": 1},
+			}},
+		},
 	}
-	metrics, err := requestRawAPI(ctx, client, execution.Base, execution.Token, http.MethodGet,
-		base+"http:ingress-nginx-controller-metrics:10254/proxy/metrics", http.StatusOK)
-	if err != nil {
-		return failedCanary(clusterID, fmt.Errorf("scrape ingress controller metrics: %w", err))
+	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, coreBase+"/pods", pod, "", http.StatusCreated); err != nil {
+		return failedCanary(clusterID, fmt.Errorf("create ingress canary backend: %w", err))
 	}
-	if !prometheusMetricHasPositiveSample(metrics.Body, "nginx_ingress_controller_build_info") {
-		return failedCanary(clusterID, fmt.Errorf("ingress controller metrics lacked a positive build-info sample"))
+	podCreated = true
+	if err := pollK8sObject(ctx, client, execution, podPath, 2*time.Second, func(object map[string]any) (bool, error) {
+		status, _ := object["status"].(map[string]any)
+		if stringField(status, "phase") == "Failed" {
+			return false, fmt.Errorf("backend pod entered Failed phase")
+		}
+		return k8sPodReady(object), nil
+	}); err != nil {
+		return failedCanary(clusterID, fmt.Errorf("wait for ingress canary backend: %w", err))
 	}
-	raw := append(append([]byte{}, routed.Body...), metrics.Body...)
-	now := time.Now().UTC()
-	return dimensionResult{Name: "functional_canary", State: "PASS", Reason: "ingress controller served the expected unmatched-route response and exposed live controller metrics", ObservedAt: now, HTTPStatus: routed.Status, ArtifactSHA: digest(raw), SampleAt: &now, TargetClusterID: clusterID}
+
+	service := map[string]any{
+		"apiVersion": "v1", "kind": "Service",
+		"metadata": map[string]any{"name": name, "namespace": namespace, "labels": labels},
+		"spec":     map[string]any{"selector": labels, "ports": []any{map[string]any{"name": "http", "port": 8080, "targetPort": "http"}}},
+	}
+	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, coreBase+"/services", service, "", http.StatusCreated); err != nil {
+		return failedCanary(clusterID, fmt.Errorf("create ingress canary Service: %w", err))
+	}
+	serviceCreated = true
+	ingress := map[string]any{
+		"apiVersion": "networking.k8s.io/v1", "kind": "Ingress",
+		"metadata": map[string]any{
+			"name": name, "namespace": namespace, "labels": labels,
+			"annotations": map[string]any{"nginx.ingress.kubernetes.io/rewrite-target": "/"},
+		},
+		"spec": map[string]any{
+			"ingressClassName": "nginx",
+			"rules": []any{map[string]any{"http": map[string]any{"paths": []any{map[string]any{
+				"path": route, "pathType": "Prefix",
+				"backend": map[string]any{"service": map[string]any{"name": name, "port": map[string]any{"number": 8080}}},
+			}}}}},
+		},
+	}
+	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, ingressBase+"/ingresses", ingress, "", http.StatusCreated); err != nil {
+		return failedCanary(clusterID, fmt.Errorf("create ingress canary route: %w", err))
+	}
+	ingressCreated = true
+
+	proxyPath := clusterBase + "/api/v1/namespaces/astronomer-ingress-nginx/services/http:ingress-nginx-controller:80/proxy" + route
+	for {
+		routed, err := requestRawAPI(ctx, client, execution.Base, execution.Token, http.MethodGet, proxyPath, http.StatusOK, http.StatusNotFound, http.StatusBadGateway, http.StatusServiceUnavailable)
+		if err == nil && routed.Status == http.StatusOK && strings.Contains(string(routed.Body), marker) {
+			now := time.Now().UTC()
+			return dimensionResult{Name: "functional_canary", State: "PASS", Reason: fmt.Sprintf("ingress-nginx routed %s through the controller to Service %s/%s and returned the unique backend marker", route, namespace, name), ObservedAt: now, HTTPStatus: routed.Status, ArtifactSHA: digest(routed.Body), SampleAt: &now, TargetClusterID: clusterID}
+		}
+		select {
+		case <-ctx.Done():
+			return failedCanary(clusterID, fmt.Errorf("ingress route did not return its backend marker: %w", ctx.Err()))
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 type metricCanarySpec struct {
