@@ -70,7 +70,7 @@ func (h *CatalogHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 	}
 	items := make([]map[string]any, 0, len(ops))
 	for _, op := range ops {
-		items = append(items, catalogOperationResponse(op))
+		items = append(items, h.catalogOperationResponseWithDelivery(r.Context(), op, false))
 	}
 	if !hasPager {
 		paging.Write(w, items, paging.FromPage(limit, offset, len(ops)))
@@ -98,11 +98,7 @@ func (h *CatalogHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
 		return
 	}
-	resp := catalogOperationResponse(op)
-	if events, err := h.queries.ListCatalogOperationEvents(r.Context(), op.ID); err == nil {
-		resp["events"] = catalogOperationEventsResponse(events)
-	}
-	h.enrichCatalogOperationDeliveryStatus(r.Context(), op, resp)
+	resp := h.catalogOperationResponseWithDelivery(r.Context(), op, true)
 	RespondJSON(w, http.StatusOK, resp)
 }
 
