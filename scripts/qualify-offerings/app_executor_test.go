@@ -163,6 +163,27 @@ func TestTempoCanaryQueriesChartServicePort(t *testing.T) {
 	}
 }
 
+func TestRestartTargetReadyRequiresNewObservedCompleteRollout(t *testing.T) {
+	statefulSet := map[string]any{
+		"metadata": map[string]any{"generation": float64(8)},
+		"spec":     map[string]any{"replicas": float64(1)},
+		"status": map[string]any{
+			"observedGeneration": float64(8), "readyReplicas": float64(1), "updatedReplicas": float64(1),
+			"currentRevision": "revision-2", "updateRevision": "revision-2",
+		},
+	}
+	if !restartTargetReady(statefulSet, "StatefulSet", 7) {
+		t.Fatal("new observed Ready StatefulSet rollout was not accepted")
+	}
+	if restartTargetReady(statefulSet, "StatefulSet", 8) {
+		t.Fatal("unchanged workload generation was accepted as restart recovery")
+	}
+	statefulSet["status"].(map[string]any)["readyReplicas"] = float64(0)
+	if restartTargetReady(statefulSet, "StatefulSet", 7) {
+		t.Fatal("new but unavailable workload generation was accepted as restart recovery")
+	}
+}
+
 func TestValidateAppPreviewBindsImmutableInputs(t *testing.T) {
 	release := catalogRelease{VersionID: "version-1", Version: "1.2.3", Digest: "sha256:abc"}
 	body := map[string]any{"data": map[string]any{

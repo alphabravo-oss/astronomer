@@ -371,11 +371,22 @@ func evaluateToolRestartRecovery(ctx context.Context, client *http.Client, execu
 	if !found {
 		return dimensionResult{Name: "restart_recovery", State: "FAIL", Reason: "no supported API restart target is defined for this chart workload", ObservedAt: time.Now().UTC(), TargetClusterID: clusterID}
 	}
+	beforeGeneration, err := restartTargetGeneration(ctx, client, execution, clusterID, target)
+	if err != nil {
+		result := failedDimension("restart_recovery", fmt.Errorf("read core workload before restart: %w", err))
+		result.TargetClusterID = clusterID
+		return result
+	}
 	path := fmt.Sprintf("/api/v1/clusters/%s/workloads/%s/%s/%s/restart/",
 		url.PathEscape(clusterID), url.PathEscape(target.Kind), url.PathEscape(target.Namespace), url.PathEscape(target.Name))
 	restart, key, err := executeToolMutation(ctx, client, execution, http.MethodPost, path, nil, slug+"-restart-recovery")
 	if err != nil {
 		result := failedDimension("restart_recovery", fmt.Errorf("restart core workload through API: %w", err))
+		result.TargetClusterID = clusterID
+		return result
+	}
+	if err := waitRestartTargetReady(ctx, client, execution, clusterID, target, beforeGeneration); err != nil {
+		result := failedDimension("restart_recovery", fmt.Errorf("wait for restarted core workload: %w", err))
 		result.TargetClusterID = clusterID
 		return result
 	}

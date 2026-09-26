@@ -571,16 +571,99 @@ func evaluateAppRestartRecovery(ctx context.Context, client *http.Client, execut
 	if err != nil {
 		return failedRestart(clusterID, err)
 	}
+	beforeGeneration, err := restartTargetGeneration(ctx, client, execution, clusterID, target)
+	if err != nil {
+		return failedRestart(clusterID, fmt.Errorf("read workload before restart: %w", err))
+	}
 	path := fmt.Sprintf("/api/v1/clusters/%s/workloads/%s/%s/%s/restart/", url.PathEscape(clusterID), url.PathEscape(target.Kind), url.PathEscape(target.Namespace), url.PathEscape(target.Name))
 	restart, key, err := executeToolMutation(ctx, client, execution, http.MethodPost, path, nil, slug+"-app-restart-recovery")
 	if err != nil {
 		return failedRestart(clusterID, err)
+	}
+	if err := waitRestartTargetReady(ctx, client, execution, clusterID, target, beforeGeneration); err != nil {
+		return failedRestart(clusterID, fmt.Errorf("wait for restarted workload: %w", err))
 	}
 	canary := evaluateAppCanary(ctx, client, execution, slug, clusterID, spec, "post-restart")
 	if canary.State != "PASS" {
 		return failedRestart(clusterID, fmt.Errorf("post-restart canary failed: %s", canary.Reason))
 	}
 	return dimensionResult{Name: "restart_recovery", State: "PASS", Reason: "API restart completed and post-restart canary passed: " + canary.Reason, ObservedAt: time.Now().UTC(), HTTPStatus: http.StatusAccepted, OperationID: restart.ID, ArtifactSHA: canary.ArtifactSHA, IdempotencyKey: key, SampleAt: canary.SampleAt, TargetClusterID: clusterID}
+}
+
+func restartTargetGeneration(ctx context.Context, client *http.Client, execution executionContext, clusterID string, target toolRestartTarget) (int64, error) {
+	object, err := restartTargetObject(ctx, client, execution, clusterID, target)
+	if err != nil {
+		return 0, err
+	}
+	metadata, _ := object["metadata"].(map[string]any)
+	generation := numberField64(metadata, "generation")
+	if generation < 1 {
+		return 0, errors.New("workload metadata lacked generation")
+	}
+	return generation, nil
+}
+
+func waitRestartTargetReady(ctx context.Context, client *http.Client, execution executionContext, clusterID string, target toolRestartTarget, beforeGeneration int64) error {
+	for {
+		object, err := restartTargetObject(ctx, client, execution, clusterID, target)
+		if err == nil && restartTargetReady(object, target.Kind, beforeGeneration) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%s %s/%s did not complete a new rollout: %w", target.Kind, target.Namespace, target.Name, ctx.Err())
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
+func restartTargetObject(ctx context.Context, client *http.Client, execution executionContext, clusterID string, target toolRestartTarget) (map[string]any, error) {
+	plurals := map[string]string{"Deployment": "deployments", "StatefulSet": "statefulsets", "DaemonSet": "daemonsets"}
+	plural := plurals[target.Kind]
+	if plural == "" {
+		return nil, fmt.Errorf("unsupported restart target kind %q", target.Kind)
+	}
+	path := fmt.Sprintf("/api/v1/clusters/%s/k8s/apis/apps/v1/namespaces/%s/%s/%s", url.PathEscape(clusterID), url.PathEscape(target.Namespace), plural, url.PathEscape(target.Name))
+	response, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodGet, path, nil, "", http.StatusOK)
+	if err != nil {
+		return nil, err
+	}
+	object, ok := response.Body.(map[string]any)
+	if !ok {
+		return nil, errors.New("workload response was not an object")
+	}
+	return object, nil
+}
+
+func restartTargetReady(object map[string]any, kind string, beforeGeneration int64) bool {
+	metadata, _ := object["metadata"].(map[string]any)
+	spec, _ := object["spec"].(map[string]any)
+	status, _ := object["status"].(map[string]any)
+	generation := numberField64(metadata, "generation")
+	if generation <= beforeGeneration || numberField64(status, "observedGeneration") < generation {
+		return false
+	}
+	switch kind {
+	case "Deployment", "StatefulSet":
+		desired := numberField64(spec, "replicas")
+		if desired < 1 {
+			desired = 1
+		}
+		if numberField64(status, "readyReplicas") < desired || numberField64(status, "updatedReplicas") < desired {
+			return false
+		}
+		if kind == "StatefulSet" {
+			current, _ := status["currentRevision"].(string)
+			update, _ := status["updateRevision"].(string)
+			return current != "" && current == update
+		}
+		return numberField64(status, "availableReplicas") >= desired
+	case "DaemonSet":
+		desired := numberField64(status, "desiredNumberScheduled")
+		return desired > 0 && numberField64(status, "numberReady") >= desired && numberField64(status, "updatedNumberScheduled") >= desired
+	default:
+		return false
+	}
 }
 
 func failedRestart(clusterID string, err error) dimensionResult {

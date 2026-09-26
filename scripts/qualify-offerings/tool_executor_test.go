@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -192,10 +193,18 @@ func TestToolIsolationRequiresCrossClusterAbsenceAndRestrictedDenial(t *testing.
 func TestCISRestartRecoveryUsesWorkloadAPIAndRerunsCanary(t *testing.T) {
 	t.Parallel()
 	const clusterID = "00000000-0000-0000-0000-000000000001"
+	var restarted atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/k8s/apis/apps/v1/namespaces/cis-operator-system/deployments/cis-operator"):
+			generation := "1"
+			if restarted.Load() {
+				generation = "2"
+			}
+			_, _ = w.Write([]byte(`{"metadata":{"generation":` + generation + `},"spec":{"replicas":1},"status":{"observedGeneration":` + generation + `,"readyReplicas":1,"updatedReplicas":1,"availableReplicas":1}}`))
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/workloads/Deployment/cis-operator-system/cis-operator/restart/"):
+			restarted.Store(true)
 			w.Header().Set("Location", "/api/v1/workloads/operations/restart-1/")
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = w.Write([]byte(`{"data":{"id":"restart-1","status":"pending"}}`))
