@@ -208,10 +208,126 @@ func stringField(object map[string]any, key string) string {
 	return strings.TrimSpace(value)
 }
 
-func evaluateToolCanary(_ context.Context, _ *http.Client, _ executionContext, slug, clusterID string, status map[string]any) dimensionResult {
+func evaluateToolCanary(ctx context.Context, client *http.Client, execution executionContext, slug, clusterID string, status map[string]any) dimensionResult {
+	if slug == "cis-operator" {
+		return evaluateCISCanary(ctx, client, execution, clusterID, 2*time.Second)
+	}
 	now := time.Now().UTC()
 	raw, _ := json.Marshal(status)
 	return dimensionResult{Name: "functional_canary", State: "FAIL", Reason: fmt.Sprintf("%s installed, but its product-specific API canary has not produced evidence; release readiness is insufficient", slug), ObservedAt: now, ArtifactSHA: digest(raw), SampleAt: &now, TargetClusterID: clusterID}
+}
+
+func evaluateCISCanary(ctx context.Context, client *http.Client, execution executionContext, clusterID string, interval time.Duration) dimensionResult {
+	created, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost,
+		"/api/v1/security/scans/", map[string]any{"cluster_id": clusterID}, "", http.StatusCreated)
+	if err != nil {
+		return failedCanary(clusterID, fmt.Errorf("start CIS scan: %w", err))
+	}
+	scan, err := objectAtPath(created.Body, "data")
+	if err != nil {
+		return failedCanary(clusterID, fmt.Errorf("start CIS scan: %w", err))
+	}
+	scanID := stringField(scan, "id")
+	if scanID == "" || stringField(scan, "cluster_id") != clusterID {
+		return failedCanary(clusterID, fmt.Errorf("CIS scan receipt did not identify the target cluster"))
+	}
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		response, requestErr := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodGet,
+			"/api/v1/security/scans/"+url.PathEscape(scanID)+"/", nil, "", http.StatusOK)
+		if requestErr != nil {
+			return failedCanary(clusterID, fmt.Errorf("poll CIS scan %s: %w", scanID, requestErr))
+		}
+		scan, err = objectAtPath(response.Body, "data")
+		if err != nil {
+			return failedCanary(clusterID, fmt.Errorf("poll CIS scan %s: %w", scanID, err))
+		}
+		if stringField(scan, "id") != scanID || stringField(scan, "cluster_id") != clusterID {
+			return failedCanary(clusterID, fmt.Errorf("CIS scan endpoint returned a different scan or cluster"))
+		}
+		switch strings.ToLower(stringField(scan, "status")) {
+		case "completed":
+			return completedCISCanary(clusterID, scanID, response.Body, scan)
+		case "failed", "cancelled", "canceled", "error":
+			reason := stringField(scan, "terminal_reason")
+			if reason == "" {
+				reason = "no terminal reason was returned"
+			}
+			return failedCanary(clusterID, fmt.Errorf("CIS scan %s failed: %s", scanID, reason))
+		case "pending", "running":
+		default:
+			return failedCanary(clusterID, fmt.Errorf("CIS scan %s returned unknown status %q", scanID, stringField(scan, "status")))
+		}
+		select {
+		case <-ctx.Done():
+			return failedCanary(clusterID, fmt.Errorf("CIS scan %s did not complete: %w", scanID, ctx.Err()))
+		case <-ticker.C:
+		}
+	}
+}
+
+func completedCISCanary(clusterID, scanID string, body any, scan map[string]any) dimensionResult {
+	findings, ok := scan["findings"].([]any)
+	if !ok || len(findings) == 0 {
+		return failedCanary(clusterID, fmt.Errorf("CIS scan %s completed without ingested findings", scanID))
+	}
+	total := numberField(scan, "passed") + numberField(scan, "failed") + numberField(scan, "warned") + numberField(scan, "skipped")
+	if total <= 0 {
+		return failedCanary(clusterID, fmt.Errorf("CIS scan %s completed without benchmark result counts", scanID))
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return failedCanary(clusterID, fmt.Errorf("encode CIS scan %s evidence: %w", scanID, err))
+	}
+	now := time.Now().UTC()
+	return dimensionResult{
+		Name:            "functional_canary",
+		State:           "PASS",
+		Reason:          fmt.Sprintf("CIS scan %s completed with %d benchmark results and %d ingested findings", scanID, total, len(findings)),
+		ObservedAt:      now,
+		HTTPStatus:      http.StatusOK,
+		OperationID:     scanID,
+		ArtifactSHA:     digest(raw),
+		SampleAt:        &now,
+		TargetClusterID: clusterID,
+	}
+}
+
+func failedCanary(clusterID string, err error) dimensionResult {
+	result := failedDimension("functional_canary", err)
+	result.TargetClusterID = clusterID
+	return result
+}
+
+func objectAtPath(body any, path string) (map[string]any, error) {
+	value, err := valueAtPath(body, path)
+	if err != nil {
+		return nil, err
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s was not an object", path)
+	}
+	return object, nil
+}
+
+func numberField(object map[string]any, key string) int {
+	switch value := object[key].(type) {
+	case json.Number:
+		result, _ := value.Int64()
+		return int(result)
+	case float64:
+		return int(value)
+	case int:
+		return value
+	default:
+		return 0
+	}
 }
 
 func evaluateToolIsolation(ctx context.Context, client *http.Client, execution executionContext, slug, targetClusterID string) dimensionResult {
