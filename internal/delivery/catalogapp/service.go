@@ -135,11 +135,17 @@ func (s *Service) apply(ctx context.Context, request InstallRequest, pendingStat
 	result.RolloutID = plan.ID
 	if _, err := s.pool.Exec(ctx, `
 		UPDATE installed_charts
-		SET request_id=$2,status=$3,updated_at=now()
-		WHERE id=$1`, request.InstallationID, result.TargetID, pendingStatus); err != nil {
+		SET request_id=$2,status=$3,
+			revision=revision+CASE WHEN $4 THEN 1 ELSE 0 END,
+			updated_at=now()
+		WHERE id=$1`, request.InstallationID, result.TargetID, pendingStatus, advancesInstallationRevision(pendingStatus)); err != nil {
 		return InstallResult{}, fmt.Errorf("link catalog installation to delivery target: %w", err)
 	}
 	return result, nil
+}
+
+func advancesInstallationRevision(pendingStatus string) bool {
+	return pendingStatus == "upgrading"
 }
 
 // Status projects the authoritative per-cluster Flux deployment state back to

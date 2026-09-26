@@ -18,3 +18,18 @@ func TestProjectStatusPrefersDeletionLifecycle(t *testing.T) {
 		})
 	}
 }
+
+func TestOnlyUpgradeAdvancesInstallationRevision(t *testing.T) {
+	for _, test := range []struct {
+		status string
+		want   bool
+	}{
+		{status: "installing", want: false},
+		{status: "upgrading", want: true},
+		{status: "rolling_back", want: false},
+	} {
+		if got := advancesInstallationRevision(test.status); got != test.want {
+			t.Fatalf("advancesInstallationRevision(%q) = %t, want %t", test.status, got, test.want)
+		}
+	}
+}
