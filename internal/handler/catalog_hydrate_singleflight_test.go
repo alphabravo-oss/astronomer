@@ -113,7 +113,7 @@ func TestHydrateChartVersionEnforcesEndToEndDeadline(t *testing.T) {
 
 func TestHydrateChartVersionRefreshesLegacySchemaCache(t *testing.T) {
 	current := sqlc.HelmChartVersion{
-		ValuesSchema:      []byte(`{"type":"object","x-astronomer-hydration-version":2}`),
+		ValuesSchema:      []byte(`{"type":"object","x-astronomer-hydration-version":3}`),
 		ContentHydratedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
 	if _, err := (*CatalogHandler)(nil).hydrateChartVersion(context.Background(), current); err != nil {

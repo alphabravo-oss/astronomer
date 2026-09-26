@@ -103,7 +103,12 @@ func overlayRancherQuestion(root map[string]any, question rancherQuestion, inher
 		node["x-astronomer-group"] = question.Group
 	}
 	if questionType := rancherQuestionJSONType(question.Type); questionType != "" {
-		node["type"] = questionType
+		if defaultNull, _ := node["x-astronomer-default-null"].(bool); defaultNull {
+			node["type"] = []any{questionType, "null"}
+			delete(node, "x-astronomer-default-null")
+		} else {
+			node["type"] = questionType
+		}
 	}
 	if question.Default != nil {
 		node["default"] = question.Default

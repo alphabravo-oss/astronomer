@@ -82,6 +82,39 @@ func TestEnrichSchemaWithRancherQuestionRequiredTooltipAndReferenceMetadata(t *t
 	}
 }
 
+func TestEnrichSchemaKeepsNullChartDefaultValid(t *testing.T) {
+	base := inferSchema(map[string]any{
+		"persistence": map[string]any{
+			"backingImage": map[string]any{"dataSourceParameters": nil},
+		},
+	})
+	raw := []byte(`questions:
+- variable: persistence.backingImage.dataSourceParameters
+  type: string
+  label: Backing image parameters
+`)
+	enriched := enrichSchemaWithRancherQuestions(base, raw)
+	var schema map[string]any
+	if err := json.Unmarshal(enriched, &schema); err != nil {
+		t.Fatal(err)
+	}
+	node := schema["properties"].(map[string]any)["persistence"].(map[string]any)["properties"].(map[string]any)["backingImage"].(map[string]any)["properties"].(map[string]any)["dataSourceParameters"].(map[string]any)
+	types, ok := node["type"].([]any)
+	if !ok || len(types) != 2 || types[0] != "string" || types[1] != "null" {
+		t.Fatalf("nullable question type = %#v", node["type"])
+	}
+	if _, leaked := node["x-astronomer-default-null"]; leaked {
+		t.Fatal("internal null marker leaked into enriched field schema")
+	}
+	if err := validateCatalogValuesSchema(enriched, map[string]any{
+		"persistence": map[string]any{
+			"backingImage": map[string]any{"dataSourceParameters": nil},
+		},
+	}); err != nil {
+		t.Fatalf("chart default null should validate: %v", err)
+	}
+}
+
 func TestEnrichSchemaRejectsUnsafeQuestionPath(t *testing.T) {
 	base := inferSchema(map[string]any{"safe": "value"})
 	enriched := enrichSchemaWithRancherQuestions(base, []byte("questions:\n- variable: __proto__.polluted\n  label: Bad\n"))

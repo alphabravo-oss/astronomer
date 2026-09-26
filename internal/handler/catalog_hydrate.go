@@ -50,7 +50,7 @@ const chartArchiveMaxBytes = 50 * 1024 * 1024
 // pin an API handler for the HTTP client's former 60-second timeout.
 const defaultChartHydrationTimeout = 10 * time.Second
 
-const chartSchemaHydrationVersion = 2
+const chartSchemaHydrationVersion = 3
 
 func (h *CatalogHandler) effectiveChartHydrationTimeout() time.Duration {
 	if h != nil && h.chartHydrationTimeout > 0 {
@@ -384,6 +384,10 @@ func inferNode(v interface{}, depth int) interface{} {
 	case float64, int, int64:
 		return map[string]interface{}{"type": "number"}
 	default:
-		return map[string]interface{}{} // nil / unknown: no type constraint
+		// Preserve that values.yaml explicitly supplied null so a later
+		// Rancher questions.yaml type can remain nullable. Without this marker,
+		// question enrichment turns an optional null chart default into a strict
+		// scalar and preview rejects the chart's own effective values.
+		return map[string]interface{}{"x-astronomer-default-null": true}
 	}
 }

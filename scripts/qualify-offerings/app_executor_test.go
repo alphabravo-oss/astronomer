@@ -65,12 +65,28 @@ func TestLokiUsesFunctionalSingleBinaryFilesystemProfile(t *testing.T) {
 	spec := appSpec("loki", memberTarget{}, "7.3.0")
 	for _, required := range []string{
 		"deploymentMode: SingleBinary",
+		"useTestSchema: true",
 		"replication_factor: 1",
 		"storage:\n    type: filesystem",
 		"minio:\n  enabled: false",
 	} {
 		if !strings.Contains(spec.Values, required) {
 			t.Fatalf("loki values %q do not contain %q", spec.Values, required)
+		}
+	}
+}
+
+func TestFunctionalProfilesIncludeRequiredRuntimeIdentity(t *testing.T) {
+	checks := map[string][]string{
+		"external-dns":            {"provider:\n  name: inmemory", "txtOwnerId: astronomer-qualification"},
+		"opentelemetry-collector": {"mode: deployment", "repository: otel/opentelemetry-collector-k8s"},
+	}
+	for slug, required := range checks {
+		spec := appSpec(slug, memberTarget{}, "1.0.0")
+		for _, value := range required {
+			if !strings.Contains(spec.Values, value) {
+				t.Errorf("%s values %q do not contain %q", slug, spec.Values, value)
+			}
 		}
 	}
 }
