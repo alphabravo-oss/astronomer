@@ -72,6 +72,7 @@ import {
   curateHelmValuesSchema,
   recommendedCatalogNamespace,
 } from "@/lib/catalog-chart-fields";
+import { catalogInstallDefaultValues } from "@/lib/catalog-install-defaults";
 
 type Mode =
   | { kind: "install"; chartId: string; chartName: string }
@@ -245,7 +246,13 @@ export function AppInstallModal({
     if (defaultValues.isError || !defaultValues.data) return;
     const key = selectedVersionId;
     if (hydratedForVersion.current === key) return;
-    form.setFieldValue("valuesYaml", defaultValues.data.defaultValues);
+    form.setFieldValue(
+      "valuesYaml",
+      catalogInstallDefaultValues(
+        mode.chartName,
+        defaultValues.data.defaultValues,
+      ),
+    );
     hydratedForVersion.current = key;
   }, [
     defaultValues.data,

@@ -160,4 +160,10 @@ it("exposes audited kube-prometheus-stack subchart values", () => {
       size: expect.objectContaining({ type: "string" }),
     }),
   );
+  expect(curated.properties?.prometheusOperator?.properties?.enabled).toEqual(
+    expect.objectContaining({
+      type: "boolean",
+      title: "Deploy Prometheus Operator",
+    }),
+  );
 });

@@ -139,6 +139,12 @@ const CURATED_FIELDS: Record<string, CuratedField[]> = {
     resourceRequirements("resources"),
   ],
   "kube-prometheus-stack": [
+    field(
+      "prometheusOperator.enabled",
+      "Deploy Prometheus Operator",
+      "Disable this when the cluster already has a Prometheus Operator managing the same CRDs.",
+      { type: "boolean" },
+    ),
     field("prometheus.prometheusSpec.scrapeInterval", "Scrape interval"),
     field(
       "prometheus.prometheusSpec.evaluationInterval",

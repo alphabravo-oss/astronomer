@@ -189,7 +189,7 @@ func appSpec(slug string, target memberTarget, chartVersion string) appInstallSp
 	values := map[string]string{
 		"constellation":            fmt.Sprintf("image:\n  tag: %s\n", constellationTag),
 		"prometheus-node-exporter": "hostNetwork: false\nhostPID: false\n",
-		"kube-prometheus-stack":    "nodeExporter:\n  enabled: false\nkubeStateMetrics:\n  enabled: false\n",
+		"kube-prometheus-stack":    "prometheusOperator:\n  enabled: false\nnodeExporter:\n  enabled: false\nkubeStateMetrics:\n  enabled: false\n",
 		"fluent-bit":               "config:\n  outputs: |\n    [OUTPUT]\n        Name stdout\n        Match *\n",
 		"cert-manager":             "crds:\n  enabled: true\nstartupapicheck:\n  enabled: true\n",
 		"external-dns":             "provider:\n  name: inmemory\nsources:\n  - service\npolicy: sync\nregistry: noop\ninterval: 5s\n",

@@ -66,6 +66,25 @@ func TestResumeRetriesLocallyBlockedCasesButPreservesExternalBlocks(t *testing.T
 	}
 }
 
+func TestBeginCaseAttemptDropsPriorTerminalDimensions(t *testing.T) {
+	completed := time.Now().UTC().Add(-time.Minute)
+	started := time.Now().UTC()
+	result := beginCaseAttempt(caseResult{
+		ID: "APP-05", State: "BLOCKED", Reason: "old blocker", Attempts: 1,
+		CompletedAt: &completed,
+		Dimensions:  []dimensionResult{{Name: "inventory", State: "BLOCKED", Reason: "old footprint"}},
+	}, started)
+	if result.State != "RUNNING" || result.Reason != "case executor started" || result.Attempts != 2 {
+		t.Fatalf("resumed attempt metadata = %#v", result)
+	}
+	if result.StartedAt == nil || !result.StartedAt.Equal(started) || result.CompletedAt != nil {
+		t.Fatalf("resumed attempt timestamps = %#v", result)
+	}
+	if len(result.Dimensions) != 0 {
+		t.Fatalf("resumed attempt retained terminal dimensions: %#v", result.Dimensions)
+	}
+}
+
 func TestDexToolExecutorPassesOnlyOnExplicitManagementOnlyRejection(t *testing.T) {
 	clusterID := "00000000-0000-0000-0000-000000000001"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

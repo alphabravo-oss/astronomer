@@ -103,6 +103,9 @@ describe("AppInstallModal", () => {
     expect(
       screen.getByRole("textbox", { name: "Scrape interval" }),
     ).toHaveValue("30s");
+    expect(
+      screen.getByRole("checkbox", { name: "Deploy Prometheus Operator" }),
+    ).not.toBeChecked();
 
     fireEvent.click(screen.getByRole("button", { name: "YAML" }));
     await waitFor(() =>

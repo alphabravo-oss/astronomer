@@ -130,11 +130,7 @@ func runQualification(ctx context.Context, args []string) error {
 			continue
 		}
 		now := time.Now().UTC()
-		current.State = "RUNNING"
-		current.Reason = "case executor started"
-		current.Attempts++
-		current.StartedAt = &now
-		current.CompletedAt = nil
+		current = beginCaseAttempt(current, now)
 		if err := checkpoint(current); err != nil {
 			return err
 		}
@@ -163,6 +159,21 @@ func runQualification(ctx context.Context, args []string) error {
 	}
 	fmt.Printf("qualify-offerings: run checkpointed; cases=%d states=%v evidence=%s\n", len(selected), result.Summary.ByState, *outputPath)
 	return nil
+}
+
+// beginCaseAttempt retains the monotonic attempt count while replacing the
+// previous attempt's terminal evidence. A resumed case must be able to pass
+// after its blocker is fixed; carrying an earlier FAIL/BLOCKED dimension into
+// finalizeDimensions would make retries permanently fail even when every
+// current observation succeeds.
+func beginCaseAttempt(result caseResult, started time.Time) caseResult {
+	result.State = "RUNNING"
+	result.Reason = "case executor started"
+	result.Attempts++
+	result.StartedAt = &started
+	result.CompletedAt = nil
+	result.Dimensions = nil
+	return result
 }
 
 func qualificationCleanup(result report) cleanupResult {

@@ -51,7 +51,11 @@ func TestConstellationUsesSystemNamespace(t *testing.T) {
 
 func TestKubePrometheusStackAvoidsBaselineExporterOwnership(t *testing.T) {
 	spec := appSpec("kube-prometheus-stack", memberTarget{}, "88.5.4")
-	for _, required := range []string{"nodeExporter:\n  enabled: false", "kubeStateMetrics:\n  enabled: false"} {
+	for _, required := range []string{
+		"prometheusOperator:\n  enabled: false",
+		"nodeExporter:\n  enabled: false",
+		"kubeStateMetrics:\n  enabled: false",
+	} {
 		if !strings.Contains(spec.Values, required) {
 			t.Fatalf("kube-prometheus-stack values %q do not contain %q", spec.Values, required)
 		}
