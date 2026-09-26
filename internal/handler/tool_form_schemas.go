@@ -160,7 +160,7 @@ var toolFormSchemas = map[string]ToolFormSchema{
 		{Path: "webhook.replicaCount", Label: "Webhook replicas", Type: toolFieldNumber, Group: "Scaling", Default: "1", Minimum: numberBound(1), Maximum: numberBound(100), Step: numberBound(1)},
 		{Path: "cainjector.replicaCount", Label: "CA injector replicas", Type: toolFieldNumber, Group: "Scaling", Default: "1", Minimum: numberBound(1), Maximum: numberBound(100), Step: numberBound(1)},
 		{Path: "prometheus.enabled", Label: "Expose Prometheus metrics", Type: toolFieldBoolean, Group: "Monitoring", Default: "true"},
-		{Path: "startupapicheck.enabled", Label: "Wait for the cert-manager API", Type: toolFieldBoolean, Group: "General", Default: "false"},
+		{Path: "startupapicheck.enabled", Label: "Wait for the cert-manager API", Type: toolFieldBoolean, Group: "General", Default: "true", Help: "Keeps installation in progress until the webhook CA is injected and the cert-manager API answers successfully."},
 	}, resourceFields("resources.", "10m", "32Mi", "128Mi")...)},
 
 	"gatekeeper": {Fields: append([]ToolFormField{
