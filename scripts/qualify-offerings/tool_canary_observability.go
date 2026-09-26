@@ -22,8 +22,9 @@ func evaluateIngressCanary(ctx context.Context, client *http.Client, execution e
 	clusterBase := "/api/v1/clusters/" + url.PathEscape(clusterID) + "/k8s"
 	coreBase := clusterBase + "/api/v1/namespaces/" + url.PathEscape(namespace)
 	ingressBase := clusterBase + "/apis/networking.k8s.io/v1/namespaces/" + url.PathEscape(namespace)
-	podPath, servicePath, ingressPath := coreBase+"/pods/"+name, coreBase+"/services/"+name, ingressBase+"/ingresses/"+name
-	podCreated, serviceCreated, ingressCreated := false, false, false
+	podPath, servicePath := coreBase+"/pods/"+name, coreBase+"/services/"+name
+	ingressPath, networkPolicyPath := ingressBase+"/ingresses/"+name, ingressBase+"/networkpolicies/"+name
+	podCreated, serviceCreated, networkPolicyCreated, ingressCreated := false, false, false, false
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
@@ -31,7 +32,7 @@ func evaluateIngressCanary(ctx context.Context, client *http.Client, execution e
 		for _, item := range []struct {
 			created bool
 			path    string
-		}{{ingressCreated, ingressPath}, {serviceCreated, servicePath}, {podCreated, podPath}} {
+		}{{ingressCreated, ingressPath}, {networkPolicyCreated, networkPolicyPath}, {serviceCreated, servicePath}, {podCreated, podPath}} {
 			if !item.created {
 				continue
 			}
@@ -85,6 +86,22 @@ func evaluateIngressCanary(ctx context.Context, client *http.Client, execution e
 		return failedCanary(clusterID, fmt.Errorf("create ingress canary Service: %w", err))
 	}
 	serviceCreated = true
+	networkPolicy := map[string]any{
+		"apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
+		"metadata": map[string]any{"name": name, "namespace": namespace, "labels": labels},
+		"spec": map[string]any{
+			"podSelector": map[string]any{"matchLabels": map[string]any{"app.kubernetes.io/name": name}},
+			"policyTypes": []any{"Ingress"},
+			"ingress": []any{map[string]any{
+				"from":  []any{map[string]any{"namespaceSelector": map[string]any{"matchLabels": map[string]any{"kubernetes.io/metadata.name": "astronomer-ingress-nginx"}}}},
+				"ports": []any{map[string]any{"protocol": "TCP", "port": 8080}},
+			}},
+		},
+	}
+	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, ingressBase+"/networkpolicies", networkPolicy, "", http.StatusCreated); err != nil {
+		return failedCanary(clusterID, fmt.Errorf("allow ingress controller to reach canary backend: %w", err))
+	}
+	networkPolicyCreated = true
 	ingress := map[string]any{
 		"apiVersion": "networking.k8s.io/v1", "kind": "Ingress",
 		"metadata": map[string]any{
