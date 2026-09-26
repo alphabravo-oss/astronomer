@@ -186,7 +186,7 @@ func evaluateCloudNativePGCanary(ctx context.Context, client *http.Client, execu
 		case <-time.After(3 * time.Second):
 		}
 	}
-	job := map[string]any{"apiVersion": "batch/v1", "kind": "Job", "metadata": map[string]any{"name": name, "namespace": namespace}, "spec": map[string]any{"backoffLimit": 1, "template": map[string]any{"spec": map[string]any{"restartPolicy": "Never", "containers": []any{map[string]any{"name": "psql", "image": "postgres:16-alpine", "env": []any{map[string]any{"name": "PGUSER", "valueFrom": map[string]any{"secretKeyRef": map[string]any{"name": name + "-app", "key": "username"}}}, map[string]any{"name": "PGPASSWORD", "valueFrom": map[string]any{"secretKeyRef": map[string]any{"name": name + "-app", "key": "password"}}}, map[string]any{"name": "PGDATABASE", "valueFrom": map[string]any{"secretKeyRef": map[string]any{"name": name + "-app", "key": "dbname"}}}, map[string]any{"name": "PGHOST", "value": name + "-rw"}}, "command": []any{"sh", "-ec", "psql -v ON_ERROR_STOP=1 -c \"CREATE TABLE qualification(value text); INSERT INTO qualification VALUES ('persisted');\" && psql -Atc \"SELECT value FROM qualification\""}}}}}}}
+	job := map[string]any{"apiVersion": "batch/v1", "kind": "Job", "metadata": map[string]any{"name": name, "namespace": namespace}, "spec": map[string]any{"backoffLimit": 2, "template": map[string]any{"spec": map[string]any{"restartPolicy": "Never", "containers": []any{map[string]any{"name": "psql", "image": "postgres:16-alpine", "env": []any{map[string]any{"name": "PGUSER", "valueFrom": map[string]any{"secretKeyRef": map[string]any{"name": name + "-app", "key": "username"}}}, map[string]any{"name": "PGPASSWORD", "valueFrom": map[string]any{"secretKeyRef": map[string]any{"name": name + "-app", "key": "password"}}}, map[string]any{"name": "PGDATABASE", "valueFrom": map[string]any{"secretKeyRef": map[string]any{"name": name + "-app", "key": "dbname"}}}, map[string]any{"name": "PGHOST", "value": name + "-rw"}}, "command": []any{"sh", "-ec", "for attempt in $(seq 1 60); do pg_isready -t 2 && break; sleep 2; done; pg_isready -t 2; psql -v ON_ERROR_STOP=1 -c \"CREATE TABLE IF NOT EXISTS qualification(value text); TRUNCATE qualification; INSERT INTO qualification VALUES ('persisted');\"; test \"$(psql -Atc 'SELECT value FROM qualification')\" = persisted"}}}}}}}
 	jobCollection := base + "/k8s/apis/batch/v1/namespaces/" + url.PathEscape(namespace) + "/jobs"
 	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, jobCollection, job, "", http.StatusCreated); err != nil {
 		return failedCanary(clusterID, fmt.Errorf("create CloudNativePG SQL job: %w", err))
@@ -204,7 +204,7 @@ func evaluateCloudNativePGCanary(ctx context.Context, client *http.Client, execu
 			now := time.Now().UTC()
 			return dimensionResult{Name: "functional_canary", State: "PASS", Reason: "CloudNativePG reconciled a database cluster and a client Job completed a SQL write/read transaction", ObservedAt: now, HTTPStatus: response.Status, ArtifactSHA: digest(raw), SampleAt: &now, TargetClusterID: clusterID}
 		}
-		if numberField(statusObj, "failed") > 0 {
+		if k8sStatusConditionTrue(statusObj, "Failed") {
 			return failedCanary(clusterID, errors.New("CloudNativePG SQL transaction Job failed"))
 		}
 		select {
@@ -213,6 +213,17 @@ func evaluateCloudNativePGCanary(ctx context.Context, client *http.Client, execu
 		case <-time.After(3 * time.Second):
 		}
 	}
+}
+
+func k8sStatusConditionTrue(status map[string]any, conditionType string) bool {
+	conditions, _ := status["conditions"].([]any)
+	for _, item := range conditions {
+		condition, _ := item.(map[string]any)
+		if stringField(condition, "type") == conditionType && strings.EqualFold(stringField(condition, "status"), "True") {
+			return true
+		}
+	}
+	return false
 }
 
 func evaluateMetricsServerCanary(ctx context.Context, client *http.Client, execution executionContext, clusterID string) dimensionResult {

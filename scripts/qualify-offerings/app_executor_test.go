@@ -184,6 +184,17 @@ func TestRestartTargetReadyRequiresNewObservedCompleteRollout(t *testing.T) {
 	}
 }
 
+func TestJobFailureRequiresTerminalCondition(t *testing.T) {
+	status := map[string]any{"failed": float64(1), "active": float64(1)}
+	if k8sStatusConditionTrue(status, "Failed") {
+		t.Fatal("a retryable failed pod was treated as terminal Job failure")
+	}
+	status["conditions"] = []any{map[string]any{"type": "Failed", "status": "True"}}
+	if !k8sStatusConditionTrue(status, "Failed") {
+		t.Fatal("terminal Job failure condition was not detected")
+	}
+}
+
 func TestValidateAppPreviewBindsImmutableInputs(t *testing.T) {
 	release := catalogRelease{VersionID: "version-1", Version: "1.2.3", Digest: "sha256:abc"}
 	body := map[string]any{"data": map[string]any{
