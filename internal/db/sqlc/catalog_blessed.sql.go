@@ -103,6 +103,47 @@ func (q *Queries) GetApplicationCatalogPresentationByChartVersion(ctx context.Co
 	return i, err
 }
 
+const listApplicationCatalogPinsByRepository = `-- name: ListApplicationCatalogPinsByRepository :many
+SELECT b.chart_name, COALESCE(b.artifact->>'version', '')::text AS version
+FROM catalog_blessed_charts b
+JOIN helm_repositories r
+  ON r.id = $1
+ AND rtrim(b.repo_url, '/') = rtrim(r.url, '/')
+WHERE b.source = 'catalog-v1'
+  AND NOT b.revoked
+  AND COALESCE(b.artifact->>'version', '') <> ''
+ORDER BY b.chart_name, version
+`
+
+type ListApplicationCatalogPinsByRepositoryRow struct {
+	ChartName string `json:"chart_name"`
+	Version   string `json:"version"`
+}
+
+// Repository browsing intentionally keeps only a small rolling window of
+// recent releases.  A verified application pin is part of the product's
+// install contract, so retain it even after newer upstream releases push it
+// outside that window.
+func (q *Queries) ListApplicationCatalogPinsByRepository(ctx context.Context, repositoryID uuid.UUID) ([]ListApplicationCatalogPinsByRepositoryRow, error) {
+	rows, err := q.db.Query(ctx, listApplicationCatalogPinsByRepository, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListApplicationCatalogPinsByRepositoryRow{}
+	for rows.Next() {
+		var i ListApplicationCatalogPinsByRepositoryRow
+		if err := rows.Scan(&i.ChartName, &i.Version); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listApplicationCatalogPresentations = `-- name: ListApplicationCatalogPresentations :many
 SELECT id, slug, repo_name, repo_url, chart_name, display_name, description,
        category, icon_url, support_tier, featured, privileged, default_enabled,

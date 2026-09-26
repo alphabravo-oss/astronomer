@@ -378,11 +378,18 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 	repositoryID := repoRecord.ID
 	// Sort each chart's versions newest-first so the last-N cap keeps recent releases.
 	indexFile.SortEntries()
+	pinnedVersions, err := catalog.ApplicationCatalogPinsByRepository(ctx, runtimeDependencies(ctx).Queries, repositoryID)
+	if err != nil {
+		return fmt.Errorf("load application catalog pins: %w", err)
+	}
 	seenCharts := map[string]struct{}{}
 	for chartName, versions := range indexFile.Entries {
-		if len(versions) > catalogMaxVersionsPerChart {
-			versions = versions[:catalogMaxVersionsPerChart]
-		}
+		versions = catalog.RetainRecentOrPinnedVersions(versions, func(version *repo.ChartVersion) string {
+			if version == nil {
+				return ""
+			}
+			return version.Version
+		}, pinnedVersions[chartName])
 		seenCharts[chartName] = struct{}{}
 		chart, err := runtimeDependencies(ctx).Queries.GetHelmChartByRepoAndName(ctx, sqlc.GetHelmChartByRepoAndNameParams{
 			RepositoryID: repositoryID,
