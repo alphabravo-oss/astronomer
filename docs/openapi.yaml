@@ -1555,6 +1555,15 @@ components:
         desiredSpecHash: {type: string}
         requiresReplace: {type: boolean}
         replaceReasons: {type: array, nullable: true, items: {type: string}}
+        baselineOwnership:
+          type: object
+          additionalProperties: false
+          required: [detected, mode, components]
+          properties:
+            detected: {type: boolean}
+            mode: {type: string, enum: [full_stack, reuse]}
+            components: {type: array, items: {type: string}}
+            message: {type: string}
     MonitoringStackStatus:
       type: object
       additionalProperties: false

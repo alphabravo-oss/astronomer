@@ -4099,6 +4099,12 @@ export interface OpenAPIComponents {
           "desiredSpecHash": string;
           "requiresReplace": boolean;
           "replaceReasons": string[] | null;
+          "baselineOwnership"?: {
+            "detected": boolean;
+            "mode": "full_stack" | "reuse";
+            "components": string[];
+            "message"?: string;
+          };
         };
     MonitoringStackPreviewEnvelope: {
           "data": OpenAPIComponents['schemas']['MonitoringStackPreview'];

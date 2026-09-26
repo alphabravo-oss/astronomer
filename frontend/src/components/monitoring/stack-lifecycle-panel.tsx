@@ -367,13 +367,13 @@ export function StackLifecyclePanel({
               size="sm"
               intent="primary"
               icon={<Download className="h-3.5 w-3.5" />}
-              onClick={() => void run("install")}
+              onClick={openPreview}
               loading={controller.isEnqueuing}
               loadingLabel="Queueing"
               disabled={!!blockReason}
               disabledReason={blockReason}
             >
-              Install
+              Review &amp; install
             </ActionButton>
           )}
           {editing && installed && canUpdate && (

@@ -176,16 +176,18 @@ func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request)
 	}
 	cfg, ok, _ := h.loadStackConfig(r.Context(), clusterID)
 	replaceRequired, reasons := clusterMonitoringReplaceRequired(cfg, ok, req)
+	baselineOwnership := h.clusterMetricsBaselineOwnership(r.Context(), clusterID)
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"clusterId": clusterID,
 		"chart": map[string]any{
 			"repoUrl":   "https://prometheus-community.github.io/helm-charts",
 			"chartName": "kube-prometheus-stack",
 		},
-		"values":          sanitizeMonitoringValues(values),
-		"desiredSpecHash": specHash(values),
-		"requiresReplace": replaceRequired,
-		"replaceReasons":  reasons,
+		"values":            sanitizeMonitoringValues(values),
+		"desiredSpecHash":   specHash(values),
+		"requiresReplace":   replaceRequired,
+		"replaceReasons":    reasons,
+		"baselineOwnership": baselineOwnership,
 	})
 }
 
@@ -554,6 +556,15 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 		"kube-state-metrics": map[string]any{
 			"metricLabelsAllowlist": monitoringKubeStateMetricLabelAllowlist,
 		},
+	}
+	if h.clusterMetricsBaselineOwnership(ctx, clusterID).Detected {
+		// Quick Start already owns these exporters through immutable Flux
+		// delivery targets. Reuse them instead of creating a second owner. This
+		// also means uninstalling the full stack naturally falls back to the
+		// lightweight baseline without an exporter outage.
+		values["kubeStateMetrics"] = map[string]any{"enabled": false}
+		values["nodeExporter"] = map[string]any{"enabled": false}
+		values["prometheus"].(map[string]any)["additionalServiceMonitors"] = baselineMetricsServiceMonitors()
 	}
 	if enableSidecar && req.StorageConfigID != "" {
 		// storageConfigId is a body-supplied reference to a GLOBAL object whose

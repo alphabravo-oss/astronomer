@@ -1639,6 +1639,12 @@ const (
 	MonitoringOperationTargetTypeSharedThanos       MonitoringOperationTargetType = "shared_thanos"
 )
 
+// Defines values for MonitoringStackPreviewBaselineOwnershipMode.
+const (
+	MonitoringStackPreviewBaselineOwnershipModeFullStack MonitoringStackPreviewBaselineOwnershipMode = "full_stack"
+	MonitoringStackPreviewBaselineOwnershipModeReuse     MonitoringStackPreviewBaselineOwnershipMode = "reuse"
+)
+
 // Defines values for NativeRBACRuleVerbs.
 const (
 	NativeRBACRuleVerbsAsterisk NativeRBACRuleVerbs = "*"
@@ -8556,6 +8562,12 @@ type MonitoringSizerVerdict struct {
 
 // MonitoringStackPreview defines model for MonitoringStackPreview.
 type MonitoringStackPreview struct {
+	BaselineOwnership *struct {
+		Components []string                                    `json:"components"`
+		Detected   bool                                        `json:"detected"`
+		Message    *string                                     `json:"message,omitempty"`
+		Mode       MonitoringStackPreviewBaselineOwnershipMode `json:"mode"`
+	} `json:"baselineOwnership,omitempty"`
 	Chart struct {
 		ChartName string `json:"chartName"`
 		RepoUrl   string `json:"repoUrl"`
@@ -8566,6 +8578,9 @@ type MonitoringStackPreview struct {
 	RequiresReplace bool                   `json:"requiresReplace"`
 	Values          map[string]interface{} `json:"values"`
 }
+
+// MonitoringStackPreviewBaselineOwnershipMode defines model for MonitoringStackPreview.BaselineOwnership.Mode.
+type MonitoringStackPreviewBaselineOwnershipMode string
 
 // MonitoringStackPreviewEnvelope defines model for MonitoringStackPreviewEnvelope.
 type MonitoringStackPreviewEnvelope struct {
