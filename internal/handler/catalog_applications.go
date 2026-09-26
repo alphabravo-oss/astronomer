@@ -166,7 +166,7 @@ func (h *CatalogHandler) PreviewCatalogInstallation(w http.ResponseWriter, r *ht
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Chart version is not present in the verified application catalog")
 		return
 	}
-	effectiveOverride := mergeValueLayers(distributionInstallValues(presentation.Slug, cluster.Distribution), request.ValuesOverride)
+	effectiveOverride := catalogInstallValues(presentation.Slug, cluster.Distribution, request.ValuesOverride)
 	checks, allowed := catalogInstallChecks(cluster, version, presentation, effectiveOverride)
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"allowed": allowed, "checks": checks, "application": presentation.Slug,

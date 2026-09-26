@@ -77,3 +77,34 @@ func TestCatalogValuesMergeDistributionDefaultsBeforeOperatorValues(t *testing.T
 		t.Fatalf("operator catalog values should override a distribution-provided list:\n%s", overridden)
 	}
 }
+
+func TestConstellationCatalogDefaultsExemptSupportedSystemNamespaces(t *testing.T) {
+	values := catalogInstallValues("constellation", "K3s", "image:\n  tag: v0.2.0\n")
+	var decoded map[string]any
+	if err := yaml.Unmarshal([]byte(values), &decoded); err != nil {
+		t.Fatalf("decode Constellation integration values: %v", err)
+	}
+	for _, namespace := range []string{"cis-operator-system", "longhorn-system", "cattle-neuvector-system", "istio-system", "astronomer-monitoring", "astronomer-gatekeeper-system"} {
+		if !strings.Contains(values, "- "+namespace+"\n") {
+			t.Errorf("Constellation integration values do not exempt supported namespace %q:\n%s", namespace, values)
+		}
+	}
+	image, _ := decoded["image"].(map[string]any)
+	if image["tag"] != "v0.2.0" {
+		t.Fatalf("operator values were not preserved: %+v", decoded)
+	}
+}
+
+func TestConstellationOperatorCanReplaceSystemNamespaceExemptions(t *testing.T) {
+	values := catalogInstallValues("constellation", "K3s", `admission:
+  webhook:
+    namespaceSelector:
+      matchExpressions:
+        - key: team
+          operator: In
+          values: [platform]
+`)
+	if strings.Contains(values, "cis-operator-system") || !strings.Contains(values, "key: team") {
+		t.Fatalf("operator namespace selector did not replace the platform default:\n%s", values)
+	}
+}

@@ -199,7 +199,7 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 					RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 					return
 				}
-				req.ValuesOverride = mergeValueLayers(distributionInstallValues(presentation.Slug, cluster.Distribution), req.ValuesOverride)
+				req.ValuesOverride = catalogInstallValues(presentation.Slug, cluster.Distribution, req.ValuesOverride)
 				params.ValuesOverride = req.ValuesOverride
 				checks, allowed := catalogInstallChecks(cluster, version, presentation, req.ValuesOverride)
 				if !allowed {
