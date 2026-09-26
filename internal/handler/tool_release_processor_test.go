@@ -21,11 +21,25 @@ type longhornUninstallRequester struct {
 	body         []byte
 	headers      map[string]string
 	status       int
+	statuses     []int
+	requests     []longhornUninstallRequest
+}
+
+type longhornUninstallRequest struct {
+	method, path string
+	body         []byte
+	headers      map[string]string
 }
 
 func (r *longhornUninstallRequester) Do(_ context.Context, _ string, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error) {
 	r.method, r.path, r.body, r.headers = method, path, body, headers
-	return &protocol.K8sResponsePayload{StatusCode: r.status}, nil
+	r.requests = append(r.requests, longhornUninstallRequest{method: method, path: path, body: body, headers: headers})
+	status := r.status
+	if len(r.statuses) > 0 {
+		status = r.statuses[0]
+		r.statuses = r.statuses[1:]
+	}
+	return &protocol.K8sResponsePayload{StatusCode: status}, nil
 }
 
 type plannedHelm struct {
@@ -230,9 +244,10 @@ func TestLonghornUninstallRefusesMissingDeletionConfirmation(t *testing.T) {
 	}
 }
 
-func TestLonghornFailedReleaseCleanupToleratesMissingDeletionSetting(t *testing.T) {
+func TestLonghornFailedReleaseCleanupRecreatesMissingDeletionSetting(t *testing.T) {
 	h, q, _, op := newPlanFixture(t, 1)
-	h.k8s = &longhornUninstallRequester{status: http.StatusNotFound}
+	req := &longhornUninstallRequester{statuses: []int{http.StatusNotFound, http.StatusCreated}}
+	h.k8s = req
 	env := toolOperationEnvelope{
 		ClusterID:                   q.clusterID.String(),
 		ToolSlug:                    "longhorn",
@@ -242,7 +257,30 @@ func TestLonghornFailedReleaseCleanupToleratesMissingDeletionSetting(t *testing.
 	if err := h.prepareLonghornUninstall(context.Background(), op, env); err != nil {
 		t.Fatal(err)
 	}
-	if len(q.events) != 1 || q.events[0].Stage != "uninstall.prepared" || !strings.Contains(q.events[0].Message, "absent") {
+	if len(req.requests) != 2 || req.requests[1].method != http.MethodPost || req.requests[1].path != "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings" {
+		t.Fatalf("requests=%+v", req.requests)
+	}
+	if !bytes.Contains(req.requests[1].body, []byte(`"value":"true"`)) || req.requests[1].headers["Content-Type"] != "application/json" {
+		t.Fatalf("create request=%+v", req.requests[1])
+	}
+	if len(q.events) != 1 || q.events[0].Stage != "uninstall.prepared" || !strings.Contains(q.events[0].Message, "recreated") {
+		t.Fatalf("events=%+v", q.events)
+	}
+}
+
+func TestLonghornFailedReleaseCleanupToleratesMissingDeletionCRD(t *testing.T) {
+	h, q, _, op := newPlanFixture(t, 1)
+	h.k8s = &longhornUninstallRequester{statuses: []int{http.StatusNotFound, http.StatusNotFound}}
+	env := toolOperationEnvelope{
+		ClusterID:                   q.clusterID.String(),
+		ToolSlug:                    "longhorn",
+		ConfirmDataDeletion:         true,
+		ConfirmFailedReleaseCleanup: true,
+	}
+	if err := h.prepareLonghornUninstall(context.Background(), op, env); err != nil {
+		t.Fatal(err)
+	}
+	if len(q.events) != 1 || q.events[0].Stage != "uninstall.prepared" || !strings.Contains(q.events[0].Message, "CRD was absent") {
 		t.Fatalf("events=%+v", q.events)
 	}
 }

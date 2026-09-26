@@ -93,13 +93,37 @@ func (h *ToolHandler) prepareLonghornUninstall(ctx context.Context, op sqlc.Tool
 	if h.k8s == nil {
 		return errors.New("kubernetes requester not configured for Longhorn uninstall")
 	}
-	const path = "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings/deleting-confirmation-flag"
+	const (
+		path       = "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings/deleting-confirmation-flag"
+		collection = "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings"
+	)
 	resp, err := h.k8s.Do(ctx, env.ClusterID, http.MethodPatch, path, []byte(`{"value":"true"}`), requestHeaders("application/merge-patch+json"))
 	if err != nil {
 		return fmt.Errorf("enable Longhorn deletion confirmation: %w", err)
 	}
 	if resp != nil && resp.StatusCode == http.StatusNotFound && env.ConfirmFailedReleaseCleanup {
-		h.recordToolOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn deletion confirmation was absent during failed-release cleanup", map[string]any{
+		createBody := []byte(`{"apiVersion":"longhorn.io/v1beta2","kind":"Setting","metadata":{"name":"deleting-confirmation-flag","namespace":"longhorn-system"},"value":"true"}`)
+		created, createErr := h.k8s.Do(ctx, env.ClusterID, http.MethodPost, collection, createBody, requestHeaders("application/json"))
+		if createErr != nil {
+			return fmt.Errorf("create Longhorn deletion confirmation during failed-release cleanup: %w", createErr)
+		}
+		if created != nil && created.StatusCode == http.StatusNotFound {
+			h.recordToolOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn deletion confirmation CRD was absent during failed-release cleanup", map[string]any{
+				"namespace": "longhorn-system",
+				"setting":   "deleting-confirmation-flag",
+			})
+			return nil
+		}
+		if created != nil && created.StatusCode == http.StatusConflict {
+			created, createErr = h.k8s.Do(ctx, env.ClusterID, http.MethodPatch, path, []byte(`{"value":"true"}`), requestHeaders("application/merge-patch+json"))
+			if createErr != nil {
+				return fmt.Errorf("enable concurrently-created Longhorn deletion confirmation: %w", createErr)
+			}
+		}
+		if err := ensureSuccess(created); err != nil {
+			return fmt.Errorf("create Longhorn deletion confirmation during failed-release cleanup: %w", err)
+		}
+		h.recordToolOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn deletion confirmation was recreated during failed-release cleanup", map[string]any{
 			"namespace": "longhorn-system",
 			"setting":   "deleting-confirmation-flag",
 		})
