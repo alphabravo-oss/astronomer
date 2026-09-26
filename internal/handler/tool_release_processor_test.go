@@ -256,10 +256,12 @@ func TestLonghornUninstallPreparesDeletionThroughClusterAgent(t *testing.T) {
 func TestCISUninstallRemovesManagedScansAndOwnedRunnerService(t *testing.T) {
 	h, q, _, op := newPlanFixture(t, 1)
 	req := &cisUninstallRequester{responses: map[string]*protocol.K8sResponsePayload{
-		"GET /apis/cis.cattle.io/v1/clusterscans":                                              jsonK8sResponse(http.StatusOK, `{"items":[{"metadata":{"name":"astronomer-cis-one","labels":{"app.kubernetes.io/managed-by":"astronomer-go"}}},{"metadata":{"name":"other","labels":{"app.kubernetes.io/managed-by":"someone-else"}}}]}`),
-		"DELETE /apis/cis.cattle.io/v1/clusterscans/astronomer-cis-one":                        {StatusCode: http.StatusOK},
-		"GET /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark":    jsonK8sResponse(http.StatusOK, `{"metadata":{"labels":{"app.kubernetes.io/name":"rancher-cis-benchmark","app.kubernetes.io/instance":"security-scan-runner-astronomer-cis-one"}}}`),
-		"DELETE /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark": {StatusCode: http.StatusOK},
+		"GET /apis/cis.cattle.io/v1/clusterscans":                                                     jsonK8sResponse(http.StatusOK, `{"items":[{"metadata":{"name":"astronomer-cis-one","labels":{"app.kubernetes.io/managed-by":"astronomer-go"}}},{"metadata":{"name":"other","labels":{"app.kubernetes.io/managed-by":"someone-else"}}}]}`),
+		"DELETE /apis/cis.cattle.io/v1/clusterscans/astronomer-cis-one":                               {StatusCode: http.StatusOK},
+		"GET /api/v1/namespaces/cis-operator-system/services":                                         jsonK8sResponse(http.StatusOK, `{"items":[{"metadata":{"name":"service-rancher-cis-benchmark","labels":{"app.kubernetes.io/name":"rancher-cis-benchmark","app.kubernetes.io/instance":"security-scan-runner-astronomer-cis-one"}}}]}`),
+		"DELETE /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark":        {StatusCode: http.StatusOK},
+		"GET /api/v1/namespaces/cis-operator-system/configmaps":                                       jsonK8sResponse(http.StatusOK, `{"items":[{"metadata":{"name":"cis-s-config-cm-astronomer-cis-one","labels":{"app.kubernetes.io/name":"rancher-cis-benchmark","app.kubernetes.io/instance":"security-scan-runner-astronomer-cis-one"}}}]}`),
+		"DELETE /api/v1/namespaces/cis-operator-system/configmaps/cis-s-config-cm-astronomer-cis-one": {StatusCode: http.StatusOK},
 	}}
 	h.k8s = req
 	env := toolOperationEnvelope{ClusterID: q.clusterID.String(), ToolSlug: "cis-operator"}
@@ -267,14 +269,15 @@ func TestCISUninstallRemovesManagedScansAndOwnedRunnerService(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"GET /apis/cis.cattle.io/v1/clusterscans",
 		"DELETE /apis/cis.cattle.io/v1/clusterscans/astronomer-cis-one",
-		"GET /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark",
 		"DELETE /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark",
+		"DELETE /api/v1/namespaces/cis-operator-system/configmaps/cis-s-config-cm-astronomer-cis-one",
 	}
-	got := make([]string, 0, len(req.requests))
+	got := make([]string, 0, len(want))
 	for _, request := range req.requests {
-		got = append(got, request.method+" "+request.path)
+		if request.method == http.MethodDelete {
+			got = append(got, request.method+" "+request.path)
+		}
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("requests=%v, want %v", got, want)
@@ -287,8 +290,8 @@ func TestCISUninstallRemovesManagedScansAndOwnedRunnerService(t *testing.T) {
 func TestCISUninstallRefusesUnownedRunnerService(t *testing.T) {
 	h, q, _, op := newPlanFixture(t, 1)
 	req := &cisUninstallRequester{responses: map[string]*protocol.K8sResponsePayload{
-		"GET /apis/cis.cattle.io/v1/clusterscans":                                           {StatusCode: http.StatusNotFound},
-		"GET /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark": jsonK8sResponse(http.StatusOK, `{"metadata":{"labels":{"app.kubernetes.io/name":"rancher-cis-benchmark","app.kubernetes.io/instance":"manually-owned"}}}`),
+		"GET /apis/cis.cattle.io/v1/clusterscans":             {StatusCode: http.StatusNotFound},
+		"GET /api/v1/namespaces/cis-operator-system/services": jsonK8sResponse(http.StatusOK, `{"items":[{"metadata":{"name":"service-rancher-cis-benchmark","labels":{"app.kubernetes.io/name":"rancher-cis-benchmark","app.kubernetes.io/instance":"manually-owned"}}}]}`),
 	}}
 	h.k8s = req
 	err := h.prepareCISUninstall(context.Background(), op, toolOperationEnvelope{ClusterID: q.clusterID.String(), ToolSlug: "cis-operator"})
