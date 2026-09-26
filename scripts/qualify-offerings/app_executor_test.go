@@ -98,3 +98,29 @@ func TestExecuteAppMutationPollsNestedCatalogReceipt(t *testing.T) {
 		t.Fatalf("unexpected mutation %#v key=%q polls=%d", mutation, key, polls)
 	}
 }
+
+func TestCleanupAppInstallationAcceptsAlreadyAbsentRelease(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/v1/catalog/installed/install-1/" {
+			t.Fatalf("unexpected cleanup request %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Idempotency-Key") == "" {
+			t.Fatal("missing cleanup idempotency key")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": "not_found"}})
+	}))
+	defer server.Close()
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, key, alreadyAbsent, err := cleanupAppInstallation(context.Background(), server.Client(), executionContext{Base: base, Token: "token", RunID: "run-1"}, "install-1", "APP-01-deferred-cleanup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key == "" || !alreadyAbsent {
+		t.Fatalf("cleanup key=%q alreadyAbsent=%t, want a successful idempotent cleanup", key, alreadyAbsent)
+	}
+}

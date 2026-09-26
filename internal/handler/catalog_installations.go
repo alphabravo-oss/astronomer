@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
@@ -690,6 +691,22 @@ func (h *CatalogHandler) ListInstalledChartRevisions(w http.ResponseWriter, r *h
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, installed.ClusterID, rbac.ResourceCatalog, rbac.VerbRead) {
+		return
+	}
+	if installed.RequestID.Valid && h.delivery != nil {
+		revs, historyErr := h.delivery.Revisions(r.Context(), installed.ID)
+		if historyErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to load application revision history")
+			return
+		}
+		if revs == nil {
+			revs = []catalogapp.Revision{}
+		}
+		RespondJSON(w, http.StatusOK, map[string]any{
+			"release_name": installed.ReleaseName,
+			"namespace":    installed.Namespace,
+			"revisions":    revs,
+		})
 		return
 	}
 	if h.helm == nil {

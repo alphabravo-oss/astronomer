@@ -486,7 +486,7 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 		h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "rolling back Flux application to its previous immutable version", map[string]any{
 			"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
 		})
-		result, deliveryErr := h.delivery.Rollback(ctx, installation.ID, op.CreatedByID, op.ID.String())
+		result, deliveryErr := h.delivery.Rollback(ctx, installation.ID, int64(env.RollbackRevision), op.CreatedByID, op.ID.String())
 		if deliveryErr != nil {
 			_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_rollback", Revision: installation.Revision})
 			return deliveryErr

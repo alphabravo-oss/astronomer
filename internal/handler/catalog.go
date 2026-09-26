@@ -139,7 +139,8 @@ type CatalogApplicationDelivery interface {
 	Install(context.Context, catalogapp.InstallRequest) (catalogapp.InstallResult, error)
 	Upgrade(context.Context, catalogapp.InstallRequest) (catalogapp.InstallResult, error)
 	Uninstall(context.Context, uuid.UUID, pgtype.UUID) error
-	Rollback(context.Context, uuid.UUID, pgtype.UUID, string) (catalogapp.InstallResult, error)
+	Rollback(context.Context, uuid.UUID, int64, pgtype.UUID, string) (catalogapp.InstallResult, error)
+	Revisions(context.Context, uuid.UUID) ([]catalogapp.Revision, error)
 	Status(context.Context, uuid.UUID) (catalogapp.Status, error)
 }
 

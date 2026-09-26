@@ -89,10 +89,13 @@ func (executor appLifecycleExecutor) Run(ctx context.Context, execution executio
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		mutation, key, cleanupErr := executeAppMutation(cleanupCtx, client, execution, http.MethodDelete, "/api/v1/catalog/installed/"+url.PathEscape(installedID)+"/", nil, definition.ID+"-deferred-cleanup")
+		mutation, key, alreadyAbsent, cleanupErr := cleanupAppInstallation(cleanupCtx, client, execution, installedID, definition.ID+"-deferred-cleanup")
 		if cleanupErr != nil {
 			final = upsertDimension(final, failedDimension("uninstall_cleanup", cleanupErr))
 			final.State, final.Reason = "FAIL", "run-owned application cleanup failed: "+cleanupErr.Error()
+		} else if alreadyAbsent {
+			final = upsertDimension(final, dimensionResult{Name: "uninstall_cleanup", State: "PASS", Reason: "run-owned catalog release was already absent", ObservedAt: time.Now().UTC(), HTTPStatus: http.StatusNotFound, TargetClusterID: target.ClusterID})
+			installedID = ""
 		} else {
 			final = upsertDimension(final, operationDimension("uninstall_cleanup", "deferred cleanup removed the run-owned catalog release", target.ClusterID, key, mutation.Operation))
 			installedID = ""
@@ -316,9 +319,28 @@ func executeAppMutation(ctx context.Context, client *http.Client, execution exec
 	if err != nil {
 		return appMutation{}, key, err
 	}
+	mutation, err := completeAppMutation(ctx, client, execution, response)
+	return mutation, key, err
+}
+
+func cleanupAppInstallation(ctx context.Context, client *http.Client, execution executionContext, installationID, keySuffix string) (appMutation, string, bool, error) {
+	key := "qualification-" + execution.RunID + "-" + strings.ToLower(keySuffix)
+	path := "/api/v1/catalog/installed/" + url.PathEscape(installationID) + "/"
+	response, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodDelete, path, nil, key, http.StatusAccepted, http.StatusNotFound)
+	if err != nil {
+		return appMutation{}, key, false, err
+	}
+	if response.Status == http.StatusNotFound {
+		return appMutation{}, key, true, nil
+	}
+	mutation, err := completeAppMutation(ctx, client, execution, response)
+	return mutation, key, false, err
+}
+
+func completeAppMutation(ctx context.Context, client *http.Client, execution executionContext, response apiResponse) (appMutation, error) {
 	data, err := objectAtPath(response.Body, "data")
 	if err != nil {
-		return appMutation{}, key, err
+		return appMutation{}, err
 	}
 	operationObject := data
 	installationID := ""
@@ -331,14 +353,14 @@ func executeAppMutation(ctx context.Context, client *http.Client, execution exec
 	}
 	operation := operationObservation{ID: stringField(operationObject, "id"), Status: strings.ToLower(stringField(operationObject, "status")), Body: response.Body}
 	if operation.ID == "" || operation.Status == "" {
-		return appMutation{}, key, errors.New("catalog operation receipt lacked id or status")
+		return appMutation{}, errors.New("catalog operation receipt lacked id or status")
 	}
 	location := response.Location
 	if location == "" {
 		location = "/api/v1/catalog/operations/" + url.PathEscape(operation.ID) + "/"
 	}
 	completed, err := pollOperation(ctx, client, execution.Base, execution.Token, location, operation.ID, 2*time.Second)
-	return appMutation{Operation: completed, InstallationID: installationID, Revision: revision}, key, err
+	return appMutation{Operation: completed, InstallationID: installationID, Revision: revision}, err
 }
 
 func listCatalogInstallations(ctx context.Context, client *http.Client, execution executionContext, clusterID string) ([]map[string]any, error) {
