@@ -3,6 +3,8 @@ package handler
 import (
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestDistributionFamily(t *testing.T) {
@@ -46,5 +48,32 @@ func TestDistributionInstallValues(t *testing.T) {
 	// A tool with no distribution quirks yields nothing.
 	if got := distributionInstallValues("trivy-operator", "k3s"); got != "" {
 		t.Errorf("tool without overrides should yield nothing, got:\n%s", got)
+	}
+}
+
+func TestCatalogValuesMergeDistributionDefaultsBeforeOperatorValues(t *testing.T) {
+	values := mergeValueLayers(
+		distributionInstallValues("fluent-bit", "K3s"),
+		"config:\n  outputs: |\n    [OUTPUT]\n        Name stdout\n        Match *\n",
+	)
+	if !strings.Contains(values, "path: /var/log/pods") || !strings.Contains(values, "Name stdout") {
+		t.Fatalf("catalog values should preserve the K3s volume adaptation and operator output:\n%s", values)
+	}
+	if strings.Contains(values, "machine-id") {
+		t.Fatalf("catalog K3s values must not restore the unsupported machine-id mount:\n%s", values)
+	}
+
+	overridden := mergeValueLayers(
+		distributionInstallValues("fluent-bit", "K3s"),
+		"daemonSetVolumes:\n  - name: custom\n    emptyDir: {}\n",
+	)
+	var decoded map[string]any
+	if err := yaml.Unmarshal([]byte(overridden), &decoded); err != nil {
+		t.Fatalf("decode merged catalog values: %v", err)
+	}
+	volumes, _ := decoded["daemonSetVolumes"].([]any)
+	volume, _ := volumes[0].(map[string]any)
+	if len(volumes) != 1 || volume["name"] != "custom" {
+		t.Fatalf("operator catalog values should override a distribution-provided list:\n%s", overridden)
 	}
 }
