@@ -148,15 +148,33 @@ func (s *Service) Status(ctx context.Context, targetID uuid.UUID) (Status, error
 	if s == nil || s.pool == nil || targetID == uuid.Nil {
 		return Status{}, errors.New("catalog application target is required")
 	}
-	var status Status
+	var deletionState, deploymentPhase, lastErrorCode string
 	err := s.pool.QueryRow(ctx, `
-		SELECT phase,last_error_code FROM cluster_deployments
-		WHERE target_id=$1 ORDER BY updated_at DESC,id DESC LIMIT 1`, targetID).
-		Scan(&status.Phase, &status.LastErrorCode)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Status{Phase: "pending"}, nil
+		SELECT t.deletion_state,COALESCE(d.phase,''),COALESCE(d.last_error_code,'')
+		FROM delivery_targets t
+		LEFT JOIN LATERAL (
+			SELECT phase,last_error_code FROM cluster_deployments
+			WHERE target_id=t.id ORDER BY updated_at DESC,id DESC LIMIT 1
+		) d ON true
+		WHERE t.id=$1`, targetID).
+		Scan(&deletionState, &deploymentPhase, &lastErrorCode)
+	if err != nil {
+		return Status{}, err
 	}
-	return status, err
+	return projectStatus(deletionState, deploymentPhase, lastErrorCode), nil
+}
+
+func projectStatus(deletionState, deploymentPhase, lastErrorCode string) Status {
+	switch deletionState {
+	case "deleting":
+		return Status{Phase: "deleting", LastErrorCode: lastErrorCode}
+	case "deleted":
+		return Status{Phase: "removed", LastErrorCode: lastErrorCode}
+	}
+	if deploymentPhase == "" {
+		deploymentPhase = "pending"
+	}
+	return Status{Phase: deploymentPhase, LastErrorCode: lastErrorCode}
 }
 
 // Uninstall requests the Delivery target's fenced deletion. The agent removes

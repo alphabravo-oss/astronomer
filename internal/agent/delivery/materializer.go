@@ -427,11 +427,15 @@ func PlanPrune(assignment protocol.DeliveryAssignmentV2, materialization Materia
 	return stale, nil
 }
 
-// PlanDeletion verifies that the tombstone exactly fences the accepted
-// assignment. Orphan tombstones deliberately return no deletion operations.
+// PlanDeletion verifies that the signed tombstone supersedes the accepted
+// assignment. The server increments a deployment generation when deletion is
+// requested. It can be more than one generation ahead when an update and its
+// deletion reach the agent in the same snapshot. The installed objects remain
+// fenced by the locally accepted assignment, not by the newer tombstone.
+// Orphan tombstones deliberately return no deletion operations.
 func PlanDeletion(assignment protocol.DeliveryAssignmentV2, tombstone protocol.DeliveryDeletionV2, materialization Materialization) ([]ObjectIdentity, error) {
-	if tombstone.DeploymentID != assignment.DeploymentID || tombstone.Generation != assignment.Generation || tombstone.SpecDigest != assignment.SpecDigest {
-		return nil, errors.New("deletion tombstone does not match the accepted assignment generation and digest")
+	if err := validateDeletionBoundary(assignment, tombstone); err != nil {
+		return nil, err
 	}
 	if tombstone.Orphan {
 		return nil, nil
@@ -449,6 +453,13 @@ func PlanDeletion(assignment protocol.DeliveryAssignmentV2, tombstone protocol.D
 	}
 	sortDeleteOrder(identities)
 	return identities, nil
+}
+
+func validateDeletionBoundary(assignment protocol.DeliveryAssignmentV2, tombstone protocol.DeliveryDeletionV2) error {
+	if tombstone.DeploymentID != assignment.DeploymentID || tombstone.Generation <= assignment.Generation {
+		return errors.New("deletion tombstone does not supersede the accepted assignment")
+	}
+	return nil
 }
 
 func validatePruneIdentity(assignment protocol.DeliveryAssignmentV2, materialization Materialization, identity ObjectIdentity) error {

@@ -169,7 +169,7 @@ func TestRuntimeApplyRestartCheckpointAndStagedDeletion(t *testing.T) {
 		}
 	}
 
-	tombstone := protocol.DeliveryDeletionV2{DeploymentID: assignment.DeploymentID, Generation: assignment.Generation, SpecDigest: assignment.SpecDigest}
+	tombstone := protocol.DeliveryDeletionV2{DeploymentID: assignment.DeploymentID, Generation: assignment.Generation + 1, SpecDigest: assignment.SpecDigest}
 	deletion := canonicalSnapshot(t, 2, nil, []protocol.DeliveryDeletionV2{tombstone})
 	for stage := 0; stage < 2; stage++ {
 		if err := runtime.processSnapshot(context.Background(), deletion, testCapabilities()); err == nil || !strings.Contains(err.Error(), "in progress") {

@@ -102,7 +102,7 @@ func TestExecutorApplyPruneAndFencedDeletion(t *testing.T) {
 	}
 
 	accepted := AcceptAssignment(rotated, next)
-	tombstone := protocol.DeliveryDeletionV2{DeploymentID: rotated.DeploymentID, Generation: rotated.Generation, SpecDigest: rotated.SpecDigest}
+	tombstone := protocol.DeliveryDeletionV2{DeploymentID: rotated.DeploymentID, Generation: rotated.Generation + 1, SpecDigest: rotated.SpecDigest}
 	removed, err := executor.BeginDeletion(ctx, accepted.boundaryAssignment(), tombstone, accepted.materializationBoundary(), accepted.Objects)
 	if err != nil || removed {
 		t.Fatalf("first deletion stage: removed=%v err=%v", removed, err)
