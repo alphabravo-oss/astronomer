@@ -102,8 +102,9 @@ func overlayRancherQuestion(root map[string]any, question rancherQuestion, inher
 	if question.Group != "" {
 		node["x-astronomer-group"] = question.Group
 	}
+	defaultNull, _ := node["x-astronomer-default-null"].(bool)
 	if questionType := rancherQuestionJSONType(question.Type); questionType != "" {
-		if defaultNull, _ := node["x-astronomer-default-null"].(bool); defaultNull {
+		if defaultNull {
 			node["type"] = []any{questionType, "null"}
 			delete(node, "x-astronomer-default-null")
 		} else {
@@ -117,7 +118,15 @@ func overlayRancherQuestion(root map[string]any, question rancherQuestion, inher
 		markQuestionRequired(root, segments)
 	}
 	if len(question.Options) > 0 {
-		node["enum"] = question.Options
+		options := append([]any(nil), question.Options...)
+		// Rancher questions describe the value users may select, while
+		// values.yaml remains the effective chart default. Preserve an explicit
+		// null default as a valid enum member so merely opening and submitting
+		// the chart's configuration does not invalidate its own defaults.
+		if defaultNull {
+			options = append(options, nil)
+		}
+		node["enum"] = options
 	}
 	if question.Min != nil {
 		node["minimum"] = *question.Min

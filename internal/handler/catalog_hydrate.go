@@ -50,7 +50,7 @@ const chartArchiveMaxBytes = 50 * 1024 * 1024
 // pin an API handler for the HTTP client's former 60-second timeout.
 const defaultChartHydrationTimeout = 10 * time.Second
 
-const chartSchemaHydrationVersion = 3
+const chartSchemaHydrationVersion = 4
 
 func (h *CatalogHandler) effectiveChartHydrationTimeout() time.Duration {
 	if h != nil && h.chartHydrationTimeout > 0 {

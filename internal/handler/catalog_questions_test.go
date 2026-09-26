@@ -92,6 +92,8 @@ func TestEnrichSchemaKeepsNullChartDefaultValid(t *testing.T) {
 - variable: persistence.backingImage.dataSourceParameters
   type: string
   label: Backing image parameters
+  options:
+    - existing
 `)
 	enriched := enrichSchemaWithRancherQuestions(base, raw)
 	var schema map[string]any
@@ -105,6 +107,10 @@ func TestEnrichSchemaKeepsNullChartDefaultValid(t *testing.T) {
 	}
 	if _, leaked := node["x-astronomer-default-null"]; leaked {
 		t.Fatal("internal null marker leaked into enriched field schema")
+	}
+	options, ok := node["enum"].([]any)
+	if !ok || len(options) != 2 || options[0] != "existing" || options[1] != nil {
+		t.Fatalf("nullable question options = %#v", node["enum"])
 	}
 	if err := validateCatalogValuesSchema(enriched, map[string]any{
 		"persistence": map[string]any{
