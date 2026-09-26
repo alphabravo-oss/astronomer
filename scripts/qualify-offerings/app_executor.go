@@ -150,7 +150,7 @@ func (executor appLifecycleExecutor) Run(ctx context.Context, execution executio
 	if err != nil {
 		return finishCase(addDimension(result, failedDimension("uninstall_cleanup", err), checkpoint), "FAIL", "application lifecycle left cleanup unproven", checkpoint)
 	}
-	if _, err = getCatalogInstallation(ctx, client, execution, installedID, http.StatusNotFound); err != nil {
+	if err = waitCatalogInstallationDeleted(ctx, client, execution, installedID, 2*time.Second); err != nil {
 		return finishCase(addDimension(result, failedDimension("uninstall_cleanup", err), checkpoint), "FAIL", "uninstall operation completed without removing the catalog record", checkpoint)
 	}
 	installedID = ""
@@ -334,7 +334,13 @@ func cleanupAppInstallation(ctx context.Context, client *http.Client, execution 
 		return appMutation{}, key, true, nil
 	}
 	mutation, err := completeAppMutation(ctx, client, execution, response)
-	return mutation, key, false, err
+	if err != nil {
+		return mutation, key, false, err
+	}
+	if err := waitCatalogInstallationDeleted(ctx, client, execution, installationID, 2*time.Second); err != nil {
+		return mutation, key, false, err
+	}
+	return mutation, key, false, nil
 }
 
 func completeAppMutation(ctx context.Context, client *http.Client, execution executionContext, response apiResponse) (appMutation, error) {
@@ -386,6 +392,31 @@ func getCatalogInstallation(ctx context.Context, client *http.Client, execution 
 		return nil, err
 	}
 	return objectAtPath(response.Body, "data")
+}
+
+func waitCatalogInstallationDeleted(ctx context.Context, client *http.Client, execution executionContext, id string, interval time.Duration) error {
+	if interval <= 0 {
+		return errors.New("catalog deletion polling interval must be positive")
+	}
+	path := "/api/v1/catalog/installed/" + url.PathEscape(id) + "/"
+	lastStatus := "unknown"
+	for {
+		response, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodGet, path, nil, "", http.StatusOK, http.StatusNotFound)
+		if err != nil {
+			return err
+		}
+		if response.Status == http.StatusNotFound {
+			return nil
+		}
+		if data, objectErr := objectAtPath(response.Body, "data"); objectErr == nil {
+			lastStatus = stringField(data, "status")
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("catalog installation remained %q while waiting for deletion: %w", lastStatus, ctx.Err())
+		case <-time.After(interval):
+		}
+	}
 }
 
 func evaluateAppIsolation(ctx context.Context, client *http.Client, execution executionContext, slug, clusterID, installationID string, installBody map[string]any) dimensionResult {

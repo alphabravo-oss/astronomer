@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 )
 
 func TestAppCasesCoverFrozenCatalog(t *testing.T) {
@@ -122,5 +123,33 @@ func TestCleanupAppInstallationAcceptsAlreadyAbsentRelease(t *testing.T) {
 	}
 	if key == "" || !alreadyAbsent {
 		t.Fatalf("cleanup key=%q alreadyAbsent=%t, want a successful idempotent cleanup", key, alreadyAbsent)
+	}
+}
+
+func TestWaitCatalogInstallationDeletedPollsToAbsence(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/catalog/installed/install-1/" {
+			t.Fatalf("unexpected deletion check %s %s", r.Method, r.URL.Path)
+		}
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		if requests == 1 {
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"id": "install-1", "status": "uninstalling"}})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"code": "not_found"}})
+	}))
+	defer server.Close()
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := waitCatalogInstallationDeleted(context.Background(), server.Client(), executionContext{Base: base, Token: "token"}, "install-1", time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 {
+		t.Fatalf("deletion checks = %d, want 2", requests)
 	}
 }

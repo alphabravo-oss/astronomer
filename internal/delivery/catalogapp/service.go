@@ -113,7 +113,7 @@ func (s *Service) apply(ctx context.Context, request InstallRequest, pendingStat
 	if err := validateInstall(request); err != nil {
 		return InstallResult{}, err
 	}
-	result, generation, err := s.ensureAssets(ctx, request)
+	result, generation, err := s.ensureAssets(ctx, request, advancesInstallationRevision(pendingStatus))
 	if err != nil {
 		return InstallResult{}, err
 	}
@@ -324,14 +324,14 @@ func (s *Service) Revisions(ctx context.Context, installationID uuid.UUID) ([]Re
 		Key      string
 	}
 	rollouts := make([]rolloutRevision, 0)
-	var latestSucceeded int64
+	latestSucceededIndex := -1
 	for rows.Next() {
 		var item rolloutRevision
 		if err := rows.Scan(&item.Revision, &item.Updated, &item.State, &item.Version, &item.Release, &item.Install, &item.Key); err != nil {
 			return nil, fmt.Errorf("scan catalog application revision: %w", err)
 		}
-		if item.State == string(model.RolloutSucceeded) && item.Revision > latestSucceeded {
-			latestSucceeded = item.Revision
+		if item.State == string(model.RolloutSucceeded) {
+			latestSucceededIndex = len(rollouts)
 		}
 		rollouts = append(rollouts, item)
 	}
@@ -339,11 +339,11 @@ func (s *Service) Revisions(ctx context.Context, installationID uuid.UUID) ([]Re
 		return nil, fmt.Errorf("list catalog application revisions: %w", err)
 	}
 	revisions := make([]Revision, 0, len(rollouts))
-	for _, item := range rollouts {
+	for index, item := range rollouts {
 		status := item.State
 		if item.State == string(model.RolloutSucceeded) {
 			status = "superseded"
-			if item.Revision == latestSucceeded {
+			if index == latestSucceededIndex {
 				status = "deployed"
 			}
 		}
@@ -362,7 +362,7 @@ func (s *Service) Revisions(ctx context.Context, installationID uuid.UUID) ([]Re
 	return revisions, nil
 }
 
-func (s *Service) ensureAssets(ctx context.Context, request InstallRequest) (InstallResult, uint64, error) {
+func (s *Service) ensureAssets(ctx context.Context, request InstallRequest, forceGeneration bool) (InstallResult, uint64, error) {
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return InstallResult{}, 0, err
@@ -480,10 +480,10 @@ func (s *Service) ensureAssets(ctx context.Context, request InstallRequest) (Ins
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'{}',false,$9,$9)
 		ON CONFLICT (id) DO UPDATE SET
 			bundle_version_id=EXCLUDED.bundle_version_id,
-			generation=delivery_targets.generation + CASE WHEN delivery_targets.bundle_version_id<>EXCLUDED.bundle_version_id THEN 1 ELSE 0 END,
+			generation=delivery_targets.generation + CASE WHEN delivery_targets.bundle_version_id<>EXCLUDED.bundle_version_id OR $10 THEN 1 ELSE 0 END,
 			resource_version=delivery_targets.resource_version + 1,updated_at=now(),updated_by=EXCLUDED.updated_by
 		RETURNING generation`, result.TargetID, request.ProjectID, bundleName, request.Description,
-		result.BundleVersionID, placementJSON, rolloutPolicyJSON, reconciliationJSON, request.ActorID).Scan(&generation); err != nil {
+		result.BundleVersionID, placementJSON, rolloutPolicyJSON, reconciliationJSON, request.ActorID, forceGeneration).Scan(&generation); err != nil {
 		return InstallResult{}, 0, fmt.Errorf("ensure catalog application target: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
