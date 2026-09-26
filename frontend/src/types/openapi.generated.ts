@@ -12568,10 +12568,12 @@ export interface OpenAPIOperations {
           "version"?: string;
         };
       };
-    response: {
-        "chart"?: string;
-        "version"?: string;
-        "readme"?: string;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "chart"?: string;
+          "version"?: string;
+          "readme"?: string;
+        };
       };
   };
   "getCatalogChartsByIdValues": {
@@ -12587,11 +12589,13 @@ export interface OpenAPIOperations {
           "version"?: string;
         };
       };
-    response: {
-        "chart"?: string;
-        "version"?: string;
-        "default_values"?: string;
-        "values_schema"?: Record<string, unknown>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "chart"?: string;
+          "version"?: string;
+          "default_values"?: string;
+          "values_schema"?: Record<string, unknown>;
+        };
       };
   };
   "getCatalogChartsByIdVersions": {

@@ -26599,14 +26599,18 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  chart:
-                    type: string
-                  version:
-                    type: string
-                  readme:
-                    type: string
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          chart:
+                            type: string
+                          version:
+                            type: string
+                          readme:
+                            type: string
         '400':
           description: Invalid chart ID.
           content:
@@ -26662,18 +26666,22 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  chart:
-                    type: string
-                  version:
-                    type: string
-                  default_values:
-                    type: string
-                    description: values.yaml as a raw string
-                  values_schema:
-                    type: object
-                    description: JSON schema (raw JSON object)
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          chart:
+                            type: string
+                          version:
+                            type: string
+                          default_values:
+                            type: string
+                            description: values.yaml as a raw string
+                          values_schema:
+                            type: object
+                            description: JSON schema (raw JSON object)
         '400':
           description: Invalid chart ID.
           content:

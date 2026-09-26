@@ -190,11 +190,12 @@ export async function getChartDefaultValues(
     query: { project_id: projectId, version },
     signal,
   });
+  const values = wire.data;
   return {
-    chart: wire.chart ?? "",
-    version: wire.version ?? "",
-    defaultValues: wire.default_values ?? "",
-    valuesSchema: wire.values_schema ?? {},
+    chart: values?.chart ?? "",
+    version: values?.version ?? "",
+    defaultValues: values?.default_values ?? "",
+    valuesSchema: values?.values_schema ?? {},
   };
 }
 

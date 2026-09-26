@@ -11,6 +11,23 @@ function initials(label: string): string {
     .join("");
 }
 
+/** Match the management UI's img-src 'self' data: policy before rendering. */
+export function isCatalogIconSourceAllowed(src?: string): boolean {
+  const value = src?.trim();
+  if (!value) return false;
+  if (value.startsWith("data:image/")) return true;
+  if (typeof window === "undefined") return value.startsWith("/");
+  try {
+    const url = new URL(value, window.location.origin);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.origin === window.location.origin
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function CatalogIcon({
   src,
   label,
@@ -23,7 +40,8 @@ export function CatalogIcon({
   imageClassName?: string;
 }) {
   const [failedSrc, setFailedSrc] = useState<string>();
-  const failed = Boolean(src && failedSrc === src);
+  const loadableSrc = isCatalogIconSourceAllowed(src) ? src?.trim() : undefined;
+  const failed = Boolean(loadableSrc && failedSrc === loadableSrc);
   const fallback = useMemo(() => initials(label), [label]);
 
   return (
@@ -34,13 +52,13 @@ export function CatalogIcon({
       )}
       aria-label={`${label} icon`}
     >
-      {src && !failed ? (
+      {loadableSrc && !failed ? (
         <img
-          src={src}
+          src={loadableSrc}
           alt=""
           loading="lazy"
           className={cn("object-contain", imageClassName)}
-          onError={() => setFailedSrc(src)}
+          onError={() => setFailedSrc(loadableSrc)}
         />
       ) : fallback ? (
         <span

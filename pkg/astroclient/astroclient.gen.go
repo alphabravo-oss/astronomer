@@ -89040,9 +89040,11 @@ type GetCatalogChartsByIdReadmeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Chart   *string `json:"chart,omitempty"`
-		Readme  *string `json:"readme,omitempty"`
-		Version *string `json:"version,omitempty"`
+		Data struct {
+			Chart   *string `json:"chart,omitempty"`
+			Readme  *string `json:"readme,omitempty"`
+			Version *string `json:"version,omitempty"`
+		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON404 *ErrorEnvelope
@@ -89068,14 +89070,16 @@ type GetCatalogChartsByIdValuesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Chart *string `json:"chart,omitempty"`
+		Data struct {
+			Chart *string `json:"chart,omitempty"`
 
-		// DefaultValues values.yaml as a raw string
-		DefaultValues *string `json:"default_values,omitempty"`
+			// DefaultValues values.yaml as a raw string
+			DefaultValues *string `json:"default_values,omitempty"`
 
-		// ValuesSchema JSON schema (raw JSON object)
-		ValuesSchema *map[string]interface{} `json:"values_schema,omitempty"`
-		Version      *string                 `json:"version,omitempty"`
+			// ValuesSchema JSON schema (raw JSON object)
+			ValuesSchema *map[string]interface{} `json:"values_schema,omitempty"`
+			Version      *string                 `json:"version,omitempty"`
+		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON404 *ErrorEnvelope
@@ -127759,9 +127763,11 @@ func ParseGetCatalogChartsByIdReadmeResponse(rsp *http.Response) (*GetCatalogCha
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Chart   *string `json:"chart,omitempty"`
-			Readme  *string `json:"readme,omitempty"`
-			Version *string `json:"version,omitempty"`
+			Data struct {
+				Chart   *string `json:"chart,omitempty"`
+				Readme  *string `json:"readme,omitempty"`
+				Version *string `json:"version,omitempty"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -127803,14 +127809,16 @@ func ParseGetCatalogChartsByIdValuesResponse(rsp *http.Response) (*GetCatalogCha
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Chart *string `json:"chart,omitempty"`
+			Data struct {
+				Chart *string `json:"chart,omitempty"`
 
-			// DefaultValues values.yaml as a raw string
-			DefaultValues *string `json:"default_values,omitempty"`
+				// DefaultValues values.yaml as a raw string
+				DefaultValues *string `json:"default_values,omitempty"`
 
-			// ValuesSchema JSON schema (raw JSON object)
-			ValuesSchema *map[string]interface{} `json:"values_schema,omitempty"`
-			Version      *string                 `json:"version,omitempty"`
+				// ValuesSchema JSON schema (raw JSON object)
+				ValuesSchema *map[string]interface{} `json:"values_schema,omitempty"`
+				Version      *string                 `json:"version,omitempty"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err

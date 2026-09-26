@@ -447,7 +447,7 @@ export async function getHelmChartReadme(
     },
     signal,
   });
-  return response.readme ?? "";
+  return response.data?.readme ?? "";
 }
 
 export async function getHelmChartValues(
@@ -472,10 +472,10 @@ export async function getHelmChartValues(
     signal,
   });
   return {
-    chart: response.chart ?? "",
-    version: response.version ?? "",
-    defaultValues: response.default_values ?? "",
-    valuesSchema: response.values_schema ?? {},
+    chart: response.data?.chart ?? "",
+    version: response.data?.version ?? "",
+    defaultValues: response.data?.default_values ?? "",
+    valuesSchema: response.data?.values_schema ?? {},
   };
 }
 

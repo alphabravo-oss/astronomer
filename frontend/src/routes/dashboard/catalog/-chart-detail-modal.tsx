@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ActionButton } from "@/components/ui/action-button";
+import { CatalogIcon } from "@/components/catalog/catalog-icon";
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
   CatalogVersionSelect,
@@ -13,7 +14,6 @@ import {
   Database,
   Download,
   ExternalLink,
-  Package,
   ShieldCheck,
 } from "lucide-react";
 import { CategoryChip } from "./-category";
@@ -71,20 +71,12 @@ export function ChartDetailModal({
       footer={footer}
       footerClassName="flex items-center justify-end gap-2"
       titleIcon={
-        <div className="h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden">
-          {chart.iconUrl ? (
-            <img
-              src={chart.iconUrl}
-              alt={chart.displayName}
-              width={32}
-              height={32}
-              loading="lazy"
-              className="h-8 w-8 object-contain"
-            />
-          ) : (
-            <Package className="h-5 w-5 text-muted-foreground" />
-          )}
-        </div>
+        <CatalogIcon
+          src={chart.iconUrl}
+          label={chart.displayName || chart.name}
+          className="h-10 w-10"
+          imageClassName="h-8 w-8"
+        />
       }
     >
       <div className="flex items-center gap-3 flex-wrap">
