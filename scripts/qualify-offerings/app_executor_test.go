@@ -133,6 +133,36 @@ func TestExternalDNSCanaryPublishesClusterIPWithoutGlobalInternalFlag(t *testing
 	}
 }
 
+func TestTempoCanaryQueriesChartServicePort(t *testing.T) {
+	var queryPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "http:tempo:4318"):
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/api/traces/"):
+			queryPath = r.URL.Path
+			_, _ = w.Write([]byte(`{"trace":"tempo-qualification"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := evaluateTempoCanary(context.Background(), server.Client(), executionContext{
+		Base: base, Token: "token", RunID: "run-1",
+	}, "cluster-1", "astronomer-tempo")
+	if result.State != "PASS" {
+		t.Fatalf("canary result = %#v", result)
+	}
+	if !strings.Contains(queryPath, "/services/http:tempo:3200/proxy/") {
+		t.Fatalf("Tempo query path = %q, want chart Service port 3200", queryPath)
+	}
+}
+
 func TestValidateAppPreviewBindsImmutableInputs(t *testing.T) {
 	release := catalogRelease{VersionID: "version-1", Version: "1.2.3", Digest: "sha256:abc"}
 	body := map[string]any{"data": map[string]any{

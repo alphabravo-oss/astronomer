@@ -63,7 +63,7 @@ func evaluateTempoCanary(ctx context.Context, client *http.Client, execution exe
 	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, writePath, body, "", http.StatusOK); err != nil {
 		return failedCanary(clusterID, fmt.Errorf("send Tempo OTLP trace: %w", err))
 	}
-	readPath := fmt.Sprintf("/api/v1/clusters/%s/k8s/api/v1/namespaces/%s/services/http:tempo:3100/proxy/api/traces/%s", url.PathEscape(clusterID), url.PathEscape(namespace), traceID)
+	readPath := fmt.Sprintf("/api/v1/clusters/%s/k8s/api/v1/namespaces/%s/services/http:tempo:3200/proxy/api/traces/%s", url.PathEscape(clusterID), url.PathEscape(namespace), traceID)
 	for {
 		response, err := requestRawAPI(ctx, client, execution.Base, execution.Token, http.MethodGet, readPath, http.StatusOK, http.StatusNotFound)
 		if err == nil && response.Status == http.StatusOK && strings.Contains(string(response.Body), "tempo-qualification") {
