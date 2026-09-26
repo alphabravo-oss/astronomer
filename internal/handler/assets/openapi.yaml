@@ -26380,7 +26380,11 @@ paths:
           description: Side-effect-free trust, compatibility, and configuration preview.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/CatalogInstallationPreview'}
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/CatalogInstallationPreview'}
         '400': {$ref: '#/components/responses/ErrorResponse'}
         '403': {$ref: '#/components/responses/ErrorResponse'}
         '404': {$ref: '#/components/responses/ErrorResponse'}

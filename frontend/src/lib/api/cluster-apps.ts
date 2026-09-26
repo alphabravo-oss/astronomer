@@ -206,7 +206,7 @@ export async function previewCatalogApplication(input: {
   valuesOverride: string;
   operation: "install" | "upgrade";
 }): Promise<OpenAPIComponents["schemas"]["CatalogInstallationPreview"]> {
-  return generated.postCatalogApplicationsPreview({
+  const wire = await generated.postCatalogApplicationsPreview({
     body: {
       cluster_id: input.clusterId,
       chart_version_id: input.chartVersionId,
@@ -215,6 +215,8 @@ export async function previewCatalogApplication(input: {
       operation: input.operation,
     },
   });
+  if (!wire.data) throw new Error("Catalog preview response omitted data");
+  return wire.data;
 }
 
 // Kick off a fresh install on this cluster. Returns the created

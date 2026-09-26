@@ -193,20 +193,24 @@ describe("catalog project isolation", () => {
 
   it("previews install and upgrade with the operation-specific API contract", async () => {
     vi.mocked(generated.postCatalogApplicationsPreview).mockResolvedValueOnce({
-      allowed: true,
-      checks: [],
-      application: "metrics-server",
-      artifact_digest: `sha256:${"a".repeat(64)}`,
-      values_digest: `sha256:${"b".repeat(64)}`,
-      catalog_digest: `sha256:${"c".repeat(64)}`,
+      data: {
+        allowed: true,
+        checks: [],
+        application: "metrics-server",
+        artifact_digest: `sha256:${"a".repeat(64)}`,
+        values_digest: `sha256:${"b".repeat(64)}`,
+        catalog_digest: `sha256:${"c".repeat(64)}`,
+      },
     });
-    await previewCatalogApplication({
-      clusterId: "cluster-1",
-      chartVersionId: "version-1",
-      namespace: "monitoring",
-      valuesOverride: "replicas: 2",
-      operation: "upgrade",
-    });
+    await expect(
+      previewCatalogApplication({
+        clusterId: "cluster-1",
+        chartVersionId: "version-1",
+        namespace: "monitoring",
+        valuesOverride: "replicas: 2",
+        operation: "upgrade",
+      }),
+    ).resolves.toMatchObject({ allowed: true, checks: [] });
     expect(generated.postCatalogApplicationsPreview).toHaveBeenCalledWith({
       body: {
         cluster_id: "cluster-1",

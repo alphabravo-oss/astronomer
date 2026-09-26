@@ -159,7 +159,8 @@ export async function previewCatalogInstallation(data: {
   namespace: string;
   values_override?: string;
 }): Promise<CatalogInstallationPreview> {
-  return postCatalogApplicationsPreview({ body: data });
+  const response = await postCatalogApplicationsPreview({ body: data });
+  return requireData(response, "previewCatalogInstallation");
 }
 
 function requiredString(value: string | undefined, field: string): string {

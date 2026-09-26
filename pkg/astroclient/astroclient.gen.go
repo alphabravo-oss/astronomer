@@ -88934,11 +88934,13 @@ func (r GetCatalogApplicationsResponse) StatusCode() int {
 type PostCatalogApplicationsPreviewResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CatalogInstallationPreview
-	JSON400      *ErrorResponse
-	JSON403      *ErrorResponse
-	JSON404      *ErrorResponse
-	JSON409      *ErrorResponse
+	JSON200      *struct {
+		Data CatalogInstallationPreview `json:"data"`
+	}
+	JSON400 *ErrorResponse
+	JSON403 *ErrorResponse
+	JSON404 *ErrorResponse
+	JSON409 *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -127581,7 +127583,9 @@ func ParsePostCatalogApplicationsPreviewResponse(rsp *http.Response) (*PostCatal
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CatalogInstallationPreview
+		var dest struct {
+			Data CatalogInstallationPreview `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

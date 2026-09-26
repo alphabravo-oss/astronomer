@@ -12501,7 +12501,9 @@ export interface OpenAPIOperations {
           "operation"?: "install" | "upgrade";
         };
       };
-    response: OpenAPIComponents['schemas']['CatalogInstallationPreview'];
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CatalogInstallationPreview'];
+      };
   };
   "getCatalogCharts": {
     method: "GET";
