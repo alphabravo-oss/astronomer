@@ -6838,6 +6838,16 @@ components:
         confirm_failed_release_cleanup:
           type: boolean
           description: Explicitly acknowledges removal of an incomplete release from a failed Astronomer install. The server still verifies the original chart, version, and revision before uninstalling it.
+    CatalogUninstallRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        confirm_data_deletion:
+          type: boolean
+          description: Required when uninstalling Longhorn because its managed volumes and stored data may be deleted.
+        confirm_failed_release_cleanup:
+          type: boolean
+          description: Allows Astronomer to recreate Longhorn's deletion setting when cleaning up an incomplete failed release.
     ToolPreview:
       type: object
       additionalProperties: false
@@ -27089,6 +27099,12 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogUninstallRequest'
       responses:
         '202':
           description: Uninstall accepted (returns the catalog operation).

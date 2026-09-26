@@ -803,6 +803,10 @@ export interface OpenAPIComponents {
     CatalogRepositorySyncReceiptEnvelope: {
           "data": OpenAPIComponents['schemas']['CatalogRepositorySyncReceipt'];
         };
+    CatalogUninstallRequest: {
+          "confirm_data_deletion"?: boolean;
+          "confirm_failed_release_cleanup"?: boolean;
+        };
     CatalogUserDiscovery: {
           "chart_id": string;
           "favorite": boolean;
@@ -12719,6 +12723,7 @@ export interface OpenAPIOperations {
         "headerParams": {
           "Idempotency-Key": string;
         };
+        "body"?: OpenAPIComponents['schemas']['CatalogUninstallRequest'];
       };
     response: OpenAPIComponents['schemas']['CatalogOperationEnvelope'];
   };
@@ -16640,6 +16645,7 @@ export type CatalogOperationEvent = OpenAPIComponents['schemas']['CatalogOperati
 export type CatalogPrerequisiteCheck = OpenAPIComponents['schemas']['CatalogPrerequisiteCheck'];
 export type CatalogRepositorySyncReceipt = OpenAPIComponents['schemas']['CatalogRepositorySyncReceipt'];
 export type CatalogRepositorySyncReceiptEnvelope = OpenAPIComponents['schemas']['CatalogRepositorySyncReceiptEnvelope'];
+export type CatalogUninstallRequest = OpenAPIComponents['schemas']['CatalogUninstallRequest'];
 export type CatalogUserDiscovery = OpenAPIComponents['schemas']['CatalogUserDiscovery'];
 export type CharlieAbortRequest = OpenAPIComponents['schemas']['CharlieAbortRequest'];
 export type CharlieAccessRequest = OpenAPIComponents['schemas']['CharlieAccessRequest'];

@@ -97,7 +97,7 @@ func (executor appLifecycleExecutor) Run(ctx context.Context, execution executio
 		}
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		mutation, key, alreadyAbsent, cleanupErr := cleanupAppInstallation(cleanupCtx, client, execution, installedID, definition.ID+"-deferred-cleanup")
+		mutation, key, alreadyAbsent, cleanupErr := cleanupAppInstallation(cleanupCtx, client, execution, installedID, executor.slug, definition.ID+"-deferred-cleanup")
 		if cleanupErr == nil {
 			cleanupErr = waitAppReleaseFootprintAbsent(cleanupCtx, client, execution, target.ClusterID, spec, 2*time.Second)
 		}
@@ -157,7 +157,7 @@ func (executor appLifecycleExecutor) Run(ctx context.Context, execution executio
 	}
 
 	result = addDimension(result, evaluateAppRestartRecovery(ctx, client, execution, executor.slug, target.ClusterID, spec), checkpoint)
-	uninstall, uninstallKey, err := executeAppMutation(ctx, client, execution, http.MethodDelete, "/api/v1/catalog/installed/"+url.PathEscape(installedID)+"/", nil, definition.ID+"-uninstall")
+	uninstall, uninstallKey, err := executeAppMutation(ctx, client, execution, http.MethodDelete, "/api/v1/catalog/installed/"+url.PathEscape(installedID)+"/", appUninstallBody(executor.slug), definition.ID+"-uninstall")
 	if err != nil {
 		return finishCase(addDimension(result, failedDimension("uninstall_cleanup", err), checkpoint), "FAIL", "application lifecycle left cleanup unproven", checkpoint)
 	}
@@ -343,10 +343,17 @@ func executeAppMutation(ctx context.Context, client *http.Client, execution exec
 	return mutation, key, err
 }
 
-func cleanupAppInstallation(ctx context.Context, client *http.Client, execution executionContext, installationID, keySuffix string) (appMutation, string, bool, error) {
+func appUninstallBody(slug string) any {
+	if slug == "longhorn" {
+		return map[string]any{"confirm_data_deletion": true, "confirm_failed_release_cleanup": true}
+	}
+	return nil
+}
+
+func cleanupAppInstallation(ctx context.Context, client *http.Client, execution executionContext, installationID, slug, keySuffix string) (appMutation, string, bool, error) {
 	key := "qualification-" + execution.RunID + "-" + strings.ToLower(keySuffix)
 	path := "/api/v1/catalog/installed/" + url.PathEscape(installationID) + "/"
-	response, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodDelete, path, nil, key, http.StatusAccepted, http.StatusNotFound)
+	response, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodDelete, path, appUninstallBody(slug), key, http.StatusAccepted, http.StatusNotFound)
 	if err != nil {
 		return appMutation{}, key, false, err
 	}

@@ -3685,6 +3685,15 @@ type CatalogRepositorySyncReceiptEnvelope struct {
 	Data CatalogRepositorySyncReceipt `json:"data"`
 }
 
+// CatalogUninstallRequest defines model for CatalogUninstallRequest.
+type CatalogUninstallRequest struct {
+	// ConfirmDataDeletion Required when uninstalling Longhorn because its managed volumes and stored data may be deleted.
+	ConfirmDataDeletion *bool `json:"confirm_data_deletion,omitempty"`
+
+	// ConfirmFailedReleaseCleanup Allows Astronomer to recreate Longhorn's deletion setting when cleaning up an incomplete failed release.
+	ConfirmFailedReleaseCleanup *bool `json:"confirm_failed_release_cleanup,omitempty"`
+}
+
 // CatalogUserDiscovery defines model for CatalogUserDiscovery.
 type CatalogUserDiscovery struct {
 	ChartId      openapi_types.UUID `json:"chart_id"`
@@ -14605,6 +14614,9 @@ type PutCatalogChartsByIdFavoriteJSONRequestBody PutCatalogChartsByIdFavoriteJSO
 // PostCatalogInstalledJSONRequestBody defines body for PostCatalogInstalled for application/json ContentType.
 type PostCatalogInstalledJSONRequestBody PostCatalogInstalledJSONBody
 
+// DeleteCatalogInstalledByIdJSONRequestBody defines body for DeleteCatalogInstalledById for application/json ContentType.
+type DeleteCatalogInstalledByIdJSONRequestBody = CatalogUninstallRequest
+
 // PostCatalogInstalledByIdRollbackJSONRequestBody defines body for PostCatalogInstalledByIdRollback for application/json ContentType.
 type PostCatalogInstalledByIdRollbackJSONRequestBody PostCatalogInstalledByIdRollbackJSONBody
 
@@ -21241,8 +21253,10 @@ type ClientInterface interface {
 
 	PostCatalogInstalled(ctx context.Context, params *PostCatalogInstalledParams, body PostCatalogInstalledJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DeleteCatalogInstalledById request
-	DeleteCatalogInstalledById(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DeleteCatalogInstalledByIdWithBody request with any body
+	DeleteCatalogInstalledByIdWithBody(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DeleteCatalogInstalledById(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, body DeleteCatalogInstalledByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCatalogInstalledById request
 	GetCatalogInstalledById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -27392,8 +27406,20 @@ func (c *Client) PostCatalogInstalled(ctx context.Context, params *PostCatalogIn
 	return c.Client.Do(req)
 }
 
-func (c *Client) DeleteCatalogInstalledById(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteCatalogInstalledByIdRequest(c.Server, id, params)
+func (c *Client) DeleteCatalogInstalledByIdWithBody(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteCatalogInstalledByIdRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteCatalogInstalledById(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, body DeleteCatalogInstalledByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteCatalogInstalledByIdRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -48565,8 +48591,19 @@ func NewPostCatalogInstalledRequestWithBody(server string, params *PostCatalogIn
 	return req, nil
 }
 
-// NewDeleteCatalogInstalledByIdRequest generates requests for DeleteCatalogInstalledById
-func NewDeleteCatalogInstalledByIdRequest(server string, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams) (*http.Request, error) {
+// NewDeleteCatalogInstalledByIdRequest calls the generic DeleteCatalogInstalledById builder with application/json body
+func NewDeleteCatalogInstalledByIdRequest(server string, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, body DeleteCatalogInstalledByIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDeleteCatalogInstalledByIdRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewDeleteCatalogInstalledByIdRequestWithBody generates requests for DeleteCatalogInstalledById with any type of body
+func NewDeleteCatalogInstalledByIdRequestWithBody(server string, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -48591,10 +48628,12 @@ func NewDeleteCatalogInstalledByIdRequest(server string, id openapi_types.UUID, 
 		return nil, err
 	}
 
-	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	req, err := http.NewRequest("DELETE", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -80227,8 +80266,10 @@ type ClientWithResponsesInterface interface {
 
 	PostCatalogInstalledWithResponse(ctx context.Context, params *PostCatalogInstalledParams, body PostCatalogInstalledJSONRequestBody, reqEditors ...RequestEditorFn) (*PostCatalogInstalledResponse, error)
 
-	// DeleteCatalogInstalledByIdWithResponse request
-	DeleteCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error)
+	// DeleteCatalogInstalledByIdWithBodyWithResponse request with any body
+	DeleteCatalogInstalledByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error)
+
+	DeleteCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, body DeleteCatalogInstalledByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error)
 
 	// GetCatalogInstalledByIdWithResponse request
 	GetCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdResponse, error)
@@ -107915,9 +107956,17 @@ func (c *ClientWithResponses) PostCatalogInstalledWithResponse(ctx context.Conte
 	return ParsePostCatalogInstalledResponse(rsp)
 }
 
-// DeleteCatalogInstalledByIdWithResponse request returning *DeleteCatalogInstalledByIdResponse
-func (c *ClientWithResponses) DeleteCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error) {
-	rsp, err := c.DeleteCatalogInstalledById(ctx, id, params, reqEditors...)
+// DeleteCatalogInstalledByIdWithBodyWithResponse request with arbitrary body returning *DeleteCatalogInstalledByIdResponse
+func (c *ClientWithResponses) DeleteCatalogInstalledByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error) {
+	rsp, err := c.DeleteCatalogInstalledByIdWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteCatalogInstalledByIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) DeleteCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, body DeleteCatalogInstalledByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error) {
+	rsp, err := c.DeleteCatalogInstalledById(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

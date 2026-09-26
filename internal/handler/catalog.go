@@ -148,6 +148,7 @@ type CatalogApplicationDelivery interface {
 type CatalogHandler struct {
 	queries  CatalogQuerier
 	helm     HelmRequester
+	k8s      K8sRequester
 	delivery CatalogApplicationDelivery
 	log      *slog.Logger
 	authz    authorizationSupport
@@ -177,6 +178,14 @@ type CatalogHandler struct {
 	// group only prevents an in-flight download stampede.
 	chartHydration        singleflight.Group
 	chartHydrationTimeout time.Duration
+}
+
+// SetK8sRequester wires the adopted-cluster API path used for lifecycle
+// preparation that must happen before a chart can be safely removed.
+func (h *CatalogHandler) SetK8sRequester(requester K8sRequester) {
+	if h != nil {
+		h.k8s = requester
+	}
 }
 
 func (h *CatalogHandler) SetApplicationDelivery(delivery CatalogApplicationDelivery) {

@@ -257,7 +257,7 @@ function CatalogPage() {
                 installed={installed}
                 loading={false}
                 onRollback={(id, revision) => rollback.mutate({ id, revision })}
-                onUninstall={(id) => uninstall.mutateAsync(id)}
+                onUninstall={(request) => uninstall.mutateAsync(request)}
                 uninstallPending={uninstall.isPending}
               />
             </QueryStates>

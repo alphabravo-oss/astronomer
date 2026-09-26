@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -87,50 +86,23 @@ func (h *ToolHandler) executeOperation(ctx context.Context, op sqlc.ToolOperatio
 }
 
 func (h *ToolHandler) prepareLonghornUninstall(ctx context.Context, op sqlc.ToolOperation, env toolOperationEnvelope) error {
-	if !env.ConfirmDataDeletion {
-		return errors.New("Longhorn uninstall is missing explicit persistent-data deletion confirmation")
-	}
-	if h.k8s == nil {
-		return errors.New("kubernetes requester not configured for Longhorn uninstall")
-	}
-	const (
-		path       = "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings/deleting-confirmation-flag"
-		collection = "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings"
-	)
-	resp, err := h.k8s.Do(ctx, env.ClusterID, http.MethodPatch, path, []byte(`{"value":"true"}`), requestHeaders("application/merge-patch+json"))
+	result, err := prepareLonghornDeletion(ctx, h.k8s, env.ClusterID, env.ConfirmDataDeletion, env.ConfirmFailedReleaseCleanup)
 	if err != nil {
-		return fmt.Errorf("enable Longhorn deletion confirmation: %w", err)
+		return err
 	}
-	if resp != nil && resp.StatusCode == http.StatusNotFound && env.ConfirmFailedReleaseCleanup {
-		createBody := []byte(`{"apiVersion":"longhorn.io/v1beta2","kind":"Setting","metadata":{"name":"deleting-confirmation-flag","namespace":"longhorn-system"},"value":"true"}`)
-		created, createErr := h.k8s.Do(ctx, env.ClusterID, http.MethodPost, collection, createBody, requestHeaders("application/json"))
-		if createErr != nil {
-			return fmt.Errorf("create Longhorn deletion confirmation during failed-release cleanup: %w", createErr)
-		}
-		if created != nil && created.StatusCode == http.StatusNotFound {
-			h.recordToolOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn deletion confirmation CRD was absent during failed-release cleanup", map[string]any{
-				"namespace": "longhorn-system",
-				"setting":   "deleting-confirmation-flag",
-			})
-			return nil
-		}
-		if created != nil && created.StatusCode == http.StatusConflict {
-			created, createErr = h.k8s.Do(ctx, env.ClusterID, http.MethodPatch, path, []byte(`{"value":"true"}`), requestHeaders("application/merge-patch+json"))
-			if createErr != nil {
-				return fmt.Errorf("enable concurrently-created Longhorn deletion confirmation: %w", createErr)
-			}
-		}
-		if err := ensureSuccess(created); err != nil {
-			return fmt.Errorf("create Longhorn deletion confirmation during failed-release cleanup: %w", err)
-		}
-		h.recordToolOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn deletion confirmation was recreated during failed-release cleanup", map[string]any{
+	if result == longhornDeletionCRDAbsent {
+		h.recordToolOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn deletion confirmation CRD was absent during failed-release cleanup", map[string]any{
 			"namespace": "longhorn-system",
 			"setting":   "deleting-confirmation-flag",
 		})
 		return nil
 	}
-	if err := ensureSuccess(resp); err != nil {
-		return fmt.Errorf("enable Longhorn deletion confirmation: %w", err)
+	if result == longhornDeletionCreated {
+		h.recordToolOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn deletion confirmation was recreated during failed-release cleanup", map[string]any{
+			"namespace": "longhorn-system",
+			"setting":   "deleting-confirmation-flag",
+		})
+		return nil
 	}
 	h.recordToolOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn persistent-data deletion confirmed", map[string]any{
 		"namespace": "longhorn-system",

@@ -176,12 +176,22 @@ func TestCleanupAppInstallationAcceptsAlreadyAbsentRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, key, alreadyAbsent, err := cleanupAppInstallation(context.Background(), server.Client(), executionContext{Base: base, Token: "token", RunID: "run-1"}, "install-1", "APP-01-deferred-cleanup")
+	_, key, alreadyAbsent, err := cleanupAppInstallation(context.Background(), server.Client(), executionContext{Base: base, Token: "token", RunID: "run-1"}, "install-1", "constellation", "APP-01-deferred-cleanup")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if key == "" || !alreadyAbsent {
 		t.Fatalf("cleanup key=%q alreadyAbsent=%t, want a successful idempotent cleanup", key, alreadyAbsent)
+	}
+}
+
+func TestAppUninstallBodyRequiresExplicitLonghornDeletionConfirmation(t *testing.T) {
+	longhorn, ok := appUninstallBody("longhorn").(map[string]any)
+	if !ok || longhorn["confirm_data_deletion"] != true || longhorn["confirm_failed_release_cleanup"] != true {
+		t.Fatalf("longhorn uninstall body = %#v", longhorn)
+	}
+	if body := appUninstallBody("grafana"); body != nil {
+		t.Fatalf("standard app uninstall body = %#v", body)
 	}
 }
 

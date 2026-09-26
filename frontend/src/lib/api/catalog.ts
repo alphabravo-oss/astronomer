@@ -583,10 +583,24 @@ export async function upgradeInstalledChart(
   return mapInstalledChart(payload.installation);
 }
 
-export async function uninstallChart(id: string): Promise<void> {
+export async function uninstallChart({
+  id,
+  confirmDataDeletion,
+}: {
+  id: string;
+  confirmDataDeletion?: boolean;
+}): Promise<void> {
   await deleteCatalogInstalledById({
     path: { id },
     headerParams: idempotencyHeaderParams(),
+    ...(confirmDataDeletion
+      ? {
+          body: {
+            confirm_data_deletion: true,
+            confirm_failed_release_cleanup: true,
+          },
+        }
+      : {}),
   });
 }
 
