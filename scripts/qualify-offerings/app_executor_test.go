@@ -79,7 +79,7 @@ func TestLokiUsesFunctionalSingleBinaryFilesystemProfile(t *testing.T) {
 func TestFunctionalProfilesIncludeRequiredRuntimeIdentity(t *testing.T) {
 	checks := map[string][]string{
 		"external-dns":            {"provider:\n  name: inmemory", "txtOwnerId: astronomer-qualification"},
-		"opentelemetry-collector": {"mode: deployment", "repository: otel/opentelemetry-collector-k8s"},
+		"opentelemetry-collector": {"mode: deployment", "repository: otel/opentelemetry-collector-k8s", "ports:\n  metrics:\n    enabled: true"},
 	}
 	for slug, required := range checks {
 		spec := appSpec(slug, memberTarget{}, "1.0.0")

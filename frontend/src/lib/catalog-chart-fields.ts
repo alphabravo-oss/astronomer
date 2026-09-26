@@ -360,6 +360,12 @@ const CURATED_FIELDS: Record<string, CuratedField[]> = {
     field("config.processors", "Processors"),
     field("config.exporters", "Exporters"),
     field("config.service.pipelines", "Pipelines"),
+    field(
+      "ports.metrics.enabled",
+      "Expose collector metrics",
+      "Publishes the collector's internal telemetry so accepted and rejected data can be verified.",
+    ),
+    field("ports.metrics.servicePort", "Collector metrics port"),
     field("serviceMonitor.enabled", "Create ServiceMonitor"),
     resourceRequirements("resources"),
   ],

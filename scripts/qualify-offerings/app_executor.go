@@ -194,7 +194,7 @@ func appSpec(slug string, target memberTarget, chartVersion string) appInstallSp
 		"cert-manager":             "crds:\n  enabled: true\nstartupapicheck:\n  enabled: true\n",
 		"external-dns":             "provider:\n  name: inmemory\nsources:\n  - service\npolicy: sync\nregistry: noop\ntxtOwnerId: astronomer-qualification\ninterval: 5s\n",
 		"velero":                   "backupsEnabled: false\nsnapshotsEnabled: false\ndeployNodeAgent: true\ncredentials:\n  useSecret: false\nconfiguration:\n  backupStorageLocation: []\n  volumeSnapshotLocation: []\n",
-		"opentelemetry-collector":  "mode: deployment\nimage:\n  repository: otel/opentelemetry-collector-k8s\nconfig:\n  exporters:\n    debug: {}\n  service:\n    pipelines:\n      traces:\n        receivers: [otlp]\n        processors: [batch]\n        exporters: [debug]\n",
+		"opentelemetry-collector":  "mode: deployment\nimage:\n  repository: otel/opentelemetry-collector-k8s\nports:\n  metrics:\n    enabled: true\nconfig:\n  exporters:\n    debug: {}\n  service:\n    pipelines:\n      traces:\n        receivers: [otlp]\n        processors: [batch]\n        exporters: [debug]\n",
 		"loki":                     "deploymentMode: SingleBinary\nloki:\n  auth_enabled: false\n  useTestSchema: true\n  commonConfig:\n    replication_factor: 1\n  storage:\n    type: filesystem\nsingleBinary:\n  replicas: 1\nbackend:\n  replicas: 0\nread:\n  replicas: 0\nwrite:\n  replicas: 0\nminio:\n  enabled: false\n",
 		"tempo":                    "tempo:\n  receivers:\n    otlp:\n      protocols:\n        http: {}\n        grpc: {}\npersistence:\n  enabled: false\n",
 	}

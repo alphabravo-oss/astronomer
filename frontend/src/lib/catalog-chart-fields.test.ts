@@ -108,6 +108,39 @@ it("adds audited required metadata to a field declared by the chart", () => {
   );
 });
 
+it("exposes OpenTelemetry collector verification metrics", () => {
+  const curated = curateHelmValuesSchema("opentelemetry-collector", {
+    type: "object",
+    properties: {
+      ports: {
+        type: "object",
+        properties: {
+          metrics: {
+            type: "object",
+            properties: {
+              enabled: { type: "boolean", default: false },
+              servicePort: { type: "integer", default: 8888 },
+            },
+          },
+        },
+      },
+    },
+  })!;
+
+  expect(curated.properties?.ports?.properties?.metrics?.properties).toEqual(
+    expect.objectContaining({
+      enabled: expect.objectContaining({
+        type: "boolean",
+        title: "Expose collector metrics",
+      }),
+      servicePort: expect.objectContaining({
+        type: "integer",
+        title: "Collector metrics port",
+      }),
+    }),
+  );
+});
+
 it("projects Constellation's real operational values and supplies its image tag field", () => {
   const curated = curateHelmValuesSchema("constellation", {
     type: "object",
