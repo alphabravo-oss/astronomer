@@ -179,7 +179,12 @@ export async function getChartDefaultValues(
   chartId: string,
   version?: string,
   signal?: AbortSignal,
-): Promise<{ chart: string; version: string; defaultValues: string }> {
+): Promise<{
+  chart: string;
+  version: string;
+  defaultValues: string;
+  valuesSchema: Record<string, unknown>;
+}> {
   const wire = await generated.getCatalogChartsByIdValues({
     path: { id: chartId },
     query: { project_id: projectId, version },
@@ -189,7 +194,26 @@ export async function getChartDefaultValues(
     chart: wire.chart ?? "",
     version: wire.version ?? "",
     defaultValues: wire.default_values ?? "",
+    valuesSchema: wire.values_schema ?? {},
   };
+}
+
+export async function previewCatalogApplication(input: {
+  clusterId: string;
+  chartVersionId: string;
+  namespace: string;
+  valuesOverride: string;
+  operation: "install" | "upgrade";
+}): Promise<OpenAPIComponents["schemas"]["CatalogInstallationPreview"]> {
+  return generated.postCatalogApplicationsPreview({
+    body: {
+      cluster_id: input.clusterId,
+      chart_version_id: input.chartVersionId,
+      namespace: input.namespace,
+      values_override: input.valuesOverride || undefined,
+      operation: input.operation,
+    },
+  });
 }
 
 // Kick off a fresh install on this cluster. Returns the created

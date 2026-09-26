@@ -6,6 +6,15 @@ export interface HelmValuesSchemaNode {
   description?: string;
   default?: unknown;
   enum?: unknown[];
+  minimum?: number;
+  maximum?: number;
+  multipleOf?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  format?: string;
+  "x-astronomer-group"?: string;
+  "x-astronomer-show-when"?: { path: string; equals: string };
   properties?: Record<string, HelmValuesSchemaNode>;
   items?: HelmValuesSchemaNode;
   required?: string[];

@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as generated from "@/lib/api/generated/client";
-import { getTools, previewToolInstall, uninstallTool } from "@/lib/api/tools";
+import {
+  getToolConfiguration,
+  getTools,
+  previewToolInstall,
+  uninstallTool,
+} from "@/lib/api/tools";
 
 vi.mock("@/lib/api/generated/client", async (importOriginal) => {
   const actual =
@@ -9,6 +14,7 @@ vi.mock("@/lib/api/generated/client", async (importOriginal) => {
     ...actual,
     deleteToolsBySlugUninstall: vi.fn(),
     getTools: vi.fn(),
+    getToolsBySlugConfiguration: vi.fn(),
     postToolsBySlugPreview: vi.fn(),
   };
 });
@@ -117,6 +123,7 @@ describe("tools generated API boundary", () => {
           },
         ],
         preset: "production",
+        checks: [],
       },
     });
 
@@ -136,6 +143,7 @@ describe("tools generated API boundary", () => {
         },
       ],
       preset: "production",
+      checks: [],
     });
     expect(generated.postToolsBySlugPreview).toHaveBeenCalledWith({
       path: { slug: "fluent-bit" },
@@ -144,6 +152,38 @@ describe("tools generated API boundary", () => {
         preset: "production",
         values_override: "replicas: 2",
       },
+    });
+  });
+
+  it("maps the saved multi-release configuration", async () => {
+    vi.mocked(generated.getToolsBySlugConfiguration).mockResolvedValueOnce({
+      data: {
+        preset: "development",
+        values_yaml: "istiod:\n  replicaCount: 1\n",
+        releases: [
+          {
+            id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            release_name: "istiod",
+            namespace: "istio-system",
+            revision: 3,
+          },
+        ],
+      },
+    });
+
+    await expect(
+      getToolConfiguration("istio", "4fa85f64-5717-4562-b3fc-2c963f66afa6"),
+    ).resolves.toEqual({
+      preset: "development",
+      valuesYaml: "istiod:\n  replicaCount: 1\n",
+      releases: [
+        {
+          id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+          releaseName: "istiod",
+          namespace: "istio-system",
+          revision: 3,
+        },
+      ],
     });
   });
 

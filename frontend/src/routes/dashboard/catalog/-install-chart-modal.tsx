@@ -18,6 +18,7 @@ import {
   type HelmValuesSchemaNode,
 } from "@/lib/helm-values-schema";
 import { cn } from "@/lib/utils";
+import { curateHelmValuesSchema } from "@/lib/catalog-chart-fields";
 import type { HelmChart, HelmChartVersion } from "@/types";
 import { AlertTriangle, Braces, FileCode2 } from "lucide-react";
 
@@ -51,10 +52,11 @@ function InstallChartForm({
   const schema = useMemo(() => {
     // Inline $ref/$defs first so generator-style schemas (cert-manager etc.) render.
     const resolved = resolveSchemaRefs(version.valuesSchema);
-    return hasRenderableSchema(resolved)
+    const renderable = hasRenderableSchema(resolved)
       ? (resolved as HelmValuesSchemaNode)
       : null;
-  }, [version.valuesSchema]);
+    return curateHelmValuesSchema(chart.name, renderable);
+  }, [chart.name, version.valuesSchema]);
 
   // Sprint 23: when arriving from an empty-state CTA on a cluster
   // detail page (e.g. "Install trivy-operator from Image Scans"), the

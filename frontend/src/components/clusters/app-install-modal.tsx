@@ -17,37 +17,58 @@ import {
  *     + ns are read-only (those are the release identity), version
  *     dropdown is the user's actual control.
  *
- * YAML editor:
+ * Values editor:
  *   • Pre-filled from GET /catalog/charts/{chart_id}/values/?version=
  *     which lazy-hydrates the chart's defaults on first call (~1-2s)
  *     then caches.
  *   • On upgrade mode it's pre-filled with the release's current
  *     values_override so the user sees what they currently have, not
  *     a wall of fresh defaults to wade through.
- *   • Plain <textarea> for v1 — Monaco / CodeMirror would be nice but
- *     out of scope. YAML correctness isn't validated client-side;
- *     helm install will fail clearly on bad YAML.
+ *   • Curated Settings and full YAML round-trip through the same override.
+ *     Review is backed by the public server preview and blocks mutation when
+ *     validation or preflight finds an unsafe configuration.
  *
  * Submission returns a durable catalog operation receipt. The caller tracks
  * that operation and its Flux rollout; acceptance is not workload readiness.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { HelmValuesForm } from "@/components/catalog/helm-values-form";
 import { QueryStates } from "@/components/ui/query-states";
 import { useAppForm, useStore } from "@/lib/form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
-import { Loader2, AlertTriangle, Info } from "lucide-react";
+import {
+  Loader2,
+  AlertTriangle,
+  Braces,
+  FileCode2,
+  GitCompare,
+  Info,
+} from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
   getChartDefaultValues,
   installChartOnCluster,
+  previewCatalogApplication,
   upgradeClusterApp,
 } from "@/lib/api/cluster-apps";
 import { queryKeys } from "@/lib/query-keys";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
+import type { OpenAPIComponents } from "@/types/openapi.generated";
+import {
+  dumpHelmValuesYAML,
+  hasRenderableSchema,
+  mergeSchemaDefaults,
+  parseHelmValuesYAML,
+  resolveSchemaRefs,
+  type HelmValuesObject,
+  type HelmValuesSchemaNode,
+} from "@/lib/helm-values-schema";
+import { cn } from "@/lib/utils";
+import { curateHelmValuesSchema } from "@/lib/catalog-chart-fields";
 
 type Mode =
   | { kind: "install"; chartId: string; chartName: string }
@@ -132,6 +153,11 @@ export function AppInstallModal({
   );
   const releaseName = useStore(form.store, (s) => s.values.releaseName);
   const namespace = useStore(form.store, (s) => s.values.namespace);
+  const valuesYaml = useStore(form.store, (s) => s.values.valuesYaml);
+  const [editorMode, setEditorMode] = useState<"form" | "yaml" | "review">(
+    "form",
+  );
+  const [yamlError, setYamlError] = useState<string | null>(null);
   // Tracks whether we've already pre-filled defaults for the chosen
   // version — used so that switching versions in install mode
   // refreshes the YAML, but typing into the editor doesn't get
@@ -166,6 +192,47 @@ export function AppInstallModal({
     enabled: !!projectId && !!selectedVersion?.version,
     throwOnError: false,
   });
+  const valuesSchema = useMemo(() => {
+    const resolved = resolveSchemaRefs(defaultValues.data?.valuesSchema);
+    const renderable = hasRenderableSchema(resolved)
+      ? (resolved as HelmValuesSchemaNode)
+      : null;
+    return curateHelmValuesSchema(mode.chartName, renderable);
+  }, [defaultValues.data?.valuesSchema, mode.chartName]);
+  const schemaValues = useMemo(() => {
+    const parsed = parseHelmValuesYAML(valuesYaml);
+    if (parsed == null) return null;
+    return (
+      valuesSchema ? mergeSchemaDefaults(valuesSchema, parsed) : parsed
+    ) as HelmValuesObject;
+  }, [valuesSchema, valuesYaml]);
+  const valuesAreValid = !valuesYaml.trim() || schemaValues != null;
+  const preview = useQuery({
+    queryKey: queryKeys.catalog.applicationPreview(
+      clusterId,
+      selectedVersionId,
+      namespace,
+      valuesYaml,
+      isUpgrade ? "upgrade" : "install",
+    ),
+    queryFn: () =>
+      previewCatalogApplication({
+        clusterId,
+        chartVersionId: selectedVersionId,
+        namespace: namespace.trim(),
+        valuesOverride: valuesYaml,
+        operation: isUpgrade ? "upgrade" : "install",
+      }),
+    enabled:
+      editorMode === "review" &&
+      !!selectedVersionId &&
+      !!namespace.trim() &&
+      valuesAreValid,
+    retry: false,
+  });
+  const blockingPreview = preview.data?.checks.find(
+    (check) => check.status === "blocking",
+  );
 
   useEffect(() => {
     if (isUpgrade) return; // don't auto-clobber on upgrade
@@ -188,6 +255,12 @@ export function AppInstallModal({
       if (isUpgrade && (!upgradeValues.isSuccess || upgradeValues.isError))
         throw new Error("Load the saved release values before upgrading");
       const value = form.state.values;
+      if (
+        value.valuesYaml.trim() &&
+        parseHelmValuesYAML(value.valuesYaml) == null
+      ) {
+        throw new Error("Values must be valid YAML containing an object");
+      }
       const idempotencyKey = intent.keyFor({
         mode,
         clusterId,
@@ -250,6 +323,9 @@ export function AppInstallModal({
     releaseName.trim() !== "" &&
     namespace.trim() !== "" &&
     !install.isPending &&
+    !yamlError &&
+    !blockingPreview &&
+    !(editorMode === "review" && (preview.isLoading || preview.isError)) &&
     !submitBlockedReason &&
     (!isUpgrade || (upgradeValues.isSuccess && !upgradeValues.isError));
 
@@ -258,7 +334,21 @@ export function AppInstallModal({
       toastWarning(submitBlockedReason);
       return;
     }
+    if (valuesYaml.trim() && parseHelmValuesYAML(valuesYaml) == null) {
+      setYamlError("Values must be valid YAML containing an object.");
+      return;
+    }
+    setYamlError(null);
     void form.handleSubmit();
+  };
+
+  const switchEditorMode = (next: "form" | "yaml" | "review") => {
+    if (next === "form" && schemaValues == null) {
+      setYamlError("Fix the YAML before returning to the form.");
+      return;
+    }
+    setYamlError(null);
+    setEditorMode(next);
   };
 
   const slowInstall = SLOW_INSTALL_CHARTS.has(mode.chartName);
@@ -283,7 +373,12 @@ export function AppInstallModal({
           pending={install.isPending}
           onSubmit={handleSubmit}
           submittable={submittable}
-          reason={submitBlockedReason}
+          reason={
+            submitBlockedReason ??
+            blockingPreview?.description ??
+            yamlError ??
+            undefined
+          }
           upgrade={isUpgrade}
         />
       }
@@ -364,10 +459,10 @@ export function AppInstallModal({
           </div>
         </div>
 
-        <div className="space-y-1.5">
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-muted-foreground">
-              Values (YAML)
+              Values
               {defaultValues.isLoading && (
                 <span className="ml-2 inline-flex items-center text-[10px] text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin mr-1" /> hydrating
@@ -399,28 +494,185 @@ export function AppInstallModal({
               </button>
             )}
           </div>
-          <form.Field name="valuesYaml">
-            {(field) => (
-              <textarea
-                value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-                onBlur={field.handleBlur}
-                rows={16}
-                spellCheck={false}
-                className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono focus:outline-hidden focus:ring-1 focus:ring-ring resize-y"
-                placeholder="# values.yaml — overrides applied on top of chart defaults"
-              />
+          {valuesSchema && (
+            <div className="inline-flex rounded-md border border-border bg-muted/30 p-1">
+              <button
+                type="button"
+                aria-pressed={editorMode === "form"}
+                onClick={() => switchEditorMode("form")}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                  editorMode === "form"
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Braces className="h-3.5 w-3.5" /> Form
+              </button>
+              <button
+                type="button"
+                aria-pressed={editorMode === "yaml"}
+                onClick={() => switchEditorMode("yaml")}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
+                  editorMode === "yaml"
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <FileCode2 className="h-3.5 w-3.5" /> YAML
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            aria-pressed={editorMode === "review"}
+            onClick={() => switchEditorMode("review")}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-sm border border-border px-2.5 py-1 text-xs font-medium transition-colors",
+              editorMode === "review"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground",
             )}
-          </form.Field>
+          >
+            <GitCompare className="h-3.5 w-3.5" /> Review
+          </button>
+          {editorMode === "review" ? (
+            <CatalogApplicationReview
+              preview={preview.data}
+              loading={preview.isLoading}
+              error={preview.error}
+              chartName={mode.chartName}
+              version={selectedVersion?.version ?? ""}
+              namespace={namespace}
+              releaseName={releaseName}
+            />
+          ) : valuesSchema && editorMode === "form" && schemaValues ? (
+            <div className="rounded-lg border border-border bg-muted/20 p-4">
+              <HelmValuesForm
+                schema={valuesSchema}
+                value={schemaValues}
+                onChange={(next) => {
+                  form.setFieldValue("valuesYaml", dumpHelmValuesYAML(next));
+                  setYamlError(null);
+                }}
+              />
+            </div>
+          ) : (
+            <form.Field name="valuesYaml">
+              {(field) => (
+                <textarea
+                  aria-label="Values (YAML)"
+                  value={field.state.value}
+                  onChange={(e) => {
+                    field.handleChange(e.target.value);
+                    setYamlError(null);
+                  }}
+                  onBlur={() => {
+                    field.handleBlur();
+                    if (
+                      field.state.value.trim() &&
+                      parseHelmValuesYAML(field.state.value) == null
+                    )
+                      setYamlError(
+                        "Values must be valid YAML containing an object.",
+                      );
+                  }}
+                  rows={16}
+                  spellCheck={false}
+                  className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono focus:outline-hidden focus:ring-1 focus:ring-ring resize-y"
+                  placeholder="# values.yaml — overrides applied on top of chart defaults"
+                />
+              )}
+            </form.Field>
+          )}
+          {yamlError && (
+            <p role="alert" className="text-xs text-status-error">
+              {yamlError}
+            </p>
+          )}
           <p className="text-[11px] text-muted-foreground">
-            Vault references like{" "}
-            <code className="font-mono">${`{vault://secret/path#key}`}</code>{" "}
-            are resolved at install time. Sensitive values stay in Vault rather
-            than this row.
+            Use chart fields that reference an existing Kubernetes Secret for
+            credentials. Verified Apps reject inline Vault placeholders so the
+            durable delivery bundle never persists a hidden secret template.
           </p>
         </div>
       </div>
     </ModalShell>
+  );
+}
+
+function CatalogApplicationReview({
+  preview,
+  loading,
+  error,
+  chartName,
+  version,
+  namespace,
+  releaseName,
+}: {
+  preview?: OpenAPIComponents["schemas"]["CatalogInstallationPreview"];
+  loading: boolean;
+  error: Error | null;
+  chartName: string;
+  version: string;
+  namespace: string;
+  releaseName: string;
+}) {
+  if (loading)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Validating trust, compatibility, access and configuration…
+      </p>
+    );
+  if (error)
+    return (
+      <p role="alert" className="text-sm text-status-error">
+        Preview failed: {error.message}
+      </p>
+    );
+  if (!preview) return null;
+  return (
+    <div className="space-y-4">
+      <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
+        <p className="font-medium text-foreground">
+          {releaseName} · {chartName}@{version}
+        </p>
+        <p className="text-muted-foreground">Namespace {namespace}</p>
+      </div>
+      <section aria-label="Installation checks" className="space-y-2">
+        {preview.checks.map((check) => (
+          <div
+            key={check.code}
+            className={cn(
+              "rounded-md border px-3 py-2 text-xs",
+              check.status === "blocking"
+                ? "border-status-error/30 bg-status-error/5"
+                : check.status === "advisory" || check.status === "approval"
+                  ? "border-status-warning/30 bg-status-warning/5"
+                  : "border-status-success/30 bg-status-success/5",
+            )}
+          >
+            <p className="font-semibold text-foreground">{check.title}</p>
+            <p className="mt-0.5 text-muted-foreground">{check.description}</p>
+          </div>
+        ))}
+      </section>
+      <dl className="grid gap-2 text-[11px] text-muted-foreground sm:grid-cols-2">
+        <div>
+          <dt>Artifact digest</dt>
+          <dd className="truncate font-mono" title={preview.artifact_digest}>
+            {preview.artifact_digest}
+          </dd>
+        </div>
+        <div>
+          <dt>Values digest</dt>
+          <dd className="truncate font-mono" title={preview.values_digest}>
+            {preview.values_digest}
+          </dd>
+        </div>
+      </dl>
+    </div>
   );
 }
 

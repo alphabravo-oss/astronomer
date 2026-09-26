@@ -4,6 +4,7 @@ import type { ClusterTool, ClusterToolStatus } from "@/types";
 
 const mocks = vi.hoisted(() => ({
   install: vi.fn(),
+  upgrade: vi.fn(),
   uninstall: vi.fn(),
   adopt: vi.fn(),
   recover: vi.fn(),
@@ -12,6 +13,18 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/hooks/tools", () => ({
   useInstallTool: () => ({ mutate: mocks.install, isPending: false }),
+  useUpgradeTool: () => ({ mutate: mocks.upgrade, isPending: false }),
+  useToolConfiguration: () => ({
+    data: {
+      preset: "production",
+      valuesYaml: "istiod:\n  replicaCount: 2",
+      releases: [],
+    },
+    isLoading: false,
+    isSuccess: true,
+    isError: false,
+    error: null,
+  }),
   useUninstallTool: () => ({ mutate: mocks.uninstall, isPending: false }),
   useAdoptTool: () => ({ mutate: mocks.adopt }),
   useRecoverTool: () => ({ mutate: mocks.recover, isPending: false }),
@@ -117,6 +130,31 @@ describe("useClusterToolActions", () => {
     expect(result.current.cardProps(tool).installDisabledReason).toBe(
       "create denied",
     );
+  });
+
+  it("loads durable values and uses update permission for an upgrade", () => {
+    const readyStatus = { ...status, status: "installed" as const };
+    const { result } = renderHook(() =>
+      useClusterToolActions({ ...props, statuses: [readyStatus] }),
+    );
+    act(() => result.current.cardProps(tool).onUpgrade?.(tool.slug));
+    expect(result.current.installDialog).toMatchObject({
+      action: "upgrade",
+      initialPreset: "production",
+      initialValuesYaml: "istiod:\n  replicaCount: 2",
+    });
+    act(() =>
+      result.current.installDialog?.onConfirm(
+        "istiod:\n  replicaCount: 3",
+        "production",
+      ),
+    );
+    expect(mocks.upgrade.mock.calls[0][0]).toEqual({
+      slug: "istio",
+      cluster_id: "cluster",
+      preset: "production",
+      values_override: "istiod:\n  replicaCount: 3",
+    });
   });
 
   it("retries the original operation directly but requires confirmation for rollback", () => {

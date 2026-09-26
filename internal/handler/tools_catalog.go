@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -53,7 +54,7 @@ func (h *ToolHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ToolHandler) Preview(w http.ResponseWriter, r *http.Request) {
-	_, req, plan, _, err := h.resolveAction(r)
+	tool, req, plan, _, err := h.resolveAction(r)
 	if err != nil {
 		if errors.Is(err, errToolNotFound) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Tool not found")
@@ -62,13 +63,29 @@ func (h *ToolHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
+	clusterID, err := uuid.Parse(req.ClusterID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
+		return
+	}
 	charts := make([]map[string]any, 0, len(plan))
 	for _, release := range plan {
 		charts = append(charts, map[string]any{"chart_name": release.ChartName, "chart_version": release.Version, "namespace": release.Namespace, "release_name": release.ReleaseName, "values_yaml": release.ValuesYAML})
 	}
+	allowedRelease := ""
+	if tool.Slug == "prometheus-node-exporter" {
+		if installed, lookupErr := h.findInstalledTool(r.Context(), clusterID, tool.Slug); lookupErr == nil {
+			allowedRelease = installed.ReleaseName
+		}
+	}
+	checks := h.toolPreflightChecks(r.Context(), tool.Slug, req.ClusterID, plan, allowedRelease)
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"charts": charts,
 		"preset": req.Preset,
+		"checks": checks,
 	})
 }
 
@@ -113,6 +130,10 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 	}
 	if msg, ok := h.checkToolScope(r.Context(), tool.Slug, clusterID); !ok {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.WrongClusterScope, msg)
+		return
+	}
+	if blocked := blockingToolPreflight(h.toolPreflightChecks(r.Context(), tool.Slug, req.ClusterID, plan, "")); blocked != "" {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
 		return
 	}
 	// Migration 067 — the values blob keeps its ${vault://...} markers in
@@ -173,6 +194,43 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to lookup installed tool")
 		return
 	}
+	// An omitted preset or values document means "preserve the installed
+	// configuration" on upgrade. This makes the public API safe for automation
+	// as well as the UI: an upgrade request can never erase prior advanced keys
+	// merely because its caller did not first read and replay them.
+	if req.Preset == "" || strings.TrimSpace(req.ValuesOverride) == "" {
+		rows, listErr := h.installedToolReleases(r, clusterID, tool.Slug)
+		if listErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load installed tool configuration")
+			return
+		}
+		savedValues, savedPreset, _, combineErr := combineInstalledToolValues(tool, rows)
+		if combineErr != nil {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Installed tool configuration cannot be reconstructed")
+			return
+		}
+		if req.Preset == "" {
+			req.Preset = savedPreset
+		}
+		if strings.TrimSpace(req.ValuesOverride) == "" {
+			req.ValuesOverride = savedValues
+		}
+		var distributionYAML string
+		if cluster, lookupErr := h.queries.GetClusterByID(r.Context(), clusterID); lookupErr == nil {
+			distributionYAML = distributionInstallValues(tool.Slug, cluster.Distribution)
+		}
+		valuesYAML := mergeValueLayers(distributionYAML, presetValuesYAML(tool.Presets, req.Preset), req.ValuesOverride)
+		if validationErr := validateToolFormValues(tool.Slug, valuesYAML); validationErr != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, validationErr.Error())
+			return
+		}
+		plan, err = buildToolReleasePlan(tool, req.ReleaseName, valuesYAML)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+			return
+		}
+	}
+	restoreToolActionRequestBody(r, req)
 	releaseName := existing.ReleaseName
 	if len(plan) == 1 {
 		if req.ReleaseName != "" && req.ReleaseName != releaseName {
@@ -181,6 +239,10 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		}
 		plan[0].ReleaseName = releaseName
 		plan[0].Namespace = existing.Namespace
+	}
+	if blocked := blockingToolPreflight(h.toolPreflightChecks(r.Context(), tool.Slug, req.ClusterID, plan, existing.ReleaseName)); blocked != "" {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
+		return
 	}
 	// Migration 067 — the values blob keeps its ${vault://...} markers in
 	// both the payload and the installed_charts row; the reconciler

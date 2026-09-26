@@ -6719,13 +6719,25 @@ components:
       properties:
         path: {type: string}
         label: {type: string}
-        type: {type: string, enum: [string, number, boolean, select, storage]}
+        type: {type: string, enum: [string, number, boolean, select, multiline, storage]}
         group: {type: string}
         default: {type: string}
         options: {type: array, items: {type: string}}
         help: {type: string}
         placeholder: {type: string}
         storage_class_path: {type: string}
+        minimum: {type: number}
+        maximum: {type: number}
+        step: {type: number, minimum: 0, exclusiveMinimum: true}
+        show_when:
+          $ref: '#/components/schemas/ToolFormCondition'
+    ToolFormCondition:
+      type: object
+      additionalProperties: false
+      required: [path, equals]
+      properties:
+        path: {type: string}
+        equals: {type: string}
     ToolFormSchema:
       type: object
       additionalProperties: false
@@ -6826,7 +6838,7 @@ components:
     ToolPreview:
       type: object
       additionalProperties: false
-      required: [charts, preset]
+      required: [charts, preset, checks]
       properties:
         charts:
           type: array
@@ -6841,6 +6853,35 @@ components:
               namespace: {type: string}
               values_yaml: {type: string}
         preset: {type: string}
+        checks:
+          type: array
+          items: {$ref: '#/components/schemas/ToolPreflightCheck'}
+    ToolPreflightCheck:
+      type: object
+      additionalProperties: false
+      required: [code, status, message]
+      properties:
+        code: {type: string}
+        status: {type: string, enum: [pass, warn, block]}
+        message: {type: string}
+    ToolConfiguration:
+      type: object
+      additionalProperties: false
+      required: [preset, values_yaml, releases]
+      properties:
+        preset: {type: string}
+        values_yaml: {type: string}
+        releases:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, release_name, namespace, revision]
+            properties:
+              id: {type: string, format: uuid}
+              release_name: {type: string}
+              namespace: {type: string}
+              revision: {type: integer}
     ToolOperationEvent:
       type: object
       additionalProperties: false
@@ -18352,6 +18393,34 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/tools/{slug}/configuration:
+    get:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "catalog:read on the requested cluster"
+      operationId: getToolsBySlugConfiguration
+      tags: [Tools]
+      summary: Read the durable effective configuration of an installed managed tool
+      description: Values may contain credentials and are authorized against the exact cluster. Multi-release values are reconstructed under their declared values keys.
+      x-astronomer-route-class: public-api
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, minLength: 1}}
+        - {name: cluster_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Installed tool configuration.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/DataEnvelope'}
+                  - properties:
+                      data: {$ref: '#/components/schemas/ToolConfiguration'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/tools/{slug}/install:
     post:
       x-astronomer-auth: "bearer-or-session"
@@ -26305,6 +26374,7 @@ paths:
                 chart_version_id: {type: string, format: uuid}
                 namespace: {type: string}
                 values_override: {type: string, maxLength: 1048576}
+                operation: {type: string, enum: [install, upgrade], default: install}
       responses:
         '200':
           description: Side-effect-free trust, compatibility, and configuration preview.

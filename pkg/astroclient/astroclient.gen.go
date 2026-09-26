@@ -2077,11 +2077,12 @@ const (
 
 // Defines values for ToolFormFieldType.
 const (
-	ToolFormFieldTypeBoolean ToolFormFieldType = "boolean"
-	ToolFormFieldTypeNumber  ToolFormFieldType = "number"
-	ToolFormFieldTypeSelect  ToolFormFieldType = "select"
-	ToolFormFieldTypeStorage ToolFormFieldType = "storage"
-	ToolFormFieldTypeString  ToolFormFieldType = "string"
+	ToolFormFieldTypeBoolean   ToolFormFieldType = "boolean"
+	ToolFormFieldTypeMultiline ToolFormFieldType = "multiline"
+	ToolFormFieldTypeNumber    ToolFormFieldType = "number"
+	ToolFormFieldTypeSelect    ToolFormFieldType = "select"
+	ToolFormFieldTypeStorage   ToolFormFieldType = "storage"
+	ToolFormFieldTypeString    ToolFormFieldType = "string"
 )
 
 // Defines values for ToolOperationOperationType.
@@ -2107,6 +2108,13 @@ const (
 	ToolOperationEventLevelError ToolOperationEventLevel = "error"
 	ToolOperationEventLevelInfo  ToolOperationEventLevel = "info"
 	ToolOperationEventLevelWarn  ToolOperationEventLevel = "warn"
+)
+
+// Defines values for ToolPreflightCheckStatus.
+const (
+	ToolPreflightCheckStatusBlock ToolPreflightCheckStatus = "block"
+	ToolPreflightCheckStatusPass  ToolPreflightCheckStatus = "pass"
+	ToolPreflightCheckStatusWarn  ToolPreflightCheckStatus = "warn"
 )
 
 // Defines values for UpdateClusterRequestBadgeColor.
@@ -2332,6 +2340,12 @@ const (
 	CreateAuditExportParamsResultError   CreateAuditExportParamsResult = "error"
 	CreateAuditExportParamsResultFailure CreateAuditExportParamsResult = "failure"
 	CreateAuditExportParamsResultSuccess CreateAuditExportParamsResult = "success"
+)
+
+// Defines values for PostCatalogApplicationsPreviewJSONBodyOperation.
+const (
+	PostCatalogApplicationsPreviewJSONBodyOperationInstall PostCatalogApplicationsPreviewJSONBodyOperation = "install"
+	PostCatalogApplicationsPreviewJSONBodyOperationUpgrade PostCatalogApplicationsPreviewJSONBodyOperation = "upgrade"
 )
 
 // Defines values for ListCharlieFindingsParamsStatus.
@@ -10665,6 +10679,18 @@ type ToolChart struct {
 	Version     *string `json:"version,omitempty"`
 }
 
+// ToolConfiguration defines model for ToolConfiguration.
+type ToolConfiguration struct {
+	Preset   string `json:"preset"`
+	Releases []struct {
+		Id          openapi_types.UUID `json:"id"`
+		Namespace   string             `json:"namespace"`
+		ReleaseName string             `json:"release_name"`
+		Revision    int                `json:"revision"`
+	} `json:"releases"`
+	ValuesYaml string `json:"values_yaml"`
+}
+
 // ToolControllerStatus defines model for ToolControllerStatus.
 type ToolControllerStatus struct {
 	LatestFailure      *map[string]interface{}    `json:"latestFailure"`
@@ -10683,17 +10709,27 @@ type ToolControllerStatusEnvelope struct {
 	Data ToolControllerStatus `json:"data"`
 }
 
+// ToolFormCondition defines model for ToolFormCondition.
+type ToolFormCondition struct {
+	Equals string `json:"equals"`
+	Path   string `json:"path"`
+}
+
 // ToolFormField defines model for ToolFormField.
 type ToolFormField struct {
-	Default          *string           `json:"default,omitempty"`
-	Group            string            `json:"group"`
-	Help             *string           `json:"help,omitempty"`
-	Label            string            `json:"label"`
-	Options          *[]string         `json:"options,omitempty"`
-	Path             string            `json:"path"`
-	Placeholder      *string           `json:"placeholder,omitempty"`
-	StorageClassPath *string           `json:"storage_class_path,omitempty"`
-	Type             ToolFormFieldType `json:"type"`
+	Default          *string            `json:"default,omitempty"`
+	Group            string             `json:"group"`
+	Help             *string            `json:"help,omitempty"`
+	Label            string             `json:"label"`
+	Maximum          *float32           `json:"maximum,omitempty"`
+	Minimum          *float32           `json:"minimum,omitempty"`
+	Options          *[]string          `json:"options,omitempty"`
+	Path             string             `json:"path"`
+	Placeholder      *string            `json:"placeholder,omitempty"`
+	ShowWhen         *ToolFormCondition `json:"show_when,omitempty"`
+	Step             *float32           `json:"step,omitempty"`
+	StorageClassPath *string            `json:"storage_class_path,omitempty"`
+	Type             ToolFormFieldType  `json:"type"`
 }
 
 // ToolFormFieldType defines model for ToolFormField.Type.
@@ -10739,6 +10775,16 @@ type ToolOperationEvent struct {
 // ToolOperationEventLevel defines model for ToolOperationEvent.Level.
 type ToolOperationEventLevel string
 
+// ToolPreflightCheck defines model for ToolPreflightCheck.
+type ToolPreflightCheck struct {
+	Code    string                   `json:"code"`
+	Message string                   `json:"message"`
+	Status  ToolPreflightCheckStatus `json:"status"`
+}
+
+// ToolPreflightCheckStatus defines model for ToolPreflightCheck.Status.
+type ToolPreflightCheckStatus string
+
 // ToolPreview defines model for ToolPreview.
 type ToolPreview struct {
 	Charts []struct {
@@ -10748,7 +10794,8 @@ type ToolPreview struct {
 		ReleaseName  *string `json:"release_name,omitempty"`
 		ValuesYaml   string  `json:"values_yaml"`
 	} `json:"charts"`
-	Preset string `json:"preset"`
+	Checks []ToolPreflightCheck `json:"checks"`
+	Preset string               `json:"preset"`
 }
 
 // ToolUninstallRequest defines model for ToolUninstallRequest.
@@ -12069,11 +12116,15 @@ type GetBackupsStorageParams struct {
 
 // PostCatalogApplicationsPreviewJSONBody defines parameters for PostCatalogApplicationsPreview.
 type PostCatalogApplicationsPreviewJSONBody struct {
-	ChartVersionId openapi_types.UUID `json:"chart_version_id"`
-	ClusterId      openapi_types.UUID `json:"cluster_id"`
-	Namespace      string             `json:"namespace"`
-	ValuesOverride *string            `json:"values_override,omitempty"`
+	ChartVersionId openapi_types.UUID                               `json:"chart_version_id"`
+	ClusterId      openapi_types.UUID                               `json:"cluster_id"`
+	Namespace      string                                           `json:"namespace"`
+	Operation      *PostCatalogApplicationsPreviewJSONBodyOperation `json:"operation,omitempty"`
+	ValuesOverride *string                                          `json:"values_override,omitempty"`
 }
+
+// PostCatalogApplicationsPreviewJSONBodyOperation defines parameters for PostCatalogApplicationsPreview.
+type PostCatalogApplicationsPreviewJSONBodyOperation string
 
 // GetCatalogChartsParams defines parameters for GetCatalogCharts.
 type GetCatalogChartsParams struct {
@@ -14100,6 +14151,11 @@ type PostToolsOperationsByIdRetryParams struct {
 type PostToolsBySlugAdoptParams struct {
 	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetToolsBySlugConfigurationParams defines parameters for GetToolsBySlugConfiguration.
+type GetToolsBySlugConfigurationParams struct {
+	ClusterId openapi_types.UUID `form:"cluster_id" json:"cluster_id"`
 }
 
 // PostToolsBySlugInstallParams defines parameters for PostToolsBySlugInstall.
@@ -23247,6 +23303,9 @@ type ClientInterface interface {
 	PostToolsBySlugAdoptWithBody(ctx context.Context, slug string, params *PostToolsBySlugAdoptParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostToolsBySlugAdopt(ctx context.Context, slug string, params *PostToolsBySlugAdoptParams, body PostToolsBySlugAdoptJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetToolsBySlugConfiguration request
+	GetToolsBySlugConfiguration(ctx context.Context, slug string, params *GetToolsBySlugConfigurationParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostToolsBySlugInstallWithBody request with any body
 	PostToolsBySlugInstallWithBody(ctx context.Context, slug string, params *PostToolsBySlugInstallParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -36368,6 +36427,18 @@ func (c *Client) PostToolsBySlugAdoptWithBody(ctx context.Context, slug string, 
 
 func (c *Client) PostToolsBySlugAdopt(ctx context.Context, slug string, params *PostToolsBySlugAdoptParams, body PostToolsBySlugAdoptJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostToolsBySlugAdoptRequest(c.Server, slug, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetToolsBySlugConfiguration(ctx context.Context, slug string, params *GetToolsBySlugConfigurationParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetToolsBySlugConfigurationRequest(c.Server, slug, params)
 	if err != nil {
 		return nil, err
 	}
@@ -77118,6 +77189,58 @@ func NewPostToolsBySlugAdoptRequestWithBody(server string, slug string, params *
 	return req, nil
 }
 
+// NewGetToolsBySlugConfigurationRequest generates requests for GetToolsBySlugConfiguration
+func NewGetToolsBySlugConfigurationRequest(server string, slug string, params *GetToolsBySlugConfigurationParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "slug", runtime.ParamLocationPath, slug)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tools/%s/configuration", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, params.ClusterId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPostToolsBySlugInstallRequest calls the generic PostToolsBySlugInstall builder with application/json body
 func NewPostToolsBySlugInstallRequest(server string, slug string, params *PostToolsBySlugInstallParams, body PostToolsBySlugInstallJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -82166,6 +82289,9 @@ type ClientWithResponsesInterface interface {
 	PostToolsBySlugAdoptWithBodyWithResponse(ctx context.Context, slug string, params *PostToolsBySlugAdoptParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostToolsBySlugAdoptResponse, error)
 
 	PostToolsBySlugAdoptWithResponse(ctx context.Context, slug string, params *PostToolsBySlugAdoptParams, body PostToolsBySlugAdoptJSONRequestBody, reqEditors ...RequestEditorFn) (*PostToolsBySlugAdoptResponse, error)
+
+	// GetToolsBySlugConfigurationWithResponse request
+	GetToolsBySlugConfigurationWithResponse(ctx context.Context, slug string, params *GetToolsBySlugConfigurationParams, reqEditors ...RequestEditorFn) (*GetToolsBySlugConfigurationResponse, error)
 
 	// PostToolsBySlugInstallWithBodyWithResponse request with any body
 	PostToolsBySlugInstallWithBodyWithResponse(ctx context.Context, slug string, params *PostToolsBySlugInstallParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostToolsBySlugInstallResponse, error)
@@ -103844,6 +103970,36 @@ func (r PostToolsBySlugAdoptResponse) StatusCode() int {
 	return 0
 }
 
+type GetToolsBySlugConfigurationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data ToolConfiguration `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+	JSON409 *Conflict
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetToolsBySlugConfigurationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetToolsBySlugConfigurationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PostToolsBySlugInstallResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -114338,6 +114494,15 @@ func (c *ClientWithResponses) PostToolsBySlugAdoptWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParsePostToolsBySlugAdoptResponse(rsp)
+}
+
+// GetToolsBySlugConfigurationWithResponse request returning *GetToolsBySlugConfigurationResponse
+func (c *ClientWithResponses) GetToolsBySlugConfigurationWithResponse(ctx context.Context, slug string, params *GetToolsBySlugConfigurationParams, reqEditors ...RequestEditorFn) (*GetToolsBySlugConfigurationResponse, error) {
+	rsp, err := c.GetToolsBySlugConfiguration(ctx, slug, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetToolsBySlugConfigurationResponse(rsp)
 }
 
 // PostToolsBySlugInstallWithBodyWithResponse request with arbitrary body returning *PostToolsBySlugInstallResponse
@@ -155442,6 +155607,76 @@ func ParsePostToolsBySlugAdoptResponse(rsp *http.Response) (*PostToolsBySlugAdop
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetToolsBySlugConfigurationResponse parses an HTTP response from a GetToolsBySlugConfigurationWithResponse call
+func ParseGetToolsBySlugConfigurationResponse(rsp *http.Response) (*GetToolsBySlugConfigurationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetToolsBySlugConfigurationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data ToolConfiguration `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ServiceUnavailable

@@ -37,6 +37,7 @@ interface ToolCardProps {
   tool: ClusterTool;
   toolStatus?: ClusterToolStatus;
   onInstall: (slug: string) => void;
+  onUpgrade?: (slug: string) => void;
   onUninstall: (slug: string) => void;
   onAdopt: (slug: string, releaseName: string) => void;
   onRecover?: (slug: string, action: "retry" | "rollback") => void;
@@ -53,6 +54,7 @@ export function ToolCard({
   tool,
   toolStatus,
   onInstall,
+  onUpgrade,
   onUninstall,
   onAdopt,
   onRecover,
@@ -78,10 +80,14 @@ export function ToolCard({
     clusterDisconnectedReason || installDisabledReason;
   const retryDisabledReason =
     clusterDisconnectedReason || recoveryDisabledReason;
-  const canResume = toolStatus?.operation?.status === "failed" || toolStatus?.operation?.status === "superseded";
+  const canResume =
+    toolStatus?.operation?.status === "failed" ||
+    toolStatus?.operation?.status === "superseded";
   const adoptBlockedReason = clusterDisconnectedReason || adoptDisabledReason;
   const uninstallBlockedReason =
     clusterDisconnectedReason || uninstallDisabledReason;
+  const upgradeBlockedReason =
+    clusterDisconnectedReason || recoveryDisabledReason;
 
   return (
     <div className="rounded-lg border border-border p-5 space-y-4">
@@ -160,15 +166,28 @@ export function ToolCard({
         )}
 
         {status === "installed" && (
-          <div className="flex items-center justify-between">
-            {onRecover && toolStatus?.operation?.operationType === "upgrade" && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {onUpgrade && (
               <button
-                onClick={() => onRecover(tool.slug, "rollback")}
-                disabled={!!retryDisabledReason}
-                title={retryDisabledReason}
-                className="h-8 px-3 rounded-md border border-border text-xs disabled:opacity-50"
-              >Roll back upgrade</button>
+                onClick={() => onUpgrade(tool.slug)}
+                disabled={!!upgradeBlockedReason}
+                title={upgradeBlockedReason}
+                className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium disabled:opacity-50"
+              >
+                Configure
+              </button>
             )}
+            {onRecover &&
+              toolStatus?.operation?.operationType === "upgrade" && (
+                <button
+                  onClick={() => onRecover(tool.slug, "rollback")}
+                  disabled={!!retryDisabledReason}
+                  title={retryDisabledReason}
+                  className="h-8 px-3 rounded-md border border-border text-xs disabled:opacity-50"
+                >
+                  Roll back upgrade
+                </button>
+              )}
             {toolStatus?.presetUsed && (
               <span className="text-xs text-muted-foreground">
                 Preset:{" "}
@@ -198,7 +217,10 @@ export function ToolCard({
             <button
               onClick={() => {
                 if (toolStatus?.releaseName) {
-                  onAdopt(tool.slug, tool.charts.length > 1 ? tool.slug : toolStatus.releaseName);
+                  onAdopt(
+                    tool.slug,
+                    tool.charts.length > 1 ? tool.slug : toolStatus.releaseName,
+                  );
                 }
               }}
               disabled={!!adoptBlockedReason}
@@ -221,10 +243,16 @@ export function ToolCard({
         {status === "failed" && (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => canResume ? onRecover?.(tool.slug, "retry") : onInstall(tool.slug)}
+              onClick={() =>
+                canResume
+                  ? onRecover?.(tool.slug, "retry")
+                  : onInstall(tool.slug)
+              }
               disabled={
                 installing ||
-                (canResume ? !!retryDisabledReason || !onRecover : !!enableDisabledReason)
+                (canResume
+                  ? !!retryDisabledReason || !onRecover
+                  : !!enableDisabledReason)
               }
               title={canResume ? retryDisabledReason : enableDisabledReason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground

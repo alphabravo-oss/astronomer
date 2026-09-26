@@ -11,6 +11,7 @@ import {
   installChartOnCluster,
   listCatalogCharts,
   listRecommendedCharts,
+  previewCatalogApplication,
 } from "@/lib/api/cluster-apps";
 
 vi.mock("@/lib/api/generated/client", async (importOriginal) => {
@@ -23,6 +24,7 @@ vi.mock("@/lib/api/generated/client", async (importOriginal) => {
     getCatalogChartsByIdVersions: vi.fn(),
     getCatalogChartsByIdValues: vi.fn(),
     postCatalogInstalled: vi.fn(),
+    postCatalogApplicationsPreview: vi.fn(),
     putCatalogInstalledByIdUpgrade: vi.fn(),
   };
 });
@@ -143,6 +145,33 @@ describe("catalog project isolation", () => {
       path: { id: "chart-1" },
       query: { project_id: "project-1", version: "1.2.3" },
       signal: undefined,
+    });
+  });
+
+  it("previews install and upgrade with the operation-specific API contract", async () => {
+    vi.mocked(generated.postCatalogApplicationsPreview).mockResolvedValueOnce({
+      allowed: true,
+      checks: [],
+      application: "metrics-server",
+      artifact_digest: `sha256:${"a".repeat(64)}`,
+      values_digest: `sha256:${"b".repeat(64)}`,
+      catalog_digest: `sha256:${"c".repeat(64)}`,
+    });
+    await previewCatalogApplication({
+      clusterId: "cluster-1",
+      chartVersionId: "version-1",
+      namespace: "monitoring",
+      valuesOverride: "replicas: 2",
+      operation: "upgrade",
+    });
+    expect(generated.postCatalogApplicationsPreview).toHaveBeenCalledWith({
+      body: {
+        cluster_id: "cluster-1",
+        chart_version_id: "version-1",
+        namespace: "monitoring",
+        values_override: "replicas: 2",
+        operation: "upgrade",
+      },
     });
   });
 

@@ -5563,6 +5563,16 @@ export interface OpenAPIComponents {
           "version"?: string;
           "values_key"?: string;
         };
+    ToolConfiguration: {
+          "preset": string;
+          "values_yaml": string;
+          "releases": Array<{
+            "id": string;
+            "release_name": string;
+            "namespace": string;
+            "revision": number;
+          }>;
+        };
     ToolControllerStatus: {
           "reconciler": OpenAPIComponents['schemas']['ControllerReconcilerStatus'];
           "tools": {
@@ -5577,16 +5587,24 @@ export interface OpenAPIComponents {
     ToolControllerStatusEnvelope: {
           "data": OpenAPIComponents['schemas']['ToolControllerStatus'];
         };
+    ToolFormCondition: {
+          "path": string;
+          "equals": string;
+        };
     ToolFormField: {
           "path": string;
           "label": string;
-          "type": "string" | "number" | "boolean" | "select" | "storage";
+          "type": "string" | "number" | "boolean" | "select" | "multiline" | "storage";
           "group": string;
           "default"?: string;
           "options"?: string[];
           "help"?: string;
           "placeholder"?: string;
           "storage_class_path"?: string;
+          "minimum"?: number;
+          "maximum"?: number;
+          "step"?: number;
+          "show_when"?: OpenAPIComponents['schemas']['ToolFormCondition'];
         };
     ToolFormSchema: {
           "fields": OpenAPIComponents['schemas']['ToolFormField'][];
@@ -5613,6 +5631,11 @@ export interface OpenAPIComponents {
           "detail"?: Record<string, unknown> | null;
           "createdAt": string;
         };
+    ToolPreflightCheck: {
+          "code": string;
+          "status": "pass" | "warn" | "block";
+          "message": string;
+        };
     ToolPreview: {
           "charts": Array<{
             "chart_name": string;
@@ -5622,6 +5645,7 @@ export interface OpenAPIComponents {
             "values_yaml": string;
           }>;
           "preset": string;
+          "checks": OpenAPIComponents['schemas']['ToolPreflightCheck'][];
         };
     ToolUninstallRequest: {
           "cluster_id": string;
@@ -9166,6 +9190,21 @@ export interface OpenAPIOperations {
         "data"?: OpenAPIComponents['schemas']['ToolOperation'];
       };
   };
+  "getToolsBySlugConfiguration": {
+    method: "GET";
+    path: "/api/v1/tools/{slug}/configuration";
+    arguments: {
+        "path": {
+          "slug": string;
+        };
+        "query": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ToolConfiguration'];
+      };
+  };
   "postToolsBySlugInstall": {
     method: "POST";
     path: "/api/v1/tools/{slug}/install";
@@ -12459,6 +12498,7 @@ export interface OpenAPIOperations {
           "chart_version_id": string;
           "namespace": string;
           "values_override"?: string;
+          "operation"?: "install" | "upgrade";
         };
       };
     response: OpenAPIComponents['schemas']['CatalogInstallationPreview'];
@@ -17179,12 +17219,15 @@ export type TaskOutboxEntryEnvelope = OpenAPIComponents['schemas']['TaskOutboxEn
 export type TaskOutboxEntryWire = OpenAPIComponents['schemas']['TaskOutboxEntryWire'];
 export type ToolActionRequest = OpenAPIComponents['schemas']['ToolActionRequest'];
 export type ToolChart = OpenAPIComponents['schemas']['ToolChart'];
+export type ToolConfiguration = OpenAPIComponents['schemas']['ToolConfiguration'];
 export type ToolControllerStatus = OpenAPIComponents['schemas']['ToolControllerStatus'];
 export type ToolControllerStatusEnvelope = OpenAPIComponents['schemas']['ToolControllerStatusEnvelope'];
+export type ToolFormCondition = OpenAPIComponents['schemas']['ToolFormCondition'];
 export type ToolFormField = OpenAPIComponents['schemas']['ToolFormField'];
 export type ToolFormSchema = OpenAPIComponents['schemas']['ToolFormSchema'];
 export type ToolOperation = OpenAPIComponents['schemas']['ToolOperation'];
 export type ToolOperationEvent = OpenAPIComponents['schemas']['ToolOperationEvent'];
+export type ToolPreflightCheck = OpenAPIComponents['schemas']['ToolPreflightCheck'];
 export type ToolPreview = OpenAPIComponents['schemas']['ToolPreview'];
 export type ToolUninstallRequest = OpenAPIComponents['schemas']['ToolUninstallRequest'];
 export type UpdateClusterGroupRequest = OpenAPIComponents['schemas']['UpdateClusterGroupRequest'];

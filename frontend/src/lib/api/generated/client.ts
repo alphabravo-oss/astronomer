@@ -518,6 +518,7 @@ export const operationMetadata = {
   "getSupportBundleOperation": { method: "GET", path: "/api/v1/support-bundles/{id}", pathParameters: ["id"], responseType: "json" },
   "getTools": { method: "GET", path: "/api/v1/tools/", pathParameters: [], responseType: "json" },
   "getToolsBySlug": { method: "GET", path: "/api/v1/tools/{slug}", pathParameters: ["slug"], responseType: "json" },
+  "getToolsBySlugConfiguration": { method: "GET", path: "/api/v1/tools/{slug}/configuration", pathParameters: ["slug"], responseType: "json" },
   "getToolsControllerStatus": { method: "GET", path: "/api/v1/tools/controller/status", pathParameters: [], responseType: "json" },
   "getToolsOperations": { method: "GET", path: "/api/v1/tools/operations", pathParameters: [], responseType: "json" },
   "getToolsOperationsById": { method: "GET", path: "/api/v1/tools/operations/{id}", pathParameters: ["id"], responseType: "json" },
@@ -3337,6 +3338,11 @@ export function getTools(args?: OpenAPIArguments<"getTools">) {
 
 export function getToolsBySlug(args: OpenAPIArguments<"getToolsBySlug">) {
   const operationId = "getToolsBySlug" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getToolsBySlugConfiguration(args: OpenAPIArguments<"getToolsBySlugConfiguration">) {
+  const operationId = "getToolsBySlugConfiguration" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 

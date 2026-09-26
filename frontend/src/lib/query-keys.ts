@@ -593,6 +593,22 @@ export const queryKeys = {
       chartId: string,
       version?: string,
     ) => ["catalog", projectId, "chart-values", chartId, version] as const,
+    applicationPreview: (
+      clusterId: string,
+      chartVersionId: string,
+      namespace: string,
+      values: string,
+      operation: "install" | "upgrade",
+    ) =>
+      [
+        "catalog",
+        "application-preview",
+        clusterId,
+        chartVersionId,
+        namespace,
+        values,
+        operation,
+      ] as const,
     chart: (scopeId: string, chartId: string) =>
       ["catalog", scopeId, "chart", chartId] as const,
     chartReadme: (scopeId: string, chartId: string, version?: string) =>
@@ -629,6 +645,8 @@ export const queryKeys = {
     detail: (slug: string) => ["tools", "detail", slug] as const,
     clusterStatus: (clusterId: string) =>
       ["tools", "clusterStatus", clusterId] as const,
+    configuration: (toolSlug: string, clusterId: string) =>
+      ["tools", "configuration", toolSlug, clusterId] as const,
     preview: (
       toolSlug: string,
       clusterId: string,

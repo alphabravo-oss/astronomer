@@ -86,6 +86,7 @@ type catalogInstallationPreviewRequest struct {
 	ChartVersionID string `json:"chart_version_id"`
 	Namespace      string `json:"namespace"`
 	ValuesOverride string `json:"values_override"`
+	Operation      string `json:"operation"`
 }
 
 // openapi:request Operation_putCatalogChartsByIdFavorite
@@ -124,7 +125,14 @@ func (h *CatalogHandler) PreviewCatalogInstallation(w http.ResponseWriter, r *ht
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to resolve namespace ownership")
 		return
 	}
-	allowedTarget, err := h.catalogCallerAllowsTarget(r.Context(), clusterID, projectID, request.Namespace, rbac.VerbCreate)
+	verb := rbac.VerbCreate
+	if request.Operation == "upgrade" {
+		verb = rbac.VerbUpdate
+	} else if request.Operation != "" && request.Operation != "install" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "operation must be install or upgrade")
+		return
+	}
+	allowedTarget, err := h.catalogCallerAllowsTarget(r.Context(), clusterID, projectID, request.Namespace, verb)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 		return
@@ -141,6 +149,11 @@ func (h *CatalogHandler) PreviewCatalogInstallation(w http.ResponseWriter, r *ht
 	version, err := h.queries.GetHelmChartVersionByID(r.Context(), versionID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart version not found")
+		return
+	}
+	version, err = h.hydrateChartVersion(r.Context(), version)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Chart configuration metadata is temporarily unavailable")
 		return
 	}
 	store, ok := h.queries.(applicationCatalogQuerier)
@@ -217,12 +230,78 @@ func catalogInstallChecks(cluster sqlc.Cluster, version sqlc.HelmChartVersion, p
 		}
 		add("persistent_storage", "advisory", "Persistent storage", detail)
 	}
-	if _, err := valuesJSONForPreview(values); err != nil {
-		add("values", "blocking", "Configuration", err.Error())
-	} else {
-		add("values", "ready", "Configuration", "Values are valid bounded YAML and contain no persisted vault placeholders.")
+	_, valuesErr := valuesJSONForPreview(values)
+	if valuesErr != nil {
+		add("values", "blocking", "Configuration", valuesErr.Error())
+		return checks, allowed
 	}
+	effectiveValues, effectiveErr := valuesJSONForPreview(mergeValueLayers(version.DefaultValues, values))
+	if effectiveErr != nil {
+		add("values", "blocking", "Configuration", "Chart defaults and overrides could not be merged into valid values.")
+	} else if schemaErr := validateCatalogValuesSchema(version.ValuesSchema, effectiveValues); schemaErr != nil {
+		add("values", "blocking", "Configuration", schemaErr.Error())
+	} else {
+		add("values", "ready", "Configuration", "Values are valid bounded YAML, satisfy the selected chart schema and contain no persisted vault placeholders.")
+	}
+	addCatalogFunctionalConfigurationChecks(presentation.Slug, effectiveValues, add)
 	return checks, allowed
+}
+
+func addCatalogFunctionalConfigurationChecks(slug string, values map[string]any, add func(string, string, string, string)) {
+	missing := func(paths ...string) []string {
+		var result []string
+		for _, path := range paths {
+			if strings.TrimSpace(catalogStringValue(values, path)) == "" {
+				result = append(result, path)
+			}
+		}
+		return result
+	}
+	switch slug {
+	case "loki":
+		if catalogStringValue(values, "loki.storage.type") != "filesystem" {
+			if absent := missing("loki.storage.bucketNames.chunks", "loki.storage.bucketNames.ruler"); len(absent) > 0 {
+				add("functional_configuration", "blocking", "Object storage", "Configure "+strings.Join(absent, " and ")+" or choose filesystem storage with a compatible SingleBinary deployment.")
+			}
+		}
+	case "opentelemetry-collector":
+		if absent := missing("mode", "image.repository"); len(absent) > 0 {
+			add("functional_configuration", "blocking", "Collector runtime", "Configure "+strings.Join(absent, " and ")+"; the pinned upstream chart deliberately has no operational default for these values.")
+		}
+	case "external-dns":
+		if absent := missing("txtOwnerId"); len(absent) > 0 {
+			add("functional_configuration", "blocking", "DNS ownership", "Set a unique txtOwnerId so this release cannot ambiguously claim records owned by another ExternalDNS deployment.")
+		}
+	case "fluent-bit":
+		if len(missing("existingConfigMap")) > 0 && len(missing("config.outputs")) > 0 {
+			add("functional_configuration", "blocking", "Log destination", "Configure an explicit output pipeline or existingConfigMap; the chart's example Elasticsearch destination is not a safe operational default.")
+		}
+	case "velero":
+		locations, _ := catalogValueAtPath(values, "configuration.backupStorageLocation").([]any)
+		if len(locations) == 0 {
+			add("functional_configuration", "blocking", "Backup storage", "Configure at least one backupStorageLocation before installing Velero so backups have a real destination.")
+		}
+	}
+}
+
+func catalogStringValue(values map[string]any, path string) string {
+	value := catalogValueAtPath(values, path)
+	if typed, ok := value.(string); ok {
+		return typed
+	}
+	return ""
+}
+
+func catalogValueAtPath(values map[string]any, path string) any {
+	var current any = values
+	for _, segment := range strings.Split(path, ".") {
+		object, ok := current.(map[string]any)
+		if !ok {
+			return nil
+		}
+		current = object[segment]
+	}
+	return current
 }
 
 const vaultReferencePrefix = "${vault://"

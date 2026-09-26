@@ -53,3 +53,7 @@ export type ClusterToolStatus = Omit<
 export type ToolPreviewResponse = CamelizeKeys<
   OpenAPIComponents["schemas"]["ToolPreview"]
 >;
+
+export type ToolConfiguration = CamelizeKeys<
+  OpenAPIComponents["schemas"]["ToolConfiguration"]
+>;

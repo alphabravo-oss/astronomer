@@ -50,6 +50,8 @@ const chartArchiveMaxBytes = 50 * 1024 * 1024
 // pin an API handler for the HTTP client's former 60-second timeout.
 const defaultChartHydrationTimeout = 10 * time.Second
 
+const chartSchemaHydrationVersion = 2
+
 func (h *CatalogHandler) effectiveChartHydrationTimeout() time.Duration {
 	if h != nil && h.chartHydrationTimeout > 0 {
 		return h.chartHydrationTimeout
@@ -64,7 +66,7 @@ func (h *CatalogHandler) effectiveChartHydrationTimeout() time.Duration {
 func (h *CatalogHandler) hydrateChartVersion(ctx context.Context, version sqlc.HelmChartVersion) (sqlc.HelmChartVersion, error) {
 	// Hydrate-once by timestamp: once we've pulled the archive we never pull
 	// again, even for charts that ship no values.schema.json / empty README.
-	if version.ContentHydratedAt.Valid {
+	if version.ContentHydratedAt.Valid && hydratedChartSchemaIsCurrent(version.ValuesSchema) {
 		return version, nil
 	}
 	if h == nil {
@@ -116,48 +118,56 @@ func (h *CatalogHandler) hydrateChartVersionOnce(ctx context.Context, version sq
 	}
 
 	var valuesYAML, readme string
+	var questionsYAML []byte
 	for _, f := range c.Raw {
 		switch strings.ToLower(f.Name) {
 		case "values.yaml":
 			valuesYAML = string(f.Data)
 		case "readme.md":
 			readme = string(f.Data)
+		case "questions.yaml", "questions.yml":
+			questionsYAML = f.Data
 		}
 	}
-
-	// values.schema.json drives the typed install form. Prefer the upstream
-	// schema (helm parses it into chart.Schema); else scan Raw for older
-	// layouts; else infer a types-only schema from the chart's default values
-	// so every chart still gets a form (the UI keeps a YAML toggle for the
-	// curated/large cases).
-	schema := json.RawMessage(`{}`)
-	switch {
-	case len(c.Schema) > 0 && json.Valid(c.Schema):
-		schema = json.RawMessage(c.Schema)
-	default:
-		found := false
+	// Start with a complete type-only schema inferred from values.yaml, then
+	// overlay the upstream schema's stronger descriptions, enums and bounds.
+	// Some large charts intentionally ship a partial values.schema.json; using
+	// it alone hides nearly every configurable value.
+	var inferred json.RawMessage
+	if valuesYAML != "" {
+		var vals map[string]interface{}
+		if err := yaml.Unmarshal([]byte(valuesYAML), &vals); err != nil {
+			if h.log != nil {
+				h.log.Warn("infer schema: values.yaml parse failed",
+					"chart", chart.Name, "version", version.Version, "bytes", len(valuesYAML), "error", err)
+			}
+		} else {
+			inferred = inferSchema(vals)
+		}
+	}
+	var upstream json.RawMessage
+	if len(c.Schema) > 0 && json.Valid(c.Schema) {
+		upstream = json.RawMessage(c.Schema)
+	} else {
 		for _, f := range c.Raw {
 			if strings.ToLower(f.Name) == "values.schema.json" && json.Valid(f.Data) {
-				schema = json.RawMessage(f.Data)
-				found = true
+				upstream = json.RawMessage(f.Data)
 				break
 			}
 		}
-		if !found && valuesYAML != "" {
-			var vals map[string]interface{}
-			if err := yaml.Unmarshal([]byte(valuesYAML), &vals); err != nil {
-				if h.log != nil {
-					h.log.Warn("infer schema: values.yaml parse failed",
-						"chart", chart.Name, "version", version.Version, "bytes", len(valuesYAML), "error", err)
-				}
-			} else if inferred := inferSchema(vals); inferred != nil {
-				schema = inferred
-			} else if h.log != nil {
-				h.log.Warn("infer schema: empty result after parse",
-					"chart", chart.Name, "version", version.Version, "keys", len(vals))
-			}
+	}
+	schema := mergeChartSchemas(inferred, upstream)
+	if len(schema) == 0 {
+		schema = json.RawMessage(`{}`)
+	}
+	if len(questionsYAML) > 0 {
+		if enriched := enrichSchemaWithRancherQuestions(schema, questionsYAML); enriched != nil {
+			schema = enriched
+		} else if h.log != nil {
+			h.log.Warn("chart questions metadata could not be normalized", "chart", chart.Name, "version", version.Version)
 		}
 	}
+	schema = markHydratedChartSchema(schema)
 
 	if err := h.queries.UpdateHelmChartVersionContent(ctx, sqlc.UpdateHelmChartVersionContentParams{
 		ID:            version.ID,
@@ -175,6 +185,64 @@ func (h *CatalogHandler) hydrateChartVersionOnce(ctx context.Context, version sq
 	version.ValuesSchema = schema
 	version.ContentHydratedAt = pgtype.Timestamptz{Valid: true}
 	return version, nil
+}
+
+func hydratedChartSchemaIsCurrent(raw json.RawMessage) bool {
+	var schema map[string]any
+	if json.Unmarshal(raw, &schema) != nil {
+		return false
+	}
+	version, ok := schema["x-astronomer-hydration-version"].(float64)
+	return ok && int(version) == chartSchemaHydrationVersion
+}
+
+func markHydratedChartSchema(raw json.RawMessage) json.RawMessage {
+	var schema map[string]any
+	if json.Unmarshal(raw, &schema) != nil {
+		return raw
+	}
+	schema["x-astronomer-hydration-version"] = chartSchemaHydrationVersion
+	marked, err := json.Marshal(schema)
+	if err != nil {
+		return raw
+	}
+	return marked
+}
+
+func mergeChartSchemas(inferred, upstream json.RawMessage) json.RawMessage {
+	if len(inferred) == 0 {
+		return upstream
+	}
+	if len(upstream) == 0 {
+		return inferred
+	}
+	var base, overlay map[string]any
+	if json.Unmarshal(inferred, &base) != nil || json.Unmarshal(upstream, &overlay) != nil {
+		return upstream
+	}
+	merged := mergeSchemaObjects(base, overlay)
+	raw, err := json.Marshal(merged)
+	if err != nil {
+		return upstream
+	}
+	return raw
+}
+
+func mergeSchemaObjects(base, overlay map[string]any) map[string]any {
+	result := make(map[string]any, len(base)+len(overlay))
+	for key, value := range base {
+		result[key] = value
+	}
+	for key, value := range overlay {
+		baseObject, baseOK := result[key].(map[string]any)
+		overlayObject, overlayOK := value.(map[string]any)
+		if baseOK && overlayOK {
+			result[key] = mergeSchemaObjects(baseObject, overlayObject)
+			continue
+		}
+		result[key] = value
+	}
+	return result
 }
 
 // fetchChartArchive resolves the chart bytes for a version, routing

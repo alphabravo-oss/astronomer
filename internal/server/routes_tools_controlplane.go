@@ -44,6 +44,7 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			r.Get("/{id}/", deps.ClusterResources.Tools.Get)
 			r.Get("/slug/{slug}/", deps.ClusterResources.Tools.GetBySlug)
 			r.Get("/{slug:[^/]+}/", deps.ClusterResources.Tools.GetBySlug)
+			r.Get("/{slug}/configuration/", deps.ClusterResources.Tools.Configuration)
 			r.Post("/{slug}/preview/", deps.ClusterResources.Tools.Preview)
 			r.With(mutationWriteScope).Post("/{slug}/install/", deps.ClusterResources.Tools.Install)
 			r.With(mutationWriteScope).Put("/{slug}/upgrade/", deps.ClusterResources.Tools.Upgrade)

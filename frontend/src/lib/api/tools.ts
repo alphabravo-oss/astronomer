@@ -3,6 +3,7 @@ import {
   getClustersByClusterIdToolsStatus,
   getTools as listToolsOperation,
   getToolsBySlug,
+  getToolsBySlugConfiguration,
   getToolsOperationsById,
   postToolsBySlugAdopt,
   postToolsBySlugInstall,
@@ -16,6 +17,7 @@ import type {
   ClusterTool,
   ClusterToolStatus,
   ToolCategory,
+  ToolConfiguration,
   ToolFormField,
   ToolOperation,
   ToolPreviewResponse,
@@ -62,6 +64,12 @@ function mapToolFormField(wire: Schemas["ToolFormField"]): ToolFormField {
     help: wire.help,
     placeholder: wire.placeholder,
     storageClassPath: wire.storage_class_path,
+    minimum: wire.minimum,
+    maximum: wire.maximum,
+    step: wire.step,
+    showWhen: wire.show_when
+      ? { path: wire.show_when.path, equals: wire.show_when.equals }
+      : undefined,
   };
 }
 
@@ -126,6 +134,28 @@ function mapToolPreview(wire: Schemas["ToolPreview"]): ToolPreviewResponse {
       valuesYaml: chart.values_yaml,
     })),
     preset: wire.preset,
+    checks: wire.checks,
+  };
+}
+
+export async function getToolConfiguration(
+  slug: string,
+  clusterId: string,
+): Promise<ToolConfiguration> {
+  const response = await getToolsBySlugConfiguration({
+    path: { slug },
+    query: { cluster_id: clusterId },
+  });
+  const wire = requireData(response, "getToolConfiguration");
+  return {
+    preset: wire.preset,
+    valuesYaml: wire.values_yaml,
+    releases: wire.releases.map((release) => ({
+      id: release.id,
+      releaseName: release.release_name,
+      namespace: release.namespace,
+      revision: release.revision,
+    })),
   };
 }
 

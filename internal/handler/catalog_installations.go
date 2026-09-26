@@ -187,6 +187,11 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		if catalogStore, ok := h.queries.(applicationCatalogQuerier); ok {
 			presentation, presentationErr := catalogStore.GetApplicationCatalogPresentationByChartVersion(r.Context(), cvID)
 			if presentationErr == nil {
+				version, err = h.hydrateChartVersion(r.Context(), version)
+				if err != nil {
+					RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Chart configuration metadata is temporarily unavailable")
+					return
+				}
 				cluster, clusterErr := h.queries.GetClusterByID(r.Context(), clusterID)
 				if clusterErr != nil {
 					RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
@@ -517,6 +522,29 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		}
 		version = requestedVersion
 		targetVersionID = pgtype.UUID{Bytes: requestedID, Valid: true}
+	}
+	if catalogStore, ok := h.queries.(applicationCatalogQuerier); ok {
+		presentation, presentationErr := catalogStore.GetApplicationCatalogPresentationByChartVersion(r.Context(), version.ID)
+		if presentationErr == nil {
+			version, err = h.hydrateChartVersion(r.Context(), version)
+			if err != nil {
+				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Chart configuration metadata is temporarily unavailable")
+				return
+			}
+			cluster, clusterErr := h.queries.GetClusterByID(r.Context(), installed.ClusterID)
+			if clusterErr != nil {
+				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+				return
+			}
+			checks, allowed := catalogInstallChecks(cluster, version, presentation, valuesOverride)
+			if !allowed {
+				RespondJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": apierror.Conflict, "message": "Catalog upgrade prerequisites failed", "checks": checks}})
+				return
+			}
+		} else if !errors.Is(presentationErr, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to verify catalog application trust")
+			return
+		}
 	}
 	updateParams := sqlc.UpdateInstalledChartValuesParams{
 		ID:             id,

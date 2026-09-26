@@ -449,6 +449,7 @@ GET /api/v1/tools/operations/{id}
 GET /api/v1/tools/slug/{slug}
 GET /api/v1/tools/{id}
 GET /api/v1/tools/{slug}
+GET /api/v1/tools/{slug}/configuration
 GET /api/v1/users
 GET /api/v1/users/{id}
 GET /api/v1/workloads/controller/status
