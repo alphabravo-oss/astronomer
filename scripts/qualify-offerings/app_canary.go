@@ -429,11 +429,14 @@ func evaluateKyvernoCanary(ctx context.Context, client *http.Client, execution e
 	base := "/api/v1/clusters/" + url.PathEscape(clusterID)
 	policyPath := base + "/k8s/apis/kyverno.io/v1/namespaces/" + url.PathEscape(namespace) + "/policies/" + name
 	podPath := base + "/k8s/api/v1/namespaces/" + url.PathEscape(namespace) + "/pods/" + name
-	created := false
+	policyCreated, podCreated := false, false
 	defer func() {
-		if created {
-			cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			defer cancel()
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if podCreated {
+			_, _ = requestAPI(cleanupCtx, client, execution.Base, execution.Token, http.MethodDelete, podPath, nil, "", http.StatusOK, http.StatusAccepted, http.StatusNotFound)
+		}
+		if policyCreated {
 			_, _ = requestAPI(cleanupCtx, client, execution.Base, execution.Token, http.MethodDelete, policyPath, nil, "", http.StatusOK, http.StatusAccepted, http.StatusNotFound)
 		}
 	}()
@@ -441,25 +444,52 @@ func evaluateKyvernoCanary(ctx context.Context, client *http.Client, execution e
 	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, base+"/k8s/apis/kyverno.io/v1/namespaces/"+url.PathEscape(namespace)+"/policies", policy, "", http.StatusCreated); err != nil {
 		return failedCanary(clusterID, fmt.Errorf("create Kyverno policy: %w", err))
 	}
-	created = true
-	time.Sleep(2 * time.Second)
+	policyCreated = true
 	pod := map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": name, "namespace": namespace}, "spec": map[string]any{"containers": []any{map[string]any{"name": "canary", "image": "busybox:1.36", "command": []any{"sh", "-c", "sleep 5"}}}, "restartPolicy": "Never"}}
-	denied, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, base+"/k8s/api/v1/namespaces/"+url.PathEscape(namespace)+"/pods", pod, "", http.StatusForbidden)
-	if err != nil || !responseMentions(denied.Body, "qualification label required") {
-		if err == nil {
-			err = errors.New("Kyverno did not deny the violating pod")
+	podCollection := base + "/k8s/api/v1/namespaces/" + url.PathEscape(namespace) + "/pods"
+	var denied apiResponse
+	for {
+		response, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, podCollection, pod, "", http.StatusCreated, http.StatusBadRequest, http.StatusForbidden)
+		if err != nil {
+			return failedCanary(clusterID, fmt.Errorf("probe Kyverno policy enforcement: %w", err))
 		}
-		return failedCanary(clusterID, err)
+		if response.Status == http.StatusBadRequest || response.Status == http.StatusForbidden {
+			if !responseMentions(response.Body, "qualification label required") {
+				return failedCanary(clusterID, errors.New("Kyverno denied the pod without the policy's qualification message"))
+			}
+			denied = response
+			break
+		}
+		podCreated = true
+		if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodDelete, podPath, nil, "", http.StatusOK, http.StatusAccepted, http.StatusNotFound); err != nil {
+			return failedCanary(clusterID, fmt.Errorf("delete pod admitted before Kyverno policy activation: %w", err))
+		}
+		if err := waitK8sDeleted(ctx, client, execution, podPath, time.Second); err != nil {
+			return failedCanary(clusterID, fmt.Errorf("wait for early Kyverno probe cleanup: %w", err))
+		}
+		podCreated = false
+		select {
+		case <-ctx.Done():
+			return failedCanary(clusterID, fmt.Errorf("Kyverno policy did not begin enforcing: %w", ctx.Err()))
+		case <-time.After(time.Second):
+		}
 	}
 	metadata := pod["metadata"].(map[string]any)
 	metadata["labels"] = map[string]any{"astronomer.io/qualification": "true"}
-	if _, err = requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, base+"/k8s/api/v1/namespaces/"+url.PathEscape(namespace)+"/pods", pod, "", http.StatusCreated); err != nil {
+	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, podCollection, pod, "", http.StatusCreated); err != nil {
 		return failedCanary(clusterID, fmt.Errorf("Kyverno rejected compliant pod: %w", err))
 	}
-	_, _ = requestAPI(context.Background(), client, execution.Base, execution.Token, http.MethodDelete, podPath, nil, "", http.StatusOK, http.StatusAccepted, http.StatusNotFound)
+	podCreated = true
+	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodDelete, podPath, nil, "", http.StatusOK, http.StatusAccepted, http.StatusNotFound); err != nil {
+		return failedCanary(clusterID, fmt.Errorf("delete compliant Kyverno probe pod: %w", err))
+	}
+	if err := waitK8sDeleted(ctx, client, execution, podPath, time.Second); err != nil {
+		return failedCanary(clusterID, fmt.Errorf("wait for compliant Kyverno probe cleanup: %w", err))
+	}
+	podCreated = false
 	raw, _ := json.Marshal(denied.Body)
 	now := time.Now().UTC()
-	return dimensionResult{Name: "functional_canary", State: "PASS", Reason: "Kyverno denied a violating pod and admitted the labeled equivalent", ObservedAt: now, HTTPStatus: http.StatusForbidden, ArtifactSHA: digest(raw), SampleAt: &now, TargetClusterID: clusterID}
+	return dimensionResult{Name: "functional_canary", State: "PASS", Reason: "Kyverno denied a violating pod and admitted the labeled equivalent", ObservedAt: now, HTTPStatus: denied.Status, ArtifactSHA: digest(raw), SampleAt: &now, TargetClusterID: clusterID}
 }
 
 func evaluateExternalDNSCanary(ctx context.Context, client *http.Client, execution executionContext, clusterID, namespace, phase string) (result dimensionResult) {
