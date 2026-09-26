@@ -117,6 +117,32 @@ func TestExecutorApplyPruneAndFencedDeletion(t *testing.T) {
 	}
 }
 
+func TestBeginDeletionLeavesReconcilerActiveForFluxFinalizer(t *testing.T) {
+	ctx := context.Background()
+	executor, client := newExecutorFixture(t)
+	assignment := helmHTTPAssignment()
+	materialization, err := BuildAssignment(assignment, testCapabilities(), ValidationPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := executor.Apply(ctx, materialization); err != nil {
+		t.Fatal(err)
+	}
+	client.ClearActions()
+
+	accepted := AcceptAssignment(assignment, materialization)
+	tombstone := protocol.DeliveryDeletionV2{DeploymentID: assignment.DeploymentID, Generation: assignment.Generation + 1, SpecDigest: assignment.SpecDigest}
+	removed, err := executor.BeginDeletion(ctx, accepted.boundaryAssignment(), tombstone, accepted.materializationBoundary(), accepted.Objects)
+	if err != nil || removed {
+		t.Fatalf("first deletion stage: removed=%v err=%v", removed, err)
+	}
+	for _, action := range client.Actions() {
+		if action.GetVerb() == "patch" && action.GetResource().Resource == "helmreleases" {
+			t.Fatal("HelmRelease was suspended before deletion; Flux would skip the Helm uninstall finalizer")
+		}
+	}
+}
+
 func TestExecutorRefusesUnknownKindAndPartialApplyPrune(t *testing.T) {
 	executor, _ := newExecutorFixture(t)
 	object := &unstructured.Unstructured{Object: map[string]any{

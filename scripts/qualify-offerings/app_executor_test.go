@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -45,6 +46,15 @@ func TestConstellationUsesSystemNamespace(t *testing.T) {
 	}
 	if got := appSpec("constellation", memberTarget{}, "v0.2.0").Values; got != spec.Values {
 		t.Fatalf("v-prefixed catalog version was changed: %q", got)
+	}
+}
+
+func TestKubePrometheusStackAvoidsBaselineExporterOwnership(t *testing.T) {
+	spec := appSpec("kube-prometheus-stack", memberTarget{}, "88.5.4")
+	for _, required := range []string{"nodeExporter:\n  enabled: false", "kubeStateMetrics:\n  enabled: false"} {
+		if !strings.Contains(spec.Values, required) {
+			t.Fatalf("kube-prometheus-stack values %q do not contain %q", spec.Values, required)
+		}
 	}
 }
 
@@ -151,5 +161,28 @@ func TestWaitCatalogInstallationDeletedPollsToAbsence(t *testing.T) {
 	}
 	if requests != 2 {
 		t.Fatalf("deletion checks = %d, want 2", requests)
+	}
+}
+
+func TestAppReleaseFootprintFindsLeakedWorkload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/deployments") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{map[string]any{"metadata": map[string]any{"name": "grafana"}}}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{}})
+	}))
+	defer server.Close()
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	footprint, err := appReleaseFootprint(context.Background(), server.Client(), executionContext{Base: base, Token: "token"}, "cluster-1", appInstallSpec{Namespace: "monitoring", ReleaseName: "stack"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(footprint) != 1 || footprint[0] != "Deployment/grafana" {
+		t.Fatalf("cleanup footprint = %v, want leaked workload identity", footprint)
 	}
 }

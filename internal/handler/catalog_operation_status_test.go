@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -68,6 +69,25 @@ func TestCatalogOperationOutcomeUnavailableIsExplicit(t *testing.T) {
 		if resp["deliveryPhase"] != "unknown" || resp["deliveryObservationError"] == "" || resp["deliveryObservedAt"] != nil {
 			t.Fatalf("unavailable observation claimed success %+v", resp)
 		}
+	}
+}
+
+func TestCatalogOperationFailureSurfacesReconcilerMessage(t *testing.T) {
+	target, rollout := uuid.New(), uuid.New()
+	observer := &operationDeliveryObserver{status: catalogapp.Status{
+		Phase: "failed", LastErrorCode: "reconciler_stalled", LastMessage: "Helm install failed because host port 9100 is occupied",
+	}}
+	h := &CatalogHandler{delivery: observer}
+	op := sqlc.CatalogOperation{TargetType: "installed_chart", OperationType: "install", Status: "completed"}
+	resp := catalogOperationResponse(op)
+	resp["events"] = []map[string]any{{"stage": "rollout", "detail": map[string]any{"targetId": target.String(), "rolloutId": rollout.String()}}}
+	h.enrichCatalogOperationDeliveryStatus(context.Background(), op, resp)
+	if resp["status"] != "failed" || resp["deliveryMessage"] != observer.status.LastMessage {
+		t.Fatalf("failure message was not projected: %+v", resp)
+	}
+	events := resp["events"].([]map[string]any)
+	if got, _ := events[len(events)-1]["message"].(string); !strings.Contains(got, "9100") {
+		t.Fatalf("event message = %q, want actionable reconciler detail", got)
 	}
 }
 

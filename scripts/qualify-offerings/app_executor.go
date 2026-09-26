@@ -52,6 +52,14 @@ func (executor appLifecycleExecutor) Run(ctx context.Context, execution executio
 		return failDimension(result, "inventory", err, checkpoint)
 	}
 	spec := appSpec(executor.slug, target, release.Version)
+	footprint, err := appReleaseFootprint(ctx, client, execution, target.ClusterID, spec)
+	if err != nil {
+		return failDimension(result, "inventory", fmt.Errorf("inspect existing release footprint: %w", err), checkpoint)
+	}
+	if len(footprint) != 0 {
+		return finishCase(result, "BLOCKED", fmt.Sprintf("Helm release %s/%s already has live resources", spec.Namespace, spec.ReleaseName), checkpoint,
+			dimensionResult{Name: "inventory", State: "BLOCKED", Reason: "the runner will not claim a pre-existing release footprint: " + strings.Join(footprint, ", "), ObservedAt: time.Now().UTC(), TargetClusterID: target.ClusterID})
+	}
 	installed, err := listCatalogInstallations(ctx, client, execution, target.ClusterID)
 	if err != nil {
 		return failDimension(result, "inventory", err, checkpoint)
@@ -90,6 +98,9 @@ func (executor appLifecycleExecutor) Run(ctx context.Context, execution executio
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		mutation, key, alreadyAbsent, cleanupErr := cleanupAppInstallation(cleanupCtx, client, execution, installedID, definition.ID+"-deferred-cleanup")
+		if cleanupErr == nil {
+			cleanupErr = waitAppReleaseFootprintAbsent(cleanupCtx, client, execution, target.ClusterID, spec, 2*time.Second)
+		}
 		if cleanupErr != nil {
 			final = upsertDimension(final, failedDimension("uninstall_cleanup", cleanupErr))
 			final.State, final.Reason = "FAIL", "run-owned application cleanup failed: "+cleanupErr.Error()
@@ -153,8 +164,11 @@ func (executor appLifecycleExecutor) Run(ctx context.Context, execution executio
 	if err = waitCatalogInstallationDeleted(ctx, client, execution, installedID, 2*time.Second); err != nil {
 		return finishCase(addDimension(result, failedDimension("uninstall_cleanup", err), checkpoint), "FAIL", "uninstall operation completed without removing the catalog record", checkpoint)
 	}
+	if err = waitAppReleaseFootprintAbsent(ctx, client, execution, target.ClusterID, spec, 2*time.Second); err != nil {
+		return finishCase(addDimension(result, failedDimension("uninstall_cleanup", err), checkpoint), "FAIL", "uninstall operation completed without removing the application effect", checkpoint)
+	}
 	installedID = ""
-	result = addDimension(result, operationDimension("uninstall_cleanup", "catalog release and installation record were removed", target.ClusterID, uninstallKey, uninstall.Operation), checkpoint)
+	result = addDimension(result, operationDimension("uninstall_cleanup", "catalog release, live resource footprint, and installation record were removed", target.ClusterID, uninstallKey, uninstall.Operation), checkpoint)
 	return finalizeLifecycleDimensions(result, "application", checkpoint)
 }
 
@@ -175,6 +189,7 @@ func appSpec(slug string, target memberTarget, chartVersion string) appInstallSp
 	values := map[string]string{
 		"constellation":            fmt.Sprintf("image:\n  tag: %s\n", constellationTag),
 		"prometheus-node-exporter": "hostNetwork: false\nhostPID: false\n",
+		"kube-prometheus-stack":    "nodeExporter:\n  enabled: false\nkubeStateMetrics:\n  enabled: false\n",
 		"fluent-bit":               "config:\n  outputs: |\n    [OUTPUT]\n        Name stdout\n        Match *\n",
 		"cert-manager":             "crds:\n  enabled: true\nstartupapicheck:\n  enabled: true\n",
 		"external-dns":             "provider:\n  name: inmemory\nsources:\n  - service\npolicy: sync\nregistry: noop\ninterval: 5s\n",

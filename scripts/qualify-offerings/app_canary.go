@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -278,6 +279,76 @@ type serviceProbe struct {
 	Service string
 	Port    int
 	Path    string
+}
+
+// appReleaseFootprint returns the live, namespaced product effect for a Helm
+// release. Catalog rows and Flux objects are control-plane bookkeeping; an
+// uninstall is complete only when the workloads and services they created are
+// absent as well.
+func appReleaseFootprint(ctx context.Context, client *http.Client, execution executionContext, clusterID string, spec appInstallSpec) ([]string, error) {
+	resources := []struct {
+		apiPath string
+		kind    string
+	}{
+		{"apis/apps/v1", "Deployment"},
+		{"apis/apps/v1", "StatefulSet"},
+		{"apis/apps/v1", "DaemonSet"},
+		{"apis/batch/v1", "Job"},
+		{"apis/batch/v1", "CronJob"},
+		{"api/v1", "Pod"},
+		{"api/v1", "Service"},
+	}
+	plurals := map[string]string{
+		"Deployment": "deployments", "StatefulSet": "statefulsets", "DaemonSet": "daemonsets",
+		"Job": "jobs", "CronJob": "cronjobs", "Pod": "pods", "Service": "services",
+	}
+	var footprint []string
+	for _, resource := range resources {
+		path := fmt.Sprintf("/api/v1/clusters/%s/k8s/%s/namespaces/%s/%s?labelSelector=%s",
+			url.PathEscape(clusterID), resource.apiPath, url.PathEscape(spec.Namespace), plurals[resource.kind],
+			url.QueryEscape("app.kubernetes.io/instance="+spec.ReleaseName))
+		response, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodGet, path, nil, "", http.StatusOK, http.StatusNotFound)
+		if err != nil {
+			return nil, err
+		}
+		if response.Status == http.StatusNotFound {
+			continue
+		}
+		items, err := arrayAtPath(response.Body, "items")
+		if err != nil {
+			return nil, fmt.Errorf("decode %s footprint: %w", resource.kind, err)
+		}
+		for _, item := range items {
+			object, _ := item.(map[string]any)
+			metadata, _ := object["metadata"].(map[string]any)
+			name := stringField(metadata, "name")
+			if name != "" {
+				footprint = append(footprint, resource.kind+"/"+name)
+			}
+		}
+	}
+	sort.Strings(footprint)
+	return footprint, nil
+}
+
+func waitAppReleaseFootprintAbsent(ctx context.Context, client *http.Client, execution executionContext, clusterID string, spec appInstallSpec, interval time.Duration) error {
+	if interval <= 0 {
+		return errors.New("application cleanup polling interval must be positive")
+	}
+	for {
+		footprint, err := appReleaseFootprint(ctx, client, execution, clusterID, spec)
+		if err != nil {
+			return err
+		}
+		if len(footprint) == 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("release %s/%s still owns %s: %w", spec.Namespace, spec.ReleaseName, strings.Join(footprint, ", "), ctx.Err())
+		case <-time.After(interval):
+		}
+	}
 }
 
 func evaluateTextHealthCanary(ctx context.Context, client *http.Client, execution executionContext, slug, clusterID, namespace string, probes []serviceProbe, marker string) dimensionResult {

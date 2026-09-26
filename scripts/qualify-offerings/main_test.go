@@ -213,6 +213,13 @@ func TestPollOperationRejectsWrongOperation(t *testing.T) {
 	}
 }
 
+func TestOperationFailureDetailUsesDeliveryMessage(t *testing.T) {
+	body := map[string]any{"data": map[string]any{"deliveryMessage": "Helm install failed because host port 9100 is occupied", "errorMessage": "generic"}}
+	if got := operationFailureDetail(body); !strings.Contains(got, "9100") {
+		t.Fatalf("operation failure detail = %q", got)
+	}
+}
+
 func TestInventoryRegistryAcceptsExplicitlyDisabledFeatureRoute(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.NotFoundHandler())

@@ -151,9 +151,10 @@ func (e *Executor) Prune(ctx context.Context, identities []ObjectIdentity) error
 }
 
 // BeginDeletion advances a tombstone without racing Flux finalizers. The
-// reconciler is suspended and foreground-deleted first; sources, credentials,
-// and RBAC are removed only after it is actually gone. The returned boolean is
-// true only when every recorded object is absent.
+// reconciler is foreground-deleted while it is still active so Flux can run
+// its uninstall/prune finalizer. Sources, credentials, and RBAC are removed
+// only after the reconciler is actually gone. The returned boolean is true
+// only when every recorded object is absent.
 func (e *Executor) BeginDeletion(ctx context.Context, assignment protocol.DeliveryAssignmentV2, tombstone protocol.DeliveryDeletionV2, materialization Materialization, recorded []ObjectIdentity) (bool, error) {
 	if err := validateDeletionBoundary(assignment, tombstone); err != nil {
 		return false, err
@@ -193,9 +194,6 @@ func (e *Executor) BeginDeletion(ctx context.Context, assignment protocol.Delive
 			continue
 		}
 		reconcilerPresent = true
-		if err := e.suspend(ctx, assignment, materialization, identity); err != nil {
-			return false, fmt.Errorf("suspend %s: %w", identity, err)
-		}
 		if err := e.delete(ctx, identity, metav1.DeletePropagationForeground); err != nil {
 			return false, fmt.Errorf("delete reconciler %s: %w", identity, err)
 		}

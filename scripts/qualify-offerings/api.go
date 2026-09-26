@@ -164,6 +164,10 @@ func pollOperation(ctx context.Context, client *http.Client, base *url.URL, toke
 		case "completed", "succeeded", "success":
 			return observation, nil
 		case "failed", "error", "canceled", "cancelled", "superseded":
+			detail := operationFailureDetail(observation.Body)
+			if detail != "" {
+				return observation, fmt.Errorf("operation %s reached terminal state %s: %s", expectedID, observation.Status, detail)
+			}
 			return observation, fmt.Errorf("operation %s reached terminal state %s", expectedID, observation.Status)
 		case "pending", "running", "accepted", "queued":
 		default:
@@ -175,4 +179,17 @@ func pollOperation(ctx context.Context, client *http.Client, base *url.URL, toke
 		case <-ticker.C:
 		}
 	}
+}
+
+func operationFailureDetail(body any) string {
+	data, err := objectAtPath(body, "data")
+	if err != nil {
+		return ""
+	}
+	for _, key := range []string{"deliveryMessage", "errorMessage"} {
+		if value := strings.TrimSpace(stringField(data, key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }

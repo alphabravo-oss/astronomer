@@ -58,6 +58,7 @@ func (h *CatalogHandler) enrichCatalogOperationDeliveryStatus(ctx context.Contex
 		phase = "pending"
 	}
 	resp["deliveryPhase"] = phase
+	resp["deliveryMessage"] = status.LastMessage
 	level, message, terminal := "info", "Flux is reconciling the application", false
 	switch phase {
 	case "ready":
@@ -71,9 +72,12 @@ func (h *CatalogHandler) enrichCatalogOperationDeliveryStatus(ctx context.Contex
 	default:
 		resp["status"] = "running"
 	}
+	if terminal && status.LastMessage != "" {
+		message += ": " + status.LastMessage
+	}
 	events = append(events, map[string]any{
 		"id": "delivery-" + phase, "level": level, "stage": "workloads", "message": message,
-		"detail":    map[string]any{"phase": phase, "errorCode": status.LastErrorCode, "terminal": terminal, "targetId": targetID.String(), "rolloutId": rolloutID.String()},
+		"detail":    map[string]any{"phase": phase, "errorCode": status.LastErrorCode, "message": status.LastMessage, "terminal": terminal, "targetId": targetID.String(), "rolloutId": rolloutID.String()},
 		"createdAt": time.Now().UTC().Format(time.RFC3339),
 	})
 	resp["events"] = events

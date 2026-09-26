@@ -65,6 +65,7 @@ type InstallResult struct {
 type Status struct {
 	Phase         string
 	LastErrorCode string
+	LastMessage   string
 }
 
 type Revision struct {

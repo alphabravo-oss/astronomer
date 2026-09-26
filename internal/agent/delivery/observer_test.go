@@ -69,9 +69,9 @@ func TestNormalizeObservationPhasesAndBoundary(t *testing.T) {
 		t.Fatalf("generation lag status = %#v, %v", status, err)
 	}
 	reconciler.SetGeneration(9)
-	reconciler.Object["status"].(map[string]any)["conditions"] = []any{map[string]any{"type": "Stalled", "status": "True", "observedGeneration": int64(9)}}
+	reconciler.Object["status"].(map[string]any)["conditions"] = []any{map[string]any{"type": "Stalled", "status": "True", "observedGeneration": int64(9), "message": "Helm install failed because host port 9100 is occupied"}}
 	status, err = NormalizeObservation(Observation{Assignment: assignment, Source: source, Reconciler: reconciler, ObservedAt: time.Now()})
-	if err != nil || status.Phase != "failed" || status.Inventory.Failed != 2 || status.ErrorCode != "reconciler_stalled" {
+	if err != nil || status.Phase != "failed" || status.Inventory.Failed != 2 || status.ErrorCode != "reconciler_stalled" || !strings.Contains(status.Message, "9100") {
 		t.Fatalf("stalled status = %#v, %v", status, err)
 	}
 	assignment.Action = protocol.DeliveryActionSuspend
