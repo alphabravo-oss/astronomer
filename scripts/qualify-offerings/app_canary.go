@@ -395,7 +395,7 @@ func evaluateExternalSecretsCanary(ctx context.Context, client *http.Client, exe
 		return failedCanary(clusterID, fmt.Errorf("create fake SecretStore: %w", err))
 	}
 	storeCreated = true
-	external := map[string]any{"apiVersion": "external-secrets.io/v1", "kind": "ExternalSecret", "metadata": map[string]any{"name": name, "namespace": namespace}, "spec": map[string]any{"refreshInterval": "5s", "secretStoreRef": map[string]any{"name": name, "kind": "SecretStore"}, "target": map[string]any{"name": name, "creationPolicy": "Owner"}, "data": []any{map[string]any{"secretKey": "value", "remoteRef": map[string]any{"key": "qualification"}}}}}
+	external := map[string]any{"apiVersion": "external-secrets.io/v1", "kind": "ExternalSecret", "metadata": map[string]any{"name": name, "namespace": namespace}, "spec": map[string]any{"refreshInterval": "5s", "secretStoreRef": map[string]any{"name": name, "kind": "SecretStore"}, "target": map[string]any{"name": name, "creationPolicy": "Owner"}, "data": []any{map[string]any{"secretKey": "value", "remoteRef": map[string]any{"key": "qualification", "version": "v1"}}}}}
 	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, base+"/externalsecrets", external, "", http.StatusCreated); err != nil {
 		return failedCanary(clusterID, fmt.Errorf("create ExternalSecret: %w", err))
 	}
