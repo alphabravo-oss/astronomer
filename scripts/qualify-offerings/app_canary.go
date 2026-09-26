@@ -502,7 +502,7 @@ func evaluateExternalDNSCanary(ctx context.Context, client *http.Client, executi
 			_, _ = requestAPI(context.Background(), client, execution.Base, execution.Token, http.MethodDelete, servicePath, nil, "", http.StatusOK, http.StatusAccepted, http.StatusNotFound)
 		}
 	}()
-	service := map[string]any{"apiVersion": "v1", "kind": "Service", "metadata": map[string]any{"name": name, "namespace": workNS, "annotations": map[string]any{"external-dns.alpha.kubernetes.io/hostname": name + ".example.test"}}, "spec": map[string]any{"selector": map[string]any{"app": "does-not-exist"}, "ports": []any{map[string]any{"port": 80, "targetPort": 8080}}}}
+	service := map[string]any{"apiVersion": "v1", "kind": "Service", "metadata": map[string]any{"name": name, "namespace": workNS, "annotations": map[string]any{"external-dns.alpha.kubernetes.io/internal-hostname": name + ".example.test"}}, "spec": map[string]any{"selector": map[string]any{"app": "does-not-exist"}, "ports": []any{map[string]any{"port": 80, "targetPort": 8080}}}}
 	base := "/api/v1/clusters/" + url.PathEscape(clusterID) + "/k8s/api/v1/namespaces/" + url.PathEscape(workNS) + "/services"
 	if _, err := requestAPI(ctx, client, execution.Base, execution.Token, http.MethodPost, base, service, "", http.StatusCreated); err != nil {
 		return failedCanary(clusterID, err)

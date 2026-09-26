@@ -91,6 +91,48 @@ func TestFunctionalProfilesIncludeRequiredRuntimeIdentity(t *testing.T) {
 	}
 }
 
+func TestExternalDNSCanaryPublishesClusterIPWithoutGlobalInternalFlag(t *testing.T) {
+	const clusterID = "cluster-1"
+	var created map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/services"):
+			if err := json.NewDecoder(r.Body).Decode(&created); err != nil {
+				t.Fatal(err)
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/proxy/metrics"):
+			_, _ = w.Write([]byte("external_dns_source_endpoints_total 1\n"))
+		case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/services/"):
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := evaluateExternalDNSCanary(context.Background(), server.Client(), executionContext{
+		Base: base, Token: "token", RunID: "run-1",
+		Config: qualificationConfig{MemberTargets: []memberTarget{{ClusterID: clusterID, Namespace: "qualification"}}},
+	}, clusterID, "astronomer-external-dns", "functional")
+	if result.State != "PASS" {
+		t.Fatalf("canary result = %#v", result)
+	}
+	metadata, _ := created["metadata"].(map[string]any)
+	annotations, _ := metadata["annotations"].(map[string]any)
+	if got := stringField(annotations, "external-dns.alpha.kubernetes.io/internal-hostname"); got == "" {
+		t.Fatalf("created Service annotations = %#v, want internal-hostname", annotations)
+	}
+	if got := stringField(annotations, "external-dns.alpha.kubernetes.io/hostname"); got != "" {
+		t.Fatalf("created Service used external hostname %q for a ClusterIP target", got)
+	}
+}
+
 func TestValidateAppPreviewBindsImmutableInputs(t *testing.T) {
 	release := catalogRelease{VersionID: "version-1", Version: "1.2.3", Digest: "sha256:abc"}
 	body := map[string]any{"data": map[string]any{
