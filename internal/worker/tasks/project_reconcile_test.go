@@ -111,9 +111,9 @@ func TestRenderLimitRange_AcceptsSnakeCaseDefaultRequest(t *testing.T) {
 }
 
 // TestRenderNetworkPolicy_Modes covers the three documented modes:
-// none (handled outside this fn), isolated (deny-all), allow-same-project.
+// none (handled outside this fn), isolated (deny ingress), allow-same-project.
 func TestRenderNetworkPolicy_Modes(t *testing.T) {
-	t.Run("isolated_is_deny_all", func(t *testing.T) {
+	t.Run("isolated_denies_ingress_without_managing_egress", func(t *testing.T) {
 		got := renderNetworkPolicy("team-a", "00000000-0000-0000-0000-000000000001", "isolated")
 		spec := got["spec"].(map[string]any)
 		if _, ok := spec["ingress"]; ok {
@@ -123,8 +123,8 @@ func TestRenderNetworkPolicy_Modes(t *testing.T) {
 			t.Errorf("isolated mode should omit egress array; got %+v", spec)
 		}
 		pt := spec["policyTypes"].([]any)
-		if len(pt) != 2 {
-			t.Errorf("expected both Ingress and Egress in policyTypes, got %v", pt)
+		if len(pt) != 1 || pt[0] != "Ingress" {
+			t.Errorf("expected only Ingress in policyTypes, got %v", pt)
 		}
 	})
 
@@ -140,6 +140,13 @@ func TestRenderNetworkPolicy_Modes(t *testing.T) {
 		labels := nsSel["matchLabels"].(map[string]any)
 		if labels[projectNamespaceLabelKey] != "abc123" {
 			t.Errorf("expected match label %s=abc123, got %v", projectNamespaceLabelKey, labels)
+		}
+		if _, ok := spec["egress"]; ok {
+			t.Errorf("allow-same-project mode must not manage egress; got %+v", spec)
+		}
+		pt := spec["policyTypes"].([]any)
+		if len(pt) != 1 || pt[0] != "Ingress" {
+			t.Errorf("expected only Ingress in policyTypes, got %v", pt)
 		}
 	})
 }

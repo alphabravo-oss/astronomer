@@ -1058,8 +1058,11 @@ func renderLimitRange(namespace string, raw json.RawMessage) map[string]any {
 }
 
 // renderNetworkPolicy expresses the requested isolation mode as a single
-// NetworkPolicy. Both modes deny-by-default; "allow-same-project" then
-// re-admits ingress + egress from peers carrying the same project label.
+// ingress NetworkPolicy. Project isolation limits who may initiate traffic
+// into workloads; it must not cut workloads off from DNS, the Kubernetes API,
+// registries, or their other declared external dependencies. This follows the
+// project-isolation model used by Rancher and matches the policy descriptions
+// exposed by Astronomer's UI.
 func renderNetworkPolicy(namespace, projectID, mode string) map[string]any {
 	policy := map[string]any{
 		"apiVersion": "networking.k8s.io/v1",
@@ -1073,7 +1076,7 @@ func renderNetworkPolicy(namespace, projectID, mode string) map[string]any {
 		},
 		"spec": map[string]any{
 			"podSelector": map[string]any{},
-			"policyTypes": []any{"Ingress", "Egress"},
+			"policyTypes": []any{"Ingress"},
 		},
 	}
 	if mode == "allow-same-project" {
@@ -1087,12 +1090,9 @@ func renderNetworkPolicy(namespace, projectID, mode string) map[string]any {
 		policy["spec"].(map[string]any)["ingress"] = []any{
 			map[string]any{"from": []any{peer}},
 		}
-		policy["spec"].(map[string]any)["egress"] = []any{
-			map[string]any{"to": []any{peer}},
-		}
 	}
-	// In "isolated" mode, omitting ingress/egress arrays under a policyTypes
-	// list of [Ingress, Egress] means deny-all in both directions, which is
-	// exactly the desired behaviour.
+	// In "isolated" mode, omitting ingress under an Ingress policy means
+	// default-deny inbound traffic. Egress remains governed by any explicit
+	// user policies and the cluster's own defaults.
 	return policy
 }
