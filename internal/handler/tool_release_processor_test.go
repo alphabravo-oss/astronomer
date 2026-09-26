@@ -509,6 +509,32 @@ func TestToolPlanConfirmedFailedReleaseCleanupRequiresExactChartAndRevision(t *t
 	}
 }
 
+func TestToolPlanConfirmedFailedReleaseCleanupAcceptsRetryRevision(t *testing.T) {
+	h, q, helm, op := newPlanFixture(t, 1)
+	key := "istio-system/istio-base"
+	helm.releases[key] = protocol.HelmResultPayload{Success: true, Status: "failed", Revision: 2}
+	helm.markers[key] = "Helm upgrade failed after post-upgrade timeout"
+	helm.charts[key] = "base-1.31.0"
+	var env toolOperationEnvelope
+	if err := json.Unmarshal(op.Payload, &env); err != nil {
+		t.Fatal(err)
+	}
+	env.ConfirmFailedReleaseCleanup = true
+	env.Releases[0].ExpectedRevision = 1
+	env.Releases[0].OperationMarker = "astronomer tool operation original release 0"
+	op.OperationType = "uninstall"
+	op.Payload, _ = json.Marshal(env)
+	if err := h.executeOperation(context.Background(), op); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := helm.releases[key]; exists {
+		t.Fatal("confirmed failed retry revision remained installed")
+	}
+	if len(q.installedByRef) != 0 {
+		t.Fatalf("unexpected installed rows: %v", q.installedByRef)
+	}
+}
+
 func TestToolPlanFailedReleaseCleanupRejectsMissingConfirmationOrMismatch(t *testing.T) {
 	for _, test := range []struct {
 		name     string
@@ -519,7 +545,7 @@ func TestToolPlanFailedReleaseCleanupRejectsMissingConfirmationOrMismatch(t *tes
 	}{
 		{name: "missing confirmation", chart: "base-1.31.0", revision: 1, status: "failed"},
 		{name: "wrong chart", confirm: true, chart: "external-1.31.0", revision: 1, status: "failed"},
-		{name: "wrong revision", confirm: true, chart: "base-1.31.0", revision: 2, status: "failed"},
+		{name: "older revision", confirm: true, chart: "base-1.31.0", revision: 1, status: "failed"},
 		{name: "ready external release", confirm: true, chart: "base-1.31.0", revision: 1, status: "deployed"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -533,7 +559,7 @@ func TestToolPlanFailedReleaseCleanupRejectsMissingConfirmationOrMismatch(t *tes
 				t.Fatal(err)
 			}
 			env.ConfirmFailedReleaseCleanup = test.confirm
-			env.Releases[0].ExpectedRevision = 1
+			env.Releases[0].ExpectedRevision = 2
 			env.Releases[0].OperationMarker = "astronomer tool operation original release 0"
 			op.OperationType = "uninstall"
 			op.Payload, _ = json.Marshal(env)

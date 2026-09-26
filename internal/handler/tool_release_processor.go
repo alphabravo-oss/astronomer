@@ -452,7 +452,7 @@ func (h *ToolHandler) toolReleaseHasMarker(ctx context.Context, env toolOperatio
 		if env.ConfirmFailedReleaseCleanup &&
 			release.ExpectedRevision > 0 &&
 			item.Revision == revision &&
-			item.Revision == release.ExpectedRevision &&
+			item.Revision >= release.ExpectedRevision &&
 			item.Chart == release.ChartName+"-"+release.Version &&
 			isFailedHelmReleaseStatus(item.Status) {
 			return true, nil
