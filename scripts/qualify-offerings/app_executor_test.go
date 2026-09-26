@@ -61,6 +61,20 @@ func TestKubePrometheusStackAvoidsBaselineExporterOwnership(t *testing.T) {
 	}
 }
 
+func TestLokiUsesFunctionalSingleBinaryFilesystemProfile(t *testing.T) {
+	spec := appSpec("loki", memberTarget{}, "7.3.0")
+	for _, required := range []string{
+		"deploymentMode: SingleBinary",
+		"replication_factor: 1",
+		"storage:\n    type: filesystem",
+		"minio:\n  enabled: false",
+	} {
+		if !strings.Contains(spec.Values, required) {
+			t.Fatalf("loki values %q do not contain %q", spec.Values, required)
+		}
+	}
+}
+
 func TestValidateAppPreviewBindsImmutableInputs(t *testing.T) {
 	release := catalogRelease{VersionID: "version-1", Version: "1.2.3", Digest: "sha256:abc"}
 	body := map[string]any{"data": map[string]any{
@@ -74,6 +88,22 @@ func TestValidateAppPreviewBindsImmutableInputs(t *testing.T) {
 	body["data"].(map[string]any)["artifact_digest"] = "sha256:wrong"
 	if err := validateAppPreview(body, "grafana", release); err == nil {
 		t.Fatal("expected mismatched artifact digest to fail")
+	}
+}
+
+func TestValidateAppPreviewReportsBlockingPrerequisite(t *testing.T) {
+	release := catalogRelease{Digest: "sha256:abc"}
+	body := map[string]any{"data": map[string]any{
+		"allowed": false, "application": "loki", "artifact_digest": release.Digest,
+		"catalog_digest": "sha256:catalog", "values_digest": "sha256:values",
+		"checks": []any{map[string]any{
+			"code": "functional_configuration", "status": "blocking",
+			"description": "choose filesystem storage",
+		}},
+	}}
+	err := validateAppPreview(body, "loki", release)
+	if err == nil || !strings.Contains(err.Error(), "functional_configuration") || !strings.Contains(err.Error(), "choose filesystem storage") {
+		t.Fatalf("blocking preview error = %v", err)
 	}
 }
 

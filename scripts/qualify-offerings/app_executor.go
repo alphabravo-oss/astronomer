@@ -195,7 +195,7 @@ func appSpec(slug string, target memberTarget, chartVersion string) appInstallSp
 		"external-dns":             "provider:\n  name: inmemory\nsources:\n  - service\npolicy: sync\nregistry: noop\ninterval: 5s\n",
 		"velero":                   "backupsEnabled: false\nsnapshotsEnabled: false\ndeployNodeAgent: true\ncredentials:\n  useSecret: false\nconfiguration:\n  backupStorageLocation: []\n  volumeSnapshotLocation: []\n",
 		"opentelemetry-collector":  "mode: deployment\nconfig:\n  exporters:\n    debug: {}\n  service:\n    pipelines:\n      traces:\n        receivers: [otlp]\n        processors: [batch]\n        exporters: [debug]\n",
-		"loki":                     "deploymentMode: SingleBinary\nsingleBinary:\n  replicas: 1\nbackend:\n  replicas: 0\nread:\n  replicas: 0\nwrite:\n  replicas: 0\nminio:\n  enabled: true\n",
+		"loki":                     "deploymentMode: SingleBinary\nloki:\n  auth_enabled: false\n  commonConfig:\n    replication_factor: 1\n  storage:\n    type: filesystem\nsingleBinary:\n  replicas: 1\nbackend:\n  replicas: 0\nread:\n  replicas: 0\nwrite:\n  replicas: 0\nminio:\n  enabled: false\n",
 		"tempo":                    "tempo:\n  receivers:\n    otlp:\n      protocols:\n        http: {}\n        grpc: {}\npersistence:\n  enabled: false\n",
 	}
 	releaseNames := map[string]string{"opentelemetry-collector": "otel-collector", "kube-prometheus-stack": "kube-prometheus-stack"}
@@ -309,9 +309,6 @@ func validateAppPreview(body any, slug string, release catalogRelease) error {
 	if err != nil {
 		return err
 	}
-	if allowed, _ := data["allowed"].(bool); !allowed {
-		return fmt.Errorf("catalog preview blocked application %s", slug)
-	}
 	if stringField(data, "application") != slug || stringField(data, "artifact_digest") != release.Digest || stringField(data, "catalog_digest") == "" || stringField(data, "values_digest") == "" {
 		return errors.New("catalog preview did not bind the requested application, artifact, catalog, and values digests")
 	}
@@ -322,8 +319,16 @@ func validateAppPreview(body any, slug string, release catalogRelease) error {
 	for _, item := range checks {
 		check, _ := item.(map[string]any)
 		if stringField(check, "status") == "blocking" {
-			return fmt.Errorf("catalog prerequisite %s was blocking", stringField(check, "code"))
+			code := stringField(check, "code")
+			description := stringField(check, "description")
+			if description != "" {
+				return fmt.Errorf("catalog prerequisite %s was blocking: %s", code, description)
+			}
+			return fmt.Errorf("catalog prerequisite %s was blocking", code)
 		}
+	}
+	if allowed, _ := data["allowed"].(bool); !allowed {
+		return fmt.Errorf("catalog preview blocked application %s without a blocking prerequisite", slug)
 	}
 	return nil
 }
