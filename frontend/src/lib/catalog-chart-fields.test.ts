@@ -167,3 +167,29 @@ it("exposes audited kube-prometheus-stack subchart values", () => {
     }),
   );
 });
+
+it("exposes Velero's node-agent-only controls with operational guidance", () => {
+  const curated = curateHelmValuesSchema("velero", {
+    type: "object",
+    properties: {
+      backupsEnabled: { type: "boolean", default: true },
+      snapshotsEnabled: { type: "boolean", default: true },
+      deployNodeAgent: { type: "boolean", default: false },
+    },
+  })!;
+
+  expect(curated.properties?.backupsEnabled).toEqual(
+    expect.objectContaining({
+      type: "boolean",
+      title: "Enable backups",
+      description: expect.stringContaining("node-agent-only"),
+    }),
+  );
+  expect(curated.properties?.deployNodeAgent).toEqual(
+    expect.objectContaining({
+      type: "boolean",
+      title: "Deploy node agent",
+      description: expect.stringContaining("filesystem data-movement agents"),
+    }),
+  );
+});

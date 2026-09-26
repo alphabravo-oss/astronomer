@@ -279,8 +279,14 @@ func addCatalogFunctionalConfigurationChecks(slug string, values map[string]any,
 		}
 	case "velero":
 		locations, _ := catalogValueAtPath(values, "configuration.backupStorageLocation").([]any)
-		if len(locations) == 0 {
+		backupsEnabled, backupsDeclared := catalogValueAtPath(values, "backupsEnabled").(bool)
+		snapshotsEnabled, snapshotsDeclared := catalogValueAtPath(values, "snapshotsEnabled").(bool)
+		deployNodeAgent, _ := catalogValueAtPath(values, "deployNodeAgent").(bool)
+		nodeAgentOnly := backupsDeclared && !backupsEnabled && snapshotsDeclared && !snapshotsEnabled && deployNodeAgent
+		if len(locations) == 0 && !nodeAgentOnly {
 			add("functional_configuration", "blocking", "Backup storage", "Configure at least one backupStorageLocation before installing Velero so backups have a real destination.")
+		} else if nodeAgentOnly {
+			add("functional_configuration", "ready", "Node-agent-only mode", "Backups and snapshots are explicitly disabled; this release will run the Velero node agent without claiming to provide recoverable backups.")
 		}
 	}
 }

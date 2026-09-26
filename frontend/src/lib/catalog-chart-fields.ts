@@ -330,7 +330,16 @@ const CURATED_FIELDS: Record<string, CuratedField[]> = {
     field("configuration.backupStorageLocation", "Backup storage locations"),
     field("configuration.volumeSnapshotLocation", "Snapshot locations"),
     field("credentials.existingSecret", "Credential Secret"),
-    field("deployNodeAgent", "Deploy node agent"),
+    field(
+      "backupsEnabled",
+      "Enable backups",
+      "Requires at least one backup storage location. Disable this and snapshots to run an explicit node-agent-only deployment.",
+    ),
+    field(
+      "deployNodeAgent",
+      "Deploy node agent",
+      "Runs filesystem data-movement agents on cluster nodes, including in node-agent-only deployments.",
+    ),
     field("snapshotsEnabled", "Enable snapshots"),
     field("metrics.serviceMonitor.enabled", "Create ServiceMonitor"),
     resourceRequirements("resources", "Server resources"),

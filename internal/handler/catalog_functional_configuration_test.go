@@ -16,6 +16,8 @@ func TestCatalogFunctionalConfigurationChecks(t *testing.T) {
 		{"external dns needs owner", "external-dns", map[string]any{"txtOwnerId": nil}, true},
 		{"fluent bit explicit output", "fluent-bit", map[string]any{"config": map[string]any{"outputs": "[OUTPUT]\n Name http"}}, false},
 		{"velero needs storage", "velero", map[string]any{"configuration": map[string]any{"backupStorageLocation": []any{}}}, true},
+		{"velero disabled backups without node agent remains nonfunctional", "velero", map[string]any{"backupsEnabled": false, "snapshotsEnabled": false, "deployNodeAgent": false, "configuration": map[string]any{"backupStorageLocation": []any{}}}, true},
+		{"velero node agent only is explicit", "velero", map[string]any{"backupsEnabled": false, "snapshotsEnabled": false, "deployNodeAgent": true, "configuration": map[string]any{"backupStorageLocation": []any{}}}, false},
 		{"velero storage configured", "velero", map[string]any{"configuration": map[string]any{"backupStorageLocation": []any{map[string]any{"name": "default"}}}}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
