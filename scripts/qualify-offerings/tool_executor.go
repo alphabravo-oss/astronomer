@@ -73,6 +73,7 @@ func (executor toolLifecycleExecutor) Run(ctx context.Context, execution executi
 		}
 	}()
 	install, installKey, err := executeToolMutation(ctx, client, execution, http.MethodPost, basePath+"/install", request, definition.ID+"-install")
+	installed = install.ID != ""
 	if err != nil {
 		return failDimension(result, "install", err, checkpoint)
 	}
