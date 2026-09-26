@@ -110,16 +110,21 @@ export function useUninstallTool() {
       slug,
       cluster_id,
       confirm_data_deletion,
+      confirm_failed_release_cleanup,
     }: {
       slug: string;
       cluster_id: string;
       confirm_data_deletion?: boolean;
+      confirm_failed_release_cleanup?: boolean;
     }) =>
       uninstallTool(slug, {
         cluster_id,
         ...(confirm_data_deletion === undefined
           ? {}
           : { confirm_data_deletion }),
+        ...(confirm_failed_release_cleanup === undefined
+          ? {}
+          : { confirm_failed_release_cleanup }),
       }),
     onSuccess: (_, { cluster_id }) => {
       void queryClient.invalidateQueries({

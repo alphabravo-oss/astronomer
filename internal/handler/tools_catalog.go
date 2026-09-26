@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (h *ToolHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -305,7 +308,7 @@ func (h *ToolHandler) queueToolReversal(w http.ResponseWriter, r *http.Request, 
 	// The durable plan also owns releases created just before a process crash,
 	// even when no installed_charts row was committed. Execution verifies the
 	// exact Helm operation marker before removing such a release.
-	previous, err := h.queries.GetLatestToolOperationForTarget(r.Context(), sqlc.GetLatestToolOperationForTargetParams{TargetType: "tool_installation", TargetKey: operationTargetKey(clusterID, slug)})
+	previous, err := h.latestToolOwnershipOperation(r.Context(), clusterID, slug, operation)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Installed tool has no durable release plan")
 		return
@@ -339,18 +342,61 @@ func (h *ToolHandler) queueToolReversal(w http.ResponseWriter, r *http.Request, 
 	}
 	if operation == "uninstall" {
 		env.ConfirmDataDeletion = req.ConfirmDataDeletion
+		env.ConfirmFailedReleaseCleanup = req.ConfirmFailedReleaseCleanup &&
+			previous.Status == "failed" &&
+			(previous.OperationType == "install" || previous.OperationType == "upgrade")
+		if env.ConfirmFailedReleaseCleanup {
+			var source toolOperationEnvelope
+			if err := json.Unmarshal(previous.Payload, &source); err != nil || len(source.Releases) != len(env.Releases) {
+				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Invalid source release plan")
+				return
+			}
+			for i := range env.Releases {
+				env.Releases[i].ExpectedRevision = source.Releases[i].ExpectedRevision
+				env.Releases[i].OperationMarker = source.Releases[i].OperationMarker
+			}
+		}
 	}
 	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	op, err := h.createAuditedToolOperation(r, "tool_installation", operationTargetKey(clusterID, slug), operation, env, currentUserUUID(r), mutationAuditEvent{action: "tool." + operation, resourceType: "tool", resourceID: tool.ID.String(), resourceName: slug, status: http.StatusAccepted, detail: map[string]any{
-		"cluster_id": req.ClusterID, "releases": toolPlanAudit(env), "source_operation_id": previous.ID.String(), "confirm_data_deletion": req.ConfirmDataDeletion,
+		"cluster_id": req.ClusterID, "releases": toolPlanAudit(env), "source_operation_id": previous.ID.String(), "confirm_data_deletion": req.ConfirmDataDeletion, "confirm_failed_release_cleanup": env.ConfirmFailedReleaseCleanup,
 	}})
 	if err != nil {
 		respondToolMutationError(w, r, err, apierror.EnqueueError, "Failed to enqueue tool "+operation)
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/tools/operations/"+op.ID.String()+"/", toolOperationResponse(op))
+}
+
+func (h *ToolHandler) latestToolOwnershipOperation(ctx context.Context, clusterID uuid.UUID, slug, reversal string) (sqlc.ToolOperation, error) {
+	operations, err := h.queries.ListToolOperations(ctx, sqlc.ListToolOperationsParams{
+		Limit:      100,
+		TargetType: pgtype.Text{String: "tool_installation", Valid: true},
+		TargetKey:  pgtype.Text{String: operationTargetKey(clusterID, slug), Valid: true},
+	})
+	if err != nil {
+		return sqlc.ToolOperation{}, err
+	}
+	if len(operations) == 0 {
+		return sqlc.ToolOperation{}, pgx.ErrNoRows
+	}
+	if operations[0].Status == "running" || operations[0].Status == "pending" {
+		return operations[0], nil
+	}
+	for _, operation := range operations {
+		if operation.OperationType == "uninstall" && operation.Status == "completed" {
+			return sqlc.ToolOperation{}, pgx.ErrNoRows
+		}
+		if operation.OperationType == "install" || operation.OperationType == "upgrade" {
+			return operation, nil
+		}
+		if reversal == "uninstall" && operation.OperationType == "adopt" && operation.Status == "completed" {
+			return operation, nil
+		}
+	}
+	return sqlc.ToolOperation{}, pgx.ErrNoRows
 }
 
 func (h *ToolHandler) Adopt(w http.ResponseWriter, r *http.Request) {

@@ -10804,6 +10804,9 @@ type ToolUninstallRequest struct {
 
 	// ConfirmDataDeletion Required for tools such as Longhorn whose uninstall can delete persistent data.
 	ConfirmDataDeletion *bool `json:"confirm_data_deletion,omitempty"`
+
+	// ConfirmFailedReleaseCleanup Explicitly acknowledges removal of an incomplete release from a failed Astronomer install. The server still verifies the original chart, version, and revision before uninstalling it.
+	ConfirmFailedReleaseCleanup *bool `json:"confirm_failed_release_cleanup,omitempty"`
 }
 
 // UpdateClusterGroupRequest defines model for UpdateClusterGroupRequest.

@@ -222,9 +222,9 @@ func newCatalogChartReadmeCmd() *cobra.Command {
 			if resp.JSON200 == nil {
 				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON404)
 			}
-			return render(cmd, resp.JSON200, func(w io.Writer) error {
-				if resp.JSON200.Readme != nil {
-					_, err := io.WriteString(w, *resp.JSON200.Readme)
+			return render(cmd, resp.JSON200.Data, func(w io.Writer) error {
+				if resp.JSON200.Data.Readme != nil {
+					_, err := io.WriteString(w, *resp.JSON200.Data.Readme)
 					return err
 				}
 				_, err := fmt.Fprintln(w, "(no README)")
@@ -264,9 +264,9 @@ func newCatalogChartValuesCmd() *cobra.Command {
 			if resp.JSON200 == nil {
 				return catalogError(resp.Status(), resp.StatusCode(), resp.JSON400, resp.JSON404)
 			}
-			return render(cmd, resp.JSON200, func(w io.Writer) error {
-				if resp.JSON200.DefaultValues != nil {
-					_, err := io.WriteString(w, *resp.JSON200.DefaultValues)
+			return render(cmd, resp.JSON200.Data, func(w io.Writer) error {
+				if resp.JSON200.Data.DefaultValues != nil {
+					_, err := io.WriteString(w, *resp.JSON200.Data.DefaultValues)
 					return err
 				}
 				_, err := fmt.Fprintln(w, "(no default values)")

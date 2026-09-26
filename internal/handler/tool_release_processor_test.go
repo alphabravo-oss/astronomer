@@ -31,6 +31,7 @@ func (r *longhornUninstallRequester) Do(_ context.Context, _ string, method, pat
 type plannedHelm struct {
 	releases    map[string]protocol.HelmResultPayload
 	markers     map[string]string
+	charts      map[string]string
 	calls       []string
 	failRelease string
 }
@@ -47,7 +48,8 @@ func (h *plannedHelm) History(ctx context.Context, cluster, release, namespace s
 	if err != nil {
 		return nil, err
 	}
-	return &protocol.HelmResultPayload{Success: true, Revisions: []protocol.HelmRevision{{Revision: status.Revision, Status: status.Status, Description: h.markers[namespace+"/"+release]}}}, nil
+	key := namespace + "/" + release
+	return &protocol.HelmResultPayload{Success: true, Revisions: []protocol.HelmRevision{{Revision: status.Revision, Status: status.Status, Chart: h.charts[key], Description: h.markers[key]}}}, nil
 }
 func (h *plannedHelm) Do(_ context.Context, _ string, message protocol.MessageType, request protocol.HelmRequestPayload) (*protocol.HelmResultPayload, error) {
 	h.calls = append(h.calls, string(message)+":"+request.ReleaseName)
@@ -98,7 +100,7 @@ func newPlanFixture(t *testing.T, count int) (*ToolHandler, *planQueries, *plann
 	t.Helper()
 	id := uuid.New()
 	queries := &planQueries{toolQueryRecorder: newToolQueryRecorder(id)}
-	helm := &plannedHelm{releases: map[string]protocol.HelmResultPayload{}, markers: map[string]string{}}
+	helm := &plannedHelm{releases: map[string]protocol.HelmResultPayload{}, markers: map[string]string{}, charts: map[string]string{}}
 	env := toolOperationEnvelope{ClusterID: id.String(), ToolSlug: "istio", Preset: "default", Releases: []toolRelease{
 		{ReleaseName: "istio-base", Namespace: "istio-system", ChartName: "base", RepoURL: "https://blob.istio.io/istio-release/charts", Version: "1.31.0", State: "pending"},
 		{ReleaseName: "istiod", Namespace: "istio-system", ChartName: "istiod", RepoURL: "https://blob.istio.io/istio-release/charts", Version: "1.31.0", State: "pending"},
@@ -345,6 +347,71 @@ func TestToolPlanRollbackOwnsCrashWindowReleaseWithoutInstalledRow(t *testing.T)
 	}
 	if len(helm.releases) != 0 {
 		t.Fatalf("orphaned release survived rollback: %v", helm.releases)
+	}
+}
+
+func TestToolPlanConfirmedFailedReleaseCleanupRequiresExactChartAndRevision(t *testing.T) {
+	h, q, helm, op := newPlanFixture(t, 1)
+	key := "istio-system/istio-base"
+	helm.releases[key] = protocol.HelmResultPayload{Success: true, Status: "failed", Revision: 1}
+	helm.markers[key] = "Helm install failed after post-install timeout"
+	helm.charts[key] = "base-1.31.0"
+	var env toolOperationEnvelope
+	if err := json.Unmarshal(op.Payload, &env); err != nil {
+		t.Fatal(err)
+	}
+	env.ConfirmFailedReleaseCleanup = true
+	env.Releases[0].ExpectedRevision = 1
+	env.Releases[0].OperationMarker = "astronomer tool operation original release 0"
+	op.OperationType = "uninstall"
+	op.Payload, _ = json.Marshal(env)
+	if err := h.executeOperation(context.Background(), op); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := helm.releases[key]; exists {
+		t.Fatal("confirmed failed release remained installed")
+	}
+	if len(q.installedByRef) != 0 {
+		t.Fatalf("unexpected installed rows: %v", q.installedByRef)
+	}
+}
+
+func TestToolPlanFailedReleaseCleanupRejectsMissingConfirmationOrMismatch(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		confirm  bool
+		chart    string
+		revision int
+		status   string
+	}{
+		{name: "missing confirmation", chart: "base-1.31.0", revision: 1, status: "failed"},
+		{name: "wrong chart", confirm: true, chart: "external-1.31.0", revision: 1, status: "failed"},
+		{name: "wrong revision", confirm: true, chart: "base-1.31.0", revision: 2, status: "failed"},
+		{name: "ready external release", confirm: true, chart: "base-1.31.0", revision: 1, status: "deployed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h, _, helm, op := newPlanFixture(t, 1)
+			key := "istio-system/istio-base"
+			helm.releases[key] = protocol.HelmResultPayload{Success: true, Status: test.status, Revision: test.revision}
+			helm.markers[key] = "external operation"
+			helm.charts[key] = test.chart
+			var env toolOperationEnvelope
+			if err := json.Unmarshal(op.Payload, &env); err != nil {
+				t.Fatal(err)
+			}
+			env.ConfirmFailedReleaseCleanup = test.confirm
+			env.Releases[0].ExpectedRevision = 1
+			env.Releases[0].OperationMarker = "astronomer tool operation original release 0"
+			op.OperationType = "uninstall"
+			op.Payload, _ = json.Marshal(env)
+			err := h.executeOperation(context.Background(), op)
+			if err == nil || !strings.Contains(err.Error(), "unowned") {
+				t.Fatalf("error=%v", err)
+			}
+			if _, exists := helm.releases[key]; !exists {
+				t.Fatal("unmatched release was removed")
+			}
+		})
 	}
 }
 

@@ -222,4 +222,25 @@ describe("tools generated API boundary", () => {
       },
     });
   });
+
+  it("sends explicit failed-release cleanup confirmation", async () => {
+    vi.mocked(generated.deleteToolsBySlugUninstall).mockResolvedValueOnce({
+      data: operationWire,
+    });
+    const clusterId = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+
+    await uninstallTool("cis-operator", {
+      cluster_id: clusterId,
+      confirm_failed_release_cleanup: true,
+    });
+
+    expect(generated.deleteToolsBySlugUninstall).toHaveBeenCalledWith({
+      path: { slug: "cis-operator" },
+      headerParams: { "Idempotency-Key": expect.stringMatching(UUID_V4) },
+      body: {
+        cluster_id: clusterId,
+        confirm_failed_release_cleanup: true,
+      },
+    });
+  });
 });

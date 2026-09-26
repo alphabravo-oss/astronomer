@@ -196,6 +196,7 @@ describe("useClusterToolActions", () => {
     expect(mocks.uninstall.mock.calls[0][0]).toEqual({
       slug: "istio",
       cluster_id: "cluster",
+      confirm_failed_release_cleanup: true,
     });
     act(() =>
       mocks.uninstall.mock.calls[0][1].onSuccess({ id: "uninstall-operation" }),

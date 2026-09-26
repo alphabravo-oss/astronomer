@@ -228,7 +228,11 @@ export async function upgradeTool(
 
 export async function uninstallTool(
   slug: string,
-  data: { cluster_id: string; confirm_data_deletion?: boolean },
+  data: {
+    cluster_id: string;
+    confirm_data_deletion?: boolean;
+    confirm_failed_release_cleanup?: boolean;
+  },
 ): Promise<ToolOperation> {
   const response = await deleteToolsBySlugUninstall({
     path: { slug },

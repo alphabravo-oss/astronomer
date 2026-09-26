@@ -114,6 +114,7 @@ export function useClusterToolActions({
 
   function confirmRemoval() {
     if (dialog?.kind !== "uninstall" || !authorize(remove)) return;
+    const failedRelease = statusMap.get(dialog.tool.slug)?.status === "failed";
     uninstall.mutate(
       {
         slug: dialog.tool.slug,
@@ -121,6 +122,7 @@ export function useClusterToolActions({
         ...(dialog.tool.slug === "longhorn"
           ? { confirm_data_deletion: true }
           : {}),
+        ...(failedRelease ? { confirm_failed_release_cleanup: true } : {}),
       },
       { onSuccess: trackOperation(dialog.tool) },
     );
@@ -171,7 +173,10 @@ export function useClusterToolActions({
               }
             : {
                 title: `Uninstall ${dialog.tool.name}`,
-                description: `Astronomer will uninstall each managed ${dialog.tool.name} release in reverse installation order.`,
+                description:
+                  statusMap.get(dialog.tool.slug)?.status === "failed"
+                    ? `Astronomer will verify and remove the incomplete ${dialog.tool.name} release created by the failed operation.`
+                    : `Astronomer will uninstall each managed ${dialog.tool.name} release in reverse installation order.`,
                 confirmText: "Uninstall",
                 confirmValue: dialog.tool.name,
                 impact: {

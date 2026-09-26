@@ -287,7 +287,7 @@ func (h *ToolHandler) executeToolRelease(ctx context.Context, op sqlc.ToolOperat
 }
 
 func (h *ToolHandler) toolReleaseHasMarker(ctx context.Context, env toolOperationEnvelope, release toolRelease, marker string, revision int) (bool, error) {
-	if marker == "" {
+	if marker == "" && !env.ConfirmFailedReleaseCleanup {
 		return false, nil
 	}
 	history, err := h.helm.History(ctx, env.ClusterID, release.ReleaseName, release.Namespace)
@@ -298,11 +298,28 @@ func (h *ToolHandler) toolReleaseHasMarker(ctx context.Context, env toolOperatio
 		return false, errors.New("Helm release history unavailable")
 	}
 	for _, item := range history.Revisions {
-		if item.Revision == revision && item.Description == marker {
+		if marker != "" && item.Revision == revision && item.Description == marker {
+			return true, nil
+		}
+		if env.ConfirmFailedReleaseCleanup &&
+			release.ExpectedRevision > 0 &&
+			item.Revision == revision &&
+			item.Revision == release.ExpectedRevision &&
+			item.Chart == release.ChartName+"-"+release.Version &&
+			isFailedHelmReleaseStatus(item.Status) {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+func isFailedHelmReleaseStatus(status string) bool {
+	switch status {
+	case "failed", "pending-install", "pending-upgrade", "pending-rollback", "pending-uninstall":
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *ToolHandler) finishToolOperation(ctx context.Context, op sqlc.ToolOperation, operationErr error) {

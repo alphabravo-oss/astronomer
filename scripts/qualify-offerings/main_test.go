@@ -101,12 +101,15 @@ func TestDexToolExecutorPassesOnlyOnExplicitManagementOnlyRejection(t *testing.T
 
 func TestToolUninstallBodyRequiresExplicitLonghornDeletionConfirmation(t *testing.T) {
 	longhorn := toolUninstallBody("longhorn", "cluster-1")
-	if longhorn["cluster_id"] != "cluster-1" || longhorn["confirm_data_deletion"] != true {
+	if longhorn["cluster_id"] != "cluster-1" || longhorn["confirm_data_deletion"] != true || longhorn["confirm_failed_release_cleanup"] != true {
 		t.Fatalf("longhorn uninstall body = %#v", longhorn)
 	}
 	standard := toolUninstallBody("cert-manager", "cluster-1")
 	if _, present := standard["confirm_data_deletion"]; present {
 		t.Fatalf("standard uninstall unexpectedly confirms data deletion: %#v", standard)
+	}
+	if standard["confirm_failed_release_cleanup"] != true {
+		t.Fatalf("standard uninstall does not acknowledge run-owned failed cleanup: %#v", standard)
 	}
 }
 

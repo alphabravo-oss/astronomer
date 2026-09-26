@@ -275,6 +275,14 @@ export function ToolCard({
                   Roll back
                 </button>
               )}
+            <button
+              onClick={() => onUninstall(tool.slug)}
+              disabled={uninstalling || !!uninstallBlockedReason}
+              title={uninstallBlockedReason}
+              className="h-8 px-3 rounded-md border border-border text-xs disabled:opacity-50"
+            >
+              Remove failed release
+            </button>
           </div>
         )}
       </div>

@@ -6835,6 +6835,9 @@ components:
         confirm_data_deletion:
           type: boolean
           description: Required for tools such as Longhorn whose uninstall can delete persistent data.
+        confirm_failed_release_cleanup:
+          type: boolean
+          description: Explicitly acknowledges removal of an incomplete release from a failed Astronomer install. The server still verifies the original chart, version, and revision before uninstalling it.
     ToolPreview:
       type: object
       additionalProperties: false

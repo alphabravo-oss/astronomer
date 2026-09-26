@@ -129,7 +129,10 @@ func (executor toolLifecycleExecutor) Run(ctx context.Context, execution executi
 }
 
 func toolUninstallBody(slug, clusterID string) map[string]any {
-	body := map[string]any{"cluster_id": clusterID}
+	body := map[string]any{
+		"cluster_id":                     clusterID,
+		"confirm_failed_release_cleanup": true,
+	}
 	if slug == "longhorn" {
 		body["confirm_data_deletion"] = true
 	}

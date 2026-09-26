@@ -220,16 +220,18 @@ type toolActionRequest struct {
 
 // openapi:request ToolUninstallRequest
 type toolUninstallRequest struct {
-	ClusterID           string `json:"cluster_id"`
-	ConfirmDataDeletion bool   `json:"confirm_data_deletion"`
+	ClusterID                   string `json:"cluster_id"`
+	ConfirmDataDeletion         bool   `json:"confirm_data_deletion"`
+	ConfirmFailedReleaseCleanup bool   `json:"confirm_failed_release_cleanup"`
 }
 
 type toolOperationEnvelope struct {
-	ClusterID           string        `json:"clusterId"`
-	ToolSlug            string        `json:"toolSlug"`
-	Preset              string        `json:"preset,omitempty"`
-	ConfirmDataDeletion bool          `json:"confirmDataDeletion,omitempty"`
-	Releases            []toolRelease `json:"releases"`
+	ClusterID                   string        `json:"clusterId"`
+	ToolSlug                    string        `json:"toolSlug"`
+	Preset                      string        `json:"preset,omitempty"`
+	ConfirmDataDeletion         bool          `json:"confirmDataDeletion,omitempty"`
+	ConfirmFailedReleaseCleanup bool          `json:"confirmFailedReleaseCleanup,omitempty"`
+	Releases                    []toolRelease `json:"releases"`
 }
 
 // toolReleaseExecution combines immutable scope with one release for the Helm

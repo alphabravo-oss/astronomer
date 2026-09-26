@@ -45,18 +45,19 @@ func (h *toolHelmStub) History(ctx context.Context, clusterID, releaseName, name
 }
 
 type toolQueryRecorder struct {
-	checkpointMu    sync.Mutex
-	checkpoints     map[uuid.UUID]json.RawMessage
-	clusterID       uuid.UUID
-	installedBySlug map[string]sqlc.InstalledChart
-	installedByRef  map[string]sqlc.InstalledChart
-	created         []sqlc.CreateInstalledChartParams
-	adopted         []sqlc.AdoptInstalledChartByReleaseParams
-	events          []sqlc.CreateToolOperationEventParams
-	operations      []sqlc.CreateToolOperationParams
-	idemOperations  []sqlc.CreateToolOperationIdempotentParams
-	idemByKey       map[string]sqlc.ToolOperation
-	valuesUpdates   []sqlc.UpdateInstalledChartValuesParams
+	checkpointMu     sync.Mutex
+	checkpoints      map[uuid.UUID]json.RawMessage
+	clusterID        uuid.UUID
+	installedBySlug  map[string]sqlc.InstalledChart
+	installedByRef   map[string]sqlc.InstalledChart
+	created          []sqlc.CreateInstalledChartParams
+	adopted          []sqlc.AdoptInstalledChartByReleaseParams
+	events           []sqlc.CreateToolOperationEventParams
+	operations       []sqlc.CreateToolOperationParams
+	idemOperations   []sqlc.CreateToolOperationIdempotentParams
+	idemByKey        map[string]sqlc.ToolOperation
+	valuesUpdates    []sqlc.UpdateInstalledChartValuesParams
+	listedOperations []sqlc.ToolOperation
 }
 
 func (q *toolQueryRecorder) RenewToolOperationLease(_ context.Context, arg sqlc.RenewToolOperationLeaseParams) (sqlc.ToolOperation, error) {
@@ -93,6 +94,56 @@ func TestEnsureInstalledRejectsRemoteUpstreamDex(t *testing.T) {
 	h := NewToolHandler(q)
 	if _, err := h.EnsureInstalled(context.Background(), q.clusterID, DexToolSlug, "dex", "development", ""); err == nil || !strings.Contains(err.Error(), "bundled") {
 		t.Fatalf("remote upstream Dex install was not rejected: %v", err)
+	}
+}
+
+func TestLatestToolOwnershipOperationSkipsFailedRecoveryAttempts(t *testing.T) {
+	clusterID := uuid.New()
+	q := newToolQueryRecorder(clusterID)
+	sourceID := uuid.New()
+	q.listedOperations = []sqlc.ToolOperation{
+		{ID: uuid.New(), OperationType: "adopt", Status: "failed"},
+		{ID: uuid.New(), OperationType: "uninstall", Status: "failed"},
+		{ID: sourceID, OperationType: "install", Status: "failed"},
+	}
+	h := NewToolHandler(q)
+	operation, err := h.latestToolOwnershipOperation(context.Background(), clusterID, "cis-operator", "uninstall")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operation.ID != sourceID {
+		t.Fatalf("selected operation %s, want original apply %s", operation.ID, sourceID)
+	}
+}
+
+func TestLatestToolOwnershipOperationStopsAfterCompletedUninstall(t *testing.T) {
+	clusterID := uuid.New()
+	q := newToolQueryRecorder(clusterID)
+	q.listedOperations = []sqlc.ToolOperation{
+		{ID: uuid.New(), OperationType: "uninstall", Status: "completed"},
+		{ID: uuid.New(), OperationType: "install", Status: "completed"},
+	}
+	h := NewToolHandler(q)
+	if _, err := h.latestToolOwnershipOperation(context.Background(), clusterID, "cis-operator", "uninstall"); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestLatestToolOwnershipOperationReturnsActiveHead(t *testing.T) {
+	clusterID := uuid.New()
+	q := newToolQueryRecorder(clusterID)
+	activeID := uuid.New()
+	q.listedOperations = []sqlc.ToolOperation{
+		{ID: activeID, OperationType: "uninstall", Status: "running"},
+		{ID: uuid.New(), OperationType: "install", Status: "completed"},
+	}
+	h := NewToolHandler(q)
+	operation, err := h.latestToolOwnershipOperation(context.Background(), clusterID, "cis-operator", "uninstall")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operation.ID != activeID {
+		t.Fatalf("selected operation %s, want active %s", operation.ID, activeID)
 	}
 }
 
@@ -224,7 +275,7 @@ func (q *toolQueryRecorder) GetToolOperation(context.Context, uuid.UUID) (sqlc.T
 	return sqlc.ToolOperation{}, nil
 }
 func (q *toolQueryRecorder) ListToolOperations(context.Context, sqlc.ListToolOperationsParams) ([]sqlc.ToolOperation, error) {
-	return nil, nil
+	return q.listedOperations, nil
 }
 func (q *toolQueryRecorder) ListPendingToolOperations(context.Context, int32) ([]sqlc.ToolOperation, error) {
 	return nil, nil
