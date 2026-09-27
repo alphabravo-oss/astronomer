@@ -8,11 +8,11 @@ release name, Kubernetes range, and required delivery capabilities.
 
 The current v1.2 baseline contains three components:
 
-| Component | Chart version | Namespace | Release name |
-| --- | --- | --- | --- |
-| `trivy-operator` | `0.36.0` | `astronomer-trivy-system` | `trivy-operator` |
-| `kube-state-metrics` | `8.0.0` | `astronomer-monitoring` | `kube-state-metrics` |
-| `prometheus-node-exporter` | `4.56.1` | `astronomer-monitoring` | `prometheus-node-exporter` |
+| Component                  | Chart version | Namespace                 | Release name               |
+| -------------------------- | ------------- | ------------------------- | -------------------------- |
+| `trivy-operator`           | `0.36.0`      | `astronomer-trivy-system` | `trivy-operator`           |
+| `kube-state-metrics`       | `8.0.0`       | `astronomer-monitoring`   | `kube-state-metrics`       |
+| `prometheus-node-exporter` | `4.56.1`      | `astronomer-monitoring`   | `prometheus-node-exporter` |
 
 The release manifest, built-in bundle archive, air-gap image inventory, and
 runtime provisioner all consume this catalog. Database `cluster_tools` rows,
@@ -53,6 +53,21 @@ Operators inspect the resulting resources through the normal delivery APIs:
 Registration reaches `ready` only after every enabled built-in target reports a
 successful deployment. A failed immutable rollout is visible through the same
 delivery and registration status APIs and requires an explicit retry.
+
+## Full monitoring ownership
+
+Quick Start remains optional when a cluster is adopted. Installing the managed
+cluster monitoring stack does not create a second owner for exporters that are
+already present. Its public preview reports the ownership decision, disables
+the kube-prometheus-stack `kubeStateMetrics` and `nodeExporter` components, and
+adds ServiceMonitors for the Flux-owned services in `astronomer-monitoring`.
+The operator must review this effective plan before installation.
+
+This split keeps the small baseline useful during a monitoring-stack upgrade or
+uninstall and avoids a second Node Exporter DaemonSet competing for host
+resources. A cluster adopted without Quick Start receives the exporters owned
+by the full monitoring stack instead. Direct API callers receive the same
+server-rendered ownership behavior as the browser.
 
 ## Optional tools are not baseline components
 

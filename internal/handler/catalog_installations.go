@@ -279,6 +279,7 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 }
 
 // DeleteInstalledChart handles DELETE /api/v1/catalog/installed/{id}/.
+// openapi:request CatalogUninstallRequest
 type catalogUninstallRequest struct {
 	ConfirmDataDeletion         bool `json:"confirm_data_deletion"`
 	ConfirmFailedReleaseCleanup bool `json:"confirm_failed_release_cleanup"`
