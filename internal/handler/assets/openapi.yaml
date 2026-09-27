@@ -1555,6 +1555,23 @@ components:
         desiredSpecHash: {type: string}
         requiresReplace: {type: boolean}
         replaceReasons: {type: array, nullable: true, items: {type: string}}
+        blocked:
+          type: boolean
+          description: True when a discovered cluster condition makes applying these values unsafe.
+        operatorConflicts:
+          type: array
+          description: Prometheus operators outside this managed release that can reconcile its namespace.
+          items:
+            type: object
+            additionalProperties: false
+            required: [namespace, name, watchesAllNamespaces]
+            properties:
+              namespace: {type: string}
+              name: {type: string}
+              releaseName: {type: string}
+              watchedNamespaces: {type: array, items: {type: string}}
+              excludedNamespaces: {type: array, items: {type: string}}
+              watchesAllNamespaces: {type: boolean}
         baselineOwnership:
           type: object
           additionalProperties: false

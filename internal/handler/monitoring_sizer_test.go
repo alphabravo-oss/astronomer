@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -790,11 +791,12 @@ func (q *sizerErrListQuerier) ListClusters(context.Context, sqlc.ListClustersPar
 }
 
 type sizerK8sFake struct {
-	t       *testing.T
-	calls   []string
-	nodes   []corev1.Node
-	pods    []corev1.Pod
-	storage storageClassWire
+	t           *testing.T
+	calls       []string
+	nodes       []corev1.Node
+	pods        []corev1.Pod
+	deployments []appsv1.Deployment
+	storage     storageClassWire
 }
 
 func (f *sizerK8sFake) Do(_ context.Context, _, method, path string, _ []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
@@ -812,6 +814,8 @@ func (f *sizerK8sFake) Do(_ context.Context, _, method, path string, _ []byte, _
 	switch {
 	case path == "/api/v1/nodes":
 		return sizerK8sJSON(corev1.NodeList{Items: f.nodes}), nil
+	case path == "/apis/apps/v1/deployments":
+		return sizerK8sJSON(appsv1.DeploymentList{Items: f.deployments}), nil
 	case strings.HasPrefix(path, "/api/v1/pods"):
 		return sizerK8sJSON(f.podPage(path)), nil
 	case path == "/apis/storage.k8s.io/v1/storageclasses":

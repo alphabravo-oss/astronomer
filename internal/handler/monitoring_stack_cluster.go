@@ -177,6 +177,12 @@ func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request)
 	cfg, ok, _ := h.loadStackConfig(r.Context(), clusterID)
 	replaceRequired, reasons := clusterMonitoringReplaceRequired(cfg, ok, req)
 	baselineOwnership := h.clusterMetricsBaselineOwnership(r.Context(), clusterID)
+	operatorConflicts, conflictErr := h.clusterMonitoringOperatorConflicts(r.Context(), clusterID, req.Namespace, req.ReleaseName)
+	if conflictErr != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError,
+			"Could not verify Prometheus operator ownership: "+conflictErr.Error())
+		return
+	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"clusterId": clusterID,
 		"chart": map[string]any{
@@ -188,6 +194,8 @@ func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request)
 		"requiresReplace":   replaceRequired,
 		"replaceReasons":    reasons,
 		"baselineOwnership": baselineOwnership,
+		"blocked":           len(operatorConflicts) > 0,
+		"operatorConflicts": operatorConflicts,
 	})
 }
 
@@ -222,6 +230,9 @@ func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request)
 		respondStackPayloadError(w, r, err)
 		return
 	}
+	if h.monitoringOperatorConflictResponse(w, r, clusterID, req) {
+		return
+	}
 	op, err := h.stageClusterStackMutation(r, clusterID, req, values, "installing", "install", "monitoring.stack.install")
 	if err != nil {
 		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to stage monitoring stack installation")
@@ -239,6 +250,9 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbUpdate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
+		return
+	}
+	if h.monitoringOperatorConflictResponse(w, r, clusterID, req) {
 		return
 	}
 	cfg, ok, loadErr := h.loadStackConfig(r.Context(), clusterID)
@@ -272,6 +286,9 @@ func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request)
 	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbUpdate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
+		return
+	}
+	if h.monitoringOperatorConflictResponse(w, r, clusterID, req) {
 		return
 	}
 	if _, _, loadErr := h.loadStackConfig(r.Context(), clusterID); loadErr != nil {

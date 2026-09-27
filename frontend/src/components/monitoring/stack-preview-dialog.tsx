@@ -71,7 +71,7 @@ export function StackPreviewDialog({
               : ""}
           </span>
           <div className="flex items-center gap-2">
-            {actions}
+            {!preview?.blocked && actions}
             <ActionButton size="sm" intent="ghost" onClick={onClose}>
               Close
             </ActionButton>
@@ -103,6 +103,37 @@ export function StackPreviewDialog({
                 ? ` Reasons: ${preview.replaceReasons.join(", ")}.`
                 : ""}
             </p>
+          </div>
+        </div>
+      )}
+
+      {preview?.blocked && !!preview.operatorConflicts?.length && (
+        <div className="flex items-start gap-2 rounded-md border border-status-error/30 bg-status-error/10 px-3 py-2 text-xs text-status-error">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="font-medium">
+              Another Prometheus operator watches this namespace
+            </p>
+            <p className="mt-0.5">
+              Applying this stack would let multiple operators rewrite the same
+              Prometheus resources. Remove it through its owning application, or
+              scope it away from this namespace, then preview again.
+            </p>
+            <ul className="mt-1 space-y-0.5 font-mono text-[10px]">
+              {preview.operatorConflicts?.map((conflict) => (
+                <li key={`${conflict.namespace}/${conflict.name}`}>
+                  {conflict.namespace}/{conflict.name}
+                  {conflict.releaseName ? ` (${conflict.releaseName})` : ""}
+                  {conflict.watchesAllNamespaces
+                    ? " — watches all namespaces"
+                    : conflict.watchedNamespaces?.length
+                      ? ` — watches ${conflict.watchedNamespaces.join(", ")}`
+                      : conflict.excludedNamespaces?.length
+                        ? ` — watches all except ${conflict.excludedNamespaces.join(", ")}`
+                        : ""}
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}

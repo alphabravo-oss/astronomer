@@ -4099,6 +4099,15 @@ export interface OpenAPIComponents {
           "desiredSpecHash": string;
           "requiresReplace": boolean;
           "replaceReasons": string[] | null;
+          "blocked"?: boolean;
+          "operatorConflicts"?: Array<{
+            "namespace": string;
+            "name": string;
+            "releaseName"?: string;
+            "watchedNamespaces"?: string[];
+            "excludedNamespaces"?: string[];
+            "watchesAllNamespaces": boolean;
+          }>;
           "baselineOwnership"?: {
             "detected": boolean;
             "mode": "full_stack" | "reuse";

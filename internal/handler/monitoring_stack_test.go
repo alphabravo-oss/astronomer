@@ -17,7 +17,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -737,6 +739,121 @@ func TestClusterStackPreviewReusesFluxOwnedMetricsBaseline(t *testing.T) {
 		if len(namespaces) != 1 || namespaces[0] != "astronomer-monitoring" {
 			t.Fatalf("namespace selector = %#v, want astronomer-monitoring", namespaces)
 		}
+	}
+}
+
+func TestClusterStackLifecycleBlocksCompetingPrometheusOperator(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	k8s := h.requester.(*sizerK8sFake)
+	k8s.deployments = []appsv1.Deployment{{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "other-monitoring",
+			Name:      "other-kube-prometheus-operator",
+			Labels:    map[string]string{"app.kubernetes.io/instance": "other-prometheus"},
+		},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+			Name: "prometheus-operator", Image: "quay.io/prometheus-operator/prometheus-operator:v0.93.1",
+		}}}}},
+	}}
+
+	preview := httptest.NewRecorder()
+	previewRequest := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+		body:   `{}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.PreviewStack(preview, previewRequest)
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status = %d: %s", preview.Code, preview.Body.String())
+	}
+	var previewBody struct {
+		Data struct {
+			Blocked   bool                         `json:"blocked"`
+			Conflicts []MonitoringOperatorConflict `json:"operatorConflicts"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(preview.Body.Bytes(), &previewBody); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if !previewBody.Data.Blocked || len(previewBody.Data.Conflicts) != 1 {
+		t.Fatalf("preview conflict result = %#v, want one blocking operator", previewBody.Data)
+	}
+	conflict := previewBody.Data.Conflicts[0]
+	if conflict.Namespace != "other-monitoring" || conflict.Name != "other-kube-prometheus-operator" || !conflict.WatchesAll {
+		t.Fatalf("operator conflict = %#v", conflict)
+	}
+
+	install := httptest.NewRecorder()
+	installRequest := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/install/",
+		body:   `{}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.InstallStack(install, installRequest)
+	if install.Code != http.StatusConflict || !strings.Contains(install.Body.String(), "monitoring_operator_conflict") {
+		t.Fatalf("install status = %d, body = %s", install.Code, install.Body.String())
+	}
+}
+
+func TestClusterStackPreviewIgnoresItsOwnNamespaceScopedOperator(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	k8s := h.requester.(*sizerK8sFake)
+	k8s.deployments = []appsv1.Deployment{{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "monitoring",
+			Name:      "prometheus-kube-prometheus-operator",
+			Labels:    map[string]string{"app.kubernetes.io/instance": "prometheus"},
+		},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+			Name: "prometheus-operator", Image: "quay.io/prometheus-operator/prometheus-operator:v0.75.1",
+			Args: []string{"--namespaces=monitoring"},
+		}}}}},
+	}}
+	rec := httptest.NewRecorder()
+	req := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+		body:   `{}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.PreviewStack(rec, req)
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"blocked":true`) {
+		t.Fatalf("own operator preview status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestClusterStackPreviewHonorsCompetingOperatorNamespaceScope(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "different allow list", args: []string{"--namespaces", "other-monitoring"}},
+		{name: "target excluded", args: []string{"--deny-namespaces=monitoring,other"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, _ := newStackLifecycleHandler(t)
+			k8s := h.requester.(*sizerK8sFake)
+			k8s.deployments = []appsv1.Deployment{{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "operators", Name: "scoped-prometheus-operator"},
+				Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+					Image: "quay.io/prometheus-operator/prometheus-operator:v0.93.1", Args: tt.args,
+				}}}}},
+			}}
+			rec := httptest.NewRecorder()
+			req := (stackLifecycleCase{
+				method: http.MethodPost,
+				target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+				body:   `{}`,
+				params: map[string]string{"id": stackTestClusterID},
+			}).request()
+			h.PreviewStack(rec, req)
+			if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"blocked":true`) {
+				t.Fatalf("scoped operator preview status = %d, body = %s", rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 

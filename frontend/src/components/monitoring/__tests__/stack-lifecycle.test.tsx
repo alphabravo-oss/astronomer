@@ -735,6 +735,56 @@ describe("per-cluster monitoring stack page", () => {
     expect(stackLifecycle).not.toHaveBeenCalled();
   });
 
+  it("blocks apply when another Prometheus operator watches the namespace", async () => {
+    grant(["read", "create", "update", "delete"]);
+    statusPerTarget({ cluster: { status: "not_configured" } });
+    stackPreview.mockResolvedValueOnce({
+      clusterId: CLUSTER_ID,
+      chart: {
+        repoUrl: "https://prometheus-community.github.io/helm-charts",
+        chartName: "kube-prometheus-stack",
+      },
+      values: {},
+      desiredSpecHash: "abcdef1234567890",
+      requiresReplace: false,
+      replaceReasons: null,
+      blocked: true,
+      operatorConflicts: [
+        {
+          namespace: "astronomer-kube-prometheus",
+          name: "kube-prometheus-stack-operator",
+          releaseName: "kube-prometheus-stack",
+          watchesAllNamespaces: true,
+        },
+      ],
+    });
+    render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, {
+      wrapper: Wrapper,
+    });
+
+    const panel = await screen.findByTestId("stack-panel-cluster");
+    fireEvent.click(within(panel).getByRole("button", { name: /^Set up / }));
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Review & install" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        "Another Prometheus operator watches this namespace",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        /astronomer-kube-prometheus\/kube-prometheus-stack-operator/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Install these values" }),
+    ).not.toBeInTheDocument();
+    expect(stackLifecycle).not.toHaveBeenCalled();
+  });
+
   it("honours a monitoring grant scoped to this cluster exactly like the API", async () => {
     grantOnCluster(CLUSTER_ID, ["read", "create", "update", "delete"]);
     statusPerTarget({ cluster: { status: "not_configured" } });

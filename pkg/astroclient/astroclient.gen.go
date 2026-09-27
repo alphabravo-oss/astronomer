@@ -8568,12 +8568,25 @@ type MonitoringStackPreview struct {
 		Message    *string                                     `json:"message,omitempty"`
 		Mode       MonitoringStackPreviewBaselineOwnershipMode `json:"mode"`
 	} `json:"baselineOwnership,omitempty"`
-	Chart struct {
+
+	// Blocked True when a discovered cluster condition makes applying these values unsafe.
+	Blocked *bool `json:"blocked,omitempty"`
+	Chart   struct {
 		ChartName string `json:"chartName"`
 		RepoUrl   string `json:"repoUrl"`
 	} `json:"chart"`
-	ClusterId       openapi_types.UUID     `json:"clusterId"`
-	DesiredSpecHash string                 `json:"desiredSpecHash"`
+	ClusterId       openapi_types.UUID `json:"clusterId"`
+	DesiredSpecHash string             `json:"desiredSpecHash"`
+
+	// OperatorConflicts Prometheus operators outside this managed release that can reconcile its namespace.
+	OperatorConflicts *[]struct {
+		ExcludedNamespaces   *[]string `json:"excludedNamespaces,omitempty"`
+		Name                 string    `json:"name"`
+		Namespace            string    `json:"namespace"`
+		ReleaseName          *string   `json:"releaseName,omitempty"`
+		WatchedNamespaces    *[]string `json:"watchedNamespaces,omitempty"`
+		WatchesAllNamespaces bool      `json:"watchesAllNamespaces"`
+	} `json:"operatorConflicts,omitempty"`
 	ReplaceReasons  *[]string              `json:"replaceReasons"`
 	RequiresReplace bool                   `json:"requiresReplace"`
 	Values          map[string]interface{} `json:"values"`
