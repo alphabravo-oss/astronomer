@@ -17,6 +17,13 @@ import (
 	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 )
 
+// Node exporter reports a physical node's root filesystem at mountpoint="/".
+// In containerized Kubernetes nodes such as k3d and kind, Docker bind-mounts
+// that same host filesystem at /etc/hostname instead. Selecting both and then
+// collapsing by scrape instance gives every node one disk value without
+// double-counting repeated bind mounts.
+const nodeRootFilesystemSelector = `mountpoint=~"^/$|^/etc/hostname$",fstype!~"tmpfs|overlay"`
+
 func (h *MonitoringHandler) PrometheusQuery(w http.ResponseWriter, r *http.Request) {
 	clusterUUID, ok := parseClusterID(w, r)
 	if !ok {
@@ -353,8 +360,8 @@ func (h *MonitoringHandler) realClusterSummary(ctx context.Context, clusterID st
 	scalar(`count(kube_node_info{`+selector+`})`, &nodeCount)
 	scalar(`sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*",`+selector+`}[5m]))`, &networkReceive)
 	scalar(`sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*",`+selector+`}[5m]))`, &networkTransmit)
-	scalar(`sum(node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+selector+`})`, &diskCapacity)
-	scalar(`sum(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+selector+`})`, &diskAvail)
+	scalar(`sum(max by(instance) (node_filesystem_size_bytes{`+nodeRootFilesystemSelector+`,`+selector+`}))`, &diskCapacity)
+	scalar(`sum(max by(instance) (node_filesystem_avail_bytes{`+nodeRootFilesystemSelector+`,`+selector+`}))`, &diskAvail)
 	if err := g.Wait(); err != nil {
 		return nil, true, err
 	}
@@ -407,8 +414,8 @@ func (h *MonitoringHandler) realNodeSummary(ctx context.Context, clusterID, node
 	scalar(`sum(kube_node_status_capacity{resource="pods",unit="integer",`+nodeLabel+`})`, &podCapacity)
 	scalar(`sum(`+nodeExporter(`rate(node_network_receive_bytes_total{device!~"lo|veth.*",`+selector+`}[5m])`)+`)`, &networkReceive)
 	scalar(`sum(`+nodeExporter(`rate(node_network_transmit_bytes_total{device!~"lo|veth.*",`+selector+`}[5m])`)+`)`, &networkTransmit)
-	scalar(`sum(`+nodeExporter(`node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+selector+`}`)+`)`, &diskCapacity)
-	scalar(`sum(`+nodeExporter(`node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay",`+selector+`}`)+`)`, &diskAvail)
+	scalar(`sum(`+nodeExporter(`max by(instance) (node_filesystem_size_bytes{`+nodeRootFilesystemSelector+`,`+selector+`})`)+`)`, &diskCapacity)
+	scalar(`sum(`+nodeExporter(`max by(instance) (node_filesystem_avail_bytes{`+nodeRootFilesystemSelector+`,`+selector+`})`)+`)`, &diskAvail)
 	if err := g.Wait(); err != nil {
 		return nil, true, err
 	}
@@ -463,7 +470,7 @@ func (h *MonitoringHandler) realClusterMetrics(ctx context.Context, clusterID, r
 		"memoryCapacity":  `sum(node_memory_MemTotal_bytes{%s})`,
 		"networkReceive":  `sum(rate(node_network_receive_bytes_total{device!~"lo|veth.*",%s}[5m]))`,
 		"networkTransmit": `sum(rate(node_network_transmit_bytes_total{device!~"lo|veth.*",%s}[5m]))`,
-		"diskUsage":       `sum(node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay",%s} - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay",%s})`,
+		"diskUsage":       `sum(max by(instance) (node_filesystem_size_bytes{` + nodeRootFilesystemSelector + `,%s}) - max by(instance) (node_filesystem_avail_bytes{` + nodeRootFilesystemSelector + `,%s}))`,
 		"podCount":        `count(kube_pod_info{%s})`,
 	})
 	if err != nil {

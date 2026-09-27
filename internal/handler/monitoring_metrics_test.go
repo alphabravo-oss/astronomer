@@ -125,6 +125,10 @@ func TestRealNodeSummaryResolvesNodeExporterInstanceByNodeName(t *testing.T) {
 	if !strings.Contains(joined, `node_uname_info{nodename="node-a"`) {
 		t.Fatalf("node-exporter queries do not resolve the node through node_uname_info: %s", joined)
 	}
+	if !strings.Contains(joined, `mountpoint=~"^/$|^/etc/hostname$"`) ||
+		!strings.Contains(joined, `max by(instance) (node_filesystem_size_bytes`) {
+		t.Fatalf("disk queries do not support containerized node root filesystems: %s", joined)
+	}
 }
 
 func TestResolveLegacyWorkloadKind(t *testing.T) {
