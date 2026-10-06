@@ -8,7 +8,10 @@ import { resolve } from "node:path";
 // prevents them from regressing.
 const actionSurfaces = [
   "src/routes/dashboard/clusters/$id/-page.tsx",
-  "src/routes/dashboard/account/security/index.tsx",
+  "src/routes/dashboard/account/security/-cards.tsx",
+  "src/routes/dashboard/account/security/-dialogs.tsx",
+  "src/routes/dashboard/account/security/-enrollment-wizard.tsx",
+  "src/routes/dashboard/account/security/-shared.tsx",
   "src/routes/dashboard/delivery/targets/$targetId/-page.tsx",
   "src/routes/dashboard/delivery/targets/-page.tsx",
   "src/routes/dashboard/settings/widgets/-widgets-section.tsx",
