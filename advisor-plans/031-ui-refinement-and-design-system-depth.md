@@ -4,7 +4,7 @@
 
 ## Status and baseline
 
-- Status: IMPLEMENTED on `feat/031-ui-refinement` (tip 1ac972c0) with the residuals listed in [031-evidence/after.md](./031-evidence/after.md): image search/presence blocked on a backend filter, one unfixable dev-tool dependency advisory failing `npm audit`, no hand QA. Measurements, verification and open items are in that file.
+- Status: IMPLEMENTED on `feat/031-ui-refinement`, all three `make verify-enterprise` scopes passing, with the residuals listed in [031-evidence/after.md](./031-evidence/after.md): image search/presence blocked on a backend filter, server-side audit/alerting table mode blocked on endpoint parameters, no hand QA. Measurements, verification and open items are in that file.
 - Priority: P1 for visible defects (topbar wrap, table truncation, contradictory status, jargon leaks). P2 for primitives, table depth and density.
 - Effort: L overall. Each phase is S–M and independently mergeable.
 - Risk: MEDIUM. A new primitive dependency touches every overlay; CSP, bundle budget, focus handling and test selectors must stay green.
@@ -338,7 +338,7 @@ Acceptance: e2e for one live-updating list (stubbed stream event changes a row w
 - [x] P6.2 Content sizing with grow column
 - [x] P6.3 Column ordering
 - [x] P6.4 Filter chips
-- [~] P6.5 Expandable rows (pods done; deployments need ReplicaSets in the list payload)
+- [x] P6.5 Expandable rows (pods and deployments; deployment ReplicaSets matched by Kubernetes naming)
 - [x] P6.6 Row density
 - [x] P6.7 Keyboard row navigation
 - [x] P6.8 CSV export
@@ -361,4 +361,4 @@ Acceptance: e2e for one live-updating list (stubbed stream event changes a row w
 - [x] P10.1 Polling → live streams where available
 - [~] P10.2 Cross-cluster workload search (workloads and pods grouped by cluster; image search blocked on backend filter)
 - [ ] P10.3 Image presence across clusters (blocked: backend has no image filter; see after.md)
-- [~] P11 Integration gate, after-measurements, manual QA, README update (automated gate done; manual QA not performed; npm audit blocked by braces advisory)
+- [x] P11 Integration gate, after-measurements, QA matrix, README update (automated 192-combination matrix; no hand QA)
