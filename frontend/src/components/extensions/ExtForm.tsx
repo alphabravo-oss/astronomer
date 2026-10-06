@@ -12,6 +12,7 @@ import type {
   FormSpec,
   FormInput,
 } from "@/lib/api/extensions";
+import { BareButton } from "@/components/form/bare-button";
 
 export interface ExtFormProps {
   extensionName: string;
@@ -157,13 +158,13 @@ export function ExtForm({ extensionName, spec, context }: ExtFormProps) {
         </p>
       )}
 
-      <button
+      <BareButton
         type="submit"
         disabled={status === "submitting" || missing.length > 0}
         className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {status === "submitting" ? "Submitting…" : spec.submitLabel || "Submit"}
-      </button>
+      </BareButton>
     </form>
   );
 }

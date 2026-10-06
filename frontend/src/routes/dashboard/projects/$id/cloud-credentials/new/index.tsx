@@ -15,7 +15,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Search, Cloud } from "lucide-react";
+import { ArrowLeft, Search, Cloud } from "lucide-react";
 import {
   useCloudCredentialProviders,
   useCreateCloudCredential,
@@ -26,6 +26,8 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import type { CloudCredentialProviderSpec } from "@/lib/api/project-detail";
 import { cn } from "@/lib/utils";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function NewCloudCredentialPage() {
   const params = Route.useParams();
@@ -87,14 +89,11 @@ function NewCloudCredentialPage() {
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
+            <LoadingSkeleton label="Loading" cards={3} />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {filtered.map((p) => (
-                <button
-                  type="button"
+                <BareButton
                   key={p.provider}
                   onClick={() => {
                     setSelected(p);
@@ -125,7 +124,7 @@ function NewCloudCredentialPage() {
                     {p.fields.filter((f) => f.required).length} required field
                     {p.fields.filter((f) => f.required).length === 1 ? "" : "s"}
                   </p>
-                </button>
+                </BareButton>
               ))}
               {filtered.length === 0 && (
                 <p className="col-span-full text-xs text-muted-foreground text-center py-6">

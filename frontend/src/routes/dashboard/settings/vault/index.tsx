@@ -49,6 +49,8 @@ import {
   type VaultAuthMethod,
   type VaultConnectionWriteRequest,
 } from "@/lib/api/vault";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 
 function blankBody(method: VaultAuthMethod): VaultConnectionWriteRequest {
   const auth: Record<string, string> =
@@ -146,12 +148,12 @@ function VaultConnectionsPage() {
           </span>
         }
         actions={
-          <button
+          <BareButton
             onClick={() => setCreating(true)}
             className="inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" /> New connection
-          </button>
+          </BareButton>
         }
       />
 
@@ -198,26 +200,26 @@ function VaultConnectionsPage() {
                     {row.lastHealthOk ? (
                       <span className="text-status-success">ok</span>
                     ) : row.lastError ? (
-                      <span className="text-status-error" title={row.lastError}>
-                        error
-                      </span>
+                      <Tooltip content={row.lastError}>
+                        <span className="text-status-error">error</span>
+                      </Tooltip>
                     ) : (
                       <span className="text-muted-foreground">unchecked</span>
                     )}
                   </TableCell>
                   <TableCell className="p-2 flex gap-2">
-                    <button
+                    <BareButton
                       onClick={() => testMu.mutate(row.id)}
                       className="text-xs underline"
                     >
                       Test
-                    </button>
-                    <button
+                    </BareButton>
+                    <BareButton
                       onClick={() => setDeleteTarget(row)}
                       className="text-xs text-status-error inline-flex items-center gap-1"
                     >
                       <Trash2 className="h-3 w-3" /> Delete
-                    </button>
+                    </BareButton>
                   </TableCell>
                 </TableRow>
               ))
@@ -394,15 +396,14 @@ function VaultConnectionsPage() {
             </form.Field>
           </label>
           <div className="flex gap-2">
-            <button
+            <BareButton
               type="submit"
               disabled={createMu.isPending}
               className="bg-primary text-primary-foreground rounded-sm px-3 py-1.5 text-sm"
             >
               {createMu.isPending ? "Saving…" : "Save"}
-            </button>
-            <button
-              type="button"
+            </BareButton>
+            <BareButton
               onClick={() => {
                 setCreating(false);
                 setError(null);
@@ -410,7 +411,7 @@ function VaultConnectionsPage() {
               className="text-sm px-3 py-1.5 border border-border rounded-sm"
             >
               Cancel
-            </button>
+            </BareButton>
           </div>
           <p className="text-xs text-muted-foreground">
             Tip: secret fields you don't change in a later edit can be left as

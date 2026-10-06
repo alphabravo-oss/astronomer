@@ -45,6 +45,8 @@ import {
 } from "@/lib/api/admin-operations";
 import { useOperationMutation } from "@/lib/hooks/operation-mutation";
 import { QueryStates } from "@/components/ui/query-states";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 
 function OperationsBody() {
   const qc = useQueryClient();
@@ -168,17 +170,16 @@ function OperationsBody() {
       <section className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-foreground">Queues</h2>
-          <button
-            type="button"
+          <BareButton
             onClick={() => queues.refetch()}
             className="inline-flex items-center gap-1.5 h-7 px-2 rounded-sm text-xs border border-border hover:bg-accent"
-            title="Refresh now"
+            tooltip="Refresh now"
           >
             <RefreshCw
               className={`h-3 w-3 ${queues.isFetching ? "animate-spin" : ""}`}
             />{" "}
             Refresh
-          </button>
+          </BareButton>
         </div>
         <QueueTable
           loading={queues.isLoading}
@@ -198,18 +199,17 @@ function OperationsBody() {
               </span>
             )}
           </h2>
-          <button
-            type="button"
+          <BareButton
             onClick={() => dlq.refetch()}
             disabled={!activeQueue}
             className="inline-flex items-center gap-1.5 h-7 px-2 rounded-sm text-xs border border-border hover:bg-accent disabled:opacity-50"
-            title="Refresh DLQ"
+            tooltip="Refresh DLQ"
           >
             <RefreshCw
               className={`h-3 w-3 ${dlq.isFetching ? "animate-spin" : ""}`}
             />{" "}
             Refresh
-          </button>
+          </BareButton>
         </div>
         <DLQTable
           loading={dlq.isLoading && !!activeQueue}
@@ -241,7 +241,7 @@ function OperationsBody() {
                 setOutboxStatus(e.target.value as TaskOutboxStatus | "")
               }
               className="h-8 rounded-sm border border-border bg-background px-2 text-xs"
-              title="Filter task outbox rows"
+              aria-label="Filter task outbox rows"
             >
               <option value="dead">Dead</option>
               <option value="failed">Failed</option>
@@ -250,17 +250,16 @@ function OperationsBody() {
               <option value="delivered">Delivered</option>
               <option value="">All</option>
             </Select>
-            <button
-              type="button"
+            <BareButton
               onClick={() => outbox.refetch()}
               className="inline-flex items-center gap-1.5 h-7 px-2 rounded-sm text-xs border border-border hover:bg-accent"
-              title="Refresh task outbox"
+              tooltip="Refresh task outbox"
             >
               <RefreshCw
                 className={`h-3 w-3 ${outbox.isFetching ? "animate-spin" : ""}`}
               />{" "}
               Refresh
-            </button>
+            </BareButton>
           </div>
         </div>
         <TaskOutboxTable
@@ -442,12 +441,13 @@ function dlqColumns(
       key: "last_err",
       header: "Last error",
       accessor: (row) => (
-        <span
-          className="text-xs text-status-error block max-w-md truncate"
-          title={row.last_err}
-        >
-          {row.last_err || "—"}
-        </span>
+        <Tooltip content={row.last_err}>
+          <span
+            className="text-xs text-status-error block max-w-md truncate"
+          >
+            {row.last_err || "—"}
+          </span>
+        </Tooltip>
       ),
       searchAccessor: (row) => row.last_err,
     },
@@ -470,22 +470,22 @@ function dlqColumns(
       hideable: false,
       accessor: (row) => (
         <div className="inline-flex items-center gap-1">
-          <button
+          <BareButton
             onClick={() => onRetry(row.id)}
             disabled={pendingRetry}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border hover:bg-muted disabled:opacity-50"
-            title="Move this task back to pending"
+            tooltip="Move this task back to pending"
           >
             <RotateCw className="h-3 w-3" /> Retry
-          </button>
-          <button
+          </BareButton>
+          <BareButton
             onClick={() => onDiscard(row.id)}
             disabled={pendingDiscard}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border text-status-error hover:bg-status-error/10 disabled:opacity-50"
-            title="Permanently delete this task"
+            tooltip="Permanently delete this task"
           >
             <Trash2 className="h-3 w-3" /> Discard
-          </button>
+          </BareButton>
         </div>
       ),
       align: "right",
@@ -550,12 +550,13 @@ function taskOutboxColumns(
         <div>
           <div className="font-mono text-xs">{row.task_type}</div>
           {row.dedupe_key && (
-            <div
-              className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground"
-              title={row.dedupe_key}
-            >
-              {row.dedupe_key}
-            </div>
+            <Tooltip content={row.dedupe_key}>
+              <div
+                className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground"
+              >
+                {row.dedupe_key}
+              </div>
+            </Tooltip>
           )}
         </div>
       ),
@@ -613,12 +614,13 @@ function taskOutboxColumns(
       key: "last_error",
       header: "Last error",
       accessor: (row) => (
-        <span
-          className="block max-w-md truncate text-xs text-status-error"
-          title={row.last_error || ""}
-        >
-          {row.last_error || "—"}
-        </span>
+        <Tooltip content={row.last_error || ""}>
+          <span
+            className="block max-w-md truncate text-xs text-status-error"
+          >
+            {row.last_error || "—"}
+          </span>
+        </Tooltip>
       ),
       searchAccessor: (row) => row.last_error || "",
     },
@@ -627,14 +629,14 @@ function taskOutboxColumns(
       header: "Actions",
       hideable: false,
       accessor: (row) => (
-        <button
+        <BareButton
           onClick={() => onRetry(row.id)}
           disabled={pendingRetry || row.status === "delivered"}
           className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border hover:bg-muted disabled:opacity-50"
-          title="Move this task outbox row back to pending"
+          tooltip="Move this task outbox row back to pending"
         >
           <RotateCw className="h-3 w-3" /> Retry
-        </button>
+        </BareButton>
       ),
       align: "right",
       width: "8rem",

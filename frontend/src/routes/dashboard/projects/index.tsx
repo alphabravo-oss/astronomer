@@ -25,6 +25,8 @@ import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm, useStore } from "@/lib/form";
 import { useSearchParam } from "@/lib/use-search-param";
 import { pageTableCount } from "@/lib/api/pagination";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 
 const PROJECTS_PAGE_SIZE = 50;
 
@@ -87,7 +89,7 @@ function ProjectsPage() {
       key: "description",
       header: "Description",
       accessor: (row) => (
-        <span className="text-sm text-muted-foreground truncate max-w-[300px] block">
+        <span className="text-sm text-muted-foreground truncate max-w-75 block">
           {row.description || "--"}
         </span>
       ),
@@ -111,13 +113,11 @@ function ProjectsPage() {
         return (
           <div className="flex flex-wrap gap-1">
             {ids.slice(0, 2).map((cid) => (
-              <span
-                key={cid}
-                className="text-xs px-2 py-0.5 rounded-sm bg-primary/10 text-primary font-medium"
-                title={cid}
-              >
-                {clusterById.get(cid) || cid.slice(0, 8)}
-              </span>
+              <Tooltip key={cid} content={cid}>
+                <span className="text-xs px-2 py-0.5 rounded-sm bg-primary/10 text-primary font-medium">
+                  {clusterById.get(cid) || cid.slice(0, 8)}
+                </span>
+              </Tooltip>
             ))}
             {ids.length > 2 && (
               <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
@@ -231,13 +231,14 @@ function ProjectsPage() {
       header: "",
       accessor: (row) => (
         <div className="flex items-center gap-1">
-          <button
+          <BareButton
+            aria-label="Delete project"
             onClick={() => setDeleteTarget(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete project"
+            tooltip="Delete project"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </BareButton>
         </div>
       ),
       sortable: false,
@@ -541,7 +542,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
               </span>
             ) : (
               namespaces.map((ns) => (
-                <button
+                <BareButton
                   key={ns.name}
                   onClick={() => toggleNamespace(ns.name)}
                   className={cn(
@@ -552,7 +553,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
                   )}
                 >
                   {ns.name}
-                </button>
+                </BareButton>
               ))
             )}
           </div>

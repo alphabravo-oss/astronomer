@@ -50,6 +50,7 @@ import type {
   ManagementBackupStatusView,
 } from "@/lib/api/settings";
 import { MANAGEMENT_BACKUP_SECRET_SENTINEL } from "@/lib/api/settings";
+import { BareButton } from "@/components/form/bare-button";
 
 function statusToVariant(status: BackupDrillResultView["status"]) {
   switch (status) {
@@ -690,7 +691,7 @@ function HistoryTable() {
       header: "Error",
       sortable: false,
       accessor: (row) => (
-        <span className="text-xs text-status-error truncate max-w-[260px] block">
+        <span className="text-xs text-status-error truncate max-w-65 block">
           {row.errorMessage || "—"}
         </span>
       ),
@@ -733,26 +734,24 @@ function HistoryTable() {
       </QueryStates>
       {data && (data.pagination.offset > 0 || data.pagination.has_more) && (
         <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
+          <BareButton
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
             className="h-8 px-3 rounded-lg border border-border text-xs font-medium disabled:opacity-50"
           >
             Previous
-          </button>
+          </BareButton>
           <p className="text-xs text-muted-foreground">
             Page {currentPage}
             {totalPages === undefined ? "" : ` of ${totalPages}`}
           </p>
-          <button
-            type="button"
+          <BareButton
             onClick={() => setPage((p) => p + 1)}
             disabled={!data.pagination.has_more}
             className="h-8 px-3 rounded-lg border border-border text-xs font-medium disabled:opacity-50"
           >
             Next
-          </button>
+          </BareButton>
         </div>
       )}
     </div>

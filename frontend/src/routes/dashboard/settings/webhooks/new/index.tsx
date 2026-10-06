@@ -23,6 +23,7 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { useCreateWebhook } from "@/components/settings/hooks";
 import type { WebhookFilter, WebhookTemplate } from "@/lib/api/settings";
+import { BareButton } from "@/components/form/bare-button";
 
 type Step = "pick" | "configure" | "preview";
 
@@ -195,14 +196,13 @@ function NewWebhookWizard() {
           {TEMPLATES.map((t) => {
             const Icon = t.icon;
             return (
-              <button
+              <BareButton
                 key={t.template}
-                type="button"
                 onClick={() => {
                   setSelected(t);
                   setStep("configure");
                 }}
-                className="flex flex-col gap-2 p-4 rounded-lg border border-border bg-card text-left hover:bg-card/80 hover:border-foreground/20 transition-colors"
+                className="flex flex-col gap-2 p-4 rounded-lg border border-border bg-card text-left hover:bg-card/80 hover:border-foreground/20 transition-colors justify-start"
               >
                 <div className="flex items-center gap-2">
                   <div className="shrink-0 w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
@@ -215,7 +215,7 @@ function NewWebhookWizard() {
                 <p className="text-xs text-muted-foreground line-clamp-3">
                   {t.description}
                 </p>
-              </button>
+              </BareButton>
             );
           })}
         </div>
@@ -308,9 +308,8 @@ function NewWebhookWizard() {
                   {AVAILABLE_EVENTS.map((ev) => {
                     const checked = field.state.value.includes(ev);
                     return (
-                      <button
+                      <BareButton
                         key={ev}
-                        type="button"
                         onClick={() =>
                           field.handleChange(
                             field.state.value.includes(ev)
@@ -326,7 +325,7 @@ function NewWebhookWizard() {
                         )}
                       >
                         {ev}
-                      </button>
+                      </BareButton>
                     );
                   })}
                 </div>

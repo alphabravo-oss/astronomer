@@ -11,6 +11,8 @@ import { useUsers } from "@/lib/hooks/user-settings";
 import { pageTableCount } from "@/lib/api/pagination";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { PermissionState } from "@/components/ui/empty-state";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 
 interface UsersTabProps {
   onEdit: (user: User) => void;
@@ -91,13 +93,17 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
             label={row.enabled ? "Enabled" : "Disabled"}
           />
           {isUserLocked(row) && (
-            <span title="Account is locked out — open the user to unlock">
-              <StatusBadge
-                status="error"
-                label="Locked"
-                icon={<Lock className="h-3 w-3" />}
-              />
-            </span>
+            <Tooltip
+              content={"Account is locked out — open the user to unlock"}
+            >
+              <span>
+                <StatusBadge
+                  status="error"
+                  label="Locked"
+                  icon={<Lock className="h-3 w-3" />}
+                />
+              </span>
+            </Tooltip>
           )}
         </div>
       ),
@@ -116,27 +122,30 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
       header: "",
       accessor: (row) => (
         <div className="flex items-center gap-1">
-          <button
+          <BareButton
+            aria-label="Edit user"
             onClick={() => onEdit(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Edit user"
+            tooltip="Edit user"
           >
             <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </BareButton>
+          <BareButton
+            aria-label="Reset password"
             onClick={() => onResetPassword(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Reset password"
+            tooltip="Reset password"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </BareButton>
+          <BareButton
+            aria-label="Delete user"
             onClick={() => onDelete(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete user"
+            tooltip="Delete user"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </BareButton>
         </div>
       ),
       sortable: false,

@@ -20,13 +20,13 @@ import {
   Shield,
   KeyRound,
   Gauge,
-  Loader2,
   LayoutDashboard,
   Package,
 } from "lucide-react";
 import { useProject } from "@/lib/hooks/projects";
 import { PageHeader } from "@/components/ui/page";
 import { tabLinkClassName } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const tabs = [
   { key: "overview", label: "Overview", icon: LayoutDashboard, segment: "" },
@@ -82,7 +82,7 @@ function ProjectDetailLayout() {
           <span className="inline-flex items-center gap-2">
             <FolderKanban className="h-5 w-5 shrink-0 text-muted-foreground" />
             {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <Skeleton className="h-5 w-32" />
             ) : (
               project?.displayName || project?.name || "Project"
             )}

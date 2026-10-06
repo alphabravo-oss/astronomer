@@ -85,7 +85,7 @@ function templateColumns(
       key: "description",
       header: "Description",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground truncate max-w-[200px] block">
+        <span className="text-xs text-muted-foreground truncate max-w-50 block">
           {row.description || "--"}
         </span>
       ),
@@ -102,7 +102,7 @@ function templateColumns(
             disabledReason={!canUpdate ? "Requires security:update" : undefined}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
-            title={
+            tooltip={
               row.isBuiltin
                 ? "Built-in templates cannot be edited"
                 : "Edit template"
@@ -116,7 +116,7 @@ function templateColumns(
             disabledReason={!canDelete ? "Requires security:delete" : undefined}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
-            title={
+            tooltip={
               row.isBuiltin
                 ? "Built-in templates cannot be deleted"
                 : "Delete template"

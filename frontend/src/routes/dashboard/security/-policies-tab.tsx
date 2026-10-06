@@ -112,7 +112,7 @@ function policyColumns(
             disabledReason={!canUpdate ? "Requires security:update" : undefined}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground
               hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            title="Apply to cluster"
+            tooltip="Apply to cluster"
           >
             <Play className="h-3 w-3" />
             Apply
@@ -122,7 +122,7 @@ function policyColumns(
             disabled={!canDelete}
             disabledReason={!canDelete ? "Requires security:delete" : undefined}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Remove policy"
+            tooltip="Remove policy"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </ActionButton>

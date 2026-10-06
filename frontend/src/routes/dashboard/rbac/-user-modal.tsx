@@ -9,6 +9,7 @@ import { toastError, toastSuccess } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
 import { useCreateUser, useUpdateUser } from "@/lib/hooks/user-settings";
 import type { User } from "@/types";
+import { BareButton } from "@/components/form/bare-button";
 
 export function CreateUserModal({ onClose }: { onClose: () => void }) {
   const createUser = useCreateUser();
@@ -164,8 +165,7 @@ export function CreateUserModal({ onClose }: { onClose: () => void }) {
               />
             )}
           </form.Field>
-          <button
-            type="button"
+          <BareButton
             onClick={() => setShowPassword(!showPassword)}
             aria-label={showPassword ? "Hide password" : "Show password"}
             className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -175,7 +175,7 @@ export function CreateUserModal({ onClose }: { onClose: () => void }) {
             ) : (
               <Eye className="h-3.5 w-3.5" />
             )}
-          </button>
+          </BareButton>
         </div>
       </div>
 
@@ -370,8 +370,7 @@ export function ResetPasswordResultModal({
               readOnly
               className="pr-10 font-mono"
             />
-            <button
-              type="button"
+            <BareButton
               onClick={() => setShowPassword(!showPassword)}
               aria-label={showPassword ? "Hide password" : "Show password"}
               className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -381,7 +380,7 @@ export function ResetPasswordResultModal({
               ) : (
                 <Eye className="h-3.5 w-3.5" />
               )}
-            </button>
+            </BareButton>
           </div>
           <ActionButton
             icon={<Copy className="h-3.5 w-3.5" />}

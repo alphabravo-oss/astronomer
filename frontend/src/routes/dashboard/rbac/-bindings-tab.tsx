@@ -125,7 +125,7 @@ export function BindingsTab({
             intent="ghost"
             icon={<Trash2 className="h-3.5 w-3.5" />}
             onClick={() => onRevoke(row)}
-            title="Revoke binding"
+            tooltip="Revoke binding"
             className="text-muted-foreground hover:text-status-error hover:bg-status-error/10"
           />
         </div>

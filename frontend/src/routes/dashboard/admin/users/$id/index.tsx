@@ -44,6 +44,7 @@ import {
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { QueryStates } from "@/components/ui/query-states";
+import { BareButton } from "@/components/form/bare-button";
 
 const userKey = (id: string) => ["admin", "users", id] as const;
 
@@ -202,13 +203,13 @@ function AdminUserDetailPage() {
             </p>
           </div>
           {isSuperuser && (
-            <button
+            <BareButton
               onClick={() => setPending("unlock")}
               className="inline-flex items-center gap-2 h-8 px-3 rounded-sm text-sm font-medium bg-status-error text-background hover:bg-status-error/90 shrink-0"
             >
               <Unlock className="h-3.5 w-3.5" />
               Unlock now
-            </button>
+            </BareButton>
           )}
         </div>
       )}
@@ -272,11 +273,11 @@ function AdminUserDetailPage() {
             {ACTIONS.filter((a) => a.available(user)).map((a) => {
               const Icon = a.icon;
               return (
-                <button
+                <BareButton
                   key={a.key}
                   onClick={() => setPending(a.key)}
                   disabled={mut.isPending}
-                  className="text-left rounded-lg border border-border bg-card hover:bg-accent transition-colors p-4 disabled:opacity-50"
+                  className="text-left rounded-lg border border-border bg-card hover:bg-accent transition-colors p-4 disabled:opacity-50 justify-start"
                 >
                   <div className="flex items-start gap-3">
                     <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center shrink-0">
@@ -291,7 +292,7 @@ function AdminUserDetailPage() {
                       </p>
                     </div>
                   </div>
-                </button>
+                </BareButton>
               );
             })}
           </div>

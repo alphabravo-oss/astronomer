@@ -21,6 +21,7 @@
 import { useState } from "react";
 import { Layers, Loader2, Plus, X } from "lucide-react";
 import { useAddProjectNamespace, useRemoveProjectNamespace } from "./hooks";
+import { BareButton } from "@/components/form/bare-button";
 
 /**
  * RFC 1123 label, the rule the apiserver applies to a namespace name. Checked
@@ -95,15 +96,14 @@ export function ProjectNamespacesCard({
             >
               {ns}
               {canEdit && (
-                <button
-                  type="button"
+                <BareButton
                   aria-label={`Remove namespace ${ns}`}
                   disabled={removeMutation.isPending}
                   onClick={() => removeMutation.mutate(ns)}
                   className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50"
                 >
                   <X className="h-3 w-3" />
-                </button>
+                </BareButton>
               )}
             </li>
           ))}
@@ -130,8 +130,7 @@ export function ProjectNamespacesCard({
               }}
               className="h-9 flex-1 min-w-0 rounded-md border border-border bg-background px-3 text-sm font-mono placeholder:text-muted-foreground placeholder:font-sans focus:outline-hidden focus:ring-1 focus:ring-ring"
             />
-            <button
-              type="button"
+            <BareButton
               onClick={submit}
               disabled={addMutation.isPending}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
@@ -142,7 +141,7 @@ export function ProjectNamespacesCard({
                 <Plus className="h-3.5 w-3.5" />
               )}
               Add
-            </button>
+            </BareButton>
           </div>
           {error && (
             <p role="alert" className="text-xs text-destructive">

@@ -50,7 +50,7 @@ function CreatedTokenPanel({ created }: { created: SCIMTokenCreated }) {
           <ActionButton
             onClick={() => void copy()}
             size="icon"
-            title="Copy token"
+            tooltip="Copy token"
             icon={
               copied ? (
                 <Check className="h-4 w-4 text-status-success" />

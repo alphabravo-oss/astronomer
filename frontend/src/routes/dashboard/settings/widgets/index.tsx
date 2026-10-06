@@ -59,6 +59,8 @@ import {
   type WidgetWriteBody,
   type DashboardDatasource,
 } from "@/lib/api/dashboards";
+import { Tooltip } from "@/components/ui/tooltip";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
 // Local cache keys for the admin widget/datasource lists. Assigned to
 // identifiers (not inlined into `queryKey:`) so they satisfy the lint rule
@@ -478,7 +480,7 @@ function WidgetsAdminPage() {
         ) : null}
 
         {loading ? (
-          <div className="text-sm text-muted-foreground">Loading...</div>
+          <LoadingSkeleton label="Loading widgets" lines={3} />
         ) : widgets.length === 0 ? (
           <div className="text-sm text-muted-foreground">
             No widgets defined. Click "New widget" to add one.
@@ -593,12 +595,11 @@ function WidgetsAdminPage() {
                         ) : (
                           <XCircle className="h-3 w-3" />
                         )}
-                        <span
-                          className="truncate max-w-[12rem]"
-                          title={testStatus[d.id].msg}
-                        >
-                          {testStatus[d.id].msg}
-                        </span>
+                        <Tooltip content={testStatus[d.id].msg}>
+                          <span className="truncate max-w-48">
+                            {testStatus[d.id].msg}
+                          </span>
+                        </Tooltip>
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground">

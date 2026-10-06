@@ -28,6 +28,8 @@ import {
   revertComplianceBaselineApplication,
   type ComplianceBaselineView,
 } from "@/lib/api/settings";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function ActiveBadge() {
   return (
@@ -94,28 +96,25 @@ function BaselineCard({
       </dl>
 
       <div className="flex gap-2 mt-auto pt-2">
-        <button
-          type="button"
+        <BareButton
           onClick={() => onViewDiff(b)}
           className="text-sm px-3 py-1.5 rounded-sm border bg-background hover:bg-muted"
         >
           View diff
-        </button>
-        <button
-          type="button"
+        </BareButton>
+        <BareButton
           onClick={() => onApply(b)}
           className="text-sm px-3 py-1.5 rounded-sm bg-primary text-primary-foreground hover:opacity-90"
         >
           Apply baseline
-        </button>
+        </BareButton>
         {b.active && latestApplicationId ? (
-          <button
-            type="button"
+          <BareButton
             onClick={() => onRevert(latestApplicationId)}
             className="text-sm px-3 py-1.5 rounded-sm border bg-background hover:bg-muted flex items-center gap-1"
           >
             <Undo2 className="w-3.5 h-3.5" /> Revert
-          </button>
+          </BareButton>
         ) : null}
       </div>
     </div>
@@ -272,9 +271,7 @@ function ComplianceBaselinesPage() {
         />
 
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" /> Loading
-          </div>
+          <LoadingSkeleton label="Loading baselines" cards={2} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {baselines.map((b) => (

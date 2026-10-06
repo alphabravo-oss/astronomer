@@ -36,6 +36,8 @@ import {
   ChevronDown,
   Loader2,
 } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 
 /**
  * Phase B5 — single CIS scan detail page.
@@ -129,13 +131,13 @@ function ScanDetailPage() {
       <PageHeader
         title={
           <span className="flex items-center gap-3 flex-wrap">
-            <button
+            <BareButton
               onClick={() => void navigate({ to: "/dashboard/security" })}
               className="text-muted-foreground hover:text-foreground transition-colors"
               aria-label="Back"
             >
               <ArrowLeft className="h-4 w-4" />
-            </button>
+            </BareButton>
             {cluster?.displayName ??
               cluster?.name ??
               scan.clusterId.slice(0, 8)}
@@ -165,25 +167,28 @@ function ScanDetailPage() {
             {/* Anchor with `download` so the browser saves the CSV instead of
                 navigating. The link goes through the API base URL so the auth
                 cookie / proxy still applies. */}
-            <a
-              href={isTerminal ? cisScanReportCSVUrl(scan.id) : undefined}
-              tabIndex={isTerminal ? undefined : -1}
-              download={`cis-scan-${scan.id}.csv`}
-              className={cn(
-                "inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border",
-                "text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors",
-                !isTerminal && "opacity-50 pointer-events-none",
-              )}
-              aria-disabled={!isTerminal}
-              title={
+            <Tooltip
+              content={
                 isTerminal
                   ? "Download CSV report"
                   : "Available once the scan completes"
               }
             >
-              <Download className="h-4 w-4" />
-              Export CSV
-            </a>
+              <a
+                href={isTerminal ? cisScanReportCSVUrl(scan.id) : undefined}
+                tabIndex={isTerminal ? undefined : -1}
+                download={`cis-scan-${scan.id}.csv`}
+                className={cn(
+                  "inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border",
+                  "text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors",
+                  !isTerminal && "opacity-50 pointer-events-none",
+                )}
+                aria-disabled={!isTerminal}
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </a>
+            </Tooltip>
             <ActionButton
               intent="primary"
               icon={<RefreshCw className="h-4 w-4" />}
@@ -503,14 +508,14 @@ function FindingsSection({
                   >
                     {f.status}
                   </span>
-                  <button
+                  <BareButton
                     onClick={() => toggleFinding(id)}
                     aria-expanded={true}
                     aria-controls={`finding-${id}`}
                     className="ml-auto text-xs text-muted-foreground hover:text-foreground"
                   >
                     Collapse {f.testId}
-                  </button>
+                  </BareButton>
                 </div>
                 <p className="text-sm text-foreground">{f.description}</p>
                 {f.remediation && (
@@ -549,9 +554,8 @@ function FilterPills<T extends string>({
         {label}:
       </span>
       {options.map((opt) => (
-        <button
+        <BareButton
           key={String(opt)}
-          type="button"
           onClick={() => onChange(opt)}
           className={cn(
             "px-2 py-0.5 rounded-sm text-2xs font-medium uppercase transition-colors",
@@ -561,7 +565,7 @@ function FilterPills<T extends string>({
           )}
         >
           {String(opt)}
-        </button>
+        </BareButton>
       ))}
     </div>
   );

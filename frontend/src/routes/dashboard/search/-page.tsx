@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { Select } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { BareButton } from "@/components/form/bare-button";
 
 // SEARCHABLE_TYPES is the user-facing list shown in the type dropdown.
 // Keeping it in declaration order rather than alphabetical means the most
@@ -316,13 +317,13 @@ export function SearchPage({
               className="pl-8 pr-8"
             />
             {nameFilter && (
-              <button
+              <BareButton
                 onClick={() => setNameFilter("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 aria-label="Clear search"
               >
                 <X className="h-3.5 w-3.5" />
-              </button>
+              </BareButton>
             )}
           </div>
         </div>
@@ -343,7 +344,7 @@ export function SearchPage({
             </span>
           )}
           {clustersFailed > 0 && (
-            <button
+            <BareButton
               onClick={() => setErrorsExpanded((v) => !v)}
               className="inline-flex items-center gap-1.5 text-status-warning hover:underline"
             >
@@ -355,7 +356,7 @@ export function SearchPage({
               ) : (
                 <ChevronRight className="h-3 w-3" />
               )}
-            </button>
+            </BareButton>
           )}
         </div>
 

@@ -23,7 +23,6 @@ import {
   Shield,
   ShieldCheck,
   ShieldOff,
-  Loader2,
   Eye,
   EyeOff,
   Copy,
@@ -48,6 +47,7 @@ import {
   type TotpStatus,
   type TotpEnrollStart,
 } from "@/lib/api/account-security";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
 const TOTP_STATUS_KEY = ["account", "security", "totp", "status"] as const;
 
@@ -276,9 +276,7 @@ function EnrollmentWizard({
             manually.
           </p>
           {startMut.isPending || !enrollment ? (
-            <div className="flex items-center justify-center h-48">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
+            <LoadingSkeleton label="Loading" heading />
           ) : (
             <div className="flex flex-col items-center gap-3">
               <div className="rounded-lg bg-white p-2 border border-border">
@@ -305,7 +303,7 @@ function EnrollmentWizard({
                     }}
                     size="icon"
                     icon={<Copy className="h-3.5 w-3.5" />}
-                    title="Copy"
+                    tooltip="Copy"
                     aria-label="Copy"
                   />
                 </div>

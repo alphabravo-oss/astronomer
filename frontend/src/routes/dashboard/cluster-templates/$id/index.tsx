@@ -282,7 +282,7 @@ function ClusterTemplateDetailPage() {
                         ? formatRelativeTime(row.lastAppliedAt)
                         : "—"}
                     </TableCell>
-                    <TableCell className="py-2 px-4 text-xs text-muted-foreground truncate max-w-[260px]">
+                    <TableCell className="py-2 px-4 text-xs text-muted-foreground truncate max-w-65">
                       {row.message || "—"}
                     </TableCell>
                   </TableRow>

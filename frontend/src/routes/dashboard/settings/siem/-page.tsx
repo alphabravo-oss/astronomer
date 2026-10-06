@@ -17,7 +17,6 @@ import {
   Pencil,
   Send,
   Activity,
-  Loader2,
   ShieldAlert,
 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -44,6 +43,8 @@ import {
   useTestSIEMForwarder,
   useSIEMForwarderStatus,
 } from "./-hooks";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 export const TRANSPORTS: { value: string; label: string }[] = [
   { value: "syslog_udp", label: "Syslog (UDP)" },
@@ -82,7 +83,7 @@ function SIEMForwardersList() {
       accessor: (row) => (
         <div>
           <p className="font-medium text-foreground">{row.name}</p>
-          <p className="text-2xs font-mono text-muted-foreground truncate max-w-[320px]">
+          <p className="text-2xs font-mono text-muted-foreground truncate max-w-80">
             {row.endpoint}
           </p>
         </div>
@@ -104,7 +105,7 @@ function SIEMForwardersList() {
       sortable: false,
       accessor: (row) =>
         row.eventFilters && row.eventFilters.length > 0 ? (
-          <div className="flex flex-wrap gap-1 max-w-[240px]">
+          <div className="flex flex-wrap gap-1 max-w-60">
             {row.eventFilters.slice(0, 3).map((f) => (
               <span
                 key={f}
@@ -150,35 +151,39 @@ function SIEMForwardersList() {
       sortable: false,
       accessor: (row) => (
         <div className="flex items-center gap-1">
-          <button
+          <BareButton
+            aria-label="View status"
             onClick={() => setStatusTarget(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="View status"
+            tooltip="View status"
           >
             <Activity className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </BareButton>
+          <BareButton
+            aria-label="Send test event"
             onClick={() => test.mutate(row.id)}
             disabled={test.isPending}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            title="Send test event"
+            tooltip="Send test event"
           >
             <Send className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </BareButton>
+          <BareButton
+            aria-label="Edit forwarder"
             onClick={() => setEditing(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Edit forwarder"
+            tooltip="Edit forwarder"
           >
             <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </BareButton>
+          <BareButton
+            aria-label="Delete forwarder"
             onClick={() => setDeleteTarget(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete forwarder"
+            tooltip="Delete forwarder"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </BareButton>
         </div>
       ),
     },
@@ -667,9 +672,7 @@ function SIEMStatusDrawer({
       size="sm"
     >
       {isLoading && !status ? (
-        <div className="flex items-center justify-center py-8 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
+        <LoadingSkeleton label="Loading" heading />
       ) : (
         <>
           <div className="grid grid-cols-3 gap-3">

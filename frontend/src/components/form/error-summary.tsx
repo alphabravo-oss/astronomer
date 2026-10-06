@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from "react";
 import { useStore } from "@tanstack/react-form";
 import { useFormContext } from "@/lib/form";
+import { BareButton } from "@/components/form/bare-button";
 
 export function errorMessages(errors: readonly unknown[]): string[] {
   return [
@@ -87,13 +88,12 @@ export function FormErrorSummary({
         ))}
         {fieldErrors.map(({ name, message }) => (
           <li key={`${name}:${message}`}>
-            <button
-              type="button"
-              className="text-left underline underline-offset-2"
+            <BareButton
+              className="text-left underline underline-offset-2 justify-start"
               onClick={() => focusField(name)}
             >
               {message}
-            </button>
+            </BareButton>
           </li>
         ))}
       </ul>

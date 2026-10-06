@@ -22,6 +22,7 @@ import {
   useClusterGroups,
   useCreateClusterGroup,
 } from "../index";
+import { BareButton } from "@/components/form/bare-button";
 
 function NewClusterGroupForm() {
   const navigate = useNavigate();
@@ -141,8 +142,7 @@ function NewClusterGroupForm() {
             </span>
             <div className="mt-1 flex flex-wrap gap-1">
               {CLUSTER_GROUP_COLORS.map((c) => (
-                <button
-                  type="button"
+                <BareButton
                   key={c}
                   onClick={() => setColor(c)}
                   className="h-7 w-7 rounded-sm border-2"

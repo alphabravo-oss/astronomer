@@ -23,6 +23,7 @@ import {
   useGitOpsSources,
 } from "@/components/settings/hooks";
 import type { GitOpsSource } from "@/lib/api/gitops";
+import { BareButton } from "@/components/form/bare-button";
 
 function GitOpsList() {
   const navigate = useNavigate();
@@ -51,7 +52,7 @@ function GitOpsList() {
       header: "Repo",
       sortable: false,
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground font-mono truncate max-w-[360px] block">
+        <span className="text-xs text-muted-foreground font-mono truncate max-w-90 block">
           {row.repo_url}
           {row.path_prefix ? ` · ${row.path_prefix}` : ""}
         </span>
@@ -118,17 +119,17 @@ function GitOpsList() {
       header: "",
       sortable: false,
       accessor: (row) => (
-        <button
-          type="button"
+        <BareButton
+          aria-label="Delete source"
           onClick={(e) => {
             e.stopPropagation();
             setConfirmDelete(row);
           }}
           className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-          title="Delete source"
+          tooltip="Delete source"
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </BareButton>
       ),
     },
   ];

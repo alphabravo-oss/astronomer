@@ -10,6 +10,7 @@ import { changeOwnPassword } from "@/lib/api/auth";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
 import { ActionButton } from "@/components/ui/action-button";
+import { BareButton } from "@/components/form/bare-button";
 
 // Forced password-rotation screen for the bootstrap admin and for any user
 // whose `must_change_password` flag is set. Reachable directly at
@@ -181,8 +182,7 @@ function ChangePasswordPage() {
           </ActionButton>
 
           {forced && (
-            <button
-              type="button"
+            <BareButton
               onClick={() => {
                 logout();
                 void navigate({ to: "/auth/login" });
@@ -190,7 +190,7 @@ function ChangePasswordPage() {
               className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               Sign out
-            </button>
+            </BareButton>
           )}
         </FormShell>
       </div>
@@ -234,8 +234,7 @@ function PasswordField({
           data-initial-focus={autoFocus}
           className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-ring transition-colors"
         />
-        <button
-          type="button"
+        <BareButton
           onClick={onToggleVisible}
           className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
           tabIndex={-1}
@@ -246,7 +245,7 @@ function PasswordField({
           ) : (
             <Eye className="h-4 w-4" />
           )}
-        </button>
+        </BareButton>
       </div>
       {hint && (
         <p

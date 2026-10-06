@@ -30,6 +30,7 @@ import {
 import type { SSOProvider, User } from "@/types";
 import { toastApiError, toastError } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
+import { BareButton } from "@/components/form/bare-button";
 
 export const Route = createFileRoute("/auth/login/")({
   // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
@@ -149,8 +150,8 @@ function LoginPage() {
         </div>
 
         {/* Accent glow */}
-        {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-1/4 left-1/3 w-64 h-64 bg-violet-500/10 rounded-full blur-[100px]" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-status-info/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-1/4 left-1/3 w-64 h-64 bg-status-pending/10 rounded-full blur-[100px]" />
 
         <div className="relative">
           <div className="flex items-center gap-3">
@@ -189,7 +190,7 @@ function LoginPage() {
               Flux-native continuous delivery
             </div>
             <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-violet-400" />
+              <div className="h-2 w-2 rounded-full bg-status-pending" />
               Enterprise RBAC
             </div>
           </div>
@@ -245,7 +246,7 @@ function LoginPage() {
           {!challenge && ssoProviders.length > 0 && (
             <div className="space-y-2.5">
               {ssoProviders.map((provider) => (
-                <button
+                <BareButton
                   key={provider.id}
                   onClick={() => handleSSO(provider.provider)}
                   disabled={!!ssoLoading}
@@ -259,7 +260,7 @@ function LoginPage() {
                     providerIcon(provider.type)
                   )}
                   Continue with {provider.name}
-                </button>
+                </BareButton>
               ))}
             </div>
           )}
@@ -344,8 +345,7 @@ function LoginPage() {
                         transition-colors"
                         autoComplete="current-password"
                       />
-                      <button
-                        type="button"
+                      <BareButton
                         onClick={() => setShowPassword(!showPassword)}
                         aria-label={
                           showPassword ? "Hide password" : "Show password"
@@ -357,7 +357,7 @@ function LoginPage() {
                         ) : (
                           <Eye className="h-4 w-4" />
                         )}
-                      </button>
+                      </BareButton>
                     </div>
                   </div>
                 )}
@@ -467,14 +467,14 @@ function TotpChallengeForm({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <BareButton
             onClick={onCancel}
             className="inline-flex items-center gap-1 h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
-          </button>
-          <button
+          </BareButton>
+          <BareButton
             onClick={() => {
               window.location.href = `/dashboard/account/security#enroll=${encodeURIComponent(challenge.challengeToken)}`;
             }}
@@ -482,7 +482,7 @@ function TotpChallengeForm({
           >
             Set up 2FA now
             <ArrowRight className="h-4 w-4" />
-          </button>
+          </BareButton>
         </div>
       </div>
     );
@@ -560,15 +560,13 @@ function TotpChallengeForm({
         <ArrowRight className="h-4 w-4" />
       </ActionButton>
       <div className="flex items-center justify-between text-xs">
-        <button
-          type="button"
+        <BareButton
           onClick={onCancel}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           ← Use a different account
-        </button>
-        <button
-          type="button"
+        </BareButton>
+        <BareButton
           onClick={() => {
             setUseRecovery((v) => !v);
             form.setFieldValue("code", "");
@@ -576,7 +574,7 @@ function TotpChallengeForm({
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           {useRecovery ? "Use authenticator code" : "Use recovery code instead"}
-        </button>
+        </BareButton>
       </div>
     </FormShell>
   );
