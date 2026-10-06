@@ -21,10 +21,14 @@ function templateColumns(
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 260,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-foreground">{row.name}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <Shield className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate font-medium text-foreground">
+            {row.name}
+          </span>
           {row.isDefault && (
             <span className="text-2xs px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary font-medium">
               Default
@@ -42,6 +46,7 @@ function templateColumns(
     {
       key: "enforce",
       header: "Enforce",
+      kind: "badge",
       accessor: (row) => (
         <span
           className={cn(
@@ -56,6 +61,7 @@ function templateColumns(
     {
       key: "audit",
       header: "Audit",
+      kind: "badge",
       accessor: (row) => (
         <span
           className={cn(
@@ -70,6 +76,7 @@ function templateColumns(
     {
       key: "warn",
       header: "Warn",
+      kind: "badge",
       accessor: (row) => (
         <span
           className={cn(
@@ -84,8 +91,12 @@ function templateColumns(
     {
       key: "description",
       header: "Description",
+      kind: "text",
+      size: 280,
+      minSize: 240,
+      maxSize: 480,
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground truncate max-w-50 block">
+        <span className="text-xs text-muted-foreground">
           {row.description || "--"}
         </span>
       ),
@@ -127,6 +138,10 @@ function templateColumns(
         </div>
       ),
       sortable: false,
+      kind: "actions",
+      size: 88,
+      minSize: 88,
+      maxSize: 88,
     },
   ];
 }

@@ -4,8 +4,9 @@ import {
   type Column,
   type DataTableProps,
 } from "@/components/ui/data-table";
+import { TimestampCell } from "@/components/ui/cell-primitives";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { formatRelativeTime, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { ClusterSecurityPolicy, PodSecurityLevel } from "@/types";
 import { psaLevelColors } from "./-psa-constants";
 import { usePermissionDecision } from "@/lib/permission-hooks";
@@ -30,6 +31,8 @@ function policyColumns(
     {
       key: "cluster",
       header: "Cluster",
+      kind: "name",
+      minSize: 200,
       accessor: (row) => (
         <span className="font-medium text-foreground text-sm">
           {row.clusterName}
@@ -39,6 +42,9 @@ function policyColumns(
     {
       key: "template",
       header: "Template",
+      kind: "text",
+      size: 200,
+      minSize: 160,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.templateName}
@@ -48,6 +54,7 @@ function policyColumns(
     {
       key: "enforce",
       header: "Enforce",
+      kind: "badge",
       accessor: (row) => (
         <span
           className={cn(
@@ -62,6 +69,7 @@ function policyColumns(
     {
       key: "audit",
       header: "Audit",
+      kind: "badge",
       accessor: (row) => (
         <span
           className={cn(
@@ -76,6 +84,7 @@ function policyColumns(
     {
       key: "warn",
       header: "Warn",
+      kind: "badge",
       accessor: (row) => (
         <span
           className={cn(
@@ -90,16 +99,20 @@ function policyColumns(
     {
       key: "syncStatus",
       header: "Sync Status",
+      kind: "status",
       accessor: (row) => <StatusBadge status={row.syncStatus} />,
     },
     {
       key: "appliedAt",
       header: "Applied",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.appliedAt ? formatRelativeTime(row.appliedAt) : "Not applied"}
-        </span>
-      ),
+      kind: "age",
+      size: 112,
+      accessor: (row) =>
+        row.appliedAt ? (
+          <TimestampCell value={row.appliedAt} />
+        ) : (
+          <span className="text-xs text-muted-foreground">Not applied</span>
+        ),
     },
     {
       key: "actions",
@@ -129,6 +142,10 @@ function policyColumns(
         </div>
       ),
       sortable: false,
+      kind: "actions",
+      size: 128,
+      minSize: 128,
+      maxSize: 128,
     },
   ];
 }

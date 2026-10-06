@@ -37,6 +37,11 @@ describe("cell primitives", () => {
     expect(screen.getByText("Never")).toBeTruthy();
   });
 
+  it("prefixes the relative age and keeps the exact value out of the text", () => {
+    render(<TimestampCell value="2024-01-02T03:04:05Z" prefix="Started" />);
+    expect(screen.getByText(/^Started .+ ago$/)).toBeTruthy();
+  });
+
   it("renders title and subtitle", () => {
     render(<NameSubCell title="Rule" subtitle="desc" />);
     expect(screen.getByText("Rule")).toBeTruthy();

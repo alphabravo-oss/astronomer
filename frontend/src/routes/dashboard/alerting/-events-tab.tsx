@@ -19,44 +19,20 @@ import { pageTableCount } from "@/lib/api/pagination";
 
 const ALERT_EVENTS_PAGE_SIZE = 50;
 
-export function EventsTab({
+function eventColumns({
   clusterId,
-  history = true,
-}: { clusterId?: string; history?: boolean } = {}) {
-  const [pageValue, setPageValue] = useInvestigationParam("alertPage", "0");
-  const pageIndex = /^\d+$/.test(pageValue)
-    ? Math.min(Number(pageValue), 100000)
-    : 0;
-  const setPageIndex = (page: number) => setPageValue(String(page));
-  const [selected, setSelected] = useInvestigationParam("event");
-  const [status, setStatus] = useTabParam(
-    ["", "firing", "acknowledged", "resolved", "silenced"] as const,
-    "",
-    "alertStatus",
-  );
-  const [severity, setSeverity] = useTabParam(
-    ["", "critical", "warning", "info"] as const,
-    "",
-    "alertSeverity",
-  );
-  const {
-    data: eventsPage,
-    isLoading,
-    isError,
-    refetch,
-  } = useAlertEvents({
-    clusterId,
-    status: history ? status || undefined : "firing",
-    severity: severity || undefined,
-    limit: ALERT_EVENTS_PAGE_SIZE,
-    offset: pageIndex * ALERT_EVENTS_PAGE_SIZE,
-  });
-  const { data: summary } = useAlertEventSummary(clusterId);
-  const acknowledgeAlert = useAcknowledgeAlert();
-  const resolveAlert = useResolveAlert();
-  const events = eventsPage?.data ?? [];
-
-  const columns: Column<AlertEvent>[] = [
+  onSelect,
+  onAcknowledge,
+  onResolve,
+  pending,
+}: {
+  clusterId?: string;
+  onSelect: (id: string) => void;
+  onAcknowledge: (id: string) => void;
+  onResolve: (id: string) => void;
+  pending: boolean;
+}): Column<AlertEvent>[] {
+  return [
     {
       key: "severity",
       header: "Severity",
@@ -80,11 +56,7 @@ export function EventsTab({
       size: 200,
       minSize: 160,
       accessor: (row) => (
-        <ActionButton
-          intent="ghost"
-          size="sm"
-          onClick={() => setSelected(row.id)}
-        >
+        <ActionButton intent="ghost" size="sm" onClick={() => onSelect(row.id)}>
           <span className="truncate">{row.ruleName || "Inspect alert"}</span>
         </ActionButton>
       ),
@@ -140,8 +112,8 @@ export function EventsTab({
                 size="sm"
                 intent="ghost"
                 tooltip="Acknowledge"
-                disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
-                onClick={() => acknowledgeAlert.mutate(row.id)}
+                disabled={pending}
+                onClick={() => onAcknowledge(row.id)}
                 icon={<Check className="h-3 w-3" />}
                 className="h-auto px-2 py-1"
               >
@@ -151,8 +123,8 @@ export function EventsTab({
                 size="sm"
                 intent="ghost"
                 tooltip="Resolve"
-                disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
-                onClick={() => resolveAlert.mutate(row.id)}
+                disabled={pending}
+                onClick={() => onResolve(row.id)}
                 icon={<CheckCircle className="h-3 w-3" />}
                 className="h-auto px-2 py-1 hover:text-status-success hover:bg-status-success/10"
               >
@@ -165,8 +137,8 @@ export function EventsTab({
               size="sm"
               intent="ghost"
               tooltip="Resolve"
-              disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
-              onClick={() => resolveAlert.mutate(row.id)}
+              disabled={pending}
+              onClick={() => onResolve(row.id)}
               icon={<CheckCircle className="h-3 w-3" />}
               className="h-auto px-2 py-1 hover:text-status-success hover:bg-status-success/10"
             >
@@ -182,6 +154,52 @@ export function EventsTab({
       maxSize: 200,
     },
   ];
+}
+
+export function EventsTab({
+  clusterId,
+  history = true,
+}: { clusterId?: string; history?: boolean } = {}) {
+  const [pageValue, setPageValue] = useInvestigationParam("alertPage", "0");
+  const pageIndex = /^\d+$/.test(pageValue)
+    ? Math.min(Number(pageValue), 100000)
+    : 0;
+  const setPageIndex = (page: number) => setPageValue(String(page));
+  const [selected, setSelected] = useInvestigationParam("event");
+  const [status, setStatus] = useTabParam(
+    ["", "firing", "acknowledged", "resolved", "silenced"] as const,
+    "",
+    "alertStatus",
+  );
+  const [severity, setSeverity] = useTabParam(
+    ["", "critical", "warning", "info"] as const,
+    "",
+    "alertSeverity",
+  );
+  const {
+    data: eventsPage,
+    isLoading,
+    isError,
+    refetch,
+  } = useAlertEvents({
+    clusterId,
+    status: history ? status || undefined : "firing",
+    severity: severity || undefined,
+    limit: ALERT_EVENTS_PAGE_SIZE,
+    offset: pageIndex * ALERT_EVENTS_PAGE_SIZE,
+  });
+  const { data: summary } = useAlertEventSummary(clusterId);
+  const acknowledgeAlert = useAcknowledgeAlert();
+  const resolveAlert = useResolveAlert();
+  const events = eventsPage?.data ?? [];
+
+  const columns = eventColumns({
+    clusterId,
+    onSelect: setSelected,
+    onAcknowledge: (id) => acknowledgeAlert.mutate(id),
+    onResolve: (id) => resolveAlert.mutate(id),
+    pending: acknowledgeAlert.isPending || resolveAlert.isPending,
+  });
 
   const serverColumns = columns.map((column) => ({
     ...column,

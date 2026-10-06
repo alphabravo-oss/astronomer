@@ -64,9 +64,12 @@ export function CappedChips({
 /** Relative age ("3 hours ago") with the exact timestamp in a Tooltip. */
 export function TimestampCell({
   value,
+  prefix,
   className,
 }: {
   value: string | null | undefined;
+  /** Leading word such as "Started", shown before the relative age. */
+  prefix?: string;
   className?: string;
 }) {
   const relative = formatRelativeTime(value);
@@ -77,6 +80,7 @@ export function TimestampCell({
         className,
       )}
     >
+      {prefix && value ? `${prefix} ` : ""}
       {relative}
     </span>
   );
