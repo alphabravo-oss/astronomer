@@ -78,23 +78,26 @@ const gatewayColumns: Column<Gateway>[] = [
   namespaceColumn<Gateway>(),
   textColumn<Gateway>("class", "Class", (row) => row.gatewayClassName, {
     mono: true,
-    size: 180,
-    minSize: chWidth(16),
+    size: 124,
+    minSize: 112,
   }),
   chipColumn<Gateway>("listeners", "Listeners", (row) => row.listenerSummary, {
-    size: 190,
-    minSize: chWidth(16),
+    size: 124,
+    minSize: 112,
     maxSize: 280,
+    max: 1,
   }),
   chipColumn<Gateway>("addresses", "Addresses", (row) => row.addresses, {
-    size: 200,
-    minSize: chWidth(20),
+    size: 124,
+    minSize: 112,
     maxSize: 300,
+    max: 1,
   }),
   {
     key: "programmed",
     header: "Programmed",
     kind: "status",
+    size: 104,
     accessor: (row) => (
       <ConditionPill
         status={row.programmed}
@@ -118,15 +121,17 @@ const routeColumns: Column<GatewayRoute>[] = [
     "Parent Gateways",
     (row) => row.parentSummary,
     {
-      size: 220,
-      minSize: chWidth(18),
+      size: 170,
+      minSize: chWidth(16),
       maxSize: 320,
+      max: 1,
     },
   ),
   chipColumn<GatewayRoute>("hostnames", "Hostnames", (row) => row.hostnames, {
-    size: 260,
-    minSize: chWidth(24),
+    size: 190,
+    minSize: chWidth(22),
     maxSize: 400,
+    max: 1,
   }),
   countColumn<GatewayRoute>("rules", "Rules", (row) => row.ruleCount),
   ageColumn<GatewayRoute>((row) => row.createdAt),
@@ -138,12 +143,13 @@ const gatewayClassColumns: Column<GatewayClass>[] = [
     "controllerName",
     "Controller",
     (row) => row.controllerName,
-    { mono: true, size: 300, minSize: chWidth(30) },
+    { mono: true, size: 240, minSize: chWidth(26) },
   ),
   {
     key: "accepted",
     header: "Accepted",
     kind: "status",
+    size: 100,
     accessor: (row) => (
       <ConditionPill
         status={row.accepted}
@@ -157,7 +163,7 @@ const gatewayClassColumns: Column<GatewayClass>[] = [
     "description",
     "Description",
     (row) => row.description,
-    { size: 280, minSize: chWidth(24), sortable: false },
+    { size: 220, minSize: chWidth(24), sortable: false },
   ),
   ageColumn<GatewayClass>((row) => row.createdAt),
 ];
@@ -169,13 +175,13 @@ const referenceGrantColumns: Column<ReferenceGrant>[] = [
     "from",
     "From",
     (row) => row.from?.map((f) => `${f.kind}@${f.namespace}`),
-    { size: 220, minSize: chWidth(18), maxSize: 320 },
+    { size: 180, minSize: chWidth(16), maxSize: 320, max: 1 },
   ),
   chipColumn<ReferenceGrant>(
     "to",
     "To",
     (row) => row.to?.map((t) => `${t.kind}${t.name ? `/${t.name}` : ""}`),
-    { size: 220, minSize: chWidth(18), maxSize: 320 },
+    { size: 180, minSize: chWidth(16), maxSize: 320, max: 1 },
   ),
   ageColumn<ReferenceGrant>((row) => row.createdAt),
 ];

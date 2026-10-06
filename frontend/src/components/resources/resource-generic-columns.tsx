@@ -132,8 +132,8 @@ const secretColumns: Column<GenericK8sResource>[] = [
     key: "type",
     header: "Type",
     kind: "badge",
-    size: 260,
-    minSize: chWidth(28),
+    size: 240,
+    minSize: chWidth(26),
     maxSize: 380,
     accessor: (row) => (
       <span className="inline-block max-w-full truncate rounded-sm bg-muted px-1.5 py-0.5 align-middle text-2xs text-muted-foreground">
@@ -323,12 +323,12 @@ const crdColumns: Column<GenericK8sResource>[] = [
   plainNameColumn<GenericK8sResource>(),
   textColumn<GenericK8sResource>("group", "Group", (row) => row.group, {
     mono: true,
-    size: 240,
+    size: 220,
     minSize: chWidth(24),
   }),
   textColumn<GenericK8sResource>("kind", "Kind", (row) => row.kind, {
-    size: 160,
-    minSize: chWidth(14),
+    size: 130,
+    minSize: 112,
   }),
   {
     ...textColumn<GenericK8sResource>(
@@ -337,7 +337,7 @@ const crdColumns: Column<GenericK8sResource>[] = [
       (row) => row.version,
     ),
     kind: "version",
-    size: 112,
+    size: 96,
   },
   {
     key: "scope",
@@ -378,7 +378,7 @@ const k8sRoleBindingColumns: Column<GenericK8sResource>[] = [
     "role",
     "Role",
     (row) => `${row.roleKind}/${row.roleName}`,
-    { mono: true, size: 260, minSize: chWidth(24) },
+    { mono: true, size: 220, minSize: chWidth(24) },
   ),
   countColumn<GenericK8sResource>(
     "subjects",
@@ -400,7 +400,7 @@ const endpointColumns: Column<GenericK8sResource>[] = [
     "ports",
     "Ports",
     (row) => row.ports?.split(/,\s*/).filter(Boolean),
-    { size: 200, minSize: chWidth(16), maxSize: 280 },
+    { size: 190, minSize: chWidth(16), maxSize: 280 },
   ),
   ageColumn<GenericK8sResource>((row) => row.createdAt),
 ];

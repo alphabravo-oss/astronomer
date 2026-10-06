@@ -119,7 +119,7 @@ const crdColumns: Column<CRDRow>[] = [
     key: "group",
     header: "Group",
     kind: "text",
-    size: 240,
+    size: 220,
     minSize: chWidth(24),
     searchAccessor: (row) => row.group,
     accessor: (row) => (
@@ -132,7 +132,7 @@ const crdColumns: Column<CRDRow>[] = [
     key: "plural",
     header: "Plural",
     kind: "text",
-    size: 180,
+    size: 150,
     minSize: chWidth(18),
     searchAccessor: (row) => row.plural,
     accessor: (row) => (
@@ -145,7 +145,7 @@ const crdColumns: Column<CRDRow>[] = [
     key: "versions",
     header: "Versions",
     kind: "badge",
-    size: 150,
+    size: 140,
     minSize: chWidth(12),
     accessor: (row) => <ChipList items={row.versions} />,
     searchAccessor: (row) => row.versions.join(" "),
@@ -167,6 +167,8 @@ const crdColumns: Column<CRDRow>[] = [
     key: "age",
     header: "Age",
     kind: "age",
+    size: 120,
+    minSize: 112,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">
         {row.createdAt ? formatRelativeTime(row.createdAt) : "-"}

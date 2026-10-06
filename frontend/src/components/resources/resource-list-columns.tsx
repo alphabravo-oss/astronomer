@@ -432,6 +432,7 @@ const serviceColumns: Column<K8sService>[] = [
     key: "type",
     header: "Type",
     kind: "badge",
+    size: 104,
     accessor: (row) => (
       <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.type}
@@ -442,9 +443,9 @@ const serviceColumns: Column<K8sService>[] = [
   {
     key: "clusterIP",
     header: "Cluster IP",
-    kind: "id",
-    size: 148,
-    minSize: chWidth(15),
+    kind: "text",
+    size: 132,
+    minSize: 112,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.clusterIP}
@@ -456,7 +457,7 @@ const serviceColumns: Column<K8sService>[] = [
     "ports",
     "Ports",
     (row) => row.ports?.map((p) => `${p.port}/${p.protocol}`),
-    { size: 200, minSize: chWidth(20), maxSize: 280 },
+    { size: 180, minSize: chWidth(16), maxSize: 280 },
   ),
   ageColumn<K8sService>((row) => row.createdAt),
 ];
@@ -465,19 +466,21 @@ const ingressColumns: Column<Ingress>[] = [
   plainNameColumn<Ingress>(),
   namespaceColumn<Ingress>(),
   textColumn<Ingress>("class", "Class", (row) => row.ingressClass, {
-    size: 140,
-    minSize: chWidth(12),
+    size: 110,
+    minSize: 96,
   }),
   chipColumn<Ingress>(
     "hosts",
     "Hosts",
     (row) => (row.hosts?.length ? row.hosts : ["*"]),
-    { size: 260, minSize: chWidth(26), maxSize: 400 },
+    { size: 200, minSize: chWidth(22), maxSize: 400, max: 1 },
   ),
   {
     key: "tls",
     header: "TLS",
     kind: "status",
+    size: 72,
+    minSize: 64,
     accessor: (row) => (
       <span
         className={cn(
@@ -500,17 +503,19 @@ const networkPolicyColumns: Column<NetworkPolicy>[] = [
     "policyTypes",
     "Policy Types",
     (row) => row.policyTypes,
-    { mono: false },
+    { mono: false, size: 150 },
   ),
   countColumn<NetworkPolicy>(
     "ingress",
     "Ingress Rules",
     (row) => row.ingressRules,
+    { size: 104 },
   ),
   countColumn<NetworkPolicy>(
     "egress",
     "Egress Rules",
     (row) => row.egressRules,
+    { size: 104 },
   ),
   ageColumn<NetworkPolicy>((row) => row.createdAt),
 ];
@@ -521,6 +526,7 @@ const pvColumns: Column<PersistentVolume>[] = [
     key: "status",
     header: "Status",
     kind: "status",
+    size: 100,
     accessor: (row) => <StatusBadge status={row.status} />,
     searchAccessor: (row) => row.status,
   },
@@ -528,6 +534,7 @@ const pvColumns: Column<PersistentVolume>[] = [
     key: "capacity",
     header: "Capacity",
     kind: "bytes",
+    size: 84,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">{row.capacity}</span>
     ),
@@ -537,8 +544,8 @@ const pvColumns: Column<PersistentVolume>[] = [
     key: "accessModes",
     header: "Access Modes",
     kind: "text",
-    size: 120,
-    minSize: 112,
+    size: 96,
+    minSize: 92,
     accessor: (row) => <AccessModesCell modes={row.accessModes} />,
     searchAccessor: (row) => abbreviateAccessModes(row.accessModes).join(" "),
     sortable: false,
@@ -547,12 +554,12 @@ const pvColumns: Column<PersistentVolume>[] = [
     "storageClass",
     "Storage Class",
     (row) => row.storageClass,
-    { size: 160, minSize: chWidth(14) },
+    { size: 124, minSize: 112 },
   ),
   textColumn<PersistentVolume>("claimRef", "Claim", (row) => row.claimRef, {
     mono: true,
-    size: 260,
-    minSize: chWidth(24),
+    size: 170,
+    minSize: chWidth(18),
   }),
   ageColumn<PersistentVolume>((row) => row.createdAt),
 ];
@@ -564,6 +571,7 @@ const pvcColumns: Column<PersistentVolumeClaim>[] = [
     key: "status",
     header: "Status",
     kind: "status",
+    size: 104,
     accessor: (row) => <StatusBadge status={row.status} />,
     searchAccessor: (row) => row.status,
   },
@@ -571,6 +579,7 @@ const pvcColumns: Column<PersistentVolumeClaim>[] = [
     key: "capacity",
     header: "Capacity",
     kind: "bytes",
+    size: 88,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">{row.capacity}</span>
     ),
@@ -580,14 +589,14 @@ const pvcColumns: Column<PersistentVolumeClaim>[] = [
     "storageClass",
     "Storage Class",
     (row) => row.storageClass,
-    { size: 160, minSize: chWidth(14) },
+    { size: 124, minSize: 112 },
   ),
   {
     key: "volumeName",
     header: "Volume",
     kind: "id",
-    size: 220,
-    minSize: chWidth(24),
+    size: 170,
+    minSize: 130,
     maxSize: 320,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
@@ -622,24 +631,25 @@ const storageClassColumns: Column<StorageClass>[] = [
     "provisioner",
     "Provisioner",
     (row) => row.provisioner,
-    { mono: true, size: 240, minSize: chWidth(26) },
+    { mono: true, size: 200, minSize: chWidth(22) },
   ),
   textColumn<StorageClass>(
     "reclaimPolicy",
     "Reclaim Policy",
     (row) => row.reclaimPolicy,
-    { size: 130, minSize: chWidth(12) },
+    { size: 112, minSize: 100 },
   ),
   textColumn<StorageClass>(
     "volumeBindingMode",
     "Binding Mode",
     (row) => row.volumeBindingMode,
-    { size: 190, minSize: chWidth(22) },
+    { size: 170, minSize: chWidth(20) },
   ),
   {
     key: "expansion",
     header: "Expansion",
     kind: "status",
+    size: 96,
     accessor: (row) => (
       <span
         className={cn(

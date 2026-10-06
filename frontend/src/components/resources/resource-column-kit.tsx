@@ -46,15 +46,16 @@ export function ChipList({
   return (
     <div className="flex min-w-0 items-center gap-1">
       {shown.map((item, i) => (
-        <span
-          key={`${item}-${i}`}
-          className={cn(
-            "min-w-0 truncate rounded-sm bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground",
-            mono && "font-mono",
-          )}
-        >
-          {item}
-        </span>
+        <Tooltip key={`${item}-${i}`} content={item.length > 14 ? item : null}>
+          <span
+            className={cn(
+              "min-w-0 truncate rounded-sm bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground",
+              mono && "font-mono",
+            )}
+          >
+            {item}
+          </span>
+        </Tooltip>
       ))}
       {rest > 0 && (
         <Tooltip
@@ -153,8 +154,8 @@ export function ageColumn<T>(
     key,
     header,
     kind: "age",
-    size: 136,
-    minSize: 128,
+    size: 120,
+    minSize: 112,
     accessor: (row) => <AgeCell value={get(row)} />,
     searchAccessor: (row) => formatRelativeTime(get(row)),
     ...rest,
@@ -166,14 +167,14 @@ export function chipColumn<T>(
   key: string,
   header: string,
   get: (row: T) => readonly string[] | null | undefined,
-  opts: Opts<T> & { mono?: boolean } = {},
+  opts: Opts<T> & { mono?: boolean; max?: number } = {},
 ): Column<T> {
-  const { mono = true, ...rest } = opts;
+  const { mono = true, max = 2, ...rest } = opts;
   return {
     key,
     header,
     kind: "badge",
-    accessor: (row) => <ChipList items={get(row)} mono={mono} />,
+    accessor: (row) => <ChipList items={get(row)} mono={mono} max={max} />,
     searchAccessor: (row) => (get(row) ?? []).join(" "),
     sortable: false,
     ...rest,
@@ -200,8 +201,8 @@ export function namespaceColumn<T extends { namespace?: string }>(
 ): Column<T> {
   return textColumn<T>("namespace", "Namespace", (row) => row.namespace, {
     mono: true,
-    size: 160,
-    minSize: chWidth(14),
+    size: 124,
+    minSize: 112,
     ...opts,
   });
 }

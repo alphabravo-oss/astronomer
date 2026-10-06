@@ -1,5 +1,4 @@
 import { apiErrorStatus } from "@/lib/api/errors";
-import { chWidth } from "@/components/resources/resource-column-kit";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { collectionScope } from "@/lib/cluster-scope-collection";
 import { useClusterNamespaceScope } from "@/lib/cluster-scope";
@@ -166,8 +165,8 @@ function ScopedCustomResourceList({
         key: "namespace",
         header: "Namespace",
         kind: "text",
-        size: 160,
-        minSize: chWidth(14),
+        size: 124,
+        minSize: 112,
         searchAccessor: (row) => row.namespace || "Cluster scoped",
         accessor: (row) => (
           <span className="text-xs text-muted-foreground font-mono">
@@ -179,6 +178,8 @@ function ScopedCustomResourceList({
         key: "age",
         header: "Age",
         kind: "age",
+        size: 120,
+        minSize: 112,
         accessor: (row) => (
           <span className="text-xs text-muted-foreground">
             {row.createdAt ? formatRelativeTime(row.createdAt) : "-"}

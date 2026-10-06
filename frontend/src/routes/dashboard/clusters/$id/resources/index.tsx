@@ -162,7 +162,7 @@ const ingressClassColumns: Column<MirroredIngressClass>[] = [
     key: "controller",
     header: "Controller",
     kind: "text",
-    size: 240,
+    size: 220,
     minSize: chWidth(26),
     accessor: (r) => (
       <span className="font-mono text-xs">{r.controller || "—"}</span>
@@ -193,8 +193,8 @@ const ingressClassColumns: Column<MirroredIngressClass>[] = [
     ),
     sortAccessor: (r) => r.lastSeenAt || "",
     kind: "age",
-    size: 136,
-    minSize: 128,
+    size: 120,
+    minSize: 112,
   },
 ];
 
@@ -249,7 +249,7 @@ const gatewayClassColumns: Column<MirroredGatewayClass>[] = [
     key: "controller",
     header: "Controller",
     kind: "text",
-    size: 240,
+    size: 220,
     minSize: chWidth(26),
     accessor: (r) => (
       <span className="font-mono text-xs">{r.controllerName || "—"}</span>
@@ -274,8 +274,8 @@ const gatewayClassColumns: Column<MirroredGatewayClass>[] = [
     ),
     sortAccessor: (r) => r.lastSeenAt || "",
     kind: "age",
-    size: 136,
-    minSize: 128,
+    size: 120,
+    minSize: 112,
   },
 ];
 
@@ -300,7 +300,7 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
     key: "namespace",
     header: "Namespace",
     kind: "text",
-    size: 160,
+    size: 140,
     minSize: chWidth(14),
     accessor: (r) => <span className="font-mono">{r.namespace}</span>,
     searchAccessor: (r) => r.namespace,
@@ -319,7 +319,7 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
     key: "types",
     header: "Types",
     kind: "badge",
-    size: 160,
+    size: 140,
     accessor: (r) => (
       <>
         {(r.policyTypes ?? []).map((t) => (
@@ -360,8 +360,8 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
     ),
     sortAccessor: (r) => r.lastSeenAt || "",
     kind: "age",
-    size: 136,
-    minSize: 128,
+    size: 120,
+    minSize: 112,
   },
 ];
 
@@ -487,7 +487,7 @@ const limitRangeMapColumn = (
   key,
   header,
   kind: "text",
-  size: 200,
+  size: 180,
   minSize: chWidth(20),
   accessor: (l) => <ChipList items={mapEntries(l[key])} empty="—" />,
   searchAccessor: (l) => mapEntries(l[key]).join(" "),
