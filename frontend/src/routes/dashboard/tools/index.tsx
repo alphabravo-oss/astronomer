@@ -8,6 +8,7 @@ import {
   type DataTableProps,
 } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
 import { useClusterEstateTable } from "@/lib/hooks/cluster-estate-table";
@@ -97,15 +98,15 @@ function ManagedToolsTable({
       {
         key: "cluster",
         header: "Cluster",
+        kind: "name",
+        minSize: 220,
         accessor: (cluster) => (
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <div>
-              <p className="font-medium text-foreground">
-                {cluster.displayName}
-              </p>
-              <p className="text-xs text-muted-foreground">{cluster.name}</p>
-            </div>
+            <StackedCell
+              primary={cluster.displayName || cluster.name}
+              secondary={cluster.name}
+            />
           </div>
         ),
         sortAccessor: (cluster) => cluster.displayName || cluster.name,
@@ -113,6 +114,8 @@ function ManagedToolsTable({
       {
         key: "environment",
         header: "Environment",
+        kind: "badge",
+        size: 133,
         accessor: (cluster) => (
           <span className="capitalize">{cluster.environment}</span>
         ),
@@ -121,6 +124,9 @@ function ManagedToolsTable({
       ...tools.map<Column<Cluster>>((tool) => ({
         key: tool.slug,
         header: tool.name,
+        kind: "status",
+        size: 150,
+        minSize: 112,
         accessor: (cluster) => (
           <ToolStatusCell clusterId={cluster.id} tool={tool} />
         ),
@@ -135,6 +141,7 @@ function ManagedToolsTable({
       columns={columns}
       keyExtractor={(cluster) => cluster.id}
       persistKey="estate-tools"
+      layout="scroll"
       serverSide={serverSide}
       pageSize={serverSide?.pagination.pageSize}
       searchPlaceholder="Filter clusters…"

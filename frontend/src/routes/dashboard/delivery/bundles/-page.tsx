@@ -26,7 +26,8 @@ import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { useNavigate } from "@tanstack/react-router";
 import { toastSuccess } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
@@ -62,27 +63,34 @@ export function BundlesPage() {
     {
       key: "name",
       header: "Bundle",
+      kind: "name",
+      minSize: 200,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Boxes className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-medium">{row.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {row.description || "No description"}
-            </p>
-          </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <Boxes className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <StackedCell
+            primary={row.name}
+            secondary={row.description || "No description"}
+          />
         </div>
       ),
+      sortAccessor: (row) => row.name,
     },
     {
       key: "id",
       header: "Stable ID",
-      accessor: (row) => <code className="text-xs">{row.id}</code>,
+      kind: "id",
+      size: 200,
+      minSize: 160,
+      accessor: (row) => row.id,
+      sortAccessor: (row) => row.id,
     },
     {
       key: "updated",
       header: "Updated",
-      accessor: (row) => formatRelativeTime(row.updatedAt),
+      kind: "age",
+      accessor: (row) => <AgeCell value={row.updatedAt} />,
+      sortAccessor: (row) => row.updatedAt,
     },
   ];
   return (
