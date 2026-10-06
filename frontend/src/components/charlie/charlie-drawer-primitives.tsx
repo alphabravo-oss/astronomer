@@ -78,7 +78,7 @@ export function CharlieProgressIndicator({
           }}
         />
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-11 text-muted-foreground">
         <span>{elapsedSeconds}s elapsed</span>
         {toolCalls > 0 && (
           <span>
@@ -131,7 +131,7 @@ export function CopyMessageButton({ text }: { text: string }) {
     <ActionButton
       intent="bare"
       size="none"
-      className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+      className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-11 text-muted-foreground hover:bg-accent hover:text-foreground"
       aria-label={copied ? "Copied" : "Copy message"}
       onClick={() => void copy()}
     >

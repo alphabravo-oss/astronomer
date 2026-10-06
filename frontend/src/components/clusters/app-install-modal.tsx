@@ -395,7 +395,7 @@ export function AppInstallModal({
                     defaultValues.data!.defaultValues,
                   )
                 }
-                className="text-[11px] text-muted-foreground hover:text-foreground underline inline-block font-normal"
+                className="text-11 text-muted-foreground hover:text-foreground underline inline-block font-normal"
               >
                 Reset to chart defaults
               </ActionButton>
@@ -414,7 +414,7 @@ export function AppInstallModal({
               />
             )}
           </form.Field>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-11 text-muted-foreground">
             Vault references like{" "}
             <code className="font-mono">${`{vault://secret/path#key}`}</code>{" "}
             are resolved at install time. Sensitive values stay in Vault rather

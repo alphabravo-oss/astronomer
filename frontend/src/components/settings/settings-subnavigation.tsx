@@ -30,7 +30,7 @@ function NavigationGroups({ onNavigate }: { onNavigate?: () => void }) {
         <section key={group.label} aria-labelledby={`settings-${group.label}`}>
           <h2
             id={`settings-${group.label}`}
-            className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+            className="mb-1 px-2 text-11 font-semibold uppercase tracking-wider text-muted-foreground"
           >
             {group.label}
           </h2>

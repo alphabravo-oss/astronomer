@@ -154,7 +154,7 @@ function TopbarNotifications() {
         >
           <Bell className="h-4 w-4" />
           {notificationCount > 0 && (
-            <span className="absolute top-0.5 right-0.5 flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-status-error text-[10px] font-bold text-white">
+            <span className="absolute top-0.5 right-0.5 flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-status-error text-10 font-bold text-white">
               {notificationCount > 99 ? "99+" : notificationCount}
             </span>
           )}

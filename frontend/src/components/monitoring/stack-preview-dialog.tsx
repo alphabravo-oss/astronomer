@@ -65,7 +65,7 @@ export function StackPreviewDialog({
       size="xl"
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-10 text-muted-foreground">
             {preview?.desiredSpecHash
               ? `spec ${preview.desiredSpecHash.slice(0, 12)}`
               : ""}

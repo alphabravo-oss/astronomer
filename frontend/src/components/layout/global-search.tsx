@@ -49,10 +49,10 @@ export function GlobalSearch() {
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
       <span className="truncate">Search resources...</span>
       <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-        <kbd className="hidden items-center rounded-sm border border-border px-1.5 py-0.5 font-mono text-[10px] md:inline-flex">
+        <kbd className="hidden items-center rounded-sm border border-border px-1.5 py-0.5 font-mono text-10 md:inline-flex">
           /
         </kbd>
-        <kbd className="hidden items-center rounded-sm border border-border px-1.5 py-0.5 font-mono text-[10px] sm:inline-flex">
+        <kbd className="hidden items-center rounded-sm border border-border px-1.5 py-0.5 font-mono text-10 sm:inline-flex">
           ⌘K
         </kbd>
       </span>

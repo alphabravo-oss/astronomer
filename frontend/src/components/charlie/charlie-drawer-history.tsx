@@ -66,7 +66,7 @@ export function CharlieHistory({
               <span className="block truncate text-sm font-medium">
                 {thread.title || "Untitled conversation"}
               </span>
-              <span className="block text-[11px] text-muted-foreground">
+              <span className="block text-11 text-muted-foreground">
                 {current
                   ? "Current"
                   : thread.state === "archived"

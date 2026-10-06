@@ -232,7 +232,7 @@ function ToolCard({ tool }: { tool: CharlieToolRun }) {
         </div>
       </dl>
       <p className="mt-2 text-muted-foreground">Argument fields</p>
-      <p className="mt-1 rounded-sm bg-muted p-2 text-[11px]">
+      <p className="mt-1 rounded-sm bg-muted p-2 text-11">
         {tool.argumentSummary?.length
           ? tool.argumentSummary.slice(0, 20).join(", ")
           : "No display-safe argument fields were provided."}

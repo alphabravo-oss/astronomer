@@ -157,7 +157,7 @@ export function CharlieComposer({
                   size="none"
                   key={command.id}
                   onClick={() => setText(commandInsertion(command))}
-                  className="rounded-full border px-2 py-1 font-mono text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="rounded-full border px-2 py-1 font-mono text-11 text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   /{command.name}
                 </ActionButton>
@@ -195,7 +195,7 @@ export function CharlieComposer({
                         ? ` <${command.argument.placeholder}>`
                         : ""}
                     </span>
-                    <span className="block text-[11px] text-muted-foreground">
+                    <span className="block text-11 text-muted-foreground">
                       {command.description}
                     </span>
                   </span>
