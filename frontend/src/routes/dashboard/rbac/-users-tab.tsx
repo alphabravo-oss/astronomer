@@ -64,7 +64,8 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
       key: "email",
       header: "Email",
       kind: "text",
-      minSize: 206,
+      size: 176,
+      minSize: 150,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">{row.email}</span>
       ),
@@ -73,6 +74,7 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
       key: "provider",
       header: "Provider",
       kind: "badge",
+      size: 112,
       accessor: (row) => (
         <Badge variant="secondary" className="capitalize">
           {row.provider}
@@ -83,7 +85,8 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
       key: "roles",
       header: "Global Roles",
       kind: "badge",
-      minSize: 180,
+      size: 136,
+      minSize: 110,
       accessor: (row) => (
         <CappedChips
           items={userRoleLabels(row)}
@@ -99,7 +102,8 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
       key: "enabled",
       header: "Status",
       kind: "status",
-      minSize: 160,
+      size: 140,
+      minSize: 120,
       maxSize: 220,
       accessor: (row) => (
         <div className="flex items-center gap-1.5">
@@ -127,6 +131,7 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
       key: "lastLogin",
       header: "Last Login",
       kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.lastLogin} />

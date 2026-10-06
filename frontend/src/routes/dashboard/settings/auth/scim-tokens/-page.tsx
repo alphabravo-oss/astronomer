@@ -43,8 +43,8 @@ function SCIMTokensList() {
       key: "prefix",
       header: "Token",
       kind: "id",
-      size: 144,
-      minSize: 128,
+      size: 128,
+      minSize: 112,
       sortAccessor: (row) => row.prefix,
       accessor: (row) => (
         <span className="text-xs font-mono text-muted-foreground">
@@ -57,6 +57,7 @@ function SCIMTokensList() {
       key: "lastUsedAt",
       header: "Last used",
       kind: "age",
+      size: 119,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.lastUsedAt} />
@@ -67,6 +68,7 @@ function SCIMTokensList() {
       key: "createdAt",
       header: "Created",
       kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.createdAt} />

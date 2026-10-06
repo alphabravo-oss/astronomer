@@ -94,7 +94,8 @@ function ProjectsPage() {
       key: "description",
       header: "Description",
       kind: "text",
-      minSize: 168,
+      size: 148,
+      minSize: 120,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.description || "--"}
@@ -106,7 +107,7 @@ function ProjectsPage() {
       key: "cluster",
       header: "Cluster",
       kind: "badge",
-      minSize: 128,
+      size: 105,
       accessor: (row) => {
         // The Go backend returns cluster_id (singular). The legacy
         // TypeScript type carries an optional clusterIds[] array from
@@ -145,9 +146,10 @@ function ProjectsPage() {
       key: "namespaces",
       header: "Namespaces",
       kind: "badge",
-      minSize: 160,
+      size: 136,
+      minSize: 120,
       accessor: (row) => (
-        <CappedChips items={row.namespaces ?? []} empty="None" mono />
+        <CappedChips items={row.namespaces ?? []} max={1} empty="None" mono />
       ),
       sortable: false,
     },
@@ -155,6 +157,7 @@ function ProjectsPage() {
       key: "members",
       header: "Members",
       kind: "count",
+      size: 105,
       accessor: (row) => {
         const count = row.members?.length;
         return (
@@ -170,7 +173,8 @@ function ProjectsPage() {
       key: "resourceQuota",
       header: "Quota",
       kind: "text",
-      minSize: 160,
+      size: 168,
+      minSize: 150,
       align: "right",
       accessor: (row) => {
         const extra = row as Project & {
@@ -193,6 +197,7 @@ function ProjectsPage() {
       key: "created",
       header: "Created",
       kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.createdAt} />

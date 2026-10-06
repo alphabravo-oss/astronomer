@@ -37,8 +37,8 @@ function GitOpsList() {
       header: "Source",
       kind: "name",
       grow: false,
-      size: 224,
-      minSize: 168,
+      size: 150,
+      minSize: 120,
       accessor: (row) => (
         <div className="flex min-w-0 items-center gap-2">
           <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -56,7 +56,7 @@ function GitOpsList() {
       header: "Repo",
       kind: "text",
       grow: true,
-      minSize: 240,
+      minSize: 160,
       maxSize: 720,
       sortable: false,
       accessor: (row) => (
@@ -70,7 +70,8 @@ function GitOpsList() {
       key: "sync_mode",
       header: "Mode",
       kind: "badge",
-      minSize: 112,
+      size: 104,
+      minSize: 100,
       sortable: false,
       accessor: (row) => (
         <span className="text-xs font-mono uppercase text-muted-foreground">
@@ -84,6 +85,8 @@ function GitOpsList() {
       key: "on_delete",
       header: "On delete",
       kind: "badge",
+      size: 96,
+      hidden: true,
       sortable: false,
       accessor: (row) => (
         <span className="text-xs font-mono uppercase text-muted-foreground">
@@ -95,7 +98,8 @@ function GitOpsList() {
       key: "last_synced_at",
       header: "Last sync",
       kind: "status",
-      minSize: 128,
+      size: 112,
+      minSize: 100,
       accessor: (row) => {
         if (row.last_error) {
           return <StatusBadge status="error" label="error" size="sm" />;
@@ -116,6 +120,7 @@ function GitOpsList() {
       key: "enabled",
       header: "Enabled",
       kind: "status",
+      size: 88,
       sortable: false,
       accessor: (row) => (
         <StatusBadge

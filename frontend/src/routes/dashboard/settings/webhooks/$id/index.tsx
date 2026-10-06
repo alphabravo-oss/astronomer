@@ -264,6 +264,7 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
       key: "createdAt",
       header: "Time",
       kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
           <RelativeTime value={row.createdAt} />
@@ -275,7 +276,7 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
       header: "Event",
       kind: "text",
       grow: true,
-      minSize: 224,
+      minSize: 160,
       accessor: (row) => (
         <span className="text-xs font-mono px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {row.eventType}
@@ -286,6 +287,7 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
       key: "status",
       header: "Status",
       kind: "status",
+      size: 104,
       accessor: (row) => (
         <StatusBadge
           status={
@@ -304,6 +306,7 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
       key: "responseCode",
       header: "HTTP",
       kind: "count",
+      size: 84,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.responseCode ?? "--"}
@@ -314,6 +317,7 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
       key: "attempts",
       header: "Attempts",
       kind: "count",
+      size: 112,
       accessor: (row) => (
         <span className="text-sm">{row.attempts}</span>
       ),

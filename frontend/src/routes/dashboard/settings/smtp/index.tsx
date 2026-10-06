@@ -270,6 +270,7 @@ function EmailsTable() {
       key: "createdAt",
       header: "Time",
       kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
           <RelativeTime value={row.createdAt} />
@@ -281,7 +282,7 @@ function EmailsTable() {
       header: "To",
       kind: "text",
       grow: true,
-      minSize: 220,
+      minSize: 200,
       maxSize: 640,
       accessor: (row) => (
         <span className="text-sm text-foreground">{row.to}</span>
@@ -291,7 +292,8 @@ function EmailsTable() {
       key: "template",
       header: "Template",
       kind: "badge",
-      minSize: 136,
+      size: 128,
+      minSize: 100,
       maxSize: 220,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
@@ -303,6 +305,7 @@ function EmailsTable() {
       key: "status",
       header: "Status",
       kind: "status",
+      size: 104,
       accessor: (row) => (
         <StatusBadge
           status={
@@ -321,6 +324,7 @@ function EmailsTable() {
       key: "attempts",
       header: "Attempts",
       kind: "count",
+      size: 112,
       accessor: (row) => <span className="text-sm">{row.attempts}</span>,
     },
   ];

@@ -14,7 +14,8 @@ export function connectorColumns(actions: {
       key: "type",
       header: "Type",
       kind: "badge",
-      minSize: 136,
+      size: 136,
+      minSize: 120,
       maxSize: 200,
       accessor: (row) => {
         const meta = getConnectorMeta(row.type);
@@ -34,8 +35,8 @@ export function connectorColumns(actions: {
       key: "name",
       header: "Name",
       kind: "id",
-      size: 176,
-      minSize: 136,
+      size: 144,
+      minSize: 120,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.name}
@@ -58,6 +59,7 @@ export function connectorColumns(actions: {
       key: "status",
       header: "Status",
       kind: "status",
+      size: 104,
       accessor: (row) => (
         <StatusBadge
           status={row.enabled ? "active" : "disconnected"}

@@ -14,6 +14,7 @@ export function searchColumns(
       key: "cluster",
       header: "Cluster",
       kind: "text",
+      size: 160,
       minSize: 136,
       maxSize: 240,
       accessor: (row) => (
@@ -30,7 +31,8 @@ export function searchColumns(
       key: "namespace",
       header: "Namespace",
       kind: "text",
-      minSize: 122,
+      size: 140,
+      minSize: 120,
       maxSize: 240,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
@@ -62,6 +64,7 @@ export function searchColumns(
       key: "age",
       header: "Age",
       kind: "age",
+      size: 88,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground tabular-nums">
           {row.age || "—"}

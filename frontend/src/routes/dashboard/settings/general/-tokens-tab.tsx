@@ -1,6 +1,5 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useAPITokens, useDeleteAPIToken } from "@/lib/hooks/user-settings";
-import { formatDate } from "@/lib/utils";
 import type { APIToken } from "@/types";
 import { ActionButton } from "@/components/ui/action-button";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -26,8 +25,8 @@ export function TokensTab({ onCreate }: { onCreate: () => void }) {
       key: "prefix",
       header: "Prefix",
       kind: "id",
-      size: 144,
-      minSize: 128,
+      size: 128,
+      minSize: 112,
       sortAccessor: (row) => row.prefix,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
@@ -39,6 +38,7 @@ export function TokensTab({ onCreate }: { onCreate: () => void }) {
       key: "status",
       header: "Status",
       kind: "status",
+      size: 100,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.isRevoked ? "Revoked" : "Active"}
@@ -48,10 +48,11 @@ export function TokensTab({ onCreate }: { onCreate: () => void }) {
     {
       key: "expires",
       header: "Expires",
-      kind: "date",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {row.expiresAt ? formatDate(row.expiresAt) : "Never"}
+          <RelativeTime value={row.expiresAt} />
         </span>
       ),
     },
@@ -59,6 +60,7 @@ export function TokensTab({ onCreate }: { onCreate: () => void }) {
       key: "lastUsed",
       header: "Last Used",
       kind: "age",
+      size: 119,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.lastUsedAt} />

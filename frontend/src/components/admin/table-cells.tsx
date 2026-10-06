@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Tooltip } from "@/components/ui/tooltip";
-import { cn, formatDate, formatRelativeTime } from "@/lib/utils";
+import { parseISO } from "date-fns";
+import { cn, formatDate } from "@/lib/utils";
 
 /** Split `items` into the first `max` and the overflow count. */
 export function capChips<T>(
@@ -68,7 +69,35 @@ export function CappedChips({
   );
 }
 
-/** Relative age ("3 hours ago") with the exact timestamp in a Tooltip. */
+/**
+ * Compact relative age for narrow age columns: `45s`, `12m`, `3h`, `8d`,
+ * `5mo`, `2y`, with an `ago` suffix (or `in` prefix for future times).
+ * Returns undefined for missing, unparsable or Go-zero timestamps.
+ */
+export function shortRelative(
+  value: string | null | undefined,
+  now: number = Date.now(),
+): string | undefined {
+  if (!value) return undefined;
+  const date = parseISO(value);
+  const time = date.getTime();
+  if (Number.isNaN(time) || date.getUTCFullYear() <= 1 || time === 0) {
+    return undefined;
+  }
+  const delta = Math.round((now - time) / 1000);
+  const abs = Math.abs(delta);
+  let text: string;
+  if (abs < 45) text = "now";
+  else if (abs < 3600) text = `${Math.max(1, Math.round(abs / 60))}m`;
+  else if (abs < 86400) text = `${Math.round(abs / 3600)}h`;
+  else if (abs < 86400 * 30) text = `${Math.round(abs / 86400)}d`;
+  else if (abs < 86400 * 365) text = `${Math.round(abs / (86400 * 30))}mo`;
+  else text = `${Math.round(abs / (86400 * 365))}y`;
+  if (text === "now") return "just now";
+  return delta >= 0 ? `${text} ago` : `in ${text}`;
+}
+
+/** Compact relative age ("3h ago") with the exact timestamp in a Tooltip. */
 export function RelativeTime({
   value,
   fallback,
@@ -76,12 +105,13 @@ export function RelativeTime({
   value: string | null | undefined;
   fallback?: ReactNode;
 }) {
-  if (!value || formatRelativeTime(value) === "Never") {
+  const short = shortRelative(value);
+  if (!value || short === undefined) {
     return <span className="text-muted-foreground">{fallback ?? "Never"}</span>;
   }
   return (
     <Tooltip content={formatDate(value)}>
-      <span className="whitespace-nowrap">{formatRelativeTime(value)}</span>
+      <span className="whitespace-nowrap">{short}</span>
     </Tooltip>
   );
 }

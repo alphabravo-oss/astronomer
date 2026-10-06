@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useAuditLogs } from "@/lib/hooks/audit";
-import { formatDate } from "@/lib/utils";
 import type { AuditLogEntry } from "@/types";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Select } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 type AuditClassFilter = "all" | "mutation" | "read" | "auth" | "system";
 
@@ -25,10 +25,12 @@ export function AuditTab() {
     {
       key: "timestamp",
       header: "Timestamp",
-      kind: "date",
+      kind: "age",
+      size: 119,
+      sortAccessor: (row) => row.timestamp,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {formatDate(row.timestamp)}
+          <RelativeTime value={row.timestamp} />
         </span>
       ),
     },
@@ -36,7 +38,8 @@ export function AuditTab() {
       key: "user",
       header: "User",
       kind: "text",
-      minSize: 164,
+      size: 128,
+      minSize: 110,
       accessor: (row) => (
         <span className="text-sm text-foreground">{row.user}</span>
       ),
@@ -45,7 +48,8 @@ export function AuditTab() {
       key: "action",
       header: "Action",
       kind: "badge",
-      minSize: 136,
+      size: 112,
+      minSize: 100,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {row.action}
@@ -79,8 +83,8 @@ export function AuditTab() {
       key: "source",
       header: "Source IP",
       kind: "id",
-      size: 150,
-      minSize: 132,
+      size: 120,
+      minSize: 104,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.sourceIP}

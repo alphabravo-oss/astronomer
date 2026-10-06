@@ -101,8 +101,8 @@ function ReadAuditPoliciesList() {
         header: "Name",
         kind: "name",
         grow: false,
-        size: 208,
-        minSize: 150,
+        size: 150,
+        minSize: 130,
         accessor: (p) => <span className="font-mono text-xs">{p.name}</span>,
         searchAccessor: (p) => p.name,
         sortAccessor: (p) => p.name,
@@ -112,7 +112,7 @@ function ReadAuditPoliciesList() {
         header: "Path pattern",
         kind: "text",
         grow: true,
-        minSize: 220,
+        minSize: 180,
         maxSize: 720,
         accessor: (p) => (
           <span className="font-mono text-xs">{p.path_pattern}</span>
@@ -142,6 +142,7 @@ function ReadAuditPoliciesList() {
         key: "enabled",
         header: "Enabled",
         kind: "status",
+        size: 104,
         accessor: (p) => (
           <BareButton
             disabled={busyId === p.id}

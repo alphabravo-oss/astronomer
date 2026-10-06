@@ -196,7 +196,8 @@ export function DestinationsSection({
               key: "schedule",
               header: "Schedule",
               kind: "text",
-              minSize: 136,
+              size: 150,
+              minSize: 120,
               accessor: (row) => (
                 <span className="text-xs text-muted-foreground">
                   {row.schedule ? cronToHuman(row.schedule) : "—"}
@@ -207,6 +208,7 @@ export function DestinationsSection({
               key: "status",
               header: "Status",
               kind: "status",
+              size: 104,
               accessor: (row) => (
                 <StatusBadge
                   status={
@@ -241,7 +243,7 @@ export function DestinationsSection({
               key: "last",
               header: "Last job",
               kind: "age",
-              minSize: 112,
+              size: 105,
               accessor: (row) => (
                 <span className="text-xs text-muted-foreground">
                   <RelativeTime
@@ -257,8 +259,8 @@ export function DestinationsSection({
               key: "actions",
               header: "",
               kind: "actions",
-              size: 272,
-              maxSize: 272,
+              size: 112,
+              maxSize: 112,
               sortable: false,
               accessor: (row) =>
                 row.readOnly ? (
@@ -269,29 +271,29 @@ export function DestinationsSection({
                   <div className="flex items-center justify-end gap-1">
                     <ActionButton
                       intent="ghost"
-                      size="sm"
+                      size="icon"
+                      aria-label="Run"
+                      tooltip="Run backup now"
                       icon={<Play className="h-3.5 w-3.5" />}
                       onClick={() => run.mutate(row.id)}
                       disabled={run.isPending || !row.enabled}
-                    >
-                      Run
-                    </ActionButton>
+                    />
                     <ActionButton
                       intent="ghost"
-                      size="sm"
+                      size="icon"
+                      aria-label="Edit"
+                      tooltip="Edit destination"
                       icon={<Pencil className="h-3.5 w-3.5" />}
                       onClick={() => setEditor(row)}
-                    >
-                      Edit
-                    </ActionButton>
+                    />
                     <ActionButton
                       intent="ghost"
-                      size="sm"
+                      size="icon"
+                      aria-label="Remove"
+                      tooltip="Remove destination"
                       icon={<Trash2 className="h-3.5 w-3.5" />}
                       onClick={() => setRemove(row)}
-                    >
-                      Remove
-                    </ActionButton>
+                    />
                   </div>
                 ),
             },
@@ -661,7 +663,8 @@ function HistoryTable() {
     {
       key: "startedAt",
       header: "Started",
-      kind: "date",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
           <RelativeTime value={row.startedAt} />
@@ -672,6 +675,7 @@ function HistoryTable() {
       key: "status",
       header: "Status",
       kind: "status",
+      size: 104,
       accessor: (row) => (
         <StatusBadge
           status={statusToVariant(row.status)}
@@ -684,6 +688,7 @@ function HistoryTable() {
       key: "schemaVersion",
       header: "Schema",
       kind: "version",
+      size: 98,
       accessor: (row) => (
         <span className="text-xs font-mono text-muted-foreground">
           {row.schemaVersion != null ? row.schemaVersion : "—"}
@@ -694,7 +699,7 @@ function HistoryTable() {
       key: "duration",
       header: "Duration",
       kind: "count",
-      minSize: 80,
+      size: 112,
       accessor: (row) => (
         <span className="text-xs font-mono tabular-nums text-muted-foreground">
           {durationLabel(row.startedAt, row.finishedAt)}
@@ -706,6 +711,7 @@ function HistoryTable() {
       header: "Error",
       kind: "text",
       grow: true,
+      minSize: 160,
       sortable: false,
       accessor: (row) => (
         <span className="text-xs text-status-error">

@@ -281,6 +281,7 @@ function queueColumns(activeQueue: string): Column<QueueSummary>[] {
       key: "name",
       header: "Name",
       kind: "name",
+      minSize: 160,
       accessor: (r) => (
         <span
           className={
@@ -389,6 +390,7 @@ function QueueTable({
       columns={columns}
       keyExtractor={(r) => r.name}
       density="compact"
+      layout="scroll"
       loading={loading}
       onRowClick={(r) => onSelect(r.name)}
       searchPlaceholder="Search queues..."
@@ -411,7 +413,8 @@ function dlqColumns(
       key: "type",
       header: "Task type",
       kind: "text",
-      minSize: 178,
+      size: 160,
+      minSize: 130,
       accessor: (row) => <span className="font-mono text-xs">{row.type}</span>,
       searchAccessor: (row) => row.type,
       sortAccessor: (row) => row.type,
@@ -420,7 +423,8 @@ function dlqColumns(
       key: "id",
       header: "ID",
       kind: "id",
-      size: 208,
+      size: 168,
+      minSize: 128,
       accessor: (row) => (
         <span className="font-mono text-[11px] text-muted-foreground">
           {row.id.length > 16 ? row.id.slice(0, 16) + "…" : row.id}
@@ -441,7 +445,7 @@ function dlqColumns(
       header: "Last error",
       kind: "text",
       grow: true,
-      minSize: 200,
+      minSize: 220,
       maxSize: 720,
       accessor: (row) => (
         <span className="text-xs text-status-error">{row.last_err || "—"}</span>
@@ -452,6 +456,7 @@ function dlqColumns(
       key: "last_failed_at",
       header: "Failed at",
       kind: "age",
+      size: 119,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.last_failed_at} fallback="—" />
@@ -463,8 +468,8 @@ function dlqColumns(
       key: "actions",
       header: "Actions",
       kind: "actions",
-      size: 200,
-      maxSize: 200,
+      size: 208,
+      maxSize: 208,
       hideable: false,
       accessor: (row) => (
         <div className="inline-flex items-center gap-1">
@@ -524,6 +529,7 @@ function DLQTable({
       columns={columns}
       keyExtractor={(row) => row.id}
       density="compact"
+      layout="scroll"
       loading={loading}
       searchPlaceholder="Search dead-letter tasks..."
       emptyState={{
@@ -544,8 +550,8 @@ function taskOutboxColumns(
       header: "Task type",
       kind: "name",
       grow: false,
-      size: 232,
-      minSize: 178,
+      size: 200,
+      minSize: 160,
       accessor: (row) => (
         <div>
           <div className="font-mono text-xs">{row.task_type}</div>
@@ -576,7 +582,8 @@ function taskOutboxColumns(
       key: "queue_name",
       header: "Queue",
       kind: "text",
-      minSize: 122,
+      size: 120,
+      minSize: 100,
       accessor: (row) => (
         <span className="font-mono text-xs">{row.queue_name}</span>
       ),
@@ -598,6 +605,7 @@ function taskOutboxColumns(
       key: "next_attempt_at",
       header: "Next attempt",
       kind: "age",
+      size: 140,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.next_attempt_at} fallback="—" />
@@ -610,7 +618,7 @@ function taskOutboxColumns(
       header: "Last error",
       kind: "text",
       grow: true,
-      minSize: 200,
+      minSize: 220,
       maxSize: 720,
       accessor: (row) => (
         <span className="text-xs text-status-error">
@@ -663,6 +671,7 @@ function TaskOutboxTable({
       columns={columns}
       keyExtractor={(row) => row.id}
       density="compact"
+      layout="scroll"
       loading={loading}
       searchPlaceholder="Search task outbox..."
       emptyState={{

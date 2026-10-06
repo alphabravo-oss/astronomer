@@ -82,6 +82,7 @@ export function BindingsTab({
       key: "scope",
       header: "Scope",
       kind: "badge",
+      size: 96,
       accessor: (row) => (
         <Badge variant="secondary" className="capitalize">
           {row.scope}
@@ -94,7 +95,8 @@ export function BindingsTab({
       key: "role",
       header: "Role",
       kind: "text",
-      minSize: 150,
+      size: 150,
+      minSize: 130,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">{roleName(row)}</span>
       ),
@@ -104,7 +106,8 @@ export function BindingsTab({
       key: "target",
       header: "Applies to",
       kind: "text",
-      minSize: 178,
+      size: 180,
+      minSize: 150,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {bindingTarget(row, clusters, projects)}
@@ -116,6 +119,7 @@ export function BindingsTab({
       key: "created",
       header: "Created",
       kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.createdAt} />

@@ -95,6 +95,8 @@ function SIEMForwardersList() {
       key: "transport",
       header: "Transport",
       kind: "badge",
+      size: 104,
+      sortable: false,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {transportLabel(row.transport)}
@@ -106,11 +108,17 @@ function SIEMForwardersList() {
       key: "filters",
       header: "Event filters",
       kind: "badge",
-      minSize: 192,
+      size: 140,
+      minSize: 130,
       maxSize: 280,
       sortable: false,
       accessor: (row) => (
-        <CappedChips items={row.eventFilters ?? []} mono empty="All events" />
+        <CappedChips
+          items={row.eventFilters ?? []}
+          max={1}
+          mono
+          empty="All events"
+        />
       ),
       searchAccessor: (row) => (row.eventFilters ?? []).join(" "),
     },
@@ -118,6 +126,7 @@ function SIEMForwardersList() {
       key: "status",
       header: "Status",
       kind: "status",
+      size: 98,
       accessor: (row) => (
         <StatusBadge
           status={row.enabled ? "active" : "disconnected"}
@@ -131,6 +140,7 @@ function SIEMForwardersList() {
       key: "updated",
       header: "Updated",
       kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.updatedAt} />
@@ -141,8 +151,8 @@ function SIEMForwardersList() {
       key: "actions",
       header: "",
       kind: "actions",
-      size: 136,
-      maxSize: 136,
+      size: 120,
+      maxSize: 120,
       sortable: false,
       accessor: (row) => (
         <div className="flex items-center gap-1">

@@ -58,8 +58,8 @@ function WebhooksList() {
       header: "Name",
       kind: "name",
       grow: false,
-      size: 232,
-      minSize: 168,
+      size: 180,
+      minSize: 150,
       accessor: (row) => (
         <div className="flex min-w-0 items-center gap-2">
           <Webhook className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -77,7 +77,7 @@ function WebhooksList() {
       header: "URL",
       kind: "text",
       grow: true,
-      minSize: 240,
+      minSize: 200,
       maxSize: 720,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
@@ -100,6 +100,7 @@ function WebhooksList() {
       key: "updatedAt",
       header: "Updated",
       kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.updatedAt} />

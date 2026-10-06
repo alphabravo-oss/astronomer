@@ -56,7 +56,8 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
       key: "description",
       header: "Description",
       kind: "text",
-      minSize: 192,
+      size: 220,
+      minSize: 160,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.description || "—"}
@@ -68,6 +69,7 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
       key: "builtin",
       header: "Type",
       kind: "badge",
+      size: 105,
       accessor: (row) => <TypeBadge builtin={isBuiltinRole(row)} />,
       sortAccessor: (row) => (isBuiltinRole(row) ? "Built-in" : "Custom"),
       filter: { label: "Type" },
@@ -76,6 +78,7 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
       key: "rules",
       header: "Rules",
       kind: "count",
+      size: 96,
       accessor: (row) => (
         <span className="text-sm">{row.rules?.length ?? 0}</span>
       ),
@@ -85,6 +88,7 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
       key: "crd",
       header: "CRD grants",
       kind: "count",
+      size: 126,
       accessor: (row) => {
         const count = crdGrantCount(row.rules);
         return count > 0 ? (
@@ -99,6 +103,7 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
       key: "created",
       header: "Created",
       kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.createdAt} fallback="—" />

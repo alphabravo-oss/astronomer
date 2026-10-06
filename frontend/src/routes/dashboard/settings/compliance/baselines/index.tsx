@@ -133,8 +133,8 @@ const diffColumns: Column<DiffRow>[] = [
     header: "Field",
     kind: "name",
     grow: false,
-    size: 168,
-    minSize: 140,
+    size: 148,
+    minSize: 120,
     accessor: (r) => <span className="font-mono text-xs">{r.field}</span>,
     searchAccessor: (r) => r.field,
     sortAccessor: (r) => r.field,
@@ -144,7 +144,8 @@ const diffColumns: Column<DiffRow>[] = [
     header: "Current",
     kind: "text",
     wrap: true,
-    minSize: 140,
+    size: 140,
+    minSize: 120,
     accessor: (r) => (
       <span className="font-mono text-xs text-muted-foreground break-all">
         {r.current}
@@ -158,7 +159,7 @@ const diffColumns: Column<DiffRow>[] = [
     kind: "text",
     wrap: true,
     grow: true,
-    minSize: 140,
+    minSize: 120,
     accessor: (r) => (
       <span className="font-mono text-xs break-all">{r.target}</span>
     ),

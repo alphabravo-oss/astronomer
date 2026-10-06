@@ -44,7 +44,7 @@ function ShellSessionsPage() {
       key: "cluster",
       header: "Cluster",
       kind: "id",
-      size: 200,
+      size: 160,
       accessor: (row) => (
         <span className="font-mono text-xs text-foreground">
           {row.clusterId}
@@ -56,7 +56,7 @@ function ShellSessionsPage() {
       key: "user",
       header: "User",
       kind: "id",
-      size: 200,
+      size: 160,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.userId}
@@ -92,6 +92,7 @@ function ShellSessionsPage() {
       key: "commands",
       header: "Commands",
       kind: "count",
+      size: 112,
       accessor: (row) => (
         <span className="text-sm">{row.commandCount ?? 0}</span>
       ),
@@ -101,6 +102,7 @@ function ShellSessionsPage() {
       key: "started",
       header: "Started",
       kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           <RelativeTime value={row.startedAt} />

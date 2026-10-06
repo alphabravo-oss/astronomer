@@ -107,9 +107,9 @@ function QuotaPlansTable() {
     },
     {
       key: "flaggedLimits",
-      header: "Flagged limits",
+      header: "Flagged",
       kind: "count",
-      minSize: 128,
+      size: 105,
       accessor: (row) => {
         const rows = usageByPlan.get(row.name) ?? [];
         return <span className="text-sm">{rows.length}</span>;
@@ -118,11 +118,11 @@ function QuotaPlansTable() {
     },
     {
       key: "worst",
-      header: "Worst utilization",
+      header: "Worst",
       kind: "percent",
-      size: 168,
+      size: 144,
       minSize: 140,
-      maxSize: 220,
+      maxSize: 200,
       sortable: false,
       accessor: (row) => {
         const rows = usageByPlan.get(row.name) ?? [];
@@ -134,11 +134,11 @@ function QuotaPlansTable() {
     },
     {
       key: "projectCaps",
-      header: "Project caps",
+      header: "Caps",
       kind: "count",
-      size: 248,
-      minSize: 224,
-      maxSize: 300,
+      size: 188,
+      minSize: 170,
+      maxSize: 260,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground tabular-nums">
           {row.maxClustersPerProject || "∞"} clusters ·{" "}

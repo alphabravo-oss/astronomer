@@ -31,8 +31,8 @@ export function auditColumns(
       header: "Actor",
       kind: "name",
       grow: false,
-      size: 208,
-      minSize: 178,
+      size: 152,
+      minSize: 128,
       accessor: (row) => (
         <div>
           <div className="truncate text-sm text-foreground">
@@ -49,7 +49,7 @@ export function auditColumns(
       key: "action",
       header: "Action",
       kind: "name",
-      minSize: 240,
+      minSize: 200,
       accessor: (row) => (
         <div>
           <div className="truncate font-mono text-xs text-foreground">
@@ -72,8 +72,8 @@ export function auditColumns(
       header: "Target",
       kind: "name",
       grow: false,
-      size: 208,
-      minSize: 178,
+      size: 152,
+      minSize: 128,
       accessor: (row) => (
         <div>
           <div className="truncate text-sm text-foreground">
@@ -90,10 +90,13 @@ export function auditColumns(
       key: "scope",
       header: "Scope",
       kind: "badge",
-      minSize: 136,
-      maxSize: 220,
+      size: 176,
+      minSize: 140,
+      maxSize: 240,
       accessor: (row) => {
-        return <CappedChips items={scopeLabels(row)} mono empty="global" />;
+        return (
+          <CappedChips items={scopeLabels(row)} max={1} mono empty="global" />
+        );
       },
       searchAccessor: (row) => scopeLabels(row).join(" ") || "global",
       sortAccessor: (row) => scopeLabels(row).join(" "),
@@ -102,7 +105,7 @@ export function auditColumns(
       key: "result",
       header: "Result",
       kind: "status",
-      minSize: 104,
+      size: 96,
       accessor: (row) => (
         <div className="space-y-1">
           <StatusBadge
