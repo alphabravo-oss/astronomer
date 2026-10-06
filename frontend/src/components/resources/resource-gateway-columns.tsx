@@ -55,11 +55,15 @@ function conditionColumn<T>(
   value: (row: T) => string,
   trueLabel: string,
   falseLabel: string,
+  ariaLabel?: string,
 ): Column<T> {
   return {
     key,
     header,
+    ariaLabel,
     kind: "status",
+    size: 112,
+    minSize: 104,
     accessor: (row) => (
       <ConditionPill
         status={value(row)}
@@ -72,8 +76,8 @@ function conditionColumn<T>(
 }
 
 export const gatewayColumns: Column<Gateway>[] = [
-  nameStubColumn<Gateway>(112),
-  namespaceColumn<Gateway>(),
+  nameStubColumn<Gateway>(150),
+  { ...namespaceColumn<Gateway>(), minSize: 120, size: 120 },
   monoTextColumn<Gateway>("class", "Class", (r) => r.gatewayClassName, {
     minSize: 96,
     size: 96,
@@ -83,7 +87,7 @@ export const gatewayColumns: Column<Gateway>[] = [
     header: "Listeners",
     kind: "badge",
     minSize: 176,
-    size: 176,
+    size: 192,
     maxSize: 320,
     accessor: (row) => <ChipList items={row.listenerSummary} />,
     searchAccessor: (row) => row.listenerSummary?.join(" ") ?? "",
@@ -93,14 +97,15 @@ export const gatewayColumns: Column<Gateway>[] = [
     "addresses",
     "Addresses",
     (r) => r.addresses?.join(", ") ?? "",
-    { minSize: 120, size: 120, sortable: false },
+    { minSize: 112, size: 112, sortable: false, hidden: true },
   ),
   conditionColumn<Gateway>(
     "programmed",
-    "Programmed",
+    "State",
     (r) => r.programmed,
     "Programmed",
     "Failed",
+    "Programmed",
   ),
   ageColumn<Gateway>(),
 ];
@@ -114,8 +119,8 @@ export const routeColumns: Column<GatewayRoute>[] = [
     key: "parents",
     header: "Parent Gateways",
     kind: "badge",
-    minSize: 190,
-    size: 190,
+    minSize: 168,
+    size: 168,
     maxSize: 320,
     accessor: (row) => <ChipList items={row.parentSummary} />,
     searchAccessor: (row) => row.parentSummary?.join(" ") ?? "",
@@ -125,8 +130,8 @@ export const routeColumns: Column<GatewayRoute>[] = [
     key: "hostnames",
     header: "Hostnames",
     kind: "text",
-    minSize: 190,
-    size: 190,
+    minSize: 160,
+    size: 176,
     accessor: (row) => <ChipList items={row.hostnames} />,
     searchAccessor: (row) => row.hostnames?.join(" ") ?? "",
     sortable: false,
@@ -141,7 +146,7 @@ export const gatewayClassColumns: Column<GatewayClass>[] = [
     "controllerName",
     "Controller",
     (r) => r.controllerName,
-    { minSize: 240, size: 260, maxSize: 520 },
+    { minSize: 208, size: 240, maxSize: 520 },
   ),
   conditionColumn<GatewayClass>(
     "accepted",
@@ -154,8 +159,8 @@ export const gatewayClassColumns: Column<GatewayClass>[] = [
     key: "description",
     header: "Description",
     kind: "text",
-    minSize: 200,
-    size: 220,
+    minSize: 160,
+    size: 180,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">
         {row.description || "-"}
