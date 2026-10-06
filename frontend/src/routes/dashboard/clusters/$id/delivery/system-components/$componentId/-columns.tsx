@@ -6,7 +6,8 @@ import type {
   DeliverySystemVolume,
 } from "@/lib/api/delivery-system";
 import { crDetailHref, crListHref } from "@/lib/k8s-paths";
-import { formatBytes, formatRelativeTime } from "@/lib/utils";
+import { formatBytes } from "@/lib/utils";
+import { EntityCell, TimestampCell } from "@/components/tables/cells";
 
 export function systemVolumeColumns(
   clusterId: string,
@@ -15,31 +16,35 @@ export function systemVolumeColumns(
     {
       key: "name",
       header: "Claim",
+      kind: "name",
+      minSize: 240,
+      pin: "start",
       accessor: (row) => (
-        <div>
-          <Link
-            to={
-              "/dashboard/clusters/" +
-              clusterId +
-              "/persistentvolumeclaims/" +
-              row.namespace +
-              "/" +
-              row.name
-            }
-            className="font-medium text-link hover:underline"
-          >
-            {row.name}
-          </Link>
-          <p className="font-mono text-xs text-muted-foreground">
-            {row.namespace}
-          </p>
-        </div>
+        <EntityCell
+          primary={
+            <Link
+              to={
+                "/dashboard/clusters/" +
+                clusterId +
+                "/persistentvolumeclaims/" +
+                row.namespace +
+                "/" +
+                row.name
+              }
+              className="text-link hover:underline"
+            >
+              {row.name}
+            </Link>
+          }
+          secondary={<span className="font-mono">{row.namespace}</span>}
+        />
       ),
       sortAccessor: (row) => row.namespace + "/" + row.name,
     },
     {
       key: "phase",
       header: "Phase",
+      kind: "status",
       accessor: (row) => <DeliveryPhaseBadge value={row.phase} />,
       sortAccessor: (row) => row.phase,
       filter: { label: "Phases" },
@@ -47,6 +52,9 @@ export function systemVolumeColumns(
     {
       key: "storageClass",
       header: "Storage class",
+      kind: "text",
+      size: 170,
+      minSize: 140,
       accessor: (row) => (
         <div>
           <p className="font-medium">{row.storageClass || "Default"}</p>
@@ -60,7 +68,9 @@ export function systemVolumeColumns(
     },
     {
       key: "capacity",
-      header: "Requested / capacity",
+      header: "Req / capacity",
+      kind: "bytes",
+      size: 170,
       accessor: (row) => (
         <span className="whitespace-nowrap tabular-nums">
           {formatBytes(row.requestedBytes || 0)} /{" "}
@@ -68,17 +78,21 @@ export function systemVolumeColumns(
         </span>
       ),
       sortAccessor: (row) => row.capacityBytes || row.requestedBytes || 0,
-      align: "right",
     },
     {
       key: "accessModes",
       header: "Access",
+      kind: "text",
+      size: 200,
+      minSize: 150,
       accessor: (row) => (row.accessModes ?? []).join(", ") || "—",
       sortAccessor: (row) => (row.accessModes ?? []).join(","),
     },
     {
       key: "expansionAllowed",
       header: "Expandable",
+      kind: "status",
+      size: 120,
       accessor: (row) => (row.expansionAllowed ? "Yes" : "No"),
       sortAccessor: (row) => (row.expansionAllowed ? 1 : 0),
       filter: { label: "Expansion" },
@@ -86,6 +100,7 @@ export function systemVolumeColumns(
     {
       key: "snapshots",
       header: "Snapshots",
+      kind: "count",
       accessor: (row) =>
         row.snapshotCount ? (
           <Link
@@ -103,13 +118,13 @@ export function systemVolumeColumns(
           "0"
         ),
       sortAccessor: (row) => row.snapshotCount || 0,
-      align: "right",
     },
     {
       key: "age",
       header: "Age",
-      accessor: (row) =>
-        row.createdAt ? formatRelativeTime(row.createdAt) : "—",
+      kind: "age",
+      size: 80,
+      accessor: (row) => <TimestampCell value={row.createdAt} fallback="—" />,
       sortAccessor: (row) => row.createdAt || "",
     },
   ];
@@ -122,31 +137,42 @@ export function systemResourceColumns(
     {
       key: "name",
       header: "Resource",
+      kind: "name",
+      grow: false,
+      size: 300,
+      minSize: 240,
       accessor: (row) => (
-        <div>
-          <Link
-            to={crDetailHref(
-              clusterId,
-              row.group || "",
-              row.version,
-              row.plural,
-              row.name,
-              row.namespace,
-            )}
-            className="font-medium text-link hover:underline"
-          >
-            {row.name}
-          </Link>
-          <p className="font-mono text-xs text-muted-foreground">
-            {row.namespace || "Cluster scoped"}
-          </p>
-        </div>
+        <EntityCell
+          primary={
+            <Link
+              to={crDetailHref(
+                clusterId,
+                row.group || "",
+                row.version,
+                row.plural,
+                row.name,
+                row.namespace,
+              )}
+              className="text-link hover:underline"
+            >
+              {row.name}
+            </Link>
+          }
+          secondary={
+            <span className="font-mono">
+              {row.namespace || "Cluster scoped"}
+            </span>
+          }
+        />
       ),
       sortAccessor: (row) => (row.namespace || "") + "/" + row.name,
     },
     {
       key: "kind",
       header: "Kind",
+      kind: "text",
+      size: 170,
+      minSize: 120,
       accessor: (row) => row.kind,
       sortAccessor: (row) => row.kind,
       filter: { label: "Kinds" },
@@ -154,6 +180,7 @@ export function systemResourceColumns(
     {
       key: "health",
       header: "Health",
+      kind: "status",
       accessor: (row) =>
         row.health ? <DeliveryPhaseBadge value={row.health} /> : "Unknown",
       sortAccessor: (row) => row.health || "unknown",
@@ -162,6 +189,10 @@ export function systemResourceColumns(
     {
       key: "detail",
       header: "Observation",
+      kind: "text",
+      grow: true,
+      minSize: 260,
+      maxSize: 900,
       accessor: (row) => row.detail || "—",
       sortAccessor: (row) => row.detail || "",
       sortable: false,

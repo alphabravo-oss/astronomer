@@ -8,6 +8,8 @@ export function clusterMetricColumns(clusterId: string) {
     {
       key: "name",
       header: "Node",
+      kind: "name",
+      minSize: 240,
       accessor: (row) => (
         <Link
           to={detailHref(clusterId, "nodes", undefined, row.name)}
@@ -20,6 +22,10 @@ export function clusterMetricColumns(clusterId: string) {
     {
       key: "cpu",
       header: "CPU",
+      kind: "percent",
+      size: 170,
+      minSize: 160,
+      maxSize: 200,
       accessor: (row) => {
         const pct =
           row.cpuCapacity > 0 ? (row.cpuUsage / row.cpuCapacity) * 100 : 0;
@@ -49,6 +55,10 @@ export function clusterMetricColumns(clusterId: string) {
     {
       key: "memory",
       header: "Memory",
+      kind: "percent",
+      size: 170,
+      minSize: 160,
+      maxSize: 200,
       accessor: (row) => {
         const pct =
           row.memoryCapacity > 0
@@ -80,13 +90,13 @@ export function clusterMetricColumns(clusterId: string) {
     {
       key: "pods",
       header: "Pods",
+      kind: "count",
       accessor: (row) => (
         <span className="text-xs tabular-nums text-muted-foreground">
           {row.podCount}/{row.podCapacity}
         </span>
       ),
       sortAccessor: (row) => row.podCount,
-      align: "center",
     },
   ];
 
@@ -94,6 +104,8 @@ export function clusterMetricColumns(clusterId: string) {
     {
       key: "name",
       header: "Namespace",
+      kind: "name",
+      minSize: 200,
       accessor: (row) => (
         <Link
           to={String(
@@ -108,15 +120,17 @@ export function clusterMetricColumns(clusterId: string) {
     {
       key: "pods",
       header: "Pods",
+      kind: "count",
       accessor: (row) => (
         <span className="tabular-nums text-xs">{row.podCount}</span>
       ),
       sortAccessor: (row) => row.podCount,
-      align: "center",
     },
     {
       key: "cpu",
       header: "CPU Usage",
+      kind: "count",
+      size: 130,
       accessor: (row) => (
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatCPU(row.cpuUsage)}
@@ -127,6 +141,8 @@ export function clusterMetricColumns(clusterId: string) {
     {
       key: "memory",
       header: "Memory Usage",
+      kind: "bytes",
+      size: 140,
       accessor: (row) => (
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatBytes(row.memoryUsage)}

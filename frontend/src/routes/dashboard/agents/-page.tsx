@@ -175,6 +175,7 @@ export function ClusterAgentsPage() {
           <DataTable
             data={items}
             columns={columns}
+            layout="scroll"
             keyExtractor={(row) => row.clusterId}
             searchPlaceholder="Search by cluster name…"
             emptyState={{

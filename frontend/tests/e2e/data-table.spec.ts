@@ -192,21 +192,21 @@ test("DataTable: column-visibility choices persist across reload (B2)", async ({
   await page.goto("/dashboard/clusters");
 
   await expect(
-    page.getByRole("columnheader", { name: /^heartbeat$/i }),
+    page.getByRole("columnheader", { name: /^seen$/i }),
   ).toBeVisible();
 
   // Hide the Heartbeat column via the Columns dropdown.
   await page.getByRole("button", { name: /columns/i }).click();
-  await page.getByRole("checkbox", { name: /^heartbeat$/i }).click();
+  await page.getByRole("checkbox", { name: /^seen$/i }).click();
   await expect(
-    page.getByRole("columnheader", { name: /^heartbeat$/i }),
+    page.getByRole("columnheader", { name: /^seen$/i }),
   ).toHaveCount(0);
 
   // Reload — the hidden column must stay hidden (persisted to localStorage).
   await page.reload();
   await expect(page.getByRole("heading", { name: "Clusters" })).toBeVisible();
   await expect(
-    page.getByRole("columnheader", { name: /^heartbeat$/i }),
+    page.getByRole("columnheader", { name: /^seen$/i }),
   ).toHaveCount(0);
 
   // And the persisted entry is present under the namespaced key.

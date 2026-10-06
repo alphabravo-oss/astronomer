@@ -27,6 +27,7 @@ import {
   formatSnapshotDate,
   isManagedControlPlane,
 } from "./control-plane-snapshot-utils";
+import { EntityCell, TimestampCell } from "@/components/tables/cells";
 import { SkeletonText } from "@/components/ui/skeleton";
 import { BARE_BUTTON } from "@/lib/bare-button";
 
@@ -62,23 +63,25 @@ function controlPlaneSnapshotColumns(
     {
       key: "name",
       header: "Snapshot",
+      kind: "name",
+      minSize: 260,
       accessor: (snapshot) => (
-        <div className="min-w-0">
-          <div className="font-mono text-xs text-foreground break-all">
-            {snapshot.name || snapshot.id}
-          </div>
-          {snapshot.error ? (
-            <div className="text-xs text-status-error mt-1">
-              {snapshot.error}
-            </div>
-          ) : null}
-        </div>
+        <EntityCell
+          mono
+          primary={snapshot.name || snapshot.id}
+          secondary={
+            snapshot.error ? (
+              <span className="text-status-error">{snapshot.error}</span>
+            ) : null
+          }
+        />
       ),
       sortAccessor: (snapshot) => snapshot.name || snapshot.id,
     },
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (snapshot) => (
         <ControlPlaneSnapshotStatusPill status={snapshot.status} />
       ),
@@ -87,29 +90,33 @@ function controlPlaneSnapshotColumns(
     },
     {
       key: "etcdRevision",
-      header: "etcd revision",
+      header: "etcd rev",
+      kind: "count",
+      size: 120,
       accessor: (snapshot) => (
         <span className="font-mono text-xs text-muted-foreground">
           {snapshot.etcdRevision?.toLocaleString() ?? "—"}
         </span>
       ),
       sortAccessor: (snapshot) => snapshot.etcdRevision ?? 0,
-      align: "right",
     },
     {
       key: "size",
       header: "Size",
+      kind: "bytes",
       accessor: (snapshot) => (
         <span className="text-xs text-muted-foreground">
           {formatSnapshotBytes(snapshot.sizeBytes)}
         </span>
       ),
       sortAccessor: (snapshot) => snapshot.sizeBytes ?? 0,
-      align: "right",
     },
     {
       key: "createdBy",
       header: "Taken by",
+      kind: "text",
+      size: 150,
+      minSize: 130,
       accessor: (snapshot) => (
         <span className="text-xs text-muted-foreground">
           {snapshot.createdBy || "—"}
@@ -120,28 +127,43 @@ function controlPlaneSnapshotColumns(
     {
       key: "createdAt",
       header: "Created",
+      kind: "date",
+      size: 119,
+      minSize: 105,
       accessor: (snapshot) => (
-        <span className="text-xs text-muted-foreground">
-          {formatSnapshotDate(snapshot.createdAt)}
-        </span>
+        <TimestampCell
+          value={snapshot.createdAt}
+          fallback="—"
+          suffix
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (snapshot) => snapshot.createdAt ?? "",
     },
     {
       key: "completedAt",
       header: "Completed",
+      kind: "date",
+      size: 119,
+      minSize: 105,
       accessor: (snapshot) => (
-        <span className="text-xs text-muted-foreground">
-          {formatSnapshotDate(snapshot.completedAt)}
-        </span>
+        <TimestampCell
+          value={snapshot.completedAt}
+          fallback="—"
+          suffix
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (snapshot) => snapshot.completedAt ?? "",
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 100,
+      minSize: 100,
+      maxSize: 140,
       sortable: false,
-      align: "right",
       accessor: (snapshot) => (
         <ActionButton
           {...BARE_BUTTON}

@@ -56,6 +56,8 @@ function WorkloadsPage() {
     {
       key: "kind",
       header: "Kind",
+      kind: "badge",
+      size: 130,
       accessor: (workload) => workload.kind,
       sortAccessor: (workload) => workload.kind,
       filter: { label: "Kind" },

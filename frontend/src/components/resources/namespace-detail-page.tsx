@@ -53,10 +53,19 @@ const tabs: Array<{ id: TabId; label: string }> = [
 ];
 
 const resourceColumns: Column<NamespaceResourceRow>[] = [
-  { key: "kind", header: "Kind", accessor: (row) => row.kind },
+  {
+    key: "kind",
+    header: "Kind",
+    kind: "badge",
+    size: 150,
+    minSize: 120,
+    accessor: (row) => row.kind,
+  },
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 240,
     accessor: (row) =>
       row.href ? (
         <Link
@@ -72,12 +81,24 @@ const resourceColumns: Column<NamespaceResourceRow>[] = [
   {
     key: "status",
     header: "Status",
+    kind: "status",
+    size: 168,
     accessor: (row) => <StatusBadge status={row.status} />,
   },
-  { key: "detail", header: "Details", accessor: (row) => row.detail },
+  {
+    key: "detail",
+    header: "Details",
+    kind: "text",
+    size: 300,
+    minSize: 200,
+    maxSize: 520,
+    accessor: (row) => row.detail,
+  },
   {
     key: "age",
     header: "Age",
+    kind: "age",
+    size: 80,
     accessor: (row) => row.age,
     sortAccessor: (row) => Date.parse(row.createdAt) || 0,
   },

@@ -211,7 +211,6 @@ export function GenericResourceTable({
           );
         },
         sortable: false,
-        align: "center" as const,
       },
     ],
     [

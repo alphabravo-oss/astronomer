@@ -221,6 +221,7 @@ function ComponentEvidence({
           <DataTable
             data={component.volumes ?? []}
             columns={volumeColumns}
+            layout="scroll"
             keyExtractor={(row) => row.namespace + "/" + row.name}
             searchable
             searchPlaceholder="Search claims, namespaces, classes, or drivers…"

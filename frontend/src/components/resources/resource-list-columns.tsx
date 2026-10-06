@@ -1,6 +1,6 @@
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { Column } from "@/components/ui/data-table";
-import { cn, formatBytes, formatCPU, formatRelativeTime } from "@/lib/utils";
+import { cn, formatBytes, formatCPU, formatPercentage } from "@/lib/utils";
 import {
   configMapColumns,
   genericColumnMap,
@@ -12,7 +12,12 @@ import type {
   Pod,
   Workload,
 } from "@/types";
-import { Tooltip } from "@/components/ui/tooltip";
+import {
+  ChipsCell,
+  ImageRefCell,
+  TimestampCell,
+  UsageGauge,
+} from "@/components/tables/cells";
 
 // ── Column Definitions ──
 
@@ -20,6 +25,8 @@ const nodeColumns: Column<ClusterNode>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 150,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -29,49 +36,36 @@ const nodeColumns: Column<ClusterNode>[] = [
   {
     key: "status",
     header: "Status",
+    kind: "status",
+    size: 168,
     accessor: (row) => <StatusBadge status={row.status} />,
   },
   {
     key: "roles",
     header: "Roles",
+    kind: "badge",
+    size: 170,
+    minSize: 150,
     accessor: (row) => (
-      <div className="flex gap-1">
-        {row.roles.map((role) => (
-          <span
-            key={role}
-            className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground"
-          >
-            {role}
-          </span>
-        ))}
-      </div>
+      <ChipsCell items={row.roles} chipMaxClass="max-w-[5.5rem]" />
     ),
+    sortAccessor: (row) => row.roles.join(","),
+    searchAccessor: (row) => row.roles.join(" "),
   },
   {
     key: "cpu",
     header: "CPU",
+    kind: "percent",
+    size: 116,
     accessor: (row) => {
       const pct =
         row.cpuCapacity > 0 ? (row.cpuUsage / row.cpuCapacity) * 100 : 0;
       return (
-        <div className="flex items-center gap-2">
-          <div className="w-16 gauge-bar">
-            <div
-              className={cn(
-                "gauge-bar-fill",
-                pct >= 90
-                  ? "bg-status-error"
-                  : pct >= 75
-                    ? "bg-status-warning"
-                    : "bg-status-success",
-              )}
-              style={{ width: `${Math.min(pct, 100)}%` }}
-            />
-          </div>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {formatCPU(row.cpuUsage)} / {formatCPU(row.cpuCapacity)}
-          </span>
-        </div>
+        <UsageGauge
+          pct={pct}
+          label={formatPercentage(pct, 0)}
+          detail={`${formatCPU(row.cpuUsage)} / ${formatCPU(row.cpuCapacity)}`}
+        />
       );
     },
     sortAccessor: (row) => row.cpuUsage,
@@ -79,30 +73,19 @@ const nodeColumns: Column<ClusterNode>[] = [
   {
     key: "memory",
     header: "Memory",
+    kind: "percent",
+    size: 116,
     accessor: (row) => {
       const pct =
         row.memoryCapacity > 0
           ? (row.memoryUsage / row.memoryCapacity) * 100
           : 0;
       return (
-        <div className="flex items-center gap-2">
-          <div className="w-16 gauge-bar">
-            <div
-              className={cn(
-                "gauge-bar-fill",
-                pct >= 90
-                  ? "bg-status-error"
-                  : pct >= 75
-                    ? "bg-status-warning"
-                    : "bg-status-success",
-              )}
-              style={{ width: `${Math.min(pct, 100)}%` }}
-            />
-          </div>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {formatBytes(row.memoryUsage)} / {formatBytes(row.memoryCapacity)}
-          </span>
-        </div>
+        <UsageGauge
+          pct={pct}
+          label={formatPercentage(pct, 0)}
+          detail={`${formatBytes(row.memoryUsage)} / ${formatBytes(row.memoryCapacity)}`}
+        />
       );
     },
     sortAccessor: (row) => row.memoryUsage,
@@ -110,22 +93,26 @@ const nodeColumns: Column<ClusterNode>[] = [
   {
     key: "pods",
     header: "Pods",
+    kind: "count",
     accessor: (row) => (
       <span className="text-muted-foreground tabular-nums text-xs">
         {row.podCount}/{row.podCapacity}
       </span>
     ),
     sortAccessor: (row) => row.podCount,
-    align: "center",
   },
   {
     key: "age",
     header: "Age",
+    kind: "age",
+    size: 80,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
+      <TimestampCell
+        value={row.createdAt}
+        className="text-xs text-muted-foreground"
+      />
     ),
+    sortAccessor: (row) => row.createdAt ?? "",
   },
 ];
 
@@ -133,6 +120,8 @@ const nsColumns: Column<Namespace>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 200,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -142,18 +131,23 @@ const nsColumns: Column<Namespace>[] = [
   {
     key: "status",
     header: "Status",
+    kind: "status",
+    size: 120,
     accessor: (row) => <StatusBadge status={row.status} />,
   },
   {
     key: "pods",
     header: "Pods",
+    kind: "count",
     accessor: (row) => <span className="tabular-nums">{row.podCount}</span>,
     sortAccessor: (row) => row.podCount,
-    align: "center",
   },
   {
     key: "cpu",
     header: "CPU Usage",
+    kind: "count",
+    size: 150,
+    maxSize: 180,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground tabular-nums">
         {formatCPU(row.cpuUsage)}
@@ -165,6 +159,9 @@ const nsColumns: Column<Namespace>[] = [
   {
     key: "memory",
     header: "Memory Usage",
+    kind: "bytes",
+    size: 170,
+    maxSize: 200,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground tabular-nums">
         {formatBytes(row.memoryUsage)}
@@ -176,11 +173,15 @@ const nsColumns: Column<Namespace>[] = [
   {
     key: "created",
     header: "Created",
+    kind: "age",
+    size: 80,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
+      <TimestampCell
+        value={row.createdAt}
+        className="text-xs text-muted-foreground"
+      />
     ),
+    sortAccessor: (row) => row.createdAt ?? "",
   },
 ];
 
@@ -188,6 +189,8 @@ const eventColumns: Column<ClusterEvent>[] = [
   {
     key: "type",
     header: "Type",
+    kind: "status",
+    size: 100,
     accessor: (row) => (
       <span
         className={cn(
@@ -202,6 +205,9 @@ const eventColumns: Column<ClusterEvent>[] = [
   {
     key: "reason",
     header: "Reason",
+    kind: "text",
+    size: 150,
+    minSize: 120,
     accessor: (row) => (
       <span className="font-medium text-foreground text-xs">{row.reason}</span>
     ),
@@ -209,6 +215,9 @@ const eventColumns: Column<ClusterEvent>[] = [
   {
     key: "object",
     header: "Object",
+    kind: "text",
+    size: 240,
+    minSize: 200,
     accessor: (row) => (
       <span className="font-mono text-xs text-muted-foreground">
         {row.involvedObject.kind}/{row.involvedObject.name}
@@ -218,30 +227,37 @@ const eventColumns: Column<ClusterEvent>[] = [
   {
     key: "message",
     header: "Message",
+    kind: "text",
+    grow: true,
+    minSize: 260,
+    maxSize: 900,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground line-clamp-2">
-        {row.message}
-      </span>
+      <span className="text-xs text-muted-foreground">{row.message}</span>
     ),
     sortable: false,
   },
   {
     key: "count",
     header: "Count",
+    kind: "count",
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.count}</span>
     ),
     sortAccessor: (row) => row.count,
-    align: "center",
   },
   {
     key: "lastSeen",
     header: "Last Seen",
+    kind: "age",
+    size: 119,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.lastTimestamp)}
-      </span>
+      <TimestampCell
+        value={row.lastTimestamp}
+        suffix
+        className="text-xs text-muted-foreground"
+      />
     ),
+    sortAccessor: (row) => row.lastTimestamp ?? "",
   },
 ];
 
@@ -249,6 +265,8 @@ const podColumns: Column<Pod>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 260,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -258,6 +276,10 @@ const podColumns: Column<Pod>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "name",
+    grow: false,
+    size: 120,
+    minSize: 100,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -269,6 +291,8 @@ const podColumns: Column<Pod>[] = [
   {
     key: "status",
     header: "Status",
+    kind: "status",
+    size: 168,
     accessor: (row) => <StatusBadge status={row.status} />,
     sortAccessor: (row) => row.status,
     filter: { label: "Status" },
@@ -276,32 +300,31 @@ const podColumns: Column<Pod>[] = [
   {
     key: "images",
     header: "Images",
+    kind: "text",
+    size: 280,
+    minSize: 220,
     hidden: true,
-    accessor: (row) => {
-      const [first, ...rest] = row.images;
-      return (
-        <Tooltip content={row.images.join("\n")}>
-          <span className="block max-w-64 truncate font-mono text-xs text-muted-foreground">
-            {first || "—"}
-            {rest.length > 0 ? ` +${rest.length}` : ""}
-          </span>
-        </Tooltip>
-      );
-    },
+    accessor: (row) => (
+      <ImageRefCell
+        image={row.images[0]}
+        extra={Math.max(row.images.length - 1, 0)}
+      />
+    ),
     searchAccessor: (row) => row.images.join(" "),
     sortAccessor: (row) => row.images[0] ?? "",
   },
   {
     key: "ready",
     header: "Ready",
+    kind: "count",
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.ready}</span>
     ),
-    align: "center",
   },
   {
     key: "restarts",
     header: "Restarts",
+    kind: "count",
     accessor: (row) => (
       <span
         className={cn(
@@ -313,22 +336,29 @@ const podColumns: Column<Pod>[] = [
       </span>
     ),
     sortAccessor: (row) => row.restarts,
-    align: "center",
   },
   {
     key: "lastRestart",
     header: "Last Restart",
+    kind: "age",
+    size: 110,
+    minSize: 100,
     hidden: true,
     accessor: (row) => (
-      <span className="whitespace-nowrap text-xs text-muted-foreground">
-        {row.lastRestartAt ? formatRelativeTime(row.lastRestartAt) : "—"}
-      </span>
+      <TimestampCell
+        value={row.lastRestartAt}
+        fallback="—"
+        className="text-xs text-muted-foreground"
+      />
     ),
     sortAccessor: (row) => row.lastRestartAt ?? "",
   },
   {
     key: "ip",
     header: "Pod IP",
+    kind: "text",
+    size: 130,
+    minSize: 120,
     hidden: true,
     accessor: (row) => (
       <span className="font-mono text-xs text-muted-foreground">
@@ -340,6 +370,10 @@ const podColumns: Column<Pod>[] = [
   {
     key: "node",
     header: "Node",
+    kind: "name",
+    grow: false,
+    size: 140,
+    minSize: 120,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.node}
@@ -351,6 +385,8 @@ const podColumns: Column<Pod>[] = [
   {
     key: "age",
     header: "Age",
+    kind: "age",
+    size: 80,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">{row.age}</span>
     ),
@@ -361,6 +397,8 @@ const workloadColumns: Column<Workload>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 220,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -370,6 +408,10 @@ const workloadColumns: Column<Workload>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "name",
+    grow: false,
+    size: 130,
+    minSize: 110,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -379,29 +421,37 @@ const workloadColumns: Column<Workload>[] = [
   {
     key: "ready",
     header: "Ready",
+    kind: "count",
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.ready}</span>
     ),
-    align: "center",
   },
   {
     key: "status",
     header: "Status",
+    kind: "status",
+    size: 120,
     accessor: (row) => <StatusBadge status={row.status} />,
   },
   {
     key: "images",
     header: "Image",
+    kind: "text",
+    size: 210,
+    minSize: 180,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-50 block">
-        {row.images?.[0] || "-"}
-      </span>
+      <ImageRefCell
+        image={row.images?.[0]}
+        extra={Math.max((row.images?.length ?? 0) - 1, 0)}
+      />
     ),
     sortable: false,
   },
   {
     key: "age",
     header: "Age",
+    kind: "age",
+    size: 80,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">{row.age}</span>
     ),

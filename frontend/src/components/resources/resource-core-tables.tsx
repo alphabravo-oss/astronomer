@@ -188,7 +188,6 @@ export function NodesTable({ clusterId }: { clusterId: string }) {
           );
         },
         sortable: false,
-        align: "center" as const,
       },
     ],
     [handleCordon, handleUncordon, clusterId, permissions],
@@ -338,7 +337,6 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -628,7 +626,7 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
   const columns = useMemo<Column<Pod>[]>(
     () => [
       // Override the shared name cell with a drill-down link into pod detail.
-      nameColumn<Pod>(clusterId, "pods"),
+      nameColumn<Pod>(clusterId, "pods", { minSize: 110 }),
       ...podColumns.slice(1),
       {
         key: "actions",
@@ -646,7 +644,6 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
           />
         ),
         sortable: false,
-        align: "center",
       },
     ],
     [clusterId, openExec, openLogs, permissions],

@@ -1,8 +1,14 @@
 import { CheckCircle2, XCircle } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { cn, formatBytes, formatRelativeTime } from "@/lib/utils";
-import type { NodePod, NodeEvent, NodeImage, NodeDetailCondition } from "@/types";
+import { cn, formatBytes } from "@/lib/utils";
+import { ImageRefCell, TimestampCell } from "@/components/tables/cells";
+import type {
+  NodePod,
+  NodeEvent,
+  NodeImage,
+  NodeDetailCondition,
+} from "@/types";
 
 /**
  * The four read-only, filter-free node tabs (Pods / Conditions / Images /
@@ -15,6 +21,8 @@ const podColumns: Column<NodePod>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 140,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -24,6 +32,10 @@ const podColumns: Column<NodePod>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "name",
+    grow: false,
+    size: 130,
+    minSize: 110,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -33,17 +45,22 @@ const podColumns: Column<NodePod>[] = [
   {
     key: "status",
     header: "Status",
+    kind: "status",
+    size: 168,
     accessor: (row) => <StatusBadge status={row.status} />,
   },
   {
     key: "ready",
     header: "Ready",
-    accessor: (row) => <span className="tabular-nums text-xs">{row.ready}</span>,
-    align: "center",
+    kind: "count",
+    accessor: (row) => (
+      <span className="tabular-nums text-xs">{row.ready}</span>
+    ),
   },
   {
     key: "restarts",
     header: "Restarts",
+    kind: "count",
     accessor: (row) => (
       <span
         className={cn(
@@ -55,25 +72,31 @@ const podColumns: Column<NodePod>[] = [
       </span>
     ),
     sortAccessor: (row) => row.restarts,
-    align: "center",
   },
   {
     key: "image",
     header: "Image",
+    kind: "text",
+    size: 200,
+    minSize: 170,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-[220px] block">
-        {row.images?.[0] || "-"}
-      </span>
+      <ImageRefCell
+        image={row.images?.[0]}
+        extra={Math.max((row.images?.length ?? 0) - 1, 0)}
+      />
     ),
     sortable: false,
   },
   {
     key: "age",
     header: "Age",
+    kind: "age",
+    size: 80,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
+      <TimestampCell
+        value={row.createdAt}
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
 ];
@@ -82,6 +105,9 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
   {
     key: "type",
     header: "Type",
+    kind: "text",
+    size: 150,
+    minSize: 130,
     accessor: (row) => (
       <span className="font-medium text-foreground text-xs">{row.type}</span>
     ),
@@ -89,6 +115,8 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
   {
     key: "status",
     header: "Status",
+    kind: "status",
+    size: 100,
     accessor: (row) => {
       const isHealthy =
         (row.type === "Ready" && row.status === "True") ||
@@ -108,6 +136,9 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
   {
     key: "reason",
     header: "Reason",
+    kind: "text",
+    size: 160,
+    minSize: 130,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">{row.reason || "-"}</span>
     ),
@@ -115,8 +146,12 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
   {
     key: "message",
     header: "Message",
+    kind: "text",
+    grow: true,
+    minSize: 260,
+    maxSize: 900,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground line-clamp-2">
+      <span className="text-xs text-muted-foreground">
         {row.message || "-"}
       </span>
     ),
@@ -124,20 +159,30 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
   },
   {
     key: "lastHeartbeat",
-    header: "Last Heartbeat",
+    header: "Heartbeat",
+    kind: "age",
+    size: 119,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.lastHeartbeat ? formatRelativeTime(row.lastHeartbeat) : "-"}
-      </span>
+      <TimestampCell
+        value={row.lastHeartbeat}
+        fallback="-"
+        suffix
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
   {
     key: "lastTransition",
-    header: "Last Transition",
+    header: "Transition",
+    kind: "age",
+    size: 126,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.lastTransition ? formatRelativeTime(row.lastTransition) : "-"}
-      </span>
+      <TimestampCell
+        value={row.lastTransition}
+        fallback="-"
+        suffix
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
 ];
@@ -146,22 +191,22 @@ const imageColumns: Column<NodeImage>[] = [
   {
     key: "name",
     header: "Image",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs truncate max-w-[500px] block">
-        {row.name}
-      </span>
-    ),
+    kind: "text",
+    grow: true,
+    minSize: 320,
+    maxSize: 900,
+    accessor: (row) => <ImageRefCell image={row.name} />,
   },
   {
     key: "size",
     header: "Size",
+    kind: "bytes",
     accessor: (row) => (
       <span className="text-xs text-muted-foreground tabular-nums">
         {row.sizeBytes > 0 ? formatBytes(row.sizeBytes) : "-"}
       </span>
     ),
     sortAccessor: (row) => row.sizeBytes,
-    align: "right",
   },
 ];
 
@@ -169,6 +214,8 @@ const eventColumns: Column<NodeEvent>[] = [
   {
     key: "type",
     header: "Type",
+    kind: "status",
+    size: 100,
     accessor: (row) => (
       <span
         className={cn(
@@ -183,6 +230,9 @@ const eventColumns: Column<NodeEvent>[] = [
   {
     key: "reason",
     header: "Reason",
+    kind: "text",
+    size: 150,
+    minSize: 120,
     accessor: (row) => (
       <span className="font-medium text-foreground text-xs">{row.reason}</span>
     ),
@@ -190,27 +240,36 @@ const eventColumns: Column<NodeEvent>[] = [
   {
     key: "message",
     header: "Message",
+    kind: "text",
+    grow: true,
+    minSize: 260,
+    maxSize: 900,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground line-clamp-2">
-        {row.message}
-      </span>
+      <span className="text-xs text-muted-foreground">{row.message}</span>
     ),
     sortable: false,
   },
   {
     key: "count",
     header: "Count",
-    accessor: (row) => <span className="tabular-nums text-xs">{row.count}</span>,
+    kind: "count",
+    accessor: (row) => (
+      <span className="tabular-nums text-xs">{row.count}</span>
+    ),
     sortAccessor: (row) => row.count,
-    align: "center",
   },
   {
     key: "lastSeen",
     header: "Last Seen",
+    kind: "age",
+    size: 119,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.lastTimestamp ? formatRelativeTime(row.lastTimestamp) : "-"}
-      </span>
+      <TimestampCell
+        value={row.lastTimestamp}
+        fallback="-"
+        suffix
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
 ];

@@ -48,6 +48,7 @@ export function SnapshotRestoreHistory({ clusterId }: { clusterId: string }) {
               {
                 key: "id",
                 header: "Restore",
+                kind: "name",
                 accessor: (restore) => (
                   <ActionButton
                     intent="ghost"
@@ -61,16 +62,23 @@ export function SnapshotRestoreHistory({ clusterId }: { clusterId: string }) {
               {
                 key: "source",
                 header: "Source cluster",
+                kind: "id",
+                size: 200,
+                minSize: 160,
                 accessor: (restore) => restore.source_cluster_id,
               },
               {
                 key: "snapshot",
                 header: "Source snapshot",
+                kind: "id",
+                size: 200,
+                minSize: 160,
                 accessor: (restore) => restore.snapshot_id,
               },
               {
                 key: "status",
                 header: "Status",
+                kind: "status",
                 accessor: (restore) => (
                   <StatusBadge status={restore.phase || "Unknown"} />
                 ),

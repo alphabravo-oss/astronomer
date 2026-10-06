@@ -59,6 +59,8 @@ function WorkloadPodsTab({
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 240,
       accessor: (pod) => (
         <RouterLink
           to={podHref(pod)}
@@ -72,6 +74,8 @@ function WorkloadPodsTab({
     {
       key: "status",
       header: "Status",
+      kind: "status",
+      size: 168,
       accessor: (pod) => (
         <StatusBadge status={pod.status?.trim() || pod.phase || "Unknown"} />
       ),
@@ -79,6 +83,7 @@ function WorkloadPodsTab({
     {
       key: "ready",
       header: "Ready",
+      kind: "count",
       accessor: (pod) => (
         <span className="font-mono text-xs tabular-nums">{pod.ready}</span>
       ),
@@ -86,6 +91,7 @@ function WorkloadPodsTab({
     {
       key: "restarts",
       header: "Restarts",
+      kind: "count",
       accessor: (pod) => (
         <span
           className={cn(
@@ -97,11 +103,14 @@ function WorkloadPodsTab({
         </span>
       ),
       sortAccessor: (pod) => pod.restarts,
-      align: "center",
     },
     {
       key: "node",
       header: "Node",
+      kind: "name",
+      grow: false,
+      size: 150,
+      minSize: 130,
       accessor: (pod) => (
         <span className="font-mono text-xs text-muted-foreground">
           {pod.node || "—"}
@@ -111,6 +120,8 @@ function WorkloadPodsTab({
     {
       key: "age",
       header: "Age",
+      kind: "age",
+      size: 80,
       accessor: (pod) => (
         <span className="text-xs text-muted-foreground">
           {pod.age || formatRelativeTime(pod.createdAt)}
