@@ -204,6 +204,22 @@ const config = [
           message: "Use PageHeader or ResourceMasthead.",
         },
         {
+          selector: "JSXOpeningElement[name.name='button']",
+          message:
+            'Use ActionButton (intent="bare" size="none" for custom clickable surfaces).',
+        },
+        {
+          selector:
+            "JSXOpeningElement[name.name=/^(div|span|a|li|td|th|p|section|article|label|input|select|textarea|img|h[1-6])$/] > JSXAttribute[name.name='title']",
+          message:
+            "Use <Tooltip> (or ActionButton's tooltip prop); the native title attribute is not allowed.",
+        },
+        {
+          selector:
+            "JSXOpeningElement[name.name='ActionButton'] > JSXAttribute[name.name='title']",
+          message: "Use ActionButton's tooltip prop instead of title.",
+        },
+        {
           selector: "JSXOpeningElement[name.name='table']",
           message: "Use DataTable / operator-table.",
         },
@@ -266,6 +282,22 @@ const config = [
         {
           selector: "JSXOpeningElement[name.name='h1']",
           message: "Use PageHeader or ResourceMasthead.",
+        },
+        {
+          selector: "JSXOpeningElement[name.name='button']",
+          message:
+            'Use ActionButton (intent="bare" size="none" for custom clickable surfaces).',
+        },
+        {
+          selector:
+            "JSXOpeningElement[name.name=/^(div|span|a|li|td|th|p|section|article|label|input|select|textarea|img|h[1-6])$/] > JSXAttribute[name.name='title']",
+          message:
+            "Use <Tooltip> (or ActionButton's tooltip prop); the native title attribute is not allowed.",
+        },
+        {
+          selector:
+            "JSXOpeningElement[name.name='ActionButton'] > JSXAttribute[name.name='title']",
+          message: "Use ActionButton's tooltip prop instead of title.",
         },
         {
           selector: "JSXOpeningElement[name.name='table']",
