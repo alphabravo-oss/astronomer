@@ -4,9 +4,9 @@ Run the existing entrypoint with `-compare-estate-baseline before.json
 -compare-estate-candidate after.json -out comparison.md`. This mode reads local
 files only, before authentication, profile loading, provisioning or HTTP setup.
 Other workload flags and nonempty `LOADTEST_*` settings except `LOADTEST_OUT` are
-rejected. It writes Markdown, `.json`, and `.sha256` files. Checksum entries use
-logical names `comparison.md` and `comparison.json`; rename files accordingly
-before using `sha256sum -c`. A successful command means artifacts were written,
+rejected. It writes Markdown, `.json`, and `.sha256` files. Checksum entries use the actual output basenames; run
+`sha256sum -c comparison.md.sha256` from the output directory. Basenames containing
+a newline, carriage return or backslash are rejected. A successful command means artifacts were written,
 not that optimization criteria passed. `qualified` is always false.
 
 Input is the existing v2 estate report. Decoding rejects duplicate keys, unknown

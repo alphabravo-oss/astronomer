@@ -12,7 +12,7 @@ import (
 )
 
 func estateComparisonRequested(c *config) bool {
-	return c.compareBaseline != "" || c.compareCandidate != "" || c.compareImages != ""
+	return c.compareMode || c.compareBaseline != "" || c.compareCandidate != "" || c.compareImages != ""
 }
 func registerEstateComparisonFlags(c *config) {
 	flag.StringVar(&c.compareBaseline, "compare-estate-baseline", "", "offline baseline estate report JSON")
@@ -40,6 +40,9 @@ func validateEstateComparisonFlags(c *config, flags *flag.FlagSet, env []string)
 	return nil
 }
 func runEstateComparison(c *config) error {
+	if strings.ContainsAny(filepath.Base(c.outPath), "\r\n\\") {
+		return errors.New("invalid_output_basename")
+	}
 	a, ah, err := readEstateComparisonReport(c.compareBaseline)
 	if err != nil {
 		return err
@@ -84,7 +87,7 @@ func runEstateComparison(c *config) error {
 			}
 		}
 	}
-	sums := []byte(fmt.Sprintf("%x  comparison.md\n%x  comparison.json\n", sha256.Sum256(md), sha256.Sum256(raw)))
+	sums := []byte(fmt.Sprintf("%x  %s\n%x  %s\n", sha256.Sum256(md), filepath.Base(outputs[0]), sha256.Sum256(raw), filepath.Base(outputs[1])))
 	for i, data := range [][]byte{md, raw, sums} {
 		if os.WriteFile(outputs[i], data, 0600) != nil {
 			return errors.New("comparison_output_failed")
@@ -105,10 +108,15 @@ func estateSameFile(a, b string) bool {
 func estateComparisonMarkdown(r estateComparison) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Offline estate comparison\n\nQualified: false. Evidence: report consistency only. Optimization criteria eligible: %t.\n\nBaseline SHA256: %s\n\nCandidate SHA256: %s\n\n", r.OptimizationEligible, r.BaselineSHA256, r.CandidateSHA256)
-	b.WriteString("Sampled rates use first-to-last successful scrape intervals. Image and attribution review is user-declared, not live provenance. All workload counts below describe the whole phase.\n\n")
+	b.WriteString("Sampled rates use first-to-last successful scrape intervals. Image and attribution review is user-declared, not live provenance. Phase work describes fleet totals; member work includes only requests explicitly assigned to that member. Unallocated search work remains phase-wide.\n\n")
 	for _, row := range r.Rows {
 		fmt.Fprintf(&b, "## Phase %d / member %d\n\nPhase SHA256: %s\n\nMember SHA256: %s\n\nEligible: %t. Blockers: %s.\n\n", row.PhaseOrdinal, row.MemberOrdinal, row.PhaseSHA256, row.MemberSHA256, row.Eligible, strings.Join(row.Blockers, ", "))
-		fmt.Fprintf(&b, "Work success/failed: %d/%d → %d/%d.\n\n", row.BaselineWork.Success, row.BaselineWork.Failed, row.CandidateWork.Success, row.CandidateWork.Failed)
+		for _, work := range []struct {
+			scope         string
+			before, after estateComparisonWork
+		}{{"Phase", row.BaselineWork, row.CandidateWork}, {"Member", row.BaselineMemberWork, row.CandidateMemberWork}} {
+			fmt.Fprintf(&b, "%s work success/failed: %d/%d → %d/%d. Successful requests/s: %s → %s.\n\n", work.scope, work.before.Success, work.before.Failed, work.after.Success, work.after.Failed, estateComparisonNumber(work.before.SuccessfulRPS), estateComparisonNumber(work.after.SuccessfulRPS))
+		}
 		b.WriteString("| Category | Baseline requests/s | Candidate requests/s | Percent change | Status |\n|---|---:|---:|---:|---|\n")
 		for _, m := range row.Metrics {
 			fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", m.Category, estateComparisonNumber(m.Baseline.RPS), estateComparisonNumber(m.Candidate.RPS), estateComparisonNumber(m.PercentChange), m.PercentageStatus)
@@ -122,4 +130,15 @@ func estateComparisonNumber(v *float64) string {
 		return "unavailable"
 	}
 	return fmt.Sprintf("%.6g", *v)
+}
+
+func estateComparisonFlagPresent(flags *flag.FlagSet) bool {
+	present := false
+	flags.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "compare-estate-baseline", "compare-estate-candidate", "compare-estate-images":
+			present = true
+		}
+	})
+	return present
 }

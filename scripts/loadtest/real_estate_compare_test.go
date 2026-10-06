@@ -5,6 +5,7 @@ import (
 	"flag"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -294,5 +295,83 @@ func TestEstateComparisonParentTransportConsistency(t *testing.T) {
 				t.Fatal("parent mismatch accepted")
 			}
 		})
+	}
+}
+
+func TestEstateComparisonChecksumUsesActualBasenames(t *testing.T) {
+	dir := t.TempDir()
+	r := comparisonFixture(t, 2)
+	raw, _ := json.Marshal(r)
+	input := filepath.Join(dir, "input.json")
+	if err := os.WriteFile(input, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c := &config{compareBaseline: input, compareCandidate: input, outPath: filepath.Join(dir, "custom report.md")}
+	if err := runEstateComparison(c); err != nil {
+		t.Fatal(err)
+	}
+	sums, err := os.ReadFile(c.outPath + ".sha256")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(sums)), "\n")
+	if len(lines) != 2 {
+		t.Fatal("checksum entry count")
+	}
+	for i, line := range lines {
+		digest, name, ok := strings.Cut(line, "  ")
+		expected := "custom report.md"
+		if i == 1 {
+			expected += ".json"
+		}
+		if !ok || name != expected {
+			t.Fatal("wrong generated basename")
+		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil || digest != estateComparisonHash(string(data)) {
+			t.Fatal("checksum does not resolve generated artifact")
+		}
+	}
+	md, _ := os.ReadFile(c.outPath)
+	for _, text := range []string{"Phase work success/failed: 1800/0", "Member work success/failed: 900/0", "Successful requests/s:"} {
+		if !strings.Contains(string(md), text) {
+			t.Fatalf("missing scoped workload text: %s", text)
+		}
+	}
+	for _, name := range []string{"bad\nname.md", "bad\rname.md", "bad\\name.md"} {
+		c.outPath = filepath.Join(dir, name)
+		if err := runEstateComparison(c); err == nil {
+			t.Fatal("unsafe basename accepted")
+		}
+		if _, err := os.Stat(c.outPath); !os.IsNotExist(err) {
+			t.Fatal("unsafe output created")
+		}
+	}
+}
+
+func TestEstateComparisonExplicitEmptyFlags(t *testing.T) {
+	if os.Getenv("ESTATE_EMPTY_COMPARE_HELPER") == "1" {
+		flag.CommandLine = flag.NewFlagSet("helper", flag.ExitOnError)
+		os.Args = []string{"helper", "-compare-estate-baseline=", "-compare-estate-candidate="}
+		parseFlags()
+		os.Exit(42)
+	}
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "-test.run=^TestEstateComparisonExplicitEmptyFlags$")
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "LOADTEST_") {
+			cmd.Env = append(cmd.Env, entry)
+		}
+	}
+	cmd.Env = append(cmd.Env, "ESTATE_EMPTY_COMPARE_HELPER=1", "LOADTEST_PROFILE=/must-not-read-profile", "LOADTEST_TOKEN=/must-not-read-token")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("empty mode accepted")
+	}
+	if string(output) != "offline estate comparison configuration rejected\n" {
+		t.Fatalf("did not reject before online input reads: %q", output)
 	}
 }

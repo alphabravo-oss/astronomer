@@ -11,6 +11,7 @@ import (
 )
 
 type config struct {
+	compareMode       bool
 	compareBaseline   string
 	compareCandidate  string
 	compareImages     string
@@ -66,6 +67,7 @@ func parseFlags() *config {
 	registerEstateFlags(cfg)
 	registerEstateComparisonFlags(cfg)
 	flag.Parse()
+	cfg.compareMode = estateComparisonFlagPresent(flag.CommandLine)
 	if estateComparisonRequested(cfg) {
 		if err := validateEstateComparisonFlags(cfg, flag.CommandLine, os.Environ()); err != nil {
 			fmt.Fprintln(os.Stderr, "offline estate comparison configuration rejected")
