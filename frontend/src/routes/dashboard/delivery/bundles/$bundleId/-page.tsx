@@ -27,8 +27,6 @@ import {
   DetailGrid,
   ErrorMessage,
   inputClass,
-  primaryButton,
-  secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
@@ -50,6 +48,7 @@ import { can, isSuperuser } from "@/lib/permissions";
 
 import { formatRelativeTime } from "@/lib/utils";
 import { toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function BundleDetailPage() {
   const { bundleId } = useParams({ strict: false }) as { bundleId: string };
@@ -123,7 +122,7 @@ export function BundleDetailPage() {
           <p className="max-w-56 truncate font-mono text-xs">
             {row.resolvedRevision || row.requestedRevision}
           </p>
-          <p className="max-w-56 truncate font-mono text-[10px] text-muted-foreground">
+          <p className="max-w-56 truncate font-mono text-2xs text-muted-foreground">
             {row.artifactDigest || "resolution pending"}
           </p>
         </div>
@@ -184,13 +183,13 @@ export function BundleDetailPage() {
             }
             actions={
               canCreate ? (
-                <button
+                <ActionButton
+                  intent="primary"
                   type="button"
-                  className={primaryButton}
                   onClick={() => setCreating(true)}
                 >
                   <Plus className="h-4 w-4" /> Add version
-                </button>
+                </ActionButton>
               ) : undefined
             }
           />
@@ -549,16 +548,16 @@ function CreateVersionDialog({
           <ErrorMessage error={formError ?? mutation.error} />
         )}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
+          <ActionButton intent="default" type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="primary"
             type="submit"
-            className={primaryButton}
             disabled={mutation.isPending}
           >
             {mutation.isPending ? "Creating…" : "Create immutable version"}
-          </button>
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>

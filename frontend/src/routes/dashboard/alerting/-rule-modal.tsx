@@ -9,6 +9,40 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn, statusBgColor } from "@/lib/utils";
 import type { AlertRule, AlertSeverity } from "@/types";
 
+function SeverityPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (severity: "critical" | "warning" | "info") => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-labelledby="alert-rule-severity-label"
+      className="flex gap-1.5"
+    >
+      {(["critical", "warning", "info"] as const).map((sev) => (
+        <ActionButton
+          intent="bare"
+          size="none"
+          key={sev}
+          aria-pressed={value === sev}
+          onClick={() => onChange(sev)}
+          className={cn(
+            "flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors capitalize",
+            value === sev
+              ? statusBgColor(sev)
+              : "bg-muted text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {sev}
+        </ActionButton>
+      ))}
+    </div>
+  );
+}
+
 export function AlertRuleModal({
   rule,
   onClose,
@@ -199,28 +233,10 @@ export function AlertRuleModal({
           >
             Severity
           </span>
-          <div
-            role="group"
-            aria-labelledby="alert-rule-severity-label"
-            className="flex gap-1.5"
-          >
-            {(["critical", "warning", "info"] as const).map((sev) => (
-              <button
-                key={sev}
-                type="button"
-                aria-pressed={severity === sev}
-                onClick={() => form.setFieldValue("severity", sev)}
-                className={cn(
-                  "flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors capitalize",
-                  severity === sev
-                    ? statusBgColor(sev)
-                    : "bg-muted text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {sev}
-              </button>
-            ))}
-          </div>
+          <SeverityPicker
+            value={severity}
+            onChange={(sev) => form.setFieldValue("severity", sev)}
+          />
         </div>
       </div>
 

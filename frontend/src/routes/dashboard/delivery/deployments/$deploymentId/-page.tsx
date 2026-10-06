@@ -15,8 +15,6 @@ import {
   DeliveryShell,
   Detail,
   DetailGrid,
-  primaryButton,
-  secondaryButton,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
   withProjectQuery,
@@ -37,6 +35,7 @@ import { formatRelativeTime } from "@/lib/utils";
 import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function DeploymentDetailPage() {
   const { deploymentId } = useParams({ strict: false }) as {
@@ -127,29 +126,29 @@ export function DeploymentDetailPage() {
             actions={
               deployment ? (
                 <>
-                  <button
+                  <ActionButton
+                    intent="default"
                     type="button"
-                    className={secondaryButton}
                     onClick={() => setDiagnostics(true)}
                   >
                     <Eye className="h-4 w-4" /> Advanced diagnostics
-                  </button>
-                  <button
+                  </ActionButton>
+                  <ActionButton
+                    intent="default"
                     type="button"
-                    className={secondaryButton}
                     disabled={!canUpdate}
                     onClick={() => setAction("suspend")}
                   >
                     <Pause className="h-4 w-4" /> Suspend
-                  </button>
-                  <button
+                  </ActionButton>
+                  <ActionButton
+                    intent="primary"
                     type="button"
-                    className={primaryButton}
                     disabled={!canUpdate}
                     onClick={() => setAction("reconcile")}
                   >
                     <RefreshCw className="h-4 w-4" /> Reconcile
-                  </button>
+                  </ActionButton>
                 </>
               ) : undefined
             }

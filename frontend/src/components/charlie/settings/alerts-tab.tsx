@@ -1,7 +1,7 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { useDraft } from "@/lib/hooks/use-draft";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save } from "lucide-react";
-import { StatePanel } from "@/components/ui/empty-state";
+import { Save } from "lucide-react";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import {
@@ -10,14 +10,8 @@ import {
   type CharlieAlertPolicy,
 } from "@/lib/api/charlie-admin";
 import { Link as RouterLink } from "@tanstack/react-router";
-import {
-  Field,
-  NumberField,
-  Section,
-  Unavailable,
-  field,
-  primary,
-} from "./shared";
+import { Field, NumberField, Section, Unavailable, field } from "./shared";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function AlertsTab() {
   const qc = useQueryClient();
@@ -36,14 +30,7 @@ export function AlertsTab() {
     },
     onError: (error) => toastApiError("Alert policy save failed", error),
   });
-  if (q.isLoading)
-    return (
-      <StatePanel
-        icon={Loader2}
-        iconClassName="animate-spin motion-reduce:animate-none"
-        title="Loading Charlie alert policy"
-      />
-    );
+  if (q.isLoading) return <LoadingPanel title="Loading Charlie alert policy" />;
   if (q.isError || !draft)
     return <Unavailable name="Alert policy" retry={() => void q.refetch()} />;
   const changed = JSON.stringify(draft) !== JSON.stringify(q.data);
@@ -202,15 +189,14 @@ export function AlertsTab() {
           <p className="text-xs text-muted-foreground">
             Policy revision {draft.revision || "not saved"}
           </p>
-          <button
-            type="button"
-            className={primary}
+          <ActionButton
+            intent="primary"
             disabled={!changed || !valid || save.isPending}
             onClick={() => save.mutate(draft)}
           >
             <Save className="h-4 w-4" />
             Save alert policy
-          </button>
+          </ActionButton>
         </div>
       </Section>
     </div>

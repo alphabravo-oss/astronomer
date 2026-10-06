@@ -16,6 +16,7 @@ import {
   OffsetPagination,
   useOffsetPagination,
 } from "@/components/ui/offset-pagination";
+import { Tooltip } from "@/components/ui/tooltip";
 
 export function OperationsTab() {
   const [statusFilter, setStatusFilter] = useSearchParam("op_status");
@@ -67,9 +68,11 @@ export function OperationsTab() {
       key: "created",
       header: "Created",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground" title={row.createdAt}>
-          {formatRelativeTime(row.createdAt)}
-        </span>
+        <Tooltip content={row.createdAt}>
+          <span className="text-xs text-muted-foreground">
+            {formatRelativeTime(row.createdAt)}
+          </span>
+        </Tooltip>
       ),
       sortAccessor: (row) => row.createdAt,
     },
@@ -77,9 +80,11 @@ export function OperationsTab() {
       key: "updated",
       header: "Age / Updated",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground" title={row.updatedAt}>
-          {formatRelativeTime(row.updatedAt)}
-        </span>
+        <Tooltip content={row.updatedAt}>
+          <span className="text-xs text-muted-foreground">
+            {formatRelativeTime(row.updatedAt)}
+          </span>
+        </Tooltip>
       ),
       sortAccessor: (row) => row.updatedAt,
     },
@@ -88,12 +93,11 @@ export function OperationsTab() {
       header: "Error",
       accessor: (row) =>
         row.errorMessage ? (
-          <span
-            className="text-xs text-status-error/80 line-clamp-1 max-w-[260px] block"
-            title={row.errorMessage}
-          >
-            {truncate(row.errorMessage, 80)}
-          </span>
+          <Tooltip content={row.errorMessage}>
+            <span className="text-xs text-status-error/80 line-clamp-1 max-w-65 block">
+              {truncate(row.errorMessage, 80)}
+            </span>
+          </Tooltip>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         ),
@@ -109,12 +113,14 @@ export function OperationsTab() {
         }
         return (
           <div className="flex items-center gap-1">
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               onClick={() => retryOperation.mutate(row.id)}
               disabled={retryOperation.isPending}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground
                 hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-              title="Retry operation"
+              tooltip="Retry operation"
             >
               <RotateCcw
                 className={cn(
@@ -123,7 +129,7 @@ export function OperationsTab() {
                 )}
               />
               Retry
-            </button>
+            </ActionButton>
           </div>
         );
       },

@@ -1,6 +1,7 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { useDraft } from "@/lib/hooks/use-draft";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Loader2, Shield } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Shield } from "lucide-react";
 import {
   acknowledgeCharlieDisclosure,
   getCharlieKubernetesVisibility,
@@ -10,7 +11,8 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { Meta, Section, Unavailable, button, primary } from "./shared";
+import { Meta, Section, Unavailable, button } from "./shared";
+import { ActionButton } from "@/components/ui/action-button";
 
 const profileLabels: Record<CharlieKubernetesVisibilityProfile, string> = {
   disabled: "Disabled",
@@ -68,9 +70,7 @@ export function KubernetesTab() {
     onError: (error) => toastApiError("Catalog acceptance failed", error),
   });
   if (query.isLoading)
-    return (
-      <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" />
-    );
+    return <LoadingPanel title="Loading Kubernetes visibility" lines={2} />;
   if (query.isError || !query.data)
     return (
       <Unavailable
@@ -100,16 +100,17 @@ export function KubernetesTab() {
             {current.availableProfiles.map((value) => {
               const selected = profile === value;
               return (
-                <button
+                <ActionButton
+                  intent="bare"
+                  size="none"
                   key={value}
-                  type="button"
                   role="radio"
                   aria-label={profileLabels[value]}
                   aria-checked={selected}
                   disabled={!configured}
                   onClick={() => setProfile(value)}
                   className={cn(
-                    "rounded-lg border p-3 text-left transition-colors motion-reduce:transition-none",
+                    "block whitespace-normal rounded-lg border p-3 text-left font-normal transition-colors motion-reduce:transition-none",
                     selected
                       ? "border-primary bg-primary/10 text-foreground"
                       : "border-border bg-background text-foreground hover:bg-accent",
@@ -122,7 +123,7 @@ export function KubernetesTab() {
                   <span className="mt-1 block text-xs text-muted-foreground">
                     {descriptions[value]}
                   </span>
-                </button>
+                </ActionButton>
               );
             })}
           </div>
@@ -161,22 +162,19 @@ export function KubernetesTab() {
             Kubernetes visibility profile.
           </p>
         )}
-        <button
-          disabled={!configured || !dirty || update.isPending}
-          className={primary}
+        <ActionButton
+          intent="primary"
+          disabled={!configured || !dirty}
+          loading={update.isPending}
+          icon={<Shield className="h-4 w-4" />}
           onClick={() => update.mutate()}
         >
-          {update.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-          ) : (
-            <Shield className="h-4 w-4" />
-          )}
           {current.requiresRediscovery &&
           profile === current.profile &&
           podLogs === current.podLogs
             ? "Retry catalog rediscovery"
             : "Save visibility policy"}
-        </button>
+        </ActionButton>
       </Section>
       <Section
         title="Effective boundary"
@@ -230,8 +228,9 @@ export function KubernetesTab() {
                 Digest: {current.candidateDisclosureDigest}
               </p>
             )}
-            <button
-              type="button"
+            <ActionButton
+              intent="bare"
+              size="none"
               className={button}
               disabled={
                 !current.candidateDisclosureDigest || acceptCatalog.isPending
@@ -242,7 +241,7 @@ export function KubernetesTab() {
               }
             >
               Accept rediscovered catalog
-            </button>
+            </ActionButton>
           </div>
         )}
         {current.requiresProductAcknowledgement && (

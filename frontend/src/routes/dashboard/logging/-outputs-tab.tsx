@@ -13,6 +13,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
 import { formatRelativeTime } from "@/lib/utils";
@@ -241,23 +242,26 @@ function outputColumns(
       key: "enabled",
       header: "Enabled",
       accessor: (row) => (
-        <span onClickCapture={(e) => e.stopPropagation()}>
-          <Switch
-            size="sm"
-            checked={row.enabled}
-            onCheckedChange={() => {
-              if (row.isSystem) return;
-              handleToggle(row);
-            }}
-            disabled={row.isSystem}
-            title={
-              row.isSystem
-                ? "System destinations are managed with Astronomer Loki"
-                : undefined
-            }
-            className={row.enabled ? "bg-primary" : undefined}
-          />
-        </span>
+        <Tooltip
+          content={
+            row.isSystem
+              ? "System destinations are managed with Astronomer Loki"
+              : undefined
+          }
+        >
+          <span onClickCapture={(e) => e.stopPropagation()}>
+            <Switch
+              size="sm"
+              checked={row.enabled}
+              onCheckedChange={() => {
+                if (row.isSystem) return;
+                handleToggle(row);
+              }}
+              disabled={row.isSystem}
+              className={row.enabled ? "bg-primary" : undefined}
+            />
+          </span>
+        </Tooltip>
       ),
       sortable: false,
     },
@@ -276,14 +280,16 @@ function outputColumns(
       accessor: (row) => (
         <div className="flex items-center gap-1">
           {row.capabilities?.query ? (
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               onClick={() => setQueryTarget(row)}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               aria-label={`Query ${row.name}`}
             >
               <Search className="h-3 w-3" />
               Query
-            </button>
+            </ActionButton>
           ) : null}
           {row.capabilities?.linkOutUrl ? (
             <a
@@ -297,23 +303,28 @@ function outputColumns(
               Explore
             </a>
           ) : null}
-          <button
+          <ActionButton
+            intent="bare"
+            size="none"
             onClick={() => testOutput.mutate(row.id)}
             disabled={testOutput.isPending}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            title="Test Output"
+            tooltip="Test Output"
           >
             <Send className="h-3 w-3" />
             Test
-          </button>
+          </ActionButton>
           {row.isSystem ? null : (
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               onClick={() => setDeleteTarget(row)}
               className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-              title="Delete output"
+              tooltip="Delete output"
+              aria-label="Delete output"
             >
               <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            </ActionButton>
           )}
         </div>
       ),

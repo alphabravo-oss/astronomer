@@ -1,7 +1,7 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
-import { StatePanel } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { queryKeys } from "@/lib/query-keys";
@@ -17,6 +17,7 @@ import {
   type CharlieMode,
 } from "@/lib/api/charlie-admin";
 import { Meta, Section, Unavailable, button } from "./shared";
+import { ActionButton } from "@/components/ui/action-button";
 
 const modeHelp: Record<CharlieMode, string> = {
   disabled:
@@ -286,14 +287,7 @@ export function ModeTab() {
     },
     onError: (e) => toastApiError("Disclosure acknowledgement failed", e),
   });
-  if (q.isLoading)
-    return (
-      <StatePanel
-        icon={Loader2}
-        iconClassName="animate-spin motion-reduce:animate-none"
-        title="Loading Charlie mode"
-      />
-    );
+  if (q.isLoading) return <LoadingPanel title="Loading Charlie mode" />;
   if (q.isError || !q.data)
     return <Unavailable name="Mode control" retry={() => void q.refetch()} />;
   const m = q.data;
@@ -465,9 +459,10 @@ export function ModeTab() {
         >
           {(["disabled", "read_only", "approval", "auto"] as CharlieMode[]).map(
             (mode) => (
-              <button
+              <ActionButton
+                intent="bare"
+                size="none"
                 key={mode}
-                type="button"
                 aria-pressed={m.authoritative === mode}
                 disabled={
                   m.authoritative === mode ||
@@ -477,7 +472,7 @@ export function ModeTab() {
                 }
                 onClick={() => setNext(mode)}
                 className={cn(
-                  "rounded-lg border p-4 text-left",
+                  "block whitespace-normal rounded-lg border p-4 text-left font-normal",
                   m.authoritative === mode
                     ? "border-primary bg-primary/5"
                     : "border-border hover:bg-accent",
@@ -490,7 +485,7 @@ export function ModeTab() {
                 <span className="mt-1 block text-xs text-muted-foreground">
                   {modeHelp[mode]}
                 </span>
-              </button>
+              </ActionButton>
             ),
           )}
         </div>
@@ -600,13 +595,15 @@ export function ModeTab() {
             <p className="mt-2 break-all text-xs text-muted-foreground">
               Digest: {acceptDigest}
             </p>
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               onClick={() => acknowledge.mutate(acceptDigest)}
               className={`${button} mt-3`}
               disabled={acknowledge.isPending}
             >
               Accept rediscovered catalog
-            </button>
+            </ActionButton>
           </div>
         )}
       </Section>
@@ -614,7 +611,9 @@ export function ModeTab() {
         title="Emergency control"
         description="Immediately fail closed for Charlie activity while preserving health, configuration, and audit access."
       >
-        <button
+        <ActionButton
+          intent="bare"
+          size="none"
           disabled={
             m.emergencyDisabled ||
             m.disablePending ||
@@ -626,7 +625,7 @@ export function ModeTab() {
         >
           <AlertTriangle className="h-4 w-4" />
           Emergency Disable
-        </button>
+        </ActionButton>
       </Section>
       <ConfirmDialog
         open={!!next}

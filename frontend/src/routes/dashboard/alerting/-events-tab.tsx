@@ -1,3 +1,4 @@
+import { Tooltip } from "@/components/ui/tooltip";
 import { Check, CheckCircle } from "lucide-react";
 import { AlertInvestigation } from "./-alert-investigation";
 import { useInvestigationParam } from "@/components/resources/resource-navigation-context";
@@ -87,9 +88,11 @@ export function EventsTab({
       key: "message",
       header: "Message",
       accessor: (row) => (
-        <span className="text-sm text-muted-foreground truncate max-w-[300px] block">
-          {row.message}
-        </span>
+        <Tooltip content={row.message}>
+          <span className="text-sm text-muted-foreground truncate max-w-75 block">
+            {row.message}
+          </span>
+        </Tooltip>
       ),
       sortable: false,
     },
@@ -130,7 +133,7 @@ export function EventsTab({
               <ActionButton
                 size="sm"
                 intent="ghost"
-                title="Acknowledge"
+                tooltip="Acknowledge"
                 disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
                 onClick={() => acknowledgeAlert.mutate(row.id)}
                 icon={<Check className="h-3 w-3" />}
@@ -141,7 +144,7 @@ export function EventsTab({
               <ActionButton
                 size="sm"
                 intent="ghost"
-                title="Resolve"
+                tooltip="Resolve"
                 disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
                 onClick={() => resolveAlert.mutate(row.id)}
                 icon={<CheckCircle className="h-3 w-3" />}
@@ -155,7 +158,7 @@ export function EventsTab({
             <ActionButton
               size="sm"
               intent="ghost"
-              title="Resolve"
+              tooltip="Resolve"
               disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
               onClick={() => resolveAlert.mutate(row.id)}
               icon={<CheckCircle className="h-3 w-3" />}

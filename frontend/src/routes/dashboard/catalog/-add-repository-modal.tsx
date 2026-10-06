@@ -123,7 +123,9 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
           className="flex gap-1.5"
         >
           {(["helm", "oci"] as const).map((type) => (
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               key={type}
               onClick={() => form.setFieldValue("repoType", type)}
               className={cn(
@@ -134,7 +136,7 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
               )}
             >
               {type}
-            </button>
+            </ActionButton>
           ))}
         </div>
       </div>
@@ -160,7 +162,9 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
         </form.Field>
       </div>
 
-      <button
+      <ActionButton
+        intent="bare"
+        size="none"
         onClick={() => setShowAuth(!showAuth)}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
@@ -171,7 +175,7 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
           )}
         />
         Authentication (optional)
-      </button>
+      </ActionButton>
 
       {showAuth && (
         <div className="space-y-4 pl-4 border-l-2 border-border">

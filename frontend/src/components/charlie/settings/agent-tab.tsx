@@ -1,6 +1,5 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { StatePanel } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   Table,
@@ -23,14 +22,7 @@ export function AgentTab() {
     retry: false,
     refetchInterval: liveFallback(15_000),
   });
-  if (q.isLoading)
-    return (
-      <StatePanel
-        icon={Loader2}
-        iconClassName="animate-spin motion-reduce:animate-none"
-        title="Loading Charlie agent"
-      />
-    );
+  if (q.isLoading) return <LoadingPanel title="Loading Charlie agent" />;
   if (q.isError || !q.data)
     return <Unavailable name="Agent status" retry={() => void q.refetch()} />;
   const a = q.data;
@@ -82,10 +74,7 @@ export function AgentTab() {
         <Meta label="Image digest" value={a.imageDigest} />
       </dl>
       <div className="overflow-x-auto rounded-lg border border-border">
-        <Table
-          layout="scroll"
-          className="w-full min-w-[44rem] text-left text-sm"
-        >
+        <Table layout="scroll" className="w-full min-w-176 text-left text-sm">
           <caption className="sr-only">
             Product-observed Charlie agent replica status
           </caption>

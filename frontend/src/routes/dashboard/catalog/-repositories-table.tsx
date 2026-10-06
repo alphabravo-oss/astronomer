@@ -5,6 +5,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import type { HelmRepository } from "@/types";
 import { Globe, RefreshCw, Trash2 } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
 
 /**
  * The catalog Repositories table.
@@ -54,9 +56,11 @@ export function RepositoriesTable({
       key: "url",
       header: "URL",
       accessor: (row) => (
-        <span className="font-mono text-xs text-muted-foreground truncate max-w-[300px] block">
-          {row.url}
-        </span>
+        <Tooltip content={row.url}>
+          <span className="font-mono text-xs text-muted-foreground truncate max-w-75 block">
+            {row.url}
+          </span>
+        </Tooltip>
       ),
     },
     {
@@ -100,9 +104,11 @@ export function RepositoriesTable({
       // the only trace is a worker log line.
       accessor: (row) =>
         row.enabled && row.lastSyncError ? (
-          <span title={row.lastSyncError}>
-            <StatusBadge status="failed" label="Sync failed" />
-          </span>
+          <Tooltip content={row.lastSyncError}>
+            <span>
+              <StatusBadge status="failed" label="Sync failed" />
+            </span>
+          </Tooltip>
         ) : (
           <StatusBadge
             status={row.enabled ? "active" : "disconnected"}
@@ -115,25 +121,30 @@ export function RepositoriesTable({
       header: "",
       accessor: (row) => (
         <div className="flex items-center gap-1">
-          <button
+          <ActionButton
+            intent="bare"
+            size="none"
             onClick={() => onSync(row.id)}
             disabled={syncPending}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground
               hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            title="Sync repository"
+            tooltip="Sync repository"
           >
             <RefreshCw
               className={cn("h-3 w-3", syncPending && "animate-spin")}
             />
             Sync
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="bare"
+            size="none"
             onClick={() => setDeleteTarget(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete repository"
+            tooltip="Delete repository"
+            aria-label="Delete repository"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </ActionButton>
         </div>
       ),
       sortable: false,

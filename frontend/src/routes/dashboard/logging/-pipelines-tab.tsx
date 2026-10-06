@@ -17,6 +17,8 @@ import { formatRelativeTime } from "@/lib/utils";
 import type { LoggingPipeline } from "@/types";
 import { Trash2 } from "lucide-react";
 import { toastError, toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
 
 export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
   const queryClient = useQueryClient();
@@ -83,9 +85,11 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
             {row.name}
           </Link>
           {row.description && (
-            <p className="text-xs text-muted-foreground truncate max-w-[300px]">
-              {row.description}
-            </p>
+            <Tooltip content={row.description}>
+              <p className="text-xs text-muted-foreground truncate max-w-75">
+                {row.description}
+              </p>
+            </Tooltip>
           )}
         </div>
       ),
@@ -219,17 +223,16 @@ function PipelineToggle({
     id: row.clusterId,
   });
   return (
-    <span
-      onClickCapture={(event) => event.stopPropagation()}
-      title={permission.reason}
-    >
-      <Switch
-        size="sm"
-        checked={row.enabled}
-        disabled={!permission.allowed || pending}
-        onCheckedChange={onToggle}
-      />
-    </span>
+    <Tooltip content={permission.reason}>
+      <span onClickCapture={(event) => event.stopPropagation()}>
+        <Switch
+          size="sm"
+          checked={row.enabled}
+          disabled={!permission.allowed || pending}
+          onCheckedChange={onToggle}
+        />
+      </span>
+    </Tooltip>
   );
 }
 function PipelineDelete({
@@ -244,13 +247,17 @@ function PipelineDelete({
     id: row.clusterId,
   });
   return (
-    <button
+    <ActionButton
+      intent="bare"
+      size="none"
       onClick={onDelete}
       disabled={!permission.allowed}
-      title={permission.allowed ? "Delete pipeline" : permission.reason}
+      tooltip={permission.allowed ? "Delete pipeline" : undefined}
+      disabledReason={permission.allowed ? undefined : permission.reason}
+      aria-label="Delete pipeline"
       className="p-1.5 disabled:opacity-50"
     >
       <Trash2 className="h-3.5 w-3.5" />
-    </button>
+    </ActionButton>
   );
 }

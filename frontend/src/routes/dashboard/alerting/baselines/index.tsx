@@ -21,6 +21,7 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { formatRelativeTime } from "@/lib/utils";
 import type { AnomalyBaseline } from "@/types";
 import { ArrowLeft, Activity, RefreshCw } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
 
 function AnomalyBaselinesPage() {
   const [clusterFilter, setClusterFilter] = useSearchParam("cluster");
@@ -44,12 +45,11 @@ function AnomalyBaselinesPage() {
       key: "clusterId",
       header: "Cluster",
       accessor: (b: AnomalyBaseline) => (
-        <span
-          className="font-mono text-xs text-muted-foreground"
-          title={b.clusterId}
-        >
-          {b.clusterId.slice(0, 8)}
-        </span>
+        <Tooltip content={b.clusterId}>
+          <span className="font-mono text-xs text-muted-foreground">
+            {b.clusterId.slice(0, 8)}
+          </span>
+        </Tooltip>
       ),
     },
     {

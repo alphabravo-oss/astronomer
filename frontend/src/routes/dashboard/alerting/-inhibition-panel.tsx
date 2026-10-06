@@ -127,7 +127,7 @@ export function InhibitionPanel() {
           <ActionButton
             size="icon"
             intent="ghost"
-            title="Edit inhibition"
+            tooltip="Edit inhibition"
             onClick={() => {
               setEditing(row);
               setShowModal(true);
@@ -137,7 +137,7 @@ export function InhibitionPanel() {
           <ActionButton
             size="icon"
             intent="ghost"
-            title="Delete inhibition"
+            tooltip="Delete inhibition"
             onClick={() => setDeleteTarget(row)}
             icon={<Trash2 className="h-3.5 w-3.5" />}
             className="hover:text-status-error hover:bg-status-error/10"
@@ -258,25 +258,26 @@ function MatcherEditor({
           placeholder="Value"
           className="h-8 flex-1 font-mono text-xs w-auto"
         />
-        <button
-          type="button"
+        <ActionButton
+          intent="bare"
+          size="none"
           onClick={() => setDraft((d) => ({ ...d, isRegex: !d.isRegex }))}
           className={`h-8 px-2.5 rounded-sm border text-xs font-mono transition-colors ${
             draft.isRegex
               ? "border-primary bg-primary/10 text-primary"
               : "border-border text-muted-foreground hover:text-foreground"
           }`}
-          title="Treat value as a regular expression"
+          tooltip="Treat value as a regular expression"
         >
           .*
-        </button>
+        </ActionButton>
         <ActionButton
           type="button"
           size="icon"
           onClick={add}
           disabled={!draft.label || !draft.value}
           icon={<Plus className="h-3.5 w-3.5" />}
-          title="Add matcher"
+          tooltip="Add matcher"
         />
       </div>
       {matchers.length > 0 && (
@@ -289,13 +290,14 @@ function MatcherEditor({
               {m.label}
               {m.isRegex ? "=~" : "="}
               {m.value}
-              <button
-                type="button"
+              <ActionButton
+                intent="bare"
+                size="icon-xs"
+                tooltip="Remove matcher"
+                icon={<X className="h-3 w-3" />}
                 onClick={() => remove(i)}
-                className="hover:text-foreground"
-              >
-                <X className="h-3 w-3" />
-              </button>
+                className="h-4 w-4 hover:text-foreground"
+              />
             </span>
           ))}
         </div>

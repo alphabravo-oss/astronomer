@@ -14,8 +14,6 @@ import {
   DeliveryProjectGate,
   DeliveryShell,
   ErrorMessage,
-  primaryButton,
-  secondaryButton,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
 } from "@/components/delivery/shared";
@@ -32,6 +30,7 @@ import { can } from "@/lib/permissions";
 import { queryKeys } from "@/lib/query-keys";
 import { formatRelativeTime } from "@/lib/utils";
 import { toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function ConfigurationTemplatesPage() {
   const { projectId, projects, projectQuery, setProjectId } =
@@ -125,22 +124,22 @@ export function ConfigurationTemplatesPage() {
       header: "Actions",
       accessor: (row) => (
         <div className="flex gap-2">
-          <button
+          <ActionButton
+            intent="default"
             type="button"
-            className={secondaryButton}
             disabled={!canUpdate}
             onClick={() => setEditing(row)}
           >
             <Pencil className="h-4 w-4" /> Edit
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="default"
             type="button"
-            className={secondaryButton}
             disabled={!canDelete || remove.isPending}
             onClick={() => setDeleting(row)}
           >
             <Trash2 className="h-4 w-4" /> Delete
-          </button>
+          </ActionButton>
         </div>
       ),
     },
@@ -167,13 +166,13 @@ export function ConfigurationTemplatesPage() {
             description="Project-scoped Helm values or Kustomize patches. Helm templates can reference existing Kubernetes Secrets without exposing their values."
             actions={
               canCreate ? (
-                <button
+                <ActionButton
+                  intent="primary"
                   type="button"
-                  className={primaryButton}
                   onClick={() => setEditing(null)}
                 >
                   <Plus className="h-4 w-4" /> New template
-                </button>
+                </ActionButton>
               ) : undefined
             }
           />
@@ -363,16 +362,16 @@ function TemplateEditor({
           <ErrorMessage error={localError ?? mutation.error} />
         )}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
+          <ActionButton intent="default" type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="primary"
             type="submit"
-            className={primaryButton}
             disabled={mutation.isPending}
           >
             Save template
-          </button>
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>

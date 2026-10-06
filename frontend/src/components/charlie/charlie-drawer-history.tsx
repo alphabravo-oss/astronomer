@@ -1,6 +1,8 @@
+import { SkeletonText } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { CharlieConversation } from "./use-charlie-conversation";
 import type { CharlieCommandDescriptor } from "@/lib/api/charlie";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function CharlieHistory({
   threads,
@@ -22,17 +24,21 @@ export function CharlieHistory({
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-xs font-semibold">Recent conversations</p>
-        <button
-          type="button"
+        <ActionButton
+          intent="bare"
+          size="none"
           aria-label="Close conversation history"
           onClick={onClose}
           className="text-xs text-muted-foreground"
         >
           Close
-        </button>
+        </ActionButton>
       </div>
       {threads.isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading conversations…</p>
+        <div role="status" aria-busy="true">
+          <span className="sr-only">Loading conversations…</span>
+          <SkeletonText lines={2} />
+        </div>
       ) : null}
       {threads.isError ? (
         <p role="alert" className="text-xs text-muted-foreground">
@@ -46,13 +52,14 @@ export function CharlieHistory({
             ? !viewingThreadId
             : thread.id === viewingThreadId;
           return (
-            <button
-              type="button"
+            <ActionButton
+              intent="bare"
+              size="none"
               key={thread.id}
               aria-current={selected ? "true" : undefined}
               onClick={() => onSelect(current ? undefined : thread.id)}
               className={cn(
-                "block w-full rounded-md border px-3 py-2 text-left hover:bg-accent",
+                "block w-full whitespace-normal rounded-md border px-3 py-2 text-left font-normal hover:bg-accent",
                 selected && "border-primary bg-primary/5",
               )}
             >
@@ -69,7 +76,7 @@ export function CharlieHistory({
                   ? ` · ${new Date(thread.updated_at).toLocaleString()}`
                   : ""}
               </span>
-            </button>
+            </ActionButton>
           );
         })}
       </div>
@@ -104,22 +111,24 @@ export function CharlieCommandHelp({
             ordinary chat.
           </p>
         </div>
-        <button
-          type="button"
+        <ActionButton
+          intent="bare"
+          size="none"
           aria-label="Close command help"
           onClick={onClose}
           className="text-xs text-muted-foreground"
         >
           Close
-        </button>
+        </ActionButton>
       </div>
       <div className="space-y-1">
         {catalogCommands.map((command) => (
-          <button
-            type="button"
+          <ActionButton
+            intent="bare"
+            size="none"
             key={command.id}
             onClick={() => onSelect(command)}
-            className="block w-full rounded-md px-2 py-1.5 text-left hover:bg-accent"
+            className="block w-full whitespace-normal rounded-md px-2 py-1.5 text-left font-normal hover:bg-accent"
           >
             <span className="font-mono text-xs">
               /{command.name}
@@ -128,7 +137,7 @@ export function CharlieCommandHelp({
             <span className="ml-2 text-xs text-muted-foreground">
               {command.description}
             </span>
-          </button>
+          </ActionButton>
         ))}
       </div>
     </section>

@@ -56,6 +56,7 @@ import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 import { pageRowCount, pageCountLabel } from "@/lib/api/pagination";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { ActionButton } from "@/components/ui/action-button";
 
 function isForbiddenError(error: unknown): boolean {
   return Boolean(
@@ -278,14 +279,15 @@ function EstateDeliveryOverview({
           description="Click a row to open that cluster's Flux workspace."
           actions={
             focus ? (
-              <button
-                type="button"
+              <ActionButton
+                intent="bare"
+                size="none"
                 onClick={() => setFocus("")}
                 className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent"
               >
                 <X className="h-3 w-3" />
                 {estateFocusLabels[focus] ?? focus.replaceAll("_", " ")}
-              </button>
+              </ActionButton>
             ) : null
           }
         >
@@ -382,11 +384,12 @@ function DistributionList({
         <ul className="mt-3 space-y-2" aria-label={title}>
           {items.map((item) => (
             <li key={item.key}>
-              <button
-                type="button"
+              <ActionButton
+                intent="bare"
+                size="none"
                 onClick={() => onSelect(item.key)}
                 className={cn(
-                  "flex w-full items-center justify-between rounded-md px-1 py-1 text-sm hover:bg-accent",
+                  "flex w-full items-center justify-between rounded-md px-1 py-1 text-sm font-normal hover:bg-accent",
                   activeKey === item.key && "bg-accent",
                 )}
               >
@@ -394,7 +397,7 @@ function DistributionList({
                 <span className="tabular-nums text-muted-foreground">
                   {item.count}
                 </span>
-              </button>
+              </ActionButton>
             </li>
           ))}
         </ul>

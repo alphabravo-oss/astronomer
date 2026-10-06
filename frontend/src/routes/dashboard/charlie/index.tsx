@@ -1,17 +1,15 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bot, CheckCircle2, Clock, ShieldCheck } from "lucide-react";
 import {
-  Bot,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  ShieldCheck,
-} from "lucide-react";
-import { EmptyState, StatePanel, type EmptyStateActionProps } from "@/components/ui/empty-state";
+  EmptyState,
+  type EmptyStateActionProps,
+} from "@/components/ui/empty-state";
 import { QueryStates, type QueryState } from "@/components/ui/query-states";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -45,6 +43,7 @@ import { can } from "@/lib/permissions";
 import { mergeCharlieSearch } from "@/components/charlie/admin-utils";
 import { TabStrip } from "@/components/ui/tabs";
 import { ResourceMasthead } from "@/components/ui/page";
+import { ActionButton } from "@/components/ui/action-button";
 
 export const CHARLIE_HUB_TABS = [
   "conversations",
@@ -245,25 +244,19 @@ function Conversations({
     retry: false,
   });
   if (q.isLoading)
-    return (
-      <Loader2
-        aria-label="Loading conversations"
-        className="h-5 w-5 animate-spin motion-reduce:animate-none"
-      />
-    );
-  if (q.isError)
-    return (
-      <QueryFailure label="Conversations" query={q} />
-    );
+    return <LoadingPanel title="Loading conversations" lines={2} />;
+  if (q.isError) return <QueryFailure label="Conversations" query={q} />;
   return (
     <div className="grid gap-4 md:grid-cols-[18rem_1fr]">
       <div className="space-y-2">
         {rows.map((s) => (
-          <button
+          <ActionButton
+            intent="bare"
+            size="none"
             key={s.id}
             onClick={() => onSelect(s.id)}
             className={cn(
-              "w-full rounded-lg border p-3 text-left",
+              "block w-full whitespace-normal rounded-lg border p-3 text-left font-normal",
               selected === s.id && "border-primary",
             )}
           >
@@ -272,7 +265,7 @@ function Conversations({
               <StatusBadge status={s.state} />
               <StatusBadge status="private" label="Private chat" />
             </div>
-          </button>
+          </ActionButton>
         ))}
         {rows.length === 0 && (
           <EmptyState
@@ -290,11 +283,7 @@ function Conversations({
             description="Only your private user-started conversations can be opened here." terminal // action: the conversation list to the left
           />
         ) : h.isLoading ? (
-          <StatePanel
-            icon={Loader2}
-            iconClassName="animate-spin motion-reduce:animate-none"
-            title="Loading private conversation"
-          />
+          <LoadingPanel title="Loading private conversation" />
         ) : h.isError ? (
           <QueryFailure label="Conversation" query={h} />
         ) : (
@@ -418,18 +407,16 @@ function Investigations({
         </p>
       </div>
       {q.isLoading || findings.isLoading ? (
-        <StatePanel
-          icon={Loader2}
-          iconClassName="animate-spin motion-reduce:animate-none"
-          title="Loading authorized investigations"
-        />
+        <LoadingPanel title="Loading authorized investigations" />
       ) : rows.length ? (
         rows.map(({ session: s, finding }) => (
-          <button
+          <ActionButton
+            intent="bare"
+            size="none"
             key={s.id}
             onClick={() => onSelect(s.id)}
             className={cn(
-              "w-full rounded-lg border p-3 text-left",
+              "block w-full whitespace-normal rounded-lg border p-3 text-left font-normal",
               selected === s.id && "border-primary",
             )}
           >
@@ -441,7 +428,7 @@ function Investigations({
             <span className="mt-1 block text-xs text-foreground/70">
               {s.resourceScopeSummary}
             </span>
-          </button>
+          </ActionButton>
         ))
       ) : (
         <EmptyState
@@ -617,18 +604,16 @@ function Findings({
       <div className="grid gap-4 md:grid-cols-[20rem_1fr]">
         <div className="space-y-2">
           {q.isLoading ? (
-            <StatePanel
-              icon={Loader2}
-              iconClassName="animate-spin motion-reduce:animate-none"
-              title="Loading findings"
-            />
+            <LoadingPanel title="Loading findings" />
           ) : rows?.length ? (
             rows.map((f) => (
-              <button
+              <ActionButton
+                intent="bare"
+                size="none"
                 key={f.id}
                 onClick={() => onSelect(f.id)}
                 className={cn(
-                  "w-full rounded-lg border p-3 text-left",
+                  "block w-full whitespace-normal rounded-lg border p-3 text-left font-normal",
                   selected === f.id && "border-primary",
                 )}
               >
@@ -646,7 +631,7 @@ function Findings({
                   {f.repeatCount ?? 1} occurrence
                   {(f.repeatCount ?? 1) === 1 ? "" : "s"}
                 </p>
-              </button>
+              </ActionButton>
             ))
           ) : (
             <EmptyState
@@ -664,11 +649,7 @@ function Findings({
               description="Evidence is fetched from Charlie only when selected." terminal // action: the finding list to the left
             />
           ) : d.isLoading ? (
-            <StatePanel
-              icon={Loader2}
-              iconClassName="animate-spin motion-reduce:animate-none"
-              title="Loading authorized finding detail"
-            />
+            <LoadingPanel title="Loading authorized finding detail" />
           ) : d.isError ? (
             <QueryFailure label="Finding" query={d} />
           ) : (
@@ -797,14 +778,16 @@ function Findings({
                 {canTriage && findingLifecycleDecisions(d.data).length ? (
                   <div className="flex flex-wrap gap-2">
                     {findingLifecycleDecisions(d.data).map((a) => (
-                      <button
+                      <ActionButton
+                        intent="bare"
+                        size="none"
                         key={a}
                         disabled={action.isPending}
                         onClick={() => action.mutate({ id: d.data.id, a })}
                         className="rounded-md border px-3 py-2 text-sm capitalize"
                       >
                         {findingDecisionLabel(a)}
-                      </button>
+                      </ActionButton>
                     ))}
                   </div>
                 ) : !canTriage ? (
@@ -855,16 +838,8 @@ function Approvals({ selected }: { selected: string | null }) {
       void qc.invalidateQueries({ queryKey: queryKeys.charlie.approvals });
     },
   });
-  if (q.isError)
-    return <QueryFailure label="Approvals" query={q} />;
-  if (q.isLoading)
-    return (
-      <StatePanel
-        icon={Loader2}
-        iconClassName="animate-spin motion-reduce:animate-none"
-        title="Loading approvals"
-      />
-    );
+  if (q.isError) return <QueryFailure label="Approvals" query={q} />;
+  if (q.isLoading) return <LoadingPanel title="Loading approvals" />;
   const approvals = [...(q.data ?? [])].sort((left, right) =>
     left.id === selected ? -1 : right.id === selected ? 1 : 0,
   );
@@ -969,20 +944,24 @@ function Approvals({ selected }: { selected: string | null }) {
                 />
               </label>
               <div className="flex gap-2">
-                <button
+                <ActionButton
+                  intent="bare"
+                  size="none"
                   onClick={() =>
                     setConfirm({ approval: a, decision: "approve" })
                   }
                   className="rounded-sm bg-primary px-3 py-2 text-sm text-primary-foreground"
                 >
                   Review approval
-                </button>
-                <button
+                </ActionButton>
+                <ActionButton
+                  intent="bare"
+                  size="none"
                   onClick={() => setConfirm({ approval: a, decision: "deny" })}
                   className="rounded-sm border px-3 py-2 text-sm"
                 >
                   Review denial
-                </button>
+                </ActionButton>
               </div>
             </div>
           ) : (

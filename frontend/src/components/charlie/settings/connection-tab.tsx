@@ -1,6 +1,7 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Loader2, Shield, Unplug, Upload } from "lucide-react";
+import { CheckCircle2, Shield, Unplug, Upload } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
@@ -22,8 +23,8 @@ import {
   Unavailable,
   button,
   emptyOnboarding,
-  primary,
 } from "./shared";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function ConnectionTab({
   localOnly = false,
@@ -163,7 +164,7 @@ export function ConnectionTab({
   if (loading) {
     return (
       <Section title="Charlie connection">
-        <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" />
+        <LoadingPanel title="Loading Charlie connection" lines={2} />
       </Section>
     );
   }
@@ -193,14 +194,16 @@ export function ConnectionTab({
             you disconnect. Connecting a different Charlie is a new one-time
             token after disconnect.
           </p>
-          <button
+          <ActionButton
+            intent="bare"
+            size="none"
             onClick={() => setConfirm("disconnect")}
             disabled={disconnect.isPending}
             className={`${button} border-status-error text-status-error`}
           >
             <Unplug className="h-4 w-4" />
             Disconnect
-          </button>
+          </ActionButton>
         </Section>
         <ConfirmDialog
           open={confirm === "disconnect"}
@@ -310,18 +313,15 @@ export function ConnectionTab({
             </div>
           </div>
         </details>
-        <button
-          disabled={!complete || validate.isPending}
+        <ActionButton
+          intent="primary"
+          disabled={!complete}
+          loading={validate.isPending}
+          icon={<Shield className="h-4 w-4" />}
           onClick={() => validate.mutate()}
-          className={primary}
         >
-          {validate.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-          ) : (
-            <Shield className="h-4 w-4" />
-          )}
           {useToken ? "Validate connection" : "Validate signature locally"}
-        </button>
+        </ActionButton>
         {validated && (
           <div
             role="status"
@@ -384,13 +384,13 @@ export function ConnectionTab({
                 authority require a new disclosure acknowledgement.
               </span>
             </label>
-            <button
+            <ActionButton
+              intent="primary"
               disabled={!disclosure}
               onClick={() => setConfirm("consume")}
-              className={primary}
             >
               Connect Charlie
-            </button>
+            </ActionButton>
           </div>
         )}
       </Section>

@@ -8,6 +8,7 @@ import { formatRelativeTime } from "@/lib/utils";
 import type { InstalledChart } from "@/types";
 import { ArrowUpCircle, RotateCcw, Trash2 } from "lucide-react";
 import { UpgradeChartModal } from "./-upgrade-chart-modal";
+import { Tooltip } from "@/components/ui/tooltip";
 
 export function InstalledTab({
   installed,
@@ -42,12 +43,13 @@ export function InstalledTab({
       key: "chart",
       header: "Chart version",
       accessor: (row) => (
-        <span
-          className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
-          title={row.chartVersionId || undefined}
-        >
-          {row.chartVersionId ? row.chartVersionId.slice(0, 8) : "managed tool"}
-        </span>
+        <Tooltip content={row.chartVersionId || undefined}>
+          <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
+            {row.chartVersionId
+              ? row.chartVersionId.slice(0, 8)
+              : "managed tool"}
+          </span>
+        </Tooltip>
       ),
     },
     {
@@ -191,8 +193,10 @@ export function InstalledTab({
 function InstalledClusterName({ clusterId }: { clusterId: string }) {
   const { data: cluster } = useCluster(clusterId);
   return (
-    <span className="text-sm text-muted-foreground" title={clusterId}>
-      {cluster?.displayName || cluster?.name || clusterId.slice(0, 8)}
-    </span>
+    <Tooltip content={clusterId}>
+      <span className="text-sm text-muted-foreground">
+        {cluster?.displayName || cluster?.name || clusterId.slice(0, 8)}
+      </span>
+    </Tooltip>
   );
 }

@@ -17,6 +17,8 @@ import type {
   CharlieMessage,
   CharlieCommandDescriptor,
 } from "@/lib/api/charlie";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
 
 export function CharlieTranscript({
   messages,
@@ -69,13 +71,14 @@ export function CharlieTranscript({
               Charlie context.
             </p>
           </div>
-          <button
-            type="button"
+          <ActionButton
+            intent="bare"
+            size="none"
             onClick={onReturn}
             className="shrink-0 rounded-md border px-2 py-1 text-xs"
           >
             Back to current
-          </button>
+          </ActionButton>
         </div>
       ) : null}
       {messages.length === 0 && !showProgress ? (
@@ -113,14 +116,15 @@ export function CharlieTranscript({
                       {m.role === "user" ? "You" : "Charlie"}
                     </p>
                     {recognizedCommand ? (
-                      <span
-                        aria-label="Recognized Charlie command"
-                        title={recognizedCommand.descriptor.label}
-                        className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary"
-                      >
-                        <Command className="h-2.5 w-2.5" aria-hidden="true" />
-                        Command
-                      </span>
+                      <Tooltip content={recognizedCommand.descriptor.label}>
+                        <span
+                          aria-label="Recognized Charlie command"
+                          className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-primary"
+                        >
+                          <Command className="h-2.5 w-2.5" aria-hidden="true" />
+                          Command
+                        </span>
+                      </Tooltip>
                     ) : null}
                   </div>
                   {m.role === "assistant" && m.content?.trim() ? (
