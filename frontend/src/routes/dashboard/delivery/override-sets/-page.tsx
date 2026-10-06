@@ -130,7 +130,8 @@ export function OverrideSetsPage() {
       key: "configuration",
       header: "Configuration",
       kind: "text",
-      minSize: 220,
+      size: 200,
+      minSize: 147,
       accessor: (row) =>
         `${Object.keys(row.values).length} values · ${(row.patches ?? []).length} patches`,
     },

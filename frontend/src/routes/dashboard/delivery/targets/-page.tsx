@@ -73,9 +73,10 @@ export function TargetsPage() {
     },
     {
       key: "bundle",
-      header: "Bundle version",
+      header: "Version",
       kind: "id",
-      minSize: 160,
+      size: 160,
+      minSize: 140,
       accessor: (row) => row.bundleVersionId,
       sortAccessor: (row) => row.bundleVersionId,
     },
@@ -83,7 +84,8 @@ export function TargetsPage() {
       key: "placement",
       header: "Placement",
       kind: "text",
-      minSize: 240,
+      size: 220,
+      minSize: 140,
       accessor: (row) =>
         row.placement.allClusters ? (
           <span className="text-status-warning">All project clusters</span>
@@ -95,7 +97,8 @@ export function TargetsPage() {
       key: "approval",
       header: "Approval",
       kind: "text",
-      minSize: 140,
+      size: 142,
+      minSize: 112,
       accessor: (row) =>
         row.rolloutPolicy.approvalRequired ? "Required" : "Policy controlled",
     },

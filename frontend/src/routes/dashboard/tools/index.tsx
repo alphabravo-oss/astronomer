@@ -115,6 +115,7 @@ function ManagedToolsTable({
         key: "environment",
         header: "Environment",
         kind: "badge",
+        size: 133,
         accessor: (cluster) => (
           <span className="capitalize">{cluster.environment}</span>
         ),
@@ -124,7 +125,7 @@ function ManagedToolsTable({
         key: tool.slug,
         header: tool.name,
         kind: "status",
-        size: 130,
+        size: 150,
         minSize: 112,
         accessor: (cluster) => (
           <ToolStatusCell clusterId={cluster.id} tool={tool} />
@@ -140,6 +141,7 @@ function ManagedToolsTable({
       columns={columns}
       keyExtractor={(cluster) => cluster.id}
       persistKey="estate-tools"
+      layout="scroll"
       serverSide={serverSide}
       pageSize={serverSide?.pagination.pageSize}
       searchPlaceholder="Filter clusters…"

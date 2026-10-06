@@ -56,7 +56,8 @@ const clusterColumns: Column<DeliveryRolloutCluster>[] = [
     key: "cohort",
     header: "Cohort / order",
     kind: "text",
-    minSize: 140,
+    size: 154,
+    minSize: 154,
     accessor: (row) => `${row.cohort} / ${row.releaseOrder}`,
   },
   {
@@ -69,7 +70,8 @@ const clusterColumns: Column<DeliveryRolloutCluster>[] = [
     key: "action",
     header: "Assignment",
     kind: "text",
-    minSize: 140,
+    size: 140,
+    minSize: 126,
     accessor: (row) => row.assignmentAction,
   },
   {

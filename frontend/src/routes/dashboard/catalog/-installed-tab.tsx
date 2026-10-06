@@ -34,7 +34,7 @@ export function InstalledTab({
       key: "release",
       header: "Release",
       kind: "name",
-      minSize: 200,
+      minSize: 180,
       accessor: (row) => (
         <span className="font-medium text-foreground font-mono text-xs">
           {row.releaseName}
@@ -44,10 +44,10 @@ export function InstalledTab({
     },
     {
       key: "chart",
-      header: "Chart version",
+      header: "Version",
       kind: "version",
-      size: 140,
-      minSize: 140,
+      size: 132,
+      minSize: 105,
       accessor: (row) => (
         <Tooltip content={row.chartVersionId || undefined}>
           <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
@@ -62,14 +62,16 @@ export function InstalledTab({
       key: "cluster",
       header: "Cluster",
       kind: "text",
-      minSize: 160,
+      size: 110,
+      minSize: 105,
       accessor: (row) => <InstalledClusterName clusterId={row.clusterId} />,
     },
     {
       key: "namespace",
       header: "Namespace",
       kind: "text",
-      minSize: 160,
+      size: 120,
+      minSize: 119,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.namespace}
@@ -80,12 +82,14 @@ export function InstalledTab({
       key: "status",
       header: "Status",
       kind: "status",
+      size: 98,
       accessor: (row) => <StatusBadge status={row.status} />,
     },
     {
       key: "revision",
       header: "Rev",
       kind: "count",
+      size: 77,
       accessor: (row) => (
         <span className="tabular-nums text-xs text-muted-foreground">
           {row.revision}
@@ -97,7 +101,8 @@ export function InstalledTab({
       key: "source",
       header: "Source",
       kind: "text",
-      minSize: 140,
+      size: 100,
+      minSize: 98,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           {row.toolSlug ? `Tool: ${row.toolSlug}` : "Catalog chart"}
@@ -106,8 +111,9 @@ export function InstalledTab({
     },
     {
       key: "date",
-      header: "Installed",
+      header: "Age",
       kind: "age",
+      size: 88,
       accessor: (row) => <AgeCell value={row.createdAt} />,
       sortAccessor: (row) => row.createdAt,
     },

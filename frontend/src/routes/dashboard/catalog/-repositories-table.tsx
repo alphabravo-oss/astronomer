@@ -43,8 +43,8 @@ export function RepositoriesTable({
       header: "Name",
       kind: "name",
       grow: false,
-      size: 240,
-      minSize: 200,
+      size: 180,
+      minSize: 160,
       maxSize: 360,
       sortAccessor: (row) => row.name,
       accessor: (row) => (
@@ -66,8 +66,8 @@ export function RepositoriesTable({
       header: "URL",
       kind: "id",
       grow: true,
-      size: 360,
-      minSize: 240,
+      size: 240,
+      minSize: 220,
       maxSize: 640,
       accessor: (row) => row.url,
       sortAccessor: (row) => row.url,
@@ -76,6 +76,7 @@ export function RepositoriesTable({
       key: "type",
       header: "Type",
       kind: "badge",
+      size: 100,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground uppercase">
           {row.repoType}
@@ -86,6 +87,7 @@ export function RepositoriesTable({
       key: "charts",
       header: "Charts",
       kind: "count",
+      size: 98,
       // chart_count is enrichment the server computes per response; if it is
       // ever absent, render an explicit 0 rather than an empty cell. React
       // renders `undefined` as nothing at all, which is how this column
@@ -99,8 +101,9 @@ export function RepositoriesTable({
     },
     {
       key: "lastSynced",
-      header: "Last Synced",
+      header: "Synced",
       kind: "age",
+      size: 98,
       accessor: (row) => <AgeCell value={row.lastSyncedAt} empty="Never" />,
       sortAccessor: (row) => row.lastSyncedAt ?? "",
     },
@@ -108,6 +111,8 @@ export function RepositoriesTable({
       key: "status",
       header: "Status",
       kind: "status",
+      size: 124,
+      maxSize: 180,
       // The scheduled sweep isolates failures per repository, so a repo can be
       // Enabled and silently not refreshing. Surface last_sync_error here or
       // the only trace is a worker log line.

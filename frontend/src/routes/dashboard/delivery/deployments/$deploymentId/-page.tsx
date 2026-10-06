@@ -381,15 +381,16 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
     key: "event",
     header: "Event",
     kind: "text",
-    minSize: 160,
+    size: 140,
+    minSize: 112,
     accessor: (row) => row.eventType.replaceAll("_", " "),
   },
   {
     key: "phase",
     header: "Phase",
     kind: "text",
-    size: 240,
-    minSize: 220,
+    size: 180,
+    minSize: 150,
     accessor: (row) => (
       <span className="font-mono text-xs">
         {row.fromPhase || "—"} → {row.toPhase || "—"}
@@ -432,7 +433,8 @@ const conditionColumns: Column<DeliveryConditionView>[] = [
     key: "type",
     header: "Condition",
     kind: "text",
-    minSize: 160,
+    size: 140,
+    minSize: 120,
     accessor: (row) => row.type,
   },
   {
@@ -455,7 +457,8 @@ const conditionColumns: Column<DeliveryConditionView>[] = [
     key: "reason",
     header: "Reason",
     kind: "text",
-    minSize: 160,
+    size: 140,
+    minSize: 120,
     accessor: (row) => row.reason || "—",
   },
   {
@@ -470,8 +473,9 @@ const conditionColumns: Column<DeliveryConditionView>[] = [
   },
   {
     key: "transition",
-    header: "Last transition",
+    header: "Changed",
     kind: "age",
+    size: 112,
     accessor: (row) => <AgeCell value={row.lastTransitionTime} />,
     sortAccessor: (row) => row.lastTransitionTime ?? "",
   },

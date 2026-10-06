@@ -51,7 +51,7 @@ const sourceDataColumns: Column<DeliverySource>[] = [
     key: "name",
     header: "Source",
     kind: "name",
-    minSize: 260,
+    minSize: 180,
     accessor: (row) => <StackedCell primary={row.name} secondary={row.url} />,
     sortAccessor: (row) => row.name,
   },
@@ -59,14 +59,16 @@ const sourceDataColumns: Column<DeliverySource>[] = [
     key: "type",
     header: "Kind",
     kind: "badge",
-    minSize: 120,
+    size: 104,
+    minSize: 88,
     accessor: (row) => row.type.replaceAll("_", " "),
   },
   {
     key: "auth",
     header: "Authentication",
     kind: "text",
-    minSize: 180,
+    size: 154,
+    minSize: 154,
     accessor: (row) => (
       <span>
         {row.authMode.replaceAll("_", " ")}
@@ -78,8 +80,8 @@ const sourceDataColumns: Column<DeliverySource>[] = [
     key: "trust",
     header: "Trust",
     kind: "badge",
-    size: 160,
-    minSize: 150,
+    size: 140,
+    minSize: 120,
     accessor: (row) =>
       row.trustPolicy.allowUnsigned ? (
         <span className="text-status-warning">Unsigned allowed</span>
@@ -94,12 +96,14 @@ const sourceDataColumns: Column<DeliverySource>[] = [
     key: "status",
     header: "Status",
     kind: "status",
+    size: 104,
     accessor: (row) => <DeliveryPhaseBadge value={row.status} />,
   },
   {
     key: "updated",
-    header: "Last checked",
+    header: "Checked",
     kind: "age",
+    size: 112,
     accessor: (row) => <AgeCell value={row.lastResolvedAt} empty="Never" />,
     sortAccessor: (row) => row.lastResolvedAt ?? "",
   },
@@ -167,9 +171,9 @@ export function SourcesPage() {
       key: "actions",
       header: "",
       kind: "actions",
-      size: 176,
-      minSize: 176,
-      maxSize: 176,
+      size: 192,
+      minSize: 192,
+      maxSize: 192,
       sortable: false,
       accessor: (row) => (
         <div className="flex justify-end gap-1">

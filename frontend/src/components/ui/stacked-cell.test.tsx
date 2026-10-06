@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { AgeCell, exactTimestamp } from "@/components/ui/age-cell";
+import { AgeCell, compactAge, exactTimestamp } from "@/components/ui/age-cell";
 import { StackedCell } from "@/components/ui/stacked-cell";
 
 describe("StackedCell", () => {
@@ -22,6 +22,15 @@ describe("AgeCell", () => {
     expect(exactTimestamp("0001-01-01T00:00:00Z")).toBeUndefined();
     render(<AgeCell value={null} />);
     expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("formats compact ages", () => {
+    const now = Date.parse("2026-10-06T12:00:00Z");
+    expect(compactAge("2026-10-06T11:59:30Z", now)).toBe("just now");
+    expect(compactAge("2026-10-06T11:15:00Z", now)).toBe("45m ago");
+    expect(compactAge("2026-10-05T16:00:00Z", now)).toBe("20h ago");
+    expect(compactAge("2026-10-03T12:00:00Z", now)).toBe("3d ago");
+    expect(compactAge("2025-10-06T12:00:00Z", now)).toBe("1y ago");
   });
 
   it("renders relative text for a valid timestamp", () => {

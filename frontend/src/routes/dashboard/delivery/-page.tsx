@@ -138,7 +138,7 @@ function EstateDeliveryOverview({
       key: "cluster",
       header: "Cluster",
       kind: "name",
-      minSize: 200,
+      minSize: 180,
       accessor: (row) => (
         <StackedCell
           primary={row.displayName || row.name}
@@ -152,6 +152,7 @@ function EstateDeliveryOverview({
       key: "environment",
       header: "Environment",
       kind: "badge",
+      size: 133,
       accessor: (row) => (
         <span className="text-xs capitalize text-muted-foreground">
           {row.environment || "—"}
@@ -163,7 +164,8 @@ function EstateDeliveryOverview({
       key: "role",
       header: "Role",
       kind: "text",
-      minSize: 140,
+      size: 120,
+      minSize: 84,
       accessor: (row) =>
         row.isLocal ? (
           <span className="text-xs text-muted-foreground">Local host-only</span>
@@ -179,6 +181,7 @@ function EstateDeliveryOverview({
       key: "agent",
       header: "Agent",
       kind: "status",
+      size: 124,
       accessor: (row) => (
         <DeliveryPhaseBadge
           value={
@@ -193,7 +196,7 @@ function EstateDeliveryOverview({
       key: "flux",
       header: "Flux",
       kind: "status",
-      minSize: 140,
+      size: 130,
       accessor: (row) => (
         <div className="min-w-0 space-y-1">
           <DeliveryPhaseBadge value={row.compatibilityStatus} />
@@ -210,20 +213,26 @@ function EstateDeliveryOverview({
       header: "Assignments",
       kind: "count",
       size: 150,
-      maxSize: 240,
+      maxSize: 200,
       accessor: (row) => (
-        <span className="tabular-nums text-sm">
-          {row.readyCount}/{row.assignmentCount}
-          {row.failedCount > 0 ? ` · ${row.failedCount} failed` : ""}
-          {row.driftedCount > 0 ? ` · ${row.driftedCount} drifted` : ""}
-        </span>
+        <StackedCell
+          primary={`${row.readyCount}/${row.assignmentCount}`}
+          primaryClassName="tabular-nums text-sm"
+          secondary={[
+            row.failedCount > 0 ? `${row.failedCount} failed` : "",
+            row.driftedCount > 0 ? `${row.driftedCount} drifted` : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        />
       ),
       sortAccessor: (row) => row.failedCount * 1000 + row.assignmentCount,
     },
     {
       key: "heartbeat",
-      header: "Last heartbeat",
+      header: "Heartbeat",
       kind: "age",
+      size: 119,
       accessor: (row) => <AgeCell value={row.lastHeartbeat} />,
       sortAccessor: (row) => row.lastHeartbeat ?? "",
     },

@@ -135,8 +135,8 @@ export function DeploymentsPage() {
     {
       key: "revision",
       header: "Revision",
-      size: 220,
-      minSize: 200,
+      size: 200,
+      minSize: 180,
       maxSize: 320,
       accessor: (row) => (
         <StackedCell
@@ -167,8 +167,9 @@ export function DeploymentsPage() {
     },
     {
       key: "observed",
-      header: "Last observed",
+      header: "Observed",
       kind: "age",
+      size: 112,
       accessor: (row) => <AgeCell value={row.lastObservedAt} empty="Never" />,
       sortAccessor: (row) => row.lastObservedAt ?? "",
     },

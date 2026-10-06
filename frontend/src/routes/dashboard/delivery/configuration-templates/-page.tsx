@@ -111,14 +111,16 @@ export function ConfigurationTemplatesPage() {
       key: "renderer",
       header: "Renderer",
       kind: "text",
-      minSize: 140,
+      size: 120,
+      minSize: 112,
       accessor: (row) => row.renderer,
     },
     {
       key: "layers",
       header: "Configuration",
       kind: "text",
-      minSize: 260,
+      size: 250,
+      minSize: 147,
       accessor: (row) =>
         `${Object.keys(row.values).length} values · ${row.patches.length} patches · ${row.secretRefs.length} Secret refs`,
     },

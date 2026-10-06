@@ -123,7 +123,8 @@ export function RolloutsPage() {
       key: "strategy",
       header: "Strategy",
       kind: "text",
-      minSize: 140,
+      size: 140,
+      minSize: 112,
       accessor: (row) => row.strategy.type.replaceAll("_", " "),
     },
     {
@@ -157,9 +158,10 @@ export function RolloutsPage() {
     },
     {
       key: "revision",
-      header: "Desired version",
+      header: "Version",
       kind: "id",
-      minSize: 160,
+      size: 160,
+      minSize: 140,
       accessor: (row) => row.toBundleVersionId,
       sortAccessor: (row) => row.toBundleVersionId,
     },

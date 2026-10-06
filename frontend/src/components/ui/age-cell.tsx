@@ -1,5 +1,4 @@
 import { Tooltip } from "@/components/ui/tooltip";
-import { formatRelativeTime } from "@/lib/utils";
 
 /** Exact local timestamp for a tooltip, or undefined when the value is absent/invalid. */
 export function exactTimestamp(value: string | null | undefined) {
@@ -11,7 +10,27 @@ export function exactTimestamp(value: string | null | undefined) {
   return date.toLocaleString();
 }
 
-/** Relative timestamp ("3 days ago") with the exact time in a Tooltip. */
+/** Compact relative age ("20h ago", "3d ago"); the exact time lives in the Tooltip. */
+export function compactAge(value: string, now: number = Date.now()): string {
+  const seconds = Math.max(
+    0,
+    Math.floor((now - new Date(value).getTime()) / 1000),
+  );
+  if (seconds < 60) return "just now";
+  const units: [number, string][] = [
+    [365 * 86400, "y"],
+    [30 * 86400, "mo"],
+    [86400, "d"],
+    [3600, "h"],
+    [60, "m"],
+  ];
+  for (const [size, label] of units) {
+    if (seconds >= size) return `${Math.floor(seconds / size)}${label} ago`;
+  }
+  return "just now";
+}
+
+/** Compact relative timestamp with the exact time in a Tooltip. */
 export function AgeCell({
   value,
   empty = "—",
@@ -26,7 +45,7 @@ export function AgeCell({
   return (
     <Tooltip content={exact}>
       <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(value)}
+        {compactAge(value as string)}
       </span>
     </Tooltip>
   );

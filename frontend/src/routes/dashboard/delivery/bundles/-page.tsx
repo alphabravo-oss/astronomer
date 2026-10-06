@@ -80,6 +80,7 @@ export function BundlesPage() {
       key: "id",
       header: "Stable ID",
       kind: "id",
+      size: 200,
       minSize: 160,
       accessor: (row) => row.id,
       sortAccessor: (row) => row.id,

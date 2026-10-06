@@ -97,7 +97,7 @@ export function BundleDetailPage() {
       header: "Version",
       kind: "version",
       grow: true,
-      minSize: 220,
+      minSize: 200,
       maxSize: 640,
       accessor: (row) => (
         <StackedCell
@@ -122,14 +122,15 @@ export function BundleDetailPage() {
       key: "renderer",
       header: "Renderer / scope",
       kind: "text",
-      minSize: 160,
+      size: 168,
+      minSize: 120,
       accessor: (row) => `${row.renderer} · ${row.scope}`,
     },
     {
       key: "revision",
       header: "Immutable revision",
-      size: 260,
-      minSize: 220,
+      size: 220,
+      minSize: 200,
       maxSize: 360,
       accessor: (row) => (
         <StackedCell
@@ -145,8 +146,8 @@ export function BundleDetailPage() {
       key: "verification",
       header: "Verification",
       kind: "status",
-      size: 160,
-      minSize: 160,
+      size: 150,
+      minSize: 140,
       maxSize: 240,
       accessor: (row) => (
         <div className="min-w-0 space-y-1">
@@ -165,12 +166,15 @@ export function BundleDetailPage() {
       key: "state",
       header: "State",
       kind: "status",
+      size: 104,
       accessor: (row) => <DeliveryPhaseBadge value={row.state} />,
     },
     {
       key: "created",
       header: "Created",
       kind: "age",
+      size: 128,
+      minSize: 112,
       accessor: (row) => <AgeCell value={row.createdAt} />,
       sortAccessor: (row) => row.createdAt,
     },
