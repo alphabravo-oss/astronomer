@@ -1,5 +1,5 @@
 {
-  "schema_version": "astronomer-real-estate-v1",
+  "schema_version": "astronomer-real-estate-v2",
   "assignment_tier_per_member": 1,
   "environment": {
     "id": "dev-example",
@@ -79,5 +79,49 @@
         "instance_id": "unknown"
       }
     }
-  ]
+  ],
+  "phases": [
+    {
+      "name": "idle",
+      "mode": "idle",
+      "rps": 0,
+      "warmup_seconds": 300,
+      "measurement_seconds": 1800
+    },
+    {
+      "name": "resources",
+      "mode": "resources",
+      "rps": 1,
+      "warmup_seconds": 300,
+      "measurement_seconds": 1800
+    },
+    {
+      "name": "delivery",
+      "mode": "delivery",
+      "rps": 1,
+      "warmup_seconds": 300,
+      "measurement_seconds": 1800
+    },
+    {
+      "name": "search",
+      "mode": "search",
+      "rps": 0.1,
+      "warmup_seconds": 300,
+      "measurement_seconds": 1800
+    }
+  ],
+  "search": {
+    "namespace": "benchmark",
+    "types": [
+      "pods",
+      "deployments",
+      "services"
+    ],
+    "limit": 1000,
+    "expected_active_cluster_ids": [
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"
+    ]
+  }
 }

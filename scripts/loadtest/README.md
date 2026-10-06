@@ -283,7 +283,7 @@ Validate locally without network or credential reads:
 
 ```sh
 go run ./scripts/loadtest -real-estate scripts/loadtest/testdata/real-estate.example.json \
-  -check-only -server https://api.example.test -warmup 5m -duration 30m -rps 10
+  -check-only -server https://api.example.test
 ```
 
 Collect only after preparing reviewed fixtures and reachable member endpoints:
@@ -291,13 +291,18 @@ Collect only after preparing reviewed fixtures and reachable member endpoints:
 ```sh
 go run ./scripts/loadtest -real-estate "$ESTATE_MANIFEST" \
   -server "$TEST_API" -token "$TEST_TOKEN_FILE" \
-  -warmup 5m -duration 30m -rps 10 -out "$RUN_DIR/real-estate.md"
+  -out "$RUN_DIR/real-estate.md"
 ```
 
 The mode rejects synthetic agent/profile flags, `-metrics-server`, certification,
 login bootstrap, audit mutation configuration and their conflicting environment
-variables. Warmup must be 5–60 minutes; measurement 30 minutes–4 hours; rate
-1–1000 RPS. There is no short-window qualification override. All requests are GET;
+variables. The v2 manifest declares 1–8 named phases, each with 5–60 minutes
+warmup and 30 minutes–4 hours measurement. Rates are requests/second: idle is
+exactly zero; resources/delivery allow 0.01–1000; search is capped at 1/6 to
+respect the existing shared per-user 10/minute limiter (0.1 is recommended).
+Legacy `-rps`, `-warmup`, `-duration` overrides are rejected for estate mode;
+phase definitions are the sole workload contract. There is no short-window
+qualification override. All requests are GET;
 this increment never creates or deletes fixtures. Start/end checks verify the
 exact scoped deployment set, cluster/project/target identity, ready generation
 and spec digest, namespace binding and paginated Kubernetes resource census.
@@ -311,8 +316,15 @@ inventory is **unavailable**, never inferred from receipt time or namespace cens
 No Secret payloads are fetched. This verifies declared references, not arbitrary
 ownership of all resources on the member.
 
-The measured HTTP mix reuses the existing scenarios and scheduler. Warmup has a
-separate recorder. Started requests have a bounded 30-second post-window drain;
+The measured phases reuse the existing scheduler with deterministic request
+selection; synthetic scenarios and their integer-rate scheduler behavior remain
+unchanged. Idle schedules no application HTTP but collects member metrics for the
+whole window. Resource browsing lists the first bounded page of pods/deployments/
+services only in each manifest namespace. It is browsing, not a repeated complete
+census. Delivery reads project/cluster-scoped inventory and deployment lists plus
+every exact manifest assignment detail. Every catalog entry must receive a
+successful request; the minimum phase rate/window must cover the full catalog.
+Warmup has a separate recorder. Each phase has independent metric baselines. Started requests have a bounded 30-second post-window drain;
 the report separates scheduling windows and drain intervals. Metric samples
 finishing outside the measurement window are counted as excluded boundary
 samples, not transport failures. Preflight duration is not agent cold start.
@@ -327,13 +339,52 @@ counts/min/max/deltas, not unbounded raw metric bodies. Resets and gaps invalida
 complete deltas. Source age uses original observed time and separately requires
 recent producer sampling; absent, future or stopped samples cannot become zero.
 
-Implemented checks retain cluster-list p99 ≤500 ms, pod-list p99 ≤2000 ms, zero
-HTTP failures, ≥95% requested traffic, ≥98% measured duration/metric coverage,
-and bounded heap/goroutine/open-FD growth. Reported CPU/memory belong to each member
-process. Management queue/event-relay and audit gates remain `NOT_RUN`, not
-silently waived. Cold start, fixture lifecycle, idle/churn/search, delivery-status
-workload, multiple panels/tabs, reconnect, repeated-run acceptance and change-to-UI
-freshness also remain `NOT_RUN`. Source age is **not** end-to-end freshness p95.
+The v2 report records scheduled/completed/success/failed counts per member,
+scenario and assignment; one request has one terminal outcome even if both its
+HTTP status and body are broken. HTTP 200 with a truncated body fails. Header
+latency keeps the historical meaning; the separate full-response latency includes
+bounded body consumption and validation. Every completed request contributes to fixed, bounded, non-cumulative latency
+histograms, including failures. Each report contains millisecond bucket upper
+bounds/counts, sample and overflow counts, and a conservative p99 upper bound.
+The boundaries include 500ms and 2000ms. A percentile falling into overflow is
+null, never clamped to the last bucket. No first-N sample subset represents a
+full window. Histogram timing semantics are versioned for comparisons.
+These new scoped
+scenarios do not replace the synthetic cluster-list ≤500ms and whole-cluster
+pod-list ≤2000ms gates or silently redefine their latency measurements.
+
+Checks require zero HTTP failures, ≥95% achieved successful traffic, full
+member/scenario/assignment coverage, ≥98% measured duration/metric coverage,
+and bounded heap/goroutine/open-FD growth. Reported CPU/memory belong to each
+member process. Management queue/event-relay, audit, cold start, fixture lifecycle,
+churn, multiple panels/tabs, reconnect, repeated-run acceptance and change-to-UI
+freshness remain `NOT_RUN`. Implemented phases are only marked measured after
+their checks pass. Source age is **not** end-to-end freshness p95.
+
+Search declares a namespace, benign types (pods/deployments/services), limit and
+an explicit expected active-cluster UUID set of 1–32 entries, separate from the
+2–10 remote benchmark members. Include the active management cluster if it is
+part of the authorized fleet; the example third ID is a placeholder, not an
+implicitly accepted local cluster. The existing search API has no cluster/project
+filter: this is namespace/type-scoped authorized-estate search. The same token
+must prove `self=true, superuser=true` through `/api/v1/rbac/my-permissions` and
+fully paginated active-cluster listing must equal the declared set. An optional
+`search.token_file` supplies a separate credential; its path/value is omitted
+from reports. Restricted credentials are rejected because `clusters:list` and
+resource-specific search grants can describe different estates.
+
+Permission and fanout checks run before/after the search phase and once per
+minute through warmup/measurement, outside scheduled workload accounting. A
+changed set cancels the phase. Response counts, failures, type, namespace and
+returned cluster IDs are validated. Partial/truncated responses are failures,
+including a legitimate top-K truncation: select a reviewed limit/dataset that
+can support complete search evidence. These are snapshot checks, not atomic
+membership fencing: a successful empty cluster is not identified in the search
+response, and changes between checks cannot be ruled out. Frozen estate
+membership is a prerequisite. No invented query filters or RBAC changes are used.
+
+Reports compare only identical v2 phase/rate/scope/timing definitions and frozen
+fixture/environment provenance. V1 reports are not comparable with v2.
 
 Tracked observation LIST/WATCH counters do not cover legacy direct reads,
 discovery/dynamic requests or assignment GETs. Therefore this increment always

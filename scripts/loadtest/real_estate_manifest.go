@@ -12,13 +12,12 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/astroclient"
 	"github.com/google/uuid"
 )
 
-const estateSchema = "astronomer-real-estate-v1"
+const estateSchema = "astronomer-real-estate-v2"
 
 var estateName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 var estateDigest = regexp.MustCompile(`^[a-f0-9]{64}$`)
@@ -27,6 +26,8 @@ type estateManifest struct {
 	Schema      string            `json:"schema_version"`
 	Tier        int               `json:"assignment_tier_per_member"`
 	Environment estateEnvironment `json:"environment"`
+	Phases      []estatePhaseSpec `json:"phases"`
+	Search      *estateSearchSpec `json:"search,omitempty"`
 	Members     []estateMember    `json:"members"`
 }
 type estateEnvironment struct {
@@ -84,6 +85,9 @@ func loadEstateManifest(path string) (estateManifest, string, error) {
 func (m estateManifest) validate() error {
 	if m.Schema != estateSchema || (m.Tier != 1 && m.Tier != 10 && m.Tier != 100) || len(m.Members) < 2 || len(m.Members) > 10 {
 		return errors.New("estate requires schema v1, tier 1/10/100, and 2–10 members")
+	}
+	if err := m.validatePhases(); err != nil {
+		return err
 	}
 	e := m.Environment
 	if !estateName.MatchString(e.ID) || !regexp.MustCompile(`^[a-f0-9]{40}$`).MatchString(e.Commit) || !regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+[a-zA-Z0-9.+-]*$`).MatchString(e.KubernetesVersion) {
@@ -175,9 +179,7 @@ func validateEstateConfig(c *config) error {
 	if c.certification || c.validateDrills || c.skipAgents || c.keepFixtures || c.profilePath != "" || c.loginEmail != "" || c.loginPasswordPath != "" || c.auditObserverPath != "" {
 		return errors.New("real estate cannot combine synthetic, profile, certification, audit mutation, or login modes")
 	}
-	if c.warmup < 5*time.Minute || c.duration < 30*time.Minute || c.duration > 4*time.Hour || c.warmup > time.Hour || c.rps < 1 || c.rps > 1000 {
-		return errors.New("real estate requires warmup 5–60m, measured window 30m–4h and 1–1000 RPS")
-	}
+
 	if len(c.estateMixedFlags) > 0 {
 		return errors.New("synthetic or metrics-server flags are incompatible with real estate")
 	}

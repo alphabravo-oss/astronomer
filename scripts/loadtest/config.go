@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"time"
 )
@@ -11,6 +12,8 @@ type config struct {
 	warmup            time.Duration
 	estateMixedFlags  []string
 	workloadClient    *http.Client
+	workloadRequest   func(context.Context, uint64)
+	workloadRPS       float64
 	server            string
 	metricsServer     string
 	clusters          int

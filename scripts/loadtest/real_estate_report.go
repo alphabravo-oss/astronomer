@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -17,83 +19,58 @@ type estateWindow struct {
 	Start time.Time `json:"start"`
 	End   time.Time `json:"end"`
 }
-type estateHTTPResult struct {
-	Scenario string  `json:"scenario"`
-	Requests int     `json:"requests"`
-	Errors   int     `json:"errors"`
-	P99MS    float64 `json:"p99_ms"`
-}
 type estateReport struct {
-	WarmupDrain                 estateWindow         `json:"warmup_request_drain"`
-	MeasurementDrain            estateWindow         `json:"measurement_request_drain"`
-	FixtureSHA256               string               `json:"fixture_sha256"`
-	DriverRevision              string               `json:"driver_revision"`
-	DriverModified              string               `json:"driver_modified"`
-	Schema                      string               `json:"schema_version"`
-	Scope                       string               `json:"evidence_scope"`
-	Verdict                     string               `json:"verdict"`
-	Qualified                   bool                 `json:"qualified"`
-	ManifestSHA256              string               `json:"manifest_sha256"`
-	Environment                 estateEnvironment    `json:"environment"`
-	Tier                        int                  `json:"assignment_tier_per_member"`
-	Members                     int                  `json:"members"`
-	TargetRPS                   int                  `json:"target_rps"`
-	RequestedWarmupSeconds      float64              `json:"requested_warmup_seconds"`
-	RequestedMeasurementSeconds float64              `json:"requested_measurement_seconds"`
-	Preflight                   estateWindow         `json:"preflight"`
-	Warmup                      estateWindow         `json:"warmup"`
-	Measurement                 estateWindow         `json:"measurement"`
-	StartVerification           []estateVerification `json:"start_verification"`
-	EndVerification             []estateVerification `json:"end_verification"`
-	HTTP                        []estateHTTPResult   `json:"http"`
-	Metrics                     []estateMetricReport `json:"member_metrics"`
-	Problems                    []string             `json:"problems"`
-	Pending                     map[string]string    `json:"pending"`
+	Schema            string                `json:"schema_version"`
+	Timing            string                `json:"timing_semantics"`
+	Scope             string                `json:"evidence_scope"`
+	Verdict           string                `json:"verdict"`
+	Qualified         bool                  `json:"qualified"`
+	FixtureSHA256     string                `json:"fixture_sha256"`
+	ManifestSHA256    string                `json:"manifest_sha256"`
+	DriverRevision    string                `json:"driver_revision"`
+	DriverModified    string                `json:"driver_modified"`
+	Environment       estateEnvironment     `json:"environment"`
+	Tier              int                   `json:"assignment_tier_per_member"`
+	Members           int                   `json:"members"`
+	Definitions       []estatePhaseSpec     `json:"phase_definitions"`
+	Search            *estateSearchSpec     `json:"search_scope,omitempty"`
+	Preflight         estateWindow          `json:"preflight"`
+	StartVerification []estateVerification  `json:"start_verification"`
+	EndVerification   []estateVerification  `json:"end_verification"`
+	Phases            []estateMeasuredPhase `json:"phases"`
+	Problems          []string              `json:"problems"`
+	Pending           map[string]string     `json:"pending"`
 }
 
 func newEstateReport(m estateManifest, digest string, c *config) *estateReport {
 	revision, modified := estateDriverIdentity()
-	return &estateReport{FixtureSHA256: estateFixtureDigest(m), DriverRevision: revision, DriverModified: modified, Schema: "astronomer-real-estate-report-v1", Scope: "engineering_preprovisioned_observation", Verdict: "incomplete", ManifestSHA256: digest, Environment: m.Environment, Tier: m.Tier, Members: len(m.Members), TargetRPS: c.rps, RequestedWarmupSeconds: c.warmup.Seconds(), RequestedMeasurementSeconds: c.duration.Seconds(), Problems: []string{}, Pending: map[string]string{
-		"agent_cold_start":   "NOT_RUN: members pre-provisioned; preflight is not startup",
+	r := &estateReport{Schema: "astronomer-real-estate-report-v2", Timing: estateTiming, Scope: "engineering_preprovisioned_observation", Verdict: "incomplete", FixtureSHA256: estateFixtureDigest(m), ManifestSHA256: digest, DriverRevision: revision, DriverModified: modified, Environment: m.Environment, Tier: m.Tier, Members: len(m.Members), Definitions: m.Phases, Problems: []string{}, Pending: map[string]string{
+		"agent_cold_start":   "NOT_RUN: pre-provisioned members",
 		"fixture_lifecycle":  "NOT_RUN: no creation or cleanup; fixtures unchanged",
-		"rendered_namespace": "See per-member start/end verification; unavailable for legacy, missing or truncated source inventory",
-		"idle_estate":        "NOT_RUN", "resource_churn": "NOT_RUN", "scoped_search": "NOT_RUN", "delivery_status_workload": "NOT_RUN", "multiple_panels": "NOT_RUN", "two_browser_tabs": "NOT_RUN", "reconnect_burst": "NOT_RUN",
+		"rendered_namespace": "See start/end source-aware verification",
+		"resource_churn":     "NOT_RUN", "multiple_panels": "NOT_RUN", "two_browser_tabs": "NOT_RUN", "reconnect_burst": "NOT_RUN",
 		"end_to_end_freshness_p95":  "NOT_RUN: source age is not change-to-UI latency",
-		"list_reduction_80_percent": "NOT_RUN: tracked-source counters exclude complete baseline API traffic",
+		"list_reduction_80_percent": "NOT_RUN: tracked counters exclude complete baseline API traffic",
 		"assignment_recurring_gets": "NOT_RUN: tracked LIST/WATCH counters cannot establish GET absence",
-		"queue_age_and_event_relay": "NOT_RUN: member endpoints do not provide management queue/relay evidence",
+		"queue_age_and_event_relay": "NOT_RUN: member endpoints omit management queue/relay evidence",
 		"audit_conservation":        "NOT_RUN: read-only workload performs no mandatory audit mutations",
-		"repeatability":             "NOT_RUN: requires independent matched repetitions",
+		"repeatability":             "NOT_RUN: independent matched repetitions required",
+		"idle_estate":               "NOT_RUN", "inventory_browsing": "NOT_RUN", "scoped_search": "NOT_RUN", "delivery_status_workload": "NOT_RUN",
 	}}
-}
-func estateHTTPResults(rec *recorder, c *config, w estateWindow) []estateHTTPResult {
-	rec.mu.Lock()
-	defer rec.mu.Unlock()
-	out := []estateHTTPResult{}
-	for _, sc := range defaultScenarios() {
-		samples := rec.httpSamples[sc.name]
-		p99 := time.Duration(0)
-		if len(samples) > 0 {
-			p99 = percentile(samples, 0.99)
-		}
-		failures := rec.httpErrors[sc.name]
-		for status, n := range rec.httpStatus[sc.name] {
-			if status < 200 || status >= 300 {
-				failures += n
-			}
-		}
-		out = append(out, estateHTTPResult{sc.name, rec.httpCount[sc.name], failures, float64(p99) / float64(time.Millisecond)})
+	if m.Search != nil {
+		copy := *m.Search
+		copy.TokenFile = ""
+		r.Search = &copy
 	}
-	return out
+	return r
 }
 func (r *estateReport) evaluate() {
-	// This collector has no path to qualified/pass, irrespective of observed data.
 	r.Qualified = false
 	r.Verdict = "incomplete"
-	if r.RequestedWarmupSeconds < 300 || r.RequestedMeasurementSeconds < 1800 || r.Warmup.End.Sub(r.Warmup.Start).Seconds() < r.RequestedWarmupSeconds || r.Measurement.End.Sub(r.Measurement.Start).Seconds() < r.RequestedMeasurementSeconds*0.98 {
-		r.Problems = append(r.Problems, "warmup or measured window incomplete")
+	if r.Schema != "astronomer-real-estate-report-v2" || r.Timing != estateTiming || len(r.Definitions) == 0 || len(r.Phases) != len(r.Definitions) {
+		r.Problems = append(r.Problems, "phase contract incomplete")
 	}
-	if len(r.StartVerification) != r.Members || len(r.EndVerification) != r.Members || r.Members < 2 {
+	if r.Members < 2 || len(r.StartVerification) != r.Members || len(r.EndVerification) != r.Members {
 		r.Problems = append(r.Problems, "member verification incomplete")
 	}
 	for _, batch := range [][]estateVerification{r.StartVerification, r.EndVerification} {
@@ -103,32 +80,93 @@ func (r *estateReport) evaluate() {
 			}
 		}
 	}
-	total := 0
-	for _, h := range r.HTTP {
-		total += h.Requests
-		if h.Errors > 0 || h.Requests == 0 {
-			r.Problems = append(r.Problems, "HTTP errors or missing scenario: "+h.Scenario)
+	for i, p := range r.Phases {
+		if i >= len(r.Definitions) || p.Spec != r.Definitions[i] {
+			r.Problems = append(r.Problems, "phase definition mismatch")
+			continue
 		}
-		if (h.Scenario == "cluster_list" && h.P99MS > 500) || (h.Scenario == "cluster_pods" && h.P99MS > 2000) {
-			r.Problems = append(r.Problems, "existing HTTP latency budget exceeded: "+h.Scenario)
-		}
-	}
-	if len(r.HTTP) != len(defaultScenarios()) || float64(total) < float64(r.TargetRPS)*r.RequestedMeasurementSeconds*0.95 {
-		r.Problems = append(r.Problems, "achieved workload below existing 95% floor")
-	}
-	if len(r.Metrics) != r.Members {
-		r.Problems = append(r.Problems, "member metric evidence missing")
-	}
-	for _, m := range r.Metrics {
-		r.Problems = append(r.Problems, m.problems()...)
-		expected := int(r.RequestedMeasurementSeconds / metricsScrape.Seconds())
-		if float64(m.Samples) < float64(expected)*0.98 {
-			r.Problems = append(r.Problems, m.Member+": insufficient metric window coverage")
+		problems := evaluateEstateMeasuredPhase(p, r.Members, r.Tier)
+		r.Problems = append(r.Problems, problems...)
+		if len(problems) == 0 {
+			key := map[string]string{"idle": "idle_estate", "resources": "inventory_browsing", "delivery": "delivery_status_workload", "search": "scoped_search"}[p.Spec.Mode]
+			r.Pending[key] = "MEASURED: see per-phase evidence; not qualification"
 		}
 	}
 	if len(r.Problems) > 0 {
 		r.Verdict = "failed"
 	}
+}
+func evaluateEstateMeasuredPhase(p estateMeasuredPhase, members, tier int) []string {
+	problems := append([]string(nil), p.Problems...)
+	add := func(message string) { problems = append(problems, p.Spec.Name+": "+message) }
+	if p.Spec.WarmupSeconds < 300 || p.Spec.MeasurementSeconds < 1800 || p.Warmup.End.Sub(p.Warmup.Start).Seconds() < float64(p.Spec.WarmupSeconds) || p.Measurement.End.Sub(p.Measurement.Start).Seconds() < float64(p.Spec.MeasurementSeconds)*.98 {
+		add("warmup or measurement incomplete")
+	}
+	if p.Totals != estateTotals(p.Spec, p.HTTP) {
+		add("request total accounting differs")
+	}
+	seen := map[string]bool{}
+	total, success := 0, 0
+	for _, h := range p.HTTP {
+		key := h.Member + "/" + h.Scenario + "/" + h.Assignment
+		if seen[key] {
+			add("duplicate coverage row")
+		}
+		if h.HeaderLatency.Samples != uint64(h.Completed) || h.FullResponseLatency.Samples != uint64(h.Completed) {
+			add("latency histogram coverage incomplete")
+		}
+		if h.Completed > 0 && (h.HeaderLatency.P99UpperBoundMS == nil || h.FullResponseLatency.P99UpperBoundMS == nil) {
+			add("full-window latency percentile unavailable")
+		}
+		seen[key] = true
+		total += h.Scheduled
+		success += h.Success
+		if h.Scheduled == 0 || h.Completed != h.Scheduled || h.Success+h.Failed != h.Completed || h.Failed > 0 {
+			add("missing coverage or HTTP failure")
+		}
+	}
+	expectedRows := 0
+	switch p.Spec.Mode {
+	case "resources":
+		expectedRows = members * 3
+	case "delivery":
+		expectedRows = members * (tier + 2)
+	case "search":
+		expectedRows = len(p.HTTP)
+		if expectedRows < 1 || expectedRows > 3 {
+			add("search coverage missing")
+		}
+	}
+	if len(p.HTTP) != expectedRows {
+		add("scenario/member/assignment coverage missing")
+	}
+	expected := int(math.Ceil(p.Spec.RPS * float64(p.Spec.MeasurementSeconds)))
+	if total > expected || float64(success) < float64(expected)*.95 {
+		add("achieved workload outside declared bounds")
+	}
+	if p.Spec.Mode == "idle" && (total != 0 || p.Spec.RPS != 0) {
+		add("idle scheduled application work")
+	}
+	if p.Spec.Mode == "search" {
+		if len(p.ScopeChecks) < 2+int((p.Spec.WarmupSeconds+p.Spec.MeasurementSeconds)/60)-1 {
+			add("search scope coverage missing")
+		}
+		for _, check := range p.ScopeChecks {
+			if !check.OK {
+				add("search scope changed")
+			}
+		}
+	}
+	if len(p.Metrics) != members {
+		add("member metric evidence missing")
+	}
+	for _, m := range p.Metrics {
+		problems = append(problems, m.problems()...)
+		if float64(m.Samples) < float64(p.Spec.MeasurementSeconds)/metricsScrape.Seconds()*.98 {
+			add("insufficient metric coverage")
+		}
+	}
+	return problems
 }
 func finishEstateReport(path string, r *estateReport) error {
 	r.evaluate()
@@ -138,7 +176,10 @@ func finishEstateReport(path string, r *estateReport) error {
 	}
 	raw = append(raw, '\n')
 	var md strings.Builder
-	fmt.Fprintf(&md, "# Real-estate engineering observation\n\nVerdict: **%s**. Qualified: **false**.\n\n%d pre-provisioned members; %d declared assignments per member.\n\nThis partial collector cannot establish live E04 acceptance. Source ages are not end-to-end freshness. Request deltas cover only declared tracked-source metrics.\n\n", r.Verdict, r.Members, r.Tier)
+	fmt.Fprintf(&md, "# Real-estate engineering observation\n\nVerdict: **%s**. Qualified: **false**.\n\n%d pre-provisioned members; %d assignments per member.\n\nPer-phase rates use requests/second. Header latency preserves historical semantics; full-response latency includes bounded body read and validation. Fixed full-window histograms report conservative p99 upper bounds and explicit overflow. Neither source age nor these HTTP timings establish change-to-UI latency.\n\nSearch scope is periodically checked snapshot evidence, not atomic membership fencing; empty successful clusters are not identified in search responses.\n\n", r.Verdict, r.Members, r.Tier)
+	for _, p := range r.Phases {
+		fmt.Fprintf(&md, "- %s (%s): %.4g requests/second; %.0fs measured.\n", p.Spec.Name, p.Spec.Mode, p.Spec.RPS, p.Measurement.End.Sub(p.Measurement.Start).Seconds())
+	}
 	for _, p := range r.Problems {
 		fmt.Fprintf(&md, "- %s\n", p)
 	}
@@ -151,7 +192,6 @@ func finishEstateReport(path string, r *estateReport) error {
 	for _, k := range keys {
 		fmt.Fprintf(&md, "- %s: %s\n", k, r.Pending[k])
 	}
-	md.WriteString("\nPer-member metrics, fixture checks, HTTP outcomes and provenance are in the adjacent JSON artifact.\n")
 	markdown := []byte(md.String())
 	if err = os.WriteFile(path, markdown, 0600); err != nil {
 		return err
@@ -168,22 +208,17 @@ func finishEstateReport(path string, r *estateReport) error {
 	}
 	return nil
 }
-
-// Comparability validates identical measurement conditions, not complete API
-// attribution. Even comparable reports leave LIST reduction and GET absence NOT_RUN.
 func comparableEstateReports(a, b estateReport) error {
 	left, right := a.Environment, b.Environment
 	left.Commit = ""
 	right.Commit = ""
 	left.ImagesSHA256 = ""
 	right.ImagesSHA256 = ""
-	x, _ := json.Marshal(left)
-	y, _ := json.Marshal(right)
-	if a.FixtureSHA256 == "" || a.FixtureSHA256 != b.FixtureSHA256 || string(x) != string(y) || a.Tier != b.Tier || a.Members != b.Members || a.TargetRPS != b.TargetRPS || a.RequestedMeasurementSeconds != b.RequestedMeasurementSeconds || a.RequestedWarmupSeconds != b.RequestedWarmupSeconds {
-		return errors.New("estate environment, tier or workload mismatch")
+	if a.Schema != b.Schema || a.Schema != "astronomer-real-estate-report-v2" || a.Timing != b.Timing || a.Timing != estateTiming || a.FixtureSHA256 == "" || a.FixtureSHA256 != b.FixtureSHA256 || !reflect.DeepEqual(left, right) || a.Tier != b.Tier || a.Members != b.Members || !reflect.DeepEqual(a.Definitions, b.Definitions) || !reflect.DeepEqual(a.Search, b.Search) {
+		return errors.New("estate environment, phase, scope or timing mismatch")
 	}
 	if a.Verdict == "failed" || b.Verdict == "failed" {
-		return errors.New("failed engineering reports cannot support comparison")
+		return errors.New("failed reports cannot support comparison")
 	}
 	return nil
 }

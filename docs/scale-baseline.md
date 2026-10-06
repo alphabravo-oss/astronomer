@@ -151,3 +151,10 @@ baseline API-read attribution, change-to-UI freshness and repeated live acceptan
 remain pending. Source-age gauges and fake-client request counts cannot substitute
 for those measurements. Existing protected certification and sizing evidence are
 unchanged.
+
+The engineering real-estate v2 manifest additionally declares separate measured
+idle, namespace browsing, project-scoped delivery reads, and namespace/type search
+phases. Each has its own warmup, measurement, drain and metric baseline; search
+records an explicitly verified authorized fanout set including local when declared.
+Full-response latency is separate from existing header-latency benchmark fields.
+These source capabilities do not constitute executed live qualification.

@@ -19,6 +19,15 @@ func runEstatePhase(ctx context.Context, c *config, token string, duration time.
 	defer cancelSchedule()
 	requests, cancelRequests := context.WithDeadline(ctx, deadline.Add(30*time.Second))
 	defer cancelRequests()
+	boundary := make(chan time.Time, 1)
+	go func() {
+		<-schedule.Done()
+		stopped := time.Now().UTC()
+		if ctx.Err() == nil || stopped.After(deadline) {
+			stopped = deadline
+		}
+		boundary <- stopped
+	}()
 	var wg sync.WaitGroup
 	if metrics != nil {
 		wg.Add(1)
@@ -27,12 +36,12 @@ func runEstatePhase(ctx context.Context, c *config, token string, duration time.
 	cfg := *c
 	cfg.duration = duration
 	driveWorkload(schedule, requests, &cfg, token, rec, log)
+	if cfg.rps == 0 {
+		<-schedule.Done()
+	}
 	wg.Wait()
 	end := time.Now().UTC()
-	scheduledEnd := deadline
-	if end.Before(deadline) {
-		scheduledEnd = end
-	}
+	scheduledEnd := <-boundary
 	return estateWindow{start, scheduledEnd}, estateWindow{scheduledEnd, end}
 }
 func verifyEstateMetricIdentity(ctx context.Context, c *http.Client, m estateMember, token string) error {

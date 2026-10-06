@@ -15,28 +15,34 @@ import (
 )
 
 func estateCompleteCollectorReport() *estateReport {
-	cfg := &config{rps: 1, warmup: 5 * time.Minute, duration: 30 * time.Minute}
-	r := newEstateReport(estateTestManifest(), strings.Repeat("a", 64), cfg)
+	m := estateTestManifest()
+	r := newEstateReport(m, strings.Repeat("a", 64), &config{})
 	start := time.Unix(1800000000, 0)
-	r.Warmup = estateWindow{start, start.Add(cfg.warmup)}
-	r.Measurement = estateWindow{r.Warmup.End, r.Warmup.End.Add(cfg.duration)}
-	for _, member := range estateTestManifest().Members {
+	p := estateMeasuredPhase{Spec: m.Phases[0], Warmup: estateWindow{start, start.Add(5 * time.Minute)}}
+	p.Measurement = estateWindow{p.Warmup.End, p.Warmup.End.Add(30 * time.Minute)}
+	for _, member := range m.Members {
 		v := estateVerification{Member: member.Name, IdentityVerified: true, RenderedNamespace: "UNAVAILABLE"}
 		r.StartVerification = append(r.StartVerification, v)
 		r.EndVerification = append(r.EndVerification, v)
-		m := estateMetricReport{Member: member.Name}
+		metric := estateMetricReport{Member: member.Name}
 		for i := 0; i < 120; i++ {
-			now := r.Measurement.Start.Add(time.Duration(i) * 15 * time.Second)
+			now := p.Measurement.Start.Add(time.Duration(i) * 15 * time.Second)
 			raw := estateMetricFixture(now)
 			points, _ := parseEstateMetrics(raw, "test")
-			m.Attempts++
-			m.observe(raw, points, now)
+			metric.Attempts++
+			metric.observe(raw, points, now)
 		}
-		r.Metrics = append(r.Metrics, m)
+		p.Metrics = append(p.Metrics, metric)
 	}
-	for _, sc := range defaultScenarios() {
-		r.HTTP = append(r.HTTP, estateHTTPResult{Scenario: sc.name, Requests: 200, P99MS: 1})
+	var histogram estateLatencyHistogram
+	for i := 0; i < 300; i++ {
+		histogram.observe(time.Millisecond)
 	}
+	for _, q := range estateRequestCatalog(m, p.Spec) {
+		p.HTTP = append(p.HTTP, estateRequestResult{Scenario: q.Scenario, Member: q.Member, Scheduled: 300, Completed: 300, Success: 300, HeaderLatency: histogram.distribution(), FullResponseLatency: histogram.distribution()})
+	}
+	p.Totals = estateTotals(p.Spec, p.HTTP)
+	r.Phases = []estateMeasuredPhase{p}
 	return r
 }
 func TestRealEstateReportNeverQualifiesMissingScenarios(t *testing.T) {
@@ -49,16 +55,16 @@ func TestRealEstateReportNeverQualifiesMissingScenarios(t *testing.T) {
 		t.Fatal("fabricated live evidence")
 	}
 	for _, mutate := range []func(*estateReport){
-		func(r *estateReport) { r.Measurement.End = r.Measurement.Start.Add(time.Minute) },
-		func(r *estateReport) { r.Warmup.End = r.Warmup.Start.Add(time.Minute) },
-		func(r *estateReport) { r.HTTP[0].Errors = 1 },
+		func(r *estateReport) { r.Phases[0].Measurement.End = r.Phases[0].Measurement.Start.Add(time.Minute) },
+		func(r *estateReport) { r.Phases[0].Warmup.End = r.Phases[0].Warmup.Start.Add(time.Minute) },
+		func(r *estateReport) { r.Phases[0].HTTP[0].Failed = 1 },
 		func(r *estateReport) {
-			for i := range r.HTTP {
-				r.HTTP[i].Requests = 1
+			for i := range r.Phases[0].HTTP {
+				r.Phases[0].HTTP[i].Scheduled = 1
 			}
 		},
 		func(r *estateReport) { r.Members = 1 },
-		func(r *estateReport) { r.Metrics[0].Samples = 10 },
+		func(r *estateReport) { r.Phases[0].Metrics[0].Samples = 10 },
 	} {
 		candidate := estateCompleteCollectorReport()
 		mutate(candidate)
@@ -76,7 +82,10 @@ func TestRealEstateComparisonRejectsDifferentConditions(t *testing.T) {
 	if err := comparableEstateReports(*a, *b); err != nil {
 		t.Fatal(err)
 	}
-	for _, mutate := range []func(*estateReport){func(r *estateReport) { r.Tier = 10 }, func(r *estateReport) { r.Environment.HardwareSHA256 = strings.Repeat("f", 64) }, func(r *estateReport) { r.FixtureSHA256 = "different" }, func(r *estateReport) { r.TargetRPS = 2 }} {
+	for _, mutate := range []func(*estateReport){func(r *estateReport) { r.Tier = 10 }, func(r *estateReport) { r.Environment.HardwareSHA256 = strings.Repeat("f", 64) }, func(r *estateReport) { r.FixtureSHA256 = "different" }, func(r *estateReport) {
+		r.Definitions = append([]estatePhaseSpec(nil), r.Definitions...)
+		r.Definitions[0].RPS = 2
+	}} {
 		candidate := estateCompleteCollectorReport()
 		mutate(candidate)
 		if comparableEstateReports(*a, *candidate) == nil {
@@ -116,14 +125,6 @@ func TestRealEstateCheckOnlyDoesNotReadTokens(t *testing.T) {
 	cfg := &config{realEstate: path, checkOnly: true, tokenPath: "/not-present", server: "https://api.test", rps: 1, duration: 30 * time.Minute, warmup: 5 * time.Minute}
 	if err := runRealEstate(cfg, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 		t.Fatal(err)
-	}
-}
-func TestRealEstateHTTPStatusErrorsAreCounted(t *testing.T) {
-	rec := newRecorder()
-	rec.RecordHTTP("cluster_list", 503, time.Millisecond, nil)
-	results := estateHTTPResults(rec, &config{}, estateWindow{})
-	if results[0].Errors != 1 {
-		t.Fatal("HTTP failure counted as achieved success")
 	}
 }
 func TestRealEstateCancellationMakesNoNetworkRequests(t *testing.T) {

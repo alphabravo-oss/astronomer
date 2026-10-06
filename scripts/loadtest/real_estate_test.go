@@ -2,7 +2,6 @@ package main
 
 import (
 	"testing"
-	"time"
 )
 
 func TestRealEstateManifestRejectsShortcuts(t *testing.T) {
@@ -25,13 +24,15 @@ func TestRealEstateManifestRejectsShortcuts(t *testing.T) {
 	}
 }
 func TestRealEstateWindows(t *testing.T) {
-	for _, cfg := range []*config{
-		{realEstate: "manifest", duration: 29 * time.Minute, warmup: 5 * time.Minute, rps: 1},
-		{realEstate: "manifest", duration: 30 * time.Minute, warmup: 4 * time.Minute, rps: 1},
-		{realEstate: "manifest", duration: 30 * time.Minute, warmup: 5 * time.Minute, rps: 1, certification: true},
+	for _, mutate := range []func(*estateManifest){
+		func(m *estateManifest) { m.Phases[0].WarmupSeconds = 299 },
+		func(m *estateManifest) { m.Phases[0].MeasurementSeconds = 1799 },
+		func(m *estateManifest) { m.Phases[0].Mode = "idle" },
 	} {
-		if validateEstateConfig(cfg) == nil {
-			t.Fatal("invalid shortcut accepted")
+		m := estateTestManifest()
+		mutate(&m)
+		if m.validate() == nil {
+			t.Fatal("invalid phase shortcut accepted")
 		}
 	}
 }

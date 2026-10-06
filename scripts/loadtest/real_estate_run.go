@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 )
@@ -24,11 +22,11 @@ func registerEstateFlags(c *config) {
 }
 func collectEstateMixedFlags(c *config) {
 	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "clusters" || f.Name == "metrics-server" || f.Name == "skip-agents" || f.Name == "keep-fixtures" || f.Name == "profile" || f.Name == "certification" {
+		if f.Name == "rps" || f.Name == "duration" || f.Name == "warmup" || f.Name == "clusters" || f.Name == "metrics-server" || f.Name == "skip-agents" || f.Name == "keep-fixtures" || f.Name == "profile" || f.Name == "certification" {
 			c.estateMixedFlags = append(c.estateMixedFlags, f.Name)
 		}
 	})
-	for _, key := range []string{"LOADTEST_CLUSTERS", "LOADTEST_METRICS_SERVER", "LOADTEST_SKIP_AGENTS", "LOADTEST_KEEP_FIXTURES", "LOADTEST_PROFILE", "LOADTEST_CERTIFICATION"} {
+	for _, key := range []string{"LOADTEST_RPS", "LOADTEST_DURATION", "LOADTEST_CLUSTERS", "LOADTEST_METRICS_SERVER", "LOADTEST_SKIP_AGENTS", "LOADTEST_KEEP_FIXTURES", "LOADTEST_PROFILE", "LOADTEST_CERTIFICATION"} {
 		if os.Getenv(key) != "" {
 			c.estateMixedFlags = append(c.estateMixedFlags, key)
 		}
@@ -88,46 +86,30 @@ func executeRealEstate(ctx context.Context, c *config, m estateManifest, digest,
 		r.Problems = append(r.Problems, err.Error())
 		return finishEstateReport(c.outPath, r)
 	}
-	cfg := *c
-	cfg.server = base
-	cfg.workloadClient = client
-	cfg.fixtureClusterIDs = nil
-	for _, member := range m.Members {
-		cfg.fixtureClusterIDs = append(cfg.fixtureClusterIDs, member.ClusterID)
-	}
-	log.Info("real estate fixture identities verified; warming existing HTTP workload", "members", len(m.Members), "tier", m.Tier)
-	r.Warmup, r.WarmupDrain = runEstatePhase(ctx, &cfg, token, c.warmup, newRecorder(), log, nil)
-	if ctx.Err() != nil {
-		r.Problems = append(r.Problems, "canceled during warmup")
-		return finishEstateReport(c.outPath, r)
-	}
-	rec := newRecorder()
-	rec.MarkStart()
-	r.Metrics = make([]estateMetricReport, len(m.Members))
-	metrics := func(schedule, requests context.Context, deadline time.Time) {
-		var wg sync.WaitGroup
-		for i, member := range m.Members {
-			r.Metrics[i].Member = member.Name
-			r.Metrics[i].TargetSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(member.Metrics.URL+"\x00"+member.Metrics.InstanceID)))
-			wg.Add(1)
-			go func(i int, member estateMember) {
-				defer wg.Done()
-				collectEstateMetrics(schedule, requests, deadline, client, member, metricTokens[i], &r.Metrics[i])
-			}(i, member)
+	searchToken := token
+	if m.Search != nil && m.Search.TokenFile != "" {
+		searchToken, err = loadToken(m.Search.TokenFile)
+		if err != nil || searchToken == "" {
+			r.Problems = append(r.Problems, "search token unavailable")
+			return finishEstateReport(c.outPath, r)
 		}
-		wg.Wait()
 	}
-	r.Measurement, r.MeasurementDrain = runEstatePhase(ctx, &cfg, token, c.duration, rec, log, metrics)
-	r.HTTP = estateHTTPResults(rec, c, r.Measurement)
+	phaseConfig := *c
+	phaseConfig.server = base
+	for _, spec := range m.Phases {
+		phase := runMeasuredEstatePhase(ctx, &phaseConfig, m, spec, token, searchToken, metricTokens, client, log)
+		r.Phases = append(r.Phases, phase)
+		if len(phase.Problems) > 0 || ctx.Err() != nil {
+			break
+		}
+	}
 	r.EndVerification, err = verify()
 	if err != nil {
 		r.Problems = append(r.Problems, err.Error())
 	}
-	if ctx.Err() != nil {
-		r.Problems = append(r.Problems, "measurement interrupted")
-	}
 	return finishEstateReport(c.outPath, r)
 }
+
 func collectEstateMetrics(ctx, requests context.Context, deadline time.Time, c *http.Client, m estateMember, token string, r *estateMetricReport) {
 	ticker := time.NewTicker(metricsScrape)
 	defer ticker.Stop()

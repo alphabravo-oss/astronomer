@@ -15,6 +15,7 @@ func estateTestManifest() estateManifest {
 	for i := 1; i <= 2; i++ {
 		m.Members = append(m.Members, estateMember{Name: fmt.Sprintf("member-%d", i), ClusterID: fmt.Sprintf("00000000-0000-4000-8000-%012d", i), ProjectID: fmt.Sprintf("00000000-0000-4000-8000-%012d", i+10), Namespace: "benchmark", PrivilegeProfile: "privileged", Assignments: []estateAssignment{{ID: fmt.Sprintf("00000000-0000-4000-8000-%012d", i+20), TargetID: fmt.Sprintf("00000000-0000-4000-8000-%012d", i+30), Generation: 1, SpecDigest: "sha256:" + strings.Repeat("f", 64)}}, Resources: map[string]int{"pods": 1, "deployments": 1, "services": 1}, Metrics: estateMetricsTarget{URL: fmt.Sprintf("https://member-%d.test/metrics", i), InstanceID: "test"}})
 	}
+	m.Phases = []estatePhaseSpec{{Name: "resources", Mode: "resources", RPS: 1, WarmupSeconds: 300, MeasurementSeconds: 1800}}
 	return m
 }
 
