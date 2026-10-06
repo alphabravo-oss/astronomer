@@ -258,34 +258,29 @@ function InstallChartForm({
           </div>
           {schema && (
             <div className="inline-flex rounded-md border border-border bg-muted/30 p-1">
-              <button
-                type="button"
-                aria-pressed={editorMode === "form"}
-                onClick={() => setEditorMode("form")}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
-                  editorMode === "form"
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Braces className="h-3.5 w-3.5" />
-                Form
-              </button>
-              <button
-                type="button"
-                aria-pressed={editorMode === "yaml"}
-                onClick={() => setEditorMode("yaml")}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
-                  editorMode === "yaml"
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <FileCode2 className="h-3.5 w-3.5" />
-                YAML
-              </button>
+              {(
+                [
+                  ["form", Braces, "Form"],
+                  ["yaml", FileCode2, "YAML"],
+                ] as const
+              ).map(([mode, Icon, label]) => (
+                <ActionButton
+                  key={mode}
+                  intent="bare"
+                  size="none"
+                  aria-pressed={editorMode === mode}
+                  onClick={() => setEditorMode(mode)}
+                  icon={<Icon className="h-3.5 w-3.5" />}
+                  className={cn(
+                    "gap-1 rounded-sm px-2.5 py-1 text-xs transition-colors",
+                    editorMode === mode
+                      ? "bg-background text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </ActionButton>
+              ))}
             </div>
           )}
         </div>

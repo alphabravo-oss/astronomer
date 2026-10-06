@@ -1,3 +1,4 @@
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   EmptyState,
   type EmptyStateActionProps,
@@ -7,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { HelmChart, HelmChartCategory } from "@/types";
 import { Package, Search, X } from "lucide-react";
 import { categories, CategoryChip } from "./-category";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function BrowseTab({
   projectId,
@@ -40,19 +42,23 @@ export function BrowseTab({
             className="pl-9 pr-8"
           />
           {searchQuery && (
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               onClick={() => onSearchQueryChange("")}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </ActionButton>
           )}
         </div>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
         {categories.map((cat) => (
-          <button
+          <ActionButton
+            intent="bare"
+            size="none"
             key={cat.key}
             onClick={() => onSelectedCategoryChange(cat.key)}
             className={cn(
@@ -63,7 +69,7 @@ export function BrowseTab({
             )}
           >
             {cat.label}
-          </button>
+          </ActionButton>
         ))}
       </div>
 
@@ -76,21 +82,26 @@ export function BrowseTab({
           terminal
         />
       ) : chartsLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div
+          role="status"
+          aria-busy="true"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        >
+          <span className="sr-only">Loading charts</span>
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
               className="rounded-lg border border-border p-4 space-y-3"
             >
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-muted animate-pulse" />
+                <Skeleton className="h-10 w-10 rounded-lg" />
                 <div className="flex-1 space-y-1.5">
-                  <div className="h-4 w-24 rounded-sm bg-muted animate-pulse" />
-                  <div className="h-3 w-16 rounded-sm bg-muted animate-pulse" />
+                  <Skeleton className="h-4 w-24 rounded-sm" />
+                  <Skeleton className="h-3 w-16 rounded-sm" />
                 </div>
               </div>
-              <div className="h-3 w-full rounded-sm bg-muted animate-pulse" />
-              <div className="h-3 w-3/4 rounded-sm bg-muted animate-pulse" />
+              <Skeleton className="h-3 w-full rounded-sm" />
+              <Skeleton className="h-3 w-3/4 rounded-sm" />
             </div>
           ))}
         </div>
@@ -113,10 +124,12 @@ export function BrowseTab({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {(charts || []).map((chart) => (
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               key={chart.id}
               onClick={() => onSelectChart(chart)}
-              className="rounded-lg border border-border p-4 text-left hover:border-foreground/20 hover:bg-muted/30
+              className="block whitespace-normal rounded-lg border border-border p-4 text-left font-normal hover:border-foreground/20 hover:bg-muted/30
                 transition-colors group"
             >
               <div className="flex items-start gap-3">
@@ -144,7 +157,7 @@ export function BrowseTab({
                   </p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-2 line-clamp-2 min-h-[2rem]">
+              <p className="text-xs text-muted-foreground mt-2 line-clamp-2 min-h-8">
                 {chart.description || "No description available"}
               </p>
               <div className="flex items-center justify-between mt-3">
@@ -158,7 +171,7 @@ export function BrowseTab({
                   </span>
                 )}
               </div>
-            </button>
+            </ActionButton>
           ))}
         </div>
       )}

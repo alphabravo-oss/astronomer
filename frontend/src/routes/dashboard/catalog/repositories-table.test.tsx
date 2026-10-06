@@ -126,7 +126,11 @@ describe("catalog Repositories table", () => {
       <RepositoriesTable repos={repos} onSync={vi.fn()} onDelete={onDelete} />,
     );
 
-    fireEvent.click(within(rowFor("bitnami")).getByTitle("Delete repository"));
+    fireEvent.click(
+      within(rowFor("bitnami")).getByRole("button", {
+        name: "Delete repository",
+      }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Delete repository" });
     expect(dialog).toHaveTextContent(
