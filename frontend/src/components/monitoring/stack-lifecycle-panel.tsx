@@ -578,7 +578,7 @@ function StackSummary({
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-6">
       {rows.map(([label, value]) => (
         <div key={label} className="min-w-0">
-          <dt className="text-2xs font-medium uppercase tracking-wider text-muted-foreground">
+          <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             {label}
           </dt>
           <dd className="truncate text-xs text-foreground">{value}</dd>

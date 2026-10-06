@@ -299,7 +299,7 @@ export function RegistrationConnectStep({
                     >
                       {curlVariants[v].label}
                       {isPlatformDefault && (
-                        <span className="text-2xs text-muted-foreground">
+                        <span className="text-[10px] text-muted-foreground">
                           (platform default)
                         </span>
                       )}
