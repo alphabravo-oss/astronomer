@@ -244,8 +244,7 @@ export function AppInstallModal({
   useEffect(() => {
     if (isUpgrade) return; // don't auto-clobber on upgrade
     if (defaultValues.isError || !defaultValues.data) return;
-    const key = selectedVersionId;
-    if (hydratedForVersion.current === key) return;
+    if (hydratedForVersion.current === selectedVersionId) return;
     form.setFieldValue(
       "valuesYaml",
       catalogInstallDefaultValues(
@@ -253,10 +252,11 @@ export function AppInstallModal({
         defaultValues.data.defaultValues,
       ),
     );
-    hydratedForVersion.current = key;
+    hydratedForVersion.current = selectedVersionId;
   }, [
     defaultValues.data,
     defaultValues.isError,
+    mode.chartName,
     form,
     selectedVersionId,
     isUpgrade,
