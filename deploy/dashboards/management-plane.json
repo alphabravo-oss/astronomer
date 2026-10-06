@@ -2,7 +2,7 @@
   "title": "Astronomer — Management Plane",
   "uid": "astronomer-management-plane",
   "schemaVersion": 38,
-  "version": 2,
+  "version": 3,
   "tags": ["astronomer", "management-plane"],
   "time": {"from": "now-6h", "to": "now"},
   "templating": {"list": [{"name": "metrics_namespace", "type": "constant", "label": "Metrics namespace", "query": "astronomer", "current": {"text": "astronomer", "value": "astronomer"}, "hide": 0}, {"name": "metrics_fullname", "type": "constant", "label": "Metrics service prefix", "query": "astronomer", "current": {"text": "astronomer", "value": "astronomer"}, "hide": 0}]},
@@ -300,6 +300,168 @@
           "expr": "go_goroutines{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} == 1)",
           "legendFormat": "worker {{pod}} / {{instance}}",
           "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Embedded observation source availability",
+      "description": "Embedded server targets only, per instance; missing or failed scrapes remain gaps. 1 means current sampled evidence; 0 means unavailable, partial or stale evidence. Standalone /metrics exists, but annotations do not establish downstream scraping or aggregation.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "astronomer_agent_delivery_observation_source_available{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "legendFormat": "{{instance}} / {{source}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Embedded observation source age",
+      "description": "Embedded server targets only, per instance; missing or failed scrapes remain gaps. Unknown age (-1) is omitted. Age is sampled source evidence, not scrape age.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 60,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "(astronomer_agent_delivery_observation_source_age_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "legendFormat": "{{instance}} / {{source}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Embedded tracked LIST/WATCH request rate",
+      "description": "Embedded server targets only, per instance; missing or failed scrapes remain gaps. Actual tracked observation LIST/WATCH calls only, not all Kubernetes calls or watch lifecycle events.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 68,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (namespace, service, instance, kind, verb, outcome) (rate(astronomer_agent_observation_requests_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m])) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "legendFormat": "{{instance}} / {{kind}} / {{verb}} / {{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Embedded inventory refresh p95 duration",
+      "description": "Embedded server targets only, per instance; missing or failed scrapes remain gaps. Discovery/dynamic refresh work excludes cache reads. No refresh samples remain no data.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 68,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (namespace, service, instance, source, outcome, le) (rate(astronomer_agent_delivery_observation_refresh_duration_seconds_bucket{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]))) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "legendFormat": "{{instance}} / {{source}} / {{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Embedded inventory refresh frequency",
+      "description": "Embedded server targets only, per instance; missing or failed scrapes remain gaps. Discovery/dynamic refresh executions, not individual Kubernetes requests.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 76,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (namespace, service, instance, source, outcome) (rate(astronomer_agent_delivery_observation_refresh_duration_seconds_count{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m])) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "legendFormat": "{{instance}} / {{source}} / {{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Server DB average acquisition duration",
+      "description": "Embedded server targets only, per instance; missing or failed scrapes remain gaps. All pool acquisition time per acquisition, not exclusively blocked wait. Zero acquisition rate is omitted.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 76,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "(rate(astronomer_db_pool_acquire_duration_seconds_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]) / (rate(astronomer_db_pool_acquire_count_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]) > 0)) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
         }
       ]
     }

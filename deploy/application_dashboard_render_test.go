@@ -82,6 +82,7 @@ func TestApplicationDashboardRenderScope(t *testing.T) {
 					}
 				}
 			}
+			assertObservationDashboardQueries(t, queries, vars)
 			disconnected := queries["Agents disconnected"]
 			if len(disconnected) != 1 || !strings.Contains(disconnected[0], "== bool 0") || !strings.Contains(disconnected[0], "and on(namespace, service, instance) (up{") || strings.Contains(disconnected[0], "vector(0)") {
 				t.Fatalf("disconnection count hides missing inputs: %#v", disconnected)
@@ -109,9 +110,15 @@ func TestApplicationDashboardSourceMissingData(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, panel := range dashboard.Panels {
-		if panel.Title == "Agents disconnected" || strings.Contains(panel.Title, "scrape availability") || panel.Title == "Process CPU usage (cores)" || panel.Title == "Go heap in use" || panel.Title == "Go goroutines" {
+		if panel.Title == "Agents disconnected" || strings.Contains(panel.Title, "scrape availability") || panel.Title == "Process CPU usage (cores)" || panel.Title == "Go heap in use" || panel.Title == "Go goroutines" || strings.HasPrefix(panel.Title, "Embedded ") || panel.Title == "Server DB average acquisition duration" {
 			if panel.FieldConfig.Defaults["noValue"] != "No data" {
 				t.Fatalf("missing-data display absent: %s", panel.Title)
+			}
+			if strings.HasPrefix(panel.Title, "Embedded ") || panel.Title == "Server DB average acquisition duration" {
+				custom, ok := panel.FieldConfig.Defaults["custom"].(map[string]any)
+				if !ok || custom["spanNulls"] != false {
+					t.Fatalf("observation gaps are connected: %s", panel.Title)
+				}
 			}
 			for _, target := range panel.Targets {
 				if strings.Contains(target.Expr, "vector(0)") {
@@ -136,6 +143,44 @@ func TestApplicationDashboardOptOut(t *testing.T) {
 			if renderedDocExists(docs, "ServiceMonitor", "astronomer-"+component) {
 				t.Fatal("dashboard setting enabled application monitors")
 			}
+		}
+	}
+}
+
+// These are structural query contracts, not a substitute for PromQL evaluation.
+func assertObservationDashboardQueries(t *testing.T, queries map[string][]string, vars map[string]string) {
+	t.Helper()
+	contracts := map[string][]string{
+		"Embedded observation source availability": {"astronomer_agent_delivery_observation_source_available"},
+		"Embedded observation source age":          {"astronomer_agent_delivery_observation_source_age_seconds", ">= 0"},
+		"Embedded tracked LIST/WATCH request rate": {"astronomer_agent_observation_requests_total", "sum by (namespace, service, instance, kind, verb, outcome)", "rate("},
+		"Embedded inventory refresh p95 duration":  {"astronomer_agent_delivery_observation_refresh_duration_seconds_bucket", "histogram_quantile(0.95,", "sum by (namespace, service, instance, source, outcome, le)"},
+		"Embedded inventory refresh frequency":     {"astronomer_agent_delivery_observation_refresh_duration_seconds_count", "sum by (namespace, service, instance, source, outcome)", "rate("},
+		"Server DB average acquisition duration":   {"rate(astronomer_db_pool_acquire_duration_seconds_total", "/ (rate(astronomer_db_pool_acquire_count_total", "[5m]) > 0)"},
+	}
+	selector := `{namespace="${metrics_namespace}",service="${metrics_fullname}-server-metrics"}`
+	for title, fragments := range contracts {
+		values := queries[title]
+		if len(values) != 1 {
+			t.Fatalf("expected one per-target query for %s: %v", title, values)
+		}
+		q := values[0]
+		for _, fragment := range append(fragments, selector, "and on(namespace, service, instance) (up"+selector+" == 1)") {
+			if !strings.Contains(q, fragment) {
+				t.Fatalf("%s lacks contract %q: %s", title, fragment, q)
+			}
+		}
+		for _, forbidden := range []string{"vector(0)", "or 0", "clamp_min", "avg(", "== bool", ">= bool", "observation_watch_events_total", "cluster_id"} {
+			if strings.Contains(q, forbidden) {
+				t.Fatalf("%s loses observation semantics: %s", title, q)
+			}
+		}
+		// Resolve Grafana constants from the actual rendered ConfigMap and ensure
+		// every metric selector stays on this release's server service.
+		resolved := strings.NewReplacer("${metrics_namespace}", vars["metrics_namespace"], "${metrics_fullname}", vars["metrics_fullname"]).Replace(q)
+		want := `{namespace="` + vars["metrics_namespace"] + `",service="` + vars["metrics_fullname"] + `-server-metrics"}`
+		if strings.Count(resolved, want) < 2 || strings.Contains(resolved, "${") || strings.Contains(resolved, "worker-metrics") {
+			t.Fatalf("%s escaped rendered scope: %s", title, resolved)
 		}
 	}
 }

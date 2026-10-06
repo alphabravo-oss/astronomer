@@ -84,11 +84,33 @@ JSON defaults both constants to `astronomer`; when importing it directly, edit
 those constants to the installation's namespace and metrics Service name prefix.
 Grafana's normal Prometheus datasource configuration is still required. Other
 existing dashboard panels retain their original query scope; these constants
-scope the new resource/availability panels and disconnected-agent count only.
+scope the resource/availability, embedded observation, server DB acquisition,
+and disconnected-agent panels.
 Enabling dashboards does not enable ServiceMonitors.
 
-Cache observation freshness, sync state, and downstream API work panels remain a
-follow-up to Plan 030 E05 when the bounded producer metrics are implemented. Do
-not infer those measurements from scrape availability or invent metric names.
+Embedded observation panels use server metrics targets only, retaining each
+`instance` separately. Source availability is 1 for current sampled evidence and
+0 for unavailable, partial or stale evidence. Source age omits the unknown-age
+sentinel (-1); it measures sampled source evidence, not time since a scrape.
+Source labels identify tracked kinds and controller evidence; discovery/dynamic
+refresh duration and frequency are separate measurements. The p95 groups by
+instance, source and outcome, so failed refreshes are not averaged into successes.
+
+The LIST/WATCH panel counts actual tracked observation requests by kind, verb and
+outcome. It is not total downstream Kubernetes API load: dynamic/discovery calls,
+other clients and watch lifecycle events are outside that counter. Refresh
+frequency counts coalesced refresh executions, not individual API calls. The
+server DB panel shows average time for all pool acquisitions, not exclusively
+blocked wait, and omits intervals with zero acquisition rate. Missing or failed
+scrapes remain gaps; no panel fabricates a healthy zero.
+
+Standalone agents expose `/metrics` on their health listener at :8081 and have
+pod scrape annotations. These annotations do not establish downstream scraping
+or aggregation into management Prometheus. The chart's ServiceMonitors select
+server and worker targets, not standalone agents. These panels therefore make
+no claim about remote agent coverage. Check actual targets before interpreting
+an absent metric, including whether the deployed producer version exports it.
+
 Dashboard render tests verify selectors and missing-data configuration; they do
-not evaluate PromQL or prove live target discovery.
+not evaluate PromQL or prove live target discovery. Real PromQL evaluation needs
+Prometheus or promtool; its absence is not a successful evaluation.
