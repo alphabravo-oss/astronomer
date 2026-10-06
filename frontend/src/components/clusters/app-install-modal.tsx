@@ -32,12 +32,11 @@ import {
  * that operation and its Flux rollout; acceptance is not workload readiness.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { QueryStates } from "@/components/ui/query-states";
 import { useAppForm, useStore } from "@/lib/form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
-import { Loader2, AlertTriangle, Info } from "lucide-react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
@@ -50,6 +49,12 @@ import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import { ActionButton } from "@/components/ui/action-button";
 import { BARE_BUTTON } from "@/lib/bare-button";
+import {
+  AppInstallFooter,
+  ChartInstallationNotes,
+  HAS_CRDS,
+} from "./app-install-parts";
+export { AppUninstallModal } from "./app-uninstall-modal";
 
 type Mode =
   | { kind: "install"; chartId: string; chartName: string }
@@ -85,19 +90,6 @@ const SLOW_INSTALL_CHARTS = new Set([
   "kube-state-metrics",
   "loki-stack",
   "loki-distributed",
-]);
-
-// Charts that ship CRDs by default — the operator should know that
-// uninstall will not remove the CRDs unless they take extra steps.
-// Surfaced on install too so the operator picks a stable namespace
-// from the start.
-const HAS_CRDS = new Set([
-  "kube-prometheus-stack",
-  "cert-manager",
-  "trivy-operator",
-  "istio-base",
-  "gatekeeper",
-  "opa-gatekeeper",
 ]);
 
 export function AppInstallModal({
@@ -423,209 +415,5 @@ export function AppInstallModal({
         </div>
       </div>
     </ModalShell>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Uninstall confirmation
-// ---------------------------------------------------------------------
-
-interface AppUninstallModalProps {
-  clusterId: string;
-  installedChartId: string;
-  releaseName: string;
-  chartName: string;
-  namespace: string;
-  onClose: () => void;
-  onConfirm: () => Promise<void> | void;
-  pending?: boolean;
-  confirmDecision?: PermissionDecision;
-}
-
-export function AppUninstallModal({
-  releaseName,
-  chartName,
-  namespace,
-  onClose,
-  onConfirm,
-  pending,
-  confirmDecision,
-}: AppUninstallModalProps) {
-  const [typed, setTyped] = useState("");
-  const confirmBlockedReason =
-    confirmDecision && !confirmDecision.allowed
-      ? permissionDeniedReason(confirmDecision)
-      : undefined;
-  const confirmable =
-    typed === releaseName && !pending && !confirmBlockedReason;
-  const crdsWillSurvive = HAS_CRDS.has(chartName);
-  const handleConfirm = () => {
-    if (confirmBlockedReason) {
-      toastWarning(confirmBlockedReason);
-      return;
-    }
-    onConfirm();
-  };
-
-  return (
-    <ModalShell
-      title="Uninstall release"
-      onClose={onClose}
-      size="sm"
-      panelClassName="bg-popover"
-      bodyClassName="p-5 space-y-3 text-sm"
-      footerClassName="bg-muted/30"
-      titleIcon={<AlertTriangle className="h-5 w-5 text-status-error" />}
-      footer={
-        <div className="flex items-center justify-end gap-2">
-          <ActionButton
-            {...BARE_BUTTON}
-            onClick={onClose}
-            className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted inline-block font-normal"
-            disabled={pending}
-          >
-            Cancel
-          </ActionButton>
-          <ActionButton
-            {...BARE_BUTTON}
-            disabledReason={confirmBlockedReason}
-            onClick={handleConfirm}
-            disabled={!confirmable}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-status-error text-background hover:bg-status-error disabled:opacity-50 font-normal"
-          >
-            {pending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uninstalling…
-              </>
-            ) : (
-              <>Uninstall</>
-            )}
-          </ActionButton>
-        </div>
-      }
-    >
-      <p>
-        This will run{" "}
-        <code className="font-mono text-xs">
-          helm uninstall {releaseName} -n {namespace}
-        </code>{" "}
-        on the cluster. Workload pods + Services + ConfigMaps owned by the
-        release will be deleted.
-      </p>
-      {crdsWillSurvive && (
-        <div className="rounded-md border border-status-warning/40 bg-status-warning/5 px-3 py-2 text-xs">
-          <div className="font-medium text-status-warning flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" /> CRDs will not be removed
-          </div>
-          <p className="text-muted-foreground mt-1">
-            <span className="font-mono">{chartName}</span> ships CRDs. Helm
-            leaves them in place on uninstall to protect data; remove manually
-            with <code className="font-mono">kubectl delete crd …</code> if you
-            need a clean re-install.
-          </p>
-        </div>
-      )}
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground">
-          Type{" "}
-          <code className="font-mono text-xs bg-muted px-1 rounded-sm">
-            {releaseName}
-          </code>{" "}
-          to confirm
-        </label>
-        <input
-          type="text"
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm font-mono focus:outline-hidden focus:ring-1 focus:ring-ring"
-          data-initial-focus
-        />
-      </div>
-    </ModalShell>
-  );
-}
-
-function AppInstallFooter({
-  onClose,
-  pending,
-  onSubmit,
-  submittable,
-  reason,
-  upgrade,
-}: {
-  onClose: () => void;
-  pending: boolean;
-  onSubmit: () => void;
-  submittable: boolean;
-  reason?: string;
-  upgrade: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-end gap-2">
-      <ActionButton
-        {...BARE_BUTTON}
-        onClick={onClose}
-        className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted inline-block font-normal"
-        disabled={pending}
-      >
-        Cancel
-      </ActionButton>
-      <ActionButton
-        {...BARE_BUTTON}
-        disabledReason={reason}
-        onClick={onSubmit}
-        disabled={!submittable}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 font-normal"
-      >
-        {pending ? (
-          <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />{" "}
-            {upgrade ? "Upgrading" : "Installing"}…
-          </>
-        ) : (
-          <>{upgrade ? "Upgrade" : "Install"}</>
-        )}
-      </ActionButton>
-    </div>
-  );
-}
-
-function ChartInstallationNotes({
-  slowInstall,
-  hasCRDs,
-  isUpgrade,
-  chartName,
-}: {
-  slowInstall: boolean;
-  hasCRDs: boolean;
-  isUpgrade: boolean;
-  chartName: string;
-}) {
-  return (
-    <>
-      {" "}
-      {(slowInstall || hasCRDs) && (
-        <div className="rounded-md border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
-          <Info className="h-4 w-4 text-status-warning mt-0.5 shrink-0" />
-          <div className="space-y-0.5 text-foreground">
-            {slowInstall && (
-              <div>
-                First install of{" "}
-                <span className="font-medium">{chartName}</span> typically takes
-                3–10 minutes — sub-charts and CRDs land before the workloads
-                come up.
-              </div>
-            )}
-            {hasCRDs && !isUpgrade && (
-              <div>
-                This chart ships CRDs. The CRDs will <em>not</em> be removed
-                automatically on uninstall (helm leaves them to protect data) —
-                pick a stable namespace from the start.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </>
   );
 }
