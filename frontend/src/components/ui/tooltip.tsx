@@ -29,6 +29,8 @@ export function Tooltip({
       <TooltipPrimitive.Root>
         <TooltipPrimitive.Trigger asChild>
           {wrap ? (
+            // Disabled buttons are not focusable; the wrapper keeps the reason reachable.
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
             <span tabIndex={0} className="inline-flex">
               {children}
             </span>

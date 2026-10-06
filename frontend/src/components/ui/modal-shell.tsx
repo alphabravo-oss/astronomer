@@ -1,8 +1,8 @@
-import { useId } from "react";
 import type { FormEventHandler, ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OverlayShell } from "@/components/ui/overlay-shell";
+import { DialogTitle } from "@/components/ui/dialog";
 
 type ModalSize = "sm" | "md" | "lg" | "xl";
 
@@ -46,7 +46,6 @@ export function ModalShell({
   formId,
   formClassName,
 }: ModalShellProps) {
-  const titleId = useId();
   const body = (
     <>
       <div className={cn("p-6 space-y-4", bodyClassName)}>{children}</div>
@@ -61,11 +60,8 @@ export function ModalShell({
   );
 
   return (
-    <OverlayShell onClose={onClose}>
+    <OverlayShell onClose={onClose} dialog>
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
         className={cn(
           "relative w-full mx-4 rounded-lg border border-border bg-card shadow-xl animate-fade-in max-h-[90vh] overflow-y-auto",
           sizeClass[size],
@@ -77,12 +73,9 @@ export function ModalShell({
             {titleIcon}
             <div className="min-w-0">
               <div className="flex items-center gap-2 min-w-0">
-                <h2
-                  id={titleId}
-                  className="text-base font-semibold text-foreground truncate"
-                >
+                <DialogTitle className="text-base font-semibold text-foreground truncate">
                   {title}
-                </h2>
+                </DialogTitle>
                 {headerActions}
               </div>
               {subtitle && (

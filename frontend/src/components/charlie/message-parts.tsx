@@ -371,7 +371,7 @@ function ApprovalCard({
                 : "This approval is no longer pending.")}
         </p>
       )}
-      {error && (
+      {error && !confirm && (
         <p role="alert" className="mt-2 text-status-error">
           {error}
         </p>
@@ -391,7 +391,15 @@ function ApprovalCard({
         }
         loading={!!pending}
         variant={confirm === "deny" ? "destructive" : undefined}
-      />
+      >
+        {/* The open modal hides the page behind it, so a failure raised while
+            it is open must be announced from inside it. */}
+        {error && (
+          <p role="alert" className="text-xs text-status-error">
+            {error}
+          </p>
+        )}
+      </ConfirmDialog>
     </section>
   );
 }
