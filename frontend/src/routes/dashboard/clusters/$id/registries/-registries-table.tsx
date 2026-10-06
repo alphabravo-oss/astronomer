@@ -6,7 +6,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/operator-table";
-import { ActionButton } from "@/components/ui/action-button";
 import {
   CheckCircle2,
   Loader2,
@@ -16,8 +15,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { BARE_BUTTON } from "@/lib/bare-button";
 import type { ClusterRegistry } from "@/lib/api/cluster-registries";
+import { BareButton } from "@/components/form/bare-button";
 
 export type RegistryTestState = "ok" | "fail" | "pending";
 
@@ -161,8 +160,7 @@ export function RegistryRowActions({
   };
   return (
     <>
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         tooltip="Test reachability"
         onClick={onTest}
         disabled={testDisabled}
@@ -170,9 +168,8 @@ export function RegistryRowActions({
       >
         <Plug className="h-3.5 w-3.5" />
         Test
-      </ActionButton>
-      <ActionButton
-        {...BARE_BUTTON}
+      </BareButton>
+      <BareButton
         tooltip={canWrite ? "Edit" : undefined}
         aria-label="Edit"
         onClick={onEdit}
@@ -180,9 +177,8 @@ export function RegistryRowActions({
         {...gated}
       >
         <Pencil className="h-3.5 w-3.5" />
-      </ActionButton>
-      <ActionButton
-        {...BARE_BUTTON}
+      </BareButton>
+      <BareButton
         tooltip={canWrite ? "Delete" : undefined}
         aria-label="Delete"
         onClick={onDelete}
@@ -193,7 +189,7 @@ export function RegistryRowActions({
         {...gated}
       >
         <Trash2 className="h-3.5 w-3.5" />
-      </ActionButton>
+      </BareButton>
     </>
   );
 }

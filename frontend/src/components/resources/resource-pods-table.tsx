@@ -5,7 +5,6 @@ import { useClusterPods, useDeletePod } from "@/lib/hooks/clusters";
 import type { PodSort } from "@/lib/api/workloads";
 import { useNavigate } from "@tanstack/react-router";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
-import { ActionButton } from "@/components/ui/action-button";
 import { ResourceActionMenu } from "./resource-action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Column } from "@/components/ui/data-table";
@@ -29,7 +28,7 @@ import {
 import type { Pod } from "@/types";
 import { Code, FileText, Terminal, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 function selectedPodSort(sorting: SortingState): PodSort {
   return sorting[0]
@@ -58,8 +57,7 @@ function PodHealthFilter({
           ["restarted", "Restarted"],
         ] as const
       ).map(([value, label]) => (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           key={value}
           aria-pressed={selected === value}
           onClick={() => onChange(value)}
@@ -71,7 +69,7 @@ function PodHealthFilter({
           )}
         >
           {label}
-        </ActionButton>
+        </BareButton>
       ))}
     </div>
   );

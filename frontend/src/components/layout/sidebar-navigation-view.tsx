@@ -8,9 +8,8 @@ import {
 } from "@/components/layout/sidebar-rail";
 import type { NavGroup } from "@/components/layout/sidebar-navigation";
 import { SidebarNavItems, type StarredNavControls } from "./sidebar-nav-items";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 export function InstalledToolLinks({
   clusterId,
@@ -81,8 +80,7 @@ export function InstalledToolLinks({
 
   return (
     <div>
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         onClick={onToggle}
         className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors whitespace-normal shrink"
       >
@@ -92,7 +90,7 @@ export function InstalledToolLinks({
         ) : (
           <ChevronDown className="h-3.5 w-3.5" />
         )}
-      </ActionButton>
+      </BareButton>
       {isOpen && (
         <div className="space-y-px">
           {uiLinks.map((link) => (
@@ -154,8 +152,7 @@ export function SidebarGroup({
     <div>
       {/* Group header with chevron on the right (Rancher style) */}
       {!group.hideLabel && (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           onClick={onToggle}
           aria-expanded={isOpen}
           aria-controls={contentId}
@@ -167,7 +164,7 @@ export function SidebarGroup({
           ) : (
             <ChevronDown className="h-3.5 w-3.5" />
           )}
-        </ActionButton>
+        </BareButton>
       )}
       {expanded && (
         <div id={contentId} className="space-y-px">

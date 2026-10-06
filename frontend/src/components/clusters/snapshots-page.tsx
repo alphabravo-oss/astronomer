@@ -39,9 +39,8 @@ import {
   type SnapshotSchedule,
   useVeleroSnapshotPage,
 } from "./snapshot-page-hooks";
-import { ActionButton } from "@/components/ui/action-button";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 // This route renders the Velero workload-snapshots tab. Control-plane (etcd)
 // snapshots live in their own control-plane snapshot module and route. They
@@ -157,8 +156,7 @@ function ClusterVeleroSnapshotsPage() {
             <h2 className="text-sm font-medium text-foreground">
               Snapshot schedules
             </h2>
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               disabledReason={canWrite ? undefined : reason}
               onClick={() => canWrite && setScheduleOpen({ mode: "create" })}
               disabled={!canWrite}
@@ -168,7 +166,7 @@ function ClusterVeleroSnapshotsPage() {
             >
               <Plus className="h-3.5 w-3.5" />
               New Schedule
-            </ActionButton>
+            </BareButton>
           </div>
           <SnapshotSchedulesTable
             loading={schedulesQuery.isLoading}
@@ -197,8 +195,7 @@ function ClusterVeleroSnapshotsPage() {
             <h2 className="text-sm font-medium text-foreground">
               Recent snapshots
             </h2>
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               disabledReason={canWrite ? undefined : reason}
               onClick={() => canWrite && setNewSnapshotOpen(true)}
               disabled={!canWrite}
@@ -208,7 +205,7 @@ function ClusterVeleroSnapshotsPage() {
             >
               <Plus className="h-3.5 w-3.5" />
               New Snapshot
-            </ActionButton>
+            </BareButton>
           </div>
           <SnapshotsTable
             loading={snapshotsQuery.isLoading}

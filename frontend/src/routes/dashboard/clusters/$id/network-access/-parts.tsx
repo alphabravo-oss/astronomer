@@ -4,8 +4,7 @@ import {
   type ApiserverAllowlistMode,
   type ApiserverAllowlistSnapshot,
 } from "@/lib/api/cluster-apiserver-allowlist";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 // ─── Mode badge ─────────────────────────────────────────────────────────────
 export function ModeBadge({
@@ -56,14 +55,13 @@ export function CIDRPill({
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-mono text-foreground">
       {cidr}
       {removable && onRemove && (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           onClick={onRemove}
           className="ml-1 text-muted-foreground hover:text-status-error inline-block font-normal"
           aria-label={`remove ${cidr}`}
         >
           ×
-        </ActionButton>
+        </BareButton>
       )}
     </span>
   );
@@ -123,8 +121,7 @@ export function SnapshotHistory({
 }) {
   return (
     <div className="rounded-sm border">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         onClick={onToggle}
         className="flex w-full items-center justify-between p-3 text-sm font-medium hover:bg-muted/30 whitespace-normal shrink"
       >
@@ -134,7 +131,7 @@ export function SnapshotHistory({
         ) : (
           <ChevronRight className="h-4 w-4" />
         )}
-      </ActionButton>
+      </BareButton>
       {open && (
         <div className="border-t p-3">
           <DataTable

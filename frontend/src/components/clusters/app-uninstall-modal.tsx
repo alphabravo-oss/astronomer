@@ -4,9 +4,8 @@ import { Loader2, AlertTriangle } from "lucide-react";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
 import { HAS_CRDS } from "./app-install-parts";
+import { BareButton } from "@/components/form/bare-button";
 
 // ---------------------------------------------------------------------
 // Uninstall confirmation
@@ -60,16 +59,14 @@ export function AppUninstallModal({
       titleIcon={<AlertTriangle className="h-5 w-5 text-status-error" />}
       footer={
         <div className="flex items-center justify-end gap-2">
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             onClick={onClose}
             className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted inline-block font-normal"
             disabled={pending}
           >
             Cancel
-          </ActionButton>
-          <ActionButton
-            {...BARE_BUTTON}
+          </BareButton>
+          <BareButton
             disabledReason={confirmBlockedReason}
             onClick={handleConfirm}
             disabled={!confirmable}
@@ -82,7 +79,7 @@ export function AppUninstallModal({
             ) : (
               <>Uninstall</>
             )}
-          </ActionButton>
+          </BareButton>
         </div>
       }
     >

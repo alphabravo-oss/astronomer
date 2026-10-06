@@ -15,8 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 export function TopbarAccountMenu() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
@@ -24,8 +23,7 @@ export function TopbarAccountMenu() {
   return (
     <Popover open={userMenuOpen} onOpenChange={setUserMenuOpen}>
       <PopoverTrigger asChild>
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           aria-label="User menu"
           className="flex items-center gap-2 h-8 pl-1 pr-2 rounded-md hover:bg-accent transition-colors font-normal"
         >
@@ -33,7 +31,7 @@ export function TopbarAccountMenu() {
             <User className="h-3 w-3 text-primary-foreground" />
           </div>
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
-        </ActionButton>
+        </BareButton>
       </PopoverTrigger>
       <PopoverContent
         data-header-popover
@@ -47,8 +45,7 @@ export function TopbarAccountMenu() {
           <p className="text-xs text-muted-foreground">{user?.email}</p>
         </div>
         <div className="p-1">
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             onClick={() => {
               void navigate({ to: "/dashboard/account/preferences" });
               setUserMenuOpen(false);
@@ -58,9 +55,8 @@ export function TopbarAccountMenu() {
           >
             <SlidersHorizontal className="h-4 w-4" />
             Preferences
-          </ActionButton>
-          <ActionButton
-            {...BARE_BUTTON}
+          </BareButton>
+          <BareButton
             onClick={() => {
               void navigate({ to: "/dashboard/settings" });
               setUserMenuOpen(false);
@@ -70,9 +66,8 @@ export function TopbarAccountMenu() {
           >
             <Settings className="h-4 w-4" />
             Settings
-          </ActionButton>
-          <ActionButton
-            {...BARE_BUTTON}
+          </BareButton>
+          <BareButton
             onClick={() => {
               void navigate({ to: "/dashboard/account/security" });
               setUserMenuOpen(false);
@@ -82,9 +77,8 @@ export function TopbarAccountMenu() {
           >
             <Shield className="h-4 w-4" />
             Security
-          </ActionButton>
-          <ActionButton
-            {...BARE_BUTTON}
+          </BareButton>
+          <BareButton
             onClick={async () => {
               // POST /auth/logout first so the backend can revoke the
               // session and (for SSO users) hand us a Dex end_session
@@ -113,7 +107,7 @@ export function TopbarAccountMenu() {
           >
             <LogOut className="h-4 w-4" />
             Sign out
-          </ActionButton>
+          </BareButton>
         </div>
       </PopoverContent>
     </Popover>

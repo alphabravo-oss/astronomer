@@ -29,9 +29,7 @@ import {
   type ImageVulnReport,
 } from "@/lib/api/cluster-vulnerabilities";
 import { Download } from "lucide-react";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { BARE_BUTTON } from "@/lib/bare-button";
 import { ScanProgressBanner } from "./-scan-progress-banner";
 import { useImageScanQueries } from "./-use-image-scans";
 import {
@@ -43,6 +41,7 @@ import {
   SeverityTiles,
 } from "./-sections";
 import { Select } from "@/components/ui/select";
+import { BareButton } from "@/components/form/bare-button";
 
 function ClusterImageScansPage() {
   const now = useClock(1000);
@@ -118,8 +117,7 @@ function ClusterImageScansPage() {
                 Export CSV
               </a>
             </Tooltip>
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50 font-normal"
               onClick={() => rescan.mutate()}
               disabled={rescan.isPending}
@@ -130,7 +128,7 @@ function ClusterImageScansPage() {
                 <RefreshCw className="h-4 w-4" />
               )}
               Trigger rescan
-            </ActionButton>
+            </BareButton>
           </>
         }
       />

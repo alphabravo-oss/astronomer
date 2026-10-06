@@ -23,7 +23,7 @@ import { useProject, useProjectSearch } from "@/lib/hooks/projects";
 import { cn } from "@/lib/utils";
 import type { Cluster, ClusterStatus } from "@/types";
 import type { ClusterScopeApplicability } from "./cluster-scope-applicability";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 export function clusterIdFromPath(pathname: string): string | undefined {
   const segment = pathname.match(/^\/dashboard\/clusters\/([^/]+)/)?.[1];
@@ -151,8 +151,7 @@ function ProjectScopePicker({
   };
   return (
     <div ref={ref} className="relative shrink-0">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         ref={triggerRef}
         onClick={() => setOpen((value) => !value)}
         disabled={projectsQuery.isLoading || !scope.ready}
@@ -168,7 +167,7 @@ function ProjectScopePicker({
             "All projects"}
         </span>
         <ChevronsUpDown className="h-3 w-3 shrink-0" />
-      </ActionButton>
+      </BareButton>
       {open ? (
         <Command
           shouldFilter={false}
@@ -243,13 +242,12 @@ function ProjectScopePicker({
             {projectsQuery.isError ? (
               <div role="alert" className="px-3 py-4 text-sm">
                 Could not load projects.
-                <ActionButton
-                  {...BARE_BUTTON}
+                <BareButton
                   onClick={() => void projectsQuery.refetch()}
                   className="ml-2 underline inline-block font-normal"
                 >
                   Retry
-                </ActionButton>
+                </BareButton>
               </div>
             ) : null}
             {projectsQuery.hasNextPage ? (
@@ -301,8 +299,7 @@ function NamespaceScopePicker({ scope }: { scope: ClusterNamespaceScope }) {
 
   return (
     <div ref={ref} className="relative shrink-0">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         ref={triggerRef}
         onClick={() => setOpen((value) => !value)}
         disabled={!scope.ready}
@@ -314,7 +311,7 @@ function NamespaceScopePicker({ scope }: { scope: ClusterNamespaceScope }) {
         <Layers3 className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">{label}</span>
         <ChevronsUpDown className="h-3 w-3 shrink-0" />
-      </ActionButton>
+      </BareButton>
       {open ? (
         <Command className="fixed left-3 right-3 top-14 z-50 overflow-hidden rounded-lg border border-border bg-popover shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:w-72">
           <div className="flex items-center border-b border-border px-3">

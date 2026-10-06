@@ -2,8 +2,7 @@ import { useCallback, useEffect } from "react";
 import { TerminalSquare } from "lucide-react";
 
 import { openClusterShellWindow } from "@/lib/window-manager-store";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 interface ClusterShellLauncherProps {
   clusterId?: string;
@@ -49,8 +48,7 @@ export function ClusterShellLauncher({
     : `Open cluster shell for ${label} (Ctrl+\`)`;
 
   return (
-    <ActionButton
-      {...BARE_BUTTON}
+    <BareButton
       tooltip={title}
       onClick={openShell}
       disabled={disabled}
@@ -60,6 +58,6 @@ export function ClusterShellLauncher({
       <TerminalSquare className="h-3.5 w-3.5" />
       <span className="hidden 2xl:inline">Shell</span>
       <kbd className="hidden font-mono text-10 min-[1800px]:inline">Ctrl+`</kbd>
-    </ActionButton>
+    </BareButton>
   );
 }

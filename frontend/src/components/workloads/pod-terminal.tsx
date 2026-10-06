@@ -24,8 +24,7 @@ import "@wterm/react/css";
 import { cn } from "@/lib/utils";
 import { createStreamTicket } from "@/lib/api/auth";
 import { wsBase } from "@/lib/env";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 export type TerminalConnectionStatus =
   "connecting" | "connected" | "disconnected" | "error";
@@ -70,20 +69,18 @@ function ContainerPicker({
 }) {
   return (
     <div ref={dropdownRef} className="relative">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         onClick={onToggle}
         className="inline-flex items-center gap-1.5 h-6 px-2 rounded-sm border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
       >
         <span className="font-mono">{selected}</span>
         <ChevronDown className="h-3 w-3" />
-      </ActionButton>
+      </BareButton>
 
       {open && (
         <div className="absolute left-0 top-full mt-1 w-48 rounded-md border border-border bg-popover p-1 shadow-lg z-50">
           {containers.map((c) => (
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               key={c}
               onClick={() => onSelect(c)}
               className={cn(
@@ -94,7 +91,7 @@ function ContainerPicker({
               )}
             >
               {c}
-            </ActionButton>
+            </BareButton>
           ))}
         </div>
       )}
@@ -402,8 +399,7 @@ export function PodTerminal({
           </div>
 
           <div className="flex items-center gap-1">
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               tooltip="Reconnect"
               onClick={handleReconnect}
               className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-xs
@@ -411,11 +407,10 @@ export function PodTerminal({
             >
               <RefreshCw className="h-3 w-3" />
               Reconnect
-            </ActionButton>
+            </BareButton>
 
             {onClose && (
-              <ActionButton
-                {...BARE_BUTTON}
+              <BareButton
                 tooltip="Close terminal"
                 aria-label="Close terminal"
                 onClick={onClose}
@@ -423,7 +418,7 @@ export function PodTerminal({
                 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
               >
                 <X className="h-3.5 w-3.5" />
-              </ActionButton>
+              </BareButton>
             )}
           </div>
         </div>

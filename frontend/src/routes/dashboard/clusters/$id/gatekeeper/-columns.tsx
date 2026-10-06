@@ -1,11 +1,10 @@
 /** Column definitions for the Gatekeeper constraints table. */
 import { Trash2 } from "lucide-react";
 import type { Column } from "@/components/ui/data-table";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { BARE_BUTTON } from "@/lib/bare-button";
 import { cn } from "@/lib/utils";
 import type { GatekeeperConstraint } from "@/types";
+import { BareButton } from "@/components/form/bare-button";
 
 export function gatekeeperColumns({
   canWrite,
@@ -126,8 +125,7 @@ export function gatekeeperColumns({
       sortable: false,
       accessor: (row) =>
         row.source === "custom" && row.desiredState !== "absent" ? (
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             tooltip={canWrite ? "Delete constraint" : undefined}
             disabledReason={canWrite ? undefined : reason}
             aria-label="Delete constraint"
@@ -139,7 +137,7 @@ export function gatekeeperColumns({
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground inline-block font-normal"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </ActionButton>
+          </BareButton>
         ) : null,
     },
   ];

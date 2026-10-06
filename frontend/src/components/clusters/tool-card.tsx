@@ -12,8 +12,7 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 const toolIcons: Record<string, typeof Wrench> = {
   monitoring: Activity,
@@ -143,8 +142,7 @@ export function ToolCard({
       <div className="pt-1">
         {status === "not_installed" && (
           <div className="flex items-center gap-2">
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               disabledReason={enableDisabledReason}
               onClick={() => onInstall(tool.slug)}
               disabled={installing || !!enableDisabledReason}
@@ -153,7 +151,7 @@ export function ToolCard({
             >
               {installing && <Loader2 className="h-3 w-3 animate-spin" />}
               Enable
-            </ActionButton>
+            </BareButton>
           </div>
         )}
 
@@ -168,15 +166,14 @@ export function ToolCard({
           <div className="flex items-center justify-between">
             {onRecover &&
               toolStatus?.operation?.operationType === "upgrade" && (
-                <ActionButton
-                  {...BARE_BUTTON}
+                <BareButton
                   disabledReason={retryDisabledReason}
                   onClick={() => onRecover(tool.slug, "rollback")}
                   disabled={!!retryDisabledReason}
                   className="h-8 px-3 rounded-md border border-border text-xs disabled:opacity-50 inline-block font-normal"
                 >
                   Roll back upgrade
-                </ActionButton>
+                </BareButton>
               )}
             {toolStatus?.presetUsed && (
               <span className="text-xs text-muted-foreground">
@@ -184,8 +181,7 @@ export function ToolCard({
                 <span className="capitalize">{toolStatus.presetUsed}</span>
               </span>
             )}
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               disabledReason={uninstallBlockedReason}
               onClick={() => onUninstall(tool.slug)}
               disabled={uninstalling || !!uninstallBlockedReason}
@@ -195,7 +191,7 @@ export function ToolCard({
             >
               {uninstalling && <Loader2 className="h-3 w-3 animate-spin" />}
               Disable
-            </ActionButton>
+            </BareButton>
           </div>
         )}
 
@@ -205,8 +201,7 @@ export function ToolCard({
               Release:{" "}
               <span className="font-mono">{toolStatus?.releaseName}</span>
             </span>
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               disabledReason={adoptBlockedReason}
               onClick={() => {
                 if (toolStatus?.releaseName) {
@@ -221,7 +216,7 @@ export function ToolCard({
                 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               Adopt
-            </ActionButton>
+            </BareButton>
           </div>
         )}
 
@@ -234,8 +229,7 @@ export function ToolCard({
 
         {status === "failed" && (
           <div className="flex items-center gap-2">
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               disabledReason={
                 canResume ? retryDisabledReason : enableDisabledReason
               }
@@ -255,21 +249,20 @@ export function ToolCard({
             >
               {installing && <Loader2 className="h-3 w-3 animate-spin" />}
               {canResume ? "Retry" : "Complete installation"}
-            </ActionButton>
+            </BareButton>
             {onRecover &&
               toolStatus?.operation &&
               ["install", "upgrade"].includes(
                 toolStatus.operation.operationType,
               ) && (
-                <ActionButton
-                  {...BARE_BUTTON}
+                <BareButton
                   disabledReason={retryDisabledReason}
                   onClick={() => onRecover(tool.slug, "rollback")}
                   disabled={!!retryDisabledReason}
                   className="h-8 px-3 rounded-md border border-border text-xs disabled:opacity-50 inline-block font-normal"
                 >
                   Roll back
-                </ActionButton>
+                </BareButton>
               )}
           </div>
         )}

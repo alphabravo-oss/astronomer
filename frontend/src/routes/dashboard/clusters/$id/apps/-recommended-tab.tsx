@@ -4,8 +4,7 @@ import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import { AlertTriangle, Star } from "lucide-react";
 import type { ClusterAppRow } from "@/lib/api/cluster-apps";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 export function RecommendedView({
   q,
@@ -83,8 +82,7 @@ export function RecommendedView({
                     Already installed
                   </span>
                 ) : (
-                  <ActionButton
-                    {...BARE_BUTTON}
+                  <BareButton
                     tooltip={
                       !installDecision.allowed ? undefined : "Install chart"
                     }
@@ -98,7 +96,7 @@ export function RecommendedView({
                     onClick={() => onInstall(c.chartId, c.name)}
                   >
                     Install →
-                  </ActionButton>
+                  </BareButton>
                 )}
               </article>
             );

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import { ActionButton } from "@/components/ui/action-button";
 import { cn } from "@/lib/utils";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 /** Icon toggle used by the pod log toolbars (inline viewer and console tab). */
 export function LogToolbarButton({
@@ -26,8 +25,7 @@ export function LogToolbarButton({
   children: ReactNode;
 }) {
   return (
-    <ActionButton
-      {...BARE_BUTTON}
+    <BareButton
       tooltip={tooltip}
       disabledReason={disabledReason}
       onClick={onClick}
@@ -44,6 +42,6 @@ export function LogToolbarButton({
       )}
     >
       {children}
-    </ActionButton>
+    </BareButton>
   );
 }

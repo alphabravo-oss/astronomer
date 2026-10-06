@@ -6,9 +6,8 @@ import type { PermissionDecision } from "@/lib/permissions";
 import type { PaginatedResponse } from "@/types";
 import { Box, ExternalLink, Search } from "lucide-react";
 import type { ClusterAppRow } from "@/lib/api/cluster-apps";
-import { ActionButton } from "@/components/ui/action-button";
 import { SkeletonCard } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 export function BrowseView({
   q,
@@ -124,8 +123,7 @@ export function BrowseView({
                         )}
                       </span>
                     ) : (
-                      <ActionButton
-                        {...BARE_BUTTON}
+                      <BareButton
                         tooltip={
                           !installDecision.allowed ? undefined : "Install chart"
                         }
@@ -139,7 +137,7 @@ export function BrowseView({
                         onClick={() => onInstall(c.id, c.name)}
                       >
                         Install →
-                      </ActionButton>
+                      </BareButton>
                     )}
                     {c.homeUrl && (
                       <a

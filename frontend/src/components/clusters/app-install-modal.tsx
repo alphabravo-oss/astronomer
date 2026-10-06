@@ -47,13 +47,12 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
 import {
   AppInstallFooter,
   ChartInstallationNotes,
   HAS_CRDS,
 } from "./app-install-parts";
+import { BareButton } from "@/components/form/bare-button";
 export { AppUninstallModal } from "./app-uninstall-modal";
 
 type Mode =
@@ -378,8 +377,7 @@ export function AppInstallModal({
               </QueryStates>
             )}
             {isUpgrade && !defaultValues.isError && defaultValues.data && (
-              <ActionButton
-                {...BARE_BUTTON}
+              <BareButton
                 tooltip="Replace with the upstream chart's default values for the selected version"
                 onClick={() =>
                   form.setFieldValue(
@@ -390,7 +388,7 @@ export function AppInstallModal({
                 className="text-11 text-muted-foreground hover:text-foreground underline inline-block font-normal"
               >
                 Reset to chart defaults
-              </ActionButton>
+              </BareButton>
             )}
           </div>
           <form.Field name="valuesYaml">

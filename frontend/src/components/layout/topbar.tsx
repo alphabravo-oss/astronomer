@@ -48,8 +48,7 @@ import { LazyHeaderClusterActions as HeaderClusterActions } from "@/components/l
 import { useClusterScopeStore } from "@/lib/cluster-scope";
 import { can } from "@/lib/permissions";
 import { useClustersUpdate } from "@/lib/permission-hooks";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 // --- Breadcrumb generation ---
 
@@ -98,13 +97,12 @@ function TopbarBreadcrumbs({
                 {crumb.label}
               </span>
             ) : (
-              <ActionButton
-                {...BARE_BUTTON}
+              <BareButton
                 onClick={() => void navigate({ to: crumb.href })}
                 className="text-muted-foreground hover:text-foreground transition-colors truncate inline-block font-normal whitespace-normal shrink"
               >
                 {crumb.label}
-              </ActionButton>
+              </BareButton>
             )}
           </div>
         );
@@ -142,8 +140,7 @@ function TopbarNotifications() {
   return (
     <Popover open={notificationOpen} onOpenChange={setNotificationOpen}>
       <PopoverTrigger asChild>
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           aria-label={
             notificationCount > 0
               ? `Notifications, ${notificationCount} unread`
@@ -158,7 +155,7 @@ function TopbarNotifications() {
               {notificationCount > 99 ? "99+" : notificationCount}
             </span>
           )}
-        </ActionButton>
+        </BareButton>
       </PopoverTrigger>
       <PopoverContent
         data-header-popover
@@ -175,8 +172,7 @@ function TopbarNotifications() {
         </div>
         <div className="max-h-80 overflow-y-auto">
           {importantFindings.map((finding) => (
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               key={`charlie:${finding.id}`}
               onClick={() => {
                 void navigate({
@@ -210,7 +206,7 @@ function TopbarNotifications() {
                   </span>
                 )}
               </span>
-            </ActionButton>
+            </BareButton>
           ))}
           {recentAlerts.length === 0 && importantFindings.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -250,8 +246,7 @@ function TopbarNotifications() {
           )}
         </div>
         <div className="px-4 py-2 border-t border-border">
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             onClick={() => {
               void navigate({ to: "/dashboard/alerting" });
               setNotificationOpen(false);
@@ -259,7 +254,7 @@ function TopbarNotifications() {
             className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1 inline-block font-normal whitespace-normal shrink"
           >
             View all alerts
-          </ActionButton>
+          </BareButton>
         </div>
       </PopoverContent>
     </Popover>
@@ -336,14 +331,13 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 py-2 lg:flex-nowrap border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         onClick={() => setMobileSidebarOpen(true)}
         className="mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden font-normal"
         aria-label="Open navigation"
       >
         <Menu className="h-4 w-4" />
-      </ActionButton>
+      </BareButton>
       {/* Left: always-mounted cluster switcher, then either the cluster
           scope controls (cluster context — the chip already says which
           cluster, so breadcrumbs would be redundant noise) or breadcrumbs
@@ -387,8 +381,7 @@ export function Topbar() {
         ) : null}
 
         {/* Theme Toggle */}
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           tooltip={`Theme: ${visibleTheme}`}
           aria-label={`Theme: ${visibleTheme}`}
           onClick={cycleTheme}
@@ -396,7 +389,7 @@ export function Topbar() {
             text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
         >
           <ThemeIcon className="h-4 w-4" />
-        </ActionButton>
+        </BareButton>
 
         <TopbarNotifications />
 

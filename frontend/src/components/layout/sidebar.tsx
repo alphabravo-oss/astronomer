@@ -26,9 +26,8 @@ import { useSidebarNavigation } from "./use-sidebar-navigation";
 import { useStarredNavControls } from "./use-starred-nav-controls";
 import { useCRDNavCounts } from "./use-crd-nav-counts";
 import { useVisibleNavGroups } from "./use-visible-nav-groups";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 // Vite stamps APP_VERSION from the release tag; local builds use the current
 // package fallback in lib/env.ts.
@@ -138,8 +137,7 @@ export function Sidebar() {
               </div>
             </RouterLink>
           )}
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             tooltip={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={toggleSidebarCollapsed}
             className={cn(
@@ -155,7 +153,7 @@ export function Sidebar() {
             ) : (
               <ChevronLeft className="h-4 w-4" />
             )}
-          </ActionButton>
+          </BareButton>
         </div>
 
         {/* Cluster context header */}

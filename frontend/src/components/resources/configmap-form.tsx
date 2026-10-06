@@ -7,8 +7,7 @@ import { useState } from "react";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useK8sCreate } from "@/lib/hooks/kubernetes-proxy";
 import { toastApiError, toastSuccess } from "@/lib/toast";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 type Props = {
   open: boolean;
@@ -78,14 +77,13 @@ export function ConfigMapFormDialog({
             onChange={(e) => setValue(e.target.value)}
           />
         </label>
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           className="rounded-sm bg-primary text-primary-foreground px-3 py-1.5 text-sm inline-block font-normal"
           onClick={submit}
           disabled={create.isPending}
         >
           Create
-        </ActionButton>
+        </BareButton>
       </div>
     </ModalShell>
   );

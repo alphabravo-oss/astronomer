@@ -20,8 +20,7 @@ import {
 import { useUserPreferences } from "@/lib/user-preferences";
 import { cn } from "@/lib/utils";
 import type { Cluster } from "@/types";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 const MAX_PINNED_CLUSTERS = 20;
 
@@ -57,8 +56,7 @@ function ClusterRow({
       className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 data-[selected=true]:bg-accent"
     >
       <ClusterOption cluster={cluster} />
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         aria-pressed={pinned}
         aria-label={
           pinned
@@ -74,7 +72,7 @@ function ClusterRow({
         <Star
           className={cn("h-3.5 w-3.5", pinned && "fill-current text-primary")}
         />
-      </ActionButton>
+      </BareButton>
     </Command.Item>
   );
 }
@@ -105,8 +103,7 @@ function ClusterSwitcherTrigger({
     : "Clusters";
 
   return (
-    <ActionButton
-      {...BARE_BUTTON}
+    <BareButton
       tooltip="Switch cluster (Ctrl/Cmd+J)"
       ref={triggerRef}
       onClick={onToggle}
@@ -129,7 +126,7 @@ function ClusterSwitcherTrigger({
         {label}
       </span>
       <ChevronsUpDown className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
-    </ActionButton>
+    </BareButton>
   );
 }
 
@@ -296,13 +293,12 @@ export function ClusterSwitcherMenu({
               <p role="status" className="p-3 text-sm">
                 {transitionState}
                 {failedTarget && (
-                  <ActionButton
-                    {...BARE_BUTTON}
+                  <BareButton
                     className="underline inline-block font-normal"
                     onClick={() => void select(failedTarget, true)}
                   >
                     Clear remembered scope and switch
-                  </ActionButton>
+                  </BareButton>
                 )}
               </p>
             )}
@@ -323,13 +319,12 @@ export function ClusterSwitcherMenu({
             ) : searchQuery.isError ? (
               <div role="alert" className="px-3 py-4 text-sm">
                 Could not load clusters.
-                <ActionButton
-                  {...BARE_BUTTON}
+                <BareButton
                   onClick={() => void searchQuery.refetch()}
                   className="ml-2 underline inline-block font-normal"
                 >
                   Retry
-                </ActionButton>
+                </BareButton>
               </div>
             ) : resultClusters.length === 0 &&
               pinnedClusters.length === 0 &&

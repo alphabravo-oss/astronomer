@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { RefreshCw, XCircle } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 export function parseCommaSeparated(value: string): string[] | undefined {
   const items = value
@@ -141,14 +141,13 @@ export function NamespacePicker({
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs bg-muted border border-border text-muted-foreground"
             >
               {namespace}
-              <ActionButton
-                {...BARE_BUTTON}
+              <BareButton
                 onClick={() => toggle(namespace)}
                 className="hover:text-foreground inline-block font-normal"
                 aria-label={`Remove ${namespace}`}
               >
                 <XCircle className="h-3 w-3" />
-              </ActionButton>
+              </BareButton>
             </span>
           ))}
         </div>
