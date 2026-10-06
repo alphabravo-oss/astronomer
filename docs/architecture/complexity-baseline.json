@@ -49,7 +49,7 @@
     "cmd/worker/main.go:main": 452,
     "frontend/src/components/auth/connector-form.tsx:ConnectorForm": 292,
     "frontend/src/components/charlie/settings/connection-tab.tsx:ConnectionTab": 381,
-    "frontend/src/components/charlie/settings/mode-tab.tsx:ModeTab": 573,
+    "frontend/src/components/charlie/settings/mode-tab.tsx:ModeTab": 454,
     "frontend/src/components/clusters/app-install-modal.tsx:AppInstallModal": 325,
     "frontend/src/components/clusters/cluster-shell.tsx:ClusterShell": 487,
     "frontend/src/components/clusters/edit-cluster-modal.tsx:EditClusterModal": 338,
