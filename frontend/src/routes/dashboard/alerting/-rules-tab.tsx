@@ -1,3 +1,4 @@
+import { Tooltip } from "@/components/ui/tooltip";
 import { AlertRuleInspection } from "./-alert-investigation";
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
@@ -30,9 +31,11 @@ export function RulesTab({
         <div>
           <p className="font-medium text-foreground">{row.name}</p>
           {row.description && (
-            <p className="text-xs text-muted-foreground truncate max-w-[300px]">
-              {row.description}
-            </p>
+            <Tooltip content={row.description}>
+              <p className="text-xs text-muted-foreground truncate max-w-75">
+                {row.description}
+              </p>
+            </Tooltip>
           )}
         </div>
       ),
@@ -109,14 +112,14 @@ export function RulesTab({
           <ActionButton
             size="icon"
             intent="ghost"
-            title="Edit rule"
+            tooltip="Edit rule"
             onClick={() => onEdit(row)}
             icon={<Pencil className="h-3.5 w-3.5" />}
           />
           <ActionButton
             size="icon"
             intent="ghost"
-            title="Delete rule"
+            tooltip="Delete rule"
             onClick={() => setDeleteRuleTarget(row)}
             icon={<Trash2 className="h-3.5 w-3.5" />}
             className="hover:text-status-error hover:bg-status-error/10"

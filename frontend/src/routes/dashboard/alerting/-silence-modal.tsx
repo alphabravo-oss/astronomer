@@ -135,7 +135,7 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
             onClick={addMatcher}
             disabled={!form.matcherKey || !form.matcherValue}
             icon={<Plus className="h-3.5 w-3.5" />}
-            title="Add matcher"
+            tooltip="Add matcher"
           />
         </div>
         {Object.entries(form.matchers).length > 0 && (
@@ -146,13 +146,14 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
                 className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
               >
                 {k}={v}
-                <button
-                  type="button"
+                <ActionButton
+                  intent="bare"
+                  size="icon-xs"
+                  tooltip="Remove matcher"
+                  icon={<X className="h-3 w-3" />}
                   onClick={() => removeMatcher(k)}
-                  className="hover:text-foreground"
-                >
-                  <X className="h-3 w-3" />
-                </button>
+                  className="h-4 w-4 hover:text-foreground"
+                />
               </span>
             ))}
           </div>

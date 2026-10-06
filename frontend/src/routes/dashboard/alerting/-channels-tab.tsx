@@ -89,7 +89,7 @@ export function ChannelsTab() {
           <ActionButton
             size="sm"
             intent="ghost"
-            title="Test Channel"
+            tooltip="Test Channel"
             onClick={() => testChannel.mutate(row.id)}
             disabled={testChannel.isPending}
             icon={<Send className="h-3 w-3" />}
