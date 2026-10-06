@@ -30,7 +30,9 @@ export default defineConfig({
     // Preview (not dev) deliberately: it serves the built dist/ with
     // SPA-fallback semantics, so every deep-link page.goto implicitly
     // tests fallback + the real bundle.
-    command: `npm run build && npx vite preview --host 127.0.0.1 --port ${port}`,
+    // VITE_UI_GALLERY=1 enables the dev-only /dashboard/dev/ui gallery in this
+    // test build only (plan 031 phase 8); production builds omit it.
+    command: `VITE_UI_GALLERY=1 npm run build && npx vite preview --host 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: managedLiveServer || !process.env.CI,
     timeout: 180_000,

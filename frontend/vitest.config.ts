@@ -1,9 +1,9 @@
 import { defineConfig, mergeConfig } from "vitest/config";
 import viteConfig from "./vite.config.ts";
 
-export default mergeConfig(
-  viteConfig,
-  defineConfig({
+// vite.config.ts is a function (it reads `command` for __UI_GALLERY__).
+export default defineConfig(async (env) =>
+  mergeConfig(await viteConfig(env), {
     test: {
       // Bound jsdom/Vite worker memory when frontend and Go/Local CI gates
       // share a host. Keep per-file isolation and existing failure deadlines;

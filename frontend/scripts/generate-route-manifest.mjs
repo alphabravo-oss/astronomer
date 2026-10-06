@@ -33,7 +33,7 @@ const outputPath = path.join(
 // Reviewed 2026-08-23 after adding resource discovery/schema and enterprise
 // operations surfaces. Keep this exact: a route addition needs a smoke fixture
 // and a route removal needs an explicit product decision.
-const EXPECTED_ROUTE_COUNT = 146; // 2026-09-24: Plan027 adds pipeline inspect and edit routes.
+const EXPECTED_ROUTE_COUNT = 147; // 2026-10-06: Plan031 P8 adds the dev-only /dashboard/dev/ui gallery (needs VITE_UI_GALLERY=1 build, set by playwright webServer).
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to
