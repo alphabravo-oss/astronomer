@@ -4153,6 +4153,99 @@ components:
           type: boolean
         roles:
           $ref: '#/components/schemas/AuthUserRoles'
+    TableView:
+      type: object
+      additionalProperties: false
+      required: [id, table_key, name, state, is_default, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        table_key:
+          type: string
+          maxLength: 128
+        name:
+          type: string
+          maxLength: 64
+        state:
+          $ref: '#/components/schemas/TableViewState'
+        is_default:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TableViewState:
+      type: object
+      description: Saved DataTable state. Only the listed keys are accepted; the document is capped at 32 KiB.
+      additionalProperties: false
+      properties:
+        v:
+          type: integer
+        search:
+          type: string
+        filters:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        sort:
+          type: array
+          items:
+            type: object
+            required: [id, desc]
+            properties:
+              id:
+                type: string
+              desc:
+                type: boolean
+        hidden:
+          type: array
+          items:
+            type: string
+        order:
+          type: array
+          items:
+            type: string
+        pinning:
+          type: object
+          properties:
+            start:
+              type: array
+              items:
+                type: string
+            end:
+              type: array
+              items:
+                type: string
+    TableViewCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [table_key, name, state]
+      properties:
+        table_key:
+          type: string
+          maxLength: 128
+        name:
+          type: string
+          maxLength: 64
+        state:
+          $ref: '#/components/schemas/TableViewState'
+    TableViewUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          maxLength: 64
+        state:
+          $ref: '#/components/schemas/TableViewState'
+        is_default:
+          type: boolean
     UserPreferences:
       type: object
       additionalProperties: false
@@ -19964,6 +20057,140 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/auth/me/table-views/:
+    get:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "authenticated current user"
+      x-astronomer-route-class: public-api
+      operationId: getAuthMeTableViews
+      tags: [Auth]
+      summary: List the current user's saved table views for one table
+      parameters:
+        - name: table_key
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        '200':
+          description: Saved views for the table, ordered by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TableView'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    post:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "authenticated current user"
+      x-astronomer-route-class: public-api
+      operationId: postAuthMeTableViews
+      tags: [Auth]
+      summary: Save a named table view
+      description: At most 20 views are kept per table per user; view names are unique per table.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TableViewCreateRequest'
+      responses:
+        '201':
+          description: Stored view.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TableView'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/auth/me/table-views/{id}/:
+    patch:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "authenticated current user and view ownership"
+      x-astronomer-route-class: public-api
+      operationId: patchAuthMeTableViewsById
+      tags: [Auth]
+      summary: Rename, replace the state of, or set the default flag on a saved view
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TableViewUpdateRequest'
+      responses:
+        '200':
+          description: Updated view.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TableView'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    delete:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "authenticated current user and view ownership"
+      x-astronomer-route-class: public-api
+      operationId: deleteAuthMeTableViewsById
+      tags: [Auth]
+      summary: Delete a saved table view
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: View deleted. No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/auth/logout/:

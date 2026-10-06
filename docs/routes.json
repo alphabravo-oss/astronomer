@@ -816,6 +816,22 @@
     "pattern": "/api/v1/auth/me/quota"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/auth/me/table-views"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/me/table-views"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/auth/me/table-views/{id}"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/auth/me/table-views/{id}"
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/auth/password-reset/complete"
   },

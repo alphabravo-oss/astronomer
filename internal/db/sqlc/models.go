@@ -3081,6 +3081,18 @@ type UserPreference struct {
 	StarredTypes   json.RawMessage `json:"starred_types"`
 }
 
+// Named saved DataTable views per user and table key; capped at 20 per table by the API.
+type UserTableView struct {
+	ID        uuid.UUID       `json:"id"`
+	UserID    uuid.UUID       `json:"user_id"`
+	TableKey  string          `json:"table_key"`
+	Name      string          `json:"name"`
+	State     json.RawMessage `json:"state"`
+	IsDefault bool            `json:"is_default"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
+}
+
 type UserTotpEnrollment struct {
 	UserID          uuid.UUID          `json:"user_id"`
 	SecretEncrypted string             `json:"secret_encrypted"`

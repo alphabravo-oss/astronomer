@@ -10587,6 +10587,54 @@ type SupportBundleOperation struct {
 // SupportBundleOperationStatus defines model for SupportBundleOperation.Status.
 type SupportBundleOperationStatus string
 
+// TableView defines model for TableView.
+type TableView struct {
+	CreatedAt time.Time          `json:"created_at"`
+	Id        openapi_types.UUID `json:"id"`
+	IsDefault bool               `json:"is_default"`
+	Name      string             `json:"name"`
+
+	// State Saved DataTable state. Only the listed keys are accepted; the document is capped at 32 KiB.
+	State     TableViewState `json:"state"`
+	TableKey  string         `json:"table_key"`
+	UpdatedAt time.Time      `json:"updated_at"`
+}
+
+// TableViewCreateRequest defines model for TableViewCreateRequest.
+type TableViewCreateRequest struct {
+	Name string `json:"name"`
+
+	// State Saved DataTable state. Only the listed keys are accepted; the document is capped at 32 KiB.
+	State    TableViewState `json:"state"`
+	TableKey string         `json:"table_key"`
+}
+
+// TableViewState Saved DataTable state. Only the listed keys are accepted; the document is capped at 32 KiB.
+type TableViewState struct {
+	Filters *map[string][]string `json:"filters,omitempty"`
+	Hidden  *[]string            `json:"hidden,omitempty"`
+	Order   *[]string            `json:"order,omitempty"`
+	Pinning *struct {
+		End   *[]string `json:"end,omitempty"`
+		Start *[]string `json:"start,omitempty"`
+	} `json:"pinning,omitempty"`
+	Search *string `json:"search,omitempty"`
+	Sort   *[]struct {
+		Desc bool   `json:"desc"`
+		Id   string `json:"id"`
+	} `json:"sort,omitempty"`
+	V *int `json:"v,omitempty"`
+}
+
+// TableViewUpdateRequest defines model for TableViewUpdateRequest.
+type TableViewUpdateRequest struct {
+	IsDefault *bool   `json:"is_default,omitempty"`
+	Name      *string `json:"name,omitempty"`
+
+	// State Saved DataTable state. Only the listed keys are accepted; the document is capped at 32 KiB.
+	State *TableViewState `json:"state,omitempty"`
+}
+
 // TaskOutboxEntryEnvelope defines model for TaskOutboxEntryEnvelope.
 type TaskOutboxEntryEnvelope struct {
 	Data TaskOutboxEntryWire `json:"data"`
@@ -11942,6 +11990,11 @@ type PostAuthDexRegisterAsSsoJSONBody struct {
 type PostAuthDexRegisterAsSsoParams struct {
 	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetAuthMeTableViewsParams defines parameters for GetAuthMeTableViews.
+type GetAuthMeTableViewsParams struct {
+	TableKey string `form:"table_key" json:"table_key"`
 }
 
 // PostAuthPasswordResetCompleteJSONBody defines parameters for PostAuthPasswordResetComplete.
@@ -14456,6 +14509,12 @@ type PostAuthLoginJSONRequestBody = LoginRequest
 
 // PutAuthMePreferencesJSONRequestBody defines body for PutAuthMePreferences for application/json ContentType.
 type PutAuthMePreferencesJSONRequestBody = UserPreferences
+
+// PostAuthMeTableViewsJSONRequestBody defines body for PostAuthMeTableViews for application/json ContentType.
+type PostAuthMeTableViewsJSONRequestBody = TableViewCreateRequest
+
+// PatchAuthMeTableViewsByIdJSONRequestBody defines body for PatchAuthMeTableViewsById for application/json ContentType.
+type PatchAuthMeTableViewsByIdJSONRequestBody = TableViewUpdateRequest
 
 // PostAuthPasswordResetCompleteJSONRequestBody defines body for PostAuthPasswordResetComplete for application/json ContentType.
 type PostAuthPasswordResetCompleteJSONRequestBody PostAuthPasswordResetCompleteJSONBody
@@ -20974,6 +21033,22 @@ type ClientInterface interface {
 	// GetAuthMeQuota request
 	GetAuthMeQuota(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAuthMeTableViews request
+	GetAuthMeTableViews(ctx context.Context, params *GetAuthMeTableViewsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAuthMeTableViewsWithBody request with any body
+	PostAuthMeTableViewsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostAuthMeTableViews(ctx context.Context, body PostAuthMeTableViewsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteAuthMeTableViewsById request
+	DeleteAuthMeTableViewsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchAuthMeTableViewsByIdWithBody request with any body
+	PatchAuthMeTableViewsByIdWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchAuthMeTableViewsById(ctx context.Context, id openapi_types.UUID, body PatchAuthMeTableViewsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostAuthPasswordResetCompleteWithBody request with any body
 	PostAuthPasswordResetCompleteWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -26547,6 +26622,78 @@ func (c *Client) PutAuthMePreferences(ctx context.Context, body PutAuthMePrefere
 
 func (c *Client) GetAuthMeQuota(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAuthMeQuotaRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAuthMeTableViews(ctx context.Context, params *GetAuthMeTableViewsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAuthMeTableViewsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthMeTableViewsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthMeTableViewsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAuthMeTableViews(ctx context.Context, body PostAuthMeTableViewsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthMeTableViewsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteAuthMeTableViewsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteAuthMeTableViewsByIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchAuthMeTableViewsByIdWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchAuthMeTableViewsByIdRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchAuthMeTableViewsById(ctx context.Context, id openapi_types.UUID, body PatchAuthMeTableViewsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchAuthMeTableViewsByIdRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -46284,6 +46431,172 @@ func NewGetAuthMeQuotaRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetAuthMeTableViewsRequest generates requests for GetAuthMeTableViews
+func NewGetAuthMeTableViewsRequest(server string, params *GetAuthMeTableViewsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/me/table-views/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "table_key", runtime.ParamLocationQuery, params.TableKey); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostAuthMeTableViewsRequest calls the generic PostAuthMeTableViews builder with application/json body
+func NewPostAuthMeTableViewsRequest(server string, body PostAuthMeTableViewsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAuthMeTableViewsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAuthMeTableViewsRequestWithBody generates requests for PostAuthMeTableViews with any type of body
+func NewPostAuthMeTableViewsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/me/table-views/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteAuthMeTableViewsByIdRequest generates requests for DeleteAuthMeTableViewsById
+func NewDeleteAuthMeTableViewsByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/me/table-views/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchAuthMeTableViewsByIdRequest calls the generic PatchAuthMeTableViewsById builder with application/json body
+func NewPatchAuthMeTableViewsByIdRequest(server string, id openapi_types.UUID, body PatchAuthMeTableViewsByIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchAuthMeTableViewsByIdRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPatchAuthMeTableViewsByIdRequestWithBody generates requests for PatchAuthMeTableViewsById with any type of body
+func NewPatchAuthMeTableViewsByIdRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/me/table-views/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -79871,6 +80184,22 @@ type ClientWithResponsesInterface interface {
 	// GetAuthMeQuotaWithResponse request
 	GetAuthMeQuotaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthMeQuotaResponse, error)
 
+	// GetAuthMeTableViewsWithResponse request
+	GetAuthMeTableViewsWithResponse(ctx context.Context, params *GetAuthMeTableViewsParams, reqEditors ...RequestEditorFn) (*GetAuthMeTableViewsResponse, error)
+
+	// PostAuthMeTableViewsWithBodyWithResponse request with any body
+	PostAuthMeTableViewsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthMeTableViewsResponse, error)
+
+	PostAuthMeTableViewsWithResponse(ctx context.Context, body PostAuthMeTableViewsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthMeTableViewsResponse, error)
+
+	// DeleteAuthMeTableViewsByIdWithResponse request
+	DeleteAuthMeTableViewsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteAuthMeTableViewsByIdResponse, error)
+
+	// PatchAuthMeTableViewsByIdWithBodyWithResponse request with any body
+	PatchAuthMeTableViewsByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchAuthMeTableViewsByIdResponse, error)
+
+	PatchAuthMeTableViewsByIdWithResponse(ctx context.Context, id openapi_types.UUID, body PatchAuthMeTableViewsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchAuthMeTableViewsByIdResponse, error)
+
 	// PostAuthPasswordResetCompleteWithBodyWithResponse request with any body
 	PostAuthPasswordResetCompleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthPasswordResetCompleteResponse, error)
 
@@ -87832,6 +88161,115 @@ func (r GetAuthMeQuotaResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetAuthMeQuotaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAuthMeTableViewsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data []TableView `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAuthMeTableViewsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAuthMeTableViewsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAuthMeTableViewsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *struct {
+		Data TableView `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON409 *Conflict
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAuthMeTableViewsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAuthMeTableViewsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteAuthMeTableViewsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteAuthMeTableViewsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteAuthMeTableViewsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchAuthMeTableViewsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data TableView `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON404 *NotFound
+	JSON409 *Conflict
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchAuthMeTableViewsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchAuthMeTableViewsByIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -107154,6 +107592,58 @@ func (c *ClientWithResponses) GetAuthMeQuotaWithResponse(ctx context.Context, re
 	return ParseGetAuthMeQuotaResponse(rsp)
 }
 
+// GetAuthMeTableViewsWithResponse request returning *GetAuthMeTableViewsResponse
+func (c *ClientWithResponses) GetAuthMeTableViewsWithResponse(ctx context.Context, params *GetAuthMeTableViewsParams, reqEditors ...RequestEditorFn) (*GetAuthMeTableViewsResponse, error) {
+	rsp, err := c.GetAuthMeTableViews(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAuthMeTableViewsResponse(rsp)
+}
+
+// PostAuthMeTableViewsWithBodyWithResponse request with arbitrary body returning *PostAuthMeTableViewsResponse
+func (c *ClientWithResponses) PostAuthMeTableViewsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthMeTableViewsResponse, error) {
+	rsp, err := c.PostAuthMeTableViewsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthMeTableViewsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostAuthMeTableViewsWithResponse(ctx context.Context, body PostAuthMeTableViewsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthMeTableViewsResponse, error) {
+	rsp, err := c.PostAuthMeTableViews(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAuthMeTableViewsResponse(rsp)
+}
+
+// DeleteAuthMeTableViewsByIdWithResponse request returning *DeleteAuthMeTableViewsByIdResponse
+func (c *ClientWithResponses) DeleteAuthMeTableViewsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteAuthMeTableViewsByIdResponse, error) {
+	rsp, err := c.DeleteAuthMeTableViewsById(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteAuthMeTableViewsByIdResponse(rsp)
+}
+
+// PatchAuthMeTableViewsByIdWithBodyWithResponse request with arbitrary body returning *PatchAuthMeTableViewsByIdResponse
+func (c *ClientWithResponses) PatchAuthMeTableViewsByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchAuthMeTableViewsByIdResponse, error) {
+	rsp, err := c.PatchAuthMeTableViewsByIdWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchAuthMeTableViewsByIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchAuthMeTableViewsByIdWithResponse(ctx context.Context, id openapi_types.UUID, body PatchAuthMeTableViewsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchAuthMeTableViewsByIdResponse, error) {
+	rsp, err := c.PatchAuthMeTableViewsById(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchAuthMeTableViewsByIdResponse(rsp)
+}
+
 // PostAuthPasswordResetCompleteWithBodyWithResponse request with arbitrary body returning *PostAuthPasswordResetCompleteResponse
 func (c *ClientWithResponses) PostAuthPasswordResetCompleteWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthPasswordResetCompleteResponse, error) {
 	rsp, err := c.PostAuthPasswordResetCompleteWithBody(ctx, contentType, body, reqEditors...)
@@ -125834,6 +126324,221 @@ func ParseGetAuthMeQuotaResponse(rsp *http.Response) (*GetAuthMeQuotaResponse, e
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAuthMeTableViewsResponse parses an HTTP response from a GetAuthMeTableViewsWithResponse call
+func ParseGetAuthMeTableViewsResponse(rsp *http.Response) (*GetAuthMeTableViewsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAuthMeTableViewsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data []TableView `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAuthMeTableViewsResponse parses an HTTP response from a PostAuthMeTableViewsWithResponse call
+func ParsePostAuthMeTableViewsResponse(rsp *http.Response) (*PostAuthMeTableViewsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAuthMeTableViewsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest struct {
+			Data TableView `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteAuthMeTableViewsByIdResponse parses an HTTP response from a DeleteAuthMeTableViewsByIdWithResponse call
+func ParseDeleteAuthMeTableViewsByIdResponse(rsp *http.Response) (*DeleteAuthMeTableViewsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteAuthMeTableViewsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchAuthMeTableViewsByIdResponse parses an HTTP response from a PatchAuthMeTableViewsByIdWithResponse call
+func ParsePatchAuthMeTableViewsByIdResponse(rsp *http.Response) (*PatchAuthMeTableViewsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchAuthMeTableViewsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data TableView `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ServiceUnavailable

@@ -5524,6 +5524,40 @@ export interface OpenAPIComponents {
           "status_url": string;
           "download_url"?: string;
         };
+    TableView: {
+          "id": string;
+          "table_key": string;
+          "name": string;
+          "state": OpenAPIComponents['schemas']['TableViewState'];
+          "is_default": boolean;
+          "created_at": string;
+          "updated_at": string;
+        };
+    TableViewCreateRequest: {
+          "table_key": string;
+          "name": string;
+          "state": OpenAPIComponents['schemas']['TableViewState'];
+        };
+    TableViewState: {
+          "v"?: number;
+          "search"?: string;
+          "filters"?: Record<string, string[]>;
+          "sort"?: Array<{
+            "id": string;
+            "desc": boolean;
+          }>;
+          "hidden"?: string[];
+          "order"?: string[];
+          "pinning"?: {
+            "start"?: string[];
+            "end"?: string[];
+          };
+        };
+    TableViewUpdateRequest: {
+          "name"?: string;
+          "state"?: OpenAPIComponents['schemas']['TableViewState'];
+          "is_default"?: boolean;
+        };
     TaskOutboxEntryEnvelope: {
           "data": OpenAPIComponents['schemas']['TaskOutboxEntryWire'];
         };
@@ -10193,6 +10227,51 @@ export interface OpenAPIOperations {
     response: {
         "data": OpenAPIComponents['schemas']['UserPreferences'];
       };
+  };
+  "getAuthMeTableViews": {
+    method: "GET";
+    path: "/api/v1/auth/me/table-views/";
+    arguments: {
+        "query": {
+          "table_key": string;
+        };
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['TableView'][];
+      };
+  };
+  "postAuthMeTableViews": {
+    method: "POST";
+    path: "/api/v1/auth/me/table-views/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['TableViewCreateRequest'];
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['TableView'];
+      };
+  };
+  "patchAuthMeTableViewsById": {
+    method: "PATCH";
+    path: "/api/v1/auth/me/table-views/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['TableViewUpdateRequest'];
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['TableView'];
+      };
+  };
+  "deleteAuthMeTableViewsById": {
+    method: "DELETE";
+    path: "/api/v1/auth/me/table-views/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
   };
   "postAuthLogout": {
     method: "POST";
@@ -17169,6 +17248,10 @@ export type StorageTestResult = OpenAPIComponents['schemas']['StorageTestResult'
 export type StreamTicketRequest = OpenAPIComponents['schemas']['StreamTicketRequest'];
 export type StreamTicketResponse = OpenAPIComponents['schemas']['StreamTicketResponse'];
 export type SupportBundleOperation = OpenAPIComponents['schemas']['SupportBundleOperation'];
+export type TableView = OpenAPIComponents['schemas']['TableView'];
+export type TableViewCreateRequest = OpenAPIComponents['schemas']['TableViewCreateRequest'];
+export type TableViewState = OpenAPIComponents['schemas']['TableViewState'];
+export type TableViewUpdateRequest = OpenAPIComponents['schemas']['TableViewUpdateRequest'];
 export type TaskOutboxEntryEnvelope = OpenAPIComponents['schemas']['TaskOutboxEntryEnvelope'];
 export type TaskOutboxEntryWire = OpenAPIComponents['schemas']['TaskOutboxEntryWire'];
 export type ToolActionRequest = OpenAPIComponents['schemas']['ToolActionRequest'];
