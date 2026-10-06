@@ -100,10 +100,12 @@ export const COLUMN_KINDS: Readonly<Record<ColumnKind, ColumnKindSpec>> = {
     overflow: "nowrap",
     numeric: true,
   },
-  // Fits "almost 2 years ago" at text-xs plus cell padding.
+  // Default width fits "almost 2 years ago" at text-xs plus cell padding. The
+  // minimum stays low so tables that render a compact age ("14m", "3d") can
+  // set a smaller explicit size and still honor it.
   age: {
     size: 140,
-    minSize: 140,
+    minSize: 72,
     maxSize: 160,
     align: "left",
     overflow: "nowrap",

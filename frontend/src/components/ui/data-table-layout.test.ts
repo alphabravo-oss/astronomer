@@ -130,7 +130,7 @@ describe("age kind", () => {
   it("is wide enough for 'almost 2 years ago' and keeps caller sizes", () => {
     expect(COLUMN_KINDS.age).toMatchObject({
       size: 140,
-      minSize: 140,
+      minSize: 72,
       maxSize: 160,
     });
     const r = resolveColumnLayout(
@@ -138,6 +138,13 @@ describe("age kind", () => {
     );
     expect(r.size).toBe(100);
     expect(r.minSize).toBe(90);
+  });
+
+  it("lets a compact-age table set a size below the roomy default", () => {
+    const r = resolveColumnLayout(
+      col("age", { kind: "age", header: "Seen", size: 84 }),
+    );
+    expect(r.size).toBe(84);
   });
 });
 
