@@ -95,9 +95,10 @@ class FakeKubectl:
             del self.objects[kind, name]
         else:
             raise AssertionError('unexpected command')
+        response = json.dumps(obj) if args[0] == 'create' else ''
         if self.hook:
             self.hook('after', args, stdin)
-        return ''
+        return response
 
 
 class LedgerTest(unittest.TestCase):
@@ -163,6 +164,30 @@ class LedgerTest(unittest.TestCase):
             self.assertNotIn('sensitive_template_marker', ledger.path.read_text())
             self.api.hook = None
             self.assertTrue(ledger.cleanup())
+
+    def test_successful_create_receipt_rejects_same_nonce_replacement(self):
+        with Ledger(self.runner) as ledger:
+            ledger.lock()
+            created_uid = None
+            def replace_after_receipt(phase, args, body):
+                nonlocal created_uid
+                if phase == 'after' and args[0] == 'create' and body['kind'] == 'Job':
+                    self.assertEqual(['-o', 'json'], args[-2:])
+                    obj = self.api.objects['job', 'one']
+                    created_uid = obj['metadata']['uid']
+                    replacement = copy.deepcopy(obj)
+                    replacement['metadata'].update(uid='replacement-uid', resourceVersion='replacement-rv')
+                    self.api.objects['job', 'one'] = replacement
+            self.api.hook = replace_after_receipt
+            with self.assertRaisesRegex(LedgerError, 'UID replaced'):
+                ledger.create('job', 'one', {'apiVersion': 'batch/v1', 'kind': 'Job'})
+            disk = json.loads(ledger.path.read_text())
+            self.assertEqual(created_uid, disk['operations'][-1]['uid'])
+            self.api.hook = None
+            before = len(self.api.calls)
+            self.assertFalse(ledger.cleanup())
+            self.assertEqual(before, len(self.api.calls))
+            self.assertEqual('replacement-uid', self.api.get('job', 'one')['metadata']['uid'])
 
     def test_ambiguous_absent_create_retains_lock(self):
         with Ledger(self.runner) as ledger:

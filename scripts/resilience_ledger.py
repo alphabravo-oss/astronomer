@@ -173,9 +173,12 @@ class Ledger:
         obj = self.api.get_optional(op['kind'], op['name'])
         if obj is None:
             return None
+        return self.validate_object(op, obj)
+
+    def validate_object(self, op, obj):
         self.runner.require_owned(obj)
         md = obj.get('metadata', {})
-        if md.get('namespace') != op['namespace'] or obj.get('apiVersion') != op['api_version'] or obj.get('kind') != op['gvk_kind']:
+        if md.get('name') != op['name'] or md.get('namespace') != op['namespace'] or obj.get('apiVersion') != op['api_version'] or obj.get('kind') != op['gvk_kind']:
             raise LedgerError('resource scope or GVK changed')
         if not md.get('uid') or not md.get('resourceVersion'):
             raise LedgerError('resource identity unavailable')
@@ -241,16 +244,20 @@ class Ledger:
         document['metadata'] = {'name': name, 'namespace': op['namespace'],
                                 'labels': {OWNER: self.runner.run_id, DISPOSABLE: 'true', NONCE: op['nonce']}}
         try:
-            self.api.run(['create', '-f', '-'], stdin=document)
+            response = self.api.run(['create', '-f', '-', '-o', 'json'], stdin=document)
         except Exception:
             # Only an exact persisted nonce can resolve an ambiguous create.
             obj = self.get(op)
             if obj is None:
                 raise LedgerError('ambiguous creation unresolved') from None
-        obj = self.get(op)
-        if obj is None:
-            raise LedgerError('creation receipt unavailable')
+        else:
+            # A successful response is the authoritative UID receipt. Persist it
+            # before the verification GET, which could observe a replacement.
+            obj = self.validate_object(op, json.loads(response))
         op['uid'] = obj['metadata']['uid']
+        self.save()
+        if self.get(op) is None:
+            raise LedgerError('creation verification unavailable')
         op['state'] = 'mutated'
         self.save()
         return op

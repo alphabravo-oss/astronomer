@@ -209,7 +209,14 @@ cluster qualification.
 
 Cleanup runs in reverse order and stops at the first unresolved operation.
 Create-only Jobs and NetworkPolicies refuse preexisting objects, even if their
-labels match; ambiguous receipts require the exact persisted operation nonce.
+labels match. Successful create responses supply the UID receipt, persisted
+before verification; even a replacement copying the same labels and nonce is
+rejected. When the response is lost or a timeout leaves no UID receipt,
+reconciliation can only bind an object with the exact persisted operation nonce
+and ownership labels. That ambiguous-response path cannot distinguish an
+external actor copying the nonce before the first successful read; it is not
+cryptographic proof of creation. The disposable namespace must remain under
+the operator's exclusive control.
 Fresh ownership, UID, and field checks prevent deleting replacements or
 restoring over externally changed replicas or restart annotations. Restoring
 the restart annotation cannot undo restarted processes or rollout history.
