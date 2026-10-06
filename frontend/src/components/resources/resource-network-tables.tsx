@@ -105,7 +105,6 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -267,7 +266,6 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -432,7 +430,6 @@ export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
