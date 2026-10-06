@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     tailwindcss(),
     tanstackRouter({
@@ -24,6 +24,12 @@ export default defineConfig({
     __BUILD_COMMIT__: JSON.stringify(process.env.GIT_COMMIT ?? "unknown"),
     __BUILD_DATE__: JSON.stringify(process.env.BUILD_DATE ?? "unknown"),
     __BUILD_NODE_VERSION__: JSON.stringify(process.version),
+    // Dev-only /dashboard/dev/ui gallery (plan 031 phase 8): on for the dev
+    // server and for builds with VITE_UI_GALLERY=1 (the Playwright web server).
+    // A define folds to a literal so production builds drop the dynamic import.
+    __UI_GALLERY__: JSON.stringify(
+      command === "serve" || process.env.VITE_UI_GALLERY === "1",
+    ),
   },
   server: {
     host: process.env.VITE_DEV_HOST ?? "127.0.0.1",
@@ -51,4 +57,4 @@ export default defineConfig({
     assetsInlineLimit: 0,
     chunkSizeWarningLimit: 650,
   },
-});
+}));
