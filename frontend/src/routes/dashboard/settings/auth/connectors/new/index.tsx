@@ -16,7 +16,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Search } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { extractApiErrorMessage } from "@/lib/api/errors";
@@ -29,6 +29,8 @@ import {
 import { ConnectorForm } from "@/components/auth/connector-form";
 import { getConnectorMeta } from "@/components/auth/connector-meta";
 import type { DexConnectorTypeSpec } from "@/types";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 type WizardStep = "pick" | "configure" | "apply";
 
@@ -116,17 +118,14 @@ function NewConnectorPage() {
           </div>
 
           {typesLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
+            <LoadingSkeleton label="Loading" cards={3} />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {filtered.map((t) => {
                 const meta = getConnectorMeta(t.type);
                 const Icon = meta.icon;
                 return (
-                  <button
-                    type="button"
+                  <BareButton
                     key={t.type}
                     onClick={() => {
                       setSelectedType(t);
@@ -159,7 +158,7 @@ function NewConnectorPage() {
                         {t.required.length === 1 ? "" : "s"}
                       </span>
                     </div>
-                  </button>
+                  </BareButton>
                 );
               })}
             </div>

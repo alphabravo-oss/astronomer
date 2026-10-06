@@ -8,6 +8,7 @@ import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toastError } from "@/lib/toast";
 import { useCreateRole, useUpdateRole } from "@/lib/hooks/rbac";
+import { BareButton } from "@/components/form/bare-button";
 
 export type RoleEditorMode = "create" | "edit" | "duplicate";
 
@@ -292,8 +293,7 @@ export function RoleEditor({
           className="flex gap-2"
         >
           {(["global", "cluster", "project"] as const).map((scope) => (
-            <button
-              type="button"
+            <BareButton
               key={scope}
               disabled={mode === "edit"}
               onClick={() => setForm((f) => ({ ...f, scope }))}
@@ -306,7 +306,7 @@ export function RoleEditor({
               )}
             >
               {scope}
-            </button>
+            </BareButton>
           ))}
         </div>
       </div>
@@ -327,12 +327,12 @@ export function RoleEditor({
                 Permission {idx + 1}
               </span>
               {form.platform.length > 1 && (
-                <button
+                <BareButton
                   onClick={() => removePlatform(idx)}
                   className="text-muted-foreground hover:text-status-error"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                </BareButton>
               )}
             </div>
             <div className="space-y-1.5">
@@ -388,12 +388,12 @@ export function RoleEditor({
                 <span className="text-xs font-medium text-muted-foreground">
                   Grant {idx + 1}
                 </span>
-                <button
+                <BareButton
                   onClick={() => removeCRD(idx)}
                   className="text-muted-foreground hover:text-status-error"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                </BareButton>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -499,9 +499,8 @@ function VerbPills({
         className="flex flex-wrap gap-1.5"
       >
         {verbs.map((verb) => (
-          <button
+          <BareButton
             key={verb}
-            type="button"
             onClick={() => onToggle(verb)}
             className={cn(
               "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
@@ -511,7 +510,7 @@ function VerbPills({
             )}
           >
             {verb}
-          </button>
+          </BareButton>
         ))}
       </div>
     </div>

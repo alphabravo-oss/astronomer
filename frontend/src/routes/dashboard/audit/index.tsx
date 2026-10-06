@@ -43,6 +43,7 @@ import {
   emptyFilters,
   type AuditFilters,
 } from "./-filters";
+import { BareButton } from "@/components/form/bare-button";
 
 function useAuditNames(
   rows: AuditLogEntry[],
@@ -306,7 +307,7 @@ function AuditLogPage() {
             <Select
               value={filters.audience}
               onChange={(e) => updateFilter("audience", e.target.value)}
-              containerClassName="w-[10.5rem]"
+              containerClassName="w-42"
               aria-label="Activity"
             >
               <option value="people">People</option>
@@ -316,7 +317,7 @@ function AuditLogPage() {
             <Select
               value={filters.actionClass}
               onChange={(e) => updateFilter("actionClass", e.target.value)}
-              containerClassName="w-[8.5rem]"
+              containerClassName="w-34"
               aria-label="Event class"
             >
               <option value="all">All kinds</option>
@@ -327,7 +328,7 @@ function AuditLogPage() {
             <Select
               value={filters.result}
               onChange={(e) => updateFilter("result", e.target.value)}
-              containerClassName="w-[8.5rem]"
+              containerClassName="w-34"
               aria-label="Result"
             >
               <option value="all">Any result</option>
@@ -366,9 +367,8 @@ function AuditLogPage() {
         {chips.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {chips.map((chip) => (
-              <button
+              <BareButton
                 key={chip.key}
-                type="button"
                 onClick={() =>
                   updateFilter(chip.key, clearFilterValue(chip.key))
                 }
@@ -376,7 +376,7 @@ function AuditLogPage() {
               >
                 {chip.label}
                 <X className="h-3 w-3" />
-              </button>
+              </BareButton>
             ))}
           </div>
         )}

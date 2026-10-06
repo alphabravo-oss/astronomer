@@ -23,6 +23,7 @@ import {
   deleteReadAuditPolicy,
   type ReadAuditPolicyView,
 } from "@/lib/api/settings";
+import { BareButton } from "@/components/form/bare-button";
 
 function ReadAuditPoliciesPage() {
   return (
@@ -133,7 +134,7 @@ function ReadAuditPoliciesList() {
         key: "enabled",
         header: "Enabled",
         accessor: (p) => (
-          <button
+          <BareButton
             disabled={busyId === p.id}
             onClick={() => toggleEnabled(p)}
             className={`text-xs px-2 py-0.5 rounded-md ${
@@ -143,7 +144,7 @@ function ReadAuditPoliciesList() {
             }`}
           >
             {p.enabled ? "enabled" : "disabled"}
-          </button>
+          </BareButton>
         ),
         searchAccessor: (p) => (p.enabled ? "enabled" : "disabled"),
         sortAccessor: (p) => (p.enabled ? 1 : 0),
@@ -155,14 +156,15 @@ function ReadAuditPoliciesList() {
         header: "",
         hideable: false,
         accessor: (p) => (
-          <button
+          <BareButton
+            aria-label="Delete policy"
             disabled={busyId === p.id}
             onClick={() => setDeleteTarget(p)}
             className="text-muted-foreground hover:text-destructive"
-            title="Delete policy"
+            tooltip="Delete policy"
           >
             <Trash2 className="h-4 w-4" />
-          </button>
+          </BareButton>
         ),
         align: "right",
         width: "4rem",

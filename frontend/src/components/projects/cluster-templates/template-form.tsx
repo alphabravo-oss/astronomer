@@ -16,7 +16,7 @@
  * `initial` snapshot.
  */
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useTools } from "@/lib/hooks/tools";
 import { cn } from "@/lib/utils";
 import { useAppForm } from "@/lib/form";
@@ -29,6 +29,8 @@ import type {
   PodSecurityProfile,
   NetworkPolicyMode,
 } from "@/lib/api/project-detail";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 interface TemplateFormProps {
   initial?: {
@@ -366,8 +368,7 @@ function Section({
   const [open, setOpen] = useState(!!defaultOpen);
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <button
-        type="button"
+      <BareButton
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center justify-between px-5 py-3 hover:bg-accent/30 transition-colors"
       >
@@ -377,7 +378,7 @@ function Section({
         ) : (
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         )}
-      </button>
+      </BareButton>
       {/* Hidden (not unmounted) when collapsed so field validators keep running. */}
       <div className={cn("px-5 pb-5 pt-2 space-y-4", !open && "hidden")}>
         {children}
@@ -424,24 +425,23 @@ function LabelsEditor({
             onChange={(e) => updateAt(i, { value: e.target.value })}
             className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
           />
-          <button
-            type="button"
+          <BareButton
+            aria-label="Remove label"
             onClick={() => remove(i)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Remove label"
+            tooltip="Remove label"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </BareButton>
         </div>
       ))}
-      <button
-        type="button"
+      <BareButton
         onClick={add}
         className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
       >
         <Plus className="h-3 w-3" />
         Add label
-      </button>
+      </BareButton>
     </div>
   );
 }
@@ -480,12 +480,7 @@ function ToolsEditor({
 
   return (
     <div className="space-y-3">
-      {isLoading && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading tools
-          catalog…
-        </div>
-      )}
+      {isLoading && <LoadingSkeleton label="Loading tools catalog" lines={2} />}
       {value.length === 0 && !isLoading && (
         <p className="text-xs text-muted-foreground">No tools selected.</p>
       )}
@@ -504,19 +499,19 @@ function ToolsEditor({
                   {tool?.name || binding.slug}
                 </p>
                 {tool?.description && (
-                  <p className="text-xs text-muted-foreground truncate max-w-[400px]">
+                  <p className="text-xs text-muted-foreground truncate max-w-100">
                     {tool.description}
                   </p>
                 )}
               </div>
-              <button
-                type="button"
+              <BareButton
+                aria-label="Remove tool"
                 onClick={() => remove(binding.slug)}
                 className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-                title="Remove tool"
+                tooltip="Remove tool"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              </BareButton>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-1.5">
@@ -582,15 +577,14 @@ function ToolsEditor({
             </option>
           ))}
         </select>
-        <button
-          type="button"
+        <BareButton
           onClick={add}
           disabled={!pending}
           className="inline-flex items-center gap-1 h-9 px-3 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
         >
           <Plus className="h-3.5 w-3.5" />
           Add
-        </button>
+        </BareButton>
       </div>
     </div>
   );

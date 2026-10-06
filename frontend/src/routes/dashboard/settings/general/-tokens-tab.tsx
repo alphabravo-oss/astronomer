@@ -62,17 +62,17 @@ export function TokensTab({ onCreate }: { onCreate: () => void }) {
       header: "",
       sortable: false,
       accessor: (row) => (
-        <button
-          type="button"
+        <BareButton
+          aria-label="Delete token"
           onClick={(e) => {
             e.stopPropagation();
             setDeleteTarget(row);
           }}
           className="text-muted-foreground hover:text-status-error transition-colors"
-          title="Delete token"
+          tooltip="Delete token"
         >
           <Trash2 className="h-4 w-4" />
-        </button>
+        </BareButton>
       ),
     },
   ];
@@ -135,3 +135,4 @@ export function TokensTab({ onCreate }: { onCreate: () => void }) {
   );
 }
 import { useState } from "react";
+import { BareButton } from "@/components/form/bare-button";

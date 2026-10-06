@@ -41,6 +41,7 @@ import {
   humaniseFieldName,
   type FieldMeta,
 } from "./connector-meta";
+import { BareButton } from "@/components/form/bare-button";
 
 export interface ConnectorFormState {
   name: string;
@@ -467,8 +468,7 @@ function NestedGroup({
   const [open, setOpen] = useState(true);
   return (
     <div className="rounded-lg border border-border">
-      <button
-        type="button"
+      <BareButton
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-accent/30 transition-colors rounded-t-lg"
       >
@@ -481,7 +481,7 @@ function NestedGroup({
           {humaniseFieldName(parent)}
         </span>
         <span className="text-2xs text-muted-foreground">{count} required</span>
-      </button>
+      </BareButton>
       {/* Hidden (not unmounted) when collapsed so field validators keep running. */}
       <div
         className={cn(

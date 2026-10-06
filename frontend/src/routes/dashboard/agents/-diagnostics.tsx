@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Download,
   History,
-  Loader2,
   Send,
   Stethoscope,
   Wrench,
@@ -26,6 +25,7 @@ import type {
   AgentUpgradeOperationResponse,
   AgentUpgradePlanResponse,
 } from "@/types";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
 export function AgentDiagnosticsDrawer({
   diagnosticsQuery,
@@ -92,7 +92,7 @@ export function AgentDiagnosticsDrawer({
             loading={selfTesting}
             icon={<Stethoscope className="h-3.5 w-3.5" />}
             disabled={!canManage || loading}
-            title={!canManage ? "Requires cluster_agents:update" : undefined}
+            tooltip={!canManage ? "Requires cluster_agents:update" : undefined}
             className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
           >
             Self-test
@@ -383,10 +383,11 @@ function AgentOperationsSection({
         <History className="h-4 w-4 text-muted-foreground" />
       </div>
       {loading ? (
-        <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading
-        </div>
+        <LoadingSkeleton
+          label="Loading operations"
+          lines={3}
+          className="mt-3"
+        />
       ) : operations.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
           No lifecycle operations.

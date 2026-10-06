@@ -8,6 +8,7 @@
 // allowlist. Render-only: a label + a Link, no third-party JS, no error surface
 // large enough to crash the nav (a missing label degrades to the name).
 
+import { Tooltip } from "@/components/ui/tooltip";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { Puzzle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,24 +46,25 @@ export function ExtensionNavItems({
           const label = mount.label || mount.displayName || mount.extension;
           if (collapsed) {
             return (
-              <RouterLink
-                key={mount.extension}
-                to={href}
-                className={cn(
-                  "nav-item group justify-center px-0",
-                  active && "active",
-                )}
-                title={label}
-              >
-                <Puzzle
+              <Tooltip key={mount.extension} content={label} side="right">
+                <RouterLink
+                  to={href}
                   className={cn(
-                    "h-4 w-4 shrink-0",
-                    active
-                      ? "text-foreground"
-                      : "text-muted-foreground group-hover:text-foreground",
+                    "nav-item group justify-center px-0",
+                    active && "active",
                   )}
-                />
-              </RouterLink>
+                  aria-label={label}
+                >
+                  <Puzzle
+                    className={cn(
+                      "h-4 w-4 shrink-0",
+                      active
+                        ? "text-foreground"
+                        : "text-muted-foreground group-hover:text-foreground",
+                    )}
+                  />
+                </RouterLink>
+              </Tooltip>
             );
           }
           return (

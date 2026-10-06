@@ -202,7 +202,7 @@ function AuthOverviewPage() {
               disabled={applyMutation.isPending || connectors.length === 0}
               loading={applyMutation.isPending}
               icon={<RefreshCw className="h-3.5 w-3.5" />}
-              title="Reconcile the retained runtime Secret and roll Dex when changed"
+              tooltip="Reconcile the retained runtime Secret and roll Dex when changed"
             >
               Apply to Dex
             </ActionButton>

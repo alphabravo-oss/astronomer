@@ -34,6 +34,7 @@ import {
 } from "@/components/projects/hooks";
 import { formatRelativeTime } from "@/lib/utils";
 import type { ClusterTemplate } from "@/lib/api/project-detail";
+import { BareButton } from "@/components/form/bare-button";
 
 function ClusterTemplatesPage() {
   const navigate = useNavigate();
@@ -87,7 +88,7 @@ function ClusterTemplatesPage() {
       key: "description",
       header: "Description",
       accessor: (row) => (
-        <span className="text-sm text-muted-foreground truncate max-w-[320px] block">
+        <span className="text-sm text-muted-foreground truncate max-w-80 block">
           {row.description || "—"}
         </span>
       ),
@@ -129,14 +130,14 @@ function ClusterTemplatesPage() {
       accessor: (row) => (
         <div className="flex items-center gap-1 justify-end">
           {canWrite && (
-            <button
-              type="button"
+            <BareButton
+              aria-label="Delete template"
               onClick={() => setDeleteTarget(row)}
               className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-              title="Delete template"
+              tooltip="Delete template"
             >
               <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            </BareButton>
           )}
         </div>
       ),

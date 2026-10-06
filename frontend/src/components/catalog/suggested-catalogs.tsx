@@ -95,7 +95,7 @@ export function SuggestedCatalogs({
                       {catalog.repoType}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 min-h-[2rem]">
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 min-h-8">
                     {catalog.description}
                   </p>
                 </div>
@@ -121,7 +121,7 @@ export function SuggestedCatalogs({
                       existingRepo && onJumpToExisting?.(existingRepo)
                     }
                     className="bg-status-success/10 text-status-success hover:bg-status-success/20 hover:text-status-success"
-                    title="View in Your repositories"
+                    tooltip="View in Your repositories"
                   >
                     Added
                   </ActionButton>

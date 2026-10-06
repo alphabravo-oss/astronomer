@@ -10,7 +10,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
   useCloudCredentialProviders,
@@ -20,6 +20,7 @@ import {
 import { CredentialForm } from "@/components/projects/cloud-credentials/credential-form";
 import { ProviderBadge } from "@/components/projects/cloud-credentials/provider-badge";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
 function EditCloudCredentialPage() {
   const params = Route.useParams();
@@ -60,11 +61,7 @@ function EditCloudCredentialPage() {
   const backToList = `/dashboard/projects/${projectId}/cloud-credentials`;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingSkeleton label="Loading" heading />;
   }
   if (!credential || !spec) {
     return (

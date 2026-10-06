@@ -3,6 +3,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { ClusterAgentItem } from "@/types";
 import type { Column } from "@/components/ui/data-table";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 
 export function agentColumns(
   setSelectedClusterId: (id: string) => void,
@@ -56,15 +58,16 @@ export function agentColumns(
       key: "compatibility",
       header: "Compatibility",
       accessor: (row) => (
-        <span
-          title={row.compatibilityMessage}
-          className={cn(
-            "inline-flex items-center rounded-sm border px-1.5 py-0.5 text-xs font-medium",
-            compatibilityTone(row.compatibilityStatus),
-          )}
-        >
-          {compatibilityLabel(row.compatibilityStatus)}
-        </span>
+        <Tooltip content={row.compatibilityMessage}>
+          <span
+            className={cn(
+              "inline-flex items-center rounded-sm border px-1.5 py-0.5 text-xs font-medium",
+              compatibilityTone(row.compatibilityStatus),
+            )}
+          >
+            {compatibilityLabel(row.compatibilityStatus)}
+          </span>
+        </Tooltip>
       ),
       sortAccessor: (row) => row.compatibilityStatus,
     },
@@ -124,7 +127,7 @@ export function agentColumns(
       key: "actions",
       header: "",
       accessor: (row) => (
-        <button
+        <BareButton
           onClick={(event) => {
             event.stopPropagation();
             setSelectedClusterId(row.clusterId);
@@ -134,7 +137,7 @@ export function agentColumns(
         >
           <Stethoscope className="h-3.5 w-3.5" />
           Diagnostics
-        </button>
+        </BareButton>
       ),
       sortable: false,
     },

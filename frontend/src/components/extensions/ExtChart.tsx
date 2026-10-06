@@ -113,7 +113,7 @@ export function ExtChart({ rows, spec, emptyText }: ExtChartProps) {
             x={i * colW + colW / 2}
             y={CHART_H + 16}
             textAnchor="middle"
-            className={cn("fill-muted-foreground text-[10px]")}
+            className={cn("fill-muted-foreground text-2xs")}
           >
             {p.x}
           </text>

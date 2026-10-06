@@ -21,8 +21,10 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import type { RenderedWidget, WidgetSpec } from "@/lib/api/dashboards";
+import { Tooltip } from "@/components/ui/tooltip";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
 export type WidgetFetcher = () => Promise<RenderedWidget[]>;
 
@@ -98,10 +100,11 @@ export function WidgetGrid({
 
   if (loading && !widgets) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Loading widgets...</span>
-      </div>
+      <LoadingSkeleton
+        label="Loading widgets"
+        cards={3}
+        className="grid grid-cols-1 gap-3 py-6 sm:grid-cols-2 lg:grid-cols-3"
+      />
     );
   }
   if (error) {
@@ -155,9 +158,9 @@ function WidgetBody({ widget }: { widget: RenderedWidget }) {
     return (
       <div className="flex-1 text-xs text-status-warning flex items-center gap-1">
         <AlertCircle className="h-3 w-3" />
-        <span className="truncate" title={data.error}>
-          {data.error}
-        </span>
+        <Tooltip content={data.error}>
+          <span className="truncate">{data.error}</span>
+        </Tooltip>
       </div>
     );
   }

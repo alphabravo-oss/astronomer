@@ -21,6 +21,7 @@ import { formatRelativeTime } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { useDeleteGroupMapping, useGroupMappings } from "@/components/settings/hooks";
 import type { GroupMappingView } from "@/lib/api/settings";
+import { BareButton } from "@/components/form/bare-button";
 
 function GroupMappingsTable() {
   const navigate = useNavigate();
@@ -91,17 +92,17 @@ function GroupMappingsTable() {
       header: "",
       sortable: false,
       accessor: (row) => (
-        <button
-          type="button"
+        <BareButton
+          aria-label="Delete mapping"
           onClick={(e) => {
             e.stopPropagation();
             setConfirmDelete(row);
           }}
           className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-          title="Delete mapping"
+          tooltip="Delete mapping"
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </BareButton>
       ),
     },
   ];

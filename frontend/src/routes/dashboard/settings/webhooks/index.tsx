@@ -22,21 +22,25 @@ import {
   useUpdateWebhook,
   useWebhooks,
 } from "@/components/settings/hooks";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { WebhookSubscriptionView } from "@/lib/api/settings";
+import { BareButton } from "@/components/form/bare-button";
 
 function EnabledToggle({ row }: { row: WebhookSubscriptionView }) {
   const update = useUpdateWebhook();
   return (
     <span onClickCapture={(e) => e.stopPropagation()}>
-      <Switch
-        size="sm"
-        checked={row.enabled}
-        onCheckedChange={(enabled) =>
-          update.mutate({ id: row.id, body: { enabled } })
-        }
-        disabled={update.isPending}
-        title={row.enabled ? "Disable" : "Enable"}
-      />
+      <Tooltip content={row.enabled ? "Disable" : "Enable"}>
+        <Switch
+          size="sm"
+          checked={row.enabled}
+          onCheckedChange={(enabled) =>
+            update.mutate({ id: row.id, body: { enabled } })
+          }
+          disabled={update.isPending}
+          aria-label={row.enabled ? "Disable" : "Enable"}
+        />
+      </Tooltip>
     </span>
   );
 }
@@ -68,7 +72,7 @@ function WebhooksList() {
       key: "url",
       header: "URL",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground font-mono truncate max-w-[360px] block">
+        <span className="text-xs text-muted-foreground font-mono truncate max-w-90 block">
           {row.url}
         </span>
       ),
@@ -95,17 +99,17 @@ function WebhooksList() {
       header: "",
       sortable: false,
       accessor: (row) => (
-        <button
-          type="button"
+        <BareButton
+          aria-label="Delete webhook"
           onClick={(e) => {
             e.stopPropagation();
             setConfirmDelete(row);
           }}
           className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-          title="Delete webhook"
+          tooltip="Delete webhook"
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </BareButton>
       ),
     },
   ];

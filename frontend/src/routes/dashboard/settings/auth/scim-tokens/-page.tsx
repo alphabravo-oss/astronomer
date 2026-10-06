@@ -16,6 +16,7 @@ import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { formatRelativeTime } from "@/lib/utils";
 import type { SCIMToken } from "@/types";
 import { useSCIMTokens, useRevokeSCIMToken } from "./-hooks";
+import { BareButton } from "@/components/form/bare-button";
 
 function SCIMTokensList() {
   const navigate = useNavigate();
@@ -68,16 +69,17 @@ function SCIMTokensList() {
       header: "",
       sortable: false,
       accessor: (row) => (
-        <button
+        <BareButton
+          aria-label="Revoke token"
           onClick={(e) => {
             e.stopPropagation();
             setRevokeTarget(row);
           }}
           className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-          title="Revoke token"
+          tooltip="Revoke token"
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </BareButton>
       ),
     },
   ];

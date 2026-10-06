@@ -25,7 +25,7 @@ import {
 import { useEffect, useMemo } from "react";
 
 import { useAppForm, useStore } from "@/lib/form";
-import { Loader2, Save, AlertCircle, ExternalLink } from "lucide-react";
+import { Save, AlertCircle, ExternalLink } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { useCurrentUser } from "@/lib/hooks/auth";
@@ -42,6 +42,8 @@ import type {
   ProjectPolicyPatch,
 } from "@/lib/api/project-detail";
 import { cn } from "@/lib/utils";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 const psaOptions: {
   value: PodSecurityProfile;
@@ -168,11 +170,7 @@ function PolicyPage() {
   }, [usage]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingSkeleton label="Loading" heading />;
   }
 
   return (
@@ -208,8 +206,7 @@ function PolicyPage() {
         </header>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           {psaOptions.map((opt) => (
-            <button
-              type="button"
+            <BareButton
               key={opt.value}
               disabled={!canEdit}
               onClick={() => form.setFieldValue("psa", opt.value)}
@@ -237,7 +234,7 @@ function PolicyPage() {
               <p className="text-xs text-muted-foreground mt-1.5">
                 {opt.description}
               </p>
-            </button>
+            </BareButton>
           ))}
         </div>
       </section>

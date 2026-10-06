@@ -38,7 +38,7 @@ function UtilizationBar({ pct }: { pct: number }) {
         : "bg-status-success";
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[160px]">
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-40">
         <div
           className={cn("h-full transition-all", color)}
           style={{ width: `${clamped}%` }}
@@ -125,7 +125,7 @@ function UsageInner() {
         if (!worst)
           return <span className="text-xs text-muted-foreground">--</span>;
         return (
-          <div className="space-y-1 max-w-[260px]">
+          <div className="space-y-1 max-w-65">
             <p className="text-xs text-muted-foreground">
               {fieldLabel(worst.field)}
             </p>

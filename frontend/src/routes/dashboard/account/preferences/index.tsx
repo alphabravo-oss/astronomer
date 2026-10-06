@@ -10,6 +10,8 @@ import {
   landingRouteOptions,
   type FavoriteRoute,
 } from "@/lib/api/user-preferences";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function AccountPreferencesPage() {
   const { preferences, isLoading, isSaving, saveError, updatePreferences } =
@@ -50,9 +52,7 @@ function AccountPreferencesPage() {
       />
 
       {isLoading ? (
-        <div className="flex h-40 items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
+        <LoadingSkeleton label="Loading" heading />
       ) : (
         <>
           <PageSection
@@ -168,9 +168,8 @@ function AccountPreferencesPage() {
               {favoriteNavigationOptions.map((option) => {
                 const selected = preferences.favorites.includes(option.href);
                 return (
-                  <button
+                  <BareButton
                     key={option.href}
-                    type="button"
                     aria-pressed={selected}
                     onClick={() => toggleFavorite(option.href)}
                     className={cn(
@@ -187,7 +186,7 @@ function AccountPreferencesPage() {
                       )}
                     />
                     {option.label}
-                  </button>
+                  </BareButton>
                 );
               })}
             </div>

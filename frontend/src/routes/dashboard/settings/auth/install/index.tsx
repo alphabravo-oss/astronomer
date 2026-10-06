@@ -27,6 +27,7 @@ import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { cn } from "@/lib/utils";
 import type { Cluster } from "@/types";
+import { BareButton } from "@/components/form/bare-button";
 
 type Step = 1 | 2 | 3;
 
@@ -291,15 +292,14 @@ function IssuerStep({
           <p className="text-xs text-muted-foreground">Suggestions</p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((s) => (
-              <button
-                type="button"
+              <BareButton
                 key={s}
                 onClick={() => onChange(s)}
                 className="inline-flex items-center px-2.5 py-1 rounded-md border border-border text-xs
                   text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-mono"
               >
                 {s}
-              </button>
+              </BareButton>
             ))}
           </div>
         </div>

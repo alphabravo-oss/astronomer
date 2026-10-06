@@ -20,7 +20,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useAppForm, useStore } from "@/lib/form";
 import { FormShell } from "@/components/ui/form-shell";
-import { ArrowLeft, GitBranch, Loader2, Play, RefreshCw } from "lucide-react";
+import { ArrowLeft, GitBranch, Play, RefreshCw } from "lucide-react";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
@@ -39,6 +39,7 @@ import type {
 } from "@/lib/api/gitops";
 import { GITOPS_AUTH_SENTINEL } from "@/lib/api/gitops";
 import { formatRelativeTime } from "@/lib/utils";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
 // Snapshot of the source row in write-request shape — the form's baseline;
 // the auth column round-trips as the sentinel when a blob is stored.
@@ -119,11 +120,7 @@ function DetailInner({ id }: { id: string }) {
   }, [form, initial]);
 
   if (isLoading || !source) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingSkeleton label="Loading" heading />;
   }
 
   return (

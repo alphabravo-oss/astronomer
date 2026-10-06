@@ -53,7 +53,7 @@ function UtilizationBar({ pct }: { pct: number }) {
         : "bg-status-success";
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[120px]">
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-30">
         <div
           className={cn("h-full transition-all", color)}
           style={{ width: `${clamped}%` }}
