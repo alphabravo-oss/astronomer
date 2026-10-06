@@ -67,3 +67,13 @@ describe("columnText", () => {
     expect(columnText({ header: "x", accessor: () => true }, 1)).toBe("");
   });
 });
+
+describe("toCsv ariaLabel", () => {
+  it("uses the full name for the header when provided", () => {
+    const out = toCsv(
+      [{ header: "CPU", ariaLabel: "CPU requests", accessor: () => 1 }],
+      [1],
+    );
+    expect(out.split("\r\n")[0]).toBe("CPU requests");
+  });
+});

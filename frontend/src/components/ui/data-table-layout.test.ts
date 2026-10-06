@@ -126,6 +126,21 @@ describe("resolveColumnLayout precedence", () => {
   });
 });
 
+describe("age kind", () => {
+  it("is wide enough for 'almost 2 years ago' and keeps caller sizes", () => {
+    expect(COLUMN_KINDS.age).toMatchObject({
+      size: 140,
+      minSize: 140,
+      maxSize: 160,
+    });
+    const r = resolveColumnLayout(
+      col("age", { kind: "age", header: "Age", size: 100, minSize: 90 }),
+    );
+    expect(r.size).toBe(100);
+    expect(r.minSize).toBe(90);
+  });
+});
+
 describe("header floor", () => {
   it("widens a short kind to fit the header label plus sort icon", () => {
     const r = resolveColumnLayout(

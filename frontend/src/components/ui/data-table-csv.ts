@@ -5,6 +5,8 @@
 
 export interface CsvColumn<T> {
   header: string;
+  /** Full name; preferred over the short visible `header` in the export. */
+  ariaLabel?: string;
   accessor: (row: T) => unknown;
   searchAccessor?: (row: T) => string;
   sortAccessor?: (row: T) => string | number;
@@ -43,7 +45,9 @@ export function toCsv<T>(
   columns: ReadonlyArray<CsvColumn<T>>,
   rows: ReadonlyArray<T>,
 ): string {
-  const lines = [columns.map((c) => csvField(c.header)).join(",")];
+  const lines = [
+    columns.map((c) => csvField(c.ariaLabel ?? c.header)).join(","),
+  ];
   for (const row of rows) {
     lines.push(columns.map((c) => csvField(columnText(c, row))).join(","));
   }
