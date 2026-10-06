@@ -59,6 +59,7 @@ import {
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
 import { OperationPartialError } from "@/lib/api/operation-polling";
 import { cn } from "@/lib/utils";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 export function NodesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterNodes(clusterId);
@@ -677,9 +678,9 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
                 ["restarted", "Restarted"],
               ] as const
             ).map(([value, label]) => (
-              <button
+              <ActionButton
+                {...BARE_BUTTON}
                 key={value}
-                type="button"
                 aria-pressed={healthFilter === value}
                 onClick={() => {
                   setHealthFilter(value);
@@ -693,7 +694,7 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
                 )}
               >
                 {label}
-              </button>
+              </ActionButton>
             ))}
           </div>
         }

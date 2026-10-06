@@ -18,6 +18,7 @@ import type {
   StorageClass,
   Workload,
 } from "@/types";
+import { Tooltip } from "@/components/ui/tooltip";
 
 // ── Column Definitions ──
 
@@ -285,13 +286,12 @@ const podColumns: Column<Pod>[] = [
     accessor: (row) => {
       const [first, ...rest] = row.images;
       return (
-        <span
-          className="block max-w-64 truncate font-mono text-xs text-muted-foreground"
-          title={row.images.join("\n")}
-        >
-          {first || "—"}
-          {rest.length > 0 ? ` +${rest.length}` : ""}
-        </span>
+        <Tooltip content={row.images.join("\n")}>
+          <span className="block max-w-64 truncate font-mono text-xs text-muted-foreground">
+            {first || "—"}
+            {rest.length > 0 ? ` +${rest.length}` : ""}
+          </span>
+        </Tooltip>
       );
     },
     searchAccessor: (row) => row.images.join(" "),
@@ -399,7 +399,7 @@ const workloadColumns: Column<Workload>[] = [
     key: "images",
     header: "Image",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px] block">
+      <span className="text-xs text-muted-foreground font-mono truncate max-w-50 block">
         {row.images?.[0] || "-"}
       </span>
     ),
@@ -504,7 +504,7 @@ const ingressColumns: Column<Ingress>[] = [
     key: "hosts",
     header: "Hosts",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px] block">
+      <span className="text-xs text-muted-foreground font-mono truncate max-w-50 block">
         {row.hosts?.join(", ") || "*"}
       </span>
     ),

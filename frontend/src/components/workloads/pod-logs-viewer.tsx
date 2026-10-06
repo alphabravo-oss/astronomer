@@ -12,8 +12,11 @@ import {
   X,
   Clock,
   History,
-  Loader2,
 } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
+import { LogToolbarButton } from "./log-toolbar-button";
+import { SkeletonText } from "@/components/ui/skeleton";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 interface PodLogsViewerProps {
   clusterId: string;
@@ -163,7 +166,7 @@ export function PodLogsViewer({
             value={podName}
             onChange={(e) => onPodChange(e.target.value)}
             className="h-7 px-2 rounded-sm border border-border bg-background text-xs
-              focus:outline-hidden focus:ring-1 focus:ring-ring max-w-[200px]"
+              focus:outline-hidden focus:ring-1 focus:ring-ring max-w-50"
           >
             {pods.map((pod) => (
               <option key={pod.name} value={pod.name}>
@@ -208,82 +211,52 @@ export function PodLogsViewer({
         </div>
 
         <div className="flex items-center gap-1">
-          <button
-            type="button"
+          <LogToolbarButton
+            tooltip={
+              previousAvailable
+                ? "Show logs from the previously terminated container"
+                : undefined
+            }
+            disabledReason={
+              previousAvailable ? undefined : "No previous container instance"
+            }
+            label="Show previous container logs"
+            pressed={previous}
+            activeClass="bg-status-warning/10 text-status-warning"
+            disabled={!previousAvailable}
             onClick={() => {
               setPrevious((value) => !value);
               setFollow(false);
             }}
-            disabled={!previousAvailable}
-            aria-label="Show previous container logs"
-            aria-pressed={previous}
-            className={cn(
-              "inline-flex h-7 items-center gap-1 rounded-sm px-2 text-xs transition-colors",
-              previous
-                ? "bg-status-warning/10 text-status-warning"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              !previousAvailable && "cursor-not-allowed opacity-40",
-            )}
-            title={
-              previousAvailable
-                ? "Show logs from the previously terminated container"
-                : "No previous container instance"
-            }
           >
             <History className="h-3 w-3" />
             <span className="hidden sm:inline">Previous</span>
-          </button>
-
-          {/* Timestamps toggle */}
-          <button
-            type="button"
+          </LogToolbarButton>
+          <LogToolbarButton
+            tooltip="Toggle timestamps"
+            label="Show timestamps"
+            pressed={showTimestamps}
             onClick={() => setShowTimestamps(!showTimestamps)}
-            aria-label="Show timestamps"
-            aria-pressed={showTimestamps}
-            className={cn(
-              "inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs transition-colors",
-              showTimestamps
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent",
-            )}
-            title="Toggle timestamps"
           >
             <Clock className="h-3 w-3" />
-          </button>
-
-          {/* Search toggle */}
-          <button
-            type="button"
+          </LogToolbarButton>
+          <LogToolbarButton
+            tooltip="Search logs"
+            label="Filter log lines"
+            pressed={showSearch}
             onClick={() => setShowSearch(!showSearch)}
-            aria-label="Filter log lines"
-            aria-pressed={showSearch}
-            className={cn(
-              "inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs transition-colors",
-              showSearch
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent",
-            )}
-            title="Search logs"
           >
             <Search className="h-3 w-3" />
-          </button>
-
-          {/* Follow toggle */}
-          <button
-            type="button"
+          </LogToolbarButton>
+          <LogToolbarButton
+            tooltip={follow ? "Stop following" : "Follow logs"}
+            label="Follow new log lines"
+            pressed={follow}
+            activeClass="bg-status-success/10 text-status-success"
             onClick={() => {
               if (previous) setPrevious(false);
               setFollow(!follow);
             }}
-            aria-label="Follow new log lines"
-            aria-pressed={follow}
-            className={cn(
-              "inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs transition-colors",
-              follow
-                ? "bg-status-success/10 text-status-success"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent",
-            )}
-            title={follow ? "Stop following" : "Follow logs"}
           >
             {follow ? (
               <Pause className="h-3 w-3" />
@@ -293,19 +266,14 @@ export function PodLogsViewer({
             <span className="hidden sm:inline">
               {follow ? "Following" : "Follow"}
             </span>
-          </button>
-
-          {/* Download */}
-          <button
-            type="button"
+          </LogToolbarButton>
+          <LogToolbarButton
+            tooltip="Download logs"
+            label="Download logs"
             onClick={handleDownload}
-            aria-label="Download logs"
-            className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Download logs"
           >
             <Download className="h-3 w-3" />
-          </button>
+          </LogToolbarButton>
         </div>
       </div>
 
@@ -328,17 +296,17 @@ export function PodLogsViewer({
               {filteredLogs.length} matches
             </span>
           )}
-          <button
-            type="button"
+          <ActionButton
+            {...BARE_BUTTON}
             aria-label="Close log filter"
             onClick={() => {
               setShowSearch(false);
               setSearchQuery("");
             }}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground inline-block font-normal"
           >
             <X className="h-3 w-3" />
-          </button>
+          </ActionButton>
         </div>
       )}
 
@@ -360,13 +328,13 @@ export function PodLogsViewer({
         aria-label={`Logs for ${namespace}/${podName}`}
         className={cn(
           "log-viewer overflow-y-auto overflow-x-hidden p-3",
-          className || "h-[500px]",
+          className || "h-125",
         )}
       >
         {isLoading ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            <span className="text-xs">Loading logs...</span>
+          <div className="h-full p-3" aria-busy="true">
+            <span className="sr-only">Loading logs...</span>
+            <SkeletonText lines={6} />
           </div>
         ) : filteredLogs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
@@ -396,8 +364,8 @@ export function PodLogsViewer({
 
       {/* Auto-scroll indicator */}
       {!follow && (
-        <button
-          type="button"
+        <ActionButton
+          {...BARE_BUTTON}
           onClick={() => {
             setFollow(true);
             if (scrollRef.current) {
@@ -406,11 +374,11 @@ export function PodLogsViewer({
           }}
           className="sticky bottom-0 w-full flex items-center justify-center gap-1.5 py-1.5
             bg-muted/80 backdrop-blur-xs border-t border-border text-xs text-muted-foreground
-            hover:text-foreground transition-colors"
+            hover:text-foreground transition-colors font-normal whitespace-normal shrink"
         >
           <ArrowDown className="h-3 w-3" />
           Scroll to bottom and follow
-        </button>
+        </ActionButton>
       )}
     </div>
   );

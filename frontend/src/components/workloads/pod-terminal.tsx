@@ -4,7 +4,13 @@
 // selection / copy-paste / accessibility. Migrated from xterm.js
 // 2026-05-12.
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  type RefObject,
+} from "react";
 import { useTheme } from "@/lib/theme";
 import {
   Terminal as TerminalIcon,
@@ -18,12 +24,11 @@ import "@wterm/react/css";
 import { cn } from "@/lib/utils";
 import { createStreamTicket } from "@/lib/api/auth";
 import { wsBase } from "@/lib/env";
+import { ActionButton } from "@/components/ui/action-button";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 export type TerminalConnectionStatus =
-  | "connecting"
-  | "connected"
-  | "disconnected"
-  | "error";
+  "connecting" | "connected" | "disconnected" | "error";
 
 // PodTerminalActions is a tiny imperative API the host can call. Used by
 // the window-manager exec tab to focus the terminal when its tab becomes
@@ -47,6 +52,55 @@ interface PodTerminalProps {
 }
 
 type ConnectionStatus = TerminalConnectionStatus;
+
+function ContainerPicker({
+  containers,
+  selected,
+  open,
+  dropdownRef,
+  onToggle,
+  onSelect,
+}: {
+  containers: string[];
+  selected: string;
+  open: boolean;
+  dropdownRef: RefObject<HTMLDivElement | null>;
+  onToggle: () => void;
+  onSelect: (container: string) => void;
+}) {
+  return (
+    <div ref={dropdownRef} className="relative">
+      <ActionButton
+        {...BARE_BUTTON}
+        onClick={onToggle}
+        className="inline-flex items-center gap-1.5 h-6 px-2 rounded-sm border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
+      >
+        <span className="font-mono">{selected}</span>
+        <ChevronDown className="h-3 w-3" />
+      </ActionButton>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-48 rounded-md border border-border bg-popover p-1 shadow-lg z-50">
+          {containers.map((c) => (
+            <ActionButton
+              {...BARE_BUTTON}
+              key={c}
+              onClick={() => onSelect(c)}
+              className={cn(
+                "w-full flex items-center px-2.5 py-1.5 rounded-sm text-xs text-left transition-colors font-mono whitespace-normal shrink",
+                c === selected
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent",
+              )}
+            >
+              {c}
+            </ActionButton>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function PodTerminal({
   clusterId,
@@ -189,28 +243,31 @@ export function PodTerminal({
   // Fires once the wterm WASM core is up. The actual WS connect is driven by
   // the effect below (gated on `ready`) so that switching containers can
   // re-run it; here we just wire the imperative actions and mark ready.
-  const handleReady = useCallback((terminal: WTerm) => {
-    // wterm 0.3.x focuses its off-screen keyboard-input textarea while also
-    // marking it aria-hidden. A focused control cannot be hidden from the
-    // accessibility tree, so expose and name the terminal's real input.
-    const input = terminal.element.querySelector("textarea");
-    input?.removeAttribute("aria-hidden");
-    input?.setAttribute("aria-label", "Pod terminal input");
-    write(
-      `Connecting to \x1b[36m${pod}\x1b[0m / \x1b[33m${selectedContainer}\x1b[0m ...\r\n`,
-    );
-    if (actionsRef) {
-      actionsRef.current = {
-        focus,
-        clear: () => write("\x1b[2J\x1b[H"),
-        fit: () => {
-          /* wterm autoResize handles fit; no-op */
-        },
-      };
-    }
-    if (embedded) focus();
-    setReady(true);
-  }, [pod, selectedContainer, write, focus, embedded, actionsRef]);
+  const handleReady = useCallback(
+    (terminal: WTerm) => {
+      // wterm 0.3.x focuses its off-screen keyboard-input textarea while also
+      // marking it aria-hidden. A focused control cannot be hidden from the
+      // accessibility tree, so expose and name the terminal's real input.
+      const input = terminal.element.querySelector("textarea");
+      input?.removeAttribute("aria-hidden");
+      input?.setAttribute("aria-label", "Pod terminal input");
+      write(
+        `Connecting to \x1b[36m${pod}\x1b[0m / \x1b[33m${selectedContainer}\x1b[0m ...\r\n`,
+      );
+      if (actionsRef) {
+        actionsRef.current = {
+          focus,
+          clear: () => write("\x1b[2J\x1b[H"),
+          fit: () => {
+            /* wterm autoResize handles fit; no-op */
+          },
+        };
+      }
+      if (embedded) focus();
+      setReady(true);
+    },
+    [pod, selectedContainer, write, focus, embedded, actionsRef],
+  );
 
   // (Re)connect whenever the selected container changes, once the core is
   // ready. connectWebSocket's identity tracks selectedContainer, so picking a
@@ -334,60 +391,42 @@ export function PodTerminal({
             </div>
 
             {containers.length > 1 && (
-              <div ref={containerDropdownRef} className="relative">
-                <button
-                  onClick={() =>
-                    setShowContainerDropdown(!showContainerDropdown)
-                  }
-                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded-sm border border-border text-xs
-                  text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                >
-                  <span className="font-mono">{selectedContainer}</span>
-                  <ChevronDown className="h-3 w-3" />
-                </button>
-
-                {showContainerDropdown && (
-                  <div className="absolute left-0 top-full mt-1 w-48 rounded-md border border-border bg-popover p-1 shadow-lg z-50">
-                    {containers.map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => handleContainerChange(c)}
-                        className={cn(
-                          "w-full flex items-center px-2.5 py-1.5 rounded-sm text-xs text-left transition-colors font-mono",
-                          c === selectedContainer
-                            ? "bg-accent text-foreground"
-                            : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                        )}
-                      >
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <ContainerPicker
+                containers={containers}
+                selected={selectedContainer}
+                open={showContainerDropdown}
+                dropdownRef={containerDropdownRef}
+                onToggle={() =>
+                  setShowContainerDropdown(!showContainerDropdown)
+                }
+                onSelect={handleContainerChange}
+              />
             )}
           </div>
 
           <div className="flex items-center gap-1">
-            <button
+            <ActionButton
+              {...BARE_BUTTON}
+              tooltip="Reconnect"
               onClick={handleReconnect}
               className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-xs
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              title="Reconnect"
+              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
             >
               <RefreshCw className="h-3 w-3" />
               Reconnect
-            </button>
+            </ActionButton>
 
             {onClose && (
-              <button
+              <ActionButton
+                {...BARE_BUTTON}
+                tooltip="Close terminal"
+                aria-label="Close terminal"
                 onClick={onClose}
                 className="inline-flex items-center justify-center h-6 w-6 rounded-sm
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                title="Close terminal"
+                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
               >
                 <X className="h-3.5 w-3.5" />
-              </button>
+              </ActionButton>
             )}
           </div>
         </div>

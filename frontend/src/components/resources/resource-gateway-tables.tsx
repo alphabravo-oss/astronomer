@@ -118,7 +118,7 @@ const gatewayColumns: Column<Gateway>[] = [
     key: "addresses",
     header: "Addresses",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px] block">
+      <span className="text-xs text-muted-foreground font-mono truncate max-w-50 block">
         {row.addresses?.join(", ") || "-"}
       </span>
     ),
@@ -194,7 +194,7 @@ const routeColumns: Column<GatewayRoute>[] = [
     key: "hostnames",
     header: "Hostnames",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px] block">
+      <span className="text-xs text-muted-foreground font-mono truncate max-w-50 block">
         {row.hostnames?.join(", ") || "-"}
       </span>
     ),
@@ -233,7 +233,7 @@ const gatewayClassColumns: Column<GatewayClass>[] = [
     key: "controllerName",
     header: "Controller",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-[280px] block">
+      <span className="text-xs text-muted-foreground font-mono truncate max-w-70 block">
         {row.controllerName}
       </span>
     ),
@@ -254,7 +254,7 @@ const gatewayClassColumns: Column<GatewayClass>[] = [
     key: "description",
     header: "Description",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground truncate max-w-[260px] block">
+      <span className="text-xs text-muted-foreground truncate max-w-65 block">
         {row.description || "-"}
       </span>
     ),
