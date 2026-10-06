@@ -48,6 +48,8 @@ import {
   type MirroredResourceQuota,
 } from "@/lib/api/cluster-resource-inventory";
 import { queryKeys } from "@/lib/query-keys";
+import { ActionButton } from "@/components/ui/action-button";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -113,12 +115,12 @@ function Section({
   const contentId = useId();
   return (
     <div className="rounded-lg border bg-card mb-4">
-      <button
-        type="button"
+      <ActionButton
+        {...BARE_BUTTON}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={contentId}
-        className="flex w-full items-center justify-between p-4 text-left"
+        className="flex w-full items-center justify-between p-4 text-left font-normal whitespace-normal shrink"
       >
         <div className="flex items-center gap-2">
           {icon}
@@ -132,7 +134,7 @@ function Section({
         ) : (
           <ChevronRight className="h-4 w-4" />
         )}
-      </button>
+      </ActionButton>
       {open && (
         <div id={contentId} className="border-t p-4">
           {children}
@@ -181,9 +183,7 @@ const ingressClassColumns: Column<MirroredIngressClass>[] = [
     key: "lastSeen",
     header: "Last seen",
     accessor: (r) => (
-      <span className="text-muted-foreground">
-        {fmtRelative(r.lastSeenAt)}
-      </span>
+      <span className="text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
     ),
     sortAccessor: (r) => r.lastSeenAt || "",
     width: "10rem",
@@ -258,9 +258,7 @@ const gatewayClassColumns: Column<MirroredGatewayClass>[] = [
     key: "lastSeen",
     header: "Last seen",
     accessor: (r) => (
-      <span className="text-muted-foreground">
-        {fmtRelative(r.lastSeenAt)}
-      </span>
+      <span className="text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
     ),
     sortAccessor: (r) => r.lastSeenAt || "",
     width: "10rem",
@@ -338,9 +336,7 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
     key: "lastSeen",
     header: "Last seen",
     accessor: (r) => (
-      <span className="text-muted-foreground">
-        {fmtRelative(r.lastSeenAt)}
-      </span>
+      <span className="text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
     ),
     sortAccessor: (r) => r.lastSeenAt || "",
     width: "10rem",
@@ -503,9 +499,10 @@ function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
   return (
     <div className="space-y-3">
       {rows.map((r) => {
-        const limits = ((r.limits ?? []) as LimitRangeItem[]).map(
-          (l, i) => ({ ...l, _key: i }),
-        );
+        const limits = ((r.limits ?? []) as LimitRangeItem[]).map((l, i) => ({
+          ...l,
+          _key: i,
+        }));
         return (
           <div
             key={`${r.namespace}/${r.name}`}

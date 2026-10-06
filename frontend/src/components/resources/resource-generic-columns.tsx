@@ -372,7 +372,7 @@ const crdColumns: Column<GenericK8sResource>[] = [
     key: "name",
     header: "Name",
     accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs truncate max-w-[300px] block">
+      <span className="font-medium text-foreground font-mono text-xs truncate max-w-75 block">
         {row.name}
       </span>
     ),
@@ -646,10 +646,7 @@ const replicaSetColumns: Column<GenericK8sResource>[] = [
 ];
 
 // Map of generic resource type → columns
-export const genericColumnMap: Record<
-  string,
-  Column<GenericK8sResource>[]
-> = {
+export const genericColumnMap: Record<string, Column<GenericK8sResource>[]> = {
   jobs: jobColumns,
   cronjobs: cronJobColumns,
   configmaps: configMapColumns,

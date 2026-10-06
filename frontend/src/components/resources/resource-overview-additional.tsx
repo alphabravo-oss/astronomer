@@ -278,10 +278,11 @@ export function ResourceQuotaOverview({ obj }: { obj: K8sObject }) {
   );
   const used = asRecord(status.used);
   const rows = Object.keys(hard).map(
-    (k) => [
-      k,
-      `${displayNumber(used[k], "0")} / ${displayNumber(hard[k])}`,
-    ] as [string, string],
+    (k) =>
+      [k, `${displayNumber(used[k], "0")} / ${displayNumber(hard[k])}`] as [
+        string,
+        string,
+      ],
   );
   return (
     <Section title="Quota (used / hard)">

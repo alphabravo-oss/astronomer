@@ -13,6 +13,7 @@ import type { PermissionDecision } from "@/lib/permissions";
 import type { ClusterTool, ToolFormField } from "@/types";
 import { toastWarning } from "@/lib/toast";
 import { previewToolFieldValues } from "./tool-values";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 interface ToolInstallModalProps {
   tool: ClusterTool;
@@ -186,7 +187,8 @@ export function ToolInstallModal({
       footer={
         <div className="flex items-center justify-between gap-2">
           {hasForm ? (
-            <button
+            <ActionButton
+              {...BARE_BUTTON}
               onClick={() =>
                 mode === "form" ? switchToYaml() : setMode("form")
               }
@@ -199,7 +201,7 @@ export function ToolInstallModal({
                 <SlidersHorizontal className="h-3.5 w-3.5" />
               )}
               {mode === "form" ? "Edit YAML" : "Back to form"}
-            </button>
+            </ActionButton>
           ) : (
             <span />
           )}
@@ -336,7 +338,7 @@ function FormFieldRow({
         {field.help && (
           <p className="text-xs text-muted-foreground mt-0.5">{field.help}</p>
         )}
-        <p className="text-[10px] text-muted-foreground/70 font-mono mt-0.5">
+        <p className="text-2xs text-muted-foreground/70 font-mono mt-0.5">
           {field.path}
         </p>
       </div>

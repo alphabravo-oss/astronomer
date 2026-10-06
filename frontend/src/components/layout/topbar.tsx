@@ -48,6 +48,8 @@ import { LazyHeaderClusterActions as HeaderClusterActions } from "@/components/l
 import { useClusterScopeStore } from "@/lib/cluster-scope";
 import { can } from "@/lib/permissions";
 import { useClustersUpdate } from "@/lib/permission-hooks";
+import { ActionButton } from "@/components/ui/action-button";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 // --- Breadcrumb generation ---
 
@@ -96,12 +98,13 @@ function TopbarBreadcrumbs({
                 {crumb.label}
               </span>
             ) : (
-              <button
+              <ActionButton
+                {...BARE_BUTTON}
                 onClick={() => void navigate({ to: crumb.href })}
-                className="text-muted-foreground hover:text-foreground transition-colors truncate"
+                className="text-muted-foreground hover:text-foreground transition-colors truncate inline-block font-normal whitespace-normal shrink"
               >
                 {crumb.label}
-              </button>
+              </ActionButton>
             )}
           </div>
         );
@@ -139,22 +142,23 @@ function TopbarNotifications() {
   return (
     <Popover open={notificationOpen} onOpenChange={setNotificationOpen}>
       <PopoverTrigger asChild>
-        <button
+        <ActionButton
+          {...BARE_BUTTON}
           aria-label={
             notificationCount > 0
               ? `Notifications, ${notificationCount} unread`
               : "Notifications"
           }
           className="relative inline-flex items-center justify-center h-8 w-8 rounded-md
-          text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
         >
           <Bell className="h-4 w-4" />
           {notificationCount > 0 && (
-            <span className="absolute top-0.5 right-0.5 flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-status-error text-[10px] font-bold text-white">
+            <span className="absolute top-0.5 right-0.5 flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-status-error text-2xs font-bold text-white">
               {notificationCount > 99 ? "99+" : notificationCount}
             </span>
           )}
-        </button>
+        </ActionButton>
       </PopoverTrigger>
       <PopoverContent
         data-header-popover
@@ -171,7 +175,8 @@ function TopbarNotifications() {
         </div>
         <div className="max-h-80 overflow-y-auto">
           {importantFindings.map((finding) => (
-            <button
+            <ActionButton
+              {...BARE_BUTTON}
               key={`charlie:${finding.id}`}
               onClick={() => {
                 void navigate({
@@ -179,7 +184,7 @@ function TopbarNotifications() {
                 });
                 setNotificationOpen(false);
               }}
-              className="flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-accent/50"
+              className="flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-accent/50 font-normal whitespace-normal shrink"
             >
               <AlertCircle
                 className={cn(
@@ -205,7 +210,7 @@ function TopbarNotifications() {
                   </span>
                 )}
               </span>
-            </button>
+            </ActionButton>
           ))}
           {recentAlerts.length === 0 && importantFindings.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -245,15 +250,16 @@ function TopbarNotifications() {
           )}
         </div>
         <div className="px-4 py-2 border-t border-border">
-          <button
+          <ActionButton
+            {...BARE_BUTTON}
             onClick={() => {
               void navigate({ to: "/dashboard/alerting" });
               setNotificationOpen(false);
             }}
-            className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+            className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1 inline-block font-normal whitespace-normal shrink"
           >
             View all alerts
-          </button>
+          </ActionButton>
         </div>
       </PopoverContent>
     </Popover>
@@ -330,14 +336,14 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 py-2 lg:flex-nowrap border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
-      <button
-        type="button"
+      <ActionButton
+        {...BARE_BUTTON}
         onClick={() => setMobileSidebarOpen(true)}
-        className="mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden"
+        className="mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden font-normal"
         aria-label="Open navigation"
       >
         <Menu className="h-4 w-4" />
-      </button>
+      </ActionButton>
       {/* Left: always-mounted cluster switcher, then either the cluster
           scope controls (cluster context — the chip already says which
           cluster, so breadcrumbs would be redundant noise) or breadcrumbs
@@ -381,14 +387,16 @@ export function Topbar() {
         ) : null}
 
         {/* Theme Toggle */}
-        <button
+        <ActionButton
+          {...BARE_BUTTON}
+          tooltip={`Theme: ${visibleTheme}`}
+          aria-label={`Theme: ${visibleTheme}`}
           onClick={cycleTheme}
           className="relative inline-flex items-center justify-center h-8 w-8 rounded-md
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title={`Theme: ${visibleTheme}`}
+            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
         >
           <ThemeIcon className="h-4 w-4" />
-        </button>
+        </ActionButton>
 
         <TopbarNotifications />
 

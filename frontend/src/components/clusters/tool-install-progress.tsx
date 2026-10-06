@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Terminal,
 } from "lucide-react";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 interface ToolInstallProgressProps {
   operationId: string;
@@ -112,7 +113,7 @@ export function ToolInstallProgress({
 
   return (
     <div className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-popover shadow-2xl">
-      <div className="mx-auto w-full max-w-[1800px]">
+      <div className="mx-auto w-full max-w-450">
         <header className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border">
           <div className="flex items-center gap-2.5">
             <Terminal className="h-4 w-4 text-muted-foreground" />
@@ -128,18 +129,19 @@ export function ToolInstallProgress({
               {statusLabel}
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent"
-            title={
+          <ActionButton
+            {...BARE_BUTTON}
+            tooltip={
               isTerminal
                 ? "Close"
                 : "Hide (install continues in the background)"
             }
+            onClick={onClose}
+            className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-accent font-normal"
           >
             {isTerminal ? "Close" : "Hide"}
             <ChevronDown className="h-3.5 w-3.5" />
-          </button>
+          </ActionButton>
         </header>
 
         {releases.length > 0 && (

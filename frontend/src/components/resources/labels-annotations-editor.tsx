@@ -28,7 +28,11 @@ export function validateLabelKey(key: string): string | null {
   const prefix = slash === -1 ? undefined : key.slice(0, slash);
   const namePart = slash === -1 ? key : key.slice(slash + 1);
   if (prefix !== undefined) {
-    if (prefix.length === 0 || prefix.length > 253 || !DNS_SUBDOMAIN_RE.test(prefix)) {
+    if (
+      prefix.length === 0 ||
+      prefix.length > 253 ||
+      !DNS_SUBDOMAIN_RE.test(prefix)
+    ) {
       return "Key prefix must be a DNS subdomain of at most 253 characters.";
     }
   }
@@ -89,14 +93,17 @@ function RowEditor({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold text-muted-foreground">
-          {title}
-        </h3>
+        <h3 className="text-xs font-semibold text-muted-foreground">{title}</h3>
         <ActionButton
           size="sm"
           intent="ghost"
           icon={<Plus className="h-3.5 w-3.5" />}
-          onClick={() => onChange([...rows, { id: Date.now() + rows.length, key: "", value: "" }])}
+          onClick={() =>
+            onChange([
+              ...rows,
+              { id: Date.now() + rows.length, key: "", value: "" },
+            ])
+          }
         >
           Add
         </ActionButton>

@@ -60,6 +60,7 @@ import {
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
 import { OperationPartialError } from "@/lib/api/operation-polling";
 import { cn } from "@/lib/utils";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 export function NodesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterNodes(clusterId);

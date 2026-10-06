@@ -17,6 +17,9 @@ import type {
   SnapshotSchedule,
 } from "@/lib/api/cluster-velero";
 import { cn } from "@/lib/utils";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 function formatDate(iso?: string) {
   if (!iso) return "—";
@@ -131,14 +134,18 @@ export function SnapshotSchedulesTable({
       key: "enabled",
       header: "Enabled",
       accessor: (schedule) => (
-        <Switch
-          size="sm"
-          checked={schedule.enabled}
-          disabled={!canWrite}
-          title={canWrite ? undefined : disabledReason}
-          onCheckedChange={() => onToggle(schedule)}
-          className={schedule.enabled ? "bg-primary" : undefined}
-        />
+        <Tooltip
+          content={canWrite ? undefined : disabledReason}
+          wrap={!canWrite}
+        >
+          <Switch
+            size="sm"
+            checked={schedule.enabled}
+            disabled={!canWrite}
+            onCheckedChange={() => onToggle(schedule)}
+            className={schedule.enabled ? "bg-primary" : undefined}
+          />
+        </Tooltip>
       ),
       sortAccessor: (schedule) => String(schedule.enabled),
     },
@@ -161,22 +168,28 @@ export function SnapshotSchedulesTable({
       align: "right",
       accessor: (schedule) => (
         <div className="flex items-center justify-end gap-1.5">
-          <button
+          <ActionButton
+            {...BARE_BUTTON}
+            tooltip={canWrite ? "Edit" : undefined}
+            disabledReason={canWrite ? undefined : disabledReason}
+            aria-label="Edit"
             onClick={() => onEdit(schedule)}
             disabled={!canWrite}
-            title={canWrite ? "Edit" : disabledReason}
-            className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
           >
             <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            {...BARE_BUTTON}
+            tooltip={canWrite ? "Delete" : undefined}
+            disabledReason={canWrite ? undefined : disabledReason}
+            aria-label="Delete"
             onClick={() => onDelete(schedule)}
             disabled={!canWrite}
-            title={canWrite ? "Delete" : disabledReason}
-            className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </ActionButton>
         </div>
       ),
     },
@@ -229,14 +242,16 @@ export function SnapshotsTable({
       header: "Source",
       accessor: (snapshot) =>
         snapshot.source === "schedule" ? (
-          <span title={snapshot.scheduleName}>
-            schedule
-            {snapshot.scheduleName ? (
-              <span className="ml-1 text-foreground">
-                / {snapshot.scheduleName}
-              </span>
-            ) : null}
-          </span>
+          <Tooltip content={snapshot.scheduleName}>
+            <span>
+              schedule
+              {snapshot.scheduleName ? (
+                <span className="ml-1 text-foreground">
+                  / {snapshot.scheduleName}
+                </span>
+              ) : null}
+            </span>
+          </Tooltip>
         ) : (
           "ad-hoc"
         ),
@@ -296,29 +311,34 @@ export function SnapshotsTable({
           snapshot.phase === "PartiallyFailed";
         return (
           <div className="flex items-center justify-end gap-1.5">
-            <button
-              onClick={() => onRestore(snapshot)}
-              disabled={!canWrite || !restorable}
-              title={
+            <ActionButton
+              {...BARE_BUTTON}
+              tooltip={
                 !canWrite
-                  ? disabledReason
+                  ? undefined
                   : !restorable
                     ? "Snapshot is not in a restorable state"
                     : "Restore"
               }
-              className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabledReason={!canWrite ? disabledReason : undefined}
+              onClick={() => onRestore(snapshot)}
+              disabled={!canWrite || !restorable}
+              className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Restore
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
+              {...BARE_BUTTON}
+              tooltip={canWrite ? "Delete" : undefined}
+              disabledReason={canWrite ? undefined : disabledReason}
+              aria-label="Delete"
               onClick={() => onDelete(snapshot)}
               disabled={!canWrite}
-              title={canWrite ? "Delete" : disabledReason}
-              className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
             >
               <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            </ActionButton>
           </div>
         );
       },

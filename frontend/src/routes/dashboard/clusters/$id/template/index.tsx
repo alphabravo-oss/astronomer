@@ -40,6 +40,9 @@ import {
 } from "@/lib/api/cluster-template-binding";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActionButton } from "@/components/ui/action-button";
+import { SkeletonText } from "@/components/ui/skeleton";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 // Monaco stays a lazy chunk (second of the 2 monaco sites; the first is
 // components/ui/yaml-editor.tsx) so the editor bundle loads only when the
@@ -48,8 +51,9 @@ const MonacoEditor = lazy(() => import("@/components/ui/monaco-editor"));
 
 function EditorLoading() {
   return (
-    <div className="flex items-center justify-center h-full bg-terminal">
-      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+    <div className="h-full bg-terminal p-4" aria-busy="true">
+      <span className="sr-only">Loading editor…</span>
+      <SkeletonText lines={6} />
     </div>
   );
 }
@@ -116,6 +120,68 @@ function TemplateStatusBadge({ status }: { status: ClusterTemplateStatus }) {
       <Icon className={cn("h-3 w-3", spin && "animate-spin")} />
       {label}
     </span>
+  );
+}
+
+function AppliedSpec({
+  open,
+  onToggle,
+  specJson,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  specJson?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <ActionButton
+        {...BARE_BUTTON}
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-5 py-3 hover:bg-accent/40 transition-colors font-normal whitespace-normal shrink"
+      >
+        <div className="flex items-center gap-2">
+          {open ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+          <span className="text-sm font-medium text-foreground">
+            Applied spec
+          </span>
+          <span className="text-xs text-muted-foreground">
+            (read-only snapshot)
+          </span>
+        </div>
+      </ActionButton>
+      {open && (
+        <div className="border-t border-border">
+          {specJson ? (
+            <div style={{ height: 360 }}>
+              <Suspense fallback={<EditorLoading />}>
+                <MonacoEditor
+                  height="100%"
+                  defaultLanguage="json"
+                  value={specJson}
+                  theme="vs-dark"
+                  options={{
+                    readOnly: true,
+                    minimap: { enabled: false },
+                    fontSize: 12,
+                    lineNumbers: "on",
+                    scrollBeyondLastLine: false,
+                    wordWrap: "on",
+                  }}
+                />
+              </Suspense>
+            </div>
+          ) : (
+            <pre className="p-4 text-xs text-muted-foreground">
+              (no spec recorded)
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -235,8 +301,12 @@ function ClusterTemplatePage() {
           {null}
         </QueryStates>
       ) : bindingLoading ? (
-        <div className="rounded-lg border border-border bg-card p-12 flex items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <div
+          className="rounded-lg border border-border bg-card p-6"
+          aria-busy="true"
+        >
+          <span className="sr-only">Loading template binding…</span>
+          <SkeletonText lines={3} />
         </div>
       ) : !binding ? (
         /* Empty state */
@@ -293,85 +363,44 @@ function ClusterTemplatePage() {
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <button
+                <ActionButton
+                  {...BARE_BUTTON}
+                  disabledReason={canWrite ? undefined : reason}
                   onClick={() => canWrite && setConfirmReapply(true)}
                   disabled={
                     !canWrite ||
                     binding.status === "applying" ||
                     binding.status === "pending"
                   }
-                  title={canWrite ? undefined : reason}
                   className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                     border border-border text-foreground hover:bg-accent transition-colors
                     disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   Reapply
-                </button>
-                <button
+                </ActionButton>
+                <ActionButton
+                  {...BARE_BUTTON}
+                  disabledReason={canWrite ? undefined : reason}
                   onClick={() => canWrite && setConfirmDetach(true)}
                   disabled={!canWrite}
-                  title={canWrite ? undefined : reason}
                   className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                     border border-border text-foreground hover:text-status-error hover:border-status-error/40 transition-colors
                     disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Unlink className="h-3.5 w-3.5" />
                   Detach
-                </button>
+                </ActionButton>
               </div>
             </div>
           </div>
 
           {/* Spec snapshot */}
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
-            <button
-              onClick={() => setSpecOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-5 py-3 hover:bg-accent/40 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                {specOpen ? (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                )}
-                <span className="text-sm font-medium text-foreground">
-                  Applied spec
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  (read-only snapshot)
-                </span>
-              </div>
-            </button>
-            {specOpen && (
-              <div className="border-t border-border">
-                {specJson ? (
-                  <div style={{ height: 360 }}>
-                    <Suspense fallback={<EditorLoading />}>
-                      <MonacoEditor
-                        height="100%"
-                        defaultLanguage="json"
-                        value={specJson}
-                        theme="vs-dark"
-                        options={{
-                          readOnly: true,
-                          minimap: { enabled: false },
-                          fontSize: 12,
-                          lineNumbers: "on",
-                          scrollBeyondLastLine: false,
-                          wordWrap: "on",
-                        }}
-                      />
-                    </Suspense>
-                  </div>
-                ) : (
-                  <pre className="p-4 text-xs text-muted-foreground">
-                    (no spec recorded)
-                  </pre>
-                )}
-              </div>
-            )}
-          </div>
+          <AppliedSpec
+            open={specOpen}
+            onToggle={() => setSpecOpen((v) => !v)}
+            specJson={specJson}
+          />
         </>
       )}
 

@@ -72,6 +72,7 @@ import type { Cluster, ClusterCondition } from "@/types";
 import { WidgetGrid } from "@/components/dashboards/widget-grid";
 import { ExtensionSlot } from "@/components/extensions/ExtensionSlot";
 import { renderForCluster } from "@/lib/api/dashboards";
+import { Tooltip } from "@/components/ui/tooltip";
 
 const routeApi = getRouteApi("/dashboard/clusters/$id/");
 
@@ -218,20 +219,20 @@ export function ClusterDetailPage() {
           actions={
             <>
               <ActionButton
+                tooltip="Download a one-hour, read-only kubeconfig routed and audited through Astronomer"
                 onClick={kubeconfig.downloadProxy}
                 loading={kubeconfig.proxyPending}
                 icon={<Download className="h-4 w-4" />}
-                title="Download a one-hour, read-only kubeconfig routed and audited through Astronomer"
               >
                 Proxy kubeconfig
               </ActionButton>
               <ActionButton
+                tooltip="Download a separately scoped, read-only direct kubeconfig valid for 15 minutes"
                 onClick={kubeconfig.downloadDirect}
                 loading={kubeconfig.directPending}
                 disabled={!!kubeconfig.directDisabledReason}
                 disabledReason={kubeconfig.directDisabledReason}
                 icon={<Download className="h-4 w-4" />}
-                title="Download a separately scoped, read-only direct kubeconfig valid for 15 minutes"
               >
                 Direct kubeconfig
               </ActionButton>
@@ -536,14 +537,14 @@ function ClusterConditionsBar({
           .filter(Boolean)
           .join(" — ");
         return (
-          <span
-            key={c.type}
-            title={tooltip}
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs border ${tone}`}
-          >
-            <Icon className="h-3 w-3" />
-            {label}
-          </span>
+          <Tooltip key={c.type} content={tooltip}>
+            <span
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs border ${tone}`}
+            >
+              <Icon className="h-3 w-3" />
+              {label}
+            </span>
+          </Tooltip>
         );
       })}
     </div>
@@ -564,17 +565,16 @@ function ClusterRemediationFooter({ clusterId }: { clusterId: string }) {
         ? "text-status-error"
         : "text-muted-foreground";
   return (
-    <div
-      className="text-[11px] text-muted-foreground pt-1"
-      title={latest.error || latest.action}
-    >
-      Last remediation:{" "}
-      <span className={tone}>
-        {latest.action} — {latest.outcome}
-      </span>
-      <span className="text-border"> · </span>
-      <span>{relativeAge(latest.attempted_at)} ago</span>
-    </div>
+    <Tooltip content={latest.error || latest.action}>
+      <div className="text-[11px] text-muted-foreground pt-1">
+        Last remediation:{" "}
+        <span className={tone}>
+          {latest.action} — {latest.outcome}
+        </span>
+        <span className="text-border"> · </span>
+        <span>{relativeAge(latest.attempted_at)} ago</span>
+      </div>
+    </Tooltip>
   );
 }
 
@@ -609,14 +609,15 @@ function MeshHeaderBadge({
         ? "border-status-success/30 text-status-success bg-status-success/10"
         : "border-border text-muted-foreground bg-muted/30";
   return (
-    <RouterLink
-      to="/dashboard/clusters/$id/service-mesh"
-      params={{ id: clusterId }}
-      title="Service mesh detection"
-      className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
-    >
-      mesh: {label}
-    </RouterLink>
+    <Tooltip content="Service mesh detection">
+      <RouterLink
+        to="/dashboard/clusters/$id/service-mesh"
+        params={{ id: clusterId }}
+        className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
+      >
+        mesh: {label}
+      </RouterLink>
+    </Tooltip>
   );
 }
 

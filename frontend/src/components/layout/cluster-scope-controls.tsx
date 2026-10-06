@@ -23,6 +23,7 @@ import { useProject, useProjectSearch } from "@/lib/hooks/projects";
 import { cn } from "@/lib/utils";
 import type { Cluster, ClusterStatus } from "@/types";
 import type { ClusterScopeApplicability } from "./cluster-scope-applicability";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 export function clusterIdFromPath(pathname: string): string | undefined {
   const segment = pathname.match(/^\/dashboard\/clusters\/([^/]+)/)?.[1];
@@ -150,15 +151,15 @@ function ProjectScopePicker({
   };
   return (
     <div ref={ref} className="relative shrink-0">
-      <button
+      <ActionButton
+        {...BARE_BUTTON}
         ref={triggerRef}
-        type="button"
         onClick={() => setOpen((value) => !value)}
         disabled={projectsQuery.isLoading || !scope.ready}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Project scope: ${selectedProject?.displayName || selectedProject?.name || "All projects"}`}
-        className="inline-flex h-8 max-w-44 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 sm:px-2.5"
+        className="inline-flex h-8 max-w-44 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 sm:px-2.5 font-normal"
       >
         <FolderKanban className="h-3.5 w-3.5 shrink-0" />
         <span className="hidden truncate lg:inline">
@@ -167,7 +168,7 @@ function ProjectScopePicker({
             "All projects"}
         </span>
         <ChevronsUpDown className="h-3 w-3 shrink-0" />
-      </button>
+      </ActionButton>
       {open ? (
         <Command
           shouldFilter={false}
@@ -242,13 +243,13 @@ function ProjectScopePicker({
             {projectsQuery.isError ? (
               <div role="alert" className="px-3 py-4 text-sm">
                 Could not load projects.
-                <button
-                  type="button"
+                <ActionButton
+                  {...BARE_BUTTON}
                   onClick={() => void projectsQuery.refetch()}
-                  className="ml-2 underline"
+                  className="ml-2 underline inline-block font-normal"
                 >
                   Retry
-                </button>
+                </ActionButton>
               </div>
             ) : null}
             {projectsQuery.hasNextPage ? (
@@ -300,20 +301,20 @@ function NamespaceScopePicker({ scope }: { scope: ClusterNamespaceScope }) {
 
   return (
     <div ref={ref} className="relative shrink-0">
-      <button
+      <ActionButton
+        {...BARE_BUTTON}
         ref={triggerRef}
-        type="button"
         onClick={() => setOpen((value) => !value)}
         disabled={!scope.ready}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Namespace scope: ${label}`}
-        className="inline-flex h-8 max-w-28 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 sm:max-w-48 sm:px-2.5"
+        className="inline-flex h-8 max-w-28 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 sm:max-w-48 sm:px-2.5 font-normal"
       >
         <Layers3 className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">{label}</span>
         <ChevronsUpDown className="h-3 w-3 shrink-0" />
-      </button>
+      </ActionButton>
       {open ? (
         <Command className="fixed left-3 right-3 top-14 z-50 overflow-hidden rounded-lg border border-border bg-popover shadow-xl sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:w-72">
           <div className="flex items-center border-b border-border px-3">

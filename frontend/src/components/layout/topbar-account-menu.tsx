@@ -15,6 +15,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ActionButton } from "@/components/ui/action-button";
+import { BARE_BUTTON } from "@/lib/bare-button";
 export function TopbarAccountMenu() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
@@ -22,15 +24,16 @@ export function TopbarAccountMenu() {
   return (
     <Popover open={userMenuOpen} onOpenChange={setUserMenuOpen}>
       <PopoverTrigger asChild>
-        <button
+        <ActionButton
+          {...BARE_BUTTON}
           aria-label="User menu"
-          className="flex items-center gap-2 h-8 pl-1 pr-2 rounded-md hover:bg-accent transition-colors"
+          className="flex items-center gap-2 h-8 pl-1 pr-2 rounded-md hover:bg-accent transition-colors font-normal"
         >
           <div className="w-6 h-6 rounded-full bg-linear-to-br from-zinc-600 to-zinc-800 flex items-center justify-center">
             <User className="h-3 w-3 text-primary-foreground" />
           </div>
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
-        </button>
+        </ActionButton>
       </PopoverTrigger>
       <PopoverContent
         data-header-popover
@@ -44,40 +47,44 @@ export function TopbarAccountMenu() {
           <p className="text-xs text-muted-foreground">{user?.email}</p>
         </div>
         <div className="p-1">
-          <button
+          <ActionButton
+            {...BARE_BUTTON}
             onClick={() => {
               void navigate({ to: "/dashboard/account/preferences" });
               setUserMenuOpen(false);
             }}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal whitespace-normal shrink"
           >
             <SlidersHorizontal className="h-4 w-4" />
             Preferences
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            {...BARE_BUTTON}
             onClick={() => {
               void navigate({ to: "/dashboard/settings" });
               setUserMenuOpen(false);
             }}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal whitespace-normal shrink"
           >
             <Settings className="h-4 w-4" />
             Settings
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            {...BARE_BUTTON}
             onClick={() => {
               void navigate({ to: "/dashboard/account/security" });
               setUserMenuOpen(false);
             }}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal whitespace-normal shrink"
           >
             <Shield className="h-4 w-4" />
             Security
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            {...BARE_BUTTON}
             onClick={async () => {
               // POST /auth/logout first so the backend can revoke the
               // session and (for SSO users) hand us a Dex end_session
@@ -102,11 +109,11 @@ export function TopbarAccountMenu() {
               }
             }}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
-                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal whitespace-normal shrink"
           >
             <LogOut className="h-4 w-4" />
             Sign out
-          </button>
+          </ActionButton>
         </div>
       </PopoverContent>
     </Popover>

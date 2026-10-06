@@ -36,11 +36,10 @@ export function DeleteFailedModal({
       footerClassName="flex items-center justify-end gap-2"
       footer={
         <>
-          <ActionButton type="button" onClick={onClose} disabled={pending}>
+          <ActionButton onClick={onClose} disabled={pending}>
             Cancel
           </ActionButton>
           <ActionButton
-            type="button"
             intent="destructive"
             onClick={() => {
               if (!confirmDecision.allowed) {

@@ -4,6 +4,8 @@ import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import { AlertTriangle, Star } from "lucide-react";
 import type { ClusterAppRow } from "@/lib/api/cluster-apps";
+import { ActionButton } from "@/components/ui/action-button";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 export function RecommendedView({
   q,
@@ -81,18 +83,22 @@ export function RecommendedView({
                     Already installed
                   </span>
                 ) : (
-                  <button
-                    className="text-[11px] text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
-                    disabled={!installDecision.allowed}
-                    title={
+                  <ActionButton
+                    {...BARE_BUTTON}
+                    tooltip={
+                      !installDecision.allowed ? undefined : "Install chart"
+                    }
+                    disabledReason={
                       !installDecision.allowed
                         ? permissionDeniedReason(installDecision)
-                        : "Install chart"
+                        : undefined
                     }
+                    className="text-[11px] text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline inline-block font-normal"
+                    disabled={!installDecision.allowed}
                     onClick={() => onInstall(c.chartId, c.name)}
                   >
                     Install →
-                  </button>
+                  </ActionButton>
                 )}
               </article>
             );

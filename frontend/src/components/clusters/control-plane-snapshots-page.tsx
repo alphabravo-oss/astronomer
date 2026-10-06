@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Cloud, Loader2, Lock, Plus, Server } from "lucide-react";
+import { BookOpen, Cloud, Lock, Plus, Server } from "lucide-react";
 
 import {
   createControlPlaneSnapshot,
@@ -28,6 +28,8 @@ import {
   formatSnapshotDate,
   isManagedControlPlane,
 } from "./control-plane-snapshot-utils";
+import { SkeletonText } from "@/components/ui/skeleton";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 function ControlPlaneSnapshotStatusPill({
   status,
@@ -142,14 +144,15 @@ function controlPlaneSnapshotColumns(
       sortable: false,
       align: "right",
       accessor: (snapshot) => (
-        <button
+        <ActionButton
+          {...BARE_BUTTON}
+          tooltip="View restore runbook"
           onClick={() => onRestoreGuidance(snapshot)}
-          className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title="View restore runbook"
+          className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
         >
           <BookOpen className="h-3.5 w-3.5" />
           Restore guidance
-        </button>
+        </ActionButton>
       ),
     },
   ];
@@ -203,18 +206,20 @@ function RestoreGuidanceModal({
         </span>
       </div>
       {guidanceQuery.isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading runbook…
+        <div className="py-8" aria-busy="true">
+          <span className="sr-only">Loading runbook…</span>
+          <SkeletonText lines={4} />
         </div>
       ) : guidanceQuery.isError ? (
         <div className="text-sm text-status-error py-8 text-center">
           Failed to load restore guidance.{" "}
-          <button
+          <ActionButton
+            {...BARE_BUTTON}
             onClick={() => void guidanceQuery.refetch()}
-            className="underline hover:text-foreground"
+            className="underline hover:text-foreground inline-block font-normal"
           >
             Retry
-          </button>
+          </ActionButton>
         </div>
       ) : (
         <div className="space-y-4">
@@ -278,8 +283,9 @@ export function ClusterControlPlaneSnapshotsPage() {
 
   if (clusterLoading)
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="h-64 p-6" aria-busy="true">
+        <span className="sr-only">Loading cluster…</span>
+        <SkeletonText lines={6} />
       </div>
     );
   if (!cluster)

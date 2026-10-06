@@ -26,6 +26,9 @@ import { useSidebarNavigation } from "./use-sidebar-navigation";
 import { useStarredNavControls } from "./use-starred-nav-controls";
 import { useCRDNavCounts } from "./use-crd-nav-counts";
 import { useVisibleNavGroups } from "./use-visible-nav-groups";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 // Vite stamps APP_VERSION from the release tag; local builds use the current
 // package fallback in lib/env.ts.
@@ -129,21 +132,22 @@ export function Sidebar() {
                 <span className="text-sm font-semibold text-foreground tracking-tight truncate leading-tight">
                   {productName}
                 </span>
-                <span className="text-[10px] text-muted-foreground leading-tight">
+                <span className="text-2xs text-muted-foreground leading-tight">
                   by AlphaBravo
                 </span>
               </div>
             </RouterLink>
           )}
-          <button
+          <ActionButton
+            {...BARE_BUTTON}
+            tooltip={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={toggleSidebarCollapsed}
             className={cn(
-              "nav-item",
+              "nav-item font-normal whitespace-normal shrink",
               collapsed
                 ? "w-full justify-center px-0"
                 : "ml-auto hidden lg:flex",
             )}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? (
@@ -151,7 +155,7 @@ export function Sidebar() {
             ) : (
               <ChevronLeft className="h-4 w-4" />
             )}
-          </button>
+          </ActionButton>
         </div>
 
         {/* Cluster context header */}
@@ -174,14 +178,16 @@ export function Sidebar() {
         )}
         {isClusterContext && collapsed && (
           <div className="px-2 py-2 border-b border-sidebar-border">
-            <RouterLink
-              to="/dashboard/clusters"
-              activeOptions={{ exact: true }}
-              className="nav-item group justify-center px-0"
-              title="Back to Clusters"
-            >
-              <ArrowLeft className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-            </RouterLink>
+            <Tooltip content="Back to Clusters">
+              <RouterLink
+                aria-label={"Back to Clusters"}
+                to="/dashboard/clusters"
+                activeOptions={{ exact: true }}
+                className="nav-item group justify-center px-0"
+              >
+                <ArrowLeft className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+              </RouterLink>
+            </Tooltip>
           </div>
         )}
 
@@ -222,22 +228,23 @@ export function Sidebar() {
 
         {/* Bottom links */}
         <div className="mt-auto px-2 py-2 border-t border-sidebar-border space-y-1">
-          <a
-            href="/astronomer-docs/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="nav-item w-full"
-            title="Documentation"
-          >
-            <BookOpen className="h-4 w-4" />
-            {!collapsed && <span className="text-xs">Documentation</span>}
-          </a>
+          <Tooltip content="Documentation">
+            <a
+              href="/astronomer-docs/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="nav-item w-full"
+            >
+              <BookOpen className="h-4 w-4" />
+              {!collapsed && <span className="text-xs">Documentation</span>}
+            </a>
+          </Tooltip>
           {!collapsed && (
             <div className="px-3 py-1 space-y-0.5">
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 {productName} {APP_VERSION}
               </p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 Built by{" "}
                 <a
                   href="https://alphabravo.io"

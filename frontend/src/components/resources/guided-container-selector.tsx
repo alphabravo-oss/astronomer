@@ -53,18 +53,13 @@ export function ContainerSelector({
           )}
         </Select>
       </Field>
-      <ActionButton type="button" size="sm" onClick={() => add("containers")}>
+      <ActionButton size="sm" onClick={() => add("containers")}>
         Add container
       </ActionButton>
-      <ActionButton
-        type="button"
-        size="sm"
-        onClick={() => add("initContainers")}
-      >
+      <ActionButton size="sm" onClick={() => add("initContainers")}>
         Add init container
       </ActionButton>
       <ActionButton
-        type="button"
         size="sm"
         disabled={group === "containers" && regular.length <= 1}
         disabledReason="A workload needs at least one container."

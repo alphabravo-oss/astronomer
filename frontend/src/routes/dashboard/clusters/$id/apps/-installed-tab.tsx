@@ -22,6 +22,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ClusterAppRow } from "@/lib/api/cluster-apps";
+import { Tooltip } from "@/components/ui/tooltip";
 
 // Coarse status → tone mapping. We don't try to enumerate every
 // helm-release state; just bucket into the four colors operators
@@ -156,7 +157,6 @@ export function InstalledView({
                   </p>
                 </div>
                 <ActionButton
-                  type="button"
                   onClick={onDeleteFailed}
                   size="sm"
                   icon={<Trash2 className="h-3 w-3" />}
@@ -273,22 +273,20 @@ function InstalledRow({
           {row.displayName && row.displayName !== row.releaseName ? (
             <span className="text-foreground">{row.displayName}</span>
           ) : (
-            <span
-              className="text-muted-foreground italic"
-              title="No chart metadata recorded for this release — the install likely failed before the chart version was resolved."
-            >
-              —
-            </span>
+            <Tooltip content="No chart metadata recorded for this release — the install likely failed before the chart version was resolved.">
+              <span className="text-muted-foreground italic">—</span>
+            </Tooltip>
           )}
           {isTool && (
-            <RouterLink
-              to="/dashboard/clusters/$id/tools"
-              params={{ id: clusterId }}
-              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-sm border border-border bg-muted text-muted-foreground hover:bg-accent"
-              title="This release is managed by the Tools tab. Open Tools to upgrade or uninstall."
-            >
-              <Wrench className="h-3 w-3" /> Tools
-            </RouterLink>
+            <Tooltip content="This release is managed by the Tools tab. Open Tools to upgrade or uninstall.">
+              <RouterLink
+                to="/dashboard/clusters/$id/tools"
+                params={{ id: clusterId }}
+                className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-sm border border-border bg-muted text-muted-foreground hover:bg-accent"
+              >
+                <Wrench className="h-3 w-3" /> Tools
+              </RouterLink>
+            </Tooltip>
           )}
         </div>
         {row.repoName && (
@@ -312,12 +310,13 @@ function InstalledRow({
             {row.status}
           </span>
           {stale && (
-            <span
-              className="inline-flex items-center gap-1 text-[10px] text-status-warning"
-              title={`Stuck in '${row.status}' for ${ageMin} min. The helm operation may have stalled — check the worker queue or the cluster's agent connectivity.`}
+            <Tooltip
+              content={`Stuck in '${row.status}' for ${ageMin} min. The helm operation may have stalled — check the worker queue or the cluster's agent connectivity.`}
             >
-              <AlertTriangle className="h-3 w-3" /> stale {ageMin}m
-            </span>
+              <span className="inline-flex items-center gap-1 text-2xs text-status-warning">
+                <AlertTriangle className="h-3 w-3" /> stale {ageMin}m
+              </span>
+            </Tooltip>
           )}
         </div>
       </TableCell>
@@ -333,6 +332,7 @@ function InstalledRow({
         ) : (
           <div className="inline-flex items-center gap-1">
             <ActionButton
+              tooltip="Upgrade to a newer chart version or edit values"
               onClick={() => onUpgrade(row)}
               disabled={!canUpgrade || !updateDecision.allowed}
               disabledReason={
@@ -342,7 +342,6 @@ function InstalledRow({
                     ? permissionDeniedReason(updateDecision)
                     : undefined
               }
-              title="Upgrade to a newer chart version or edit values"
               size="sm"
               icon={<ArrowUpCircle className="h-3 w-3" />}
               className="h-7 px-2"
@@ -350,6 +349,7 @@ function InstalledRow({
               Upgrade
             </ActionButton>
             <ActionButton
+              tooltip="Uninstall this release"
               onClick={() => onUninstall(row)}
               disabled={!deleteDecision.allowed}
               disabledReason={
@@ -357,7 +357,6 @@ function InstalledRow({
                   ? permissionDeniedReason(deleteDecision)
                   : undefined
               }
-              title="Uninstall this release"
               size="sm"
               icon={<Trash2 className="h-3 w-3" />}
               className="h-7 px-2 border-status-error/40 text-status-error hover:bg-status-error/10"

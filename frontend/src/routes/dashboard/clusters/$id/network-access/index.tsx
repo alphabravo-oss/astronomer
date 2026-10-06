@@ -51,6 +51,9 @@ import { queryKeys } from "@/lib/query-keys";
 import { liveFallback } from "@/lib/live/status-store";
 import { useClustersUpdate } from "@/lib/permission-hooks";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 // ─── Mode badge ─────────────────────────────────────────────────────────────
 function ModeBadge({
@@ -101,14 +104,14 @@ function CIDRPill({
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-mono text-foreground">
       {cidr}
       {removable && onRemove && (
-        <button
-          type="button"
+        <ActionButton
+          {...BARE_BUTTON}
           onClick={onRemove}
-          className="ml-1 text-muted-foreground hover:text-status-error"
+          className="ml-1 text-muted-foreground hover:text-status-error inline-block font-normal"
           aria-label={`remove ${cidr}`}
         >
           ×
-        </button>
+        </ActionButton>
       )}
     </span>
   );
@@ -156,6 +159,48 @@ const snapshotColumns: Column<ApiserverAllowlistSnapshot>[] = [
 ];
 
 // ─── Main page ──────────────────────────────────────────────────────────────
+function SnapshotHistory({
+  open,
+  onToggle,
+  snapshots,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  snapshots: ApiserverAllowlistSnapshot[];
+}) {
+  return (
+    <div className="rounded-sm border">
+      <ActionButton
+        {...BARE_BUTTON}
+        onClick={onToggle}
+        className="flex w-full items-center justify-between p-3 text-sm font-medium hover:bg-muted/30 whitespace-normal shrink"
+      >
+        <span>Snapshot history</span>
+        {open ? (
+          <ChevronDown className="h-4 w-4" />
+        ) : (
+          <ChevronRight className="h-4 w-4" />
+        )}
+      </ActionButton>
+      {open && (
+        <div className="border-t p-3">
+          <DataTable
+            data={snapshots}
+            columns={snapshotColumns}
+            keyExtractor={(s) => String(s.id)}
+            density="compact"
+            searchable={false}
+            emptyState={{
+              title: "No snapshots captured yet",
+              description: "Snapshots appear here after the next reconcile.",
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClusterNetworkAccessPage() {
   const params = Route.useParams();
   const clusterId = params.id;
@@ -313,19 +358,26 @@ function ClusterNetworkAccessPage() {
                 <ShieldCheck className="h-3 w-3" /> Synced
               </span>
             )}
-            <button
-              type="button"
-              onClick={() => reconcileMut.mutate()}
-              disabled={!canReconcile || reconcileMut.isPending}
-              title={
+            <ActionButton
+              {...BARE_BUTTON}
+              tooltip={
+                !canWrite
+                  ? undefined
+                  : canMonitor
+                    ? "Run reconcile now"
+                    : undefined
+              }
+              disabledReason={
                 !canWrite
                   ? reason
                   : canMonitor
-                    ? "Run reconcile now"
+                    ? undefined
                     : (data.capability.reason ??
                       "This provider cannot be monitored")
               }
-              className="inline-flex items-center gap-1 rounded-sm border px-3 py-1 text-sm hover:bg-muted/30 disabled:opacity-50"
+              onClick={() => reconcileMut.mutate()}
+              disabled={!canReconcile || reconcileMut.isPending}
+              className="inline-flex items-center gap-1 rounded-sm border px-3 py-1 text-sm hover:bg-muted/30 disabled:opacity-50 font-normal"
             >
               <RefreshCw
                 className={
@@ -333,7 +385,7 @@ function ClusterNetworkAccessPage() {
                 }
               />
               Reconcile now
-            </button>
+            </ActionButton>
           </>
         }
       />
@@ -386,47 +438,50 @@ function ClusterNetworkAccessPage() {
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-medium">Operator CIDRs</h2>
             {!editing ? (
-              <button
-                type="button"
-                onClick={beginEditing}
-                disabled={!canWrite || !canMonitor}
-                title={
+              <ActionButton
+                {...BARE_BUTTON}
+                tooltip={
+                  !canWrite ? undefined : canMonitor ? "Edit" : undefined
+                }
+                disabledReason={
                   !canWrite
                     ? reason
                     : canMonitor
-                      ? "Edit"
+                      ? undefined
                       : data.capability.reason
                 }
-                className="text-xs underline disabled:opacity-50"
+                onClick={beginEditing}
+                disabled={!canWrite || !canMonitor}
+                className="text-xs underline disabled:opacity-50 inline-block font-normal"
               >
                 Edit
-              </button>
+              </ActionButton>
             ) : (
               <div className="flex gap-2">
-                <button
-                  type="button"
+                <ActionButton
+                  {...BARE_BUTTON}
                   onClick={() => {
                     setEditing(false);
                     setEditedCIDRs(data.operatorCidrs);
                     setEditedMode(data.mode);
                     setRequireForce(false);
                   }}
-                  className="text-xs underline"
+                  className="text-xs underline inline-block font-normal"
                 >
                   Cancel
-                </button>
-                <button
-                  type="button"
+                </ActionButton>
+                <ActionButton
+                  {...BARE_BUTTON}
                   onClick={handleSave}
                   disabled={updateMut.isPending}
-                  className="text-xs underline text-status-info"
+                  className="text-xs underline text-status-info inline-block font-normal"
                 >
                   Save
-                </button>
+                </ActionButton>
               </div>
             )}
           </div>
-          <div className="flex flex-wrap gap-1 min-h-[2rem]">
+          <div className="flex flex-wrap gap-1 min-h-8">
             {(editing ? editedCIDRs : data.operatorCidrs).map((c) => (
               <CIDRPill
                 key={c}
@@ -452,13 +507,13 @@ function ClusterNetworkAccessPage() {
                 placeholder="e.g. 10.0.0.0/8"
                 className="flex-1 rounded-sm border px-2 py-1 text-sm font-mono"
               />
-              <button
-                type="button"
+              <ActionButton
+                {...BARE_BUTTON}
                 onClick={handleAddCIDR}
-                className="rounded-sm border px-3 py-1 text-sm hover:bg-muted/30"
+                className="rounded-sm border px-3 py-1 text-sm hover:bg-muted/30 inline-block font-normal"
               >
                 Add
-              </button>
+              </ActionButton>
             </div>
           )}
         </div>
@@ -466,14 +521,11 @@ function ClusterNetworkAccessPage() {
         <div className="rounded-sm border bg-muted/30 p-4">
           <h2 className="font-medium mb-2 flex items-center gap-1">
             Astronomer egress
-            <span
-              className="text-xs text-muted-foreground"
-              title="Astronomer's tunnel egress IPs are stamped onto every cluster's allow-list automatically. Operators cannot remove this block — doing so would brick the tunnel."
-            >
-              ⓘ
-            </span>
+            <Tooltip content="Astronomer's tunnel egress IPs are stamped onto every cluster's allow-list automatically. Operators cannot remove this block — doing so would brick the tunnel.">
+              <span className="text-xs text-muted-foreground">ⓘ</span>
+            </Tooltip>
           </h2>
-          <div className="flex flex-wrap gap-1 min-h-[2rem]">
+          <div className="flex flex-wrap gap-1 min-h-8">
             {data.astronomerEgress.length === 0 ? (
               <span className="text-xs text-muted-foreground">
                 No egress CIDRs configured.
@@ -518,7 +570,7 @@ function ClusterNetworkAccessPage() {
       {/* Effective list */}
       <div className="rounded-sm border p-4">
         <h2 className="font-medium mb-2">Effective (last reconcile)</h2>
-        <div className="flex flex-wrap gap-1 min-h-[2rem]">
+        <div className="flex flex-wrap gap-1 min-h-8">
           {data.effective.length === 0 ? (
             <span className="text-xs text-muted-foreground">
               No effective list captured yet — reconcile to populate.
@@ -535,7 +587,7 @@ function ClusterNetworkAccessPage() {
           Desired
           <CheckCircle2 className="h-3 w-3 text-status-success" />
         </h2>
-        <div className="flex flex-wrap gap-1 min-h-[2rem]">
+        <div className="flex flex-wrap gap-1 min-h-8">
           {data.desired.map((c) => (
             <CIDRPill key={c} cidr={c} />
           ))}
@@ -543,35 +595,11 @@ function ClusterNetworkAccessPage() {
       </div>
 
       {/* Snapshot history */}
-      <div className="rounded-sm border">
-        <button
-          type="button"
-          onClick={() => setShowSnapshots(!showSnapshots)}
-          className="flex w-full items-center justify-between p-3 text-sm font-medium hover:bg-muted/30"
-        >
-          <span>Snapshot history</span>
-          {showSnapshots ? (
-            <ChevronDown className="h-4 w-4" />
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
-        </button>
-        {showSnapshots && (
-          <div className="border-t p-3">
-            <DataTable
-              data={snapshots}
-              columns={snapshotColumns}
-              keyExtractor={(s) => String(s.id)}
-              density="compact"
-              searchable={false}
-              emptyState={{
-                title: "No snapshots captured yet",
-                description: "Snapshots appear here after the next reconcile.",
-              }}
-            />
-          </div>
-        )}
-      </div>
+      <SnapshotHistory
+        open={showSnapshots}
+        onToggle={() => setShowSnapshots(!showSnapshots)}
+        snapshots={snapshots}
+      />
 
       {/* Enforce confirm modal */}
       <ConfirmDialog

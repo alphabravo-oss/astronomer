@@ -18,14 +18,10 @@ import { MetricsChart } from "@/components/monitoring/metrics-chart";
 import { DataTable } from "@/components/ui/data-table";
 import { formatBytes, formatCPU, formatPercentage, cn } from "@/lib/utils";
 import { LineChart, ArrowRight } from "lucide-react";
-import {
-  Cpu,
-  MemoryStick,
-  Network,
-  HardDrive,
-  Box,
-  Loader2,
-} from "lucide-react";
+import { Cpu, MemoryStick, Network, HardDrive, Box } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
+import { SkeletonCard } from "@/components/ui/skeleton";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 const timeRanges = [
   { value: "1h", label: "1H" },
@@ -72,7 +68,8 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
               {timeRanges.map((range) => (
-                <button
+                <ActionButton
+                  {...BARE_BUTTON}
                   key={range.value}
                   onClick={() => setTimeRange(range.value)}
                   className={cn(
@@ -83,7 +80,7 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
                   )}
                 >
                   {range.label}
-                </button>
+                </ActionButton>
               ))}
             </div>
           </div>
@@ -156,11 +153,10 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
           title="Metrics history unavailable"
         />
       ) : metricsLoading && !hasProm && rolling.count === 0 ? (
-        <div className="flex items-center justify-center h-48">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
-          <span className="text-sm text-muted-foreground">
-            Loading metrics...
-          </span>
+        <div aria-busy="true" className="grid gap-4 sm:grid-cols-2">
+          <span className="sr-only">Loading metrics...</span>
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       ) : hasProm && metrics ? (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

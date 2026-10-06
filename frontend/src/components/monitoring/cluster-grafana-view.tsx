@@ -79,7 +79,7 @@ export function ClusterGrafanaView({
               <iframe
                 title="Cluster Grafana"
                 src={(data.grafanaProxyPath || base) + suffix}
-                className="h-[calc(100vh-12rem)] min-h-[38rem] w-full bg-background"
+                className="h-[calc(100vh-12rem)] min-h-152 w-full bg-background"
                 referrerPolicy="same-origin"
               />
             </div>

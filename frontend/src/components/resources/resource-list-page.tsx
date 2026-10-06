@@ -74,7 +74,6 @@ import {
   workloadDetailHref,
 } from "@/components/resources/resource-table-primitives";
 import {
-  Loader2,
   Server,
   Terminal,
   FileText,
@@ -87,6 +86,7 @@ import {
 } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { pageTableCount } from "@/lib/api/pagination";
+import { SkeletonText } from "@/components/ui/skeleton";
 
 const WORKLOAD_RESOURCE_PAGE_SIZE = 50;
 
@@ -524,8 +524,9 @@ export function ClusterResourcePage() {
 
   if (clusterLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="h-64 p-6" aria-busy="true">
+        <span className="sr-only">Loading cluster…</span>
+        <SkeletonText lines={6} />
       </div>
     );
   }

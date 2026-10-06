@@ -32,8 +32,32 @@ import {
   type CurlVariant,
 } from "@/components/clusters/registration-install-commands";
 import { registrationWizardStep } from "@/components/clusters/registration-stage";
+import { cn } from "@/lib/utils";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 const TAB_KEYS = ["curl", "quick", "yaml", "airgapped"] as const;
+
+function CopyCommandButton({
+  copied,
+  disabled,
+  onClick,
+}: {
+  copied: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <ActionButton
+      {...BARE_BUTTON}
+      onClick={onClick}
+      disabled={disabled}
+      className="absolute top-2 right-2 inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-border bg-background text-xs hover:bg-accent disabled:opacity-50 font-normal"
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? "Copied" : "Copy"}
+    </ActionButton>
+  );
+}
 
 export function RegistrationConnectStep({
   clusterId,
@@ -262,24 +286,24 @@ export function RegistrationConnectStep({
                   const active = curlVariant === v;
                   const isPlatformDefault = v === tlsMode;
                   return (
-                    <button
+                    <ActionButton
+                      {...BARE_BUTTON}
                       key={v}
-                      type="button"
                       onClick={() => setCurlVariant(v)}
-                      className={
-                        "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-colors " +
-                        (active
+                      className={cn(
+                        "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-normal transition-colors",
+                        active
                           ? "border-primary bg-primary/10 text-foreground"
-                          : "border-border bg-background text-muted-foreground hover:bg-accent")
-                      }
+                          : "border-border bg-background text-muted-foreground hover:bg-accent",
+                      )}
                     >
                       {curlVariants[v].label}
                       {isPlatformDefault && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-2xs text-muted-foreground">
                           (platform default)
                         </span>
                       )}
-                    </button>
+                    </ActionButton>
                   );
                 })}
               </div>
@@ -290,20 +314,13 @@ export function RegistrationConnectStep({
                 <pre className="text-xs bg-muted/30 border border-border rounded-lg p-4 overflow-x-auto font-mono whitespace-pre">
                   {curlVariants[curlVariant].cmd || "# loading..."}
                 </pre>
-                <button
+                <CopyCommandButton
+                  copied={copied === curlVariant}
+                  disabled={!curlVariants[curlVariant].cmd}
                   onClick={() =>
                     onCopy(curlVariant, curlVariants[curlVariant].cmd)
                   }
-                  disabled={!curlVariants[curlVariant].cmd}
-                  className="absolute top-2 right-2 inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-border bg-background text-xs hover:bg-accent disabled:opacity-50"
-                >
-                  {copied === curlVariant ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                  {copied === curlVariant ? "Copied" : "Copy"}
-                </button>
+                />
               </div>
               <p className="text-xs text-muted-foreground">
                 The URL pulls a freshly-rendered manifest signed with a
@@ -329,17 +346,10 @@ export function RegistrationConnectStep({
                 <pre className="text-xs bg-muted/30 border border-border rounded-lg p-4 overflow-x-auto font-mono whitespace-pre">
                   {oneLiner || (manifest ? "" : "# loading...")}
                 </pre>
-                <button
+                <CopyCommandButton
+                  copied={copied === "quick"}
                   onClick={() => onCopy("quick", oneLiner)}
-                  className="absolute top-2 right-2 inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-border bg-background text-xs hover:bg-accent"
-                >
-                  {copied === "quick" ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                  {copied === "quick" ? "Copied" : "Copy"}
-                </button>
+                />
               </div>
             </div>
           )}
@@ -355,13 +365,14 @@ export function RegistrationConnectStep({
                   {manifest || "# loading..."}
                 </pre>
               </div>
-              <button
+              <ActionButton
+                {...BARE_BUTTON}
                 onClick={onDownload}
                 className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent"
               >
                 <Download className="h-3.5 w-3.5" />
                 Download YAML
-              </button>
+              </ActionButton>
             </div>
           )}
 
@@ -410,9 +421,7 @@ export function RegistrationConnectStep({
             )}
 
             <div className="flex items-center justify-end gap-2">
-              <ActionButton type="button" onClick={onBack}>
-                ← Back
-              </ActionButton>
+              <ActionButton onClick={onBack}>← Back</ActionButton>
               <ActionButton
                 intent="primary"
                 onClick={advance}
@@ -463,15 +472,19 @@ function TabButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <ActionButton
+      {...BARE_BUTTON}
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-        active
-          ? "border-primary text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground"
-      }`}
+      className={cn(
+        `px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+          active
+            ? "border-primary text-foreground"
+            : "border-transparent text-muted-foreground hover:text-foreground"
+        }`,
+        "inline-block",
+      )}
     >
       {children}
-    </button>
+    </ActionButton>
   );
 }

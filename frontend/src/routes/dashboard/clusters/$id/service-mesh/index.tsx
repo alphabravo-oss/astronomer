@@ -52,6 +52,10 @@ import {
   type ServiceMeshPolicyValidation,
   type ServiceMeshKind,
 } from "@/lib/api/cluster-service-mesh";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
+import { SkeletonText } from "@/components/ui/skeleton";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 // meshLabel maps the backend enum to a human-readable string. Kept as a
 // pure mapping (no JSX) so it can be reused in headers + tile labels.
@@ -214,8 +218,12 @@ function InventoryPanel({
 }) {
   if (loading) {
     return (
-      <div className="rounded-lg border border-border bg-card p-5 flex items-center justify-center h-36">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div
+        className="rounded-lg border border-border bg-card p-5 h-36"
+        aria-busy="true"
+      >
+        <span className="sr-only">Loading inventory…</span>
+        <SkeletonText lines={3} />
       </div>
     );
   }
@@ -291,18 +299,19 @@ function InventoryPanel({
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
                         {preview.map((item) => (
-                          <span
+                          <Tooltip
                             key={`${resource.kind}:${item.namespace || "_"}:${item.name}`}
-                            className="inline-flex items-center rounded-sm border border-border px-2 py-1 text-xs text-foreground"
-                            title={item.reason || undefined}
+                            content={item.reason || undefined}
                           >
-                            {item.namespace && (
-                              <span className="text-muted-foreground mr-1">
-                                {item.namespace}/
-                              </span>
-                            )}
-                            {item.name}
-                          </span>
+                            <span className="inline-flex items-center rounded-sm border border-border px-2 py-1 text-xs text-foreground">
+                              {item.namespace && (
+                                <span className="text-muted-foreground mr-1">
+                                  {item.namespace}/
+                                </span>
+                              )}
+                              {item.name}
+                            </span>
+                          </Tooltip>
                         ))}
                         {resource.count > preview.length && (
                           <span className="text-xs text-muted-foreground px-1 py-1">
@@ -363,8 +372,8 @@ function PolicyValidationPanel({
             </p>
           )}
         </div>
-        <button
-          type="button"
+        <ActionButton
+          {...BARE_BUTTON}
           onClick={onValidate}
           disabled={validating || value.trim().length === 0}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
@@ -377,7 +386,7 @@ function PolicyValidationPanel({
             <CheckCircle2 className="h-3.5 w-3.5" />
           )}
           Validate
-        </button>
+        </ActionButton>
       </div>
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Textarea
@@ -532,7 +541,8 @@ function ClusterServiceMeshPage() {
           title="Service mesh"
           description={`Detect and monitor the service mesh installed on ${cluster.displayName}.`}
         />
-        <button
+        <ActionButton
+          {...BARE_BUTTON}
           onClick={() => reDetect.mutate()}
           disabled={reDetect.isPending}
           className="inline-flex items-center gap-1.5 h-9 px-3 rounded-sm text-sm font-medium
@@ -545,13 +555,17 @@ function ClusterServiceMeshPage() {
             <RefreshCw className="h-3.5 w-3.5" />
           )}
           Re-detect
-        </button>
+        </ActionButton>
       </div>
 
       {/* Hero card */}
       {detLoading ? (
-        <div className="rounded-lg border border-border bg-card p-6 flex items-center justify-center h-32">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <div
+          className="rounded-lg border border-border bg-card p-6 h-32"
+          aria-busy="true"
+        >
+          <span className="sr-only">Loading service mesh detection…</span>
+          <SkeletonText lines={3} />
         </div>
       ) : detection ? (
         <HeroCard detection={detection} clusterId={clusterId} />

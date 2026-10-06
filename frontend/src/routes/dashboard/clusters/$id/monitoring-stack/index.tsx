@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-
 import { ClusterMonitoringStackPage } from "@/components/monitoring/cluster-stack-page";
 
 function ClusterMonitoringStackRoute() {
