@@ -135,6 +135,9 @@ func (h *TableViewsHandler) List(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusOK, items)
 }
 
+// createTableViewRequest is the POST body.
+//
+// openapi:request TableViewCreateRequest
 type createTableViewRequest struct {
 	TableKey string          `json:"table_key"`
 	Name     string          `json:"name"`
@@ -193,6 +196,9 @@ func (h *TableViewsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusCreated, tableViewFromRow(stored))
 }
 
+// updateTableViewRequest is the PATCH body.
+//
+// openapi:request TableViewUpdateRequest
 type updateTableViewRequest struct {
 	Name      *string          `json:"name"`
 	State     *json.RawMessage `json:"state"`
