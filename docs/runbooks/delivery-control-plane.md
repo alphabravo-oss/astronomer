@@ -118,3 +118,101 @@ assignment generations, rollout fences, audit chain, and release manifest
 before reopening traffic. A v0.3.x database is intentionally rejected without
 mutation; greenfield v1 requires a fresh install, with only explicitly exported
 configuration and credentials re-entered through supported APIs.
+
+## Disposable resilience drill recovery
+
+`scripts/run-delivery-resilience-drill.py` exercises only the existing bounded
+mutation actions in an explicitly disposable, pre-provisioned namespace. It
+requires the exact confirmation below and both qualification ownership labels
+on the namespace and every mutation target. Its report always has
+`release_eligible: false`: successful actions and cleanup do not establish
+change-to-observed freshness, reconnect correctness, or release qualification.
+
+Validate the checked-in example without contacting Kubernetes:
+
+```bash
+python3 scripts/run-delivery-resilience-drill.py \
+  --manifest scripts/testdata/delivery-resilience-drill.example.json --validate-only
+```
+
+After deliberately preparing the example's disposable cluster and labeled
+resources, use a private, durable directory on the runner host. This example is
+an invocation pattern, not an instruction to mutate a shared cluster:
+
+```bash
+mkdir -m 700 drill-evidence
+python3 scripts/run-delivery-resilience-drill.py \
+  --manifest scripts/testdata/delivery-resilience-drill.example.json \
+  --evidence drill-evidence/report.json \
+  --confirm delete-only-owned:k3d-astronomer-qualification-example-001:astronomer-qualification-example-001:example-001
+```
+
+The runner writes `report.json.ledger.json` with mode 0600, atomically replacing
+and fsyncing the file and parent directory before each mutation. Retain this
+ledger and the report on durable storage. The ledger contains the manifest
+digest, run identity, context, cluster identity (the `kube-system` namespace
+UID), target namespace UID, resource GVK/name/UID, operation nonce, and only the
+replica count or restart annotation needed for restoration. It never stores Job
+templates, pod environment, Secrets, credentials, or remote command output.
+Restart annotations must be timestamps; other preexisting values are refused.
+Inputs are bounded to 1 MiB for manifests and 4 MiB for kubectl input/output and
+individual checkpoints. A limit or command error fails closed with a fixed
+classification; raw kubectl stderr is discarded.
+
+After a crash, use the **same host, absolute ledger location, manifest, context,
+and namespace** to clean up without replaying scenarios:
+
+```bash
+python3 scripts/run-delivery-resilience-drill.py \
+  --manifest scripts/testdata/delivery-resilience-drill.example.json \
+  --evidence drill-evidence/report.json --resume-cleanup \
+  --confirm delete-only-owned:k3d-astronomer-qualification-example-001:astronomer-qualification-example-001:example-001
+```
+
+Recovery preserves the original scenario history and run status. A run without
+a completed report remains `interrupted`; cleanup success is reported
+separately as `cleanup_status: passed`. A resume command exits successfully when
+cleanup succeeds, which does not mean the original drill passed. A conflicting
+or unverifiable cleanup remains unresolved, retains the ledger and cluster
+lock, and requires investigation. Do not delete the ledger or lock to bypass
+that refusal. An absent object after an ambiguous create with no recorded UID,
+or an unapplied-looking field after an ambiguous mutation, cannot establish
+that the request will never finish; these cases deliberately remain unresolved.
+
+Coordination is deliberately limited. A private local `flock`, keyed by cluster
+and namespace UID across evidence paths, excludes concurrent runners on the
+same host and Unix user. Its fixed `/tmp/astronomer-drill-locks-<uid>` directory
+is independent of `TMPDIR`, `TEMP`, and `TMP`; runners must share the host
+filesystem namespace. Separate containers with private `/tmp` directories are
+not supported recovery peers. A create-only, labeled `qualification-drill-lock` ConfigMap excludes
+new runs while recovery is pending. Recovery accepts only its recorded nonce
+and UID; it never steals or recreates a missing or replaced lock. The persisted
+host and ledger-location hashes are accidental-misuse guards, not authentication.
+Cross-host recovery, copied ledgers, cloned host identities, and remote concurrent
+resume are unsupported. This is not a distributed lease or fencing service.
+The host must provide `/etc/machine-id`, Linux `flock`, and a durable filesystem
+with atomic rename/fsync semantics. Failure to read cluster identity prevents
+all mutations.
+
+The additional coordination permissions are `get/create/delete` on ConfigMaps
+in the disposable namespace (create is needed for `qualification-drill-lock`),
+and `get` on the target and `kube-system` Namespace objects. Existing actions
+also need resource-specific `get`, workload `patch` and rollout watches, pod
+`list/delete`, NetworkPolicy and Job `create/delete`, Job wait watches, and
+CronJob `get`. No Secret access, namespace deletion, new cluster-wide mutation
+permission, or automatic RBAC installation is required. Grant only the actions
+selected by the manifest. The runner uses `kubectl delete --raw=... -f -` with
+Kubernetes DeleteOptions UID and resourceVersion preconditions, and JSON Patch
+UID/resourceVersion tests for field updates; the installed kubectl must support
+these options. These client paths have hermetic tests, not a claim of live
+cluster qualification.
+
+Cleanup runs in reverse order and stops at the first unresolved operation.
+Create-only Jobs and NetworkPolicies refuse preexisting objects, even if their
+labels match; ambiguous receipts require the exact persisted operation nonce.
+Fresh ownership, UID, and field checks prevent deleting replacements or
+restoring over externally changed replicas or restart annotations. Restoring
+the restart annotation cannot undo restarted processes or rollout history.
+Deleting a Pod is explicitly irreversible: cleanup verifies/removes only the
+recorded Pod UID and never recreates it. A controller may replace it; a same-name
+replacement causes refusal rather than adoption. There is no namespace cleanup.
