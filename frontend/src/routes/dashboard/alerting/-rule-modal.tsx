@@ -273,15 +273,13 @@ export function AlertRuleModal({
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                 >
-                  <option value="cluster_cpu_percent">
-                    cluster_cpu_percent
-                  </option>
+                  <option value="cluster_cpu_percent">Cluster CPU %</option>
                   <option value="cluster_memory_percent">
-                    cluster_memory_percent
+                    Cluster memory %
                   </option>
-                  <option value="pod_count">pod_count</option>
-                  <option value="node_count">node_count</option>
-                  <option value="pod_restart_rate">pod_restart_rate</option>
+                  <option value="pod_count">Pod count</option>
+                  <option value="node_count">Node count</option>
+                  <option value="pod_restart_rate">Pod restart rate</option>
                 </Select>
               )}
             </form.Field>

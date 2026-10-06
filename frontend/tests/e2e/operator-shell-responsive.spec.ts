@@ -21,7 +21,7 @@ test("all header controls fit at the five reviewed widths", async ({
         .locator("header")
         .getByRole("button", { name: "Import", exact: true }),
     ).toBeVisible();
-    for (const label of ["Go to page", "User menu", "Import"])
+    for (const label of ["Search resources", "User menu", "Import"])
       await expect(
         page
           .locator("header")
@@ -115,4 +115,54 @@ test("long cluster labels retain viewport-safe context and actions", async ({
       .evaluate((header) => header.scrollWidth <= innerWidth),
   ).toBe(true);
   await page.screenshot({ path: info.outputPath("shell-long-name-390.png") });
+});
+
+test("cluster-scope header stays one row, as tall as the global header, at laptop widths", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 1366, height: 768 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/dashboard/clusters");
+    const header = page.locator("header").first();
+    await expect(
+      header.getByRole("button", { name: /Notifications/ }),
+    ).toBeVisible();
+    const globalHeight = (await header.boundingBox())!.height;
+
+    await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}`);
+    await expect(
+      header.getByRole("button", { name: "Import", exact: true }),
+    ).toBeVisible();
+    expect((await header.boundingBox())!.height).toBe(globalHeight);
+    const search = header.getByRole("button", { name: "Search resources" });
+    expect((await search.boundingBox())!.width).toBeGreaterThanOrEqual(240);
+    await expect(
+      header.getByRole("button", { name: "Go to page" }),
+    ).toHaveCount(0);
+  }
+});
+
+test("clusters table shows the full name without truncation or scrolling at 1280px", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/dashboard/clusters");
+  const name = page.getByRole("cell").getByText("Smoke East", { exact: true });
+  await expect(name).toBeVisible();
+  const fits = await page.getByRole("table").evaluate((table) => {
+    const cells = [...table.querySelectorAll("td")];
+    const scroller = table.parentElement!;
+    return {
+      noHorizontalScroll: scroller.scrollWidth <= scroller.clientWidth,
+      noEllipsis: cells.every((cell) =>
+        [...cell.querySelectorAll("*")].every(
+          (el) => el.scrollWidth <= el.clientWidth + 1,
+        ),
+      ),
+    };
+  });
+  expect(fits).toEqual({ noHorizontalScroll: true, noEllipsis: true });
 });

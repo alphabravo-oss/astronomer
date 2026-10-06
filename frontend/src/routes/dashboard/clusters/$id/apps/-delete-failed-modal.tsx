@@ -60,11 +60,8 @@ export function DeleteFailedModal({
       }
     >
       <p className="text-sm text-muted-foreground">
-        Hard-delete {count ?? "all matching"}{" "}
-        <code className="font-mono">installed_charts</code> row
-        {count === 1 ? "" : "s"} in{" "}
-        <code className="font-mono">failed_install</code> /{" "}
-        <code className="font-mono">failed_uninstall</code> on this cluster.
+        Permanently delete {count ?? "all"} failed install or uninstall record
+        {count === 1 ? "" : "s"} on this cluster.
       </p>
       <p className="text-xs text-muted-foreground">
         This removes tracking records only; it does not uninstall Helm releases.

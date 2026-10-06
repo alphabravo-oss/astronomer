@@ -26,7 +26,6 @@ import {
 import { useAlertEvents, useAlertEventSummary } from "@/lib/hooks/alerting";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime } from "@/lib/utils";
-import { ActionButton } from "@/components/ui/action-button";
 import { GlobalSearch } from "@/components/layout/global-search";
 import { listCharlieFindings } from "@/lib/api/charlie";
 import { queryKeys } from "@/lib/query-keys";
@@ -336,7 +335,7 @@ export function Topbar() {
     visibleTheme === "dark" ? Moon : visibleTheme === "light" ? Sun : Monitor;
 
   return (
-    <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 py-2 border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
+    <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 py-2 lg:flex-nowrap border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
       <button
         type="button"
         onClick={() => setMobileSidebarOpen(true)}
@@ -365,18 +364,12 @@ export function Topbar() {
       {/* Center: Cross-cluster Global Search (Phase A3). Its own kbd hint
           covers the command palette shortcut, so the topbar no longer needs
           a separate ⌘K chip. */}
-      <div className="flex min-w-44 max-w-xs flex-1 justify-center px-2">
+      <div className="flex min-w-44 max-w-md flex-1 justify-center px-2 lg:min-w-60">
         <GlobalSearch />
       </div>
 
       {/* Right: Actions */}
       <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
-        <ActionButton
-          size="sm"
-          onClick={() => useUIStore.getState().setCommandPaletteOpen(true)}
-        >
-          Go to page
-        </ActionButton>
         <ClusterShellLauncher
           clusterId={activeClusterId}
           clusterName={

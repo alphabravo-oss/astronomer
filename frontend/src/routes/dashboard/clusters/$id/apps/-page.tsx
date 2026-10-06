@@ -387,16 +387,16 @@ function AppsDescription({
 }) {
   return (
     <>
-      Browse, install, and manage helm-packaged applications on{" "}
-      {name || "this cluster"}. Releases managed by the{" "}
+      Browse, install, and manage Helm applications on {name || "this cluster"}.
+      Releases installed by Cluster Tools are marked Managed by Tools. See the{" "}
       <RouterLink
         to="/dashboard/clusters/$id/tools"
         params={{ id: clusterId }}
         className="underline"
       >
         Tools tab
-      </RouterLink>{" "}
-      appear here too with a &quot;Managed by Tools&quot; pivot.
+      </RouterLink>
+      .
     </>
   );
 }

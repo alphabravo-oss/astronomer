@@ -20,7 +20,7 @@ describe("AnomalyBaselinesPanel query states", () => {
     render(<AnomalyBaselinesPanel clusterId="cluster-1" />);
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(
-      screen.queryByText(/No baselines computed yet/),
+      screen.queryByText(/Baselines appear after 24 hours/),
     ).not.toBeInTheDocument();
   });
 
@@ -33,6 +33,8 @@ describe("AnomalyBaselinesPanel query states", () => {
       refetch: vi.fn(),
     });
     render(<AnomalyBaselinesPanel clusterId="cluster-1" />);
-    expect(screen.getByText(/No baselines computed yet/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Baselines appear after 24 hours/),
+    ).toBeInTheDocument();
   });
 });

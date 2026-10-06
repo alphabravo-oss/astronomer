@@ -57,8 +57,8 @@ function ClusterTemplatesPage() {
           permission="cluster_templates:read"
           description={
             <>
-              You need <span className="font-mono">cluster_templates:read</span>{" "}
-              to view templates. Ask an administrator to grant the role.
+              You need permission to view cluster templates. Ask an
+              administrator to grant the role.
             </>
           }
           className="rounded-lg border border-border bg-muted/30 p-6"
@@ -182,8 +182,8 @@ function ClusterTemplatesPage() {
                   onAction: () =>
                     void navigate({ to: "/dashboard/cluster-templates/new" }),
                 } satisfies EmptyStateActionProps)
-              // terminal: read-only viewers can't create a bundle from here.
-              : { terminal: true })}
+              : // terminal: read-only viewers can't create a bundle from here.
+                { terminal: true })}
           />
         }
       >

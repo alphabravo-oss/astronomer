@@ -59,7 +59,8 @@ function ClusterTemplateEditPage() {
   return (
     <PageShell>
       <RouterLink
-        to="/dashboard/cluster-templates/$id" params={{ id }}
+        to="/dashboard/cluster-templates/$id"
+        params={{ id }}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
@@ -76,10 +77,7 @@ function ClusterTemplateEditPage() {
           title="Write permission required"
           permission="cluster_templates:write"
           description={
-            <>
-              Saving requires the{" "}
-              <span className="font-mono">cluster_templates:write</span> role.
-            </>
+            <>Saving requires permission to manage cluster templates.</>
           }
           className="rounded-lg border border-border bg-muted/30 p-6"
         />
@@ -95,7 +93,9 @@ function ClusterTemplateEditPage() {
           description: template.description,
           spec: template.spec,
         }}
-        onCancel={() => void navigate({ to: `/dashboard/cluster-templates/${id}` })}
+        onCancel={() =>
+          void navigate({ to: `/dashboard/cluster-templates/${id}` })
+        }
         onSubmit={async (body) => {
           if (!canWrite) {
             setServerError(

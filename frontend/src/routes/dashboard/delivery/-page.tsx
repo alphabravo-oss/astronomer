@@ -1,4 +1,9 @@
 import { clusterHref, useEstateFocus } from "./-estate-focus";
+import {
+  EstateKpiGrid,
+  EstateZeroState,
+  isEstateEmpty,
+} from "./-estate-summary";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -6,14 +11,11 @@ import {
   Crosshair,
   GitBranch,
   Layers,
-  Radio,
   Rocket,
   ServerCog,
   Shield,
-  Unplug,
   X,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { MetricCard } from "@/components/ui/metric-card";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -221,76 +223,11 @@ function EstateDeliveryOverview({
       {query.isError && !isForbiddenError(query.error) && (
         <ErrorMessage error={query.error} />
       )}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-foreground">
-            Cluster health
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            <EstateTile
-              icon={<Radio className="h-4 w-4" />}
-              title="Adopted"
-              value={summary?.managedClusters ?? "—"}
-              active={focus === "adopted"}
-              onClick={() => setFocus("adopted")}
-            />
-            <EstateTile
-              icon={<ServerCog className="h-4 w-4" />}
-              title="Flux ready"
-              value={summary?.fluxReady ?? "—"}
-              active={focus === "flux_ready"}
-              onClick={() => setFocus("flux_ready")}
-            />
-            <EstateTile
-              icon={<AlertTriangle className="h-4 w-4" />}
-              title="Incompatible"
-              value={summary?.incompatible ?? "—"}
-              active={focus === "incompatible"}
-              onClick={() => setFocus("incompatible")}
-            />
-            <EstateTile
-              icon={<Unplug className="h-4 w-4" />}
-              title="Disconnected"
-              value={summary?.disconnected ?? "—"}
-              active={focus === "disconnected"}
-              onClick={() => setFocus("disconnected")}
-            />
-          </div>
-        </div>
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-foreground">Assignments</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <EstateTile
-              icon={<Layers className="h-4 w-4" />}
-              title="Assigned"
-              value={summary?.assignments ?? "—"}
-              active={focus === "assignments"}
-              onClick={() => setFocus("assignments")}
-            />
-            <EstateTile
-              icon={<AlertTriangle className="h-4 w-4" />}
-              title="Failed"
-              value={summary?.failed ?? "—"}
-              active={focus === "failed"}
-              onClick={() => setFocus("failed")}
-            />
-            <EstateTile
-              icon={<GitBranch className="h-4 w-4" />}
-              title="Drifted"
-              value={summary?.drifted ?? "—"}
-              active={focus === "drifted"}
-              onClick={() => setFocus("drifted")}
-            />
-            <EstateTile
-              icon={<Rocket className="h-4 w-4" />}
-              title="Active rollouts"
-              value={summary?.activeRollouts ?? "—"}
-              active={focus === "assignments"}
-              onClick={() => setFocus("assignments")}
-            />
-          </div>
-        </div>
-      </div>
+      {isEstateEmpty(query.data) ? (
+        <EstateZeroState />
+      ) : (
+        <EstateKpiGrid summary={summary} focus={focus} setFocus={setFocus} />
+      )}
       <PageSection
         title="Needs attention"
         description="Disconnected agents, failed assignments, incompatible controllers, drift, and stale inventory."
@@ -375,41 +312,6 @@ function EstateDeliveryOverview({
         </PageSection>
       </div>
     </PageShell>
-  );
-}
-
-function EstateTile({
-  title,
-  value,
-  icon,
-  active,
-  onClick,
-}: {
-  title: string;
-  value: string | number;
-  icon: ReactNode;
-  active?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex items-start justify-between rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40 focus:outline-hidden focus:ring-2 focus:ring-ring",
-        active && "ring-2 ring-ring",
-      )}
-    >
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-muted-foreground">{title}</p>
-        <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-          {value}
-        </p>
-      </div>
-      <div className="rounded-md bg-muted p-2 text-muted-foreground">
-        {icon}
-      </div>
-    </button>
   );
 }
 
