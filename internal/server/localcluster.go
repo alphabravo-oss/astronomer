@@ -337,11 +337,12 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		}
 		deliveryProbe.WithDynamicClient(deliveryDynamic)
 		deliveryRuntime, err = agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
-			ClusterID:        clusterID.String(),
-			AgentVersion:     version.Version,
-			ValidationPolicy: agentdelivery.ValidationPolicy{AllowPlatformScope: true},
-			Connected:        tunnelClient.IsConnected,
-			Logger:           logger.With("component", "local-agent-delivery"),
+			ClusterID:            clusterID.String(),
+			AgentVersion:         version.Version,
+			ValidationPolicy:     agentdelivery.ValidationPolicy{AllowPlatformScope: true},
+			Connected:            tunnelClient.IsConnected,
+			ObservationFreshness: tunnelClient.ObservationFreshnessEnabled,
+			Logger:               logger.With("component", "local-agent-delivery"),
 		}, deliveryExecutor, deliveryStore, deliveryProbe)
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery runtime: %w", err)
@@ -362,6 +363,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 			return nil, fmt.Errorf("initialize local system manager: %w", err)
 		}
 		deliveryRuntime.SetSystemManager(systemManager)
+		tunnelClient.SetObservationRetry(deliveryRuntime.RetryObservation)
 		tunnelClient.RegisterHandler(protocol.MsgDeliveryStateResponse, deliveryRuntime.HandleStateResponse)
 		tunnelClient.RegisterHandler(protocol.MsgDeliveryReconcile, deliveryRuntime.HandleReconcile)
 	}

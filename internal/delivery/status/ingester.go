@@ -149,7 +149,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 			DistributionDigest: payload.ControllerInventory.DistributionDigest,
 			KubernetesVersion:  payload.ControllerInventory.KubernetesVersion,
 			Ready:              payload.ControllerInventory.Ready, CompatibilityStatus: string(compatibilityResult.Status),
-			ErrorCode: compatibilityResult.Code, ObservedAt: timestamp(time.Now().UTC()),
+			ErrorCode: compatibilityResult.Code, ObservedAt: inventoryObservedAt(payload.ControllerInventory, time.Now().UTC()),
 			StatusDigest: payload.StatusDigest, AgentSessionID: sessionID, AgentSequence: payload.SessionSequence,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -168,7 +168,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 			observedAt := time.Now().UTC()
 			observed, err := systemTx.ObserveDeliverySystemAssignment(ctx, sqlc.ObserveDeliverySystemAssignmentParams{
 				ClusterID: authenticatedCluster, ObservedDistributionDigest: payload.ControllerInventory.DistributionDigest,
-				ObservedAgentVersion: payload.ControllerInventory.AgentVersion, ObservedAt: timestamp(observedAt),
+				ObservedAgentVersion: payload.ControllerInventory.AgentVersion, ObservedAt: inventoryObservedAt(payload.ControllerInventory, observedAt),
 				InventoryReady: payload.ControllerInventory.Ready, CompatibilityStatus: string(compatibilityResult.Status),
 				ErrorCode: compatibilityResult.Code,
 			})

@@ -11018,13 +11018,29 @@ components:
         ready: {type: boolean}
         compatibility_status: {type: string, enum: [compatible, incompatible, upgrade_required, degraded]}
         error_code: {type: string}
-        observed_at: {type: string, format: date-time, nullable: true}
+        observed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Source observation time for negotiated agents; receipt time for legacy agents. Null means no source observation exists. Unavailable source state is reflected in error_code and ready=false.
         updated_at: {type: string, format: date-time}
+    DeliveryObservation:
+      type: object
+      additionalProperties: false
+      required: [state]
+      description: Negotiated source freshness. Legacy observations omit this object. Timestamps are source observation times, never message receipt times. Current observations older than five minutes must be treated as stale.
+      properties:
+        state: {type: string, enum: [current, stale, unsynced, denied, absent, disconnected, unavailable]}
+        observed_at:
+          type: string
+          format: date-time
+          description: Required for current, stale, and absent states. Omitted when a source has never been observed; no timestamp is fabricated.
     DeliverySystemComponent:
       type: object
       additionalProperties: false
       required: [id, name, category, owner, management_method, kind, health, high_availability]
       properties:
+        observation: {$ref: '#/components/schemas/DeliveryObservation'}
         id: {type: string, maxLength: 192}
         name: {type: string, maxLength: 128}
         category: {type: string, maxLength: 64}

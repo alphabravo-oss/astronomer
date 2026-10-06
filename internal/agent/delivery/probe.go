@@ -66,6 +66,8 @@ func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryController
 		if _, err := p.discovery.ServerResourcesForGroupVersion(apiVersion); err == nil {
 			served[apiVersion] = true
 			inventory.APIVersions = append(inventory.APIVersions, apiVersion)
+		} else if !apierrors.IsNotFound(err) && inventory.CompatibilityMessage == "" {
+			inventory.CompatibilityMessage = "flux_api_discovery_unavailable"
 		}
 	}
 	sort.Strings(inventory.APIVersions)

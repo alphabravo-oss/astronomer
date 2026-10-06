@@ -95,15 +95,16 @@ type DeliveryStateResponseV2 struct {
 }
 
 type DeliveryControllerInventory struct {
-	AgentVersion         string            `json:"agent_version,omitempty"`
-	FluxVersion          string            `json:"flux_version,omitempty"`
-	Components           map[string]string `json:"components,omitempty"`
-	SystemComponents     []SystemComponent `json:"system_components,omitempty"`
-	APIVersions          []string          `json:"api_versions,omitempty"`
-	KubernetesVersion    string            `json:"kubernetes_version,omitempty"`
-	DistributionDigest   string            `json:"distribution_digest,omitempty"`
-	Ready                bool              `json:"ready"`
-	CompatibilityMessage string            `json:"compatibility_message,omitempty"`
+	Observation          *DeliveryObservation `json:"observation,omitempty"`
+	AgentVersion         string               `json:"agent_version,omitempty"`
+	FluxVersion          string               `json:"flux_version,omitempty"`
+	Components           map[string]string    `json:"components,omitempty"`
+	SystemComponents     []SystemComponent    `json:"system_components,omitempty"`
+	APIVersions          []string             `json:"api_versions,omitempty"`
+	KubernetesVersion    string               `json:"kubernetes_version,omitempty"`
+	DistributionDigest   string               `json:"distribution_digest,omitempty"`
+	Ready                bool                 `json:"ready"`
+	CompatibilityMessage string               `json:"compatibility_message,omitempty"`
 }
 
 // SystemComponent is a bounded, secret-free observation of software that is
@@ -111,6 +112,7 @@ type DeliveryControllerInventory struct {
 // separate so the control plane never implies that Flux owns infrastructure
 // installed by the Kubernetes distribution or an external operator.
 type SystemComponent struct {
+	Observation             *DeliveryObservation        `json:"observation,omitempty"`
 	ID                      string                      `json:"id"`
 	Name                    string                      `json:"name"`
 	Category                string                      `json:"category"`
@@ -298,6 +300,7 @@ type DeliveryStatusV2 struct {
 // weakening session or desired-generation fences.
 func (s DeliveryStatusV2) SemanticDigest() string {
 	canonical := s
+	canonical.ControllerInventory = s.ControllerInventory.WithoutObservationTimes()
 	canonical.SessionSequence = 0
 	canonical.StatusDigest = ""
 	canonical.Deployments = append([]DeliveryDeploymentStatusV2(nil), s.Deployments...)
@@ -388,6 +391,9 @@ func (r DeliveryStateRequestV2) Validate() error {
 }
 
 func (i DeliveryControllerInventory) Validate() error {
+	if err := i.validateObservations(); err != nil {
+		return err
+	}
 	if len(i.AgentVersion) > 64 || len(i.FluxVersion) > 64 || len(i.KubernetesVersion) > 64 || len(i.CompatibilityMessage) > MaxDeliveryStatusMessageBytes {
 		return errors.New("controller inventory contains an oversized field")
 	}

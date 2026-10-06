@@ -359,9 +359,10 @@ type ConnectPayload struct {
 
 // ConnectAckPayload is sent by the server to acknowledge a connection.
 type ConnectAckPayload struct {
-	SessionID     string `json:"session_id"`
-	ServerVersion string `json:"server_version"`
-	AgentToken    string `json:"agent_token,omitempty"`
+	Capabilities  []string `json:"capabilities,omitempty"`
+	SessionID     string   `json:"session_id"`
+	ServerVersion string   `json:"server_version"`
+	AgentToken    string   `json:"agent_token,omitempty"`
 	// AuditIngestToken is the scoped outbound API token (clusters:write only)
 	// the agent uses with httpAuditSender to POST audit batches over plain
 	// HTTP instead of the WS tunnel (PATH A). Empty when the server does not

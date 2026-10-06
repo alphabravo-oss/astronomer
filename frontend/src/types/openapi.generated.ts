@@ -2365,6 +2365,10 @@ export interface OpenAPIComponents {
           "operator": "In" | "NotIn" | "Exists" | "DoesNotExist";
           "values"?: string[];
         };
+    DeliveryObservation: {
+          "state": "current" | "stale" | "unsynced" | "denied" | "absent" | "disconnected" | "unavailable";
+          "observed_at"?: string;
+        };
     DeliveryOverrideSet: OpenAPIComponents['schemas']['DeliveryOverrideSetWrite'] & {
           "id": string;
           "project_id": string;
@@ -2722,6 +2726,7 @@ export interface OpenAPIComponents {
           "data": OpenAPIComponents['schemas']['DeliverySystemCompatibility'];
         };
     DeliverySystemComponent: {
+          "observation"?: OpenAPIComponents['schemas']['DeliveryObservation'];
           "id": string;
           "name": string;
           "category": string;
@@ -16846,6 +16851,7 @@ export type DeliveryHelmRenderer = OpenAPIComponents['schemas']['DeliveryHelmRen
 export type DeliveryImmutableRevision = OpenAPIComponents['schemas']['DeliveryImmutableRevision'];
 export type DeliveryKustomizeRenderer = OpenAPIComponents['schemas']['DeliveryKustomizeRenderer'];
 export type DeliveryLabelExpression = OpenAPIComponents['schemas']['DeliveryLabelExpression'];
+export type DeliveryObservation = OpenAPIComponents['schemas']['DeliveryObservation'];
 export type DeliveryOverrideSet = OpenAPIComponents['schemas']['DeliveryOverrideSet'];
 export type DeliveryOverrideSetEnvelope = OpenAPIComponents['schemas']['DeliveryOverrideSetEnvelope'];
 export type DeliveryOverrideSetPage = OpenAPIComponents['schemas']['DeliveryOverrideSetPage'];

@@ -371,11 +371,12 @@ func runConnect(logger *slog.Logger) error {
 		}
 		deliveryProbe.WithDynamicClient(deliveryDynamic)
 		deliveryRuntime, err := agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
-			ClusterID:        cfg.ClusterID,
-			AgentVersion:     version.Version,
-			ValidationPolicy: agentdelivery.ValidationPolicy{AllowPlatformScope: allowPlatformScope},
-			Connected:        tunnel.IsConnected,
-			Logger:           logger,
+			ClusterID:            cfg.ClusterID,
+			AgentVersion:         version.Version,
+			ValidationPolicy:     agentdelivery.ValidationPolicy{AllowPlatformScope: allowPlatformScope},
+			Connected:            tunnel.IsConnected,
+			ObservationFreshness: tunnel.ObservationFreshnessEnabled,
+			Logger:               logger,
 		}, deliveryExecutor, deliveryStore, deliveryProbe)
 		if err != nil {
 			return fmt.Errorf("initialize delivery runtime: %w", err)
@@ -398,8 +399,7 @@ func runConnect(logger *slog.Logger) error {
 		}
 		deliveryRuntime.SetSystemManager(systemManager)
 		deliveryRuntime.SetPauseGuard(pauseGuard)
-		tunnel.RegisterHandler(protocol.MsgDeliveryStateResponse, deliveryRuntime.HandleStateResponse)
-		tunnel.RegisterHandler(protocol.MsgDeliveryReconcile, deliveryRuntime.HandleReconcile)
+		registerDeliveryRuntime(tunnel, deliveryRuntime)
 		go func() {
 			if err := deliveryRuntime.Run(ctx, tunnel.SendFunc(ctx)); err != nil && ctx.Err() == nil {
 				logger.Error("delivery runtime stopped", "error", err)

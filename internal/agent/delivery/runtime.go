@@ -31,13 +31,14 @@ type CapabilityProbe interface {
 }
 
 type RuntimeConfig struct {
-	ClusterID        string
-	AgentVersion     string
-	PollInterval     time.Duration
-	StatusInterval   time.Duration
-	ValidationPolicy ValidationPolicy
-	Connected        func() bool
-	Logger           *slog.Logger
+	ClusterID            string
+	AgentVersion         string
+	PollInterval         time.Duration
+	StatusInterval       time.Duration
+	ValidationPolicy     ValidationPolicy
+	Connected            func() bool
+	ObservationFreshness func() bool
+	Logger               *slog.Logger
 }
 
 type stateReply struct {
@@ -61,10 +62,11 @@ type Runtime struct {
 	wake    chan struct{}
 	paused  *atomic.Bool
 
-	checkpoint checkpoint
-	transient  map[string]protocol.DeliveryDeploymentStatusV2
-	sequence   int64
-	now        func() time.Time
+	checkpoint       checkpoint
+	transient        map[string]protocol.DeliveryDeploymentStatusV2
+	sequence         int64
+	resetObservation atomic.Bool
+	now              func() time.Time
 
 	lastStatusDigest string
 	lastStatusSentAt time.Time
@@ -166,6 +168,7 @@ func (r *Runtime) Run(ctx context.Context, send Sender) error {
 	wasConnected := r.config.Connected()
 	for {
 		if request && r.config.Connected() {
+			r.resetObservationSuppression()
 			if err := r.requestAndReconcile(ctx, send); err != nil && ctx.Err() == nil {
 				r.config.Logger.Warn("delivery reconciliation did not complete", "error_code", stableRuntimeError(err), "error", err)
 			}
@@ -200,7 +203,7 @@ func (r *Runtime) requestAndReconcile(ctx context.Context, send Sender) error {
 	if r.paused != nil && r.paused.Load() {
 		return nil
 	}
-	inventory, capabilities, err := r.probe.Inspect(ctx)
+	inventory, capabilities, err := r.inspectInventory(ctx)
 	if err != nil {
 		return fmt.Errorf("inspect delivery capabilities: %w", err)
 	}
@@ -370,7 +373,7 @@ func (r *Runtime) processSnapshot(ctx context.Context, snapshot protocol.Deliver
 }
 
 func (r *Runtime) sendStatus(ctx context.Context, send Sender) error {
-	inventory, _, err := r.probe.Inspect(ctx)
+	inventory, _, err := r.inspectInventory(ctx)
 	if err != nil {
 		return fmt.Errorf("inspect delivery status inventory: %w", err)
 	}

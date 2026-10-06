@@ -11,7 +11,7 @@
     "frontend/src/lib/api/project-detail.ts": 987,
     "frontend/src/routes/dashboard/charlie/index.tsx": 1049,
     "internal/agent/state_subscriber.go": 1037,
-    "internal/agent/tunnel.go": 1061,
+    "internal/agent/tunnel.go": 1055,
     "internal/auth/jwt.go": 855,
     "internal/charlie/action_guard.go": 818,
     "internal/charlie/admin.go": 1288,

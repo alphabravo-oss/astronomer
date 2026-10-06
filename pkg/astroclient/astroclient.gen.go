@@ -1101,6 +1101,17 @@ const (
 	DeliveryLabelExpressionOperatorNotIn        DeliveryLabelExpressionOperator = "NotIn"
 )
 
+// Defines values for DeliveryObservationState.
+const (
+	DeliveryObservationStateAbsent       DeliveryObservationState = "absent"
+	DeliveryObservationStateCurrent      DeliveryObservationState = "current"
+	DeliveryObservationStateDenied       DeliveryObservationState = "denied"
+	DeliveryObservationStateDisconnected DeliveryObservationState = "disconnected"
+	DeliveryObservationStateStale        DeliveryObservationState = "stale"
+	DeliveryObservationStateUnavailable  DeliveryObservationState = "unavailable"
+	DeliveryObservationStateUnsynced     DeliveryObservationState = "unsynced"
+)
+
 // Defines values for DeliveryOverrideSetScope.
 const (
 	DeliveryOverrideSetScopeCluster      DeliveryOverrideSetScope = "cluster"
@@ -5883,10 +5894,12 @@ type DeliveryControllerInventory struct {
 	ErrorCode           string                                         `json:"error_code"`
 	FluxVersion         string                                         `json:"flux_version"`
 	KubernetesVersion   string                                         `json:"kubernetes_version"`
-	ObservedAt          *time.Time                                     `json:"observed_at"`
-	Ready               bool                                           `json:"ready"`
-	SystemComponents    []DeliverySystemComponent                      `json:"system_components"`
-	UpdatedAt           time.Time                                      `json:"updated_at"`
+
+	// ObservedAt Source observation time for negotiated agents; receipt time for legacy agents. Null means no source observation exists. Unavailable source state is reflected in error_code and ready=false.
+	ObservedAt       *time.Time                `json:"observed_at"`
+	Ready            bool                      `json:"ready"`
+	SystemComponents []DeliverySystemComponent `json:"system_components"`
+	UpdatedAt        time.Time                 `json:"updated_at"`
 }
 
 // DeliveryControllerInventoryCompatibilityStatus defines model for DeliveryControllerInventory.CompatibilityStatus.
@@ -6054,6 +6067,16 @@ type DeliveryLabelExpression struct {
 
 // DeliveryLabelExpressionOperator defines model for DeliveryLabelExpression.Operator.
 type DeliveryLabelExpressionOperator string
+
+// DeliveryObservation Negotiated source freshness. Legacy observations omit this object. Timestamps are source observation times, never message receipt times. Current observations older than five minutes must be treated as stale.
+type DeliveryObservation struct {
+	// ObservedAt Required for current, stale, and absent states. Omitted when a source has never been observed; no timestamp is fabricated.
+	ObservedAt *time.Time               `json:"observed_at,omitempty"`
+	State      DeliveryObservationState `json:"state"`
+}
+
+// DeliveryObservationState defines model for DeliveryObservation.State.
+type DeliveryObservationState string
 
 // DeliveryOverrideSet defines model for DeliveryOverrideSet.
 type DeliveryOverrideSet struct {
@@ -6588,36 +6611,39 @@ type DeliverySystemCompatibilityEnvelope struct {
 
 // DeliverySystemComponent defines model for DeliverySystemComponent.
 type DeliverySystemComponent struct {
-	Category                string                                `json:"category"`
-	Compatibility           *DeliverySystemComponentCompatibility `json:"compatibility,omitempty"`
-	CpuLimit                *string                               `json:"cpu_limit,omitempty"`
-	CpuRequest              *string                               `json:"cpu_request,omitempty"`
-	CreatedAt               *time.Time                            `json:"created_at,omitempty"`
-	DefaultStorage          *bool                                 `json:"default_storage,omitempty"`
-	DesiredReplicas         *int32                                `json:"desired_replicas,omitempty"`
-	Detail                  *string                               `json:"detail,omitempty"`
-	Health                  DeliverySystemComponentHealth         `json:"health"`
-	HighAvailability        bool                                  `json:"high_availability"`
-	Id                      string                                `json:"id"`
-	Images                  *[]string                             `json:"images,omitempty"`
-	Kind                    string                                `json:"kind"`
-	ManagementMethod        string                                `json:"management_method"`
-	MemoryLimit             *string                               `json:"memory_limit,omitempty"`
-	MemoryRequest           *string                               `json:"memory_request,omitempty"`
-	Name                    string                                `json:"name"`
-	Namespace               *string                               `json:"namespace,omitempty"`
-	Owner                   DeliverySystemComponentOwner          `json:"owner"`
-	ReadyReplicas           *int32                                `json:"ready_replicas,omitempty"`
-	Resources               *[]DeliverySystemResource             `json:"resources,omitempty"`
-	StorageClass            *string                               `json:"storage_class,omitempty"`
-	StorageDriver           *string                               `json:"storage_driver,omitempty"`
-	StorageProvisionedBytes *int64                                `json:"storage_provisioned_bytes,omitempty"`
-	StorageReplicaCount     *int32                                `json:"storage_replica_count,omitempty"`
-	StorageUsedBytes        *int64                                `json:"storage_used_bytes,omitempty"`
-	SupportedActions        *[]string                             `json:"supported_actions,omitempty"`
-	UpdateState             *DeliverySystemComponentUpdateState   `json:"update_state,omitempty"`
-	Version                 *string                               `json:"version,omitempty"`
-	Volumes                 *[]DeliverySystemVolume               `json:"volumes,omitempty"`
+	Category         string                                `json:"category"`
+	Compatibility    *DeliverySystemComponentCompatibility `json:"compatibility,omitempty"`
+	CpuLimit         *string                               `json:"cpu_limit,omitempty"`
+	CpuRequest       *string                               `json:"cpu_request,omitempty"`
+	CreatedAt        *time.Time                            `json:"created_at,omitempty"`
+	DefaultStorage   *bool                                 `json:"default_storage,omitempty"`
+	DesiredReplicas  *int32                                `json:"desired_replicas,omitempty"`
+	Detail           *string                               `json:"detail,omitempty"`
+	Health           DeliverySystemComponentHealth         `json:"health"`
+	HighAvailability bool                                  `json:"high_availability"`
+	Id               string                                `json:"id"`
+	Images           *[]string                             `json:"images,omitempty"`
+	Kind             string                                `json:"kind"`
+	ManagementMethod string                                `json:"management_method"`
+	MemoryLimit      *string                               `json:"memory_limit,omitempty"`
+	MemoryRequest    *string                               `json:"memory_request,omitempty"`
+	Name             string                                `json:"name"`
+	Namespace        *string                               `json:"namespace,omitempty"`
+
+	// Observation Negotiated source freshness. Legacy observations omit this object. Timestamps are source observation times, never message receipt times. Current observations older than five minutes must be treated as stale.
+	Observation             *DeliveryObservation                `json:"observation,omitempty"`
+	Owner                   DeliverySystemComponentOwner        `json:"owner"`
+	ReadyReplicas           *int32                              `json:"ready_replicas,omitempty"`
+	Resources               *[]DeliverySystemResource           `json:"resources,omitempty"`
+	StorageClass            *string                             `json:"storage_class,omitempty"`
+	StorageDriver           *string                             `json:"storage_driver,omitempty"`
+	StorageProvisionedBytes *int64                              `json:"storage_provisioned_bytes,omitempty"`
+	StorageReplicaCount     *int32                              `json:"storage_replica_count,omitempty"`
+	StorageUsedBytes        *int64                              `json:"storage_used_bytes,omitempty"`
+	SupportedActions        *[]string                           `json:"supported_actions,omitempty"`
+	UpdateState             *DeliverySystemComponentUpdateState `json:"update_state,omitempty"`
+	Version                 *string                             `json:"version,omitempty"`
+	Volumes                 *[]DeliverySystemVolume             `json:"volumes,omitempty"`
 }
 
 // DeliverySystemComponentCompatibility defines model for DeliverySystemComponent.Compatibility.
