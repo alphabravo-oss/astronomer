@@ -9,16 +9,24 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
-// inspectInventory currently performs direct observation. Future cache-backed
-// probes must choose their direct legacy path when negotiation is disabled;
-// cached metadata is never silently stripped or restamped as a fresh read.
+// inspectInventory chooses the source contract once for this observation. The
+// tunnel final-write guard fences any negotiation change while it is in flight.
 func (r *Runtime) inspectInventory(ctx context.Context) (protocol.DeliveryControllerInventory, Capabilities, error) {
 	observedAt := r.now().UTC()
-	inventory, capabilities, err := r.probe.Inspect(ctx)
+	enabled := r.config.ObservationFreshness != nil && r.config.ObservationFreshness()
+	var inventory protocol.DeliveryControllerInventory
+	var capabilities Capabilities
+	var err error
+	if probe, ok := r.probe.(interface {
+		InspectObserved(context.Context) (protocol.DeliveryControllerInventory, Capabilities, error)
+	}); ok && enabled {
+		inventory, capabilities, err = probe.InspectObserved(ctx)
+	} else {
+		inventory, capabilities, err = r.probe.Inspect(ctx)
+	}
 	if err != nil {
 		return inventory, capabilities, err
 	}
-	enabled := r.config.ObservationFreshness != nil && r.config.ObservationFreshness()
 	if !enabled {
 		if inventory.Observation != nil {
 			return inventory, capabilities, errors.New("observation contract requires direct legacy probe")

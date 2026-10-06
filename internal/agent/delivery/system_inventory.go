@@ -102,6 +102,10 @@ func (p *ClusterProbe) inspectSystemComponents(ctx context.Context, kubernetesVe
 		}
 	}
 	components = append(components, operatorComponents...)
+	return normalizeSystemComponents(components)
+}
+
+func normalizeSystemComponents(components []protocol.SystemComponent) []protocol.SystemComponent {
 	for index := range components {
 		if components[index].Compatibility == "" {
 			components[index].Compatibility = "unknown"

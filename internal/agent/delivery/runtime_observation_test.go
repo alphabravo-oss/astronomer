@@ -151,3 +151,75 @@ func TestRuntimeRetriesSupersededObservationInDirectLegacyMode(t *testing.T) {
 		t.Fatal("retry did not use direct legacy observation")
 	}
 }
+
+func TestRuntimeNegotiatesSharedProbeAndReturnsToDirectLegacy(t *testing.T) {
+	runtime, _ := newRuntimeFixture(t)
+	probe, client, _ := sharedProbeFixture(t)
+	probe.platformScope = false
+	runtime.probe = probe
+	enabled := true
+	runtime.config.ObservationFreshness = func() bool { return enabled }
+	if _, _, err := runtime.inspectInventory(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.Actions()) != 0 {
+		t.Fatal("negotiated path used typed API")
+	}
+	enabled = false
+	inventory, _, err := runtime.inspectInventory(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inventory.Observation != nil || len(client.Actions()) != 3 {
+		t.Fatal("reconnect to legacy did not explicitly use three direct controller GETs")
+	}
+	raw, err := json.Marshal(inventory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&legacyObservationInventory{}); err != nil {
+		t.Fatal("legacy peer received added fields", err)
+	}
+}
+
+func TestHeartbeatMarginPreservesSourceTimeWithoutHealthyAgeFlaps(t *testing.T) {
+	runtime, _ := newRuntimeFixture(t)
+	if deliveryStatusHeartbeatFloor >= protocol.MaxCurrentObservationAge-4*time.Minute+time.Second {
+		t.Fatal("heartbeat has no margin below stale threshold")
+	}
+	started := time.Now().UTC().Add(-3 * time.Minute)
+	sent := 0
+	lastSource := started
+	sender := func(message *protocol.Message) error {
+		var payload protocol.DeliveryStatusV2
+		if err := json.Unmarshal(message.Payload, &payload); err != nil {
+			return err
+		}
+		if !payload.ControllerInventory.Observation.ObservedAt.Equal(lastSource) {
+			t.Fatal("heartbeat restamped unchanged source")
+		}
+		sent++
+		return nil
+	}
+	for elapsed := time.Duration(0); elapsed <= 3*time.Minute; elapsed += 15 * time.Second {
+		// Successful quiet-watch repair verifies the source every150s. Between
+		// repairs the producer sends its original time, including heartbeat frames.
+		if elapsed%(150*time.Second) == 0 {
+			lastSource = started.Add(elapsed)
+		}
+		inventory := protocol.DeliveryControllerInventory{Ready: true, Observation: &protocol.DeliveryObservation{State: protocol.ObservationCurrent, ObservedAt: &lastSource}}
+		payload := protocol.DeliveryStatusV2{ProtocolVersion: protocol.DeliveryProtocolVersion, ClusterID: runtime.config.ClusterID, ControllerInventory: inventory, SessionSequence: runtime.sequence + 1}
+		payload.StatusDigest = payload.SemanticDigest()
+		if err := runtime.sendStatusPayload(sender, payload, started.Add(elapsed)); err != nil {
+			t.Fatal(err)
+		}
+		if started.Add(elapsed).Sub(lastSource) >= protocol.MaxCurrentObservationAge {
+			t.Fatal("healthy source aged into stale during repair/heartbeat schedule")
+		}
+	}
+	if sent < 3 {
+		t.Fatalf("insufficient heartbeat reports: %d", sent)
+	}
+}

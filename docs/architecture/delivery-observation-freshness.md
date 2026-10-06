@@ -1,10 +1,7 @@
 # Delivery observation freshness
 
 Astronomer distinguishes the time Kubernetes state was observed from the time a
-tunnel message arrived. This extension prepares shared observation caches; the
-current runtime still uses direct Kubernetes probes. Cache-backed producers are
-separate follow-up work. The component UI consumes source freshness before those
-producers can be enabled.
+tunnel message arrived. Negotiated delivery uses shared typed observation stores and bounded discovery/operator projections. Legacy sessions retain direct probes. Both the remote agent and embedded local agent share their existing StateSubscriber with delivery and health reporting. The component UI interprets source freshness independently of receipt time.
 
 ## Session negotiation and mixed versions
 
@@ -54,12 +51,11 @@ negotiated controller/component metadata must be consistently present.
 
 Direct probes timestamp successfully obtained projections. Failed discovery or
 controller reads produce `unavailable`, without inventing a successful source
-timestamp. Optional kinds that the direct probe could not read are currently
-omitted; per-kind availability reporting belongs to the subsequent snapshot work.
+timestamp. Optional kinds that the legacy direct probe could not read remain omitted. Negotiated shared inventory instead reports per-kind availability explicitly.
 Successful observation and healthy reconciliation are separate: a current
 observation can correctly report an unhealthy workload.
 
-## Shared typed source (delivery activation pending)
+## Shared typed source
 
 `StateSubscriber` owns one informer per Deployment, StatefulSet, DaemonSet, Pod,
 PersistentVolumeClaim, and StorageClass. PVC and StorageClass typed projections
@@ -110,10 +106,54 @@ are fixed `success`, `error`, `denied`, `expired`, `canceled` for API results an
 `closed`, `rollover`, `repair`, `error`, `denied`, `expired`, `canceled` for lifecycle
 events. No resource names, namespaces, error strings, or tenant labels are added.
 
-Delivery still uses direct probes in this change. Negotiated source consumption,
-remote/embedded wiring, shared discovery/dynamic refresh, and heartbeat headroom
-remain the next integration step; these source tests do not establish live
-Kubernetes watch behavior or end-to-end request reduction.
+Negotiated delivery takes its controller deployments and platform workloads,
+Pods, PVCs and StorageClasses from these stores. Legacy peers explicitly use the
+original direct path. A denied, disconnected, stale, or unsynced source never
+triggers a per-tick direct fallback. Optional unavailable kinds have explicit
+availability rows; truly absent resources remain distinct. Optional storage or
+operator permissions do not disable independently verified Flux readiness.
+Controller identity, pinned images, hardening flags, and warm-standby readiness
+use the same evaluator in both paths. Source times are combined conservatively
+across fields in an aggregate row. Typed snapshots are sampled after bounded
+refresh I/O, so revocation during that work cannot be hidden by earlier data.
+
+Discovery refreshes fixed version, Flux API, and API-group endpoints through
+context-aware REST requests. Production never wraps uncancellable discovery
+methods in detached goroutines. Discovery and five optional dynamic projections
+have separate coalesced two-minute refreshes and 15-second context bounds; waiting
+callers can cancel without starting duplicate work. Refresh deadlines start
+before work, so request latency cannot extend certificate health beyond public
+`notAfter`. Dynamic caches retain bounded public component projections and
+snapshot counts, not complete custom-resource bodies. Truncated detail slices are copied into bounded backing arrays; aggregate totals remain intact. The snapshot-count map scales with distinct claim identities and is replaced on refresh, so total memory is not a fixed constant independent of cluster size. Errors replace healthy
+cached evidence with explicit unavailable/denied rows at the next refresh.
+Permission changes without a watch signal can therefore take up to the bounded
+refresh interval to be detected; receipt time never extends that interval.
+
+Controller identity/generation/image changes and relevant CRD metadata revisions
+invalidate these refreshes. The CRD definition watcher uses the existing metadata
+factory and existing credentials, with no RBAC changes. If CRD metadata watch
+permission is denied or metadata-client construction fails, periodic discovery
+still detects API changes, with its two-minute bound. Discovery failures remain
+unavailable rather than proving an API is absent.
+
+`astronomer_agent_delivery_observation_refresh_duration_seconds` records actual
+coalesced refresh work with fixed `source` (`discovery`, `dynamic`) and `outcome`
+(`success`, `unavailable`). Fixed-source `delivery_observation_source_age_seconds`
+and `delivery_observation_source_available` gauges are sampled diagnostics.
+`delivery_observation_sampled_at_timestamp_seconds` exposes producer sampling
+Unix time; `delivery_observation_observed_at_timestamp_seconds` exposes preserved
+source Unix time, or zero when unknown. These metrics use the existing
+`astronomer_agent_` prefix and `astronomer_instance_id` label. Dashboards must gate
+on producer sampling recency and derive source age from observation time; a live
+server scrape does not prove its embedded delivery producer is still running.
+No public endpoint or additional transport is introduced. Remote-agent metric
+exposure remains a deployment/transport concern, not implied by registration.
+
+Local integration tests measure ten modern probes with zero recurring typed
+LIST/GET calls after informer synchronization, one coalesced discovery refresh,
+and five initial dynamic LISTs. Controller changes and CRD revisions invalidate
+only the bounded refreshes. These tests do not establish live Kubernetes watch
+behavior, production request reduction, or live soak acceptance.
 
 ## Persistence, API, and coalescing
 
@@ -135,10 +175,7 @@ Higher-sequence, semantically coalesced messages still persist their supplied
 source time. Retransmitting an unchanged snapshot does not renew its age.
 Session and sequence fences remain authoritative for duplicate/replayed messages.
 
-The existing five-minute status heartbeat floor equals the fleet stale threshold.
-Component UI age handling is implemented below. The cache rollout still needs
-refresh/heartbeat headroom and end-to-end integration verification; receipt
-restamping must not be used to conceal this boundary.
+The status heartbeat floor is one minute, below the five-minute fleet/UI stale threshold. The shared typed source has a four-minute hard age ceiling and proactively repairs quiet watches after 150 seconds. Heartbeat tests preserve unchanged source times across reports; receipt restamping never conceals source age. Live timing/soak acceptance remains outstanding.
 
 ## Component presentation
 
@@ -161,7 +198,7 @@ suppression. Detail source times are shown only when valid.
 ```sh
 go test ./pkg/protocol ./internal/delivery/status ./internal/delivery/compatibility ./internal/agent/delivery
 go test -race ./internal/agent/observation
-go test -race ./internal/agent -run 'Test(StateSubscriber|SharedObservation)'
+go test -race ./internal/agent -run 'Test(StateSubscriber|SharedObservation|SharedDeliveryReal|DiscoveryRevision|DeliveryComposition)'
 go test ./internal/agent -run 'Test(ObservationNegotiation|QueuedExtended)'
 npm --prefix frontend test -- src/lib/system-component-freshness.test.ts 'src/routes/dashboard/clusters/$id/delivery/system-components/-freshness.test.tsx'
 ```

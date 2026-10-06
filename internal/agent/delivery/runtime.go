@@ -20,7 +20,7 @@ import (
 const (
 	defaultDeliveryPollInterval   = 30 * time.Second
 	defaultDeliveryStatusInterval = 15 * time.Second
-	deliveryStatusHeartbeatFloor  = 5 * time.Minute
+	deliveryStatusHeartbeatFloor  = time.Minute
 	deliveryResponseTimeout       = 30 * time.Second
 )
 

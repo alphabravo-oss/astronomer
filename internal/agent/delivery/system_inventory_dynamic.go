@@ -40,6 +40,10 @@ func (p *ClusterProbe) inspectLonghornNodes(ctx context.Context) (protocol.Syste
 	if err != nil || len(items.Items) == 0 {
 		return protocol.SystemComponent{}, false
 	}
+	return longhornNodesComponent(items)
+}
+
+func longhornNodesComponent(items *unstructured.UnstructuredList) (protocol.SystemComponent, bool) {
 	var ready int32
 	var maximum, scheduled, available int64
 	resources := make([]protocol.SystemResourceObservation, 0, len(items.Items))
@@ -113,6 +117,10 @@ func (p *ClusterProbe) inspectLonghornVolumes(ctx context.Context) (protocol.Sys
 	if err != nil || len(items.Items) == 0 {
 		return protocol.SystemComponent{}, false
 	}
+	return longhornVolumesComponent(items)
+}
+
+func longhornVolumesComponent(items *unstructured.UnstructuredList) (protocol.SystemComponent, bool) {
 	var healthy int32
 	var provisioned, used int64
 	var minimumReplicas int32
@@ -156,11 +164,15 @@ func (p *ClusterProbe) inspectCertificates(ctx context.Context) (protocol.System
 	if err != nil || len(items.Items) == 0 {
 		return protocol.SystemComponent{}, false
 	}
+	return certificatesComponent(items, time.Now())
+}
+
+func certificatesComponent(items *unstructured.UnstructuredList, now time.Time) (protocol.SystemComponent, bool) {
 	var ready int32
 	resources := make([]protocol.SystemResourceObservation, 0, len(items.Items))
 	for index := range items.Items {
 		item := &items.Items[index]
-		detail, expired := certificateInventoryDetail(item, time.Now())
+		detail, expired := certificateInventoryDetail(item, now)
 		isReady := inventoryConditionTrue(item, "Ready") && !expired
 		if isReady {
 			ready++
@@ -192,6 +204,10 @@ func (p *ClusterProbe) inspectGateways(ctx context.Context) (protocol.SystemComp
 	if err != nil || len(items.Items) == 0 {
 		return protocol.SystemComponent{}, false
 	}
+	return gatewaysComponent(items)
+}
+
+func gatewaysComponent(items *unstructured.UnstructuredList) (protocol.SystemComponent, bool) {
 	var ready int32
 	var listeners int64
 	var attachedRoutes int64

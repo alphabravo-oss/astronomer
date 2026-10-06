@@ -38,7 +38,7 @@ func TestRuntimeSuppressesUnchangedStatusUntilHeartbeatFloor(t *testing.T) {
 	payload.SessionSequence++
 	payload.Deployments[0].ObservedAt = now.Add(time.Minute)
 	payload.StatusDigest = payload.SemanticDigest()
-	if err := runtime.sendStatusPayload(sender, payload, now.Add(time.Minute)); err != nil {
+	if err := runtime.sendStatusPayload(sender, payload, now.Add(deliveryStatusHeartbeatFloor/2)); err != nil {
 		t.Fatal(err)
 	}
 	if sent != 1 || runtime.sequence != 1 {

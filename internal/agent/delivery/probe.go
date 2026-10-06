@@ -32,6 +32,7 @@ type ClusterProbe struct {
 	discovery     discovery.DiscoveryInterface
 	dynamic       dynamic.Interface
 	platformScope bool
+	observations  *sharedProbe
 }
 
 func (p *ClusterProbe) WithDynamicClient(client dynamic.Interface) *ClusterProbe {
@@ -49,21 +50,32 @@ func NewClusterProbe(client kubernetes.Interface, discoveryClient discovery.Disc
 }
 
 func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryControllerInventory, Capabilities, error) {
+	data := p.readDiscovery(ctx, false)
+	inventory, capabilities, err := evaluateControllers(data, func(name string) (*appsv1.Deployment, error) {
+		return p.client.AppsV1().Deployments(DeliverySystemNamespace).Get(ctx, name, metav1.GetOptions{})
+	})
+	if err == nil {
+		inventory.SystemComponents = p.inspectSystemComponents(ctx, inventory.KubernetesVersion)
+	}
+	return inventory, capabilities, err
+}
+
+func evaluateControllers(data discoverySnapshot, getDeployment func(string) (*appsv1.Deployment, error)) (protocol.DeliveryControllerInventory, Capabilities, error) {
 	expectedControllerImages, err := fluxdistribution.ControllerImages()
 	if err != nil {
 		return protocol.DeliveryControllerInventory{}, Capabilities{}, err
 	}
 	inventory := protocol.DeliveryControllerInventory{Components: make(map[string]string)}
-	capabilities := Capabilities{PlatformScope: p.platformScope}
-	if version, err := p.discovery.ServerVersion(); err == nil && version != nil {
-		inventory.KubernetesVersion = version.GitVersion
+	capabilities := Capabilities{PlatformScope: data.platformScope}
+	if data.versionError == nil {
+		inventory.KubernetesVersion = data.version
 	} else {
 		inventory.CompatibilityMessage = "kubernetes_version_unavailable"
 	}
 
 	served := make(map[string]bool, len(expectedFluxAPIs))
 	for _, apiVersion := range expectedFluxAPIs {
-		if _, err := p.discovery.ServerResourcesForGroupVersion(apiVersion); err == nil {
+		if err := data.apis[apiVersion]; err == nil {
 			served[apiVersion] = true
 			inventory.APIVersions = append(inventory.APIVersions, apiVersion)
 		} else if !apierrors.IsNotFound(err) && inventory.CompatibilityMessage == "" {
@@ -90,7 +102,7 @@ func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryController
 	hardeningReady := true
 	images := make([]string, 0, len(expectedControllerImages))
 	for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller"} {
-		deployment, err := p.client.AppsV1().Deployments(DeliverySystemNamespace).Get(ctx, name, metav1.GetOptions{})
+		deployment, err := getDeployment(name)
 		if err != nil {
 			controllerReady = false
 			hardeningReady = false
@@ -127,7 +139,6 @@ func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryController
 		}
 	}
 	inventory.FluxVersion = fluxdistribution.Version()
-	inventory.SystemComponents = p.inspectSystemComponents(ctx, inventory.KubernetesVersion)
 	if len(images) == len(expectedControllerImages) {
 		inventory.DistributionDigest, err = fluxdistribution.ControllerSetDigest()
 		if err != nil {

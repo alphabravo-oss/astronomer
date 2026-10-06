@@ -313,6 +313,15 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 	svcProxy := agent.NewServiceProxy(logger)
 	tunnelClient.RegisterHandler(protocol.MsgServiceProxyRequest, svcProxy.HandleRequest)
 
+	subscriber := agent.NewStateSubscriber(clientset, tunnelClient, logger.With("component", "local-agent"))
+	// P4.6 informer expansion: metadata-only informers (extra built-in
+	// kinds, Helm release Secrets, discover-if-present CRDs).
+	if mc, mErr := metadata.NewForConfig(restCfg); mErr == nil {
+		subscriber.SetMetadataClient(mc)
+	} else {
+		logger.Warn("local agent: metadata client init failed; expanded informer set disabled", "error", mErr)
+	}
+
 	var deliveryRuntime *agentdelivery.Runtime
 	if deliveryConfig.Enabled {
 		deliveryDynamic, err := dynamic.NewForConfig(restCfg)
@@ -335,7 +344,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery capability probe: %w", err)
 		}
-		deliveryProbe.WithDynamicClient(deliveryDynamic)
+		deliveryProbe.WithDynamicClient(deliveryDynamic).WithObservationSource(subscriber)
 		deliveryRuntime, err = agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
 			ClusterID:            clusterID.String(),
 			AgentVersion:         version.Version,
@@ -388,6 +397,9 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		logger.Debug("local agent metrics client unavailable", "error", err)
 	}
 
+	health.SetInventorySource(subscriber)
+	subscriber.SetConnectionWatcher(tunnelClient)
+
 	return func(ctx context.Context) error {
 		loops := []namedRuntimeLoop{
 			namedRuntimeLoop{name: "local-agent-observers", run: func(ctx context.Context) {
@@ -403,18 +415,6 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 					case <-ticker.C:
 					}
 				}
-				subscriber := agent.NewStateSubscriber(clientset, tunnelClient, logger.With("component", "local-agent"))
-				// P4.6 informer expansion: metadata-only informers (extra built-in
-				// kinds, Helm release Secrets, discover-if-present CRDs).
-				if mc, mErr := metadata.NewForConfig(restCfg); mErr == nil {
-					subscriber.SetMetadataClient(mc)
-				} else {
-					logger.Warn("local agent: metadata client init failed; expanded informer set disabled", "error", mErr)
-				}
-				// Serve the heartbeat/metrics node + pod inventory from the informer
-				// caches this subscriber already maintains, instead of re-listing the
-				// whole cluster from the apiserver on every tick.
-				health.SetInventorySource(subscriber)
 				// Track every tunnel transition, not just the first connect, so
 				// collection pauses while the embedded tunnel is down.
 				tunnelClient.SetConnectionListener(health.SetConnected)
