@@ -210,7 +210,7 @@ test("pod drilldown: row opens pod detail with containers + Logs tab renders", a
 
   // Pod overview: header + pod summary + per-container row.
   await expect(page.getByRole("heading", { name: POD_NAME })).toBeVisible();
-  await expect(page.getByText("Kind: Pod")).toBeVisible();
+  await expect(page.getByText("Pod", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Containers")).toBeVisible();
   await expect(page.getByText("nginx:1.25")).toBeVisible();
   // Pod summary fields.

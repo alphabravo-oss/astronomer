@@ -252,17 +252,21 @@ test("drilldown: clicking a Service row opens its detail (Overview + YAML)", asy
 
   // Overview: header shows the name; Metadata + Labels render.
   await expect(page.getByRole("heading", { name: SERVICE_NAME })).toBeVisible();
-  await expect(page.getByText("Kind: Service")).toBeVisible();
+  await expect(
+    page.getByText("Service", { exact: true }).first(),
+  ).toBeVisible();
   await expect(page.getByText("Metadata")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Labels", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("platform")).toBeVisible();
+  await expect(page.getByText("platform", { exact: true })).toBeVisible();
 
   // YAML tab renders the panel (View/Edit toggle + editor toolbar). Scope to
   // the tab nav — the header also has a "Download YAML" action button named YAML.
   await page.getByRole("tab", { name: "YAML" }).click();
-  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Edit", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("YAML", { exact: true }).last()).toBeVisible();
 });
 
@@ -317,7 +321,10 @@ test("drilldown: Events tab lists this object's events; Related shows owner refs
   // Related tab: owner reference renders as a drill-down link.
   await page.getByRole("tab", { name: "Related" }).click();
   await expect(page.getByText("Owned By")).toBeVisible();
-  const ownerLink = page.getByRole("link", { name: "my-deploy" });
+  // The masthead also links the owner; scope to the Related panel.
+  const ownerLink = page
+    .getByRole("tabpanel")
+    .getByRole("link", { name: "my-deploy" });
   const podLink = page.getByRole("link", { name: "web-1" });
   await expect(podLink).toHaveAttribute(
     "href",

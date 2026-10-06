@@ -6,11 +6,15 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import { QueryStates } from "@/components/ui/query-states";
+import {
+  ageMetaItem,
+  KindBadge,
+  MastheadDetails,
+} from "@/components/resources/resource-masthead-details";
 import { ResourceMasthead } from "@/components/ui/page";
 import { TabStrip } from "@/components/ui/tabs";
 import { k8sResourcePath } from "@/lib/k8s-paths";
 import { usePermissionDecision } from "@/lib/permission-hooks";
-import { formatRelativeTime } from "@/lib/utils";
 import { Server } from "lucide-react";
 import { NodeHeaderActions } from "./-node-header-actions";
 import { NodeTabContent, type NodeTabId } from "./-node-tab-content";
@@ -115,8 +119,23 @@ export function NodeDetailPageBody({
       <ResourceMasthead
         backTo={`/dashboard/clusters/${clusterId}/nodes`}
         backLabel="Back to nodes"
+        eyebrow={<KindBadge kind="Node" />}
         title={node.name}
         mono
+        details={
+          <MastheadDetails
+            isPod={false}
+            obj={{
+              metadata: {
+                labels: node.labels,
+                annotations: node.annotations,
+              },
+              status: {
+                conditions: node.conditions.map((c) => ({ ...c })),
+              },
+            }}
+          />
+        }
         status={
           <>
             <StatusBadge status={node.status} />
@@ -131,7 +150,7 @@ export function NodeDetailPageBody({
         }
         meta={[
           { label: "Roles", value: node.roles.join(", ") },
-          { label: "Age", value: formatRelativeTime(node.createdAt) },
+          ...[ageMetaItem(node.createdAt)].filter((item) => !!item),
           { label: "Version", value: node.nodeInfo.kubeletVersion },
         ]}
         actions={
