@@ -19,6 +19,7 @@ LOCK_ROOT = '/tmp'
 OWNER = 'delivery.astronomer.io/qualification-run'
 DISPOSABLE = 'delivery.astronomer.io/disposable'
 NONCE = 'delivery.astronomer.io/qualification-operation'
+OBSERVATION = 'delivery.astronomer.io/qualification-observation'
 RESTART = 'kubectl.kubernetes.io/restartedAt'
 RESOURCES = {
     'deployment': ('apps/v1', 'Deployment', 'deployments'),
@@ -96,7 +97,7 @@ class Ledger:
                 if self.path.exists() or self.path.is_symlink() or self.runner.evidence_path.exists():
                     raise LedgerError('existing evidence requires explicit resume-cleanup')
                 self.data = {'schema': 'astronomer-drill-ledger/v1', 'identity': identity,
-                             'operations': [], 'cleanup_complete': False}
+                             'operations': [], 'cleanup_complete': False, 'source_digest': self.runner.report.get('source_digest')}
                 self.save()
             return self
         except BaseException:
@@ -142,19 +143,21 @@ class Ledger:
                 raise LedgerError('invalid operation nonce')
             if op.get('uid') is not None and (not isinstance(op['uid'], str) or not 1 <= len(op['uid']) <= 256):
                 raise LedgerError('invalid operation UID')
-            if op['mode'] == 'field' and (op['kind'] not in ('deployment', 'statefulset') or op.get('field') not in ('replicas', 'restart')):
+            if op['mode'] == 'field' and (op['kind'] not in ('deployment', 'statefulset') or op.get('field') not in ('replicas', 'restart', 'observation')):
                 raise LedgerError('invalid field operation')
             if op['mode'] == 'delete' and op['kind'] != 'pod':
                 raise LedgerError('invalid deletion operation')
             if op['mode'] == 'create' and op['kind'] not in ('configmap', 'networkpolicy', 'job'):
                 raise LedgerError('invalid creation operation')
-            if op.get('field') not in (None, 'replicas', 'restart'):
+            if op.get('field') not in (None, 'replicas', 'restart', 'observation'):
                 raise LedgerError('invalid ledger field')
             if op.get('mode') == 'field':
                 for key in ('original', 'expected'):
                     value = op.get(key)
                     if op['field'] == 'replicas' and (type(value) is not int or not 0 <= value <= 100):
                         raise LedgerError('invalid replica restoration')
+                    if op['field'] == 'observation' and (op['kind'] != 'deployment' or (value is not None and (not isinstance(value, str) or not re.fullmatch('q-[0-9a-f]{32}', value)))):
+                        raise LedgerError('invalid observation restoration')
                     if op['field'] == 'restart' and not restart_value(value):
                         raise LedgerError('invalid restart restoration')
             if op.get('state') not in ('intent', 'mutated', 'cleaning', 'done', 'unresolved'):
@@ -190,6 +193,8 @@ class Ledger:
 
     def intent(self, mode, kind, name, obj=None, **fields):
         self.check_identity()
+        if len(self.data['operations']) >= 10001:
+            raise LedgerError('ledger operation limit exceeded')
         api, gvk, _ = RESOURCES[kind]
         op = dict(mode=mode, kind=kind, api_version=api, gvk_kind=gvk,
                   namespace=self.runner.manifest['namespace'], name=name,
@@ -263,6 +268,8 @@ class Ledger:
         return op
 
     def value(self, obj, field):
+        if field == 'observation':
+            return obj.get('metadata', {}).get('annotations', {}).get(OBSERVATION)
         if field == 'replicas':
             return obj.get('spec', {}).get('replicas')
         return obj.get('spec', {}).get('template', {}).get('metadata', {}).get('annotations', {}).get(RESTART)
@@ -274,15 +281,44 @@ class Ledger:
         if op['field'] == 'replicas':
             patch.append({'op': 'replace', 'path': '/spec/replicas', 'value': value})
         else:
-            template_md = obj['spec']['template']['metadata']
+            prefix = '/metadata' if op['field'] == 'observation' else '/spec/template/metadata'
+            template_md = obj['metadata'] if op['field'] == 'observation' else obj['spec']['template']['metadata']
             if 'annotations' not in template_md:
-                patch.append({'op': 'add', 'path': '/spec/template/metadata/annotations', 'value': {}})
-            path = '/spec/template/metadata/annotations/' + escape(RESTART)
+                patch.append({'op': 'add', 'path': prefix + '/annotations', 'value': {}})
+            path = prefix + '/annotations/' + escape(OBSERVATION if op['field'] == 'observation' else RESTART)
             if value is None:
                 patch.append({'op': 'remove', 'path': path})
             else:
                 patch.append({'op': 'add', 'path': path, 'value': value})
-        self.api.run(['patch', op['kind'], op['name'], '--type=json', '--patch-file=/dev/stdin'], stdin=patch)
+        args = ['patch', op['kind'], op['name'], '--type=json', '--patch-file=/dev/stdin']
+        if op['field'] == 'observation':
+            args += ['-o', 'json']
+        return self.api.run(args, stdin=patch)
+
+    def observe_annotation(self, name, settled_object, deadline):
+        original = self.value(settled_object, 'observation')
+        if original is not None and (not isinstance(original, str) or not re.fullmatch('q-[0-9a-f]{32}', original)):
+            raise LedgerError('invalid original observation annotation')
+        expected = 'q-' + uuid.uuid4().hex
+        op = self.intent('field', 'deployment', name, settled_object,
+                         field='observation', original=original, expected=expected, observation={})
+        # Use the settled read's RV, never a newer read that could hide a change.
+        current = self.validate_object(op, settled_object)
+        if time.monotonic() >= deadline:
+            op['state'] = 'done'  # No request was sent.
+            self.save()
+            raise LedgerError('observation deadline exceeded before mutation')
+        dispatch = time.monotonic_ns()
+        raw = self.patch_field(op, current, expected)
+        receipt = self.validate_object(op, json.loads(raw))
+        rv = receipt['metadata']['resourceVersion']
+        if self.value(receipt, 'observation') != expected or not isinstance(rv, str) or not 1 <= len(rv) <= 256 or rv == current['metadata']['resourceVersion']:
+            raise LedgerError('observation receipt invalid')
+        op['acknowledged'] = True
+        op['observation'] = {'dispatch_ns': dispatch, 'resource_version': rv}
+        op['state'] = 'mutated'
+        self.save()
+        return op
 
     def change(self, kind, name, field, expected):
         obj = self.runner.owned(kind, name)
