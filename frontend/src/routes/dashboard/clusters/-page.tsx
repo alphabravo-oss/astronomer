@@ -188,7 +188,7 @@ export function ClustersPage() {
             },
           }}
           toolbar={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Select
                 aria-label="Filter clusters by status"
                 value={statusFilter}
@@ -196,7 +196,7 @@ export function ClustersPage() {
                   setStatusFilter(e.target.value);
                   setPageIndex(0);
                 }}
-                containerClassName="w-auto"
+                containerClassName="w-auto shrink-0"
               >
                 <option value="">All Statuses</option>
                 <option value="active">Active</option>
@@ -213,7 +213,7 @@ export function ClustersPage() {
                   setProviderFilter(e.target.value);
                   setPageIndex(0);
                 }}
-                containerClassName="w-auto"
+                containerClassName="w-auto shrink-0"
               >
                 <option value="">All Providers</option>
                 <option value="aws">AWS</option>
@@ -230,7 +230,7 @@ export function ClustersPage() {
                   setEnvFilter(e.target.value);
                   setPageIndex(0);
                 }}
-                containerClassName="w-auto"
+                containerClassName="w-auto shrink-0"
               >
                 <option value="">All Environments</option>
                 <option value="production">Production</option>

@@ -22,7 +22,10 @@ export function TabsList({
     <div
       role="tablist"
       aria-label={ariaLabel ?? "Sections"}
-      className={cn("flex gap-6 border-b border-border", className)}
+      className={cn(
+        "flex gap-6 overflow-x-auto border-b border-border",
+        className,
+      )}
       {...props}
     />
   );
@@ -43,7 +46,7 @@ export function TabsTrigger({
       aria-controls={ariaControls}
       tabIndex={tabIndex ?? (active ? 0 : -1)}
       className={cn(
-        "flex items-center gap-2 border-b-2 pb-3 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+        "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 pb-3 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         active
           ? "border-foreground text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground",
@@ -154,7 +157,7 @@ export function TabStrip<T extends string>({
               handleTabStripKeyDown(event, index, tabs, onChange)
             }
           >
-            {Icon ? <Icon className="h-4 w-4" /> : null}
+            {Icon ? <Icon className="h-4 w-4 shrink-0" /> : null}
             {tab.label}
             {tab.count !== undefined ? (
               <span className="text-muted-foreground">{tab.count}</span>
@@ -176,7 +179,7 @@ export function TabStrip<T extends string>({
  */
 export function tabLinkClassName(active: boolean): string {
   return cn(
-    "flex items-center gap-2 border-b-2 pb-3 text-sm font-medium transition-colors",
+    "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 pb-3 text-sm font-medium transition-colors",
     active
       ? "border-foreground text-foreground"
       : "border-transparent text-muted-foreground hover:text-foreground",

@@ -95,7 +95,7 @@ export function AuditTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <label
           htmlFor="audit-class-filter"
           className="text-xs uppercase tracking-wide text-muted-foreground"
@@ -108,7 +108,7 @@ export function AuditTab() {
           onChange={(e) =>
             setAuditClassFilter(e.target.value as AuditClassFilter)
           }
-          containerClassName="w-auto"
+          containerClassName="w-auto shrink-0"
         >
           <option value="all">All</option>
           <option value="mutation">Mutation</option>

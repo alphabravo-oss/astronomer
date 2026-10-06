@@ -247,7 +247,7 @@ export function EventsTab({
           onPaginationChange: (next) => setPageIndex(next.pageIndex),
         }}
         toolbar={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {history && (
               <Select
                 aria-label="Filter alert events by status"
@@ -256,7 +256,7 @@ export function EventsTab({
                   setStatus(event.target.value as "" | AlertEvent["status"]);
                   setPageIndex(0);
                 }}
-                containerClassName="w-auto"
+                containerClassName="w-auto shrink-0"
               >
                 <option value="">All statuses</option>
                 <option value="firing">Firing</option>
@@ -272,7 +272,7 @@ export function EventsTab({
                 setSeverity(event.target.value as "" | AlertEvent["severity"]);
                 setPageIndex(0);
               }}
-              containerClassName="w-auto"
+              containerClassName="w-auto shrink-0"
             >
               <option value="">All severities</option>
               <option value="critical">Critical</option>
