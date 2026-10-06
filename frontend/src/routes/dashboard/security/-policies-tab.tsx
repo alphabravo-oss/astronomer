@@ -102,6 +102,7 @@ function policyColumns(
     {
       key: "syncStatus",
       header: "Sync",
+      ariaLabel: "Sync status",
       kind: "status",
       accessor: (row) => <StatusBadge status={row.syncStatus} />,
     },

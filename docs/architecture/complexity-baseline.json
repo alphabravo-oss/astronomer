@@ -91,7 +91,7 @@
     "frontend/src/routes/dashboard/logging/-pipeline-modal.tsx:CreatePipelineModal": 286,
     "frontend/src/routes/dashboard/projects/$id/catalogs/index.tsx:ProjectCatalogsPage": 268,
     "frontend/src/routes/dashboard/projects/$id/policy/index.tsx:PolicyPage": 350,
-    "frontend/src/routes/dashboard/projects/index.tsx:ProjectsPage": 280,
+    "frontend/src/routes/dashboard/projects/index.tsx:ProjectsPage": 278,
     "frontend/src/routes/dashboard/security/scans/new/index.tsx:NewScanWizardPage": 262,
     "frontend/src/routes/dashboard/settings/auth/settings/index.tsx:DexSettingsPage": 299,
     "frontend/src/routes/dashboard/settings/gitops/$id/index.tsx:DetailInner": 430,

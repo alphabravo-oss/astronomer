@@ -313,6 +313,7 @@ export function SnapshotsTable({
     {
       key: "warningsErrors",
       header: "Warn / Err",
+      ariaLabel: "Warnings / errors",
       kind: "count",
       size: 90,
       accessor: (snapshot) => (

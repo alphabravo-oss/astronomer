@@ -160,6 +160,7 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
   {
     key: "lastHeartbeat",
     header: "Heartbeat",
+    ariaLabel: "Last heartbeat",
     kind: "age",
     size: 119,
     accessor: (row) => (
@@ -174,6 +175,7 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
   {
     key: "lastTransition",
     header: "Transition",
+    ariaLabel: "Last transition",
     kind: "age",
     size: 126,
     accessor: (row) => (

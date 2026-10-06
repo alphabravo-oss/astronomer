@@ -32,6 +32,11 @@ import { QuotaCell } from "./-quota-cell";
 
 const PROJECTS_PAGE_SIZE = 50;
 
+type ProjectWithQuotaLimits = Project & {
+  resourceQuotaCpuLimit?: string;
+  resourceQuotaMemoryLimit?: string;
+};
+
 function ProjectsPage() {
   const navigate = useNavigate();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -172,15 +177,13 @@ function ProjectsPage() {
     {
       key: "resourceQuota",
       header: "Quota",
+      ariaLabel: "Resource quota",
       kind: "text",
       size: 168,
       minSize: 150,
       align: "right",
       accessor: (row) => {
-        const extra = row as Project & {
-          resourceQuotaCpuLimit?: string;
-          resourceQuotaMemoryLimit?: string;
-        };
+        const extra = row as ProjectWithQuotaLimits;
         const cpu = row.resourceQuota?.cpuLimit || extra.resourceQuotaCpuLimit;
         const mem =
           row.resourceQuota?.memoryLimit || extra.resourceQuotaMemoryLimit;

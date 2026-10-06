@@ -111,6 +111,7 @@ export function systemComponentColumns(
     {
       key: "replicas",
       header: "Ready",
+      ariaLabel: "Ready / desired",
       kind: "count",
       size: 110,
       accessor: (row) =>

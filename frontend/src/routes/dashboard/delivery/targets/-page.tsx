@@ -74,6 +74,7 @@ export function TargetsPage() {
     {
       key: "bundle",
       header: "Version",
+      ariaLabel: "Bundle version",
       kind: "id",
       size: 160,
       minSize: 140,

@@ -113,6 +113,7 @@ export function agentColumns(
     {
       key: "lastHeartbeat",
       header: "Heartbeat",
+      ariaLabel: "Last heartbeat",
       kind: "age",
       size: 130,
       accessor: (row) => (

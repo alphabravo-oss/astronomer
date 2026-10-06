@@ -108,6 +108,7 @@ function QuotaPlansTable() {
     {
       key: "flaggedLimits",
       header: "Flagged",
+      ariaLabel: "Flagged limits",
       kind: "count",
       size: 105,
       accessor: (row) => {
@@ -119,6 +120,7 @@ function QuotaPlansTable() {
     {
       key: "worst",
       header: "Worst",
+      ariaLabel: "Worst utilization",
       kind: "percent",
       size: 144,
       minSize: 140,
@@ -135,6 +137,7 @@ function QuotaPlansTable() {
     {
       key: "projectCaps",
       header: "Caps",
+      ariaLabel: "Project caps",
       kind: "count",
       size: 188,
       minSize: 170,

@@ -464,6 +464,7 @@ const conditionColumns: Column<DeliveryConditionView>[] = [
   {
     key: "message",
     header: "Message",
+    ariaLabel: "Sanitized message",
     kind: "text",
     grow: true,
     minSize: 280,
@@ -474,6 +475,7 @@ const conditionColumns: Column<DeliveryConditionView>[] = [
   {
     key: "transition",
     header: "Changed",
+    ariaLabel: "Last transition",
     kind: "age",
     size: 112,
     accessor: (row) => <AgeCell value={row.lastTransitionTime} />,
