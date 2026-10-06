@@ -5,7 +5,6 @@ import { QueryStates } from "@/components/ui/query-states";
 import { ActionButton } from "@/components/ui/action-button";
 import { getCatalogOperation, type CatalogOperation } from "@/lib/api/catalog";
 import { queryKeys } from "@/lib/query-keys";
-import { liveFallback } from "@/lib/live/status-store";
 
 export function catalogOperationSettled(operation?: CatalogOperation) {
   if (!operation) return false;
@@ -16,6 +15,12 @@ export function catalogOperationSettled(operation?: CatalogOperation) {
     return false;
   return ["completed", "failed", "superseded"].includes(operation.status ?? "");
 }
+/** Poll cadence for a catalog operation: unconditional until it settles. */
+export function catalogOperationPollInterval(
+  operation?: CatalogOperation,
+): number | false {
+  return catalogOperationSettled(operation) ? false : 2_500;
+}
 export function CatalogOperationTimeline({
   operationId,
 }: {
@@ -24,10 +29,11 @@ export function CatalogOperationTimeline({
   const query = useQuery({
     queryKey: queryKeys.catalog.operation(operationId),
     queryFn: ({ signal }) => getCatalogOperation(operationId, signal),
+    // No stream event is routed to `catalog.operation(id)` (`catalog_release.
+    // changed` only refreshes the installed lists), so an in-flight operation
+    // must keep polling even while the stream is open.
     refetchInterval: (current) =>
-      catalogOperationSettled(current.state.data)
-        ? false
-        : liveFallback(2_500)(),
+      catalogOperationPollInterval(current.state.data),
     throwOnError: false,
   });
   return (

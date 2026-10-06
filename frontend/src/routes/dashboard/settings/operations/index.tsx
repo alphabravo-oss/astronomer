@@ -85,7 +85,9 @@ function OperationsBody() {
   const outbox = useQuery({
     queryKey: queryKeys.adminOperations.outbox(outboxStatus),
     queryFn: ({ signal }) => listTaskOutbox(outboxStatus, signal),
-    refetchInterval: liveFallback(10_000),
+    // `admin_queue.changed` routes only the queue summary + DLQ keys, not the
+    // task outbox, so this list polls regardless of stream state.
+    refetchInterval: 10_000,
   });
 
   const retry = useOperationMutation({

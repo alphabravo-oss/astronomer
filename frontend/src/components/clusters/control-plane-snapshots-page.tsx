@@ -11,7 +11,6 @@ import {
   type ControlPlaneSnapshotStatus,
 } from "@/lib/api/cluster-snapshots";
 import { useCluster } from "@/lib/hooks/clusters";
-import { liveFallback } from "@/lib/live/status-store";
 import { pageTableCount } from "@/lib/api/pagination";
 import { queryKeys } from "@/lib/query-keys";
 import { useClustersUpdate } from "@/lib/permission-hooks";
@@ -267,7 +266,9 @@ export function ClusterControlPlaneSnapshotsPage() {
         signal,
       ),
     enabled: !!cluster && !managed,
-    refetchInterval: liveFallback(15_000),
+    // No stream event is routed to control-plane snapshots (`snapshot.changed`
+    // covers Velero snapshots only), so poll regardless of stream state.
+    refetchInterval: 15_000,
     refetchIntervalInBackground: false,
   });
   const takeSnapshot = useMutation({

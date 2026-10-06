@@ -100,7 +100,7 @@
     "frontend/src/routes/dashboard/projects/$id/catalogs/index.tsx:ProjectCatalogsPage": 268,
     "frontend/src/routes/dashboard/projects/$id/policy/index.tsx:PolicyPage": 350,
     "frontend/src/routes/dashboard/projects/index.tsx:ProjectsPage": 303,
-    "frontend/src/routes/dashboard/search/-page.tsx:SearchPage": 334,
+    "frontend/src/routes/dashboard/search/-page.tsx:SearchPage": 294,
     "frontend/src/routes/dashboard/security/scans/$scanId/index.tsx:FindingsSection": 243,
     "frontend/src/routes/dashboard/security/scans/new/index.tsx:NewScanWizardPage": 262,
     "frontend/src/routes/dashboard/settings/auth/index.tsx:AuthOverviewPage": 256,
