@@ -4,7 +4,7 @@
 
 ## Status and baseline
 
-- Status: PLANNED — not started.
+- Status: IMPLEMENTED on `feat/031-ui-refinement` (tip 1ac972c0) with the residuals listed in [031-evidence/after.md](./031-evidence/after.md): image search/presence blocked on a backend filter, one unfixable dev-tool dependency advisory failing `npm audit`, no hand QA. Measurements, verification and open items are in that file.
 - Priority: P1 for visible defects (topbar wrap, table truncation, contradictory status, jargon leaks). P2 for primitives, table depth and density.
 - Effort: L overall. Each phase is S–M and independently mergeable.
 - Risk: MEDIUM. A new primitive dependency touches every overlay; CSP, bundle budget, focus handling and test selectors must stay green.
@@ -300,65 +300,65 @@ Acceptance: e2e for one live-updating list (stubbed stream event changes a row w
 
 ## Task checklist
 
-- [ ] P0.1 Baseline measurements recorded
-- [ ] P0.2 Before screenshots captured
-- [ ] P0.3 Primitive library decision recorded
-- [ ] P0.4 Radix spike passes CSP and bundle budget
-- [ ] P1.1 Topbar single row at 1280px
-- [ ] P1.2 Clusters table sizing fixed
-- [ ] P1.3 Single effective cluster status; metric cards consistent
-- [ ] P1.4 Jargon copy pass
-- [ ] P1.5 Zero-state collapse on Estate; empty-state copy trimmed
-- [ ] P2.1 Tooltip
-- [ ] P2.2 Popover replaces header popover positioning
-- [ ] P2.3 DropdownMenu behind ActionMenu
-- [ ] P2.4 Combobox (namespace, cluster, chart, storage class, service account)
-- [ ] P2.5 Dialog/Sheet behind ModalShell/DrawerShell
-- [ ] P2.6 Skeleton set wired into DataTable, MetricCard, ResourceMasthead
-- [ ] P2.7 Kbd, Separator
-- [ ] P2.8 `radix-ui` import restricted to `components/ui/`
-- [ ] P3.1 Tooltip migration (917 → 0)
-- [ ] P3.2 Button migration (361 → 0)
-- [ ] P3.3 Spinner → Skeleton migration
-- [ ] P3.4 Palette/hex → tokens
-- [ ] P3.5 Arbitrary values ≤ 60
-- [ ] P3.6 Lint ratchets enabled
-- [ ] P4.1 PageHeader slots
-- [ ] P4.2 Single content width/padding
-- [ ] P4.3 Scope notices moved to callouts
-- [ ] P4.4 All routes on PageShell/PageHeader/ResourceMasthead
-- [ ] P4.5 Page-anatomy test
-- [ ] P5.1 Masthead metadata (status, age, owner, managed-by)
-- [ ] P5.2 Labels/annotations chips
-- [ ] P5.3 Conditions strip
-- [ ] P5.4 Detail action bar with RBAC/owner rules
-- [ ] P5.5 No bare "No data." on Overview
-- [ ] P5.6 Pod container summary
-- [ ] P6.1 Column pinning
-- [ ] P6.2 Content sizing with grow column
-- [ ] P6.3 Column ordering
-- [ ] P6.4 Filter chips
-- [ ] P6.5 Expandable rows (pods, deployments)
-- [ ] P6.6 Row density
-- [ ] P6.7 Keyboard row navigation
-- [ ] P6.8 CSV export
-- [ ] P6.9 Saved views (URL + `user_table_views` API)
-- [ ] P6.10 Server-side mode for audit, events, pods
-- [ ] P6b.1 Column kinds and header sizing in DataTable
-- [ ] P6b.2 Table inventory document
-- [ ] P6b.3 Domain sweeps (8 batches) assign a kind to every column
-- [ ] P6b.4 Special-case cells (composite, image refs, chips, quantities, timestamps)
-- [ ] P6b.5 Guard test with empty allowlist
-- [ ] P6b.6 Densest 25 tables in visual regression
-- [ ] P7.1 Type tokens
-- [ ] P7.2 Density tokens
-- [ ] P7.3 Kit and touched pages migrated to tokens
-- [ ] P7.4 Density preference persisted, pre-paint
-- [ ] P8.1 Dev component gallery route
-- [ ] P8.2 Gallery in route-smoke crawl
-- [ ] P8.3 Visual regression baselines
-- [ ] P9 Ten largest files under 600 lines
-- [ ] P10.1 Polling → live streams where available
-- [ ] P10.2 Cross-cluster workload search
-- [ ] P10.3 Image presence across clusters
-- [ ] P11 Integration gate, after-measurements, manual QA, README update
+- [x] P0.1 Baseline measurements recorded
+- [x] P0.2 Before screenshots captured
+- [x] P0.3 Primitive library decision recorded
+- [x] P0.4 Radix spike passes CSP and bundle budget
+- [x] P1.1 Topbar single row at 1280px
+- [x] P1.2 Clusters table sizing fixed
+- [x] P1.3 Single effective cluster status; metric cards consistent
+- [x] P1.4 Jargon copy pass
+- [x] P1.5 Zero-state collapse on Estate; empty-state copy trimmed
+- [x] P2.1 Tooltip
+- [x] P2.2 Popover replaces header popover positioning
+- [x] P2.3 DropdownMenu behind ActionMenu
+- [x] P2.4 Combobox (namespace, cluster, chart, storage class, service account)
+- [x] P2.5 Dialog/Sheet behind ModalShell/DrawerShell
+- [x] P2.6 Skeleton set wired into DataTable, MetricCard, ResourceMasthead
+- [x] P2.7 Kbd, Separator
+- [x] P2.8 `radix-ui` import restricted to `components/ui/`
+- [x] P3.1 Tooltip migration (917 → 0)
+- [x] P3.2 Button migration (361 → 0)
+- [x] P3.3 Spinner → Skeleton migration
+- [x] P3.4 Palette/hex → tokens
+- [x] P3.5 Arbitrary values ≤ 60
+- [x] P3.6 Lint ratchets enabled
+- [x] P4.1 PageHeader slots
+- [x] P4.2 Single content width/padding
+- [x] P4.3 Scope notices moved to callouts
+- [x] P4.4 All routes on PageShell/PageHeader/ResourceMasthead
+- [x] P4.5 Page-anatomy test
+- [x] P5.1 Masthead metadata (status, age, owner, managed-by)
+- [x] P5.2 Labels/annotations chips
+- [x] P5.3 Conditions strip
+- [x] P5.4 Detail action bar with RBAC/owner rules
+- [x] P5.5 No bare "No data." on Overview
+- [x] P5.6 Pod container summary
+- [x] P6.1 Column pinning
+- [x] P6.2 Content sizing with grow column
+- [x] P6.3 Column ordering
+- [x] P6.4 Filter chips
+- [~] P6.5 Expandable rows (pods done; deployments need ReplicaSets in the list payload)
+- [x] P6.6 Row density
+- [x] P6.7 Keyboard row navigation
+- [x] P6.8 CSV export
+- [x] P6.9 Saved views (URL + `user_table_views` API)
+- [~] P6.10 Server-side mode for audit, events, pods (DataTable support done; audit/alerting endpoints lack sort/filter params)
+- [x] P6b.1 Column kinds and header sizing in DataTable
+- [x] P6b.2 Table inventory document
+- [x] P6b.3 Domain sweeps (8 batches) assign a kind to every column
+- [x] P6b.4 Special-case cells (composite, image refs, chips, quantities, timestamps)
+- [x] P6b.5 Guard test with empty allowlist
+- [x] P6b.6 Densest 25 tables in visual regression
+- [x] P7.1 Type tokens
+- [x] P7.2 Density tokens
+- [x] P7.3 Kit and touched pages migrated to tokens
+- [x] P7.4 Density preference persisted, pre-paint
+- [x] P8.1 Dev component gallery route
+- [x] P8.2 Gallery in route-smoke crawl
+- [x] P8.3 Visual regression baselines
+- [x] P9 Ten largest files under 600 lines
+- [x] P10.1 Polling → live streams where available
+- [~] P10.2 Cross-cluster workload search (workloads and pods grouped by cluster; image search blocked on backend filter)
+- [ ] P10.3 Image presence across clusters (blocked: backend has no image filter; see after.md)
+- [~] P11 Integration gate, after-measurements, manual QA, README update (automated gate done; manual QA not performed; npm audit blocked by braces advisory)
