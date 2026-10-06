@@ -1,3 +1,4 @@
+import { columnFullName } from "@/components/ui/data-table-header-label";
 import type { ReactNode, Ref } from "react";
 import { useState } from "react";
 import type {
@@ -112,7 +113,7 @@ export function DataTableToolbar<T extends RowData>({
               <FacetedFilter
                 key={definition.key}
                 column={column}
-                label={definition.filter?.label ?? definition.header}
+                label={definition.filter?.label ?? columnFullName(definition)}
                 onChange={() => table.setPageIndex(0)}
               />
             );
@@ -175,19 +176,21 @@ export function DataTableToolbar<T extends RowData>({
                           checked={isVisible}
                           onChange={() => column.toggleVisibility()}
                         />
-                        <span className="truncate">{definition.header}</span>
+                        <span className="truncate">
+                          {columnFullName(definition)}
+                        </span>
                       </label>
                       {controls && (
                         <>
                           <MenuIconButton
-                            label={`Move ${definition.header} up`}
+                            label={`Move ${columnFullName(definition)} up`}
                             disabled={index === 0 || side !== false}
                             onClick={() => onMoveColumn(definition.key, -1)}
                           >
                             <ArrowUp className="h-3.5 w-3.5" />
                           </MenuIconButton>
                           <MenuIconButton
-                            label={`Move ${definition.header} down`}
+                            label={`Move ${columnFullName(definition)} down`}
                             disabled={
                               index === listed.length - 1 || side !== false
                             }
@@ -196,7 +199,7 @@ export function DataTableToolbar<T extends RowData>({
                             <ArrowDown className="h-3.5 w-3.5" />
                           </MenuIconButton>
                           <MenuIconButton
-                            label={`Pin ${definition.header} left`}
+                            label={`Pin ${columnFullName(definition)} left`}
                             pressed={side === "start"}
                             onClick={() =>
                               onPinColumn(
@@ -208,7 +211,7 @@ export function DataTableToolbar<T extends RowData>({
                             <ArrowLeftToLine className="h-3.5 w-3.5" />
                           </MenuIconButton>
                           <MenuIconButton
-                            label={`Pin ${definition.header} right`}
+                            label={`Pin ${columnFullName(definition)} right`}
                             pressed={side === "end"}
                             onClick={() =>
                               onPinColumn(

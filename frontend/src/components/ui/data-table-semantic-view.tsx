@@ -1,3 +1,7 @@
+import {
+  columnFullName,
+  HeaderTooltip,
+} from "@/components/ui/data-table-header-label";
 import { Fragment, useMemo, type CSSProperties, type ReactNode } from "react";
 import type { RowData, Row, Table as RtTable } from "@tanstack/react-table";
 
@@ -246,6 +250,7 @@ export function SemanticDataTable<T extends RowData>({
                       pinnedClasses(placement, true),
                     )}
                     style={styleFor(col)}
+                    aria-label={col.ariaLabel}
                     aria-sort={
                       sortable
                         ? sorted === "asc"
@@ -256,40 +261,42 @@ export function SemanticDataTable<T extends RowData>({
                         : undefined
                     }
                   >
-                    {sortable ? (
-                      <button
-                        type="button"
-                        aria-label={`Sort by ${col.header}`}
-                        onClick={() => column?.toggleSorting()}
-                        className={cn(
-                          "flex min-w-0 items-center gap-1 overflow-hidden p-0 cursor-pointer select-none hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                          // Narrower than the full header width when a resize
-                          // handle shares this header, so the two adjacent
-                          // touch targets have clear space between them
-                          // instead of touching bounding boxes (WCAG 2.5.8
-                          // target spacing) — a right-margin/padding trick
-                          // doesn't work here because the browser resolves an
-                          // over-constrained `width: 100%` + margin by
-                          // discarding the margin.
-                          resizable && header?.column.getCanResize()
-                            ? "w-[calc(100%-12px)]"
-                            : "w-full",
-                          alignClass,
-                        )}
-                      >
-                        {headerContent}
-                      </button>
-                    ) : (
-                      <div
-                        className={cn("flex items-center gap-1", alignClass)}
-                      >
-                        {headerContent}
-                      </div>
-                    )}
+                    <HeaderTooltip col={col}>
+                      {sortable ? (
+                        <button
+                          type="button"
+                          aria-label={`Sort by ${columnFullName(col)}`}
+                          onClick={() => column?.toggleSorting()}
+                          className={cn(
+                            "flex min-w-0 items-center gap-1 overflow-hidden p-0 cursor-pointer select-none hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                            // Narrower than the full header width when a resize
+                            // handle shares this header, so the two adjacent
+                            // touch targets have clear space between them
+                            // instead of touching bounding boxes (WCAG 2.5.8
+                            // target spacing) — a right-margin/padding trick
+                            // doesn't work here because the browser resolves an
+                            // over-constrained `width: 100%` + margin by
+                            // discarding the margin.
+                            resizable && header?.column.getCanResize()
+                              ? "w-[calc(100%-12px)]"
+                              : "w-full",
+                            alignClass,
+                          )}
+                        >
+                          {headerContent}
+                        </button>
+                      ) : (
+                        <div
+                          className={cn("flex items-center gap-1", alignClass)}
+                        >
+                          {headerContent}
+                        </div>
+                      )}
+                    </HeaderTooltip>
                     {resizable && header?.column.getCanResize() && (
                       <button
                         type="button"
-                        aria-label={`Resize ${col.header} column, currently ${header.column.getSize()} pixels. Use left and right arrow keys.`}
+                        aria-label={`Resize ${columnFullName(col)} column, currently ${header.column.getSize()} pixels. Use left and right arrow keys.`}
                         tabIndex={0}
                         data-resize-handle=""
                         onMouseDown={header.getResizeHandler()}
@@ -490,7 +497,7 @@ export function SemanticDataTable<T extends RowData>({
                               overflow={rowActions ? "fixed" : overflow}
                               mono={resolved?.mono === true}
                               numeric={resolved?.numeric === true}
-                              label={col.header}
+                              label={columnFullName(col)}
                               text={
                                 overflow === "middle"
                                   ? columnText(col, row.original)

@@ -17,6 +17,7 @@ import {
   reorderWithin,
   type ColumnKind,
 } from "@/components/ui/data-table-layout";
+import { columnFullName } from "@/components/ui/data-table-header-label";
 import { downloadCsv, toCsv } from "@/components/ui/data-table-csv";
 import {
   buildFilterChips,
@@ -60,6 +61,13 @@ import { useDataTableController } from "@/components/ui/use-data-table-controlle
 export interface Column<T> {
   key: string;
   header: string;
+  /**
+   * Full column name when `header` is a short visible label: screen readers,
+   * the Columns menu and CSV export use it; the header tooltip falls back to it.
+   */
+  ariaLabel?: string;
+  /** Tooltip shown on hover/focus of the header (defaults to `ariaLabel`). */
+  headerTooltip?: ReactNode;
   /** Semantic column kind: the primary way to size and align a column. */
   kind?: ColumnKind;
   /** Preferred pixel width (overrides the kind's). */
@@ -390,7 +398,9 @@ export function DataTable<T extends RowData>({
         columnFilters,
         (id) => {
           const column = columns.find((c) => c.key === id);
-          return column?.filter?.label ?? column?.header ?? id;
+          return (
+            column?.filter?.label ?? (column ? columnFullName(column) : id)
+          );
         },
         searchValue,
       ),
