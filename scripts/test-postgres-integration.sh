@@ -50,6 +50,7 @@ export DELIVERY_ROLLOUT_TEST_DATABASE_URL="$database_url"
 export HEARTBEAT_TEST_DATABASE_URL="$database_url"
 export INACTIVE_USER_RETENTION_TEST_DATABASE_URL="$database_url"
 export REFRESH_SESSION_TEST_DATABASE_URL="$database_url"
+export TABLE_VIEWS_TEST_DATABASE_URL="$database_url"
 
 expected=(
   TestCatalogSearchFiltersScopeBeforePaginationAndCounts
@@ -70,6 +71,9 @@ expected=(
   TestRecordAgentHeartbeatAtomicWrite
   TestDeactivateInactiveUsersPostgresSemantics
   TestRefreshSessionConcurrentRotationAndReplayRevokesFamily
+  TestTableViewsPostgresConcurrentCreatesRespectTheCap
+  TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner
+  TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault
 )
 pattern="^($(IFS='|'; printf '%s' "${expected[*]}"))$"
 race_args=()
@@ -82,7 +86,8 @@ set +e
 go test "${race_args[@]}" -json -p=1 -count=1 -timeout=10m \
   -run "$pattern" \
   ./internal/db/sqlc ./internal/charlie ./internal/delivery/builtin \
-  ./internal/delivery/rollout ./internal/delivery/catalogapp ./internal/worker/tasks | tee "$report"
+  ./internal/delivery/rollout ./internal/delivery/catalogapp ./internal/worker/tasks \
+  ./internal/handler | tee "$report"
 test_status=${PIPESTATUS[0]}
 set -e
 (( test_status == 0 )) || exit "$test_status"
