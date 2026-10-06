@@ -6,8 +6,8 @@ const cardVariants = cva("border border-border bg-card text-card-foreground", {
   variants: {
     padding: {
       none: "p-0",
-      sm: "p-4",
-      md: "p-5",
+      sm: "p-(--card-p)",
+      md: "p-(--card-p)",
       lg: "p-6",
     },
     radius: {
@@ -23,8 +23,7 @@ const cardVariants = cva("border border-border bg-card text-card-foreground", {
 });
 
 export interface CardProps
-  extends HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof cardVariants> {}
+  extends HTMLAttributes<HTMLDivElement>, VariantProps<typeof cardVariants> {}
 
 /**
  * `padding` defaults to `"none"` because `CardHeader`/`CardContent`/
@@ -45,7 +44,10 @@ export function CardHeader({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("flex flex-col gap-1.5 p-5", className)} {...props} />
+    <div
+      className={cn("flex flex-col gap-1.5 p-(--card-p)", className)}
+      {...props}
+    />
   );
 }
 
@@ -56,7 +58,10 @@ export function CardTitle({
 }: HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h3
-      className={cn("text-sm font-semibold text-foreground", className)}
+      className={cn(
+        "text-section-title font-semibold text-foreground",
+        className,
+      )}
       {...props}
     >
       {children}
@@ -69,7 +74,10 @@ export function CardDescription({
   ...props
 }: HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className={cn("text-sm text-muted-foreground", className)} {...props} />
+    <p
+      className={cn("text-body text-muted-foreground", className)}
+      {...props}
+    />
   );
 }
 
@@ -77,7 +85,7 @@ export function CardContent({
   className,
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("p-5 pt-0", className)} {...props} />;
+  return <div className={cn("p-(--card-p) pt-0", className)} {...props} />;
 }
 
 export function CardFooter({
@@ -86,7 +94,7 @@ export function CardFooter({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex items-center gap-2 p-5 pt-0", className)}
+      className={cn("flex items-center gap-2 p-(--card-p) pt-0", className)}
       {...props}
     />
   );

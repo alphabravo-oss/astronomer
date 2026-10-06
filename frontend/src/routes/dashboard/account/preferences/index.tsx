@@ -57,7 +57,7 @@ function AccountPreferencesPage() {
         <>
           <PageSection
             title="Appearance and behavior"
-            description="Choose how dense, visual, and time-aware the console should be."
+            description="Choose how dense (tables, forms, cards), visual, and time-aware the console should be."
           >
             <Card>
               <CardContent className="grid gap-5 p-5 md:grid-cols-2">
@@ -78,7 +78,7 @@ function AccountPreferencesPage() {
                 />
                 <PreferenceSelect
                   id="preference-density"
-                  label="Table density"
+                  label="Interface density"
                   value={preferences.table_density}
                   onChange={(table_density) =>
                     updatePreferences({

@@ -68,7 +68,7 @@ export function TableHead({
     <th
       scope={scope}
       className={cn(
-        "h-10 overflow-hidden text-ellipsis whitespace-nowrap px-3 text-left text-xs font-semibold",
+        "h-10 overflow-hidden text-ellipsis whitespace-nowrap px-3 text-left text-meta font-semibold",
         className,
       )}
       {...props}
@@ -83,7 +83,7 @@ export function TableCell({
   return (
     <td
       className={cn(
-        "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-3 py-2.5 text-sm leading-5",
+        "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap px-3 py-(--row-py) text-body",
         className,
       )}
       {...props}

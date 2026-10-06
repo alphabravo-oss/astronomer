@@ -1,4 +1,3 @@
-
 import { Link as RouterLink } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { cn, gaugeColor, gaugeTextColor } from "@/lib/utils";
@@ -60,21 +59,23 @@ export function MetricCard({
       {...wrapperProps}
       className={cn(
         "block rounded-lg border border-border bg-card transition-colors hover:bg-card/80",
-        dense ? "p-3" : "p-5",
+        dense ? "p-3" : "p-(--card-p)",
         className,
       )}
     >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           {heading && (
-            <p className="text-sm font-medium text-muted-foreground">
+            <p className="text-body font-medium text-muted-foreground">
               {heading}
             </p>
           )}
           <div className="flex items-baseline gap-1.5">
             <span
               className={cn(
-                dense ? "text-lg font-semibold tracking-tight" : "text-2xl font-semibold tracking-tight",
+                dense
+                  ? "text-lg font-semibold tracking-tight"
+                  : "text-2xl font-semibold tracking-tight",
                 tone
                   ? toneTextClasses[tone]
                   : percentage !== undefined
@@ -89,7 +90,7 @@ export function MetricCard({
             )}
           </div>
           {subtitle && (
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
+            <p className="text-meta text-muted-foreground">{subtitle}</p>
           )}
         </div>
 

@@ -8,7 +8,9 @@ import type {
 import { cn } from "@/lib/utils";
 
 export function Tabs({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("space-y-6", className)} {...props} />;
+  return (
+    <div className={cn("space-y-(--gap-section)", className)} {...props} />
+  );
 }
 
 export function TabsList({
