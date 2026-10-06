@@ -23,8 +23,11 @@ import { useClustersUpdate } from "@/lib/permission-hooks";
 import { useAnomalyBaselines } from "@/lib/hooks/alerting";
 import { useClusterToolsStatus } from "@/lib/hooks/tools";
 import { liveFallback } from "@/lib/live/status-store";
-import { getRegistrationStatus } from "@/lib/api/cluster-registration";
-import type { RegistrationStatusView } from "@/lib/api/cluster-registration";
+import {
+  clusterLifecycleDetail,
+  deriveEffectiveClusterStatus,
+} from "./-cluster-status";
+import { ClusterUsageCards } from "./-cluster-usage-cards";
 import { getImageVulnSummary } from "@/lib/api/cluster-vulnerabilities";
 import { vulnerabilityMetric } from "@/components/clusters/vulnerability-metric";
 import { toolStatusMetric } from "@/components/clusters/tool-status-metric";
@@ -46,18 +49,12 @@ import { ResourceMasthead } from "@/components/ui/page";
 import { registrationSearch } from "@/components/clusters/registration-flow";
 import { EditClusterModal } from "@/components/clusters/edit-cluster-modal";
 import {
-  formatBytes,
-  formatCPU,
-  formatPercentage,
   formatRelativeTime,
   distributionDisplayName,
   formatK8sVersion,
   capitalize,
 } from "@/lib/utils";
 import {
-  Cpu,
-  MemoryStick,
-  Box,
   Server,
   Activity,
   AlertTriangle,
@@ -71,7 +68,7 @@ import {
   ShieldAlert,
   Package,
 } from "lucide-react";
-import type { ClusterCondition } from "@/types";
+import type { Cluster, ClusterCondition } from "@/types";
 import { WidgetGrid } from "@/components/dashboards/widget-grid";
 import { ExtensionSlot } from "@/components/extensions/ExtensionSlot";
 import { renderForCluster } from "@/lib/api/dashboards";
@@ -193,6 +190,7 @@ export function ClusterDetailPage() {
   }
 
   const clusterMeta = clusterOverviewMetadata(cluster);
+  const effectiveStatus = deriveEffectiveClusterStatus(cluster);
 
   return (
     <div className="space-y-6">
@@ -202,10 +200,18 @@ export function ClusterDetailPage() {
           status={
             <>
               <StatusBadge
-                tone={cluster.badgeColor}
-                label={cluster.badgeText}
+                status={effectiveStatus.status}
+                label={effectiveStatus.label}
+                size="lg"
                 className="shrink-0"
               />
+              {cluster.badgeText ? (
+                <StatusBadge
+                  tone={cluster.badgeColor}
+                  label={cluster.badgeText}
+                  className="shrink-0"
+                />
+              ) : null}
             </>
           }
           meta={clusterMeta}
@@ -258,8 +264,6 @@ export function ClusterDetailPage() {
           }
         />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
-          <StatusBadge status={cluster.status} size="lg" />
-          <RegistrationPhaseHeaderBadge clusterId={clusterId} />
           {meshDetection && (
             <MeshHeaderBadge
               clusterId={clusterId}
@@ -319,79 +323,12 @@ export function ClusterDetailPage() {
           row has a usage/percentage value, we render an em-dash so the card
           doesn't lie with a fake 0% — the gauge bar is also suppressed by
           leaving `percentage` undefined. */}
-      {(() => {
-        const cpuPct =
-          metricsSummary?.cpuPercentage ?? cluster.cpuPercentage ?? null;
-        const cpuUsage = metricsSummary?.cpuUsage ?? cluster.cpuUsage ?? null;
-        const cpuCap =
-          metricsSummary?.cpuCapacity ?? cluster.cpuCapacity ?? null;
-        const memPct =
-          metricsSummary?.memoryPercentage ?? cluster.memoryPercentage ?? null;
-        const memUsage =
-          metricsSummary?.memoryUsage ?? cluster.memoryUsage ?? null;
-        const memCap =
-          metricsSummary?.memoryCapacity ?? cluster.memoryCapacity ?? null;
-        return (
-          <div className="space-y-2">
-            {/* Metrics are non-optional: the panel always renders. When the
-            summary query errors (e.g. Prometheus unreachable) we surface a
-            "metrics unavailable" banner rather than hiding the cards, so the
-            distinction between "no data" and "couldn't reach metrics" is
-            visible to operators. */}
-            {metricsError ? (
-              <p
-                data-testid="metrics-unavailable"
-                className="text-sm text-muted-foreground"
-              >
-                Metrics unavailable
-              </p>
-            ) : null}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <MetricCard
-                title="CPU Usage"
-                href={`/dashboard/clusters/${clusterId}/metrics`}
-                value={formatPercentage(cpuPct)}
-                percentage={cpuPct ?? undefined}
-                subtitle={
-                  cpuUsage != null && cpuCap != null
-                    ? `${formatCPU(cpuUsage)} / ${formatCPU(cpuCap)}`
-                    : "No data"
-                }
-                icon={<Cpu className="h-4 w-4" />}
-              />
-              <MetricCard
-                title="Memory Usage"
-                href={`/dashboard/clusters/${clusterId}/metrics`}
-                value={formatPercentage(memPct)}
-                percentage={memPct ?? undefined}
-                subtitle={
-                  memUsage != null && memCap != null
-                    ? `${formatBytes(memUsage)} / ${formatBytes(memCap)}`
-                    : "No data"
-                }
-                icon={<MemoryStick className="h-4 w-4" />}
-              />
-              <MetricCard
-                title="Nodes"
-                href={`/dashboard/clusters/${clusterId}/nodes`}
-                value={metricsSummary?.nodeCount ?? cluster.nodeCount ?? 0}
-                icon={<Server className="h-4 w-4" />}
-              />
-              <MetricCard
-                title="Pods"
-                href={`/dashboard/clusters/${clusterId}/pods`}
-                value={metricsSummary?.podCount ?? cluster.podCount ?? 0}
-                subtitle={
-                  metricsSummary && Number.isFinite(metricsSummary.podCapacity)
-                    ? `of ${metricsSummary.podCapacity} capacity`
-                    : undefined
-                }
-                icon={<Box className="h-4 w-4" />}
-              />
-            </div>
-          </div>
-        );
-      })()}
+      <ClusterUsageCards
+        clusterId={clusterId}
+        cluster={cluster}
+        metricsSummary={metricsSummary}
+        metricsError={metricsError}
+      />
 
       {/* Platform health row — image-scan severity + baseline-tool
           installation status + agent freshness. The data here all
@@ -492,7 +429,7 @@ export function ClusterDetailPage() {
       </div>
 
       {/* T7.2 — Anomaly baselines surface. The nightly
-          anomaly_baseline_recompute task fills these rows but no UI
+          nightly baseline job fills these rows but no UI
           surfaced them until now. Top 5 anomalies sorted by score so
           the operator can sanity-check what the platform considers
           "normal" for this cluster. */}
@@ -683,60 +620,9 @@ function MeshHeaderBadge({
   );
 }
 
-// Compact pill showing the cluster's adoption phase next to its status badge.
-// Yellow spinner on awaiting_agent + baseline apply, green check on ready,
-// red X on failed. Links to the Adoption tab so one click drills into the
-// full timeline. Hidden when the cluster has no registration record.
-function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
-  const { data } = useQuery<RegistrationStatusView | null>({
-    queryKey: queryKeys.clusterPages.registrationStatus(clusterId),
-    queryFn: async ({ signal }) => {
-      try {
-        return await getRegistrationStatus(clusterId, { signal });
-      } catch {
-        return null;
-      }
-    },
-    // `cluster.registration.step`/`.phase` events refresh this while the
-    // stream is open.
-    refetchInterval: liveFallback(5000),
-  });
-  const phase = data?.phase;
-  if (!phase || phase === "ready") return null; // collapse when done
-  const tone =
-    phase === "failed"
-      ? "border-status-error/30 text-status-error bg-status-error/10"
-      : phase === "provisioning" ||
-          phase === "awaiting_agent" ||
-          phase === "connected"
-        ? "border-status-warning/30 text-status-warning bg-status-warning/10"
-        : "border-border text-muted-foreground bg-muted/30";
-  const label =
-    phase === "awaiting_agent"
-      ? "waiting for agent"
-      : phase === "provisioning"
-        ? "applying baseline"
-        : phase === "connected"
-          ? "connected"
-          : phase === "failed"
-            ? "failed"
-            : phase;
-  return (
-    <RouterLink
-      to="/dashboard/clusters/$id/adoption"
-      params={{ id: clusterId }}
-      title="Adoption phase - click for step timeline"
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
-    >
-      <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
-      {label}
-    </RouterLink>
-  );
-}
-
 // ── Anomaly baselines panel (T7.2) ───────────────────────────────────────
 //
-// The nightly anomaly_baseline_recompute task computes a per-metric
+// The nightly baseline job computes a per-metric
 // rolling mean + stddev per cluster. Until now those rows lived in
 // the DB with nothing rendering them. The panel surfaces the top 5
 // metrics by sample count (the most-observed → most-trustworthy)
@@ -755,9 +641,7 @@ export function AnomalyBaselinesPanel({ clusterId }: { clusterId: string }) {
         isEmpty={(data) => data.length === 0}
         empty={
           <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
-            No baselines computed yet. The nightly anomaly_baseline_recompute
-            task fills these in once the cluster has at least 24h of metric
-            samples.
+            Baselines appear after 24 hours of metrics.
           </div>
         }
       >
@@ -813,7 +697,9 @@ function clusterOverviewMetadata(cluster: {
   distribution?: string | null;
   kubernetesVersion?: string | null;
   environment?: string | null;
+  registrationPhase: Cluster["registrationPhase"];
 }) {
+  const lifecycle = clusterLifecycleDetail(cluster);
   return [
     {
       label: "Distribution",
@@ -821,5 +707,6 @@ function clusterOverviewMetadata(cluster: {
     },
     { label: "Version", value: formatK8sVersion(cluster.kubernetesVersion) },
     { label: "Environment", value: capitalize(cluster.environment ?? "") },
+    ...(lifecycle ? [{ label: "Lifecycle", value: lifecycle }] : []),
   ];
 }

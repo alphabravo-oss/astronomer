@@ -65,12 +65,7 @@ function ClusterTemplateDetailPage() {
         </RouterLink>
         <PermissionState
           permission="cluster_templates:read"
-          description={
-            <>
-              You need <span className="font-mono">cluster_templates:read</span>{" "}
-              to view this bundle.
-            </>
-          }
+          description={<>You need permission to view cluster templates.</>}
           className="rounded-lg border border-border bg-muted/30 p-6"
         />
       </div>
@@ -131,7 +126,9 @@ function ClusterTemplateDetailPage() {
             <ActionButton
               icon={<PencilLine className="h-3.5 w-3.5" />}
               onClick={() =>
-                void navigate({ to: `/dashboard/cluster-templates/${template.id}/edit` })
+                void navigate({
+                  to: `/dashboard/cluster-templates/${template.id}/edit`,
+                })
               }
             >
               Edit
@@ -227,10 +224,12 @@ function ClusterTemplateDetailPage() {
           isEmpty={(clusters) => clusters.length === 0}
           empty={
             <EmptyState
-              icon={Layers} title="No clusters bound"
+              icon={Layers}
+              title="No clusters bound"
               description="Apply this bundle during cluster registration to track its rollout here."
               className="py-10"
-              actionLabel="Register cluster" actionHref="/dashboard/clusters/register"
+              actionLabel="Register cluster"
+              actionHref="/dashboard/clusters/register"
             />
           }
         >
@@ -260,7 +259,8 @@ function ClusterTemplateDetailPage() {
                   >
                     <TableCell className="py-2 px-4">
                       <RouterLink
-                        to="/dashboard/clusters/$id" params={{ id: row.clusterId }}
+                        to="/dashboard/clusters/$id"
+                        params={{ id: row.clusterId }}
                         className="text-foreground hover:underline underline-offset-2"
                       >
                         {row.clusterName}

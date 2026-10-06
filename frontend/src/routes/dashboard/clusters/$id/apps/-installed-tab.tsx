@@ -149,12 +149,10 @@ export function InstalledView({
                     on this cluster
                   </div>
                   <p className="text-muted-foreground mt-0.5">
-                    Releases in{" "}
-                    <code className="font-mono">failed_install</code> /{" "}
-                    <code className="font-mono">failed_uninstall</code> never
-                    deployed cleanly. The helm release itself is either missing
-                    or already gone, so they can&apos;t be uninstalled through
-                    the normal flow — use the bulk delete to clear them.
+                    These releases never installed or uninstalled cleanly. The
+                    helm release itself is either missing or already gone, so
+                    they can&apos;t be uninstalled through the normal flow — use
+                    the bulk delete to clear them.
                   </p>
                 </div>
                 <ActionButton

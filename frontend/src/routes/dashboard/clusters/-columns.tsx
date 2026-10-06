@@ -20,6 +20,8 @@ export function clusterColumns(
   return [
     {
       key: "name",
+      // Flexible column: every other column declares a content-based width,
+      // so Name absorbs the remaining space instead of truncating.
       header: "Name",
       accessor: (row) => (
         <div>
@@ -31,6 +33,7 @@ export function clusterColumns(
     },
     {
       key: "status",
+      width: "6.5rem",
       header: "Status",
       accessor: (row) =>
         row.decommissioning ? (
@@ -42,28 +45,27 @@ export function clusterColumns(
         row.decommissioning ? "decommissioning" : row.status,
     },
     {
-      key: "provider",
-      header: "Provider",
-      accessor: (row) => (
-        <span className="text-muted-foreground">
-          {providerDisplayName(row.provider)}
-        </span>
-      ),
-      sortAccessor: (row) => row.provider,
-    },
-    {
       key: "distribution",
+      width: "7.5rem",
       header: "Distribution",
       accessor: (row) => (
-        <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
-          {distributionDisplayName(row.distribution)}
-        </span>
+        <div className="space-y-0.5">
+          <span className="rounded-sm bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground">
+            {distributionDisplayName(row.distribution)}
+          </span>
+          <p className="text-xs text-muted-foreground">
+            {providerDisplayName(row.provider)}
+          </p>
+        </div>
       ),
       sortAccessor: (row) => row.distribution,
+      searchAccessor: (row) =>
+        `${distributionDisplayName(row.distribution)} ${providerDisplayName(row.provider)}`,
     },
     {
       key: "version",
-      header: "K8s Version",
+      width: "5rem",
+      header: "K8s",
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.kubernetesVersion}
@@ -72,6 +74,7 @@ export function clusterColumns(
     },
     {
       key: "nodes",
+      width: "4.5rem",
       header: "Nodes",
       accessor: (row) => <span className="tabular-nums">{row.nodeCount}</span>,
       sortAccessor: (row) => row.nodeCount,
@@ -79,6 +82,7 @@ export function clusterColumns(
     },
     {
       key: "pods",
+      width: "4rem",
       header: "Pods",
       accessor: (row) => <span className="tabular-nums">{row.podCount}</span>,
       sortAccessor: (row) => row.podCount,
@@ -86,10 +90,11 @@ export function clusterColumns(
     },
     {
       key: "cpu",
+      width: "7.5rem",
       header: "CPU%",
       accessor: (row) => (
         <div className="flex items-center gap-2">
-          <div className="w-16 gauge-bar">
+          <div className="w-10 gauge-bar">
             <div
               className={`gauge-bar-fill ${
                 row.cpuPercentage >= 90
@@ -101,7 +106,7 @@ export function clusterColumns(
               style={{ width: `${Math.min(row.cpuPercentage, 100)}%` }}
             />
           </div>
-          <span className="text-xs tabular-nums text-muted-foreground w-10">
+          <span className="text-xs tabular-nums text-muted-foreground w-9">
             {formatPercentage(
               row.cpuPercentage,
               row.cpuPercentage < 10 ? 1 : 0,
@@ -113,10 +118,11 @@ export function clusterColumns(
     },
     {
       key: "mem",
+      width: "7.5rem",
       header: "Mem%",
       accessor: (row) => (
         <div className="flex items-center gap-2">
-          <div className="w-16 gauge-bar">
+          <div className="w-10 gauge-bar">
             <div
               className={`gauge-bar-fill ${
                 row.memoryPercentage >= 90
@@ -128,7 +134,7 @@ export function clusterColumns(
               style={{ width: `${Math.min(row.memoryPercentage, 100)}%` }}
             />
           </div>
-          <span className="text-xs tabular-nums text-muted-foreground w-10">
+          <span className="text-xs tabular-nums text-muted-foreground w-9">
             {formatPercentage(
               row.memoryPercentage,
               row.memoryPercentage < 10 ? 1 : 0,
@@ -140,7 +146,8 @@ export function clusterColumns(
     },
     {
       key: "heartbeat",
-      header: "Last Heartbeat",
+      width: "7rem",
+      header: "Heartbeat",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           {row.lastHeartbeat ? formatRelativeTime(row.lastHeartbeat) : "Never"}

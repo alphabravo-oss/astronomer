@@ -94,7 +94,9 @@ test("page palette finds custom types beyond sidebar display cap without count f
     }),
   );
   await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}`);
-  await page.getByRole("button", { name: "Go to page", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Search resources", exact: true })
+    .click();
   await page
     .getByPlaceholder("Search clusters, pages, actions...")
     .fill("Widget54");
@@ -211,7 +213,7 @@ test("keyboard selection distinguishes the cluster and workload Overview command
   const base = `/dashboard/clusters/${SMOKE_CLUSTER_ID}`;
   await page.goto(base);
   await expect(
-    page.getByRole("button", { name: "Go to page", exact: true }),
+    page.getByRole("button", { name: "Search resources", exact: true }),
   ).toBeVisible();
   for (const destination of [base, `${base}/workloads`]) {
     await page.keyboard.press("ControlOrMeta+k");

@@ -300,8 +300,7 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
           {(timeoutMinutes) => (
             <p className="text-xs text-muted-foreground">
               Absolute JWT <span className="font-mono">exp</span> applied on
-              every mint and refresh (setting key{" "}
-              <span className="font-mono">session.timeout_minutes</span>).
+              every mint and refresh (the session timeout setting).
               Activity does not slide the access token; use refresh to obtain a
               new one under this same cap. Compliance baselines may pin this
               value (e.g. 15–20 minutes).

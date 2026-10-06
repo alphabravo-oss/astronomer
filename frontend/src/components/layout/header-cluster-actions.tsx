@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { ChevronDown, Download, Upload } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 
 import { ActionButton } from "@/components/ui/action-button";
 import { useDismissable } from "@/components/layout/cluster-scope-controls";
@@ -67,15 +67,14 @@ export function HeaderClusterActions({
     <>
       <div ref={menuRef} className="relative">
         <ActionButton
-          size="sm"
+          size="icon"
           icon={<Download className="h-3.5 w-3.5" />}
           onClick={() => setMenuOpen((value) => !value)}
+          aria-label="Kubeconfig"
+          tooltip="Kubeconfig"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-        >
-          Kubeconfig
-          <ChevronDown className="h-3 w-3" />
-        </ActionButton>
+        />
         {menuOpen && (
           <div
             role="menu"
@@ -105,13 +104,12 @@ export function HeaderClusterActions({
         )}
       </div>
       <ActionButton
-        size="sm"
+        size="icon"
         icon={<Upload className="h-3.5 w-3.5" />}
         onClick={() => setImportOpen(true)}
-        title="Apply one or more Kubernetes manifests to this cluster"
-      >
-        Import
-      </ActionButton>
+        aria-label="Import"
+        tooltip="Import YAML: apply manifests to this cluster"
+      />
       {importOpen && (
         <Suspense fallback={<span role="status">Loading YAML importer…</span>}>
           <CreateResourceDialog

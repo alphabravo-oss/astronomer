@@ -137,9 +137,7 @@ function RegisterAsSSOPage() {
           </div>
           <p className="text-sm text-muted-foreground">
             The <span className="font-mono text-xs">{success.provider}</span>{" "}
-            row in
-            <span className="font-mono text-xs"> sso_configurations</span> is
-            enabled and pointed at{" "}
+            single sign-on configuration is enabled and pointed at{" "}
             <span className="font-mono text-xs">{success.issuerUrl}</span>.
           </p>
           <p className="text-sm text-muted-foreground">
