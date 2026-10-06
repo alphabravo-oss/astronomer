@@ -154,6 +154,7 @@ const accessModesColumn = <
 >(): Column<T> => ({
   key: "accessModes",
   header: "Access",
+  ariaLabel: "Access modes",
   kind: "text",
   minSize: 96,
   size: 96,

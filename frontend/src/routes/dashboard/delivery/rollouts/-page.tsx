@@ -159,6 +159,7 @@ export function RolloutsPage() {
     {
       key: "revision",
       header: "Version",
+      ariaLabel: "Desired version",
       kind: "id",
       size: 160,
       minSize: 140,

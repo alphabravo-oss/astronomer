@@ -103,6 +103,7 @@ export const estateColumns: Column<DeliveryEstateCluster>[] = [
   {
     key: "heartbeat",
     header: "Heartbeat",
+    ariaLabel: "Last heartbeat",
     kind: "age",
     size: 119,
     accessor: (row) => <AgeCell value={row.lastHeartbeat} />,

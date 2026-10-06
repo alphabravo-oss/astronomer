@@ -168,6 +168,7 @@ export function DeploymentsPage() {
     {
       key: "observed",
       header: "Observed",
+      ariaLabel: "Last observed",
       kind: "age",
       size: 112,
       accessor: (row) => <AgeCell value={row.lastObservedAt} empty="Never" />,

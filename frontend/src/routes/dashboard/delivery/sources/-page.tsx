@@ -90,6 +90,7 @@ const sourceDataColumns: Column<DeliverySource>[] = [
   {
     key: "updated",
     header: "Checked",
+    ariaLabel: "Last checked",
     kind: "age",
     size: 112,
     accessor: (row) => <AgeCell value={row.lastResolvedAt} empty="Never" />,

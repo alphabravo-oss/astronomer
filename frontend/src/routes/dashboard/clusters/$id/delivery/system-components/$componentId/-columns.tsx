@@ -69,6 +69,7 @@ export function systemVolumeColumns(
     {
       key: "capacity",
       header: "Req / capacity",
+      ariaLabel: "Requested / capacity",
       kind: "bytes",
       size: 170,
       accessor: (row) => (

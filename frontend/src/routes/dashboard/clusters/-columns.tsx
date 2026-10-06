@@ -51,6 +51,7 @@ export function clusterColumns(
     {
       key: "distribution",
       header: "Platform",
+      ariaLabel: "Distribution / provider",
       kind: "badge",
       size: 112,
       accessor: (row) => (
@@ -70,6 +71,7 @@ export function clusterColumns(
     {
       key: "version",
       header: "K8s",
+      ariaLabel: "Kubernetes version",
       kind: "version",
       size: 112,
       accessor: (row) => (
@@ -127,6 +129,7 @@ export function clusterColumns(
     {
       key: "heartbeat",
       header: "Seen",
+      ariaLabel: "Last heartbeat",
       kind: "age",
       size: 84,
       accessor: (row) => (

@@ -45,6 +45,7 @@ export function InstalledTab({
     {
       key: "chart",
       header: "Version",
+      ariaLabel: "Chart version",
       kind: "version",
       size: 132,
       minSize: 105,
@@ -112,6 +113,7 @@ export function InstalledTab({
     {
       key: "date",
       header: "Age",
+      ariaLabel: "Created",
       kind: "age",
       size: 88,
       accessor: (row) => <AgeCell value={row.createdAt} />,

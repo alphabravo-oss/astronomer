@@ -117,6 +117,7 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
   {
     key: "lastSchedule",
     header: "Last Run",
+    ariaLabel: "Last schedule",
     kind: "age",
     size: 119,
     accessor: (row) => (
@@ -359,6 +360,7 @@ const pdbColumns: Column<GenericK8sResource>[] = [
   {
     key: "minAvailable",
     header: "Min Avail",
+    ariaLabel: "Min available",
     kind: "count",
     size: 130,
     accessor: (row) => (
@@ -368,6 +370,7 @@ const pdbColumns: Column<GenericK8sResource>[] = [
   {
     key: "maxUnavailable",
     header: "Max Unavail",
+    ariaLabel: "Max unavailable",
     kind: "count",
     size: 130,
     accessor: (row) => (

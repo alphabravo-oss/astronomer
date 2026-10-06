@@ -113,6 +113,7 @@ function ClusterTemplatesPage() {
     {
       key: "clusters",
       header: "Clusters",
+      ariaLabel: "Clusters bound",
       kind: "count",
       size: 120,
       accessor: (row) => (

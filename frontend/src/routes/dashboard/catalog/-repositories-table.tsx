@@ -102,6 +102,7 @@ export function RepositoriesTable({
     {
       key: "lastSynced",
       header: "Synced",
+      ariaLabel: "Last synced",
       kind: "age",
       size: 98,
       accessor: (row) => <AgeCell value={row.lastSyncedAt} empty="Never" />,

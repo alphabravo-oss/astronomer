@@ -91,6 +91,7 @@ function AnomalyBaselinesPage() {
     {
       key: "lastValue",
       header: "Last",
+      ariaLabel: "Last value",
       kind: "count",
       size: 84,
       accessor: (b: AnomalyBaseline) => <NumberCell value={b.lastValue} />,

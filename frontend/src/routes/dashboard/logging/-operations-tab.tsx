@@ -79,6 +79,7 @@ export function OperationsTab() {
     {
       key: "updated",
       header: "Updated",
+      ariaLabel: "Age / updated",
       kind: "age",
       size: 120,
       maxSize: 160,

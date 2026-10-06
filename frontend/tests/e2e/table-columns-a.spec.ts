@@ -390,7 +390,7 @@ const cases: Case[] = [
     url: "/dashboard/clusters",
     overrides: [clustersList],
     grow: ["Name"],
-    header: "Seen",
+    header: "Last heartbeat",
   },
   {
     name: "Nodes",

@@ -91,6 +91,7 @@ function controlPlaneSnapshotColumns(
     {
       key: "etcdRevision",
       header: "etcd rev",
+      ariaLabel: "etcd revision",
       kind: "count",
       size: 120,
       accessor: (snapshot) => (
