@@ -878,7 +878,7 @@ func newCatalogUninstallCmd() *cobra.Command {
 				}
 			}
 			params := &astroclient.DeleteCatalogInstalledByIdParams{IdempotencyKey: uuid.NewString()}
-			resp, err := client.DeleteCatalogInstalledByIdWithResponse(cmd.Context(), id, params)
+			resp, err := client.DeleteCatalogInstalledByIdWithResponse(cmd.Context(), id, params, astroclient.DeleteCatalogInstalledByIdJSONRequestBody{})
 			if err != nil {
 				return err
 			}
