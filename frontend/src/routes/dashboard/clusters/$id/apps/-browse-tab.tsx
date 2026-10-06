@@ -51,7 +51,7 @@ export function BrowseView({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Filter charts on this page (kube-prometheus, loki, …)"
-          className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm
+          className="w-full h-(--control-h) pl-8 pr-3 rounded-md border border-border bg-background text-sm
             placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
         />
       </div>

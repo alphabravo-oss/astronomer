@@ -255,7 +255,7 @@ export function ConnectionTab({
             Air-gapped package file
           </summary>
           <div className="mt-3 space-y-3">
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border p-5 text-sm hover:bg-accent">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border p-(--card-p) text-sm hover:bg-accent">
               <Upload className="h-4 w-4" />
               <span>{fileName || "Choose JSON package"}</span>
               <input

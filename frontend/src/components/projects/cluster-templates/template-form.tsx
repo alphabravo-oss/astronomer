@@ -65,7 +65,7 @@ const envOptions: ClusterTemplateSpec["environment"][] = [
 
 // This form's inputs are one notch tighter than the kit default — merged
 // over the kit's base input class (twMerge, later wins).
-const tplInputClassName = "h-9 rounded-md focus:ring-1";
+const tplInputClassName = "h-(--control-h) rounded-md focus:ring-1";
 
 export function TemplateForm({
   initial,
@@ -416,14 +416,14 @@ function LabelsEditor({
             value={label.key}
             placeholder="key"
             onChange={(e) => updateAt(i, { key: e.target.value })}
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+            className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
           />
           <input
             type="text"
             value={label.value}
             placeholder="value"
             onChange={(e) => updateAt(i, { value: e.target.value })}
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+            className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
           />
           <BareButton
             aria-label="Remove label"
@@ -529,7 +529,7 @@ function ToolsEditor({
                       preset: e.target.value || undefined,
                     })
                   }
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-1 focus:ring-ring"
+                  className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-1 focus:ring-ring"
                 >
                   <option value="">(no preset)</option>
                   {presetNames.map((p) => (
@@ -568,7 +568,7 @@ function ToolsEditor({
         <select
           value={pending}
           onChange={(e) => setPending(e.target.value)}
-          className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-1 focus:ring-ring"
+          className="flex-1 h-(--control-h) px-3 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-1 focus:ring-ring"
         >
           <option value="">Add a tool…</option>
           {remainingTools.map((t) => (
@@ -580,7 +580,7 @@ function ToolsEditor({
         <BareButton
           onClick={add}
           disabled={!pending}
-          className="inline-flex items-center gap-1 h-9 px-3 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1 h-(--control-h) px-3 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
         >
           <Plus className="h-3.5 w-3.5" />
           Add

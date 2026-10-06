@@ -29,7 +29,8 @@ import {
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { queryKeys } from "@/lib/query-keys";
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { toastSuccess } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
 
@@ -101,43 +102,53 @@ export function OverrideSetsPage() {
     {
       key: "name",
       header: "Override",
+      kind: "name",
+      minSize: 200,
       accessor: (row) => (
-        <div>
-          <p className="font-medium">{row.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {row.enabled ? "Enabled" : "Disabled"}
-          </p>
-        </div>
+        <StackedCell
+          primary={row.name}
+          secondary={row.enabled ? "Enabled" : "Disabled"}
+        />
       ),
       sortAccessor: (row) => row.name,
     },
     {
       key: "scope",
       header: "Scope",
+      kind: "badge",
       accessor: (row) => <span className="capitalize">{row.scope}</span>,
       sortAccessor: (row) => row.scope,
     },
     {
       key: "precedence",
       header: "Precedence",
+      kind: "count",
       accessor: (row) => row.precedence,
       sortAccessor: (row) => row.precedence,
     },
     {
       key: "configuration",
       header: "Configuration",
+      kind: "text",
+      size: 200,
+      minSize: 147,
       accessor: (row) =>
         `${Object.keys(row.values).length} values · ${(row.patches ?? []).length} patches`,
     },
     {
       key: "updated",
       header: "Updated",
-      accessor: (row) => formatRelativeTime(row.updatedAt),
+      kind: "age",
+      accessor: (row) => <AgeCell value={row.updatedAt} />,
       sortAccessor: (row) => row.updatedAt,
     },
     {
       key: "actions",
       header: "Actions",
+      kind: "actions",
+      size: 220,
+      minSize: 220,
+      maxSize: 220,
       accessor: (row) => (
         <div className="flex gap-2">
           <ActionButton

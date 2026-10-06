@@ -174,7 +174,7 @@ function PolicyPage() {
   }
 
   return (
-    <div className="space-y-6"><form.AppForm><form.FormErrorSummary serverError={updateMutation.error ? extractApiErrorMessage(updateMutation.error) : null} /></form.AppForm>
+    <div className="space-y-(--gap-section)"><form.AppForm><form.FormErrorSummary serverError={updateMutation.error ? extractApiErrorMessage(updateMutation.error) : null} /></form.AppForm>
       {!canEdit && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -187,7 +187,7 @@ function PolicyPage() {
       )}
 
       {/* --- Pod Security --- */}
-      <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+      <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-4">
         <header>
           <h2 className="text-sm font-medium text-foreground">Pod Security</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -240,7 +240,7 @@ function PolicyPage() {
       </section>
 
       {/* --- Resource Quota --- */}
-      <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+      <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-4">
         <header>
           <h2 className="text-sm font-medium text-foreground">
             Resource Quota
@@ -303,7 +303,7 @@ function PolicyPage() {
       </section>
 
       {/* --- Network Policy --- */}
-      <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+      <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-4">
         <header>
           <h2 className="text-sm font-medium text-foreground">
             Network Policy
@@ -361,7 +361,7 @@ function PolicyPage() {
       )}
 
       {/* --- Live quota usage table --- */}
-      <section className="rounded-xl border border-border bg-card p-5 space-y-3">
+      <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-3">
         <header>
           <h2 className="text-sm font-medium text-foreground">Quota usage</h2>
           <p className="text-xs text-muted-foreground mt-0.5">

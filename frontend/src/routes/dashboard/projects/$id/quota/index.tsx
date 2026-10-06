@@ -37,9 +37,9 @@ function ProjectQuotaPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       {/* Plan summary */}
-      <section className="rounded-xl border border-border bg-card p-5">
+      <section className="rounded-xl border border-border bg-card p-(--card-p)">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -64,7 +64,7 @@ function ProjectQuotaPage() {
           </div>
           <RouterLink
             to="/dashboard/settings/quotas"
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="inline-flex items-center gap-1.5 h-(--control-h) px-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
             <Settings className="h-3.5 w-3.5" />
             Manage plans
@@ -122,7 +122,7 @@ function UsageTile({
         : "bg-status-success";
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+    <div className="rounded-xl border border-border bg-card p-(--card-p) space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           <Icon className="h-3.5 w-3.5" />

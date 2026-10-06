@@ -69,7 +69,7 @@ export function ProjectNamespacesCard({
   };
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+    <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-4">
       <header>
         <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Layers className="h-3.5 w-3.5 text-muted-foreground" />
@@ -128,12 +128,12 @@ export function ProjectNamespacesCard({
                   submit();
                 }
               }}
-              className="h-9 flex-1 min-w-0 rounded-md border border-border bg-background px-3 text-sm font-mono placeholder:text-muted-foreground placeholder:font-sans focus:outline-hidden focus:ring-1 focus:ring-ring"
+              className="h-(--control-h) flex-1 min-w-0 rounded-md border border-border bg-background px-3 text-sm font-mono placeholder:text-muted-foreground placeholder:font-sans focus:outline-hidden focus:ring-1 focus:ring-ring"
             />
             <BareButton
               onClick={submit}
               disabled={addMutation.isPending}
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 h-(--control-h) px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {addMutation.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

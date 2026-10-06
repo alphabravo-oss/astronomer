@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Users } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
 import { Card } from "@/components/ui/card";
@@ -52,7 +52,7 @@ function NewGroupMappingForm() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <Card radius="xl" padding="lg" className="space-y-4">
         <div className="space-y-1.5">
           <label
@@ -186,12 +186,7 @@ function NewGroupMappingPage() {
         </RouterLink>
         <PageHeader
           eyebrow="Settings · Group mappings · New"
-          title={
-            <span className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              New group mapping
-            </span>
-          }
+          title="New group mapping"
         />
         <NewGroupMappingForm />
       </PageShell>

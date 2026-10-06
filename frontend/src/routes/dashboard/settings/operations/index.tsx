@@ -15,12 +15,11 @@ import { DataTable, type Column } from "@/components/ui/data-table";
  */
 
 import { useState, useMemo } from "react";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import {
   RefreshCw,
   RotateCw,
   Trash2,
-  Activity,
   AlertTriangle,
   CheckCircle2,
   Database,
@@ -86,7 +85,9 @@ function OperationsBody() {
   const outbox = useQuery({
     queryKey: queryKeys.adminOperations.outbox(outboxStatus),
     queryFn: ({ signal }) => listTaskOutbox(outboxStatus, signal),
-    refetchInterval: liveFallback(10_000),
+    // `admin_queue.changed` routes only the queue summary + DLQ keys, not the
+    // task outbox, so this list polls regardless of stream state.
+    refetchInterval: 10_000,
   });
 
   const retry = useOperationMutation({
@@ -133,7 +134,7 @@ function OperationsBody() {
   });
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <p className="sr-only" role="status" aria-live="polite">
         {retry.isPending
           ? `DLQ retry ${retry.operationState.phase}`
@@ -144,11 +145,7 @@ function OperationsBody() {
       <ResourceMasthead
         backTo="/dashboard/settings"
         backLabel="Back to Settings"
-        title={
-          <span className="inline-flex items-center gap-2">
-            <Activity className="h-5 w-5" /> Operations
-          </span>
-        }
+        title="Operations"
         description="Live view of the asynq worker queues + DLQ. Audited; superuser-only."
       />
 
@@ -271,7 +268,7 @@ function OperationsBody() {
           pendingRetry={retryOutbox.isPending}
         />
       </section>
-    </div>
+    </PageShell>
   );
 }
 

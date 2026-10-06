@@ -4,7 +4,7 @@ import { SettingsSubnavigation } from "@/components/settings/settings-subnavigat
 
 function SettingsLayout() {
   return (
-    <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start">
+    <div className="grid gap-(--gap-section) lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start">
       <SettingsSubnavigation />
       <div className="min-w-0">
         <Outlet />

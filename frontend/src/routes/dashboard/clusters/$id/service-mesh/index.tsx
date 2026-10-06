@@ -167,7 +167,7 @@ function HeroCard({
             to="/dashboard/clusters/$id/apps"
             params={{ id: clusterId }}
             search={{ section: "browse", install: "istio-base" }}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-sm text-sm font-medium
+            className="inline-flex items-center gap-1.5 h-(--control-h) px-3 rounded-sm text-sm font-medium
               bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -219,7 +219,7 @@ function InventoryPanel({
   if (loading) {
     return (
       <div
-        className="rounded-lg border border-border bg-card p-5 h-36"
+        className="rounded-lg border border-border bg-card p-(--card-p) h-36"
         aria-busy="true"
       >
         <span className="sr-only">Loading inventory…</span>
@@ -282,16 +282,16 @@ function InventoryPanel({
                   key={resource.kind}
                   className="border-t border-border"
                 >
-                  <TableCell className="px-5 py-3 font-medium text-foreground whitespace-nowrap">
+                  <TableCell className="px-5 py-(--row-py) font-medium text-foreground whitespace-nowrap">
                     {resource.kind}
                   </TableCell>
-                  <TableCell className="px-5 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">
+                  <TableCell className="px-5 py-(--row-py) text-xs text-muted-foreground font-mono whitespace-nowrap">
                     {resource.apiVersion}
                   </TableCell>
-                  <TableCell className="px-5 py-3 text-right tabular-nums text-foreground">
+                  <TableCell className="px-5 py-(--row-py) text-right tabular-nums text-foreground">
                     {resource.count}
                   </TableCell>
-                  <TableCell className="px-5 py-3 min-w-64">
+                  <TableCell className="px-5 py-(--row-py) min-w-64">
                     {resource.count === 0 ? (
                       <span className="text-xs text-muted-foreground">
                         {resource.notice || "None"}
@@ -321,7 +321,7 @@ function InventoryPanel({
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="px-5 py-3 whitespace-nowrap">
+                  <TableCell className="px-5 py-(--row-py) whitespace-nowrap">
                     {gitOpsOwned > 0 ? (
                       <span className="inline-flex items-center gap-1 rounded-sm bg-status-warning/10 px-2 py-1 text-xs text-status-warning">
                         <Shield className="h-3 w-3" />
@@ -535,28 +535,27 @@ function ClusterServiceMeshPage() {
   return (
     <PageShell>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <PageHeader
-          className="flex-1"
-          title="Service mesh"
-          description={`Detect and monitor the service mesh installed on ${cluster.displayName}.`}
-        />
-        <ActionButton
-          {...BARE_BUTTON}
-          onClick={() => reDetect.mutate()}
-          disabled={reDetect.isPending}
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-sm text-sm font-medium
-            border border-border text-foreground hover:bg-accent transition-colors
-            disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {reDetect.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
-          Re-detect
-        </ActionButton>
-      </div>
+      <PageHeader
+        title="Service mesh"
+        description={`Detect and monitor the service mesh installed on ${cluster.displayName}.`}
+        actions={
+          <ActionButton
+            {...BARE_BUTTON}
+            onClick={() => reDetect.mutate()}
+            disabled={reDetect.isPending}
+            className="inline-flex items-center gap-1.5 h-(--control-h) px-3 rounded-sm text-sm font-medium
+              border border-border text-foreground hover:bg-accent transition-colors
+              disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {reDetect.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            Re-detect
+          </ActionButton>
+        }
+      />
 
       {/* Hero card */}
       {detLoading ? (

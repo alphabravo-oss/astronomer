@@ -1,7 +1,17 @@
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { Column } from "@/components/ui/data-table";
 import { formatRelativeTime } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/tooltip";
+import {
+  ageColumn,
+  countColumn,
+  monoTextColumn,
+  nameStubColumn,
+  namespaceColumn,
+} from "@/components/resources/networking-table-cells";
 import type { GenericK8sResource } from "@/types";
+
+const nameCol = () => nameStubColumn<GenericK8sResource>();
 
 const jobColumns: Column<GenericK8sResource>[] = [
   {
@@ -110,88 +120,36 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
 ];
 
 export const configMapColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "data",
-    header: "Data",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.dataCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  nameCol(),
+  namespaceColumn<GenericK8sResource>(),
+  countColumn<GenericK8sResource>("data", "Data", (r) => r.dataCount ?? 0),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const secretColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
+  nameCol(),
+  namespaceColumn<GenericK8sResource>(),
   {
     key: "type",
     header: "Type",
+    kind: "badge",
+    minSize: 180,
+    size: 224,
+    maxSize: 320,
     accessor: (row) => (
-      <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
-        {row.type || "Opaque"}
-      </span>
+      <Tooltip content={row.type || "Opaque"}>
+        <span
+          data-cell-clip=""
+          className="block min-w-0 truncate px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground"
+        >
+          {row.type || "Opaque"}
+        </span>
+      </Tooltip>
     ),
+    sortAccessor: (row) => row.type || "Opaque",
   },
-  {
-    key: "data",
-    header: "Data",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.dataCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  countColumn<GenericK8sResource>("data", "Data", (r) => r.dataCount ?? 0),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const hpaColumns: Column<GenericK8sResource>[] = [
@@ -368,227 +326,101 @@ const pdbColumns: Column<GenericK8sResource>[] = [
 ];
 
 const crdColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs truncate max-w-75 block">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "group",
-    header: "Group",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.group}
-      </span>
-    ),
-  },
+  { ...nameCol(), minSize: 160 },
+  monoTextColumn<GenericK8sResource>("group", "Group", (r) => r.group ?? "", {
+    minSize: 200,
+    size: 208,
+  }),
   {
     key: "kind",
     header: "Kind",
+    kind: "text",
+    minSize: 128,
+    size: 144,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">{row.kind}</span>
     ),
+    sortAccessor: (row) => row.kind ?? "",
   },
   {
     key: "version",
     header: "Version",
+    kind: "version",
+    size: 112,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">{row.version}</span>
     ),
+    sortAccessor: (row) => row.version ?? "",
   },
   {
     key: "scope",
     header: "Scope",
+    kind: "badge",
+    size: 110,
     accessor: (row) => (
       <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.scope}
       </span>
     ),
+    sortAccessor: (row) => row.scope ?? "",
   },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  ageColumn<GenericK8sResource>(),
 ];
 
 const serviceAccountColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "secrets",
-    header: "Secrets",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.secretsCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  nameCol(),
+  namespaceColumn<GenericK8sResource>(),
+  countColumn<GenericK8sResource>(
+    "secrets",
+    "Secrets",
+    (r) => r.secretsCount ?? 0,
+  ),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const k8sRoleColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace || "-"}
-      </span>
-    ),
-  },
-  {
-    key: "rules",
-    header: "Rules",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.rulesCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  nameCol(),
+  namespaceColumn<GenericK8sResource>("-"),
+  countColumn<GenericK8sResource>("rules", "Rules", (r) => r.rulesCount ?? 0),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const k8sRoleBindingColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace || "-"}
-      </span>
-    ),
-  },
-  {
-    key: "role",
-    header: "Role",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.roleKind}/{row.roleName}
-      </span>
-    ),
-  },
-  {
-    key: "subjects",
-    header: "Subjects",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.subjectsCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  nameCol(),
+  namespaceColumn<GenericK8sResource>("-"),
+  monoTextColumn<GenericK8sResource>(
+    "role",
+    "Role",
+    (r) => `${r.roleKind}/${r.roleName}`,
+    { minSize: 224, size: 260 },
+  ),
+  countColumn<GenericK8sResource>(
+    "subjects",
+    "Subjects",
+    (r) => r.subjectsCount ?? 0,
+  ),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const endpointColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "endpoints",
-    header: "Endpoints",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.addressesCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "ports",
-    header: "Ports",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {row.ports || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  nameCol(),
+  namespaceColumn<GenericK8sResource>(),
+  countColumn<GenericK8sResource>(
+    "endpoints",
+    "Endpoints",
+    (r) => r.addressesCount ?? 0,
+  ),
+  monoTextColumn<GenericK8sResource>(
+    "ports",
+    "Ports",
+    (r) => String(r.ports ?? ""),
+    {
+      minSize: 144,
+      size: 168,
+      sortable: false,
+    },
+  ),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const replicaSetColumns: Column<GenericK8sResource>[] = [

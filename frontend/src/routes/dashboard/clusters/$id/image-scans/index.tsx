@@ -10,7 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/operator-table";
-import { PageHeader } from "@/components/ui/page";
+import { InfoCallout } from "@/components/ui/info-callout";
+import { PageHeader, PageShell } from "@/components/ui/page";
 /**
  * Cluster Image Scans tab — sprint 062.
  *
@@ -242,22 +243,14 @@ function ClusterImageScansPage() {
     );
 
   return (
-    <div className="space-y-6 p-4">
+    <PageShell>
       <p className="sr-only" role="status" aria-live="polite">
         {rescan.isPending
           ? `Vulnerability rescan ${rescan.operationState.phase}`
           : ""}
       </p>
-      <p className="text-xs text-muted-foreground">
-        Cluster-wide security inventory. Use this page’s namespace filter; the
-        navigation namespace selection does not filter these reports.
-      </p>
       <PageHeader
-        title={
-          <span className="inline-flex items-center gap-2">
-            <ShieldAlert className="h-6 w-6" /> Image Scans
-          </span>
-        }
+        title="Image Scans"
         description="Aggregated CVE counts from the in-cluster Trivy operator. Astronomer ingests VulnerabilityReport CRDs continuously."
         actions={
           <>
@@ -287,6 +280,11 @@ function ClusterImageScansPage() {
           </>
         }
       />
+
+      <InfoCallout>
+        Cluster-wide security inventory. Use this page’s namespace filter; the
+        navigation namespace selection does not filter these reports.
+      </InfoCallout>
 
       {/* Scan-in-progress banner. Render states:
            • dispatched — operator clicked rescan in the last 60s; we
@@ -679,7 +677,7 @@ function ClusterImageScansPage() {
           />
         </DrawerShell>
       )}
-    </div>
+    </PageShell>
   );
 }
 

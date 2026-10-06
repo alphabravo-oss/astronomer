@@ -337,7 +337,7 @@ export function AppInstallModal({
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   disabled={isUpgrade}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
+                  className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
                 />
               )}
             </form.Field>
@@ -359,7 +359,7 @@ export function AppInstallModal({
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   disabled={isUpgrade}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
+                  className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
                 />
               )}
             </form.Field>
@@ -537,7 +537,7 @@ export function AppUninstallModal({
           type="text"
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
-          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono focus:outline-hidden focus:ring-1 focus:ring-ring"
+          className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm font-mono focus:outline-hidden focus:ring-1 focus:ring-ring"
           data-initial-focus
         />
       </div>

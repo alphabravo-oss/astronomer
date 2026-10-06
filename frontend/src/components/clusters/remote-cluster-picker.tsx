@@ -158,7 +158,7 @@ export function RemoteClusterPicker({
             setOpen(true);
           }
         }}
-        className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-3 text-left text-sm text-foreground outline-hidden focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-normal whitespace-normal shrink"
+        className="flex h-(--control-h) w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-3 text-left text-sm text-foreground outline-hidden focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-normal whitespace-normal shrink"
       >
         <span className={cn("truncate", !value && "text-muted-foreground")}>
           {value ? selectedText : placeholder}

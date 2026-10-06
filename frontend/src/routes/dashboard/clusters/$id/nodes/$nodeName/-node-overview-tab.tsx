@@ -117,7 +117,7 @@ export function OverviewTab({
   const isPidPressureOk = condMap["PIDPressure"] === "False";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       {/* Health Status Alerts */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <ConditionAlert label="Kubelet" ok={isKubeletOk} />

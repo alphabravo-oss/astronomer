@@ -74,7 +74,7 @@ function ClusterDeliveryLayout() {
       .sort((a, b) => b.segment.length - a.segment.length)[0]?.key ?? "flux";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <RouterLink
         to="/dashboard/delivery"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -86,30 +86,30 @@ function ClusterDeliveryLayout() {
         eyebrow="Cluster delivery"
         title={cluster?.displayName || cluster?.name || "Cluster"}
         description="Flux and delivery for this environment. Switch clusters from the sidebar to stay on the same tab."
+        tabs={
+          <nav
+            aria-label="Cluster delivery sections"
+            className="flex flex-wrap gap-4"
+          >
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const href = `${base}${tab.segment}${projectQuery}`;
+              const active = activeKey === tab.key;
+              return (
+                <RouterLink
+                  key={tab.key}
+                  to={href}
+                  aria-current={active ? "page" : undefined}
+                  className={tabLinkClassName(active)}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </RouterLink>
+              );
+            })}
+          </nav>
+        }
       />
-      <div className="border-b border-border">
-        <nav
-          aria-label="Cluster delivery sections"
-          className="flex flex-wrap gap-4"
-        >
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const href = `${base}${tab.segment}${projectQuery}`;
-            const active = activeKey === tab.key;
-            return (
-              <RouterLink
-                key={tab.key}
-                to={href}
-                aria-current={active ? "page" : undefined}
-                className={tabLinkClassName(active)}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </RouterLink>
-            );
-          })}
-        </nav>
-      </div>
       <Outlet />
     </div>
   );

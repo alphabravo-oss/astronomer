@@ -10,6 +10,7 @@ import {
   tableColumns,
   type ProxyRow,
 } from "./declarative";
+import { extColumnLayouts } from "./ext-table-layout";
 import type { FieldBinding } from "@/lib/api/extensions";
 
 export interface ExtTableProps {
@@ -38,9 +39,11 @@ export function ExtTable({ rows, fields, emptyText }: ExtTableProps) {
     );
   }
 
-  const tableDefs: Column<ProxyRow>[] = columns.map((field) => ({
+  const layouts = extColumnLayouts(columns);
+  const tableDefs: Column<ProxyRow>[] = columns.map((field, index) => ({
     key: field.path,
     header: field.label,
+    ...layouts[index],
     accessor: (row) => <Cell row={row} field={field} />,
     sortAccessor: (row) =>
       formatValue(getByPath(row, field.path), field.format),

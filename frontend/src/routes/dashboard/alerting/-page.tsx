@@ -45,7 +45,7 @@ export function AlertingPage() {
           <>
             <RouterLink
               to="/dashboard/alerting/baselines"
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+              className="inline-flex h-(--control-h) items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
             >
               Anomaly Baselines
             </RouterLink>

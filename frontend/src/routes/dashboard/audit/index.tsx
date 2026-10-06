@@ -160,14 +160,14 @@ function AuditLogPage() {
           <div className="flex items-center gap-2">
             <RouterLink
               to="/dashboard/audit/shell-sessions"
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-accent"
+              className="inline-flex h-(--control-h) items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-accent"
             >
               <TerminalSquare className="h-4 w-4" />
               Shell sessions
             </RouterLink>
             <a
               href={exportHref}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-accent"
+              className="inline-flex h-(--control-h) items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-accent"
             >
               <Download className="h-4 w-4" />
               Export

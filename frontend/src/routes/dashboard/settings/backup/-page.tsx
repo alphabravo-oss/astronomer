@@ -796,12 +796,7 @@ export function AstronomerBackupPage() {
         </RouterLink>
         <PageHeader
           eyebrow="Settings · Backup"
-          title={
-            <span className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-muted-foreground" />
-              Astronomer backup
-            </span>
-          }
+          title="Astronomer backup"
           description="Nightly dump of Astronomer's own database to one or more S3 buckets. Workload snapshots live on each cluster after Velero is installed there."
         />
         <QueryStates
