@@ -10,7 +10,7 @@
     "frontend/src/lib/api/monitoring-stack.ts": 853,
     "frontend/src/lib/api/project-detail.ts": 987,
     "frontend/src/routes/dashboard/charlie/index.tsx": 1049,
-    "internal/agent/state_subscriber.go": 1055,
+    "internal/agent/state_subscriber.go": 1037,
     "internal/agent/tunnel.go": 1061,
     "internal/auth/jwt.go": 855,
     "internal/charlie/action_guard.go": 818,

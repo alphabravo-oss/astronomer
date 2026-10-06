@@ -267,13 +267,14 @@ func (r *stateRateLimiter) size() int {
 // lacks list/watch on a resource, the corresponding informer fails to sync
 // and is logged but never crashes the process.
 type StateSubscriber struct {
-	client  kubernetes.Interface
-	sender  stateSender
-	log     *slog.Logger
-	limiter *stateRateLimiter
-	ready   atomic.Bool
-	readyCh chan struct{}
-	once    sync.Once
+	client      kubernetes.Interface
+	sender      stateSender
+	log         *slog.Logger
+	limiter     *stateRateLimiter
+	ready       atomic.Bool
+	readyCh     chan struct{}
+	syncTimeout time.Duration
+	once        sync.Once
 
 	// bootstrapSeen records Add callbacks delivered before the initial cache
 	// barrier. bootstrapPending records cache objects whose Add callback was
@@ -341,6 +342,7 @@ func NewStateSubscriber(client kubernetes.Interface, sender stateSender, log *sl
 		log:              log,
 		limiter:          newStateRateLimiter(getStateSubscriberMinInterval(), getStateSubscriberEvictAfter()),
 		readyCh:          make(chan struct{}),
+		syncTimeout:      30 * time.Second,
 		startedAt:        time.Now(),
 		watchSecrets:     false,
 		stores:           make(map[string]stateStoreEntry),
@@ -377,8 +379,9 @@ func (s *StateSubscriber) SetWatchSecrets(enabled bool) {
 	}
 }
 
-// WaitReady blocks until the informer caches have synced and the subscriber is
-// ready to emit live updates, or until ctx is cancelled.
+// WaitReady blocks until bounded bootstrap finishes and the subscriber may
+// emit live updates, or until ctx is cancelled. Individual kinds can remain
+// unsynced; inventory readers must check their own cache availability.
 func (s *StateSubscriber) WaitReady(ctx context.Context) bool {
 	if s == nil {
 		return false
@@ -398,6 +401,9 @@ func (s *StateSubscriber) WaitReady(ctx context.Context) bool {
 // per-resource handlers, and starts the eviction goroutine. RBAC failures
 // during initial sync are logged at WARN; the agent continues to run.
 func (s *StateSubscriber) Run(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
 	if s.client == nil {
 		s.log.Warn("state subscriber: nil clientset, skipping live updates")
 		return
@@ -413,10 +419,10 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 	s.registerEvents(factory)
 	s.log.Debug("state subscriber: handlers registered, starting factory")
 
-	stopCh := make(chan struct{})
-	defer close(stopCh)
+	stopCh := ctx.Done()
 
 	factory.Start(stopCh)
+	defer factory.Shutdown()
 
 	// P4.6 informer expansion: metadata-only informers for the built-in
 	// kinds beyond the typed set, a Helm-release-filtered Secret informer,
@@ -430,6 +436,7 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 			s.attach(metaFactory.ForResource(k.gvr).Informer(), k.kind, k.apiGroup, k.apiVersion)
 		}
 		metaFactory.Start(stopCh)
+		defer metaFactory.Shutdown()
 		s.startHelmSecretInformer(stopCh)
 		for _, k := range crdInformerKinds {
 			go s.runCRDInformer(ctx, k, stopCh)
@@ -437,33 +444,8 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 		go s.runGatekeeperConstraints(ctx, stopCh)
 	}
 
-	// Wait for the initial list to populate; if some informers fail to sync
-	// (typically RBAC), log and continue. We do NOT abort: a partial subscriber
-	// is still better than polling-only.
-	synced := factory.WaitForCacheSync(stopCh)
-	for typ, ok := range synced {
-		if !ok {
-			s.log.Warn("state subscriber: cache failed to sync (RBAC?)", "type", fmt.Sprintf("%T", typ))
-		}
-	}
-	if metaFactory != nil {
-		// Bounded wait: a single RBAC-denied metadata informer must not
-		// stall readiness forever (that would suppress every typed kind's
-		// events too — the ready gate is subscriber-wide).
-		syncStop := make(chan struct{})
-		go func() {
-			select {
-			case <-stopCh:
-			case <-time.After(30 * time.Second):
-			}
-			close(syncStop)
-		}()
-		msynced := metaFactory.WaitForCacheSync(syncStop)
-		for typ, ok := range msynced {
-			if !ok {
-				s.log.Warn("state subscriber: metadata cache failed to sync (RBAC?)", "type", fmt.Sprintf("%v", typ))
-			}
-		}
+	if !s.waitForInitialCaches(ctx, factory, metaFactory) {
+		return
 	}
 	s.finishBootstrap()
 	s.once.Do(func() { close(s.readyCh) })
