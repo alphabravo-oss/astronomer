@@ -1,7 +1,7 @@
-
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/tooltip";
 
 type ActionIntent = "default" | "primary" | "destructive" | "ghost";
 type ActionSize = "sm" | "md" | "icon";
@@ -13,6 +13,8 @@ export interface ActionButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
   loading?: boolean;
   loadingLabel?: ReactNode;
   disabledReason?: string;
+  /** Styled tooltip; `title` is kept as an alias so existing call sites migrate for free. */
+  tooltip?: ReactNode;
 }
 
 const intentClass: Record<ActionIntent, string> = {
@@ -39,6 +41,7 @@ export const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(
       disabledReason,
       disabled,
       title,
+      tooltip,
       className,
       children,
       ...props
@@ -52,23 +55,34 @@ export const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(
       icon
     );
 
+    // ponytail: disabled reasons stay a native title (disabled buttons emit no
+    // pointer events, so Radix cannot open); upgrade with a wrapper span later.
+    const tip = tooltip ?? title;
+    const label =
+      props["aria-label"] ??
+      (size === "icon" && typeof tip === "string" ? tip : undefined);
+
     return (
-      <button
-        ref={ref}
-        type="button"
-        disabled={blocked}
-        title={disabledReason ?? title}
-        className={cn(
-          "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-          intentClass[intent],
-          sizeClass[size],
-          className,
-        )}
-        {...props}
-      >
-        {visibleIcon}
-        {size !== "icon" && (loading && loadingLabel ? loadingLabel : children)}
-      </button>
+      <Tooltip content={tip}>
+        <button
+          ref={ref}
+          type="button"
+          disabled={blocked}
+          aria-label={label}
+          title={disabledReason}
+          className={cn(
+            "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+            intentClass[intent],
+            sizeClass[size],
+            className,
+          )}
+          {...props}
+        >
+          {visibleIcon}
+          {size !== "icon" &&
+            (loading && loadingLabel ? loadingLabel : children)}
+        </button>
+      </Tooltip>
     );
   },
 );

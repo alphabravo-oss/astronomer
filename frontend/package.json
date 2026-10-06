@@ -54,6 +54,7 @@
     "date-fns": "^4.4.0",
     "js-yaml": "5.4.1",
     "lucide-react": "^1.44.0",
+    "radix-ui": "^1.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

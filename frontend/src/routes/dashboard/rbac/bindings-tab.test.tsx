@@ -12,7 +12,9 @@ const binding = {
   createdAt: "2026-09-10T12:00:00Z",
 };
 
-function renderBindings(overrides: Partial<ComponentProps<typeof BindingsTab>> = {}) {
+function renderBindings(
+  overrides: Partial<ComponentProps<typeof BindingsTab>> = {},
+) {
   const onRevoke = vi.fn();
   render(
     <BindingsTab
@@ -22,7 +24,11 @@ function renderBindings(overrides: Partial<ComponentProps<typeof BindingsTab>> =
       projectRoles={[]}
       clusters={[]}
       projects={[]}
-      users={[{ id: "user-1", username: "alex", email: "alex@example.test" }] as never}
+      users={
+        [
+          { id: "user-1", username: "alex", email: "alex@example.test" },
+        ] as never
+      }
       loading={false}
       isError={false}
       onRetry={vi.fn()}
@@ -38,13 +44,15 @@ describe("BindingsTab", () => {
     const { onRevoke } = renderBindings();
     expect(screen.getByText("alex")).toBeInTheDocument();
     expect(screen.getByText("Viewer")).toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("Revoke binding"));
+    fireEvent.click(screen.getByRole("button", { name: "Revoke binding" }));
     expect(onRevoke).toHaveBeenCalledWith(binding);
   });
 
   it("keeps permission failures distinct from an empty binding list", () => {
     renderBindings({ bindings: [], isError: true, error: { status: 403 } });
     expect(screen.getByText(/permission required/i)).toBeInTheDocument();
-    expect(screen.queryByText("No role bindings found")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No role bindings found"),
+    ).not.toBeInTheDocument();
   });
 });
