@@ -136,3 +136,18 @@ These are **starting points for capacity planning**, not SLOs:
 
 Until a **pass** row is recorded above, operators should assume the product has
 not been load-certified for their target fleet size.
+
+### Real-agent observation readiness
+
+The existing [loadtest command](../scripts/loadtest/README.md#real-estate-observation-collector-engineering-only)
+now has an engineering-only collector for pre-provisioned real members and scoped
+assignment tiers 1/10/100. It verifies fixture identities and resource census,
+collects bounded per-member source metrics, and records separate warmup, measured
+and request-drain windows. Every report remains unqualified (`incomplete` or
+`failed`); this source addition is not a measured live benchmark result.
+
+Real cold start, fixture lifecycle/churn, browser/reconnect scenarios, complete
+baseline API-read attribution, change-to-UI freshness and repeated live acceptance
+remain pending. Source-age gauges and fake-client request counts cannot substitute
+for those measurements. Existing protected certification and sizing evidence are
+unchanged.

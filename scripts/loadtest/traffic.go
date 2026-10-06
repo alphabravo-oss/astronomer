@@ -274,7 +274,10 @@ func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token s
 	}
 	scs := defaultScenarios()
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := cfg.workloadClient
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
 	var sequence atomic.Uint64
 	var inflight sync.WaitGroup
 	defer inflight.Wait()

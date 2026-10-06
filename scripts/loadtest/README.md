@@ -247,3 +247,96 @@ scenario `name` is what shows up in the report's HTTP-latency table.
 
 CI plumbing pipes the harness output into a runner that fails the job if it
 doesn't see `^VERDICT:` in the markdown. Don't reformat the line.
+
+## Real-estate observation collector (engineering only)
+
+The existing command also measures **pre-provisioned real agents**. This partial
+E04 collector never reports qualification: its verdict is `incomplete` when its
+implemented checks succeed, or `failed` when they fail. Synthetic certification,
+protected drill provenance, and component sizing rules are unchanged. A zero exit
+status means this limited collection succeeded, not that E04 passed.
+
+Start from `testdata/real-estate.example.json`. Its IDs and hashes are placeholders,
+not deployed fixtures. Replace them with reviewed estate identities and frozen
+provenance. The manifest requires 2–10 distinct adopted remote members, exactly
+1, 10, or 100 declared delivery deployments **per member's declared project**,
+expected ready generations/spec digests, project namespace binding, and actual
+namespace pod/deployment/service counts. Other projects' assignments are outside
+this scoped census and must be controlled by the benchmark dataset separately.
+
+Declare the tested commit, SHA256 digests of image inventory, chart values,
+dataset and hardware description, Kubernetes version, and server/worker replica
+counts. These environment fields are declarations, not an independent live digest
+attestation. The report separately records the manifest and fixture digests and
+Go driver VCS revision/dirty status when available; `unavailable` is explicit.
+
+Each member declares its own `/metrics` URL and expected `astronomer_instance_id`.
+The collector independently verifies that the same origin's `/healthz.cluster_id`
+matches that member before collection and each scrape. Shared instance IDs such
+as `unknown` alone do not establish member identity. URLs must use HTTPS or an
+explicit numeric loopback HTTP address (existing port-forwards are supported).
+Redirects, URL userinfo, queries and fragments are rejected. An optional per-target
+`token_file` supplies only that target's credential; the management API token is
+never inherited. No listener, deployment, ServiceMonitor or RBAC is created.
+
+Validate locally without network or credential reads:
+
+```sh
+go run ./scripts/loadtest -real-estate scripts/loadtest/testdata/real-estate.example.json \
+  -check-only -server https://api.example.test -warmup 5m -duration 30m -rps 10
+```
+
+Collect only after preparing reviewed fixtures and reachable member endpoints:
+
+```sh
+go run ./scripts/loadtest -real-estate "$ESTATE_MANIFEST" \
+  -server "$TEST_API" -token "$TEST_TOKEN_FILE" \
+  -warmup 5m -duration 30m -rps 10 -out "$RUN_DIR/real-estate.md"
+```
+
+The mode rejects synthetic agent/profile flags, `-metrics-server`, certification,
+login bootstrap, audit mutation configuration and their conflicting environment
+variables. Warmup must be 5–60 minutes; measurement 30 minutes–4 hours; rate
+1–1000 RPS. There is no short-window qualification override. All requests are GET;
+this increment never creates or deletes fixtures. Start/end checks verify the
+exact scoped deployment set, cluster/project/target identity, ready generation
+and spec digest, namespace binding and paginated Kubernetes resource census.
+
+Optional `rendered_resources` use the generated public inventory identity schema.
+Complete current source observation, matching generation/spec digest, matching
+inventory references and independent resource GETs are required for rendered
+namespace verification. Supported references are namespaced Pod, Service, PVC,
+Deployment, StatefulSet and DaemonSet. Missing, stale, legacy or truncated source
+inventory is **unavailable**, never inferred from receipt time or namespace census.
+No Secret payloads are fetched. This verifies declared references, not arbitrary
+ownership of all resources on the member.
+
+The measured HTTP mix reuses the existing scenarios and scheduler. Warmup has a
+separate recorder. Started requests have a bounded 30-second post-window drain;
+the report separates scheduling windows and drain intervals. Metric samples
+finishing outside the measurement window are counted as excluded boundary
+samples, not transport failures. Preflight duration is not agent cold start.
+
+Outputs are Markdown, adjacent `.json`, and `.sha256` covering both files. Metric
+URLs and token paths/values are omitted. A hash identifies each declared metric
+origin/producer; per-member series preserve only allowlisted kind/verb/outcome/
+source labels. The collector bounds bodies to 4 MiB and samples to 256 series;
+unknown selected-family labels fail rather than introduce resource-name labels.
+It reduces samples online, keeping a timestamped hash chain and bounded per-series
+counts/min/max/deltas, not unbounded raw metric bodies. Resets and gaps invalidate
+complete deltas. Source age uses original observed time and separately requires
+recent producer sampling; absent, future or stopped samples cannot become zero.
+
+Implemented checks retain cluster-list p99 ≤500 ms, pod-list p99 ≤2000 ms, zero
+HTTP failures, ≥95% requested traffic, ≥98% measured duration/metric coverage,
+and bounded heap/goroutine/open-FD growth. Reported CPU/memory belong to each member
+process. Management queue/event-relay and audit gates remain `NOT_RUN`, not
+silently waived. Cold start, fixture lifecycle, idle/churn/search, delivery-status
+workload, multiple panels/tabs, reconnect, repeated-run acceptance and change-to-UI
+freshness also remain `NOT_RUN`. Source age is **not** end-to-end freshness p95.
+
+Tracked observation LIST/WATCH counters do not cover legacy direct reads,
+discovery/dynamic requests or assignment GETs. Therefore this increment always
+leaves ≥80% LIST reduction and zero recurring assignment GET claims `NOT_RUN`.
+Those require equivalent complete attributable baseline/candidate request evidence,
+real changes with correlated observations, and matched repeated live windows.
