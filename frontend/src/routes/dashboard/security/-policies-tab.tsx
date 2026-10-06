@@ -32,7 +32,7 @@ function policyColumns(
       key: "cluster",
       header: "Cluster",
       kind: "name",
-      minSize: 200,
+      minSize: 170,
       accessor: (row) => (
         <span className="font-medium text-foreground text-sm">
           {row.clusterName}
@@ -43,8 +43,8 @@ function policyColumns(
       key: "template",
       header: "Template",
       kind: "text",
-      size: 200,
-      minSize: 160,
+      size: 128,
+      minSize: 112,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.templateName}
@@ -55,6 +55,7 @@ function policyColumns(
       key: "enforce",
       header: "Enforce",
       kind: "badge",
+      size: 105,
       accessor: (row) => (
         <span
           className={cn(
@@ -70,6 +71,7 @@ function policyColumns(
       key: "audit",
       header: "Audit",
       kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span
           className={cn(
@@ -85,6 +87,7 @@ function policyColumns(
       key: "warn",
       header: "Warn",
       kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span
           className={cn(
@@ -98,7 +101,7 @@ function policyColumns(
     },
     {
       key: "syncStatus",
-      header: "Sync Status",
+      header: "Sync",
       kind: "status",
       accessor: (row) => <StatusBadge status={row.syncStatus} />,
     },
@@ -106,7 +109,8 @@ function policyColumns(
       key: "appliedAt",
       header: "Applied",
       kind: "age",
-      size: 112,
+      size: 120,
+      maxSize: 160,
       accessor: (row) =>
         row.appliedAt ? (
           <TimestampCell value={row.appliedAt} />
@@ -143,9 +147,9 @@ function policyColumns(
       ),
       sortable: false,
       kind: "actions",
-      size: 128,
-      minSize: 128,
-      maxSize: 128,
+      size: 120,
+      minSize: 120,
+      maxSize: 120,
     },
   ];
 }

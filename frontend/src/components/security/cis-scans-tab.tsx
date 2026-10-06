@@ -53,7 +53,7 @@ function cisScanColumns(
       key: "cluster",
       header: "Cluster",
       kind: "name",
-      minSize: 200,
+      minSize: 180,
       accessor: (row) => (
         <span className="font-medium text-foreground text-sm">
           {clusterById.get(row.clusterId) ?? row.clusterId.slice(0, 8)}
@@ -65,8 +65,8 @@ function cisScanColumns(
       key: "profile",
       header: "Profile",
       kind: "text",
-      size: 176,
-      minSize: 160,
+      size: 144,
+      minSize: 128,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.scanType}
@@ -79,6 +79,7 @@ function cisScanColumns(
       header: "Run At",
       kind: "age",
       size: 120,
+      maxSize: 160,
       accessor: (row) =>
         row.completedAt ? (
           <TimestampCell value={row.completedAt} />
@@ -93,6 +94,7 @@ function cisScanColumns(
       key: "status",
       header: "Status",
       kind: "status",
+      size: 120,
       accessor: (row) => <StatusBadge status={row.status} />,
       sortAccessor: (row) => row.status,
     },
@@ -100,6 +102,7 @@ function cisScanColumns(
       key: "pass",
       header: "Pass",
       kind: "count",
+      size: 84,
       accessor: (row) => (
         <span className="tabular-nums text-status-success text-sm">
           {row.passed ?? 0}
@@ -111,6 +114,7 @@ function cisScanColumns(
       key: "fail",
       header: "Fail",
       kind: "count",
+      size: 84,
       accessor: (row) => (
         <span
           className={cn(
@@ -129,6 +133,7 @@ function cisScanColumns(
       key: "warn",
       header: "Warn",
       kind: "count",
+      size: 84,
       accessor: (row) => (
         <span
           className={cn(
@@ -147,6 +152,7 @@ function cisScanColumns(
       key: "skip",
       header: "Skip",
       kind: "count",
+      size: 84,
       accessor: (row) => (
         <span className="tabular-nums text-sm text-muted-foreground">
           {row.skipped ?? 0}

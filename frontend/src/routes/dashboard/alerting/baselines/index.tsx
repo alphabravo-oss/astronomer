@@ -18,6 +18,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { cn } from "@/lib/utils";
 import { NumberCell, TimestampCell } from "@/components/ui/cell-primitives";
 import type { AnomalyBaseline } from "@/types";
 import { ArrowLeft, Activity, RefreshCw } from "lucide-react";
@@ -38,7 +39,7 @@ function AnomalyBaselinesPage() {
       key: "metric",
       header: "Metric",
       kind: "name",
-      minSize: 240,
+      minSize: 180,
       accessor: (b: AnomalyBaseline) => (
         <span className="font-mono text-xs">{b.metric}</span>
       ),
@@ -48,8 +49,8 @@ function AnomalyBaselinesPage() {
       key: "clusterId",
       header: "Cluster",
       kind: "text",
-      size: 128,
-      minSize: 112,
+      size: 105,
+      minSize: 104,
       accessor: (b: AnomalyBaseline) => (
         <Tooltip content={b.clusterId}>
           <span className="font-mono text-xs text-muted-foreground">
@@ -64,9 +65,10 @@ function AnomalyBaselinesPage() {
       kind: "count",
       accessor: (b: AnomalyBaseline) => (
         <span
-          className={
-            b.sampleCount < 50 ? "text-status-warning" : "text-foreground"
-          }
+          className={cn(
+            "font-mono text-xs tabular-nums",
+            b.sampleCount < 50 ? "text-status-warning" : "text-foreground",
+          )}
         >
           {b.sampleCount}
         </span>
@@ -88,9 +90,9 @@ function AnomalyBaselinesPage() {
     },
     {
       key: "lastValue",
-      header: "Last Value",
+      header: "Last",
       kind: "count",
-      size: 96,
+      size: 84,
       accessor: (b: AnomalyBaseline) => <NumberCell value={b.lastValue} />,
       sortAccessor: (b: AnomalyBaseline) => b.lastValue,
     },
@@ -105,8 +107,8 @@ function AnomalyBaselinesPage() {
       key: "windowSeconds",
       header: "Window",
       kind: "text",
+      size: 98,
       minSize: 96,
-      size: 96,
       accessor: (b: AnomalyBaseline) => (
         <span className="text-xs text-muted-foreground">
           {formatWindow(b.windowSeconds)}
@@ -117,6 +119,8 @@ function AnomalyBaselinesPage() {
       key: "updatedAt",
       header: "Updated",
       kind: "age",
+      size: 120,
+      maxSize: 160,
       accessor: (b: AnomalyBaseline) => <TimestampCell value={b.updatedAt} />,
     },
   ];

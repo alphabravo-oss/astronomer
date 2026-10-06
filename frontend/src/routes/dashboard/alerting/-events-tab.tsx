@@ -37,6 +37,7 @@ function eventColumns({
       key: "severity",
       header: "Severity",
       kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span
           className={cn(
@@ -52,11 +53,16 @@ function eventColumns({
       key: "rule",
       header: "Rule",
       kind: "name",
+      size: 150,
+      minSize: 130,
       grow: false,
-      size: 200,
-      minSize: 160,
       accessor: (row) => (
-        <ActionButton intent="ghost" size="sm" onClick={() => onSelect(row.id)}>
+        <ActionButton
+          intent="ghost"
+          size="sm"
+          tooltip={row.ruleName || undefined}
+          onClick={() => onSelect(row.id)}
+        >
           <span className="truncate">{row.ruleName || "Inspect alert"}</span>
         </ActionButton>
       ),
@@ -65,8 +71,8 @@ function eventColumns({
       key: "message",
       header: "Message",
       kind: "text",
+      minSize: 180,
       grow: true,
-      minSize: 240,
       maxSize: 640,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">{row.message}</span>
@@ -80,8 +86,8 @@ function eventColumns({
             key: "cluster",
             header: "Cluster",
             kind: "text",
-            size: 160,
-            minSize: 128,
+            size: 112,
+            minSize: 96,
             accessor: (row: AlertEvent) => (
               <span className="text-sm text-muted-foreground">
                 {row.clusterName || "--"}
@@ -93,12 +99,15 @@ function eventColumns({
       key: "firedAt",
       header: "Fired",
       kind: "age",
+      size: 120,
+      maxSize: 160,
       accessor: (row) => <TimestampCell value={row.firedAt} />,
     },
     {
       key: "status",
       header: "Status",
       kind: "status",
+      size: 140,
       accessor: (row) => <StatusBadge status={row.status} />,
     },
     {
@@ -149,9 +158,9 @@ function eventColumns({
       ),
       sortable: false,
       kind: "actions",
-      size: 200,
-      minSize: 200,
-      maxSize: 200,
+      size: 168,
+      minSize: 168,
+      maxSize: 168,
     },
   ];
 }

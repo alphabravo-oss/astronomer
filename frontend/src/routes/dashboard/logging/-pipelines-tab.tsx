@@ -151,6 +151,8 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
       key: "created",
       header: "Created",
       kind: "age",
+      size: 120,
+      maxSize: 160,
       accessor: (row) => <TimestampCell value={row.createdAt} />,
     },
     {

@@ -217,7 +217,7 @@ function outputColumns(
       key: "name",
       header: "Output",
       kind: "name",
-      minSize: 240,
+      minSize: 184,
       accessor: (row) => <OutputNameCell row={row} />,
       sortAccessor: (row) => row.name,
     },
@@ -225,6 +225,7 @@ function outputColumns(
       key: "type",
       header: "Type",
       kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {outputTypeOf(row)}
@@ -235,8 +236,8 @@ function outputColumns(
       key: "cluster",
       header: "Cluster",
       kind: "text",
-      size: 160,
-      minSize: 128,
+      size: 112,
+      minSize: 105,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.clusterName || "All"}
@@ -253,7 +254,7 @@ function outputColumns(
       key: "enabled",
       header: "Enabled",
       kind: "badge",
-      size: 88,
+      size: 80,
       minSize: 80,
       maxSize: 96,
       accessor: (row) => (
@@ -284,6 +285,8 @@ function outputColumns(
       key: "created",
       header: "Created",
       kind: "age",
+      size: 120,
+      maxSize: 160,
       accessor: (row) => <TimestampCell value={row.createdAt} />,
     },
     {
@@ -342,8 +345,8 @@ function outputColumns(
       ),
       sortable: false,
       kind: "actions",
-      size: 288,
-      minSize: 240,
+      size: 240,
+      minSize: 200,
       maxSize: 320,
     },
   ];

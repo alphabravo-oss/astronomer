@@ -47,6 +47,7 @@ function templateColumns(
       key: "enforce",
       header: "Enforce",
       kind: "badge",
+      size: 108,
       accessor: (row) => (
         <span
           className={cn(
@@ -62,6 +63,7 @@ function templateColumns(
       key: "audit",
       header: "Audit",
       kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span
           className={cn(
@@ -77,6 +79,7 @@ function templateColumns(
       key: "warn",
       header: "Warn",
       kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span
           className={cn(
@@ -92,8 +95,8 @@ function templateColumns(
       key: "description",
       header: "Description",
       kind: "text",
-      size: 280,
-      minSize: 240,
+      size: 240,
+      minSize: 200,
       maxSize: 480,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">

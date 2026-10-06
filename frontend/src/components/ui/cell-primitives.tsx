@@ -9,7 +9,7 @@ import { cn, formatDate, formatRelativeTime } from "@/lib/utils";
  */
 
 const CHIP_CLASS =
-  "min-w-0 max-w-40 truncate rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground";
+  "min-w-0 max-w-32 truncate rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground";
 
 /**
  * Chips capped at `max` plus a "+N" overflow chip whose Tooltip lists the
@@ -61,6 +61,11 @@ export function CappedChips({
   );
 }
 
+/** "about 20 hours ago" -> "20 hours ago": drops approximation words to keep age columns narrow. */
+export function compactRelative(text: string): string {
+  return text.replace(/^(about|almost|over|less than) /, "");
+}
+
 /** Relative age ("3 hours ago") with the exact timestamp in a Tooltip. */
 export function TimestampCell({
   value,
@@ -72,7 +77,7 @@ export function TimestampCell({
   prefix?: string;
   className?: string;
 }) {
-  const relative = formatRelativeTime(value);
+  const relative = compactRelative(formatRelativeTime(value));
   const text = (
     <span
       className={cn(

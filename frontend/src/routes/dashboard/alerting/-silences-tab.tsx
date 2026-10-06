@@ -32,9 +32,9 @@ export function SilencesTab() {
       key: "matchers",
       header: "Matchers",
       kind: "badge",
-      size: 260,
-      minSize: 220,
-      maxSize: 340,
+      size: 300,
+      minSize: 240,
+      maxSize: 360,
       accessor: (row) => (
         <CappedChips
           items={Object.entries(row.matchers).map(([k, v]) => `${k}=${v}`)}
@@ -46,8 +46,8 @@ export function SilencesTab() {
       key: "creator",
       header: "Creator",
       kind: "text",
-      size: 200,
-      minSize: 160,
+      size: 160,
+      minSize: 120,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">{row.createdBy}</span>
       ),
@@ -56,6 +56,8 @@ export function SilencesTab() {
       key: "endsAt",
       header: "Expires",
       kind: "age",
+      size: 120,
+      maxSize: 160,
       accessor: (row) => <TimestampCell value={row.endsAt} />,
     },
   ];

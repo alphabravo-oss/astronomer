@@ -38,6 +38,7 @@ export function RulesTab({
       key: "type",
       header: "Type",
       kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.type}
@@ -48,6 +49,7 @@ export function RulesTab({
       key: "severity",
       header: "Severity",
       kind: "badge",
+      size: 112,
       accessor: (row) => (
         <span
           className={cn(
@@ -66,8 +68,8 @@ export function RulesTab({
             key: "cluster",
             header: "Cluster",
             kind: "text",
-            size: 160,
-            minSize: 128,
+            size: 144,
+            minSize: 112,
             accessor: (row: AlertRule) => (
               <span className="text-sm text-muted-foreground">
                 {row.clusterName || "All"}
@@ -79,6 +81,7 @@ export function RulesTab({
       key: "status",
       header: "Status",
       kind: "status",
+      size: 112,
       accessor: (row) => (
         <StatusBadge
           status={row.enabled ? "active" : "disconnected"}

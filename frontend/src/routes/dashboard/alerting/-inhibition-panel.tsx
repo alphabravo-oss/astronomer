@@ -45,7 +45,7 @@ export function InhibitionPanel() {
       key: "name",
       header: "Name",
       kind: "name",
-      minSize: 180,
+      minSize: 150,
       accessor: (row) => (
         <span className="font-medium text-foreground">{row.name}</span>
       ),
@@ -54,32 +54,32 @@ export function InhibitionPanel() {
       key: "source",
       header: "Source matchers",
       kind: "badge",
-      size: 240,
-      minSize: 200,
+      size: 168,
+      minSize: 140,
       maxSize: 320,
       sortable: false,
       accessor: (row) => (
-        <CappedChips items={matcherLabels(row.sourceMatchers)} />
+        <CappedChips items={matcherLabels(row.sourceMatchers)} max={1} />
       ),
     },
     {
       key: "target",
       header: "Target matchers",
       kind: "badge",
-      size: 240,
-      minSize: 200,
+      size: 168,
+      minSize: 140,
       maxSize: 320,
       sortable: false,
       accessor: (row) => (
-        <CappedChips items={matcherLabels(row.targetMatchers)} />
+        <CappedChips items={matcherLabels(row.targetMatchers)} max={1} />
       ),
     },
     {
       key: "equal",
       header: "Equal labels",
       kind: "badge",
-      size: 180,
-      minSize: 160,
+      size: 176,
+      minSize: 140,
       maxSize: 260,
       sortable: false,
       accessor: (row) => <CappedChips items={row.equalLabels} />,
@@ -88,6 +88,7 @@ export function InhibitionPanel() {
       key: "enabled",
       header: "Status",
       kind: "status",
+      size: 104,
       accessor: (row) => (
         <StatusBadge
           status={row.enabled ? "active" : "disconnected"}
@@ -101,6 +102,8 @@ export function InhibitionPanel() {
       key: "updated",
       header: "Updated",
       kind: "age",
+      size: 112,
+      maxSize: 160,
       accessor: (row) => <TimestampCell value={row.updatedAt} />,
     },
     {
