@@ -14,7 +14,7 @@ const eventCapableRoutes = [
   ["delivery/rollouts/$rolloutId/-page.tsx", "RolloutEventTimeline"],
   ["delivery/rollouts/$rolloutId/-event-timeline.tsx", "OperationTimeline"],
   ["delivery/deployments/$deploymentId/-page.tsx", "DeploymentEventTimeline"],
-  ["settings/backup/-page.tsx", "OperationMutationTimeline"],
+  ["settings/backup/-destinations-section.tsx", "OperationMutationTimeline"],
 ] as const;
 
 describe("operation timeline inventory", () => {
