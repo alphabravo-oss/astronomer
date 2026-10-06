@@ -28,7 +28,7 @@ export function clusterColumns(
       // the remaining space instead of truncating.
       header: "Name",
       kind: "name",
-      minSize: 200,
+      minSize: 110,
       accessor: (row) => (
         <EntityCell primary={row.displayName} secondary={row.name} />
       ),
@@ -132,7 +132,6 @@ export function clusterColumns(
       accessor: (row) => (
         <TimestampCell
           value={row.lastHeartbeat}
-          suffix
           className="text-xs text-muted-foreground"
         />
       ),

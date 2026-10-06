@@ -1,6 +1,5 @@
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { Column } from "@/components/ui/data-table";
-import { formatRelativeTime } from "@/lib/utils";
 import { TimestampCell } from "@/components/tables/cells";
 import { Tooltip } from "@/components/ui/tooltip";
 import {

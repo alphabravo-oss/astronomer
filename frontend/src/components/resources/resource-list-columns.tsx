@@ -1,12 +1,6 @@
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { Column } from "@/components/ui/data-table";
-import {
-  cn,
-  formatBytes,
-  formatCPU,
-  formatPercentage,
-  formatRelativeTime,
-} from "@/lib/utils";
+import { cn, formatBytes, formatCPU, formatPercentage } from "@/lib/utils";
 import {
   configMapColumns,
   genericColumnMap,
@@ -32,7 +26,7 @@ const nodeColumns: Column<ClusterNode>[] = [
     key: "name",
     header: "Name",
     kind: "name",
-    minSize: 220,
+    minSize: 150,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}

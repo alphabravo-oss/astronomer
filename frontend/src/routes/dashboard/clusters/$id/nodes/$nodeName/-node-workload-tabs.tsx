@@ -22,7 +22,7 @@ const podColumns: Column<NodePod>[] = [
     key: "name",
     header: "Name",
     kind: "name",
-    minSize: 240,
+    minSize: 140,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
