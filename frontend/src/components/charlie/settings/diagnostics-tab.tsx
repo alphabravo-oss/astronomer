@@ -1,16 +1,15 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   Bot,
   Database,
   KeyRound,
-  Loader2,
   Network,
   RefreshCw,
   Shield,
   Sparkles,
 } from "lucide-react";
-import { StatePanel } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { queryKeys } from "@/lib/query-keys";
 import { formatRelativeTime } from "@/lib/utils";
@@ -18,6 +17,7 @@ import { liveFallback } from "@/lib/live/status-store";
 import { completeDiagnostics } from "@/components/charlie/admin-utils";
 import { getCharlieDiagnostics } from "@/lib/api/charlie-admin";
 import { Section, Unavailable, button } from "./shared";
+import { ActionButton } from "@/components/ui/action-button";
 
 const diagnosticIcon: Record<string, typeof Database> = {
   local_config: Database,
@@ -38,14 +38,7 @@ export function DiagnosticsTab() {
     retry: false,
     refetchInterval: liveFallback(30_000),
   });
-  if (q.isLoading)
-    return (
-      <StatePanel
-        icon={Loader2}
-        iconClassName="animate-spin motion-reduce:animate-none"
-        title="Running Charlie diagnostics"
-      />
-    );
+  if (q.isLoading) return <LoadingPanel title="Running Charlie diagnostics" />;
   if (q.isError)
     return <Unavailable name="Diagnostics" retry={() => void q.refetch()} />;
   const checks = completeDiagnostics(q.data?.checks ?? []);
@@ -65,10 +58,15 @@ export function DiagnosticsTab() {
           status={q.data?.overall ?? "unknown"}
           label={`Overall: ${q.data?.overall ?? "unknown"}`}
         />
-        <button onClick={() => void q.refetch()} className={button}>
+        <ActionButton
+          intent="bare"
+          size="none"
+          onClick={() => void q.refetch()}
+          className={button}
+        >
           <RefreshCw className="h-4 w-4" />
           Run again
-        </button>
+        </ActionButton>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         {checks.map((check) => {

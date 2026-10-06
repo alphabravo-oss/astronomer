@@ -1,10 +1,12 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { Loader2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { CharlieContextOption } from "@/lib/api/charlie";
 import { DrawerShell } from "@/components/ui/drawer-shell";
 import { contextForRoute } from "./context-registry";
 import { CharlieContext as Context } from "./charlie-context";
+import { ActionButton } from "@/components/ui/action-button";
 
 const CharlieDrawer = lazy(() =>
   import("./charlie-drawer").then((module) => ({
@@ -55,17 +57,19 @@ export function CharlieCapability() {
   };
   return (
     <Context.Provider value={value}>
-      <button
+      <ActionButton
+        intent="bare"
+        size="none"
         onClick={() => setOpen(true)}
         aria-label="Open Charlie assistant"
         aria-expanded={open}
         aria-controls="charlie-assistant-drawer"
-        title="Open Charlie (Ctrl/⌘ Shift .)"
+        tooltip="Open Charlie (Ctrl/⌘ Shift .)"
         className="fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
       >
         <Sparkles className="h-5 w-5" />
         <span className="hidden sm:inline">Charlie</span>
-      </button>
+      </ActionButton>
       {open && (
         <Suspense
           fallback={
@@ -74,13 +78,7 @@ export function CharlieCapability() {
               onClose={() => setOpen(false)}
               panelClassName="max-w-xl max-sm:max-w-none"
             >
-              <div
-                role="status"
-                className="flex h-full min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground"
-              >
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-                Loading Charlie…
-              </div>
+              <LoadingPanel title="Loading Charlie…" className="m-4" />
             </DrawerShell>
           }
         >

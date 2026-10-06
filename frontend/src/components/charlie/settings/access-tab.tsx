@@ -1,6 +1,5 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { StatePanel } from "@/components/ui/empty-state";
 import { queryKeys } from "@/lib/query-keys";
 import { getCharlieAccess } from "@/lib/api/charlie-admin";
 import { GrantList, Unavailable } from "./shared";
@@ -11,14 +10,7 @@ export function AccessTab() {
     queryFn: ({ signal }) => getCharlieAccess(signal),
     retry: false,
   });
-  if (q.isLoading)
-    return (
-      <StatePanel
-        icon={Loader2}
-        iconClassName="animate-spin motion-reduce:animate-none"
-        title="Loading Charlie access"
-      />
-    );
+  if (q.isLoading) return <LoadingPanel title="Loading Charlie access" />;
   if (q.isError)
     return <Unavailable name="Access report" retry={() => void q.refetch()} />;
   return (

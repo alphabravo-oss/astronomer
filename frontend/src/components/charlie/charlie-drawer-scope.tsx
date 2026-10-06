@@ -6,6 +6,7 @@ import {
   searchCharlieContext,
   type CharlieContextOption,
 } from "@/lib/api/charlie";
+import { ActionButton } from "@/components/ui/action-button";
 
 function ContextPicker({
   open,
@@ -25,15 +26,16 @@ function ContextPicker({
   });
   if (!open)
     return (
-      <button
-        type="button"
+      <ActionButton
+        intent="bare"
+        size="none"
         onClick={() => onOpenChange(true)}
         aria-expanded="false"
         className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
       >
         <Plus className="h-3 w-3" />
         Narrow scope
-      </button>
+      </ActionButton>
     );
   return (
     <div
@@ -42,13 +44,14 @@ function ContextPicker({
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-xs font-medium">Choose a diagnostic scope</p>
-        <button
-          type="button"
+        <ActionButton
+          intent="bare"
+          size="none"
           onClick={() => onOpenChange(false)}
           className="rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
         >
           Done
-        </button>
+        </ActionButton>
       </div>
       <label className="flex items-center gap-2">
         <Search className="h-4 w-4" />
@@ -72,20 +75,21 @@ function ContextPicker({
         </p>
       )}
       {result.data?.map((v) => (
-        <button
-          type="button"
+        <ActionButton
+          intent="bare"
+          size="none"
           key={`${v.type}:${v.id}`}
           onClick={() => {
             add(v);
             onOpenChange(false);
           }}
-          className="mt-2 block w-full rounded-sm p-2 text-left text-sm hover:bg-accent"
+          className="mt-2 block w-full whitespace-normal rounded-sm p-2 text-left text-sm font-normal hover:bg-accent"
         >
           <b>{v.label}</b>
           <span className="block text-xs text-muted-foreground">
             {v.summary}
           </span>
-        </button>
+        </ActionButton>
       ))}
       {!result.isLoading && result.data?.length === 0 && (
         <p className="mt-2 text-xs text-muted-foreground">
@@ -140,13 +144,14 @@ export function CharlieScope({
                 className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs"
               >
                 {r.label}
-                <button
-                  type="button"
+                <ActionButton
+                  intent="bare"
+                  size="none"
                   aria-label={`Remove ${r.label}`}
                   onClick={() => remove(`${r.type}:${r.id}`)}
                 >
                   <X className="h-3 w-3" />
-                </button>
+                </ActionButton>
               </span>
             ))}
           </div>

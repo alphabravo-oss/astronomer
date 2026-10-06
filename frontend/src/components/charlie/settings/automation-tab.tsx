@@ -1,8 +1,8 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { useState } from "react";
 import { useDraft } from "@/lib/hooks/use-draft";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
-import { StatePanel } from "@/components/ui/empty-state";
+import { Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -36,8 +36,9 @@ import {
   Section,
   Unavailable,
   button,
-  primary,
 } from "./shared";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
 
 const newAutomationRule = (): CharlieTriggerRule => ({
   id: "",
@@ -159,14 +160,7 @@ export function AutomationTab() {
     },
     onError: (e) => toastApiError("Trigger retry failed", e),
   });
-  if (q.isLoading)
-    return (
-      <StatePanel
-        icon={Loader2}
-        iconClassName="animate-spin motion-reduce:animate-none"
-        title="Loading automation"
-      />
-    );
+  if (q.isLoading) return <LoadingPanel title="Loading automation" />;
   if (q.isError || !draft)
     return (
       <Unavailable
@@ -370,15 +364,15 @@ export function AutomationTab() {
                       ? policy.preconditions.join("; ")
                       : "None published"}
                   </div>
-                  <button
-                    type="button"
-                    className={`${primary} mt-3`}
+                  <ActionButton
+                    intent="primary"
+                    className="mt-3"
                     disabled={!changed || !valuesValid || savePolicy.isPending}
                     onClick={() => savePolicy.mutate(policy)}
                   >
                     <Save className="h-4 w-4" />
                     Save action policy
-                  </button>
+                  </ActionButton>
                 </article>
               );
             })}
@@ -544,8 +538,9 @@ export function AutomationTab() {
               />
               Dead letters
             </label>
-            <button
-              type="button"
+            <ActionButton
+              intent="bare"
+              size="none"
               className={`${button} text-status-error`}
               onClick={() => {
                 if (r.id) setDeleteRule(r);
@@ -561,7 +556,7 @@ export function AutomationTab() {
             >
               <Trash2 className="h-4 w-4" />
               Delete rule
-            </button>
+            </ActionButton>
           </div>
         </Section>
       ))}
@@ -579,8 +574,9 @@ export function AutomationTab() {
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
+        <ActionButton
+          intent="bare"
+          size="none"
           onClick={() =>
             setDraft({ ...draft, rules: [...draft.rules, newAutomationRule()] })
           }
@@ -588,16 +584,15 @@ export function AutomationTab() {
         >
           <Plus className="h-4 w-4" />
           Add trigger rule
-        </button>
-        <button
-          type="button"
+        </ActionButton>
+        <ActionButton
+          intent="primary"
           disabled={save.isPending || issues.length > 0}
           onClick={() => save.mutate(draft)}
-          className={primary}
         >
           <Save className="h-4 w-4" />
           Save automation
-        </button>
+        </ActionButton>
       </div>
       <Section
         title="Dead-letter events"
@@ -616,7 +611,7 @@ export function AutomationTab() {
           <div className="overflow-x-auto">
             <Table
               layout="scroll"
-              className="w-full min-w-[760px] text-left text-sm"
+              className="w-full min-w-190 text-left text-sm"
             >
               <caption className="sr-only">
                 Charlie dead-letter trigger lifecycle metadata
@@ -653,12 +648,11 @@ export function AutomationTab() {
                       <span className="block font-medium">
                         {event.eventType}
                       </span>
-                      <span
-                        className="block max-w-48 truncate font-mono text-xs text-muted-foreground"
-                        title={event.id}
-                      >
-                        {event.id}
-                      </span>
+                      <Tooltip content={event.id}>
+                        <span className="block max-w-48 truncate font-mono text-xs text-muted-foreground">
+                          {event.id}
+                        </span>
+                      </Tooltip>
                     </TableCell>
                     <TableCell className="px-2 py-2">
                       {event.resourceType} · {event.resourceId}
@@ -678,14 +672,15 @@ export function AutomationTab() {
                         : "—"}
                     </TableCell>
                     <TableCell className="px-2 py-2 text-right">
-                      <button
-                        type="button"
+                      <ActionButton
+                        intent="bare"
+                        size="none"
                         className={button}
                         onClick={() => setRetryEvent(event)}
                       >
                         <RefreshCw className="h-4 w-4" />
                         Retry
-                      </button>
+                      </ActionButton>
                     </TableCell>
                   </TableRow>
                 ))}

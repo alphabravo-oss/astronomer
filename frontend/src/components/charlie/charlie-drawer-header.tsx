@@ -1,6 +1,7 @@
 import { History as HistoryIcon, Loader2, StopCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CharlieModePresentation } from "./charlie-mode";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function CharlieModeSummary({
   mode,
@@ -60,30 +61,33 @@ export function CharlieHeaderActions({
 }) {
   return (
     <div className="flex items-center gap-1">
-      <button
-        type="button"
+      <ActionButton
+        intent="bare"
+        size="none"
         onClick={onToggleHistory}
         aria-expanded={conversationListOpen}
         className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
       >
         <HistoryIcon className="h-3 w-3" /> History
-      </button>
-      <button
-        type="button"
+      </ActionButton>
+      <ActionButton
+        intent="bare"
+        size="none"
         onClick={onNewChat}
         disabled={newChatPending}
         className="rounded-md border px-2 py-1 text-xs"
       >
         New chat
-      </button>
+      </ActionButton>
       {canAbort && (
-        <button
-          type="button"
+        <ActionButton
+          intent="bare"
+          size="none"
           onClick={onAbort}
           className="inline-flex items-center gap-1 rounded-md border border-status-error/40 px-2 py-1 text-xs text-status-error"
         >
           <StopCircle className="h-3 w-3" /> Abort turn
-        </button>
+        </ActionButton>
       )}
     </div>
   );

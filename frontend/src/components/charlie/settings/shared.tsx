@@ -5,7 +5,6 @@ import type { CharlieOnboardingInput } from "@/lib/api/charlie-admin";
 
 export const button =
   "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors motion-reduce:transition-none hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50";
-export const primary = `${button} border-primary bg-primary text-primary-foreground hover:bg-primary/90`;
 export const field =
   "h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring";
 

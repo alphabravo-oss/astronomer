@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Clock,
   FileSearch,
-  Loader2,
   ShieldCheck,
   Wrench,
 } from "lucide-react";
@@ -19,6 +18,7 @@ import {
   type CharlieMessage,
   type CharlieToolRun,
 } from "@/lib/api/charlie";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function CharlieLifecycleNotice({ state }: { state?: string }) {
   const states: Record<
@@ -335,30 +335,28 @@ function ApprovalCard({
             />
           </label>
           <div className="flex gap-2">
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               disabled={!!pending}
+              loading={pending === "approve"}
+              icon={<CheckCircle2 className="h-4 w-4" />}
               onClick={() => setConfirm("approve")}
               className="rounded-sm bg-primary px-3 py-2 text-primary-foreground"
             >
-              {pending === "approve" ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" />
-              )}
               <span>Review approval</span>
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
+              intent="bare"
+              size="none"
               disabled={!!pending}
+              loading={pending === "deny"}
+              icon={<Clock className="h-4 w-4" />}
               onClick={() => setConfirm("deny")}
               className="rounded-sm border px-3 py-2"
             >
-              {pending === "deny" ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Clock className="h-4 w-4" />
-              )}
               <span>Review denial</span>
-            </button>
+            </ActionButton>
           </div>
         </div>
       ) : (
