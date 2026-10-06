@@ -17,7 +17,7 @@ import {
 } from "@/lib/api/cluster-registries";
 import { cn } from "@/lib/utils";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 const PASSWORD_SENTINEL = "<set>";
 
@@ -29,8 +29,7 @@ function PasswordToggle({
   onToggle: () => void;
 }) {
   return (
-    <ActionButton
-      {...BARE_BUTTON}
+    <BareButton
       onClick={onToggle}
       className="absolute right-2 top-1/2 inline-block -translate-y-1/2 font-normal text-muted-foreground hover:text-foreground"
       aria-label={shown ? "Hide password" : "Show password"}
@@ -40,7 +39,7 @@ function PasswordToggle({
       ) : (
         <Eye className="h-3.5 w-3.5" />
       )}
-    </ActionButton>
+    </BareButton>
   );
 }
 
@@ -368,14 +367,13 @@ function NamespaceMultiSelect({
               )}
             >
               {ns}
-              <ActionButton
-                {...BARE_BUTTON}
+              <BareButton
                 onClick={() => toggle(ns)}
                 className="hover:text-foreground inline-block font-normal"
                 aria-label={`Remove ${ns}`}
               >
                 <XCircle className="h-3 w-3" />
-              </ActionButton>
+              </BareButton>
             </span>
           ))}
         </div>

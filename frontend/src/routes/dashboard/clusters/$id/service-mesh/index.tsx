@@ -31,15 +31,14 @@ import {
   validateServiceMeshPolicy,
   type ServiceMeshPolicyValidation,
 } from "@/lib/api/cluster-service-mesh";
-import { ActionButton } from "@/components/ui/action-button";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
 import {
   HeroCard,
   HealthTile,
   InventoryPanel,
   PolicyValidationPanel,
 } from "./-panels";
+import { BareButton } from "@/components/form/bare-button";
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 function ClusterServiceMeshPage() {
@@ -127,8 +126,7 @@ function ClusterServiceMeshPage() {
         title="Service mesh"
         description={`Detect and monitor the service mesh installed on ${cluster.displayName}.`}
         actions={
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             onClick={() => reDetect.mutate()}
             disabled={reDetect.isPending}
             className="inline-flex items-center gap-1.5 h-(--control-h) px-3 rounded-sm text-sm font-medium
@@ -141,7 +139,7 @@ function ClusterServiceMeshPage() {
               <RefreshCw className="h-3.5 w-3.5" />
             )}
             Re-detect
-          </ActionButton>
+          </BareButton>
         }
       />
 

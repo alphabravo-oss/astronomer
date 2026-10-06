@@ -2,8 +2,7 @@ import { useEffect } from "react";
 import { Search } from "lucide-react";
 import { useUIStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 const openPalette = () => useUIStore.getState().setCommandPaletteOpen(true);
 
@@ -35,8 +34,7 @@ export function GlobalSearch() {
   }, []);
 
   return (
-    <ActionButton
-      {...BARE_BUTTON}
+    <BareButton
       onClick={openPalette}
       aria-label="Search resources"
       aria-haspopup="dialog"
@@ -56,6 +54,6 @@ export function GlobalSearch() {
           ⌘K
         </kbd>
       </span>
-    </ActionButton>
+    </BareButton>
   );
 }

@@ -22,10 +22,9 @@ import {
   type ServiceMeshPolicyValidation,
   type ServiceMeshKind,
 } from "@/lib/api/cluster-service-mesh";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 // meshLabel maps the backend enum to a human-readable string. Kept as a
 // pure mapping (no JSX) so it can be reused in headers + tile labels.
@@ -342,8 +341,7 @@ export function PolicyValidationPanel({
             </p>
           )}
         </div>
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           onClick={onValidate}
           disabled={validating || value.trim().length === 0}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
@@ -356,7 +354,7 @@ export function PolicyValidationPanel({
             <CheckCircle2 className="h-3.5 w-3.5" />
           )}
           Validate
-        </ActionButton>
+        </BareButton>
       </div>
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Textarea

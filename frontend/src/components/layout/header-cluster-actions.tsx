@@ -9,7 +9,7 @@ import {
 } from "@/lib/hooks/kubernetes-proxy";
 import { cn } from "@/lib/utils";
 import type { Cluster } from "@/types";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 const CreateResourceDialog = lazy(() =>
   import("@/components/resources/create-resource-dialog").then((module) => ({
@@ -82,8 +82,7 @@ export function HeaderClusterActions({
             className="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
           >
             {items.map((item) => (
-              <ActionButton
-                {...BARE_BUTTON}
+              <BareButton
                 disabledReason={item.disabledReason}
                 key={item.label}
                 role="menuitem"
@@ -99,7 +98,7 @@ export function HeaderClusterActions({
                 )}
               >
                 {item.label}
-              </ActionButton>
+              </BareButton>
             ))}
           </div>
         )}

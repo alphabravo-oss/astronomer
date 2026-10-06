@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import type { Cluster } from "@/types";
 import { ActionButton } from "@/components/ui/action-button";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 interface RemoteClusterPickerProps {
   value: string;
@@ -40,8 +40,7 @@ function PickerTextButton({
   ...props
 }: ComponentProps<typeof ActionButton>) {
   return (
-    <ActionButton
-      {...BARE_BUTTON}
+    <BareButton
       className={cn("font-normal whitespace-normal shrink", className)}
       {...props}
     />
@@ -140,8 +139,7 @@ export function RemoteClusterPicker({
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         ref={triggerRef}
         id={id}
         name={name}
@@ -164,7 +162,7 @@ export function RemoteClusterPicker({
           {value ? selectedText : placeholder}
         </span>
         <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </ActionButton>
+      </BareButton>
 
       {open ? (
         <div className="absolute z-50 mt-1 w-full min-w-72 overflow-hidden rounded-md border border-border bg-popover shadow-xl">
@@ -267,8 +265,7 @@ export function RemoteClusterPicker({
                             : "Load more clusters"}
                         </PickerTextButton>
                       ) : (
-                        <ActionButton
-                          {...BARE_BUTTON}
+                        <BareButton
                           id={`${listboxID}-option-${virtualRow.index}`}
                           role="option"
                           aria-selected={cluster.id === value}
@@ -296,7 +293,7 @@ export function RemoteClusterPicker({
                           {cluster.id === value ? (
                             <Check className="h-4 w-4 shrink-0 text-primary" />
                           ) : null}
-                        </ActionButton>
+                        </BareButton>
                       )}
                     </div>
                   );

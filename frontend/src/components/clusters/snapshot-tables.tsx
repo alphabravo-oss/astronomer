@@ -17,10 +17,9 @@ import type {
   SnapshotSchedule,
 } from "@/lib/api/cluster-velero";
 import { cn } from "@/lib/utils";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ChipsCell, TimestampCell } from "@/components/tables/cells";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 function SnapshotPhasePill({ phase }: { phase: SnapshotPhase }) {
   const tone =
@@ -176,8 +175,7 @@ export function SnapshotSchedulesTable({
       rowActions: true,
       accessor: (schedule) => (
         <div className="flex items-center justify-end gap-1.5">
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             tooltip={canWrite ? "Edit" : undefined}
             disabledReason={canWrite ? undefined : disabledReason}
             aria-label="Edit"
@@ -186,9 +184,8 @@ export function SnapshotSchedulesTable({
             className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
           >
             <Pencil className="h-3.5 w-3.5" />
-          </ActionButton>
-          <ActionButton
-            {...BARE_BUTTON}
+          </BareButton>
+          <BareButton
             tooltip={canWrite ? "Delete" : undefined}
             disabledReason={canWrite ? undefined : disabledReason}
             aria-label="Delete"
@@ -197,7 +194,7 @@ export function SnapshotSchedulesTable({
             className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </ActionButton>
+          </BareButton>
         </div>
       ),
     },
@@ -342,8 +339,7 @@ export function SnapshotsTable({
           snapshot.phase === "PartiallyFailed";
         return (
           <div className="flex items-center justify-end gap-1.5">
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               tooltip={
                 !canWrite
                   ? undefined
@@ -358,9 +354,8 @@ export function SnapshotsTable({
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Restore
-            </ActionButton>
-            <ActionButton
-              {...BARE_BUTTON}
+            </BareButton>
+            <BareButton
               tooltip={canWrite ? "Delete" : undefined}
               disabledReason={canWrite ? undefined : disabledReason}
               aria-label="Delete"
@@ -369,7 +364,7 @@ export function SnapshotsTable({
               className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
             >
               <Trash2 className="h-3.5 w-3.5" />
-            </ActionButton>
+            </BareButton>
           </div>
         );
       },

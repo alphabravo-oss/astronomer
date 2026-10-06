@@ -9,7 +9,7 @@ import {
   ChevronDown,
   Terminal,
 } from "lucide-react";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 interface ToolInstallProgressProps {
   operationId: string;
@@ -129,8 +129,7 @@ export function ToolInstallProgress({
               {statusLabel}
             </span>
           </div>
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             tooltip={
               isTerminal
                 ? "Close"
@@ -141,7 +140,7 @@ export function ToolInstallProgress({
           >
             {isTerminal ? "Close" : "Hide"}
             <ChevronDown className="h-3.5 w-3.5" />
-          </ActionButton>
+          </BareButton>
         </header>
 
         {releases.length > 0 && (

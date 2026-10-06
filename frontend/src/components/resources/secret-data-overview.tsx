@@ -16,8 +16,7 @@ import {
 } from "@/components/resources/resource-overview-primitives";
 import { useClusterResourcePermission } from "@/lib/permission-hooks";
 import { cn, copyToClipboard, formatBytes } from "@/lib/utils";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 interface SecretDataOverviewProps {
   obj: K8sObject;
@@ -223,8 +222,7 @@ function SecretValuePanel({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             onClick={() => setRevealed((value) => !value)}
             aria-label={revealed ? `Hide ${name}` : `Show ${name}`}
             aria-pressed={revealed}
@@ -241,9 +239,8 @@ function SecretValuePanel({
               <Eye className="h-3.5 w-3.5" />
             )}
             {revealed ? "Hide" : "Show"}
-          </ActionButton>
-          <ActionButton
-            {...BARE_BUTTON}
+          </BareButton>
+          <BareButton
             onClick={() => void copy()}
             disabled={!revealed || !decoded.text}
             aria-label={`Copy ${name}`}
@@ -255,16 +252,15 @@ function SecretValuePanel({
               <Copy className="h-3.5 w-3.5" />
             )}
             {copied ? "Copied" : "Copy"}
-          </ActionButton>
-          <ActionButton
-            {...BARE_BUTTON}
+          </BareButton>
+          <BareButton
             onClick={() => downloadValue(secretName, name, decoded)}
             disabled={!revealed}
             aria-label={`Download ${name}`}
             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 font-normal"
           >
             <Download className="h-3.5 w-3.5" /> Download
-          </ActionButton>
+          </BareButton>
         </div>
       </header>
       <div className="relative min-h-40 bg-muted/15">

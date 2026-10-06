@@ -35,9 +35,8 @@ import {
   reapplyNetworkPolicyApplication,
   type NetworkPolicyApplication,
 } from "@/lib/api/settings";
-import { ActionButton } from "@/components/ui/action-button";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 function PolicyRowActions({
   onReapply,
@@ -48,22 +47,20 @@ function PolicyRowActions({
 }) {
   return (
     <div className="flex items-center justify-end gap-1">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         onClick={onReapply}
         className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-border hover:bg-muted font-normal"
       >
         <RefreshCw className="h-3 w-3" /> Reapply
-      </ActionButton>
-      <ActionButton
-        {...BARE_BUTTON}
+      </BareButton>
+      <BareButton
         tooltip="Revoke"
         aria-label="Revoke"
         onClick={onRevoke}
         className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-status-error/30 text-status-error hover:bg-status-error/10 font-normal"
       >
         <Trash2 className="h-3 w-3" />
-      </ActionButton>
+      </BareButton>
     </div>
   );
 }
@@ -158,13 +155,12 @@ function ClusterNetworkPoliciesPage() {
         title="Network policies"
         description="NetworkPolicy templates applied to namespaces in this cluster. The reconciler keeps each application server-side-applied; drifting rows are re-stamped on the next 5m tick."
         actions={
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             onClick={() => setOpenApply((v) => !v)}
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-card hover:bg-muted font-normal"
           >
             <Plus className="h-4 w-4" /> Apply template
-          </ActionButton>
+          </BareButton>
         }
       />
 
@@ -202,8 +198,7 @@ function ClusterNetworkPoliciesPage() {
               </span>
             </label>
           </div>
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             onClick={handleApply}
             disabled={submitting}
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-foreground text-background hover:opacity-90 disabled:opacity-50 font-normal"
@@ -214,7 +209,7 @@ function ClusterNetworkPoliciesPage() {
               <Plus className="h-4 w-4" />
             )}
             Apply
-          </ActionButton>
+          </BareButton>
         </div>
       )}
 

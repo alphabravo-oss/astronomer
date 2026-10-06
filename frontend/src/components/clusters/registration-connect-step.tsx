@@ -33,7 +33,7 @@ import {
 } from "@/components/clusters/registration-install-commands";
 import { registrationWizardStep } from "@/components/clusters/registration-stage";
 import { cn } from "@/lib/utils";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 const TAB_KEYS = ["curl", "quick", "yaml", "airgapped"] as const;
 
@@ -47,15 +47,14 @@ function CopyCommandButton({
   onClick: () => void;
 }) {
   return (
-    <ActionButton
-      {...BARE_BUTTON}
+    <BareButton
       onClick={onClick}
       disabled={disabled}
       className="absolute top-2 right-2 inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-border bg-background text-xs hover:bg-accent disabled:opacity-50 font-normal"
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
       {copied ? "Copied" : "Copy"}
-    </ActionButton>
+    </BareButton>
   );
 }
 
@@ -279,8 +278,7 @@ export function RegistrationConnectStep({
                   const active = curlVariant === v;
                   const isPlatformDefault = v === tlsMode;
                   return (
-                    <ActionButton
-                      {...BARE_BUTTON}
+                    <BareButton
                       key={v}
                       onClick={() => setCurlVariant(v)}
                       className={cn(
@@ -296,7 +294,7 @@ export function RegistrationConnectStep({
                           (platform default)
                         </span>
                       )}
-                    </ActionButton>
+                    </BareButton>
                   );
                 })}
               </div>
@@ -358,14 +356,13 @@ export function RegistrationConnectStep({
                   {manifest || "# loading..."}
                 </pre>
               </div>
-              <ActionButton
-                {...BARE_BUTTON}
+              <BareButton
                 onClick={onDownload}
                 className="inline-flex items-center gap-1.5 h-(--control-h) px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent"
               >
                 <Download className="h-3.5 w-3.5" />
                 Download YAML
-              </ActionButton>
+              </BareButton>
             </div>
           )}
 
@@ -465,8 +462,7 @@ function TabButton({
   children: React.ReactNode;
 }) {
   return (
-    <ActionButton
-      {...BARE_BUTTON}
+    <BareButton
       onClick={onClick}
       className={cn(
         `px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
@@ -478,6 +474,6 @@ function TabButton({
       )}
     >
       {children}
-    </ActionButton>
+    </BareButton>
   );
 }

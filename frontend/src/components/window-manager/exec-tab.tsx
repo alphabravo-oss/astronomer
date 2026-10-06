@@ -6,9 +6,8 @@ import {
 } from "@/components/workloads/pod-terminal";
 import { Eraser, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 interface ExecTabProps {
   clusterId: string;
@@ -77,8 +76,7 @@ export function ExecTab({
         </div>
 
         <div className="flex items-center gap-1">
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             tooltip="Clear terminal"
             onClick={() => {
               termActionsRef.current?.clear();
@@ -94,10 +92,9 @@ export function ExecTab({
           >
             <Eraser className="h-3 w-3" />
             <span className="hidden sm:inline">Clear</span>
-          </ActionButton>
+          </BareButton>
           {(status === "disconnected" || status === "error") && (
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               tooltip="Reconnect"
               onClick={() => setReconnectNonce((n) => n + 1)}
               className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-2xs
@@ -105,7 +102,7 @@ export function ExecTab({
             >
               <RefreshCw className="h-3 w-3" />
               Reconnect
-            </ActionButton>
+            </BareButton>
           )}
         </div>
       </div>

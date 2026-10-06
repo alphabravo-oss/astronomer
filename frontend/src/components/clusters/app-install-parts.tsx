@@ -1,6 +1,5 @@
 import { Loader2, Info } from "lucide-react";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 // Charts that ship CRDs by default — the operator should know that
 // uninstall will not remove the CRDs unless they take extra steps.
@@ -32,16 +31,14 @@ export function AppInstallFooter({
 }) {
   return (
     <div className="flex items-center justify-end gap-2">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         onClick={onClose}
         className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted inline-block font-normal"
         disabled={pending}
       >
         Cancel
-      </ActionButton>
-      <ActionButton
-        {...BARE_BUTTON}
+      </BareButton>
+      <BareButton
         disabledReason={reason}
         onClick={onSubmit}
         disabled={!submittable}
@@ -55,7 +52,7 @@ export function AppInstallFooter({
         ) : (
           <>{upgrade ? "Upgrade" : "Install"}</>
         )}
-      </ActionButton>
+      </BareButton>
     </div>
   );
 }

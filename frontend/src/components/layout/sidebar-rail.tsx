@@ -6,9 +6,8 @@ import type { NavGroup, NavItem } from "@/components/layout/sidebar-navigation";
 import { cn } from "@/lib/utils";
 import { navGroupItems } from "./nav-group-items";
 import { SidebarNavItems, type StarredNavControls } from "./sidebar-nav-items";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 function isItemActive(item: NavItem, pathname: string): boolean {
   return item.exact
@@ -143,8 +142,7 @@ export function SidebarRailGroup({
 
   return (
     <div className="relative">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         tooltip={group.label}
         ref={triggerRef}
         onClick={() => setOpen((value) => !value)}
@@ -164,7 +162,7 @@ export function SidebarRailGroup({
               : "text-muted-foreground group-hover:text-foreground",
           )}
         />
-      </ActionButton>
+      </BareButton>
       {open &&
         createPortal(
           <nav

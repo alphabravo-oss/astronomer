@@ -27,8 +27,7 @@ import {
   WORKLOAD_RESTARTABLE_KINDS,
 } from "@/lib/k8s-paths";
 import { cn } from "@/lib/utils";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 interface ResourceActionsProps {
   clusterId: string;
@@ -155,19 +154,17 @@ export function ResourceActions({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {WORKLOAD_SCALABLE_KINDS.includes(kind) && (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           tooltip={denied(scalePerm)}
           className={cn(BTN, "inline-block font-normal")}
           disabled={!scalePerm.allowed}
           onClick={() => setShowScale(true)}
         >
           <Scaling className="h-3.5 w-3.5" /> Scale
-        </ActionButton>
+        </BareButton>
       )}
       {WORKLOAD_RESTARTABLE_KINDS.includes(kind) && (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           tooltip={denied(restartPerm)}
           className={cn(BTN, "inline-block font-normal")}
           disabled={!restartPerm.allowed || restartWorkload.isPending}
@@ -187,11 +184,10 @@ export function ResourceActions({
             )}
           />{" "}
           Restart
-        </ActionButton>
+        </BareButton>
       )}
       {kind === "Deployment" && paused !== undefined && (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           tooltip={denied(updatePerm)}
           className={cn(BTN, "inline-block font-normal")}
           disabled={!updatePerm.allowed || patch.isPending}
@@ -209,22 +205,20 @@ export function ResourceActions({
             <Pause className="h-3.5 w-3.5" />
           )}
           {paused ? "Resume" : "Pause"}
-        </ActionButton>
+        </BareButton>
       )}
       {kind === "CronJob" && jobTemplate && (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           tooltip={denied(triggerPerm)}
           className={cn(BTN, "inline-block font-normal")}
           disabled={!triggerPerm.allowed || k8sCreate.isPending}
           onClick={runNow}
         >
           <Zap className="h-3.5 w-3.5" /> Run Now
-        </ActionButton>
+        </BareButton>
       )}
       {kind === "CronJob" && suspended !== undefined && (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           tooltip={denied(updatePerm)}
           className={cn(BTN, "inline-block font-normal")}
           disabled={!updatePerm.allowed || patch.isPending}
@@ -242,18 +236,16 @@ export function ResourceActions({
             <Pause className="h-3.5 w-3.5" />
           )}
           {suspended ? "Resume" : "Suspend"}
-        </ActionButton>
+        </BareButton>
       )}
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         tooltip="Download YAML"
         className={cn(BTN, "inline-block font-normal")}
         onClick={downloadYaml}
       >
         <Download className="h-3.5 w-3.5" /> YAML
-      </ActionButton>
-      <ActionButton
-        {...BARE_BUTTON}
+      </BareButton>
+      <BareButton
         tooltip={denied(deletePerm)}
         className={cn(
           BTN,
@@ -263,7 +255,7 @@ export function ResourceActions({
         onClick={() => setShowDelete(true)}
       >
         <Trash2 className="h-3.5 w-3.5" /> Delete
-      </ActionButton>
+      </BareButton>
 
       <ScaleDialog
         open={showScale}

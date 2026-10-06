@@ -13,10 +13,9 @@ import {
   Clock,
   History,
 } from "lucide-react";
-import { ActionButton } from "@/components/ui/action-button";
 import { LogToolbarButton } from "./log-toolbar-button";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 interface PodLogsViewerProps {
   clusterId: string;
@@ -296,8 +295,7 @@ export function PodLogsViewer({
               {filteredLogs.length} matches
             </span>
           )}
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             aria-label="Close log filter"
             onClick={() => {
               setShowSearch(false);
@@ -306,7 +304,7 @@ export function PodLogsViewer({
             className="text-muted-foreground hover:text-foreground inline-block font-normal"
           >
             <X className="h-3 w-3" />
-          </ActionButton>
+          </BareButton>
         </div>
       )}
 
@@ -364,8 +362,7 @@ export function PodLogsViewer({
 
       {/* Auto-scroll indicator */}
       {!follow && (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           onClick={() => {
             setFollow(true);
             if (scrollRef.current) {
@@ -378,7 +375,7 @@ export function PodLogsViewer({
         >
           <ArrowDown className="h-3 w-3" />
           Scroll to bottom and follow
-        </ActionButton>
+        </BareButton>
       )}
     </div>
   );

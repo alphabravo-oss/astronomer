@@ -40,9 +40,8 @@ import {
 } from "@/lib/api/cluster-template-binding";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ActionButton } from "@/components/ui/action-button";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 // Monaco stays a lazy chunk (second of the 2 monaco sites; the first is
 // components/ui/yaml-editor.tsx) so the editor bundle loads only when the
@@ -134,8 +133,7 @@ function AppliedSpec({
 }) {
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         onClick={onToggle}
         className="w-full flex items-center justify-between px-5 py-3 hover:bg-accent/40 transition-colors font-normal whitespace-normal shrink"
       >
@@ -152,7 +150,7 @@ function AppliedSpec({
             (read-only snapshot)
           </span>
         </div>
-      </ActionButton>
+      </BareButton>
       {open && (
         <div className="border-t border-border">
           {specJson ? (
@@ -363,8 +361,7 @@ function ClusterTemplatePage() {
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <ActionButton
-                  {...BARE_BUTTON}
+                <BareButton
                   disabledReason={canWrite ? undefined : reason}
                   onClick={() => canWrite && setConfirmReapply(true)}
                   disabled={
@@ -378,9 +375,8 @@ function ClusterTemplatePage() {
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   Reapply
-                </ActionButton>
-                <ActionButton
-                  {...BARE_BUTTON}
+                </BareButton>
+                <BareButton
                   disabledReason={canWrite ? undefined : reason}
                   onClick={() => canWrite && setConfirmDetach(true)}
                   disabled={!canWrite}
@@ -390,7 +386,7 @@ function ClusterTemplatePage() {
                 >
                   <Unlink className="h-3.5 w-3.5" />
                   Detach
-                </ActionButton>
+                </BareButton>
               </div>
             </div>
           </div>

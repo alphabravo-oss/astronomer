@@ -19,9 +19,8 @@ import { DataTable } from "@/components/ui/data-table";
 import { formatBytes, formatCPU, formatPercentage, cn } from "@/lib/utils";
 import { LineChart, ArrowRight } from "lucide-react";
 import { Cpu, MemoryStick, Network, HardDrive, Box } from "lucide-react";
-import { ActionButton } from "@/components/ui/action-button";
 import { SkeletonCard } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 const timeRanges = [
   { value: "1h", label: "1H" },
@@ -68,8 +67,7 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
               {timeRanges.map((range) => (
-                <ActionButton
-                  {...BARE_BUTTON}
+                <BareButton
                   key={range.value}
                   onClick={() => setTimeRange(range.value)}
                   className={cn(
@@ -80,7 +78,7 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
                   )}
                 >
                   {range.label}
-                </ActionButton>
+                </BareButton>
               ))}
             </div>
           </div>

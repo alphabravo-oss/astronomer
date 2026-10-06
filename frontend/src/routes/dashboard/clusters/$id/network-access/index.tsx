@@ -46,10 +46,9 @@ import { queryKeys } from "@/lib/query-keys";
 import { liveFallback } from "@/lib/live/status-store";
 import { useClustersUpdate } from "@/lib/permission-hooks";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { BARE_BUTTON } from "@/lib/bare-button";
 import { ModeBadge, CIDRPill, SnapshotHistory } from "./-parts";
+import { BareButton } from "@/components/form/bare-button";
 
 function ClusterNetworkAccessPage() {
   const params = Route.useParams();
@@ -204,8 +203,7 @@ function ClusterNetworkAccessPage() {
                 <ShieldCheck className="h-3 w-3" /> Synced
               </span>
             )}
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               tooltip={
                 !canWrite
                   ? undefined
@@ -231,7 +229,7 @@ function ClusterNetworkAccessPage() {
                 }
               />
               Reconcile now
-            </ActionButton>
+            </BareButton>
           </>
         }
       />
@@ -284,8 +282,7 @@ function ClusterNetworkAccessPage() {
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-medium">Operator CIDRs</h2>
             {!editing ? (
-              <ActionButton
-                {...BARE_BUTTON}
+              <BareButton
                 tooltip={
                   !canWrite ? undefined : canMonitor ? "Edit" : undefined
                 }
@@ -301,11 +298,10 @@ function ClusterNetworkAccessPage() {
                 className="text-xs underline disabled:opacity-50 inline-block font-normal"
               >
                 Edit
-              </ActionButton>
+              </BareButton>
             ) : (
               <div className="flex gap-2">
-                <ActionButton
-                  {...BARE_BUTTON}
+                <BareButton
                   onClick={() => {
                     setEditing(false);
                     setEditedCIDRs(data.operatorCidrs);
@@ -315,15 +311,14 @@ function ClusterNetworkAccessPage() {
                   className="text-xs underline inline-block font-normal"
                 >
                   Cancel
-                </ActionButton>
-                <ActionButton
-                  {...BARE_BUTTON}
+                </BareButton>
+                <BareButton
                   onClick={handleSave}
                   disabled={updateMut.isPending}
                   className="text-xs underline text-status-info inline-block font-normal"
                 >
                   Save
-                </ActionButton>
+                </BareButton>
               </div>
             )}
           </div>
@@ -353,13 +348,12 @@ function ClusterNetworkAccessPage() {
                 placeholder="e.g. 10.0.0.0/8"
                 className="flex-1 rounded-sm border px-2 py-1 text-sm font-mono"
               />
-              <ActionButton
-                {...BARE_BUTTON}
+              <BareButton
                 onClick={handleAddCIDR}
                 className="rounded-sm border px-3 py-1 text-sm hover:bg-muted/30 inline-block font-normal"
               >
                 Add
-              </ActionButton>
+              </BareButton>
             </div>
           )}
         </div>

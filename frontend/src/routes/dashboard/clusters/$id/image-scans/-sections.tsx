@@ -10,10 +10,8 @@ import {
   TableRow,
 } from "@/components/ui/operator-table";
 import { ShieldAlert, TrendingDown, TrendingUp, Minus } from "lucide-react";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
 import type {
   CVESeverity,
   ImageVulnDiff,
@@ -23,6 +21,7 @@ import type {
   ImageVulnSummary,
 } from "@/lib/api/cluster-vulnerabilities";
 import { HistorySparkline } from "./-history-sparkline";
+import { BareButton } from "@/components/form/bare-button";
 
 export const SEVERITIES: {
   key: keyof ImageVulnSummary;
@@ -264,8 +263,7 @@ export function ImagesTable({
                 onClick={() => onOpen(r)}
               >
                 <TableCell className="px-3 py-2 font-mono text-xs">
-                  <ActionButton
-                    {...BARE_BUTTON}
+                  <BareButton
                     className="text-primary hover:underline focus-visible:outline focus-visible:outline-ring inline-block font-normal"
                     aria-label={`View CVEs for ${r.imageRepo}:${r.imageTag}`}
                     onClick={(event) => {
@@ -274,7 +272,7 @@ export function ImagesTable({
                     }}
                   >
                     {r.imageRepo}:{r.imageTag}
-                  </ActionButton>
+                  </BareButton>
                 </TableCell>
                 <TableCell className="px-3 py-2">{r.namespace}</TableCell>
                 <TableCell className="px-3 py-2">

@@ -1,8 +1,7 @@
 import { useId, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { ActionButton } from "@/components/ui/action-button";
-import { BARE_BUTTON } from "@/lib/bare-button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -84,8 +83,7 @@ export function Section({
   const contentId = useId();
   return (
     <div className="rounded-lg border bg-card mb-4">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={contentId}
@@ -103,7 +101,7 @@ export function Section({
         ) : (
           <ChevronRight className="h-4 w-4" />
         )}
-      </ActionButton>
+      </BareButton>
       {open && (
         <div id={contentId} className="border-t p-4">
           {children}

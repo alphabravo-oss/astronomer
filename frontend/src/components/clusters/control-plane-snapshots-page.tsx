@@ -29,7 +29,7 @@ import {
 } from "./control-plane-snapshot-utils";
 import { EntityCell, TimestampCell } from "@/components/tables/cells";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 function ControlPlaneSnapshotStatusPill({
   status,
@@ -166,15 +166,14 @@ function controlPlaneSnapshotColumns(
       maxSize: 140,
       sortable: false,
       accessor: (snapshot) => (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           tooltip="View restore runbook"
           onClick={() => onRestoreGuidance(snapshot)}
           className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
         >
           <BookOpen className="h-3.5 w-3.5" />
           Restore guidance
-        </ActionButton>
+        </BareButton>
       ),
     },
   ];
@@ -235,13 +234,12 @@ function RestoreGuidanceModal({
       ) : guidanceQuery.isError ? (
         <div className="text-sm text-status-error py-8 text-center">
           Failed to load restore guidance.{" "}
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             onClick={() => void guidanceQuery.refetch()}
             className="underline hover:text-foreground inline-block font-normal"
           >
             Retry
-          </ActionButton>
+          </BareButton>
         </div>
       ) : (
         <div className="space-y-4">

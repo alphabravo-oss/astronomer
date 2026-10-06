@@ -21,9 +21,8 @@ import {
   Terminal as TerminalIcon,
   X,
 } from "lucide-react";
-import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 // Console transports and the terminal runtime are loaded only when a tab opens.
 const LogsTab = lazy(() =>
   import("./logs-tab").then((module) => ({ default: module.LogsTab })),
@@ -136,8 +135,7 @@ export function WindowManager() {
         className="fixed left-0 right-0 bottom-0 z-40 flex items-center gap-1 px-2 py-1
           border-t border-border bg-card/95 backdrop-blur-xs"
       >
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           tooltip="Restore"
           onClick={() => toggleMinimize()}
           className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-2xs
@@ -145,11 +143,10 @@ export function WindowManager() {
         >
           <ChevronUp className="h-3 w-3" />
           <span>Console</span>
-        </ActionButton>
+        </BareButton>
         <div className="flex items-center gap-1 overflow-x-auto">
           {tabs.map((t) => (
-            <ActionButton
-              {...BARE_BUTTON}
+            <BareButton
               key={t.id}
               onClick={() => {
                 setActive(t.id);
@@ -168,7 +165,7 @@ export function WindowManager() {
                   {shortLabel(t)}
                 </span>
               </Tooltip>
-            </ActionButton>
+            </BareButton>
           ))}
         </div>
         <div className="ml-auto" />
@@ -186,8 +183,7 @@ export function WindowManager() {
       style={{ height: `${height}px` }}
     >
       {/* Resize handle */}
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         aria-label={`Resize console, currently ${height} pixels. Use up and down arrow keys.`}
         onMouseDown={onDragStart}
         onKeyDown={(event) => {
@@ -215,8 +211,7 @@ export function WindowManager() {
                       : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
                   )}
                 >
-                  <ActionButton
-                    {...BARE_BUTTON}
+                  <BareButton
                     onClick={() => setActive(t.id)}
                     aria-pressed={isActive}
                     className="inline-flex min-w-0 items-center gap-1.5 focus:outline-hidden focus:ring-2 focus:ring-ring font-normal whitespace-normal shrink"
@@ -224,16 +219,15 @@ export function WindowManager() {
                     <TabStatusDot status={tabStatuses[t.id] ?? "idle"} />
                     <TabIcon kind={t.kind} />
                     <span className="font-mono">{tabLabel(t)}</span>
-                  </ActionButton>
-                  <ActionButton
-                    {...BARE_BUTTON}
+                  </BareButton>
+                  <BareButton
                     onClick={() => closeTab(t.id)}
                     aria-label={`Close ${tabLabel(t)} tab`}
                     className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-sm
                     text-muted-foreground/70 hover:text-foreground hover:bg-accent/80 font-normal"
                   >
                     <X className="h-3 w-3" />
-                  </ActionButton>
+                  </BareButton>
                 </div>
               </Tooltip>
             );
@@ -321,15 +315,14 @@ function ConsoleIconButton({
   children: ReactNode;
 }) {
   return (
-    <ActionButton
-      {...BARE_BUTTON}
+    <BareButton
       tooltip={label}
       aria-label={label}
       onClick={() => onClick()}
       className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground font-normal"
     >
       {children}
-    </ActionButton>
+    </BareButton>
   );
 }
 

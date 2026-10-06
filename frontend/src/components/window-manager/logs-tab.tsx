@@ -14,11 +14,10 @@ import {
   X,
 } from "lucide-react";
 import type { PodLog } from "@/types";
-import { ActionButton } from "@/components/ui/action-button";
 import { LogToolbarButton } from "@/components/workloads/log-toolbar-button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SkeletonText } from "@/components/ui/skeleton";
-import { BARE_BUTTON } from "@/lib/bare-button";
+import { BareButton } from "@/components/form/bare-button";
 
 interface LogsTabProps {
   clusterId: string;
@@ -255,8 +254,7 @@ export function LogsTab({
               {filteredLogs.length} matches
             </span>
           )}
-          <ActionButton
-            {...BARE_BUTTON}
+          <BareButton
             aria-label="Close log filter"
             onClick={() => {
               setShowSearch(false);
@@ -265,7 +263,7 @@ export function LogsTab({
             className="text-muted-foreground hover:text-foreground inline-block font-normal"
           >
             <X className="h-3 w-3" />
-          </ActionButton>
+          </BareButton>
         </div>
       )}
 
@@ -326,8 +324,7 @@ export function LogsTab({
       </div>
 
       {!follow && filteredLogs.length > 0 && (
-        <ActionButton
-          {...BARE_BUTTON}
+        <BareButton
           onClick={() => {
             setPrevious(false);
             setFollow(true);
@@ -341,7 +338,7 @@ export function LogsTab({
         >
           <ArrowDown className="h-3 w-3" />
           Scroll to bottom and follow
-        </ActionButton>
+        </BareButton>
       )}
     </div>
   );
@@ -437,8 +434,7 @@ function TailRangeSelect({
   const renderOption = (opt: TailRangeOption) => {
     const selected = rangeEquals(value, opt);
     return (
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         key={opt.label}
         role="option"
         aria-selected={selected}
@@ -451,14 +447,13 @@ function TailRangeSelect({
         )}
       >
         <span className="tabular-nums">{opt.label}</span>
-      </ActionButton>
+      </BareButton>
     );
   };
 
   return (
     <div ref={ref} className="relative">
-      <ActionButton
-        {...BARE_BUTTON}
+      <BareButton
         tooltip="Tail range"
         aria-label={`Tail range: ${labelForRange(value)}`}
         aria-haspopup="listbox"
@@ -485,7 +480,7 @@ function TailRangeSelect({
             strokeLinejoin="round"
           />
         </svg>
-      </ActionButton>
+      </BareButton>
       {open && (
         <div
           role="listbox"
