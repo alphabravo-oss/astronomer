@@ -45,7 +45,7 @@ import {
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { registrationSearch } from "@/components/clusters/registration-flow";
 import { EditClusterModal } from "@/components/clusters/edit-cluster-modal";
 import {
@@ -194,7 +194,7 @@ export function ClusterDetailPage() {
   const effectiveStatus = deriveEffectiveClusterStatus(cluster);
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <div className="space-y-2">
         <ResourceMasthead
           title={cluster.displayName || cluster.name || cluster.id}
@@ -460,7 +460,7 @@ export function ClusterDetailPage() {
         variant="destructive"
         loading={deleteMutation.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 

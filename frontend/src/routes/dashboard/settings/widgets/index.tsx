@@ -28,7 +28,7 @@ import {
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { ActionButton } from "@/components/ui/action-button";
 import {
   Plus,
@@ -312,7 +312,7 @@ function WidgetsAdminPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <PageShell>
       <ResourceMasthead
         backTo="/dashboard/settings"
         backLabel="Settings"
@@ -719,7 +719,7 @@ function WidgetsAdminPage() {
         variant="destructive"
         loading={deleteDatasourceMutation.isPending}
       />
-    </div>
+    </PageShell>
   );
 }
 

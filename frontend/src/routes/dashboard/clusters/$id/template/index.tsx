@@ -330,7 +330,7 @@ function ClusterTemplatePage() {
       ) : (
         <>
           {/* Applied template card */}
-          <div className="rounded-lg border border-border bg-card p-5">
+          <div className="rounded-lg border border-border bg-card p-(--card-p)">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">

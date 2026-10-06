@@ -42,7 +42,7 @@ import { useAuthStore } from "@/lib/store";
 import { can } from "@/lib/permissions";
 import { mergeCharlieSearch } from "@/components/charlie/admin-utils";
 import { TabStrip } from "@/components/ui/tabs";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { ActionButton } from "@/components/ui/action-button";
 
 export const CHARLIE_HUB_TABS = [
@@ -84,7 +84,7 @@ function CharlieHub() {
     });
   };
   return (
-    <div className="space-y-6">
+    <PageShell>
       <ResourceMasthead
         title="Charlie"
         status={
@@ -144,7 +144,7 @@ function CharlieHub() {
         )}
         {tab === "approvals" && <Approvals selected={params.get("approval")} />}
       </div>
-    </div>
+    </PageShell>
   );
 }
 
@@ -169,7 +169,7 @@ function FilterField({
           aria-label={label}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-9 w-full rounded-sm border bg-background px-2"
+          className="h-(--control-h) w-full rounded-sm border bg-background px-2"
         >
           <option value="">All</option>
           {options.map((option) => (
@@ -184,7 +184,7 @@ function FilterField({
           aria-label={label}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-9 w-full rounded-sm border bg-background px-2"
+          className="h-(--control-h) w-full rounded-sm border bg-background px-2"
         />
       )}
     </label>

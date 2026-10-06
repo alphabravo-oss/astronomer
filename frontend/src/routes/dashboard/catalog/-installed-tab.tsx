@@ -4,7 +4,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
 import { useCluster } from "@/lib/hooks/clusters";
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
 import type { InstalledChart } from "@/types";
 import { ArrowUpCircle, RotateCcw, Trash2 } from "lucide-react";
 import { UpgradeChartModal } from "./-upgrade-chart-modal";
@@ -33,15 +33,21 @@ export function InstalledTab({
     {
       key: "release",
       header: "Release",
+      kind: "name",
+      minSize: 180,
       accessor: (row) => (
         <span className="font-medium text-foreground font-mono text-xs">
           {row.releaseName}
         </span>
       ),
+      sortAccessor: (row) => row.releaseName,
     },
     {
       key: "chart",
-      header: "Chart version",
+      header: "Version",
+      kind: "version",
+      size: 132,
+      minSize: 105,
       accessor: (row) => (
         <Tooltip content={row.chartVersionId || undefined}>
           <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
@@ -55,11 +61,17 @@ export function InstalledTab({
     {
       key: "cluster",
       header: "Cluster",
+      kind: "text",
+      size: 110,
+      minSize: 105,
       accessor: (row) => <InstalledClusterName clusterId={row.clusterId} />,
     },
     {
       key: "namespace",
       header: "Namespace",
+      kind: "text",
+      size: 120,
+      minSize: 119,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.namespace}
@@ -69,22 +81,28 @@ export function InstalledTab({
     {
       key: "status",
       header: "Status",
+      kind: "status",
+      size: 98,
       accessor: (row) => <StatusBadge status={row.status} />,
     },
     {
       key: "revision",
       header: "Rev",
+      kind: "count",
+      size: 77,
       accessor: (row) => (
         <span className="tabular-nums text-xs text-muted-foreground">
           {row.revision}
         </span>
       ),
       sortAccessor: (row) => row.revision,
-      align: "center",
     },
     {
       key: "source",
       header: "Source",
+      kind: "text",
+      size: 100,
+      minSize: 98,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
           {row.toolSlug ? `Tool: ${row.toolSlug}` : "Catalog chart"}
@@ -93,16 +111,16 @@ export function InstalledTab({
     },
     {
       key: "date",
-      header: "Date",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.createdAt)}
-        </span>
-      ),
+      header: "Age",
+      kind: "age",
+      size: 88,
+      accessor: (row) => <AgeCell value={row.createdAt} />,
+      sortAccessor: (row) => row.createdAt,
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
       rowActions: true,
       accessor: (row) => {
         const items: ActionMenuItem[] = [

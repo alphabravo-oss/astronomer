@@ -107,16 +107,22 @@ function ReleaseDiagnostics({ id }: { id: string }) {
               {
                 key: "revision",
                 header: "Revision",
+                kind: "count",
                 accessor: (row) => row.revision,
               },
               {
                 key: "status",
                 header: "Status",
+                kind: "status",
                 accessor: (row) => row.status || "Unknown",
               },
               {
                 key: "description",
                 header: "Description",
+                kind: "text",
+                grow: true,
+                minSize: 240,
+                maxSize: 960,
                 accessor: (row) => row.description || "—",
               },
             ]}

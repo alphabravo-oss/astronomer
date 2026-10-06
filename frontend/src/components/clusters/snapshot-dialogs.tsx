@@ -201,7 +201,7 @@ function TextField({
 }
 
 const inputClass =
-  "w-full h-9 px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring";
+  "w-full h-(--control-h) px-3 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring";
 
 export function NewSnapshotDialog({
   clusterId,

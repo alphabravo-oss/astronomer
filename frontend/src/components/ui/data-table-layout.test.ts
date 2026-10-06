@@ -163,6 +163,20 @@ describe("computeColumnWidths (grow math)", () => {
     expect(widths[0]).toBe(layouts[0].minSize);
   });
 
+  it("shrinks fixed columns toward their minimums before squeezing the grow column", () => {
+    const wide = [
+      resolveColumnLayout(col("name", { grow: true, minSize: 200, size: 200 })),
+      resolveColumnLayout(col("a", { size: 400, minSize: 120 })),
+      resolveColumnLayout(col("b", { size: 400, minSize: 120 })),
+    ];
+    // Preferred 1000px of fixed columns + 200 grow minimum in a 800px box.
+    const widths = computeColumnWidths(wide, 800);
+    expect(widths[0]).toBeGreaterThanOrEqual(200);
+    expect(widths[1]).toBeGreaterThanOrEqual(120);
+    expect(widths[1]).toBeLessThan(400);
+    expect(widths[0] + widths[1] + widths[2]).toBeLessThanOrEqual(800 + 0.001);
+  });
+
   it("splits remaining width equally across unsized legacy columns", () => {
     const legacy = [col("a"), col("b")].map(resolveColumnLayout);
     expect(computeColumnWidths(legacy, 600)).toEqual([300, 300]);

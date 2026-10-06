@@ -5,7 +5,6 @@ import {
   NameSubCell,
   NumberCell,
   TimestampCell,
-  compactRelative,
   formatFixed,
 } from "@/components/ui/cell-primitives";
 
@@ -40,13 +39,8 @@ describe("cell primitives", () => {
 
   it("prefixes the relative age and keeps the exact value out of the text", () => {
     render(<TimestampCell value="2024-01-02T03:04:05Z" prefix="Started" />);
-    expect(screen.getByText(/^Started .+ ago$/)).toBeTruthy();
-  });
-
-  it("drops approximation words from relative ages", () => {
-    expect(compactRelative("about 20 hours ago")).toBe("20 hours ago");
-    expect(compactRelative("less than a minute ago")).toBe("a minute ago");
-    expect(compactRelative("3 days ago")).toBe("3 days ago");
+    expect(screen.getByText("Started")).toBeTruthy();
+    expect(screen.getByText(/ago$/)).toBeTruthy();
   });
 
   it("renders title and subtitle", () => {

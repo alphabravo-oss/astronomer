@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader, PageShell } from "@/components/ui/page";
 /**
  * Cluster "Network & access" tab (migration 070).
  *
@@ -336,15 +336,11 @@ function ClusterNetworkAccessPage() {
   const canReconcile = canWrite && canMonitor;
 
   return (
-    <div className="space-y-6 p-6">
+    <PageShell>
       {/* Header */}
       <PageHeader
-        title={
-          <span className="inline-flex items-center gap-2">
-            Network &amp; access
-            <ModeBadge mode={data.mode} drift={data.drift} />
-          </span>
-        }
+        title="Network &amp; access"
+        status={<ModeBadge mode={data.mode} drift={data.drift} />}
         description="Manage the operator-defined CIDR allow-list for this cluster's apiserver. Astronomer's tunnel egress block is always stamped on top — operators can't remove it without disabling Astronomer management."
         actions={
           <>
@@ -613,7 +609,7 @@ function ClusterNetworkAccessPage() {
         onConfirm={handleEnforceConfirm}
         onClose={() => setConfirmEnforce(false)}
       />
-    </div>
+    </PageShell>
   );
 }
 

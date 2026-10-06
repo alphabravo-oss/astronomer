@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { toastError } from "@/lib/toast";
-import { Server, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import {
   RegistrationBaselineOption,
   RegistrationImageScanningOption,
@@ -235,14 +235,7 @@ function RegisterClusterWizardPage({
     <div>
       <div className="mb-6">
         <PageHeader
-          title={
-            <span className="inline-flex items-center gap-3">
-              <span className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                <Server className="h-5 w-5 text-muted-foreground" />
-              </span>
-              Register an existing cluster
-            </span>
-          }
+          title="Register an existing cluster"
           description="Connect a Kubernetes cluster you already run so Astronomer can observe and manage it. Astronomer does not create clusters, provision infrastructure, or add nodes — you install a lightweight agent and it adopts the cluster as-is."
         />
         <WizardStepper

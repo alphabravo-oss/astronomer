@@ -21,7 +21,7 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { cn } from "@/lib/utils";
 import { NumberCell, TimestampCell } from "@/components/ui/cell-primitives";
 import type { AnomalyBaseline } from "@/types";
-import { ArrowLeft, Activity, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 
 function AnomalyBaselinesPage() {
@@ -137,12 +137,7 @@ function AnomalyBaselinesPage() {
             Back to Alerting
           </RouterLink>
         }
-        title={
-          <span className="inline-flex items-center gap-2">
-            <Activity className="h-6 w-6" />
-            Anomaly Baselines
-          </span>
-        }
+        title="Anomaly Baselines"
         description="Rolling-window statistics per (cluster, metric, window) tuple. Maintained by the anomaly:baseline_recompute worker every 5 minutes."
         actions={
           <ActionButton

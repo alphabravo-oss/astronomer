@@ -113,12 +113,7 @@ function ShellSessionsPage() {
         </RouterLink>
         <PageHeader
           className="mt-2"
-          title={
-            <span className="inline-flex items-center gap-2">
-              <TerminalSquare className="h-6 w-6" />
-              Shell Sessions
-            </span>
-          }
+          title="Shell Sessions"
           description="Active kubectl shell sessions across every cluster. Click a session to see its command trail."
         />
       </div>
@@ -187,7 +182,10 @@ function SessionCommandsDrawer({
         {(commands) => (
           <ol className="space-y-1.5 font-mono text-xs">
             {commands.map((cmd, i) => (
-              <li key={i} className="flex gap-3 rounded-md bg-muted/40 px-3 py-2">
+              <li
+                key={i}
+                className="flex gap-3 rounded-md bg-muted/40 px-3 py-2"
+              >
                 <span className="text-muted-foreground whitespace-nowrap">
                   {formatDate(cmd.commandAt)}
                 </span>

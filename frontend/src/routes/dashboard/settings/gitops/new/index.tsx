@@ -102,7 +102,7 @@ function GitOpsForm() {
                 value={field.state.value ?? ""}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono"
+                className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm font-mono"
               />
             )}
           </form.Field>
@@ -121,7 +121,7 @@ function GitOpsForm() {
                 value={field.state.value ?? ""}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono"
+                className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm font-mono"
               />
             )}
           </form.Field>
@@ -146,7 +146,7 @@ function GitOpsForm() {
                   )
                 }
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
+                className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm"
               >
                 <option value="none">None (public repo)</option>
                 <option value="https_token">HTTPS token</option>
@@ -171,7 +171,7 @@ function GitOpsForm() {
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
                 disabled={authMode === "none"}
-                className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
+                className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
                 placeholder={
                   authMode === "none" ? "(not required)" : "paste secret"
                 }
@@ -197,7 +197,7 @@ function GitOpsForm() {
                   field.handleChange(e.target.value as "manual" | "interval")
                 }
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
+                className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm"
               >
                 <option value="interval">Interval</option>
                 <option value="manual">Manual only</option>
@@ -222,7 +222,7 @@ function GitOpsForm() {
                 onChange={(e) => field.handleChange(Number(e.target.value))}
                 onBlur={field.handleBlur}
                 disabled={syncMode === "manual"}
-                className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
+                className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
               />
             )}
           </form.Field>
@@ -245,7 +245,7 @@ function GitOpsForm() {
                   )
                 }
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
+                className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm"
               >
                 <option value="log">Log only (safe)</option>
                 <option value="tombstone">Tombstone (24h grace)</option>

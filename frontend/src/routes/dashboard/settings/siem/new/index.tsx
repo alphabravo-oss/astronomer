@@ -181,7 +181,7 @@ function NewForwarderForm() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <Card radius="xl" padding="lg" className="space-y-4">
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor="siem-name">

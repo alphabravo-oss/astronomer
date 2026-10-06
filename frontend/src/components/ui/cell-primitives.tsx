@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Tooltip } from "@/components/ui/tooltip";
-import { cn, formatDate, formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
+import { StackedCell } from "@/components/ui/stacked-cell";
+import { cn } from "@/lib/utils";
 
 /**
  * Small cell building blocks shared by table column definitions: capped chip
@@ -61,39 +63,24 @@ export function CappedChips({
   );
 }
 
-/** "about 20 hours ago" -> "20 hours ago": drops approximation words to keep age columns narrow. */
-export function compactRelative(text: string): string {
-  return text.replace(/^(about|almost|over|less than) /, "");
-}
-
-/** Relative age ("3 hours ago") with the exact timestamp in a Tooltip. */
+/** Compact relative age (AgeCell) with an optional leading word such as "Started". */
 export function TimestampCell({
   value,
   prefix,
-  className,
 }: {
   value: string | null | undefined;
-  /** Leading word such as "Started", shown before the relative age. */
   prefix?: string;
-  className?: string;
 }) {
-  const relative = compactRelative(formatRelativeTime(value));
-  const text = (
-    <span
-      className={cn(
-        "whitespace-nowrap text-xs text-muted-foreground",
-        className,
-      )}
-    >
-      {prefix && value ? `${prefix} ` : ""}
-      {relative}
+  if (!prefix || !value) return <AgeCell value={value} empty="Never" />;
+  return (
+    <span className="inline-flex gap-1">
+      <span className="text-xs text-muted-foreground">{prefix}</span>
+      <AgeCell value={value} />
     </span>
   );
-  if (!value || relative === "Never") return text;
-  return <Tooltip content={formatDate(value)}>{text}</Tooltip>;
 }
 
-/** Primary label with a muted subtitle; both truncate and share one Tooltip. */
+/** Primary label with a muted subtitle (StackedCell), optionally led by an icon. */
 export function NameSubCell({
   title,
   subtitle,
@@ -103,21 +90,12 @@ export function NameSubCell({
   subtitle?: ReactNode;
   icon?: ReactNode;
 }) {
-  const full = [title, subtitle].filter((v) => typeof v === "string");
-  const body = (
-    <div className="min-w-0 flex-1">
-      <p className="truncate font-medium text-foreground">{title}</p>
-      {subtitle ? (
-        <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
-      ) : null}
-    </div>
-  );
   return (
     <div className="flex min-w-0 items-center gap-2">
       {icon ? <span className="shrink-0">{icon}</span> : null}
-      <Tooltip content={full.length ? full.join(" — ") : undefined}>
-        {body}
-      </Tooltip>
+      <div className="min-w-0 flex-1">
+        <StackedCell primary={title} secondary={subtitle} />
+      </div>
     </div>
   );
 }
