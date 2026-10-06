@@ -3,7 +3,10 @@ import { Copy, Download } from "lucide-react";
 import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
 import { k8sGetYaml } from "@/lib/api/kubernetes-proxy";
 import { k8sResourcePath } from "@/lib/k8s-paths";
-import { prepareCloneManifest } from "@/lib/k8s-clone";
+import {
+  cloneYamlFromSource,
+  NON_CLONABLE_RESOURCE_TYPES,
+} from "@/lib/k8s-clone";
 import {
   permissionDeniedReason,
   toastPermissionDenied,
@@ -15,13 +18,6 @@ import type { ResourcePermissionDecisions } from "./resource-action-policy";
 const CloneDialog = lazy(async () => ({
   default: (await import("./create-resource-dialog")).CreateResourceDialog,
 }));
-const NON_CLONABLE = new Set([
-  "nodes",
-  "events",
-  "persistentvolumes",
-  "customresourcedefinitions",
-  "crds",
-]);
 
 /** One live-read/export/clone path for all explorer table families. */
 export function ResourceActionMenu({
@@ -47,7 +43,7 @@ export function ResourceActionMenu({
     : !permissions.create.allowed
       ? permissions.create
       : undefined;
-  const safeKind = !NON_CLONABLE.has(resourceType);
+  const safeKind = !NON_CLONABLE_RESOURCE_TYPES.has(resourceType);
   const transfer = async (clone: boolean) => {
     const denied = clone
       ? cloneDenied
@@ -73,22 +69,7 @@ export function ResourceActionMenu({
         );
         return;
       }
-      const yaml = await import("js-yaml");
-      const parsed = yaml.load(source);
-      if (
-        !parsed ||
-        typeof parsed !== "object" ||
-        Array.isArray(parsed) ||
-        !("apiVersion" in parsed) ||
-        !("kind" in parsed)
-      )
-        throw new Error("The live response is not a Kubernetes object.");
-      setCloneYaml(
-        yaml.dump(prepareCloneManifest(parsed as Record<string, unknown>), {
-          lineWidth: -1,
-          noRefs: true,
-        }),
-      );
+      setCloneYaml(await cloneYamlFromSource(source));
     } catch (error) {
       toastApiError(
         clone ? "Failed to prepare clone" : "Failed to download YAML",

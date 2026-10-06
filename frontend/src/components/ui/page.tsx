@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
+import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 export function PageShell({
@@ -75,6 +76,8 @@ export function ResourceMasthead({
   meta = [],
   actions,
   description,
+  details,
+  loading = false,
   className,
 }: {
   backTo?: string;
@@ -88,10 +91,17 @@ export function ResourceMasthead({
   meta?: Array<{ label: string; value: ReactNode }>;
   actions?: ReactNode;
   description?: ReactNode;
+  /** Rich rows under the meta line (label/annotation chips, conditions strip). */
+  details?: ReactNode;
+  /** Render skeleton placeholders for the title and meta while the object loads. */
+  loading?: boolean;
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-3", className)}>
+    <div
+      className={cn("space-y-3", className)}
+      aria-busy={loading || undefined}
+    >
       <div className="flex flex-wrap items-start gap-4">
         {backTo ? (
           <RouterLink
@@ -126,9 +136,11 @@ export function ResourceMasthead({
             >
               {title}
             </h1>
-            {status}
+            {loading ? <Skeleton className="h-5 w-16 rounded-full" /> : status}
           </div>
-          {meta.length > 0 ? (
+          {loading ? (
+            <SkeletonText lines={1} className="mt-2 max-w-md" />
+          ) : meta.length > 0 ? (
             <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
               {meta.map((item, index) => (
                 <div key={index} className="flex items-center gap-1">
@@ -144,6 +156,9 @@ export function ResourceMasthead({
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
               {description}
             </p>
+          ) : null}
+          {details && !loading ? (
+            <div className="mt-3 space-y-2">{details}</div>
           ) : null}
         </div>
         {actions ? (

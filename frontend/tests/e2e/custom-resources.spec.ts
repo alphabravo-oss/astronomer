@@ -291,17 +291,19 @@ test("custom resources: CRD list -> CR list -> CR detail (Overview + YAML)", asy
 
   // Overview: header + Metadata/Labels sections render for the CR.
   await expect(page.getByRole("heading", { name: CR_NAME })).toBeVisible();
-  await expect(page.getByText(`Kind: ${KIND}`)).toBeVisible();
+  await expect(page.getByText(KIND, { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Metadata")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Labels", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("platform")).toBeVisible();
+  await expect(page.getByText("platform", { exact: true })).toBeVisible();
 
   // YAML tab renders the panel (View/Edit toggle). Scope to the tab nav — the
   // header also has a "Download YAML" action button named YAML.
   await page.getByRole("tab", { name: "YAML" }).click();
-  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Edit", exact: true }),
+  ).toBeVisible();
 });
 
 test("custom resources: server continuation and live YAML actions preserve list navigation", async ({

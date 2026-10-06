@@ -8,6 +8,7 @@ import { cn, formatRelativeTime } from "@/lib/utils";
 import type { Pod } from "@/types";
 import { ResourceOverview } from "@/components/resources/resource-overview";
 import type { K8sObject } from "@/components/resources/resource-detail-model";
+import type { DetailEditMode } from "@/components/resources/resource-detail-edit-actions";
 import { RolloutHistory } from "@/components/resources/rollout-history";
 import { ErrorState, LoadingState } from "@/components/ui/empty-state";
 import {
@@ -52,6 +53,8 @@ interface ResourceDetailTabPanelProps {
   error: unknown;
   updateAllowed: boolean;
   forceConflictPermission: PermissionDecision;
+  /** Set by the masthead Edit actions: open the YAML tab already editing. */
+  yamlEdit?: DetailEditMode;
   onRetry: () => void;
 }
 
@@ -67,6 +70,7 @@ export function ResourceDetailTabPanel({
   error,
   updateAllowed,
   forceConflictPermission,
+  yamlEdit,
   onRetry,
 }: ResourceDetailTabPanelProps) {
   const isPod = resourceType === "pods";
@@ -106,6 +110,8 @@ export function ResourceDetailTabPanel({
             clusterId={clusterId}
             k8sPath={k8sPath}
             allowEdit={updateAllowed}
+            editMode={!!yamlEdit && updateAllowed}
+            initialEditorMode={yamlEdit}
             forceConflictPermission={forceConflictPermission}
           />
         </div>

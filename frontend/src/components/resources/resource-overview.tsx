@@ -32,6 +32,7 @@ import {
 } from "@/components/resources/resource-overview-additional";
 import { PodResourceOverview } from "@/components/resources/pod-resource-overview";
 import { SecretDataOverview } from "@/components/resources/secret-data-overview";
+import { OverviewUnavailable } from "@/components/resources/overview-unavailable";
 import { LabelsAnnotationsEditor } from "@/components/resources/labels-annotations-editor";
 
 export function ResourceOverview({
@@ -49,7 +50,7 @@ export function ResourceOverview({
 }) {
   const meta = obj?.metadata;
   if (!meta) {
-    return <p className="text-sm text-muted-foreground">No data.</p>;
+    return <OverviewUnavailable resourceType={resourceType} />;
   }
 
   // ponytail: small per-kind branches keyed by resourceType for the few
@@ -174,7 +175,7 @@ function GenericOverview({
 }) {
   const meta = obj?.metadata;
   if (!meta) {
-    return <p className="text-sm text-muted-foreground">No data.</p>;
+    return <OverviewUnavailable resourceType={resourceType} />;
   }
 
   // Top-level spec scalars — surfaces .spec for arbitrary CRs / unmapped kinds

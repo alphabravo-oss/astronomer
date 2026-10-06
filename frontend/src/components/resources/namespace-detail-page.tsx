@@ -13,6 +13,7 @@ import {
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TabStrip } from "@/components/ui/tabs";
+import { ageMetaItem } from "@/components/resources/resource-masthead-details";
 import { ResourceMasthead } from "@/components/ui/page";
 import { MetricCard } from "@/components/ui/metric-card";
 import {
@@ -21,7 +22,7 @@ import {
 } from "./namespace-queries";
 import { QueryStates } from "@/components/ui/query-states";
 import { Link } from "@tanstack/react-router";
-import { cn, formatBytes, formatCPU, formatRelativeTime } from "@/lib/utils";
+import { cn, formatBytes, formatCPU } from "@/lib/utils";
 import {
   useNamespaceResourceRows,
   type NamespaceResourceRow,
@@ -157,11 +158,7 @@ export function NamespaceDetailPage({
                 }
               />
             }
-            description={
-              ns
-                ? `Created ${formatRelativeTime(ns.createdAt)}`
-                : "Namespace-scoped operations and resources"
-            }
+            meta={[ageMetaItem(ns.createdAt)].filter((item) => !!item)}
           />
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
