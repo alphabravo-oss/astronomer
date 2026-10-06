@@ -131,7 +131,7 @@ export function dlqColumns(
       size: 168,
       minSize: 128,
       accessor: (row) => (
-        <span className="font-mono text-[11px] text-muted-foreground">
+        <span className="font-mono text-11 text-muted-foreground">
           {row.id.length > 16 ? row.id.slice(0, 16) + "…" : row.id}
         </span>
       ),
@@ -217,7 +217,7 @@ export function taskOutboxColumns(
           <div className="font-mono text-xs">{row.task_type}</div>
           {row.dedupe_key && (
             <Tooltip content={row.dedupe_key}>
-              <div className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground">
+              <div className="mt-1 max-w-xs truncate font-mono text-11 text-muted-foreground">
                 {row.dedupe_key}
               </div>
             </Tooltip>

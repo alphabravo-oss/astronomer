@@ -60,6 +60,12 @@
   --text-meta--line-height: calc(1 / 0.75);
   --text-micro: 0.625rem;
   --text-micro--line-height: calc(0.875 / 0.625);
+  /* Flat sizes (no line-height) for dense metadata that previously used
+   * arbitrary text-[Npx]; line-height is inherited exactly as before. */
+  --text-9: 0.5625rem;
+  --text-10: 0.625rem;
+  --text-11: 0.6875rem;
+  --text-13: 0.8125rem;
   --text-page-title: 1.5rem;
   --text-page-title--line-height: calc(2 / 1.5);
   --text-section-title: 0.875rem;

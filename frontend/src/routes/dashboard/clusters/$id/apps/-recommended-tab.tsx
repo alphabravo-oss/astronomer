@@ -79,7 +79,7 @@ export function RecommendedView({
                   )}
                 </div>
                 {isInstalled ? (
-                  <span className="text-[11px] text-status-success font-medium">
+                  <span className="text-11 text-status-success font-medium">
                     Already installed
                   </span>
                 ) : (
@@ -93,7 +93,7 @@ export function RecommendedView({
                         ? permissionDeniedReason(installDecision)
                         : undefined
                     }
-                    className="text-[11px] text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline inline-block font-normal"
+                    className="text-11 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline inline-block font-normal"
                     disabled={!installDecision.allowed}
                     onClick={() => onInstall(c.chartId, c.name)}
                   >

@@ -132,7 +132,7 @@ export function Sidebar() {
                 <span className="text-sm font-semibold text-foreground tracking-tight truncate leading-tight">
                   {productName}
                 </span>
-                <span className="text-[10px] text-muted-foreground leading-tight">
+                <span className="text-10 text-muted-foreground leading-tight">
                   by AlphaBravo
                 </span>
               </div>
@@ -241,10 +241,10 @@ export function Sidebar() {
           </Tooltip>
           {!collapsed && (
             <div className="px-3 py-1 space-y-0.5">
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-10 text-muted-foreground">
                 {productName} {APP_VERSION}
               </p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-10 text-muted-foreground">
                 Built by{" "}
                 <a
                   href="https://alphabravo.io"

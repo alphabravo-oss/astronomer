@@ -139,7 +139,7 @@ export function ClusterRemediationFooter({ clusterId }: { clusterId: string }) {
         : "text-muted-foreground";
   return (
     <Tooltip content={latest.error || latest.action}>
-      <div className="text-[11px] text-muted-foreground pt-1">
+      <div className="text-11 text-muted-foreground pt-1">
         Last remediation:{" "}
         <span className={tone}>
           {latest.action} — {latest.outcome}

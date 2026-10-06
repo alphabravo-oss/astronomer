@@ -221,7 +221,7 @@ export function RolloutHistory({
               <TableCell className="text-xs tabular-nums">
                 {entry.revision ?? "-"}
                 {index === 0 && (
-                  <span className="ml-2 rounded-sm bg-status-info/10 px-1.5 py-0.5 text-[10px] font-medium text-status-info">
+                  <span className="ml-2 rounded-sm bg-status-info/10 px-1.5 py-0.5 text-10 font-medium text-status-info">
                     Latest
                   </span>
                 )}

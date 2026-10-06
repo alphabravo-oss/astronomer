@@ -169,7 +169,7 @@ export function VirtualizedGrid<T extends RowData>({
           }
         }}
         className={cn(
-          "relative max-h-[28rem] overflow-y-auto text-sm outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
+          "relative max-h-112 overflow-y-auto text-sm outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
           layout === "scroll" ? "overflow-x-auto" : "overflow-x-hidden",
         )}
       >

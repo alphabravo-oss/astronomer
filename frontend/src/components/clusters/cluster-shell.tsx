@@ -546,7 +546,7 @@ export function ClusterShell({
                 ))}
             </ul>
           )}
-          <p className="mt-3 text-[10px] text-muted-foreground">
+          <p className="mt-3 text-10 text-muted-foreground">
             Only your input lines are recorded — never output. See
             docs/kubectl-shell.md for the audit-log contract.
           </p>

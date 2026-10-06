@@ -46,9 +46,7 @@ const nodeColumns: Column<ClusterNode>[] = [
     kind: "badge",
     size: 170,
     minSize: 150,
-    accessor: (row) => (
-      <ChipsCell items={row.roles} chipMaxClass="max-w-[5.5rem]" />
-    ),
+    accessor: (row) => <ChipsCell items={row.roles} chipMaxClass="max-w-22" />,
     sortAccessor: (row) => row.roles.join(","),
     searchAccessor: (row) => row.roles.join(" "),
   },

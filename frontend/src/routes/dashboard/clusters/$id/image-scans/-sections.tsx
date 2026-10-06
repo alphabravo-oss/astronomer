@@ -104,7 +104,7 @@ export function DiffCard({ diff }: { diff?: ImageVulnDiff }) {
             const Icon = d > 0 ? TrendingUp : d < 0 ? TrendingDown : Minus;
             return (
               <div key={sev} className={`border rounded-sm p-2 ${tone}`}>
-                <div className="text-[10px] uppercase tracking-wide opacity-80">
+                <div className="text-10 uppercase tracking-wide opacity-80">
                   {sev}
                 </div>
                 <div className="flex items-baseline justify-between mt-1">
@@ -114,7 +114,7 @@ export function DiffCard({ diff }: { diff?: ImageVulnDiff }) {
                   </div>
                   <Icon className="h-3.5 w-3.5" />
                 </div>
-                <div className="text-[10px] opacity-70 mt-0.5">
+                <div className="text-10 opacity-70 mt-0.5">
                   {diff.prior?.[sev] ?? 0} → {diff.latest?.[sev] ?? 0}
                 </div>
               </div>
@@ -360,7 +360,7 @@ export function ImageDrawer({
           <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Scan history
           </h3>
-          <span className="text-[10px] text-muted-foreground tabular-nums">
+          <span className="text-10 text-muted-foreground tabular-nums">
             {reportHistory.data?.totalCount ?? 0} snapshot
             {(reportHistory.data?.totalCount ?? 0) === 1 ? "" : "s"}
           </span>

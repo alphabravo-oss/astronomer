@@ -163,7 +163,7 @@ export function OverviewTab({
                 key={`${addr.type}-${addr.address}`}
                 className="flex items-center gap-2"
               >
-                <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground min-w-[80px] text-center">
+                <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground min-w-20 text-center">
                   {addr.type}
                 </span>
                 <span className="text-xs font-mono text-foreground">

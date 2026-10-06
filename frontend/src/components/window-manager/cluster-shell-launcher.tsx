@@ -59,9 +59,7 @@ export function ClusterShellLauncher({
     >
       <TerminalSquare className="h-3.5 w-3.5" />
       <span className="hidden 2xl:inline">Shell</span>
-      <kbd className="hidden font-mono text-[10px] min-[1800px]:inline">
-        Ctrl+`
-      </kbd>
+      <kbd className="hidden font-mono text-10 min-[1800px]:inline">Ctrl+`</kbd>
     </ActionButton>
   );
 }

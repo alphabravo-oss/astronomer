@@ -103,7 +103,7 @@ export function BrowseView({
                       {c.displayName || c.name}
                     </div>
                     {c.deprecated && (
-                      <span className="text-[10px] text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded-sm">
+                      <span className="text-10 text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded-sm">
                         deprecated
                       </span>
                     )}
@@ -115,7 +115,7 @@ export function BrowseView({
                   )}
                   <div className="flex items-center justify-between gap-2 pt-1">
                     {existing ? (
-                      <span className="text-[11px] text-status-success font-medium inline-flex items-center gap-1">
+                      <span className="text-11 text-status-success font-medium inline-flex items-center gap-1">
                         Installed
                         {existing.sourceKind === "tool" && (
                           <span className="text-muted-foreground font-normal">
@@ -134,7 +134,7 @@ export function BrowseView({
                             ? permissionDeniedReason(installDecision)
                             : undefined
                         }
-                        className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline font-normal"
+                        className="text-11 inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline font-normal"
                         disabled={!installDecision.allowed}
                         onClick={() => onInstall(c.id, c.name)}
                       >
@@ -146,7 +146,7 @@ export function BrowseView({
                         href={c.homeUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                        className="text-11 text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
                       >
                         Docs <ExternalLink className="h-2.5 w-2.5" />
                       </a>

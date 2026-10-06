@@ -109,7 +109,7 @@ export function SuggestedCatalogs({
               )}
 
               <div className="mt-auto pt-1 flex items-center justify-between">
-                <span className="font-mono text-2xs text-muted-foreground truncate max-w-[60%]">
+                <span className="font-mono text-2xs text-muted-foreground truncate max-w-3/5">
                   {catalog.url}
                 </span>
                 {isAdded ? (

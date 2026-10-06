@@ -290,7 +290,7 @@ function InstalledRow({
           )}
         </div>
         {row.repoName && (
-          <div className="text-[11px] text-muted-foreground mt-0.5">
+          <div className="text-11 text-muted-foreground mt-0.5">
             {row.repoName}
             {row.chartCategory ? ` · ${row.chartCategory}` : ""}
           </div>
@@ -305,7 +305,7 @@ function InstalledRow({
       <TableCell className="px-3 py-2">
         <div className="inline-flex items-center gap-1.5">
           <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-sm border text-[11px] font-medium ${statusTone(row.status)}`}
+            className={`inline-flex items-center px-2 py-0.5 rounded-sm border text-11 font-medium ${statusTone(row.status)}`}
           >
             {row.status}
           </span>

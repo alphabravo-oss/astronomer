@@ -128,7 +128,7 @@ function LoginPage() {
       {/* Left panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-linear-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex-col justify-between p-12 overflow-hidden">
         {/* Background pattern */}
-        <div className="absolute inset-0 opacity-[0.03]">
+        <div className="absolute inset-0 opacity-3">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <pattern
@@ -160,7 +160,7 @@ function LoginPage() {
               <span className="text-xl font-semibold text-white tracking-tight leading-tight">
                 {productName}
               </span>
-              {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<span className="text-[11px] text-zinc-500 leading-tight">
+              {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<span className="text-11 text-zinc-500 leading-tight">
                 by AlphaBravo
               </span>
             </div>
@@ -218,7 +218,7 @@ function LoginPage() {
               <span className="text-xl font-semibold text-foreground tracking-tight leading-tight">
                 {productName}
               </span>
-              <span className="text-[11px] text-muted-foreground leading-tight">
+              <span className="text-11 text-muted-foreground leading-tight">
                 by AlphaBravo
               </span>
             </div>

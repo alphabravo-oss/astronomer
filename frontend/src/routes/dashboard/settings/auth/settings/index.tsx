@@ -402,7 +402,7 @@ function DexRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 py-1.5">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm text-foreground font-mono truncate max-w-[60%] text-right">
+      <span className="text-sm text-foreground font-mono truncate max-w-3/5 text-right">
         {value || "—"}
       </span>
     </div>

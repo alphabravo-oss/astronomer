@@ -69,7 +69,7 @@ export function ChipsCell({
   items,
   max = 2,
   empty = "—",
-  chipMaxClass = "max-w-[9rem]",
+  chipMaxClass = "max-w-36",
 }: {
   items: readonly string[];
   max?: number;

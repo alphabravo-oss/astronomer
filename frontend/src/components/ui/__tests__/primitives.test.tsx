@@ -46,7 +46,7 @@ describe("form primitives", () => {
     expect(screen.getByLabelText("Provider").parentElement).toHaveClass(
       "max-w-xs",
     );
-    expect(screen.getByLabelText("Notes")).toHaveClass("min-h-[120px]");
+    expect(screen.getByLabelText("Notes")).toHaveClass("min-h-30");
   });
 });
 

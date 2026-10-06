@@ -10,7 +10,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       ref={ref}
       className={cn(
         controlClassName,
-        "h-auto min-h-[120px] py-2 font-mono text-meta",
+        "h-auto min-h-30 py-2 font-mono text-meta",
         className,
       )}
       {...props}
