@@ -12,7 +12,10 @@ import {
   crDetailHref,
   crdListHref,
 } from "@/lib/k8s-paths";
-import { formatRelativeTime } from "@/lib/utils";
+import {
+  ageColumn,
+  namespaceColumn,
+} from "@/components/resources/networking-table-cells";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
@@ -140,6 +143,8 @@ function ScopedCustomResourceList({
       {
         key: "name",
         header: "Name",
+        kind: "name",
+        minSize: 200,
         sortAccessor: (row) => row.name,
         accessor: (row) => (
           <Link
@@ -154,30 +159,14 @@ function ScopedCustomResourceList({
               ) + search
             }
             onClick={(event) => event.stopPropagation()}
-            className="min-w-0 truncate font-medium text-foreground font-mono text-xs hover:underline"
+            className="font-medium text-foreground font-mono text-xs hover:underline"
           >
             {row.name}
           </Link>
         ),
       },
-      {
-        key: "namespace",
-        header: "Namespace",
-        accessor: (row) => (
-          <span className="text-xs text-muted-foreground font-mono">
-            {row.namespace || "Cluster scoped"}
-          </span>
-        ),
-      },
-      {
-        key: "age",
-        header: "Age",
-        accessor: (row) => (
-          <span className="text-xs text-muted-foreground">
-            {row.createdAt ? formatRelativeTime(row.createdAt) : "-"}
-          </span>
-        ),
-      },
+      namespaceColumn<CRRow>("Cluster scoped"),
+      ageColumn<CRRow>("-"),
     ],
     [clusterId, group, version, plural, search],
   );
@@ -223,6 +212,7 @@ function ScopedCustomResourceList({
               key: "actions",
               header: "Actions",
               rowActions: true,
+              kind: "actions",
               sortable: false,
               hideable: false,
               accessor: (row) => (
