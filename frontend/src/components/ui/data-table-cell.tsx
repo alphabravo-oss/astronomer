@@ -18,25 +18,32 @@ export function idCharBudget(widthPx: number | undefined): number {
 }
 
 /**
- * A cell value that clips visually but always exposes the full value through
- * the Tooltip primitive. Clipping is measured on hover/focus so unclipped
- * values never show a redundant tooltip, and nothing relies on `title`.
+ * Public clipped-cell primitive: a value that clips visually (one line, or
+ * two with `lines={2}`) and exposes the full value through the Tooltip
+ * primitive. Clipping is measured on pointer-enter, so unclipped values never
+ * show a redundant tooltip and nothing relies on `title`. The tooltip shows the
+ * element's text, or `tooltip` when a composite cell needs richer content.
+ * Composite cells (stacked text, chip lists) should use this instead of
+ * hand-setting `data-cell-clip=""`.
  */
-function ClippedValue({
+export function ClippedValue({
   children,
-  clampLines,
   className,
+  tooltip,
+  lines = 1,
 }: {
   children: ReactNode;
-  clampLines?: 2;
   className?: string;
+  /** Tooltip content when clipped; defaults to the element's text. */
+  tooltip?: ReactNode;
+  lines?: 1 | 2;
 }) {
-  const [full, setFull] = useState<string | undefined>();
+  const [full, setFull] = useState<ReactNode>();
   const measure = (el: HTMLElement) => {
     const clipped =
       el.scrollWidth > el.clientWidth + 1 ||
       el.scrollHeight > el.clientHeight + 1;
-    setFull(clipped ? (el.textContent ?? undefined) : undefined);
+    setFull(clipped ? (tooltip ?? el.textContent ?? undefined) : undefined);
   };
   return (
     <Tooltip content={full}>
@@ -45,7 +52,7 @@ function ClippedValue({
         onPointerEnter={(event) => measure(event.currentTarget)}
         className={cn(
           "min-w-0 overflow-hidden",
-          clampLines
+          lines === 2
             ? "line-clamp-2 whitespace-normal break-words"
             : "truncate",
           className,
@@ -92,7 +99,7 @@ export function DataTableCellContent({
         <ClippedValue className={cn(numberClass)}>{children}</ClippedValue>
       );
     case "wrap-2":
-      return <ClippedValue clampLines={2}>{children}</ClippedValue>;
+      return <ClippedValue lines={2}>{children}</ClippedValue>;
     case "nowrap":
       return (
         <div className={cn("min-w-0 whitespace-nowrap", numberClass)}>
