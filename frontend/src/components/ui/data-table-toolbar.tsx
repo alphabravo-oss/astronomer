@@ -1,13 +1,26 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { useState } from "react";
 import type {
   Column as RtColumn,
   Table as RtTable,
   RowData,
 } from "@tanstack/react-table";
-import { Filter, Search, SlidersHorizontal, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowLeftToLine,
+  ArrowRightToLine,
+  ArrowUp,
+  Download,
+  Filter,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import type { Column } from "@/components/ui/data-table";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { ColumnPinningState } from "@/components/ui/data-table-layout";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { DataTableFeatures } from "./data-table-features";
 import { cn } from "@/lib/utils";
 
@@ -19,10 +32,21 @@ interface DataTableToolbarProps<T extends RowData> {
   searchPlaceholder: string;
   searchInput: string;
   onSearchInputChange: (value: string) => void;
+  searchInputRef?: Ref<HTMLInputElement>;
   toolbar?: ReactNode;
   selectable: boolean | ((row: T) => boolean);
   selectedRows: T[];
   bulkActions?: (selected: T[]) => ReactNode;
+  /** All columns in current display order (Columns menu order). */
+  menuColumns?: Column<T>[];
+  pinning?: ColumnPinningState;
+  onMoveColumn?: (key: string, direction: -1 | 1) => void;
+  onPinColumn?: (key: string, side: "start" | "end" | false) => void;
+  onResetColumns?: () => void;
+  onExportCsv?: () => void;
+  /** Server-paged tables export only the page they hold. */
+  exportPageOnly?: boolean;
+  viewsMenu?: ReactNode;
 }
 
 export function DataTableToolbar<T extends RowData>({
@@ -33,12 +57,24 @@ export function DataTableToolbar<T extends RowData>({
   searchPlaceholder,
   searchInput,
   onSearchInputChange,
+  searchInputRef,
   toolbar,
   selectable,
   selectedRows,
   bulkActions,
+  menuColumns,
+  pinning,
+  onMoveColumn,
+  onPinColumn,
+  onResetColumns,
+  onExportCsv,
+  exportPageOnly = false,
+  viewsMenu,
 }: DataTableToolbarProps<T>) {
   const [showColumnToggle, setShowColumnToggle] = useState(false);
+  const listed = (menuColumns ?? columns).filter((definition) =>
+    table.getColumn(definition.key)?.getCanHide(),
+  );
 
   return (
     <>
@@ -48,6 +84,8 @@ export function DataTableToolbar<T extends RowData>({
             <div className="relative max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
+                ref={searchInputRef}
+                data-table-search=""
                 type="text"
                 placeholder={searchPlaceholder}
                 value={searchInput}
@@ -82,39 +120,123 @@ export function DataTableToolbar<T extends RowData>({
           {toolbar}
         </div>
 
-        <div className="relative self-end sm:self-auto">
-          <button
-            type="button"
-            aria-expanded={showColumnToggle}
-            onClick={() => setShowColumnToggle((visible) => !visible)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3
-              text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            Columns
-          </button>
-
-          {showColumnToggle && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-md border border-border bg-popover p-1 shadow-lg">
-              {columns.map((definition) => {
-                const column = table.getColumn(definition.key);
-                if (!column?.getCanHide()) return null;
-                const isVisible = column?.getIsVisible() ?? true;
-                return (
-                  <label
-                    key={definition.key}
-                    className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                  >
-                    <Checkbox
-                      checked={isVisible}
-                      onChange={() => column?.toggleVisibility()}
-                    />
-                    {definition.header}
-                  </label>
-                );
-              })}
-            </div>
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          {viewsMenu}
+          {onExportCsv && (
+            <Tooltip
+              content={
+                exportPageOnly
+                  ? "Exports only the rows on this page"
+                  : "Exports the filtered rows and visible columns"
+              }
+            >
+              <button
+                type="button"
+                onClick={onExportCsv}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3
+                  text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Download className="h-4 w-4" />
+                {exportPageOnly ? "Export page (CSV)" : "Export CSV"}
+              </button>
+            </Tooltip>
           )}
+          <div className="relative">
+            <button
+              type="button"
+              aria-expanded={showColumnToggle}
+              onClick={() => setShowColumnToggle((visible) => !visible)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3
+              text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Columns
+            </button>
+
+            {showColumnToggle && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-lg">
+                {listed.map((definition, index) => {
+                  const column = table.getColumn(definition.key);
+                  if (!column) return null;
+                  const isVisible = column.getIsVisible();
+                  const side = pinning?.start.includes(definition.key)
+                    ? "start"
+                    : pinning?.end.includes(definition.key)
+                      ? "end"
+                      : false;
+                  const controls = onMoveColumn && onPinColumn;
+                  return (
+                    <div
+                      key={definition.key}
+                      className="flex items-center gap-1 rounded-sm px-1 hover:bg-accent"
+                    >
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-1 py-1.5 text-sm">
+                        <Checkbox
+                          checked={isVisible}
+                          onChange={() => column.toggleVisibility()}
+                        />
+                        <span className="truncate">{definition.header}</span>
+                      </label>
+                      {controls && (
+                        <>
+                          <MenuIconButton
+                            label={`Move ${definition.header} up`}
+                            disabled={index === 0 || side !== false}
+                            onClick={() => onMoveColumn(definition.key, -1)}
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </MenuIconButton>
+                          <MenuIconButton
+                            label={`Move ${definition.header} down`}
+                            disabled={
+                              index === listed.length - 1 || side !== false
+                            }
+                            onClick={() => onMoveColumn(definition.key, 1)}
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </MenuIconButton>
+                          <MenuIconButton
+                            label={`Pin ${definition.header} left`}
+                            pressed={side === "start"}
+                            onClick={() =>
+                              onPinColumn(
+                                definition.key,
+                                side === "start" ? false : "start",
+                              )
+                            }
+                          >
+                            <ArrowLeftToLine className="h-3.5 w-3.5" />
+                          </MenuIconButton>
+                          <MenuIconButton
+                            label={`Pin ${definition.header} right`}
+                            pressed={side === "end"}
+                            onClick={() =>
+                              onPinColumn(
+                                definition.key,
+                                side === "end" ? false : "end",
+                              )
+                            }
+                          >
+                            <ArrowRightToLine className="h-3.5 w-3.5" />
+                          </MenuIconButton>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+                {onResetColumns && (
+                  <button
+                    type="button"
+                    onClick={onResetColumns}
+                    className="mt-1 flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Reset order and pinning
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -133,6 +255,38 @@ export function DataTableToolbar<T extends RowData>({
         </div>
       ) : null}
     </>
+  );
+}
+
+function MenuIconButton({
+  label,
+  onClick,
+  disabled,
+  pressed,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  pressed?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={pressed}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground",
+        "hover:bg-background hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+        "disabled:cursor-not-allowed disabled:opacity-30",
+        pressed && "bg-primary/15 text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -278,6 +278,8 @@ export const queryKeys = {
     detail: (id: string) => ["users", "detail", id] as const,
     current: ["users", "current"] as const,
     preferences: (userId: string) => ["users", "preferences", userId] as const,
+    tableViews: (userId: string, tableKey: string) =>
+      ["users", "table-views", userId, tableKey] as const,
     list: (params?: Record<string, unknown>) =>
       ["users", "list", params] as const,
   },

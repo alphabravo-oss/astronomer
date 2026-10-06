@@ -1,9 +1,11 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   useTable,
   type ColumnDef,
+  type ColumnFiltersState,
   type ColumnSizingState,
   type ColumnVisibilityState,
+  type ExpandedState,
   type PaginationState,
   type RowData,
   type RowSelectionState,
@@ -18,11 +20,28 @@ import {
   dataTableFeatures,
   type DataTableFeatures,
 } from "@/components/ui/data-table-features";
+import {
+  defaultPinning,
+  normalizePinning,
+  orderColumns,
+  pinnedPlacements,
+  resolveColumnLayout,
+  SELECT_COLUMN_WIDTH,
+  type ColumnPinningState,
+} from "@/components/ui/data-table-layout";
 import { searchIndexMatches } from "@/components/ui/data-table-search";
 import {
   sortValue,
   serverNavigationRowCount,
 } from "@/components/ui/data-table-state";
+import {
+  decodeViewState,
+  encodeViewState,
+  sanitizeViewState,
+  VIEW_STATE_VERSION,
+  viewParamName,
+  type TableViewState,
+} from "@/components/ui/data-table-view-state";
 import { useDataTableState } from "@/components/ui/use-data-table-state";
 import { useVirtualRows } from "@/components/ui/use-virtual-rows";
 import { useUserPreferences } from "@/lib/user-preferences";
@@ -47,7 +66,11 @@ interface DataTableControllerOptions<T extends RowData> {
   resizable: boolean;
   virtualized: NonNullable<DataTableProps<T>["virtualized"]>;
   serverSide: DataTableProps<T>["serverSide"];
+  layout?: "fit" | "scroll";
+  renderSubRow?: DataTableProps<T>["renderSubRow"];
 }
+
+const EMPTY_ORDER: string[] = [];
 
 export function useDataTableController<T extends RowData>({
   groupBy,
@@ -66,6 +89,8 @@ export function useDataTableController<T extends RowData>({
   resizable,
   virtualized,
   serverSide,
+  layout = "fit",
+  renderSubRow,
 }: DataTableControllerOptions<T>) {
   const { preferences } = useUserPreferences();
   const effectiveDensity = density ?? preferences.table_density;
@@ -96,6 +121,12 @@ export function useDataTableController<T extends RowData>({
     setColumnSizing,
     persistSizing,
     persistVisibility,
+    columnOrder,
+    setColumnOrder,
+    userPinning,
+    setUserPinning,
+    expanded,
+    setExpanded,
     filteredEmptyState,
     searchIndex,
   } = useDataTableState({
@@ -109,11 +140,22 @@ export function useDataTableController<T extends RowData>({
     persistKey,
     resizable,
   });
-  const cellPadding =
-    effectiveDensity === "compact" ? "px-3 py-2" : "px-4 py-3";
-  const selectPadding =
-    effectiveDensity === "compact" ? "px-3 py-2" : "px-3 py-3";
+  // `--row-py` (set by the density tokens) wins when present; the fallback
+  // keeps the table correct where the token is not defined. An explicit
+  // `density` prop pins the padding regardless of the token.
+  const compact = effectiveDensity === "compact";
+  const rowPy =
+    density !== undefined
+      ? compact
+        ? "py-2"
+        : "py-3"
+      : compact
+        ? "py-[var(--row-py,0.5rem)]"
+        : "py-[var(--row-py,0.75rem)]";
+  const cellPadding = `${compact ? "px-3" : "px-4"} ${rowPy}`;
+  const selectPadding = `px-3 ${rowPy}`;
   const skeletonRows = loadingRows ?? Math.min(pageSize, 8);
+  const expandable = !!renderSubRow;
 
   const columnDefs = useMemo<ColumnDef<DataTableFeatures, T>[]>(
     () =>
@@ -149,6 +191,21 @@ export function useDataTableController<T extends RowData>({
     [columns],
   );
 
+  const columnKeys = useMemo(
+    () => new Set(columns.map((c) => c.key)),
+    [columns],
+  );
+  const defaultPin = useMemo(
+    () => defaultPinning(columns, layout),
+    [columns, layout],
+  );
+  const pinning = useMemo(
+    () => normalizePinning(userPinning ?? defaultPin, columnKeys),
+    [userPinning, defaultPin, columnKeys],
+  );
+  const effectiveColumnFilters =
+    effectiveServerSide?.filtering?.value ?? columnFilters;
+
   const tableOptions = useMemo<TableOptions<DataTableFeatures, T>>(
     () => ({
       features: dataTableFeatures,
@@ -158,9 +215,12 @@ export function useDataTableController<T extends RowData>({
       state: {
         globalFilter,
         sorting: effectiveServerSide?.sorting?.value ?? sorting,
-        columnFilters,
+        columnFilters: effectiveColumnFilters,
         rowSelection,
         columnVisibility,
+        columnOrder,
+        columnPinning: pinning,
+        expanded,
         ...(resizable ? { columnSizing } : {}),
         pagination: effectiveServerSide?.pagination ?? clientPagination,
       },
@@ -178,6 +238,7 @@ export function useDataTableController<T extends RowData>({
         : {}),
       manualPagination: !!effectiveServerSide || effectiveVirtualized,
       manualSorting: !!effectiveServerSide?.sorting,
+      manualFiltering: !!effectiveServerSide?.filtering,
       onPaginationChange: setClientPagination,
       ...(effectiveServerSide
         ? {
@@ -195,6 +256,19 @@ export function useDataTableController<T extends RowData>({
         typeof selectable === "function"
           ? (row) => selectable(row.original)
           : selectable,
+      getRowCanExpand: () => expandable,
+      // Polling refreshes must not collapse rows the user opened.
+      autoResetExpanded: false,
+      onExpandedChange: (updater: Updater<ExpandedState>) =>
+        setExpanded(updater),
+      onColumnOrderChange: (updater: Updater<string[]>) =>
+        setColumnOrder(
+          typeof updater === "function" ? updater(columnOrder) : updater,
+        ),
+      onColumnPinningChange: (updater: Updater<ColumnPinningState>) =>
+        setUserPinning(
+          typeof updater === "function" ? updater(pinning) : updater,
+        ),
       enableSortingRemoval: false, // 2-state toggle (asc ⇄ desc), never back to unsorted
       sortDescFirst: false, // always start ascending, even for numeric columns
       // The old hand-rolled table only reset to page 1 on a *search* change (done
@@ -220,7 +294,16 @@ export function useDataTableController<T extends RowData>({
         }
         setSorting(updater);
       },
-      onColumnFiltersChange: setColumnFilters,
+      onColumnFiltersChange: (updater: Updater<ColumnFiltersState>) => {
+        if (effectiveServerSide?.filtering) {
+          const current = effectiveServerSide.filtering.value;
+          effectiveServerSide.filtering.onChange(
+            typeof updater === "function" ? updater(current) : updater,
+          );
+          return;
+        }
+        setColumnFilters(updater);
+      },
       onColumnVisibilityChange: (updater: Updater<ColumnVisibilityState>) => {
         const next =
           typeof updater === "function" ? updater(columnVisibility) : updater;
@@ -250,15 +333,22 @@ export function useDataTableController<T extends RowData>({
       keyExtractor,
       globalFilter,
       sorting,
-      columnFilters,
+      effectiveColumnFilters,
       rowSelection,
       columnVisibility,
+      columnOrder,
+      pinning,
+      expanded,
+      expandable,
       resizable,
       columnSizing,
       effectiveServerSide,
       persistSizing,
       persistVisibility,
       setColumnFilters,
+      setColumnOrder,
+      setUserPinning,
+      setExpanded,
       setColumnSizing,
       setColumnVisibility,
       setRowSelection,
@@ -278,10 +368,30 @@ export function useDataTableController<T extends RowData>({
 
   // A column is visible unless explicitly toggled off. Derived from the
   // columnVisibility state (which we own) rather than querying the table, so the
-  // memo deps are exactly what it reads.
+  // memo deps are exactly what it reads. Display order is start-pinned, the
+  // user's order, then end-pinned.
   const activeColumns = useMemo(
-    () => columns.filter((c) => columnVisibility[c.key] !== false),
-    [columns, columnVisibility],
+    () =>
+      orderColumns(
+        columns.filter((c) => columnVisibility[c.key] !== false),
+        columnOrder.length ? columnOrder : EMPTY_ORDER,
+        pinning,
+      ),
+    [columns, columnVisibility, columnOrder, pinning],
+  );
+  const leadWidth =
+    (selectable ? SELECT_COLUMN_WIDTH : 0) + (expandable ? 40 : 0);
+  const activePinning = useMemo(
+    () => normalizePinning(pinning, new Set(activeColumns.map((c) => c.key))),
+    [pinning, activeColumns],
+  );
+  const placements = useMemo(
+    () => pinnedPlacements(activeColumns, activePinning, leadWidth),
+    [activeColumns, activePinning, leadWidth],
+  );
+  const layouts = useMemo(
+    () => new Map(activeColumns.map((c) => [c.key, resolveColumnLayout(c)])),
+    [activeColumns],
   );
 
   // Faceted filters render for visible columns that opted in via `filter`.
@@ -303,6 +413,113 @@ export function useDataTableController<T extends RowData>({
   const totalRows = effectiveServerSide
     ? effectiveServerSide.rowCount
     : filteredCount;
+
+  // ---- View state (URL + saved views) ----
+  const defaultHidden = useMemo(
+    () => columns.filter((c) => c.hidden).map((c) => c.key),
+    [columns],
+  );
+  const searchValue = effectiveServerSide?.search?.value ?? searchInput;
+  const sortingValue = effectiveServerSide?.sorting?.value ?? sorting;
+  const currentViewState = useMemo<TableViewState>(() => {
+    const state: TableViewState = { v: VIEW_STATE_VERSION };
+    if (searchValue) state.search = searchValue;
+    const filters = Object.fromEntries(
+      effectiveColumnFilters
+        .filter((f) => Array.isArray(f.value) && f.value.length > 0)
+        .map((f) => [f.id, f.value as string[]]),
+    );
+    if (Object.keys(filters).length) state.filters = filters;
+    if (sortingValue.length) {
+      state.sort = sortingValue.map(({ id, desc }) => ({ id, desc }));
+    }
+    const hidden = columns
+      .filter((c) => columnVisibility[c.key] === false)
+      .map((c) => c.key);
+    const sameHidden =
+      hidden.length === defaultHidden.length &&
+      hidden.every((k) => defaultHidden.includes(k));
+    if (!sameHidden) state.hidden = hidden;
+    if (columnOrder.length) state.order = columnOrder;
+    if (userPinning) state.pinning = userPinning;
+    return state;
+  }, [
+    searchValue,
+    effectiveColumnFilters,
+    sortingValue,
+    columns,
+    columnVisibility,
+    defaultHidden,
+    columnOrder,
+    userPinning,
+  ]);
+
+  const applyViewState = useCallback(
+    (raw: TableViewState) => {
+      const state = sanitizeViewState(raw, columnKeys);
+      const nextSearch = state.search ?? "";
+      if (effectiveServerSide?.search) {
+        effectiveServerSide.search.onChange(nextSearch);
+      } else {
+        setSearchInput(nextSearch);
+      }
+      const nextFilters: ColumnFiltersState = Object.entries(
+        state.filters ?? {},
+      ).map(([id, value]) => ({ id, value }));
+      if (effectiveServerSide?.filtering) {
+        effectiveServerSide.filtering.onChange(nextFilters);
+      } else {
+        setColumnFilters(nextFilters);
+      }
+      const nextSort = state.sort ?? [];
+      if (effectiveServerSide?.sorting) {
+        effectiveServerSide.sorting.onChange(nextSort);
+      } else {
+        setSorting(nextSort);
+      }
+      const hidden = new Set(state.hidden ?? defaultHidden);
+      const nextVisibility: ColumnVisibilityState = {};
+      for (const col of columns) {
+        // Structural columns can never be hidden by a view.
+        const structural =
+          col.rowActions || col.hideable === false || col.header.trim() === "";
+        nextVisibility[col.key] = structural || !hidden.has(col.key);
+      }
+      if (columns.some((c) => nextVisibility[c.key])) {
+        setColumnVisibility(nextVisibility);
+        persistVisibility(nextVisibility);
+      }
+      setColumnOrder(state.order ?? []);
+      setUserPinning(state.pinning ?? null);
+      table.setPageIndex(0);
+    },
+    [
+      columnKeys,
+      columns,
+      defaultHidden,
+      effectiveServerSide,
+      persistVisibility,
+      setColumnFilters,
+      setColumnOrder,
+      setColumnVisibility,
+      setSearchInput,
+      setSorting,
+      setUserPinning,
+      table,
+    ],
+  );
+
+  const urlParam = persistKey ? viewParamName(persistKey) : undefined;
+  const initialUrlState = useRef<TableViewState | null>(null);
+  // Called once by the URL sync child when the table mounts.
+  const onInitialUrl = useCallback(
+    (value: string | null) => {
+      initialUrlState.current = decodeViewState(value, columnKeys);
+      if (initialUrlState.current) applyViewState(initialUrlState.current);
+    },
+    [columnKeys, applyViewState],
+  );
+  const encodedView = encodeViewState(currentViewState);
 
   // ---- Virtualization ----
   // The scroll container that the virtualizer measures against. Only used by
@@ -336,9 +553,23 @@ export function useDataTableController<T extends RowData>({
     });
   };
 
+  // Rows for CSV export: the filtered and sorted model across every client
+  // page. A server-paged table only holds its current page.
+  const exportRows = () =>
+    (effectiveServerSide
+      ? table.getRowModel().rows
+      : table.getSortedRowModel().rows
+    ).map((r) => r.original);
+
   return {
     table,
     activeColumns,
+    layouts,
+    placements,
+    pinning: activePinning,
+    fullPinning: pinning,
+    defaultPin,
+    expandable,
     facetColumns,
     rows,
     selectedRows,
@@ -359,5 +590,16 @@ export function useDataTableController<T extends RowData>({
     totalRows,
     searchInput,
     setSearchInput,
+    columnOrder,
+    setColumnOrder,
+    setUserPinning,
+    currentViewState,
+    applyViewState,
+    hasInitialUrlState: () => initialUrlState.current !== null,
+    urlParam,
+    encodedView,
+    onInitialUrl,
+    exportRows,
+    isServerSide: !!effectiveServerSide,
   };
 }

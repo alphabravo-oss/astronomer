@@ -1,14 +1,23 @@
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Fragment, useMemo, type CSSProperties, type ReactNode } from "react";
 import type { RowData, Row, Table as RtTable } from "@tanstack/react-table";
 
 import type { Column } from "@/components/ui/data-table";
+import { DataTableCellContent } from "@/components/ui/data-table-cell";
+import { columnText } from "@/components/ui/data-table-csv";
 import {
   TableEmptyPanel,
   type TableEmptyState,
 } from "@/components/ui/data-table-empty-state";
+import {
+  SELECT_COLUMN_WIDTH,
+  tableCellStyle,
+  type PinnedPlacement,
+  type ResolvedColumnLayout,
+} from "@/components/ui/data-table-layout";
 import { DataTableQueryError } from "@/components/ui/data-table-query-error";
 import { eventStartedInRowAction } from "@/components/ui/data-table-row-actions";
 import type { DataTableFeatures } from "@/components/ui/data-table-features";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -18,7 +27,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  ChevronsUpDown,
+} from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface SemanticDataTableProps<T extends RowData> {
@@ -26,7 +40,12 @@ interface SemanticDataTableProps<T extends RowData> {
   groupBy?: (row: T) => string;
   table: RtTable<DataTableFeatures, T>;
   activeColumns: Column<T>[];
+  layouts: Map<string, ResolvedColumnLayout>;
+  placements: Map<string, PinnedPlacement>;
   selectable: boolean | ((row: T) => boolean);
+  expandable?: boolean;
+  renderSubRow?: (row: T) => ReactNode;
+  keyboardNav?: boolean;
   resizable: boolean;
   layout: "fit" | "scroll";
   cellPadding: string;
@@ -43,12 +62,19 @@ interface SemanticDataTableProps<T extends RowData> {
   onRowClick?: (row: T) => void;
 }
 
+const EXPAND_COLUMN_WIDTH = 40;
+
 export function SemanticDataTable<T extends RowData>({
   rows,
   groupBy,
   table,
   activeColumns,
+  layouts,
+  placements,
   selectable,
+  expandable = false,
+  renderSubRow,
+  keyboardNav = false,
   resizable,
   layout,
   cellPadding,
@@ -73,6 +99,54 @@ export function SemanticDataTable<T extends RowData>({
       ),
     [table],
   );
+  // Sticky cells only need an opaque background when the table can scroll
+  // sideways; in fit layout they keep the row's own hover/selected tint.
+  const scrolls = layout === "scroll";
+  const stickyBg = scrolls ? "bg-background" : undefined;
+  const pinnedClasses = (
+    placement: PinnedPlacement | undefined,
+    header: boolean,
+  ) =>
+    placement
+      ? cn(
+          header ? scrolls && "bg-muted" : stickyBg,
+          placement.edge &&
+            scrolls &&
+            (placement.side === "start"
+              ? "border-r border-border"
+              : "border-l border-border"),
+        )
+      : undefined;
+  const leadCount = (selectable ? 1 : 0) + (expandable ? 1 : 0);
+  const colSpan = activeColumns.length + leadCount;
+  const expandLeft = selectable ? SELECT_COLUMN_WIDTH : 0;
+  const leadStyle = (left: number, width: number): CSSProperties => ({
+    position: "sticky",
+    left,
+    width,
+    minWidth: width,
+    maxWidth: width,
+    zIndex: "var(--z-sticky)" as unknown as number,
+  });
+  const resizedWidth = (col: Column<T>): number | undefined => {
+    if (!resizable) return undefined;
+    const resolved = layouts.get(col.key);
+    const stored = (
+      table.options.state as { columnSizing?: Record<string, number> }
+    ).columnSizing?.[col.key];
+    return resolved?.sized
+      ? stored
+      : (stored ?? table.getColumn(col.key)?.getSize());
+  };
+  const styleFor = (col: Column<T>): CSSProperties | undefined => {
+    const resolved = layouts.get(col.key);
+    if (!resolved) return undefined;
+    const style = tableCellStyle(resolved, {
+      resizedWidth: resizedWidth(col),
+      pinned: placements.get(col.key),
+    });
+    return Object.keys(style).length ? style : undefined;
+  };
 
   return (
     <div className="rounded-lg border border-border overflow-hidden">
@@ -86,12 +160,16 @@ export function SemanticDataTable<T extends RowData>({
           layout === "scroll" ? "Scrollable data table" : "Data table"
         }
         tabIndex={0}
+        data-table-region=""
       >
         <Table layout={layout} className="w-full text-sm">
           <TableHeader>
             <TableRow className="border-b border-border bg-muted/50">
               {selectable && (
-                <TableHead className={cn("w-10", selectPadding)}>
+                <TableHead
+                  className={cn("w-10", scrolls && "bg-muted", selectPadding)}
+                  style={leadStyle(0, SELECT_COLUMN_WIDTH)}
+                >
                   <Checkbox
                     aria-label="Select all rows on this page"
                     checked={table.getIsAllPageRowsSelected()}
@@ -99,24 +177,36 @@ export function SemanticDataTable<T extends RowData>({
                   />
                 </TableHead>
               )}
+              {expandable && (
+                <TableHead
+                  className={cn("px-1.5", scrolls && "bg-muted", selectPadding)}
+                  style={leadStyle(expandLeft, EXPAND_COLUMN_WIDTH)}
+                >
+                  <span className="sr-only">Expand row</span>
+                </TableHead>
+              )}
               {activeColumns.map((col) => {
                 const column = table.getColumn(col.key);
+                const resolved = layouts.get(col.key);
+                const placement = placements.get(col.key);
                 const rowActions = col.rowActions === true;
                 const sorted = column?.getIsSorted();
                 const header = resizable ? headerByKey.get(col.key) : undefined;
                 const sortable = !rowActions && col.sortable !== false;
+                // Sized columns reserve room for the label, so it never clips.
+                const keepWhole = resolved?.sized === true;
                 const headerContent = (
                   <>
                     <span
                       className={cn(
-                        "min-w-0 truncate",
+                        keepWhole ? "whitespace-nowrap" : "min-w-0 truncate",
                         rowActions && "sr-only",
                       )}
                     >
                       {col.header || (rowActions ? "Actions" : "")}
                     </span>
                     {sortable && (
-                      <span className="text-muted-foreground/50">
+                      <span className="shrink-0 text-muted-foreground/50">
                         {sorted === "asc" ? (
                           <ChevronUp className="h-3.5 w-3.5" />
                         ) : sorted === "desc" ? (
@@ -129,8 +219,8 @@ export function SemanticDataTable<T extends RowData>({
                   </>
                 );
                 const alignClass = cn(
-                  col.align === "center" && "justify-center",
-                  col.align === "right" && "justify-end",
+                  resolved?.align === "center" && "justify-center",
+                  resolved?.align === "right" && "justify-end",
                 );
                 return (
                   <TableHead
@@ -140,18 +230,11 @@ export function SemanticDataTable<T extends RowData>({
                       "min-w-0 overflow-hidden font-medium text-muted-foreground",
                       rowActions && "px-1.5",
                       resizable && "relative",
-                      col.align === "center" && "text-center",
-                      col.align === "right" && "text-right",
+                      resolved?.align === "center" && "text-center",
+                      resolved?.align === "right" && "text-right",
+                      pinnedClasses(placement, true),
                     )}
-                    style={
-                      rowActions
-                        ? { width: col.width ?? "2.5rem" }
-                        : resizable
-                          ? { width: column?.getSize() }
-                          : col.width
-                            ? { width: col.width }
-                            : undefined
-                    }
+                    style={styleFor(col)}
                     aria-sort={
                       sortable
                         ? sorted === "asc"
@@ -233,10 +316,7 @@ export function SemanticDataTable<T extends RowData>({
           <TableBody>
             {isError ? (
               <TableRow>
-                <TableCell
-                  colSpan={activeColumns.length + (selectable ? 1 : 0)}
-                  className="px-4 py-12 text-center"
-                >
+                <TableCell colSpan={colSpan} className="px-4 py-12 text-center">
                   <div className="sticky left-0 w-[calc(100vw-2rem)] max-w-full">
                     <DataTableQueryError
                       error={error}
@@ -255,7 +335,12 @@ export function SemanticDataTable<T extends RowData>({
                 >
                   {selectable && (
                     <TableCell className={selectPadding}>
-                      <div className="h-4 w-4 rounded-sm bg-muted animate-pulse" />
+                      <Skeleton className="h-4 w-4 rounded-sm" />
+                    </TableCell>
+                  )}
+                  {expandable && (
+                    <TableCell className={selectPadding}>
+                      <Skeleton className="h-4 w-4 rounded-sm" />
                     </TableCell>
                   )}
                   {activeColumns.map((col) => {
@@ -264,18 +349,10 @@ export function SemanticDataTable<T extends RowData>({
                       <TableCell
                         key={col.key}
                         className={cn(cellPadding, rowActions && "px-1.5")}
-                        style={
-                          rowActions
-                            ? { width: col.width ?? "2.5rem" }
-                            : resizable
-                              ? {
-                                  width: table.getColumn(col.key)?.getSize(),
-                                }
-                              : undefined
-                        }
+                        style={styleFor(col)}
                       >
-                        <div
-                          className="h-4 w-24 max-w-full rounded-sm bg-muted animate-pulse"
+                        <Skeleton
+                          className="h-4 w-24 max-w-full rounded-sm"
                           style={{
                             width: col.width
                               ? `min(100%, ${col.width})`
@@ -290,7 +367,7 @@ export function SemanticDataTable<T extends RowData>({
             ) : rows.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={activeColumns.length + (selectable ? 1 : 0)}
+                  colSpan={colSpan}
                   className="px-4 py-12 text-center text-muted-foreground"
                 >
                   <div className="sticky left-0 w-[calc(100vw-2rem)] max-w-full">
@@ -302,6 +379,8 @@ export function SemanticDataTable<T extends RowData>({
               rows.map((row, index) => {
                 const key = keyExtractor(row.original);
                 const isSelected = row.getIsSelected();
+                const isExpanded = expandable && row.getIsExpanded();
+                const subRow = isExpanded ? renderSubRow?.(row.original) : null;
                 return (
                   <Fragment key={key}>
                     {groupBy &&
@@ -310,9 +389,7 @@ export function SemanticDataTable<T extends RowData>({
                           groupBy(rows[index - 1].original)) && (
                         <TableRow>
                           <TableHead
-                            colSpan={
-                              activeColumns.length + (selectable ? 1 : 0)
-                            }
+                            colSpan={colSpan}
                             className="bg-muted px-3 py-2 text-xs font-semibold"
                           >
                             {groupBy(row.original)}
@@ -321,12 +398,14 @@ export function SemanticDataTable<T extends RowData>({
                       )}
                     <TableRow
                       key={key}
+                      data-row-index={index}
                       className={cn(
                         "border-b border-border last:border-0 transition-colors",
+                        "focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                         onRowClick && "cursor-pointer hover:bg-muted/50",
                         isSelected && "bg-muted/30",
                       )}
-                      tabIndex={onRowClick ? 0 : undefined}
+                      tabIndex={onRowClick ? 0 : keyboardNav ? -1 : undefined}
                       onKeyDown={(event) => {
                         if (!onRowClick || event.target !== event.currentTarget)
                           return;
@@ -341,7 +420,10 @@ export function SemanticDataTable<T extends RowData>({
                       }}
                     >
                       {selectable && (
-                        <TableCell className={selectPadding}>
+                        <TableCell
+                          className={cn(selectPadding, stickyBg)}
+                          style={leadStyle(0, SELECT_COLUMN_WIDTH)}
+                        >
                           <Checkbox
                             aria-label={`Select row ${keyExtractor(row.original)}`}
                             checked={isSelected}
@@ -350,8 +432,36 @@ export function SemanticDataTable<T extends RowData>({
                           />
                         </TableCell>
                       )}
+                      {expandable && (
+                        <TableCell
+                          className={cn("px-1.5", selectPadding, stickyBg)}
+                          style={leadStyle(expandLeft, EXPAND_COLUMN_WIDTH)}
+                        >
+                          <button
+                            type="button"
+                            aria-label={`${isExpanded ? "Collapse" : "Expand"} row ${key}`}
+                            aria-expanded={isExpanded}
+                            aria-controls={`subrow-${key}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              row.toggleExpanded();
+                            }}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <ChevronRight
+                              className={cn(
+                                "h-4 w-4 transition-transform",
+                                isExpanded && "rotate-90",
+                              )}
+                            />
+                          </button>
+                        </TableCell>
+                      )}
                       {activeColumns.map((col) => {
+                        const resolved = layouts.get(col.key);
+                        const placement = placements.get(col.key);
                         const rowActions = col.rowActions === true;
+                        const overflow = resolved?.overflow ?? "legacy";
                         return (
                           <TableCell
                             key={col.key}
@@ -359,39 +469,46 @@ export function SemanticDataTable<T extends RowData>({
                               cellPadding,
                               "min-w-0 overflow-hidden",
                               rowActions && "px-1.5",
-                              col.align === "center" && "text-center",
-                              col.align === "right" && "text-right",
+                              resolved?.align === "center" && "text-center",
+                              resolved?.align === "right" && "text-right",
+                              pinnedClasses(placement, false),
                             )}
-                            style={
-                              rowActions
-                                ? { width: col.width ?? "2.5rem" }
-                                : resizable
-                                  ? {
-                                      width: table
-                                        .getColumn(col.key)
-                                        ?.getSize(),
-                                    }
-                                  : undefined
-                            }
+                            style={styleFor(col)}
                           >
-                            <div
-                              className={cn(
-                                "min-w-0",
-                                rowActions
-                                  ? "overflow-visible"
-                                  : "overflow-hidden text-ellipsis",
-                                !rowActions &&
-                                  (col.wrap
-                                    ? "whitespace-normal break-words"
-                                    : "whitespace-nowrap"),
-                              )}
+                            <DataTableCellContent
+                              overflow={rowActions ? "fixed" : overflow}
+                              mono={resolved?.mono === true}
+                              numeric={resolved?.numeric === true}
+                              label={col.header}
+                              text={
+                                overflow === "middle"
+                                  ? columnText(col, row.original)
+                                  : ""
+                              }
+                              width={resolved?.size}
                             >
                               {col.accessor(row.original)}
-                            </div>
+                            </DataTableCellContent>
                           </TableCell>
                         );
                       })}
                     </TableRow>
+                    {subRow ? (
+                      <TableRow
+                        id={`subrow-${key}`}
+                        data-subrow=""
+                        className="border-b border-border bg-muted/20 last:border-0"
+                      >
+                        <TableCell
+                          colSpan={colSpan}
+                          className="whitespace-normal px-4 py-3"
+                        >
+                          <div className="sticky left-4 w-[calc(100vw-4rem)] max-w-full whitespace-normal">
+                            {subRow}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
                   </Fragment>
                 );
               })

@@ -19,6 +19,7 @@ import { ResourceActionMenu } from "./resource-action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Column } from "@/components/ui/data-table";
 import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
+import { PodContainersSubRow } from "@/components/resources/pod-containers-subrow";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
@@ -510,6 +511,46 @@ function selectedPodSort(sorting: SortingState): PodSort {
     : "namespace_asc";
 }
 
+type PodHealth = "all" | "attention" | "restarted";
+
+function PodHealthFilter({
+  value: selected,
+  onChange,
+}: {
+  value: PodHealth;
+  onChange: (value: PodHealth) => void;
+}) {
+  return (
+    <div
+      className="flex items-center gap-1 rounded-md border border-border bg-muted/20 p-1"
+      aria-label="Pod health filter"
+    >
+      {(
+        [
+          ["all", "All"],
+          ["attention", "Needs attention"],
+          ["restarted", "Restarted"],
+        ] as const
+      ).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={selected === value}
+          onClick={() => onChange(value)}
+          className={cn(
+            "inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs transition-colors",
+            selected === value
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function PodsTable({ clusterId }: { clusterId: string }) {
   const navigate = useNavigate();
   const [pageIndex, setPageIndex] = useState(0);
@@ -666,36 +707,13 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
           setPageIndex(0);
         }}
         toolbar={
-          <div
-            className="flex items-center gap-1 rounded-md border border-border bg-muted/20 p-1"
-            aria-label="Pod health filter"
-          >
-            {(
-              [
-                ["all", "All"],
-                ["attention", "Needs attention"],
-                ["restarted", "Restarted"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={healthFilter === value}
-                onClick={() => {
-                  setHealthFilter(value);
-                  setPageIndex(0);
-                }}
-                className={cn(
-                  "inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs transition-colors",
-                  healthFilter === value
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <PodHealthFilter
+            value={healthFilter}
+            onChange={(value) => {
+              setHealthFilter(value);
+              setPageIndex(0);
+            }}
+          />
         }
         loading={isLoading}
         isError={podsQuery.isError}
@@ -707,6 +725,8 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
             "Resources will appear here when they are available in this scope.",
         }}
         onRowClick={makeRowClick(navigate, clusterId, "pods", permissions.read)}
+        renderSubRow={(pod) => <PodContainersSubRow pod={pod} />}
+        exportCsv
         bulkDelete={{
           path: (row) => k8sResourcePath("pods", row.name, row.namespace),
           label: (row) => `${row.namespace}/${row.name}`,

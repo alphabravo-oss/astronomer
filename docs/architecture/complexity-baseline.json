@@ -66,7 +66,6 @@
     "frontend/src/components/resources/create-resource-dialog.tsx:CreateResourceEditor": 290,
     "frontend/src/components/resources/generic-resource-table.tsx:GenericResourceTable": 279,
     "frontend/src/components/resources/namespace-detail-page.tsx:NamespaceDetailPage": 256,
-    "frontend/src/components/resources/resource-core-tables.tsx:PodsTable": 245,
     "frontend/src/components/resources/secret-data-overview.tsx:decodeSecretValue": 285,
     "frontend/src/components/security/cis-scans-tab.tsx:CISScansTab": 248,
     "frontend/src/components/ui/yaml-view-dialog.tsx:ActiveYamlPanel": 352,
