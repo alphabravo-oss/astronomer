@@ -2,7 +2,6 @@ import { Copy, Pencil, Shield, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { formatRelativeTime } from "@/lib/utils";
 import type { GlobalRole } from "@/types";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -18,6 +17,7 @@ import {
   roleTitle,
   type RoleLike,
 } from "@/components/rbac/binding-utils";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 function TypeBadge({ builtin }: { builtin: boolean }) {
   return (
@@ -36,12 +36,15 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
     {
       key: "name",
       header: "Role",
+      kind: "name",
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-medium text-foreground">{roleTitle(row)}</p>
-            <p className="text-xs text-muted-foreground font-mono">
+        <div className="flex min-w-0 items-center gap-2">
+          <Shield className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground">
+              {roleTitle(row)}
+            </p>
+            <p className="truncate font-mono text-xs text-muted-foreground">
               {row.name}
             </p>
           </div>
@@ -52,6 +55,8 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
     {
       key: "description",
       header: "Description",
+      kind: "text",
+      minSize: 192,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.description || "—"}
@@ -62,6 +67,7 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
     {
       key: "builtin",
       header: "Type",
+      kind: "badge",
       accessor: (row) => <TypeBadge builtin={isBuiltinRole(row)} />,
       sortAccessor: (row) => (isBuiltinRole(row) ? "Built-in" : "Custom"),
       filter: { label: "Type" },
@@ -69,32 +75,33 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
     {
       key: "rules",
       header: "Rules",
+      kind: "count",
       accessor: (row) => (
-        <span className="tabular-nums text-sm">{row.rules?.length ?? 0}</span>
+        <span className="text-sm">{row.rules?.length ?? 0}</span>
       ),
       sortAccessor: (row) => row.rules?.length ?? 0,
-      align: "center",
     },
     {
       key: "crd",
       header: "CRD grants",
+      kind: "count",
       accessor: (row) => {
         const count = crdGrantCount(row.rules);
         return count > 0 ? (
-          <span className="tabular-nums text-sm">{count}</span>
+          <span className="text-sm">{count}</span>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         );
       },
       sortAccessor: (row) => crdGrantCount(row.rules),
-      align: "center",
     },
     {
       key: "created",
       header: "Created",
+      kind: "age",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {row.createdAt ? formatRelativeTime(row.createdAt) : "—"}
+          <RelativeTime value={row.createdAt} fallback="—" />
         </span>
       ),
       sortAccessor: (row) => row.createdAt || "",
@@ -102,6 +109,7 @@ function roleColumns<T extends RoleLike & { id: string }>(actions: {
     {
       key: "actions",
       header: "",
+      kind: "actions",
       rowActions: true,
       accessor: (row) => {
         const builtin = isBuiltinRole(row);

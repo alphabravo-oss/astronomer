@@ -25,6 +25,7 @@ export function AuditTab() {
     {
       key: "timestamp",
       header: "Timestamp",
+      kind: "date",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
           {formatDate(row.timestamp)}
@@ -34,6 +35,8 @@ export function AuditTab() {
     {
       key: "user",
       header: "User",
+      kind: "text",
+      minSize: 164,
       accessor: (row) => (
         <span className="text-sm text-foreground">{row.user}</span>
       ),
@@ -41,6 +44,8 @@ export function AuditTab() {
     {
       key: "action",
       header: "Action",
+      kind: "badge",
+      minSize: 136,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {row.action}
@@ -50,6 +55,8 @@ export function AuditTab() {
     {
       key: "resource",
       header: "Resource",
+      kind: "text",
+      grow: true,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.resourceType}/{row.resourceName}
@@ -59,6 +66,7 @@ export function AuditTab() {
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (row) => (
         <StatusBadge
           status={row.status === "success" ? "active" : "error"}
@@ -70,6 +78,9 @@ export function AuditTab() {
     {
       key: "source",
       header: "Source IP",
+      kind: "id",
+      size: 150,
+      minSize: 132,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.sourceIP}

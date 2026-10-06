@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import {
   Search,
-  Server,
   AlertTriangle,
   ChevronDown,
   ChevronRight,
@@ -18,13 +17,13 @@ import type {
 } from "@/lib/api/resource-search";
 import { detailHref } from "@/lib/k8s-paths";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import { DataTable } from "@/components/ui/data-table";
 import { DataTableQueryError } from "@/components/ui/data-table-query-error";
 import { Input } from "@/components/ui/input";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { Select } from "@/components/ui/select";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { BareButton } from "@/components/form/bare-button";
+import { searchColumns } from "./-columns";
 
 // SEARCHABLE_TYPES is the user-facing list shown in the type dropdown.
 // Keeping it in declaration order rather than alphabetical means the most
@@ -190,67 +189,7 @@ export function SearchPage({
   const clustersQueried = data?.clustersQueried ?? 0;
   const clustersFailed = data?.clustersFailed ?? 0;
 
-  const columns: Column<SearchResultRow>[] = [
-    {
-      key: "cluster",
-      header: "Cluster",
-      accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Server className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span className="font-medium text-foreground truncate">
-            {row.clusterName}
-          </span>
-        </div>
-      ),
-      sortAccessor: (row) => row.clusterName,
-    },
-    {
-      key: "namespace",
-      header: "Namespace",
-      accessor: (row) => (
-        <span className="font-mono text-xs text-muted-foreground">
-          {row.namespace || "—"}
-        </span>
-      ),
-      sortAccessor: (row) => row.namespace || "",
-    },
-    {
-      key: "name",
-      header: "Name",
-      accessor: (row) => (
-        <span className="font-medium text-foreground">{row.name || "—"}</span>
-      ),
-      sortAccessor: (row) => row.name || "",
-    },
-    {
-      key: "type",
-      header: "Type",
-      accessor: (row) => (
-        <span className="px-2 py-0.5 rounded-sm text-xs font-medium bg-muted text-muted-foreground">
-          {row.type || resourceType}
-        </span>
-      ),
-    },
-    {
-      key: "age",
-      header: "Age",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {row.age || "—"}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      accessor: (row) =>
-        row.status ? (
-          <StatusBadge status={String(row.status)} />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
-    },
-  ];
+  const columns = useMemo(() => searchColumns(resourceType), [resourceType]);
 
   const handleRowClick = (row: SearchResultRow) => {
     // Click → per-cluster detail page. See `searchResultHref` for the

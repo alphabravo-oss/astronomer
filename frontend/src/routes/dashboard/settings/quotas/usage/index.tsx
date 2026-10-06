@@ -93,12 +93,13 @@ function UsageInner() {
     {
       key: "scope",
       header: "Scope",
+      kind: "name",
       accessor: (row) => (
-        <div>
-          <p className="text-sm font-medium text-foreground capitalize">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-foreground capitalize">
             {row.scope}
           </p>
-          <p className="text-2xs text-muted-foreground font-mono">
+          <p className="truncate text-2xs text-muted-foreground font-mono">
             {row.scopeName ?? row.scopeId ?? "--"}
           </p>
         </div>
@@ -107,6 +108,8 @@ function UsageInner() {
     {
       key: "planName",
       header: "Plan",
+      kind: "text",
+      minSize: 136,
       accessor: (row) => (
         <RouterLink
           to="/dashboard/settings/quotas/$name" params={{ name: row.planName }}
@@ -119,13 +122,17 @@ function UsageInner() {
     {
       key: "worst",
       header: "Worst cap",
+      kind: "percent",
+      size: 208,
+      minSize: 160,
+      maxSize: 260,
       sortable: false,
       accessor: (row) => {
         const worst = worstField(row);
         if (!worst)
           return <span className="text-xs text-muted-foreground">--</span>;
         return (
-          <div className="space-y-1 max-w-65">
+          <div className="space-y-1">
             <p className="text-xs text-muted-foreground">
               {fieldLabel(worst.field)}
             </p>

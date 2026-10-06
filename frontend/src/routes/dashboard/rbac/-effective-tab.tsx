@@ -25,6 +25,7 @@ function effectivePermissionColumns(
     {
       key: "applies",
       header: "Applies",
+      kind: "badge",
       accessor: (row) => (
         <Badge
           variant={row.appliesToContext === false ? "secondary" : "success"}
@@ -37,6 +38,8 @@ function effectivePermissionColumns(
     {
       key: "resource",
       header: "Resource",
+      kind: "text",
+      minSize: 164,
       accessor: (row) => (
         <span className="font-mono text-sm">{row.resource}</span>
       ),
@@ -45,12 +48,15 @@ function effectivePermissionColumns(
     {
       key: "verb",
       header: "Verb",
+      kind: "text",
+      minSize: 108,
       accessor: (row) => <span className="font-mono text-sm">{row.verb}</span>,
       sortAccessor: (row) => row.verb,
     },
     {
       key: "risk",
       header: "Risk",
+      kind: "badge",
       accessor: (row) => (
         <Badge variant={riskVariant(row)}>{riskLabel(row)}</Badge>
       ),
@@ -59,12 +65,16 @@ function effectivePermissionColumns(
     {
       key: "sources",
       header: "Granted By",
+      kind: "text",
+      grow: true,
       accessor: (row) => sourceSummary(row.sources),
       sortable: false,
     },
     {
       key: "target",
       header: "Scope Target",
+      kind: "text",
+      minSize: 178,
       accessor: (row) =>
         targetSummary(row.sources, clusterNameById, projectNameById),
       sortable: false,
@@ -132,12 +142,14 @@ export function EffectiveTab() {
     {
       key: "role",
       header: "Role",
+      kind: "name",
       accessor: (row) =>
         row.roleName || row.roleId || row.bindingId || row.scope,
     },
     {
       key: "scope",
       header: "Scope",
+      kind: "badge",
       accessor: (row) => (
         <Badge
           variant={row.superuser ? "warning" : "secondary"}
@@ -150,6 +162,8 @@ export function EffectiveTab() {
     {
       key: "target",
       header: "Target",
+      kind: "text",
+      minSize: 178,
       accessor: (row) =>
         namedBindingTarget(row, clusterNameById, projectNameById),
       sortable: false,
@@ -157,11 +171,9 @@ export function EffectiveTab() {
     {
       key: "rules",
       header: "Rules",
-      accessor: (row) => (
-        <span className="tabular-nums">{row.rules?.length ?? 0}</span>
-      ),
+      kind: "count",
+      accessor: (row) => <span>{row.rules?.length ?? 0}</span>,
       sortAccessor: (row) => row.rules?.length ?? 0,
-      align: "center",
     },
   ];
 

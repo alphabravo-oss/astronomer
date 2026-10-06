@@ -14,7 +14,6 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft, Mail, Pencil, Plus, Save, Send } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
-import { formatRelativeTime } from "@/lib/utils";
 import { pageCount, pageNumber } from "@/lib/api/pagination";
 import { useAppForm, useStore } from "@/lib/form";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -37,6 +36,7 @@ import {
 } from "@/lib/api/settings";
 import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 const DEFAULT_CONFIG: SmtpConfig = {
   host: "",
@@ -269,15 +269,20 @@ function EmailsTable() {
     {
       key: "createdAt",
       header: "Time",
+      kind: "age",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {formatRelativeTime(row.createdAt)}
+          <RelativeTime value={row.createdAt} />
         </span>
       ),
     },
     {
       key: "to",
       header: "To",
+      kind: "text",
+      grow: true,
+      minSize: 220,
+      maxSize: 640,
       accessor: (row) => (
         <span className="text-sm text-foreground">{row.to}</span>
       ),
@@ -285,6 +290,9 @@ function EmailsTable() {
     {
       key: "template",
       header: "Template",
+      kind: "badge",
+      minSize: 136,
+      maxSize: 220,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
           {row.template}
@@ -294,6 +302,7 @@ function EmailsTable() {
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (row) => (
         <StatusBadge
           status={
@@ -311,10 +320,8 @@ function EmailsTable() {
     {
       key: "attempts",
       header: "Attempts",
-      align: "right",
-      accessor: (row) => (
-        <span className="tabular-nums text-sm">{row.attempts}</span>
-      ),
+      kind: "count",
+      accessor: (row) => <span className="text-sm">{row.attempts}</span>,
     },
   ];
 

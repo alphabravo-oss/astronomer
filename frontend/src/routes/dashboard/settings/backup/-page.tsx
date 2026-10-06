@@ -51,6 +51,7 @@ import type {
 } from "@/lib/api/settings";
 import { MANAGEMENT_BACKUP_SECRET_SENTINEL } from "@/lib/api/settings";
 import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 function statusToVariant(status: BackupDrillResultView["status"]) {
   switch (status) {
@@ -181,10 +182,11 @@ export function DestinationsSection({
             {
               key: "name",
               header: "Name",
+              kind: "name",
               accessor: (row) => (
-                <div>
-                  <p className="text-sm text-foreground">{row.name}</p>
-                  <p className="text-2xs text-muted-foreground font-mono">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-foreground">{row.name}</p>
+                  <p className="truncate font-mono text-2xs text-muted-foreground">
                     {row.bucket}
                   </p>
                 </div>
@@ -193,6 +195,8 @@ export function DestinationsSection({
             {
               key: "schedule",
               header: "Schedule",
+              kind: "text",
+              minSize: 136,
               accessor: (row) => (
                 <span className="text-xs text-muted-foreground">
                   {row.schedule ? cronToHuman(row.schedule) : "—"}
@@ -202,6 +206,7 @@ export function DestinationsSection({
             {
               key: "status",
               header: "Status",
+              kind: "status",
               accessor: (row) => (
                 <StatusBadge
                   status={
@@ -235,19 +240,25 @@ export function DestinationsSection({
             {
               key: "last",
               header: "Last job",
+              kind: "age",
+              minSize: 112,
               accessor: (row) => (
                 <span className="text-xs text-muted-foreground">
-                  {row.lastJob?.completionTime
-                    ? formatRelativeTime(row.lastJob.completionTime)
-                    : row.lastJob?.startTime
-                      ? formatRelativeTime(row.lastJob.startTime)
-                      : "never"}
+                  <RelativeTime
+                    value={
+                      row.lastJob?.completionTime ?? row.lastJob?.startTime
+                    }
+                    fallback="never"
+                  />
                 </span>
               ),
             },
             {
               key: "actions",
               header: "",
+              kind: "actions",
+              size: 272,
+              maxSize: 272,
               sortable: false,
               accessor: (row) =>
                 row.readOnly ? (
@@ -650,15 +661,17 @@ function HistoryTable() {
     {
       key: "startedAt",
       header: "Started",
+      kind: "date",
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {formatRelativeTime(row.startedAt)}
+          <RelativeTime value={row.startedAt} />
         </span>
       ),
     },
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (row) => (
         <StatusBadge
           status={statusToVariant(row.status)}
@@ -670,6 +683,7 @@ function HistoryTable() {
     {
       key: "schemaVersion",
       header: "Schema",
+      kind: "version",
       accessor: (row) => (
         <span className="text-xs font-mono text-muted-foreground">
           {row.schemaVersion != null ? row.schemaVersion : "—"}
@@ -679,7 +693,8 @@ function HistoryTable() {
     {
       key: "duration",
       header: "Duration",
-      align: "right",
+      kind: "count",
+      minSize: 80,
       accessor: (row) => (
         <span className="text-xs font-mono tabular-nums text-muted-foreground">
           {durationLabel(row.startedAt, row.finishedAt)}
@@ -689,9 +704,11 @@ function HistoryTable() {
     {
       key: "error",
       header: "Error",
+      kind: "text",
+      grow: true,
       sortable: false,
       accessor: (row) => (
-        <span className="text-xs text-status-error truncate max-w-65 block">
+        <span className="text-xs text-status-error">
           {row.errorMessage || "—"}
         </span>
       ),

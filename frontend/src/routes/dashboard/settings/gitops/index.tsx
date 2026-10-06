@@ -16,7 +16,6 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { formatRelativeTime } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
   useDeleteGitOpsSource,
@@ -24,6 +23,7 @@ import {
 } from "@/components/settings/hooks";
 import type { GitOpsSource } from "@/lib/api/gitops";
 import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 function GitOpsList() {
   const navigate = useNavigate();
@@ -35,12 +35,16 @@ function GitOpsList() {
     {
       key: "name",
       header: "Source",
+      kind: "name",
+      grow: false,
+      size: 224,
+      minSize: 168,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <GitBranch className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-medium text-foreground">{row.name}</p>
-            <p className="text-2xs font-mono text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2">
+          <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground">{row.name}</p>
+            <p className="truncate font-mono text-2xs text-muted-foreground">
               {row.branch}
             </p>
           </div>
@@ -50,9 +54,13 @@ function GitOpsList() {
     {
       key: "repo_url",
       header: "Repo",
+      kind: "text",
+      grow: true,
+      minSize: 240,
+      maxSize: 720,
       sortable: false,
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground font-mono truncate max-w-90 block">
+        <span className="text-xs text-muted-foreground font-mono">
           {row.repo_url}
           {row.path_prefix ? ` · ${row.path_prefix}` : ""}
         </span>
@@ -61,7 +69,8 @@ function GitOpsList() {
     {
       key: "sync_mode",
       header: "Mode",
-      align: "center",
+      kind: "badge",
+      minSize: 112,
       sortable: false,
       accessor: (row) => (
         <span className="text-xs font-mono uppercase text-muted-foreground">
@@ -74,7 +83,7 @@ function GitOpsList() {
     {
       key: "on_delete",
       header: "On delete",
-      align: "center",
+      kind: "badge",
       sortable: false,
       accessor: (row) => (
         <span className="text-xs font-mono uppercase text-muted-foreground">
@@ -85,6 +94,8 @@ function GitOpsList() {
     {
       key: "last_synced_at",
       header: "Last sync",
+      kind: "status",
+      minSize: 128,
       accessor: (row) => {
         if (row.last_error) {
           return <StatusBadge status="error" label="error" size="sm" />;
@@ -96,7 +107,7 @@ function GitOpsList() {
         }
         return (
           <span className="text-xs text-muted-foreground">
-            {formatRelativeTime(row.last_synced_at)}
+            <RelativeTime value={row.last_synced_at} />
           </span>
         );
       },
@@ -104,7 +115,7 @@ function GitOpsList() {
     {
       key: "enabled",
       header: "Enabled",
-      align: "center",
+      kind: "status",
       sortable: false,
       accessor: (row) => (
         <StatusBadge
@@ -117,6 +128,7 @@ function GitOpsList() {
     {
       key: "actions",
       header: "",
+      kind: "actions",
       sortable: false,
       accessor: (row) => (
         <BareButton
