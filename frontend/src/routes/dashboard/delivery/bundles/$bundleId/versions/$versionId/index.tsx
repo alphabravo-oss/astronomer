@@ -83,18 +83,35 @@ function precedenceRows(version: ComponentBundleVersion): PrecedenceRow[] {
 }
 
 const columns: Column<PrecedenceRow>[] = [
-  { key: "order", header: "Order", accessor: (row) => row.order },
+  {
+    key: "order",
+    header: "Order",
+    kind: "count",
+    accessor: (row) => row.order,
+  },
   {
     key: "layer",
     header: "Layer",
+    kind: "text",
+    minSize: 160,
     accessor: (row) => <span className="font-medium">{row.layer}</span>,
   },
-  { key: "scope", header: "Scope", accessor: (row) => row.scope },
+  {
+    key: "scope",
+    header: "Scope",
+    kind: "text",
+    minSize: 160,
+    accessor: (row) => row.scope,
+  },
   {
     key: "evidence",
     header: "Effective evidence",
+    wrap: true,
+    grow: true,
+    size: 480,
+    minSize: 320,
     accessor: (row) => (
-      <div className="max-w-2xl space-y-2 whitespace-normal">
+      <div className="space-y-2 whitespace-normal">
         <p>{row.evidence}</p>
         {row.content !== undefined && (
           <pre className="max-h-72 overflow-auto rounded-md border border-border bg-muted/30 p-3 text-xs">

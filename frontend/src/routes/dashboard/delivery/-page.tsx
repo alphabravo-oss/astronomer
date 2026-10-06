@@ -17,6 +17,8 @@ import {
   X,
 } from "lucide-react";
 import { Link as RouterLink } from "@tanstack/react-router";
+import { AgeCell } from "@/components/ui/age-cell";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { MetricCard } from "@/components/ui/metric-card";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
@@ -55,7 +57,7 @@ import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 import { pageRowCount, pageCountLabel } from "@/lib/api/pagination";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { ActionButton } from "@/components/ui/action-button";
 
 function isForbiddenError(error: unknown): boolean {
@@ -135,19 +137,21 @@ function EstateDeliveryOverview({
     {
       key: "cluster",
       header: "Cluster",
+      kind: "name",
+      minSize: 200,
       accessor: (row) => (
-        <div>
-          <span className="font-medium text-foreground">
-            {row.displayName || row.name}
-          </span>
-          <p className="font-mono text-xs text-muted-foreground">{row.name}</p>
-        </div>
+        <StackedCell
+          primary={row.displayName || row.name}
+          secondary={row.name}
+          secondaryMono
+        />
       ),
       sortAccessor: (row) => row.displayName || row.name,
     },
     {
       key: "environment",
       header: "Environment",
+      kind: "badge",
       accessor: (row) => (
         <span className="text-xs capitalize text-muted-foreground">
           {row.environment || "—"}
@@ -158,6 +162,8 @@ function EstateDeliveryOverview({
     {
       key: "role",
       header: "Role",
+      kind: "text",
+      minSize: 140,
       accessor: (row) =>
         row.isLocal ? (
           <span className="text-xs text-muted-foreground">Local host-only</span>
@@ -172,6 +178,7 @@ function EstateDeliveryOverview({
     {
       key: "agent",
       header: "Agent",
+      kind: "status",
       accessor: (row) => (
         <DeliveryPhaseBadge
           value={
@@ -185,12 +192,15 @@ function EstateDeliveryOverview({
     {
       key: "flux",
       header: "Flux",
+      kind: "status",
+      minSize: 140,
       accessor: (row) => (
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <DeliveryPhaseBadge value={row.compatibilityStatus} />
-          <p className="font-mono text-xs text-muted-foreground">
-            {row.fluxVersion || "—"}
-          </p>
+          <StackedCell
+            primary={row.fluxVersion || "—"}
+            primaryClassName="font-mono text-xs font-normal text-muted-foreground"
+          />
         </div>
       ),
       sortAccessor: (row) => row.compatibilityStatus,
@@ -198,6 +208,9 @@ function EstateDeliveryOverview({
     {
       key: "assignments",
       header: "Assignments",
+      kind: "count",
+      size: 150,
+      maxSize: 240,
       accessor: (row) => (
         <span className="tabular-nums text-sm">
           {row.readyCount}/{row.assignmentCount}
@@ -210,11 +223,8 @@ function EstateDeliveryOverview({
     {
       key: "heartbeat",
       header: "Last heartbeat",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.lastHeartbeat ? formatRelativeTime(row.lastHeartbeat) : "—"}
-        </span>
-      ),
+      kind: "age",
+      accessor: (row) => <AgeCell value={row.lastHeartbeat} />,
       sortAccessor: (row) => row.lastHeartbeat ?? "",
     },
   ];

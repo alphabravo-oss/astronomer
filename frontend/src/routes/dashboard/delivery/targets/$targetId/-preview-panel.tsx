@@ -3,30 +3,41 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageSection } from "@/components/ui/page";
 import { ActionButton } from "@/components/ui/action-button";
 import { MetricCard } from "@/components/ui/metric-card";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { DeliveryPhaseBadge } from "@/components/delivery/shared";
-import type { PlacementDecision, PlacementPreview } from "@/lib/api/delivery-targets";
+import type {
+  PlacementDecision,
+  PlacementPreview,
+} from "@/lib/api/delivery-targets";
 
 const columns: Column<PlacementDecision>[] = [
   {
     key: "cluster",
     header: "Cluster",
+    kind: "name",
+    minSize: 220,
     accessor: (row) => (
-      <div>
-        <p className="font-medium">{row.clusterName || row.clusterId}</p>
-        <p className="font-mono text-xs text-muted-foreground">
-          {row.clusterId}
-        </p>
-      </div>
+      <StackedCell
+        primary={row.clusterName || row.clusterId}
+        secondary={row.clusterId}
+        secondaryMono
+      />
     ),
+    sortAccessor: (row) => row.clusterName || row.clusterId,
   },
   {
     key: "decision",
     header: "Decision",
+    kind: "status",
     accessor: (row) => <DeliveryPhaseBadge value={row.reason} />,
   },
   {
     key: "reason",
     header: "Details",
+    kind: "text",
+    grow: true,
+    minSize: 240,
+    maxSize: 960,
     accessor: (row) =>
       row.missingCapabilities?.join(", ") ||
       row.compatibilityReason ||
@@ -71,8 +82,16 @@ export function PreviewPanel({
     >
       <div className="grid gap-3 sm:grid-cols-4">
         <MetricCard dense label="Selected" value={preview.selectedCount} />
-        <MetricCard dense label="Excluded / blocked" value={preview.excludedCount} />
-        <MetricCard dense label="Target generation" value={preview.targetGeneration} />
+        <MetricCard
+          dense
+          label="Excluded / blocked"
+          value={preview.excludedCount}
+        />
+        <MetricCard
+          dense
+          label="Target generation"
+          value={preview.targetGeneration}
+        />
         <MetricCard
           dense
           label="All-cluster confirmation"

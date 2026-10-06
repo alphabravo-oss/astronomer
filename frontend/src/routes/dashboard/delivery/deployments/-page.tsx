@@ -20,7 +20,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useNavigate, useLocation } from "@tanstack/react-router";
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 
@@ -103,45 +104,57 @@ export function DeploymentsPage() {
     {
       key: "deployment",
       header: "Deployment",
+      kind: "name",
+      minSize: 280,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-mono text-xs">{row.id}</p>
-            <p className="text-xs text-muted-foreground">
-              target {row.targetId.slice(0, 8)}
-            </p>
-          </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <StackedCell
+            primary={row.id}
+            primaryClassName="font-mono text-xs font-normal"
+            secondary={`target ${row.targetId.slice(0, 8)}`}
+          />
         </div>
       ),
+      sortAccessor: (row) => row.id,
     },
     {
       key: "cluster",
       header: "Cluster",
-      accessor: (row) => <code className="text-xs">{row.clusterId}</code>,
+      kind: "id",
+      minSize: 160,
+      accessor: (row) => row.clusterId,
+      sortAccessor: (row) => row.clusterId,
     },
     {
       key: "phase",
       header: "Phase",
+      kind: "status",
       accessor: (row) => <DeliveryPhaseBadge value={row.phase} />,
     },
     {
       key: "revision",
       header: "Revision",
+      size: 220,
+      minSize: 200,
+      maxSize: 320,
       accessor: (row) => (
-        <div>
-          <p className="max-w-48 truncate font-mono text-xs">
-            {row.observedRevision || row.desiredRevision || "Not observed"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            gen {row.observedGeneration}/{row.desiredGeneration}
-          </p>
-        </div>
+        <StackedCell
+          primary={
+            row.observedRevision || row.desiredRevision || "Not observed"
+          }
+          primaryClassName="font-mono text-xs font-normal"
+          secondary={`gen ${row.observedGeneration}/${row.desiredGeneration}`}
+        />
       ),
+      sortAccessor: (row) => row.observedRevision || row.desiredRevision || "",
     },
     {
       key: "drift",
       header: "Drift",
+      kind: "status",
+      size: 150,
+      maxSize: 200,
       accessor: (row) =>
         row.conditions.some(
           (condition) =>
@@ -155,8 +168,9 @@ export function DeploymentsPage() {
     {
       key: "observed",
       header: "Last observed",
-      accessor: (row) =>
-        row.lastObservedAt ? formatRelativeTime(row.lastObservedAt) : "Never",
+      kind: "age",
+      accessor: (row) => <AgeCell value={row.lastObservedAt} empty="Never" />,
+      sortAccessor: (row) => row.lastObservedAt ?? "",
     },
   ];
   return (

@@ -39,11 +39,71 @@ import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { toastSuccess } from "@/lib/toast";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 
 const sourceStatuses = ["pending", "ready", "degraded", "revoked"] as const;
+
+const sourceDataColumns: Column<DeliverySource>[] = [
+  {
+    key: "name",
+    header: "Source",
+    kind: "name",
+    minSize: 260,
+    accessor: (row) => <StackedCell primary={row.name} secondary={row.url} />,
+    sortAccessor: (row) => row.name,
+  },
+  {
+    key: "type",
+    header: "Kind",
+    kind: "badge",
+    minSize: 120,
+    accessor: (row) => row.type.replaceAll("_", " "),
+  },
+  {
+    key: "auth",
+    header: "Authentication",
+    kind: "text",
+    minSize: 180,
+    accessor: (row) => (
+      <span>
+        {row.authMode.replaceAll("_", " ")}
+        {row.credential.configured ? " · configured" : ""}
+      </span>
+    ),
+  },
+  {
+    key: "trust",
+    header: "Trust",
+    kind: "badge",
+    size: 160,
+    minSize: 150,
+    accessor: (row) =>
+      row.trustPolicy.allowUnsigned ? (
+        <span className="text-status-warning">Unsigned allowed</span>
+      ) : (
+        <span className="inline-flex items-center gap-1">
+          <ShieldCheck className="h-4 w-4 text-status-success" />{" "}
+          {row.trustPolicy.provider}
+        </span>
+      ),
+  },
+  {
+    key: "status",
+    header: "Status",
+    kind: "status",
+    accessor: (row) => <DeliveryPhaseBadge value={row.status} />,
+  },
+  {
+    key: "updated",
+    header: "Last checked",
+    kind: "age",
+    accessor: (row) => <AgeCell value={row.lastResolvedAt} empty="Never" />,
+    sortAccessor: (row) => row.lastResolvedAt ?? "",
+  },
+];
 
 export function SourcesPage() {
   const { projectId, projects, projectQuery, listHref } =
@@ -102,60 +162,14 @@ export function SourcesPage() {
   );
 
   const columns: Column<DeliverySource>[] = [
-    {
-      key: "name",
-      header: "Source",
-      accessor: (row) => (
-        <div>
-          <p className="font-medium">{row.name}</p>
-          <p className="max-w-72 truncate text-xs text-muted-foreground">
-            {row.url}
-          </p>
-        </div>
-      ),
-    },
-    {
-      key: "type",
-      header: "Kind",
-      accessor: (row) => row.type.replaceAll("_", " "),
-    },
-    {
-      key: "auth",
-      header: "Authentication",
-      accessor: (row) => (
-        <span>
-          {row.authMode.replaceAll("_", " ")}
-          {row.credential.configured ? " · configured" : ""}
-        </span>
-      ),
-    },
-    {
-      key: "trust",
-      header: "Trust",
-      accessor: (row) =>
-        row.trustPolicy.allowUnsigned ? (
-          <span className="text-status-warning">Unsigned allowed</span>
-        ) : (
-          <span className="inline-flex items-center gap-1">
-            <ShieldCheck className="h-4 w-4 text-status-success" />{" "}
-            {row.trustPolicy.provider}
-          </span>
-        ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      accessor: (row) => <DeliveryPhaseBadge value={row.status} />,
-    },
-    {
-      key: "updated",
-      header: "Last checked",
-      accessor: (row) =>
-        row.lastResolvedAt ? formatRelativeTime(row.lastResolvedAt) : "Never",
-    },
+    ...sourceDataColumns,
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 176,
+      minSize: 176,
+      maxSize: 176,
       sortable: false,
       accessor: (row) => (
         <div className="flex justify-end gap-1">

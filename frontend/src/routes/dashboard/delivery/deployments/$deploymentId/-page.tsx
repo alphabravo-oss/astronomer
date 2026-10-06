@@ -31,7 +31,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
 import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { toastSuccess } from "@/lib/toast";
@@ -369,6 +369,7 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
   {
     key: "observed",
     header: "Observed",
+    kind: "date",
     accessor: (row) => (
       <span className="whitespace-nowrap text-xs text-muted-foreground">
         {new Date(row.observedAt).toLocaleString()}
@@ -379,11 +380,16 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
   {
     key: "event",
     header: "Event",
+    kind: "text",
+    minSize: 160,
     accessor: (row) => row.eventType.replaceAll("_", " "),
   },
   {
     key: "phase",
     header: "Phase",
+    kind: "text",
+    size: 240,
+    minSize: 220,
     accessor: (row) => (
       <span className="font-mono text-xs">
         {row.fromPhase || "—"} → {row.toPhase || "—"}
@@ -393,6 +399,7 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
   {
     key: "result",
     header: "Result",
+    kind: "status",
     accessor: (row) => (
       <DeliveryPhaseBadge value={row.toPhase || row.eventType} />
     ),
@@ -400,6 +407,7 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
   {
     key: "generation",
     header: "Gen",
+    kind: "count",
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.generation}</span>
     ),
@@ -408,19 +416,29 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
   {
     key: "message",
     header: "Message",
+    kind: "text",
+    grow: true,
+    minSize: 280,
+    maxSize: 960,
     accessor: (row) => (
-      <span className="max-w-xl whitespace-normal text-xs">
-        {row.message || row.reasonCode || "—"}
-      </span>
+      <span className="text-xs">{row.message || row.reasonCode || "—"}</span>
     ),
+    sortAccessor: (row) => row.message || row.reasonCode || "",
   },
 ];
 
 const conditionColumns: Column<DeliveryConditionView>[] = [
-  { key: "type", header: "Condition", accessor: (row) => row.type },
+  {
+    key: "type",
+    header: "Condition",
+    kind: "text",
+    minSize: 160,
+    accessor: (row) => row.type,
+  },
   {
     key: "status",
     header: "Status",
+    kind: "status",
     accessor: (row) => (
       <DeliveryPhaseBadge
         value={
@@ -433,17 +451,28 @@ const conditionColumns: Column<DeliveryConditionView>[] = [
       />
     ),
   },
-  { key: "reason", header: "Reason", accessor: (row) => row.reason || "—" },
+  {
+    key: "reason",
+    header: "Reason",
+    kind: "text",
+    minSize: 160,
+    accessor: (row) => row.reason || "—",
+  },
   {
     key: "message",
-    header: "Sanitized message",
-    accessor: (row) => (
-      <span className="max-w-xl whitespace-normal">{row.message || "—"}</span>
-    ),
+    header: "Message",
+    kind: "text",
+    grow: true,
+    minSize: 280,
+    maxSize: 960,
+    accessor: (row) => row.message || "—",
+    sortAccessor: (row) => row.message || "",
   },
   {
     key: "transition",
     header: "Last transition",
-    accessor: (row) => formatRelativeTime(row.lastTransitionTime),
+    kind: "age",
+    accessor: (row) => <AgeCell value={row.lastTransitionTime} />,
+    sortAccessor: (row) => row.lastTransitionTime ?? "",
   },
 ];
