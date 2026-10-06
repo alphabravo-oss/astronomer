@@ -21,7 +21,10 @@ import { usePermissionDecision } from "@/lib/permission-hooks";
 import { ResourceDetail } from "@/components/resources/resource-detail";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { crResourcePath, crListHref } from "@/lib/k8s-paths";
-import { formatRelativeTime } from "@/lib/utils";
+import {
+  ageColumn,
+  ChipList,
+} from "@/components/resources/networking-table-cells";
 import { PageHeader } from "@/components/ui/page";
 import { CustomResourceList } from "./custom-resource-list";
 import { QueryStates } from "@/components/ui/query-states";
@@ -108,6 +111,8 @@ const crdColumns: Column<CRDRow>[] = [
   {
     key: "kind",
     header: "Kind",
+    kind: "name",
+    minSize: 200,
     accessor: (row) => (
       <span className="font-medium text-foreground text-xs">{row.kind}</span>
     ),
@@ -116,6 +121,10 @@ const crdColumns: Column<CRDRow>[] = [
   {
     key: "group",
     header: "Group",
+    kind: "text",
+    minSize: 208,
+    size: 240,
+    sortAccessor: (row) => row.group,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.group || "-"}
@@ -125,6 +134,10 @@ const crdColumns: Column<CRDRow>[] = [
   {
     key: "plural",
     header: "Plural",
+    kind: "text",
+    minSize: 144,
+    size: 176,
+    sortAccessor: (row) => row.plural,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.plural}
@@ -134,16 +147,16 @@ const crdColumns: Column<CRDRow>[] = [
   {
     key: "versions",
     header: "Versions",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.versions.join(", ") || "-"}
-      </span>
-    ),
+    kind: "version",
+    minSize: 144,
+    accessor: (row) => <ChipList items={row.versions} />,
+    searchAccessor: (row) => row.versions.join(" "),
     sortable: false,
   },
   {
     key: "scope",
     header: "Scope",
+    kind: "badge",
     accessor: (row) => (
       <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.scope || "-"}
@@ -153,13 +166,7 @@ const crdColumns: Column<CRDRow>[] = [
     filter: { label: "Scope" },
   },
   {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.createdAt ? formatRelativeTime(row.createdAt) : "-"}
-      </span>
-    ),
+    ...ageColumn<CRDRow>("-"),
   },
 ];
 

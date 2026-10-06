@@ -50,6 +50,8 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { ActionButton } from "@/components/ui/action-button";
 import { BARE_BUTTON } from "@/lib/bare-button";
+import { Tooltip } from "@/components/ui/tooltip";
+import { ChipList } from "@/components/resources/networking-table-cells";
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -67,6 +69,22 @@ function fmtRelative(iso?: string): string {
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
 }
+
+function LastSeen({ iso }: { iso?: string }) {
+  const valid = iso && !Number.isNaN(Date.parse(iso));
+  return (
+    <Tooltip content={valid ? new Date(iso).toLocaleString() : undefined}>
+      <span className="text-muted-foreground">{fmtRelative(iso)}</span>
+    </Tooltip>
+  );
+}
+
+const LAST_SEEN_COLUMN = {
+  key: "lastSeen",
+  header: "Last seen",
+  kind: "age",
+  minSize: 128,
+} as const;
 
 // parseQuantity converts a Kubernetes-style quantity string to a number
 // where possible (so we can compute used/hard ratios). Returns NaN for
@@ -152,6 +170,8 @@ const ingressClassColumns: Column<MirroredIngressClass>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 200,
     accessor: (r) => <span className="font-mono">{r.name}</span>,
     searchAccessor: (r) => r.name,
     sortAccessor: (r) => r.name,
@@ -159,6 +179,9 @@ const ingressClassColumns: Column<MirroredIngressClass>[] = [
   {
     key: "controller",
     header: "Controller",
+    kind: "text",
+    minSize: 224,
+    size: 260,
     accessor: (r) => (
       <span className="font-mono text-xs">{r.controller || "—"}</span>
     ),
@@ -177,16 +200,12 @@ const ingressClassColumns: Column<MirroredIngressClass>[] = [
         <span className="text-muted-foreground">—</span>
       ),
     sortAccessor: (r) => (r.isDefault ? 1 : 0),
-    width: "8rem",
+    kind: "badge",
   },
   {
-    key: "lastSeen",
-    header: "Last seen",
-    accessor: (r) => (
-      <span className="text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
-    ),
+    ...LAST_SEEN_COLUMN,
+    accessor: (r) => <LastSeen iso={r.lastSeenAt} />,
     sortAccessor: (r) => r.lastSeenAt || "",
-    width: "10rem",
   },
 ];
 
@@ -232,6 +251,8 @@ const gatewayClassColumns: Column<MirroredGatewayClass>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 200,
     accessor: (r) => <span className="font-mono">{r.name}</span>,
     searchAccessor: (r) => r.name,
     sortAccessor: (r) => r.name,
@@ -239,6 +260,9 @@ const gatewayClassColumns: Column<MirroredGatewayClass>[] = [
   {
     key: "controller",
     header: "Controller",
+    kind: "text",
+    minSize: 224,
+    size: 260,
     accessor: (r) => (
       <span className="font-mono text-xs">{r.controllerName || "—"}</span>
     ),
@@ -252,16 +276,12 @@ const gatewayClassColumns: Column<MirroredGatewayClass>[] = [
     searchAccessor: (r) => r.acceptedStatus,
     sortAccessor: (r) => r.acceptedStatus,
     filter: { label: "Accepted" },
-    width: "9rem",
+    kind: "status",
   },
   {
-    key: "lastSeen",
-    header: "Last seen",
-    accessor: (r) => (
-      <span className="text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
-    ),
+    ...LAST_SEEN_COLUMN,
+    accessor: (r) => <LastSeen iso={r.lastSeenAt} />,
     sortAccessor: (r) => r.lastSeenAt || "",
-    width: "10rem",
   },
 ];
 
@@ -285,6 +305,9 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "text",
+    minSize: 136,
+    size: 168,
     accessor: (r) => <span className="font-mono">{r.namespace}</span>,
     searchAccessor: (r) => r.namespace,
     sortAccessor: (r) => r.namespace,
@@ -293,6 +316,8 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 200,
     accessor: (r) => <span className="font-mono">{r.name}</span>,
     searchAccessor: (r) => r.name,
     sortAccessor: (r) => r.name,
@@ -300,18 +325,9 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
   {
     key: "types",
     header: "Types",
-    accessor: (r) => (
-      <>
-        {(r.policyTypes ?? []).map((t) => (
-          <span
-            key={t}
-            className="mr-1 rounded-full bg-muted px-2 py-0.5 text-xs"
-          >
-            {t}
-          </span>
-        ))}
-      </>
-    ),
+    kind: "badge",
+    minSize: 144,
+    accessor: (r) => <ChipList items={r.policyTypes} mono={false} />,
     searchAccessor: (r) => (r.policyTypes ?? []).join(" "),
   },
   {
@@ -330,16 +346,12 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
     searchAccessor: (r) => (r.isManaged ? "astronomer" : "operator"),
     sortAccessor: (r) => (r.isManaged ? "astronomer" : "operator"),
     filter: { label: "Owner" },
-    width: "8rem",
+    kind: "badge",
   },
   {
-    key: "lastSeen",
-    header: "Last seen",
-    accessor: (r) => (
-      <span className="text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
-    ),
+    ...LAST_SEEN_COLUMN,
+    accessor: (r) => <LastSeen iso={r.lastSeenAt} />,
     sortAccessor: (r) => r.lastSeenAt || "",
-    width: "10rem",
   },
 ];
 
@@ -461,30 +473,43 @@ const limitRangeItemColumns: Column<LimitRangeItem & { _key: number }>[] = [
   {
     key: "type",
     header: "Type",
+    kind: "text",
+    minSize: 112,
+    size: 112,
     accessor: (l) => <span className="font-mono">{l.type ?? "—"}</span>,
     sortAccessor: (l) => l.type ?? "",
   },
   {
     key: "default",
     header: "Default",
-    accessor: (l) => <span className="font-mono">{fmtMap(l.default)}</span>,
+    kind: "text",
+    grow: true,
+    minSize: 200,
+    accessor: (l) => <ChipList items={fmtItems(l.default)} empty="—" />,
   },
   {
     key: "defaultRequest",
-    header: "DefaultRequest",
-    accessor: (l) => (
-      <span className="font-mono">{fmtMap(l.defaultRequest)}</span>
-    ),
+    header: "Default request",
+    kind: "text",
+    minSize: 184,
+    size: 184,
+    accessor: (l) => <ChipList items={fmtItems(l.defaultRequest)} empty="—" />,
   },
   {
     key: "min",
     header: "Min",
-    accessor: (l) => <span className="font-mono">{fmtMap(l.min)}</span>,
+    kind: "text",
+    minSize: 152,
+    size: 152,
+    accessor: (l) => <ChipList items={fmtItems(l.min)} empty="—" />,
   },
   {
     key: "max",
     header: "Max",
-    accessor: (l) => <span className="font-mono">{fmtMap(l.max)}</span>,
+    kind: "text",
+    minSize: 152,
+    size: 152,
+    accessor: (l) => <ChipList items={fmtItems(l.max)} empty="—" />,
   },
 ];
 
@@ -534,11 +559,8 @@ function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
   );
 }
 
-function fmtMap(m?: Record<string, string>): string {
-  if (!m) return "—";
-  const keys = Object.keys(m);
-  if (keys.length === 0) return "—";
-  return keys.map((k) => `${k}=${m[k]}`).join(", ");
+function fmtItems(m?: Record<string, string>): string[] {
+  return Object.entries(m ?? {}).map(([k, v]) => `${k}=${v}`);
 }
 
 // ---------------------------------------------------------------------
