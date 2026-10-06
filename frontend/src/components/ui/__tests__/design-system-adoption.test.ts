@@ -11,7 +11,8 @@ const actionSurfaces = [
   "src/routes/dashboard/account/security/index.tsx",
   "src/routes/dashboard/delivery/targets/$targetId/-page.tsx",
   "src/routes/dashboard/delivery/targets/-page.tsx",
-  "src/routes/dashboard/settings/widgets/index.tsx",
+  "src/routes/dashboard/settings/widgets/-widgets-section.tsx",
+  "src/routes/dashboard/settings/widgets/-datasources-section.tsx",
   "src/routes/dashboard/delivery/sources/-page.tsx",
 ];
 
