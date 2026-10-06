@@ -465,6 +465,7 @@ const ROWS: DemoRow[] = [
 const COLUMNS: Column<DemoRow>[] = [
   {
     key: "name",
+    kind: "name",
     header: "Name",
     accessor: (r) => r.name,
     sortAccessor: (r) => r.name,
@@ -472,6 +473,7 @@ const COLUMNS: Column<DemoRow>[] = [
   },
   {
     key: "status",
+    kind: "status",
     header: "Status",
     accessor: (r) => <StatusBadge status={r.status} />,
     sortAccessor: (r) => r.status,
@@ -479,12 +481,14 @@ const COLUMNS: Column<DemoRow>[] = [
   },
   {
     key: "version",
+    kind: "version",
     header: "Version",
     accessor: (r) => r.version,
     sortAccessor: (r) => r.version,
   },
   {
     key: "nodes",
+    kind: "count",
     header: "Nodes",
     accessor: (r) => r.nodes,
     sortAccessor: (r) => r.nodes,

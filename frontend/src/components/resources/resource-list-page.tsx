@@ -335,6 +335,8 @@ function ScopedWorkloadsTable({
       {
         key: "name",
         header: "Name",
+        kind: "name",
+        minSize: 220,
         accessor: (row) => (
           <RouterLink
             to={workloadDetailHref(
