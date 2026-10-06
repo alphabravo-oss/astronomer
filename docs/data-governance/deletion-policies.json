@@ -122,6 +122,7 @@
         "quota_plans",
         "siem_forwarders",
         "sso_configurations",
+        "user_table_views",
         "user_totp_enrollments",
         "user_totp_recovery_codes",
         "users",
