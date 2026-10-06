@@ -145,7 +145,9 @@ export function GenericResourceTable({
 
   const columns = useMemo<Column<GenericK8sResource>[]>(
     () => [
-      nameColumn<GenericK8sResource>(clusterId, resourceType),
+      nameColumn<GenericK8sResource>(clusterId, resourceType, {
+        minSize: 220,
+      }),
       ...baseColumns.slice(1),
       {
         key: "actions",
@@ -209,7 +211,6 @@ export function GenericResourceTable({
           );
         },
         sortable: false,
-        align: "center" as const,
       },
     ],
     [

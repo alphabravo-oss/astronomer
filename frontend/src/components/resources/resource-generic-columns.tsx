@@ -1,12 +1,15 @@
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { Column } from "@/components/ui/data-table";
 import { formatRelativeTime } from "@/lib/utils";
+import { TimestampCell } from "@/components/tables/cells";
 import type { GenericK8sResource } from "@/types";
 
 const jobColumns: Column<GenericK8sResource>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 220,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -16,6 +19,9 @@ const jobColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "text",
+    size: 150,
+    minSize: 120,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -25,25 +31,29 @@ const jobColumns: Column<GenericK8sResource>[] = [
   {
     key: "status",
     header: "Status",
+    kind: "status",
     accessor: (row) => <StatusBadge status={row.status || "Pending"} />,
   },
   {
     key: "completions",
     header: "Completions",
+    kind: "count",
+    size: 110,
     accessor: (row) => (
       <span className="tabular-nums text-xs">
         {row.succeeded ?? 0}/{row.completions ?? 1}
       </span>
     ),
-    align: "center",
   },
   {
     key: "age",
     header: "Age",
+    kind: "age",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
+      <TimestampCell
+        value={row.createdAt}
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
 ];
@@ -52,6 +62,8 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 220,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -61,6 +73,9 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "text",
+    size: 150,
+    minSize: 120,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -70,6 +85,9 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
   {
     key: "schedule",
     header: "Schedule",
+    kind: "text",
+    size: 150,
+    minSize: 130,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.schedule}
@@ -79,32 +97,39 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
   {
     key: "status",
     header: "Status",
+    kind: "status",
     accessor: (row) => <StatusBadge status={row.status || "Active"} />,
   },
   {
     key: "lastSchedule",
-    header: "Last Schedule",
+    header: "Last Run",
+    kind: "age",
+    size: 120,
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.lastSchedule ? formatRelativeTime(row.lastSchedule) : "-"}
-      </span>
+      <TimestampCell
+        value={row.lastSchedule}
+        fallback="-"
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
   {
     key: "active",
     header: "Active",
+    kind: "count",
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.activeCount ?? 0}</span>
     ),
-    align: "center",
   },
   {
     key: "age",
     header: "Age",
+    kind: "age",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
+      <TimestampCell
+        value={row.createdAt}
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
 ];
@@ -198,6 +223,8 @@ const hpaColumns: Column<GenericK8sResource>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 220,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -207,6 +234,9 @@ const hpaColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "text",
+    size: 150,
+    minSize: 120,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -216,6 +246,9 @@ const hpaColumns: Column<GenericK8sResource>[] = [
   {
     key: "target",
     header: "Target",
+    kind: "text",
+    size: 240,
+    minSize: 200,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.targetKind}/{row.targetName}
@@ -225,28 +258,31 @@ const hpaColumns: Column<GenericK8sResource>[] = [
   {
     key: "minmax",
     header: "Min/Max",
+    kind: "count",
+    size: 110,
     accessor: (row) => (
       <span className="tabular-nums text-xs">
         {row.minReplicas ?? 0}/{row.maxReplicas ?? 0}
       </span>
     ),
-    align: "center",
   },
   {
     key: "replicas",
     header: "Replicas",
+    kind: "count",
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.currentReplicas ?? 0}</span>
     ),
-    align: "center",
   },
   {
     key: "age",
     header: "Age",
+    kind: "age",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
+      <TimestampCell
+        value={row.createdAt}
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
 ];
@@ -255,6 +291,8 @@ const resourceQuotaColumns: Column<GenericK8sResource>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 220,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -264,6 +302,9 @@ const resourceQuotaColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "text",
+    size: 150,
+    minSize: 120,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -273,10 +314,12 @@ const resourceQuotaColumns: Column<GenericK8sResource>[] = [
   {
     key: "age",
     header: "Age",
+    kind: "age",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
+      <TimestampCell
+        value={row.createdAt}
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
 ];
@@ -285,6 +328,8 @@ const limitRangeColumns: Column<GenericK8sResource>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 220,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -294,6 +339,9 @@ const limitRangeColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "text",
+    size: 150,
+    minSize: 120,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -303,10 +351,12 @@ const limitRangeColumns: Column<GenericK8sResource>[] = [
   {
     key: "age",
     header: "Age",
+    kind: "age",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
+      <TimestampCell
+        value={row.createdAt}
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
 ];
@@ -315,6 +365,8 @@ const pdbColumns: Column<GenericK8sResource>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 220,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -324,6 +376,9 @@ const pdbColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "text",
+    size: 150,
+    minSize: 120,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -332,37 +387,41 @@ const pdbColumns: Column<GenericK8sResource>[] = [
   },
   {
     key: "minAvailable",
-    header: "Min Available",
+    header: "Min Avail",
+    kind: "count",
+    size: 130,
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.minAvailable || "-"}</span>
     ),
-    align: "center",
   },
   {
     key: "maxUnavailable",
-    header: "Max Unavailable",
+    header: "Max Unavail",
+    kind: "count",
+    size: 130,
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.maxUnavailable || "-"}</span>
     ),
-    align: "center",
   },
   {
     key: "currentHealthy",
     header: "Healthy",
+    kind: "count",
     accessor: (row) => (
       <span className="tabular-nums text-xs">
         {row.currentHealthy ?? 0}/{row.desiredHealthy ?? 0}
       </span>
     ),
-    align: "center",
   },
   {
     key: "age",
     header: "Age",
+    kind: "age",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
+      <TimestampCell
+        value={row.createdAt}
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
 ];
@@ -595,6 +654,8 @@ const replicaSetColumns: Column<GenericK8sResource>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 220,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.name}
@@ -604,6 +665,9 @@ const replicaSetColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
+    kind: "text",
+    size: 150,
+    minSize: 120,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -613,34 +677,36 @@ const replicaSetColumns: Column<GenericK8sResource>[] = [
   {
     key: "desired",
     header: "Desired",
+    kind: "count",
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.desired ?? 0}</span>
     ),
-    align: "center",
   },
   {
     key: "ready",
     header: "Ready",
+    kind: "count",
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.ready ?? 0}</span>
     ),
-    align: "center",
   },
   {
     key: "available",
     header: "Available",
+    kind: "count",
     accessor: (row) => (
       <span className="tabular-nums text-xs">{row.available ?? 0}</span>
     ),
-    align: "center",
   },
   {
     key: "age",
     header: "Age",
+    kind: "age",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
+      <TimestampCell
+        value={row.createdAt}
+        className="text-xs text-muted-foreground"
+      />
     ),
   },
 ];

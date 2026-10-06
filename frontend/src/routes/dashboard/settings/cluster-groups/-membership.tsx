@@ -21,10 +21,11 @@ const memberColumns: Column<ClusterGroupMember>[] = [
   {
     key: "name",
     header: "Cluster",
+    kind: "name",
     accessor: (cluster) => (
-      <div className="flex items-center gap-2">
-        <Server className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">{cluster.name}</span>
+      <div className="flex min-w-0 items-center gap-2">
+        <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 truncate font-medium">{cluster.name}</span>
       </div>
     ),
     sortAccessor: (cluster) => cluster.name,
@@ -32,11 +33,12 @@ const memberColumns: Column<ClusterGroupMember>[] = [
   {
     key: "id",
     header: "Cluster ID",
-    accessor: (cluster) => (
-      <span className="font-mono text-xs text-muted-foreground">
-        {cluster.id}
-      </span>
-    ),
+    kind: "id",
+    size: 280,
+    minSize: 200,
+    maxSize: 320,
+    sortAccessor: (cluster) => cluster.id,
+    accessor: (cluster) => cluster.id,
   },
 ];
 

@@ -122,39 +122,40 @@ const snapshotColumns: Column<ApiserverAllowlistSnapshot>[] = [
   {
     key: "capturedAt",
     header: "Captured",
+    kind: "name",
+    minSize: 220,
     accessor: (s) => <span className="font-mono text-xs">{s.capturedAt}</span>,
     sortAccessor: (s) => s.capturedAt,
   },
   {
     key: "drift",
     header: "Drift",
+    kind: "status",
+    size: 96,
     accessor: (s) => (
       <span className="text-xs">{s.drift ? "⚠ yes" : "no"}</span>
     ),
     searchAccessor: (s) => (s.drift ? "yes" : "no"),
     sortAccessor: (s) => (s.drift ? 1 : 0),
     filter: { label: "Drift" },
-    width: "6rem",
   },
   {
     key: "effective",
     header: "Effective",
+    kind: "count",
     accessor: (s) => (
       <span className="font-mono text-xs">{s.effectiveCidrs.length}</span>
     ),
     sortAccessor: (s) => s.effectiveCidrs.length,
-    align: "right",
-    width: "7rem",
   },
   {
     key: "desired",
     header: "Desired",
+    kind: "count",
     accessor: (s) => (
       <span className="font-mono text-xs">{s.desiredCidrs.length}</span>
     ),
     sortAccessor: (s) => s.desiredCidrs.length,
-    align: "right",
-    width: "7rem",
   },
 ];
 

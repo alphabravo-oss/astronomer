@@ -171,6 +171,8 @@ export function workloadColumns(clusterId: string): Column<WorkloadRow>[] {
     {
       key: "kind",
       header: "Kind",
+      kind: "badge",
+      size: 144,
       accessor: (workload) => {
         const Icon = KIND_META[workload.kind].icon;
         return (
@@ -183,11 +185,12 @@ export function workloadColumns(clusterId: string): Column<WorkloadRow>[] {
       searchAccessor: (workload) => workload.kind,
       sortAccessor: (workload) => workload.kind,
       filter: { label: "Kind" },
-      width: "9rem",
     },
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 220,
       accessor: (workload) => (
         <RouterLink
           to={workloadHref(clusterId, workload)}
@@ -202,6 +205,9 @@ export function workloadColumns(clusterId: string): Column<WorkloadRow>[] {
     {
       key: "namespace",
       header: "Namespace",
+      kind: "text",
+      size: 192,
+      minSize: 140,
       accessor: (workload) => (
         <span className="text-muted-foreground">
           {workload.item.metadata.namespace}
@@ -210,11 +216,12 @@ export function workloadColumns(clusterId: string): Column<WorkloadRow>[] {
       searchAccessor: (workload) => workload.item.metadata.namespace,
       sortAccessor: (workload) => workload.item.metadata.namespace,
       filter: { label: "Namespace" },
-      width: "12rem",
     },
     {
       key: "status",
       header: "Status",
+      kind: "status",
+      size: 160,
       accessor: (workload) => {
         const status = workloadStatus(workload);
         return (
@@ -226,11 +233,11 @@ export function workloadColumns(clusterId: string): Column<WorkloadRow>[] {
       },
       searchAccessor: (workload) => workloadStatus(workload).label,
       sortAccessor: (workload) => workloadStatus(workload).label,
-      width: "10rem",
     },
     {
       key: "age",
       header: "Age",
+      kind: "age",
       accessor: (workload) => (
         <span className="text-muted-foreground">
           {workload.item.metadata.creationTimestamp
@@ -242,7 +249,6 @@ export function workloadColumns(clusterId: string): Column<WorkloadRow>[] {
         workload.item.metadata.creationTimestamp
           ? Date.parse(workload.item.metadata.creationTimestamp)
           : 0,
-      width: "8rem",
     },
   ];
 }

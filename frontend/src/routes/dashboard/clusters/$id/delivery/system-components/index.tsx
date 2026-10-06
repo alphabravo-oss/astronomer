@@ -141,6 +141,7 @@ function SystemComponentsPage() {
           <DataTable
             data={components}
             columns={columns}
+            layout="scroll"
             keyExtractor={(row) => row.id}
             searchable
             searchPlaceholder="Search components, owners, namespaces, or versions…"

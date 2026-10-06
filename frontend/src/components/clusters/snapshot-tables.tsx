@@ -19,13 +19,8 @@ import type {
 import { cn } from "@/lib/utils";
 import { ActionButton } from "@/components/ui/action-button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { ChipsCell, TimestampCell } from "@/components/tables/cells";
 import { BARE_BUTTON } from "@/lib/bare-button";
-
-function formatDate(iso?: string) {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
-}
 
 function SnapshotPhasePill({ phase }: { phase: SnapshotPhase }) {
   const tone =
@@ -98,12 +93,17 @@ export function SnapshotSchedulesTable({
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 200,
       accessor: (schedule) => schedule.name,
       sortAccessor: (schedule) => schedule.name,
     },
     {
       key: "cron",
       header: "Cron",
+      kind: "text",
+      size: 130,
+      minSize: 120,
       accessor: (schedule) => (
         <span className="font-mono text-xs">{schedule.cron}</span>
       ),
@@ -112,20 +112,18 @@ export function SnapshotSchedulesTable({
     {
       key: "namespaces",
       header: "Namespaces",
+      kind: "badge",
+      size: 220,
+      minSize: 180,
+      maxSize: 280,
       accessor: (schedule) => (
-        <div className="flex flex-wrap gap-1">
-          {(schedule.spec.includedNamespaces?.length
-            ? schedule.spec.includedNamespaces
-            : ["(all)"]
-          ).map((namespace) => (
-            <span
-              key={namespace}
-              className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-xs bg-muted text-muted-foreground border border-border"
-            >
-              {namespace}
-            </span>
-          ))}
-        </div>
+        <ChipsCell
+          items={
+            schedule.spec.includedNamespaces?.length
+              ? schedule.spec.includedNamespaces
+              : ["(all)"]
+          }
+        />
       ),
       sortAccessor: (schedule) =>
         schedule.spec.includedNamespaces?.join(",") ?? "",
@@ -133,6 +131,8 @@ export function SnapshotSchedulesTable({
     {
       key: "enabled",
       header: "Enabled",
+      kind: "status",
+      size: 96,
       accessor: (schedule) => (
         <Tooltip
           content={canWrite ? undefined : disabledReason}
@@ -152,20 +152,25 @@ export function SnapshotSchedulesTable({
     {
       key: "lastRun",
       header: "Last run",
+      kind: "date",
       accessor: (schedule) => (
-        <span className="text-xs text-muted-foreground">
-          {formatDate(schedule.lastRun)}
-        </span>
+        <TimestampCell
+          value={schedule.lastRun}
+          fallback="—"
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (schedule) => schedule.lastRun ?? "",
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 80,
+      minSize: 80,
+      maxSize: 80,
       sortable: false,
       rowActions: true,
-      width: "4.5rem",
-      align: "right",
       accessor: (schedule) => (
         <div className="flex items-center justify-end gap-1.5">
           <ActionButton
@@ -234,12 +239,17 @@ export function SnapshotsTable({
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 260,
       accessor: (snapshot) => snapshot.name,
       sortAccessor: (snapshot) => snapshot.name,
     },
     {
       key: "source",
       header: "Source",
+      kind: "text",
+      size: 200,
+      minSize: 150,
       accessor: (snapshot) =>
         snapshot.source === "schedule" ? (
           <Tooltip content={snapshot.scheduleName}>
@@ -260,6 +270,7 @@ export function SnapshotsTable({
     {
       key: "phase",
       header: "Phase",
+      kind: "status",
       accessor: (snapshot) => <SnapshotPhasePill phase={snapshot.phase} />,
       sortAccessor: (snapshot) => snapshot.phase,
       filter: { label: "Phase" },
@@ -267,26 +278,34 @@ export function SnapshotsTable({
     {
       key: "started",
       header: "Started",
+      kind: "date",
       accessor: (snapshot) => (
-        <span className="text-xs text-muted-foreground">
-          {formatDate(snapshot.startTimestamp)}
-        </span>
+        <TimestampCell
+          value={snapshot.startTimestamp}
+          fallback="—"
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (snapshot) => snapshot.startTimestamp ?? "",
     },
     {
       key: "completed",
       header: "Completed",
+      kind: "date",
       accessor: (snapshot) => (
-        <span className="text-xs text-muted-foreground">
-          {formatDate(snapshot.completionTimestamp)}
-        </span>
+        <TimestampCell
+          value={snapshot.completionTimestamp}
+          fallback="—"
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (snapshot) => snapshot.completionTimestamp ?? "",
     },
     {
       key: "warningsErrors",
-      header: "W / E",
+      header: "Warn / Err",
+      kind: "count",
+      size: 90,
       accessor: (snapshot) => (
         <span className="text-muted-foreground text-xs">
           {snapshot.warnings ?? 0} /{" "}
@@ -301,10 +320,12 @@ export function SnapshotsTable({
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 120,
+      minSize: 120,
+      maxSize: 120,
       sortable: false,
       rowActions: true,
-      width: "7.5rem",
-      align: "right",
       accessor: (snapshot) => {
         const restorable =
           snapshot.phase === "Completed" ||

@@ -8,6 +8,8 @@ const taintColumns: Column<NodeTaint>[] = [
   {
     key: "key",
     header: "Key",
+    kind: "name",
+    minSize: 240,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.key}
@@ -17,6 +19,9 @@ const taintColumns: Column<NodeTaint>[] = [
   {
     key: "value",
     header: "Value",
+    kind: "text",
+    size: 160,
+    minSize: 120,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.value || "-"}
@@ -26,6 +31,8 @@ const taintColumns: Column<NodeTaint>[] = [
   {
     key: "effect",
     header: "Effect",
+    kind: "badge",
+    size: 150,
     accessor: (row) => (
       <span
         className={cn(
@@ -90,8 +97,8 @@ export function TaintsTab({
                 <Trash2 className="h-3.5 w-3.5" />
               </BareButton>
             ),
+            kind: "actions" as const,
             sortable: false,
-            align: "center" as const,
           },
         ]}
         keyExtractor={(r) => `${r.key}-${r.effect}`}
