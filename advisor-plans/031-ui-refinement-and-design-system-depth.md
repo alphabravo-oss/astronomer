@@ -217,6 +217,22 @@ Files: `src/components/ui/data-table-features.ts`, `data-table.tsx`, `data-table
 
 Acceptance: unit tests per feature (pinning order, grow sizing math, chip removal, view round-trip through URL, CSV output escaping); e2e: save a view on Pods, reload, it applies; keyboard row navigation e2e with axe clean.
 
+## Phase 6b — Per-table column tuning (generic tables)
+
+Finding: `Column<T>` only offers `width?: string`; 76 of ~91 DataTable users declare no width, so every column gets an equal share. Long names and image refs are cut off while counts, ages and badges get far more space than they need.
+
+Tasks:
+
+1. **Column kinds (in P6.2).** Add `kind` to `Column<T>`: `name | text | status | badge | count | percent | age | date | version | id | bytes | actions | select`. Each kind sets default `size/minSize/maxSize`, alignment (numeric kinds right-aligned, tabular figures), and overflow policy (name grows and truncates with a Tooltip; text wraps to 2 lines then truncates; status/badge/count/age/version never truncate; id is mono with middle-ellipsis and copy; actions is fixed and pinned right). Explicit width/size/align/grow overrides the kind. No kind and no width keeps today's behavior.
+2. **Headers never clip.** Header min width accounts for label plus sort icon; short header labels with the full name in a tooltip.
+3. **Inventory.** Produce `031-evidence/table-inventory.md`: every DataTable user (≈94 files), its columns, the proposed `kind` per column, and the worst current symptom (clipped, oversized, wrapped).
+4. **Sweep by domain**, one PR per batch: clusters/nodes, workloads/pods/events, networking/storage/policy/RBAC resources, delivery/Flux, apps/catalog/tools, monitoring/alerting/logging, security/scans/registries, settings/admin/audit/backups/projects. Assign a `kind` to every column; set `grow` on exactly one text-like column per table; add `minSize` for columns holding long identifiers (image refs, namespaced names, URLs).
+5. **Per-table special cases** the generic kinds cannot express: multi-line cells (name + subtitle), composite cells (status + reason), image references (registry/repo:tag with tag always visible), label/selector chips (cap to 2 plus "+N"), resource quantities (CPU/memory with unit, right-aligned), timestamps (relative with exact tooltip).
+6. **Guard.** Vitest that renders each table's column list through the kind resolver and fails when a column has neither `kind` nor explicit width (allowlist shrinks to zero by the end of the sweep).
+7. **Visual check.** Add the 25 densest tables to the visual-regression set at 1280px.
+
+Acceptance: no clipped values and no column wider than 3x its content in the inventory's 25 densest tables at 1280px; guard test passes with an empty allowlist; screenshots before and after in `031-evidence/tables/`.
+
 ## Phase 7 — Tokens: density and type scale
 
 File: `src/styles/globals.css`, `src/lib/user-preferences`.
@@ -268,6 +284,7 @@ Acceptance: e2e for one live-updating list (stubbed stream event changes a row w
 - Zero native tooltips, raw buttons, palette or hex colors outside `components/ui/`, enforced by lint.
 - Every list, card and detail load uses skeletons.
 - Every page uses `PageShell` + `PageHeader` or `ResourceMasthead`, enforced by test.
+- Every DataTable column has a semantic `kind` or explicit size; nothing clipped and nothing oversized in the 25 densest tables at 1280px.
 - DataTable supports pinning, grow sizing, ordering, chips, expansion, density, keyboard nav, CSV export and saved views; at least Pods, Deployments, Nodes, Clusters, Events and Audit use them.
 - Density preference persisted and applied before first paint.
 - Component gallery route and visual regression in CI.
@@ -327,6 +344,12 @@ Acceptance: e2e for one live-updating list (stubbed stream event changes a row w
 - [ ] P6.8 CSV export
 - [ ] P6.9 Saved views (URL + `user_table_views` API)
 - [ ] P6.10 Server-side mode for audit, events, pods
+- [ ] P6b.1 Column kinds and header sizing in DataTable
+- [ ] P6b.2 Table inventory document
+- [ ] P6b.3 Domain sweeps (8 batches) assign a kind to every column
+- [ ] P6b.4 Special-case cells (composite, image refs, chips, quantities, timestamps)
+- [ ] P6b.5 Guard test with empty allowlist
+- [ ] P6b.6 Densest 25 tables in visual regression
 - [ ] P7.1 Type tokens
 - [ ] P7.2 Density tokens
 - [ ] P7.3 Kit and touched pages migrated to tokens
