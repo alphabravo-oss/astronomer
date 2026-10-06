@@ -151,8 +151,8 @@ func TestApplicationDashboardOptOut(t *testing.T) {
 func assertObservationDashboardQueries(t *testing.T, queries map[string][]string, vars map[string]string) {
 	t.Helper()
 	contracts := map[string][]string{
-		"Embedded observation source availability": {"astronomer_agent_delivery_observation_source_available"},
-		"Embedded observation source age":          {"astronomer_agent_delivery_observation_source_age_seconds", ">= 0"},
+		"Embedded observation source availability": {"astronomer_agent_delivery_observation_source_available", "astronomer_agent_delivery_observation_observed_at_timestamp_seconds", "> bool 0", ">= bool 0", "<= bool 240"},
+		"Embedded observation source age":          {"time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds", "> 0", ">= 0"},
 		"Embedded tracked LIST/WATCH request rate": {"astronomer_agent_observation_requests_total", "sum by (namespace, service, instance, kind, verb, outcome)", "rate("},
 		"Embedded inventory refresh p95 duration":  {"astronomer_agent_delivery_observation_refresh_duration_seconds_bucket", "histogram_quantile(0.95,", "sum by (namespace, service, instance, source, outcome, le)"},
 		"Embedded inventory refresh frequency":     {"astronomer_agent_delivery_observation_refresh_duration_seconds_count", "sum by (namespace, service, instance, source, outcome)", "rate("},
@@ -170,9 +170,28 @@ func assertObservationDashboardQueries(t *testing.T, queries map[string][]string
 				t.Fatalf("%s lacks contract %q: %s", title, fragment, q)
 			}
 		}
-		for _, forbidden := range []string{"vector(0)", "or 0", "clamp_min", "avg(", "== bool", ">= bool", "observation_watch_events_total", "cluster_id"} {
+		for _, forbidden := range []string{"vector(0)", "or 0", "clamp_min", "avg(", "== bool", "observation_watch_events_total", "cluster_id"} {
 			if strings.Contains(q, forbidden) {
 				t.Fatalf("%s loses observation semantics: %s", title, q)
+			}
+		}
+		if title == "Embedded observation source availability" || title == "Embedded observation source age" {
+			sample := "astronomer_agent_delivery_observation_sampled_at_timestamp_seconds" + selector
+			match := "on(namespace, service, instance, astronomer_instance_id, source)"
+			recency := " and " + match + " ((time() - " + sample + " >= 0) and (time() - " + sample + " <= 60))"
+			if !strings.Contains(q, recency) || strings.Contains(q, "observation_source_age_seconds") {
+				t.Fatalf("%s can conceal a stopped producer: %s", title, q)
+			}
+			if title == "Embedded observation source availability" {
+				// Multiply by boolean evidence validity rather than filter it out:
+				// sampled noncurrent/unknown/expired sources must retain zero.
+				observed := "astronomer_agent_delivery_observation_observed_at_timestamp_seconds" + selector
+				validity := " * " + match + " ((" + observed + " > bool 0) * (time() - " + observed + " >= bool 0) * (time() - " + observed + " <= bool 240))"
+				if !strings.Contains(q, validity) {
+					t.Fatalf("availability hides invalid evidence instead of showing zero: %s", q)
+				}
+			} else if strings.Contains(q, "bool") {
+				t.Fatalf("age must omit unknown/future evidence, not turn it into a boolean: %s", q)
 			}
 		}
 		// Resolve Grafana constants from the actual rendered ConfigMap and ensure

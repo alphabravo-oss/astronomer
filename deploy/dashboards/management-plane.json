@@ -305,7 +305,7 @@
     },
     {
       "title": "Embedded observation source availability",
-      "description": "Embedded server targets only, per instance; missing or failed scrapes remain gaps. 1 means current sampled evidence; 0 means unavailable, partial or stale evidence. Standalone /metrics exists, but annotations do not establish downstream scraping or aggregation.",
+      "description": "Embedded server targets only, per instance and source. Recently sampled noncurrent or unknown evidence is 0; current evidence is 1 only while its observed timestamp is positive, not in the future and at most 240 seconds old. Missing, future or older-than-60-second producer samples remain gaps even when /metrics is healthy. Standalone /metrics exists, but annotations do not establish downstream scraping or aggregation.",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
@@ -324,7 +324,7 @@
       },
       "targets": [
         {
-          "expr": "astronomer_agent_delivery_observation_source_available{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "expr": "(astronomer_agent_delivery_observation_source_available{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} * on(namespace, service, instance, astronomer_instance_id, source) ((astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} > bool 0) * (time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= bool 0) * (time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} <= bool 240))) and on(namespace, service, instance, astronomer_instance_id, source) ((time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0) and (time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} <= 60)) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
           "legendFormat": "{{instance}} / {{source}}",
           "refId": "A"
         }
@@ -332,7 +332,7 @@
     },
     {
       "title": "Embedded observation source age",
-      "description": "Embedded server targets only, per instance; missing or failed scrapes remain gaps. Unknown age (-1) is omitted. Age is sampled source evidence, not scrape age.",
+      "description": "Embedded server targets only, per instance and source. Age advances from the preserved source observation timestamp, not the sampled age gauge. Unknown (0) or future observation timestamps are omitted. Missing, future or older-than-60-second producer samples and failed scrapes remain gaps.",
       "type": "timeseries",
       "gridPos": {
         "x": 12,
@@ -351,7 +351,7 @@
       },
       "targets": [
         {
-          "expr": "(astronomer_agent_delivery_observation_source_age_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "expr": "((time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}) and (astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} > 0) and (time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0)) and on(namespace, service, instance, astronomer_instance_id, source) ((time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0) and (time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} <= 60)) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
           "legendFormat": "{{instance}} / {{source}}",
           "refId": "A"
         }

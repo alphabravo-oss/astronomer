@@ -89,9 +89,20 @@ and disconnected-agent panels.
 Enabling dashboards does not enable ServiceMonitors.
 
 Embedded observation panels use server metrics targets only, retaining each
-`instance` separately. Source availability is 1 for current sampled evidence and
-0 for unavailable, partial or stale evidence. Source age omits the unknown-age
-sentinel (-1); it measures sampled source evidence, not time since a scrape.
+`instance` and `source` separately. Both require a successful scrape and a
+producer sample timestamp no more than 60 seconds old and not in the future.
+A stopped observation loop therefore becomes a gap even if `/metrics` remains
+healthy. Sample freshness uses
+`astronomer_agent_delivery_observation_sampled_at_timestamp_seconds`.
+
+Source age advances as Prometheus `time()` minus
+`astronomer_agent_delivery_observation_observed_at_timestamp_seconds`, preserving
+the original evidence time. Unknown (0) and future observation timestamps are
+omitted. Availability is 1 only when the sampled state is current and evidence
+has a positive, nonfuture timestamp no more than 240 seconds old. A recently
+sampled noncurrent, unknown or expired source remains 0. Missing or stale
+producer samples remain gaps, not a fabricated unavailable value. The older
+sampled age/availability gauges alone cannot establish current freshness.
 Source labels identify tracked kinds and controller evidence; discovery/dynamic
 refresh duration and frequency are separate measurements. The p95 groups by
 instance, source and outcome, so failed refreshes are not averaged into successes.
