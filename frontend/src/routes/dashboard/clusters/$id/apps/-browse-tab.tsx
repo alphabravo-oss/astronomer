@@ -4,8 +4,11 @@ import { QueryStates } from "@/components/ui/query-states";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import type { PaginatedResponse } from "@/types";
-import { Box, ExternalLink, Loader2, Search } from "lucide-react";
+import { Box, ExternalLink, Search } from "lucide-react";
 import type { ClusterAppRow } from "@/lib/api/cluster-apps";
+import { ActionButton } from "@/components/ui/action-button";
+import { SkeletonCard } from "@/components/ui/skeleton";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 export function BrowseView({
   q,
@@ -55,8 +58,14 @@ export function BrowseView({
       {q.isError ? (
         <QueryStates query={q}>{null}</QueryStates>
       ) : q.isLoading ? (
-        <div className="flex items-center justify-center h-32 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading catalog…
+        <div
+          aria-busy="true"
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          <span className="sr-only">Loading catalog…</span>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       ) : charts.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-6 text-center">
@@ -94,7 +103,7 @@ export function BrowseView({
                       {c.displayName || c.name}
                     </div>
                     {c.deprecated && (
-                      <span className="text-[10px] text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded-sm">
+                      <span className="text-2xs text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded-sm">
                         deprecated
                       </span>
                     )}
@@ -115,18 +124,22 @@ export function BrowseView({
                         )}
                       </span>
                     ) : (
-                      <button
-                        className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
-                        disabled={!installDecision.allowed}
-                        title={
+                      <ActionButton
+                        {...BARE_BUTTON}
+                        tooltip={
+                          !installDecision.allowed ? undefined : "Install chart"
+                        }
+                        disabledReason={
                           !installDecision.allowed
                             ? permissionDeniedReason(installDecision)
-                            : "Install chart"
+                            : undefined
                         }
+                        className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline font-normal"
+                        disabled={!installDecision.allowed}
                         onClick={() => onInstall(c.id, c.name)}
                       >
                         Install →
-                      </button>
+                      </ActionButton>
                     )}
                     {c.homeUrl && (
                       <a

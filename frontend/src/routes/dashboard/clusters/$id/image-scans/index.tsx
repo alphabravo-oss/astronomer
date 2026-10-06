@@ -56,6 +56,10 @@ import {
 } from "@/lib/api/cluster-vulnerabilities";
 import { useOperationMutation } from "@/lib/hooks/operation-mutation";
 import { Download, TrendingDown, TrendingUp, Minus } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
+import { SkeletonText } from "@/components/ui/skeleton";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 const SEVERITIES: {
   key: keyof ImageVulnSummary;
@@ -257,17 +261,19 @@ function ClusterImageScansPage() {
         description="Aggregated CVE counts from the in-cluster Trivy operator. Astronomer ingests VulnerabilityReport CRDs continuously."
         actions={
           <>
-            <a
-              className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-border bg-background hover:bg-muted"
-              href={exportImageVulnsCSVPath(clusterId)}
-              download
-              title="Download all current image-scan rows as CSV"
-            >
-              <Download className="h-4 w-4" />
-              Export CSV
-            </a>
-            <button
-              className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50"
+            <Tooltip content="Download all current image-scan rows as CSV">
+              <a
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-border bg-background hover:bg-muted"
+                href={exportImageVulnsCSVPath(clusterId)}
+                download
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </a>
+            </Tooltip>
+            <ActionButton
+              {...BARE_BUTTON}
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50 font-normal"
               onClick={() => rescan.mutate()}
               disabled={rescan.isPending}
             >
@@ -277,7 +283,7 @@ function ClusterImageScansPage() {
                 <RefreshCw className="h-4 w-4" />
               )}
               Trigger rescan
-            </button>
+            </ActionButton>
           </>
         }
       />
@@ -353,7 +359,7 @@ function ClusterImageScansPage() {
                 const Icon = d > 0 ? TrendingUp : d < 0 ? TrendingDown : Minus;
                 return (
                   <div key={sev} className={`border rounded-sm p-2 ${tone}`}>
-                    <div className="text-[10px] uppercase tracking-wide opacity-80">
+                    <div className="text-2xs uppercase tracking-wide opacity-80">
                       {sev}
                     </div>
                     <div className="flex items-baseline justify-between mt-1">
@@ -363,7 +369,7 @@ function ClusterImageScansPage() {
                       </div>
                       <Icon className="h-3.5 w-3.5" />
                     </div>
-                    <div className="text-[10px] opacity-70 mt-0.5">
+                    <div className="text-2xs opacity-70 mt-0.5">
                       {diff.data.prior?.[sev] ?? 0} →{" "}
                       {diff.data.latest?.[sev] ?? 0}
                     </div>
@@ -471,12 +477,9 @@ function ClusterImageScansPage() {
           <TableBody>
             {images.isLoading && (
               <TableRow>
-                <TableCell
-                  colSpan={7}
-                  className="px-3 py-6 text-center text-muted-foreground"
-                >
-                  <Loader2 className="inline h-4 w-4 animate-spin mr-2" />
-                  Loading…
+                <TableCell colSpan={7} className="px-3 py-6" aria-busy="true">
+                  <span className="sr-only">Loading…</span>
+                  <SkeletonText lines={3} />
                 </TableCell>
               </TableRow>
             )}
@@ -525,9 +528,9 @@ function ClusterImageScansPage() {
                   onClick={() => setOpenReport(r)}
                 >
                   <TableCell className="px-3 py-2 font-mono text-xs">
-                    <button
-                      type="button"
-                      className="text-primary hover:underline focus-visible:outline focus-visible:outline-ring"
+                    <ActionButton
+                      {...BARE_BUTTON}
+                      className="text-primary hover:underline focus-visible:outline focus-visible:outline-ring inline-block font-normal"
                       aria-label={`View CVEs for ${r.imageRepo}:${r.imageTag}`}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -535,7 +538,7 @@ function ClusterImageScansPage() {
                       }}
                     >
                       {r.imageRepo}:{r.imageTag}
-                    </button>
+                    </ActionButton>
                   </TableCell>
                   <TableCell className="px-3 py-2">{r.namespace}</TableCell>
                   <TableCell className="px-3 py-2">
@@ -608,15 +611,15 @@ function ClusterImageScansPage() {
               <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Scan history
               </h3>
-              <span className="text-[10px] text-muted-foreground tabular-nums">
+              <span className="text-2xs text-muted-foreground tabular-nums">
                 {reportHistory.data?.totalCount ?? 0} snapshot
                 {(reportHistory.data?.totalCount ?? 0) === 1 ? "" : "s"}
               </span>
             </div>
             {reportHistory.isLoading && (
-              <div className="text-xs text-muted-foreground">
-                <Loader2 className="inline h-3 w-3 animate-spin mr-1.5" />
-                Loading history…
+              <div aria-busy="true">
+                <span className="sr-only">Loading history…</span>
+                <SkeletonText lines={2} />
               </div>
             )}
             {reportHistory.data &&
@@ -641,30 +644,26 @@ function ClusterImageScansPage() {
                         {new Date(p.scannedAt).toLocaleString()}
                       </span>
                       <span className="flex items-center gap-1.5">
-                        <span
-                          className="text-status-error font-medium tabular-nums"
-                          title="Critical"
-                        >
-                          {p.critical}
-                        </span>
-                        <span
-                          className="text-status-high tabular-nums"
-                          title="High"
-                        >
-                          {p.high}
-                        </span>
-                        <span
-                          className="text-status-warning tabular-nums"
-                          title="Medium"
-                        >
-                          {p.medium}
-                        </span>
-                        <span
-                          className="text-status-info tabular-nums"
-                          title="Low"
-                        >
-                          {p.low}
-                        </span>
+                        <Tooltip content="Critical">
+                          <span className="text-status-error font-medium tabular-nums">
+                            {p.critical}
+                          </span>
+                        </Tooltip>
+                        <Tooltip content="High">
+                          <span className="text-status-high tabular-nums">
+                            {p.high}
+                          </span>
+                        </Tooltip>
+                        <Tooltip content="Medium">
+                          <span className="text-status-warning tabular-nums">
+                            {p.medium}
+                          </span>
+                        </Tooltip>
+                        <Tooltip content="Low">
+                          <span className="text-status-info tabular-nums">
+                            {p.low}
+                          </span>
+                        </Tooltip>
                       </span>
                     </div>
                   ))}

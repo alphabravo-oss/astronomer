@@ -506,7 +506,6 @@ function RegisterClusterWizardPage({
 
         <div className="flex items-center justify-end gap-2 pt-2">
           <ActionButton
-            type="button"
             onClick={() => void navigate({ to: "/dashboard/clusters" })}
           >
             Cancel

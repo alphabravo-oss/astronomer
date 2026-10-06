@@ -4,6 +4,7 @@ import type { Column } from "@/components/ui/data-table";
 import type { DeliverySystemComponent } from "@/lib/api/delivery-system";
 import { formatBytes, formatRelativeTime } from "@/lib/utils";
 import { replicaRedundancy } from "@/lib/system-component-availability";
+import { Tooltip } from "@/components/ui/tooltip";
 
 function ownerLabel(owner: string) {
   if (owner === "flux") return "Flux";
@@ -175,12 +176,11 @@ export function systemComponentColumns(
       key: "version",
       header: "Version",
       accessor: (row) => (
-        <span
-          className="block max-w-40 truncate font-mono text-xs"
-          title={row.version}
-        >
-          {row.version || "—"}
-        </span>
+        <Tooltip content={row.version}>
+          <span className="block max-w-40 truncate font-mono text-xs">
+            {row.version || "—"}
+          </span>
+        </Tooltip>
       ),
       sortAccessor: (row) => row.version || "",
     },

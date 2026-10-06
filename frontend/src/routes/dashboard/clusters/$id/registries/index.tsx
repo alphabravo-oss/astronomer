@@ -63,6 +63,7 @@ import {
 } from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
 import { liveFallback } from "@/lib/live/status-store";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 const PASSWORD_SENTINEL = "<set>";
 
@@ -176,11 +177,11 @@ function ClusterRegistriesPage() {
         description={`Private image-pull credentials reconciled into namespaces on ${cluster.displayName}.`}
         actions={
           <ActionButton
+            disabledReason={canWrite ? undefined : reason}
             intent="primary"
             icon={<Plus className="h-3.5 w-3.5" />}
             onClick={() => canWrite && setNewOpen(true)}
             disabled={!canWrite}
-            title={canWrite ? undefined : reason}
           >
             New Registry
           </ActionButton>
@@ -272,39 +273,17 @@ function ClusterRegistriesPage() {
                     </TableCell>
                     <TableCell className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => testMutation.mutate(r.id)}
-                          disabled={
+                        <RegistryRowActions
+                          canWrite={canWrite}
+                          reason={reason}
+                          testDisabled={
                             testMutation.isPending &&
                             testStatus[r.id] === "pending"
                           }
-                          title="Test reachability"
-                          className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground
-                          hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-                        >
-                          <Plug className="h-3.5 w-3.5" />
-                          Test
-                        </button>
-                        <button
-                          onClick={() => canWrite && setEditTarget(r)}
-                          disabled={!canWrite}
-                          title={canWrite ? "Edit" : reason}
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground
-                          hover:text-foreground hover:bg-accent transition-colors
-                          disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => canWrite && setDeleteTarget(r)}
-                          disabled={!canWrite}
-                          title={canWrite ? "Delete" : reason}
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground
-                          hover:text-status-error hover:bg-status-error/10 transition-colors
-                          disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                          onTest={() => testMutation.mutate(r.id)}
+                          onEdit={() => setEditTarget(r)}
+                          onDelete={() => setDeleteTarget(r)}
+                        />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -347,24 +326,108 @@ function ClusterRegistriesPage() {
   );
 }
 
+const rowActionClass =
+  "inline-flex h-7 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 font-normal";
+
+function RegistryRowActions({
+  canWrite,
+  reason,
+  testDisabled,
+  onTest,
+  onEdit,
+  onDelete,
+}: {
+  canWrite: boolean;
+  reason?: string;
+  testDisabled: boolean;
+  onTest: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const gated = {
+    disabled: !canWrite,
+    disabledReason: canWrite ? undefined : reason,
+  };
+  return (
+    <>
+      <ActionButton
+        {...BARE_BUTTON}
+        tooltip="Test reachability"
+        onClick={onTest}
+        disabled={testDisabled}
+        className={cn(rowActionClass, "gap-1 px-2 text-xs")}
+      >
+        <Plug className="h-3.5 w-3.5" />
+        Test
+      </ActionButton>
+      <ActionButton
+        {...BARE_BUTTON}
+        tooltip={canWrite ? "Edit" : undefined}
+        aria-label="Edit"
+        onClick={onEdit}
+        className={cn(rowActionClass, "w-7")}
+        {...gated}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </ActionButton>
+      <ActionButton
+        {...BARE_BUTTON}
+        tooltip={canWrite ? "Delete" : undefined}
+        aria-label="Delete"
+        onClick={onDelete}
+        className={cn(
+          rowActionClass,
+          "w-7 hover:bg-status-error/10 hover:text-status-error",
+        )}
+        {...gated}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </ActionButton>
+    </>
+  );
+}
+
+function PasswordToggle({
+  shown,
+  onToggle,
+}: {
+  shown: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <ActionButton
+      {...BARE_BUTTON}
+      onClick={onToggle}
+      className="absolute right-2 top-1/2 inline-block -translate-y-1/2 font-normal text-muted-foreground hover:text-foreground"
+      aria-label={shown ? "Hide password" : "Show password"}
+    >
+      {shown ? (
+        <EyeOff className="h-3.5 w-3.5" />
+      ) : (
+        <Eye className="h-3.5 w-3.5" />
+      )}
+    </ActionButton>
+  );
+}
+
 function TestStatusPill({ state }: { state?: "ok" | "fail" | "pending" }) {
   if (!state) return null;
   if (state === "pending") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] border bg-status-info/10 text-status-info border-status-info/20">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-2xs border bg-status-info/10 text-status-info border-status-info/20">
         <Loader2 className="h-3 w-3 animate-spin" /> Testing
       </span>
     );
   }
   if (state === "ok") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] border bg-status-success/10 text-status-success border-status-success/20">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-2xs border bg-status-success/10 text-status-success border-status-success/20">
         <CheckCircle2 className="h-3 w-3" /> Reachable
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] border bg-status-error/10 text-status-error border-status-error/20">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-2xs border bg-status-error/10 text-status-error border-status-error/20">
       <XCircle className="h-3 w-3" /> Failed
     </span>
   );
@@ -412,6 +475,7 @@ function RegistryDialog({
   });
 
   const loading = create.isPending || update.isPending;
+  const submitError = create.error ?? update.error;
 
   const form = useAppForm({
     defaultValues: {
@@ -473,7 +537,12 @@ function RegistryDialog({
       title={isEdit ? `Edit ${existing.registryUrl}` : "Add registry"}
       icon={<Lock className="h-4 w-4" />}
       onClose={onClose}
-    ><form.AppForm><form.FormErrorSummary serverError={(create.error ?? update.error) ? extractApiErrorMessage(create.error ?? update.error) : null} /></form.AppForm>
+    >
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={submitError ? extractApiErrorMessage(submitError) : null}
+        />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -548,18 +617,10 @@ function RegistryDialog({
                 />
               )}
             </form.Field>
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? (
-                <EyeOff className="h-3.5 w-3.5" />
-              ) : (
-                <Eye className="h-3.5 w-3.5" />
-              )}
-            </button>
+            <PasswordToggle
+              shown={showPassword}
+              onToggle={() => setShowPassword((v) => !v)}
+            />
           </div>
           {isEdit && !passwordTouched && (
             <p className="text-xs text-muted-foreground">
@@ -696,13 +757,14 @@ function NamespaceMultiSelect({
               )}
             >
               {ns}
-              <button
+              <ActionButton
+                {...BARE_BUTTON}
                 onClick={() => toggle(ns)}
-                className="hover:text-foreground"
+                className="hover:text-foreground inline-block font-normal"
                 aria-label={`Remove ${ns}`}
               >
                 <XCircle className="h-3 w-3" />
-              </button>
+              </ActionButton>
             </span>
           ))}
         </div>

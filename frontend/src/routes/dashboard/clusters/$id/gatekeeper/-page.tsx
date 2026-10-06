@@ -18,7 +18,6 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Trash2,
-  Loader2,
   CheckCircle2,
   XCircle,
   Play,
@@ -38,6 +37,9 @@ import {
   useApplyConstraint,
   useDeleteConstraint,
 } from "./-hooks";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 const STARTER_YAML = `apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredLabels
@@ -176,12 +178,11 @@ export function ClusterGatekeeperPage() {
                 : row.syncStatus}
             </span>
             {row.lastError ? (
-              <p
-                className="max-w-56 truncate text-2xs text-status-error"
-                title={row.lastError}
-              >
-                {row.lastError}
-              </p>
+              <Tooltip content={row.lastError}>
+                <p className="max-w-56 truncate text-2xs text-status-error">
+                  {row.lastError}
+                </p>
+              </Tooltip>
             ) : null}
           </div>
         ) : (
@@ -195,17 +196,20 @@ export function ClusterGatekeeperPage() {
       sortable: false,
       accessor: (row) =>
         row.source === "custom" && row.desiredState !== "absent" ? (
-          <button
+          <ActionButton
+            {...BARE_BUTTON}
+            tooltip={canWrite ? "Delete constraint" : undefined}
+            disabledReason={canWrite ? undefined : reason}
+            aria-label="Delete constraint"
             onClick={(e) => {
               e.stopPropagation();
               if (canWrite) setDeleteTarget(row);
             }}
             disabled={!canWrite}
-            title={canWrite ? "Delete constraint" : reason}
-            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground inline-block font-normal"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </ActionButton>
         ) : null,
     },
   ];
@@ -240,7 +244,8 @@ export function ClusterGatekeeperPage() {
   return (
     <PageShell>
       <RouterLink
-        to="/dashboard/clusters/$id" params={{ id: clusterId }}
+        to="/dashboard/clusters/$id"
+        params={{ id: clusterId }}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
@@ -259,31 +264,24 @@ export function ClusterGatekeeperPage() {
             Author constraint
           </h2>
           <div className="flex items-center gap-2">
-            <button
+            <ActionButton
+              icon={<Play className="h-3.5 w-3.5" />}
+              loading={validate.isPending}
               onClick={handleValidate}
               disabled={busy || !yaml.trim()}
-              className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
             >
-              {validate.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
               Validate
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
+              intent="primary"
+              icon={<Upload className="h-3.5 w-3.5" />}
+              loading={apply.isPending}
+              disabledReason={canWrite ? undefined : reason}
               onClick={handleApply}
               disabled={busy || !yaml.trim() || !canWrite}
-              title={canWrite ? undefined : reason}
-              className="inline-flex items-center gap-2 h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              {apply.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Upload className="h-3.5 w-3.5" />
-              )}
               Apply
-            </button>
+            </ActionButton>
           </div>
         </div>
 
