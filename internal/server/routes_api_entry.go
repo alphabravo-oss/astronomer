@@ -40,6 +40,12 @@ func registerAPIIdentityEntryRoutes(r chi.Router, deps RouterDependencies) {
 		r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Get("/auth/me/", deps.CoreAuth.Auth.CurrentUser)
 		r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Get("/auth/me/preferences/", deps.CoreAuth.Auth.GetUserPreferences)
 		r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Put("/auth/me/preferences/", deps.CoreAuth.Auth.PutUserPreferences)
+		if deps.CoreAuth.TableViews != nil {
+			r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Get("/auth/me/table-views/", deps.CoreAuth.TableViews.List)
+			r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Post("/auth/me/table-views/", deps.CoreAuth.TableViews.Create)
+			r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Patch("/auth/me/table-views/{id}/", deps.CoreAuth.TableViews.Update)
+			r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Delete("/auth/me/table-views/{id}/", deps.CoreAuth.TableViews.Delete)
+		}
 		r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Get("/auth/tokens/", deps.CoreAuth.Auth.ListTokens)
 		r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Post("/auth/tokens/", deps.CoreAuth.Auth.CreateToken)
 		r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Delete("/auth/tokens/{id}/", deps.CoreAuth.Auth.RevokeToken)

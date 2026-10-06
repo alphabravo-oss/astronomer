@@ -48,6 +48,7 @@ type CoreAuthDependencies struct {
 	ReadAuditEvaluator *appmiddleware.PolicyEvaluator
 	SCIM               *handler.SCIMHandler
 	SCIMTokenAdmin     *handler.SCIMTokenAdminHandler
+	TableViews         *handler.TableViewsHandler
 	Readyz             http.Handler
 }
 
