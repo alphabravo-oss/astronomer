@@ -112,7 +112,7 @@ const crdColumns: Column<CRDRow>[] = [
     key: "kind",
     header: "Kind",
     kind: "name",
-    minSize: 200,
+    minSize: 168,
     accessor: (row) => (
       <span className="font-medium text-foreground text-xs">{row.kind}</span>
     ),
@@ -122,8 +122,8 @@ const crdColumns: Column<CRDRow>[] = [
     key: "group",
     header: "Group",
     kind: "text",
-    minSize: 208,
-    size: 240,
+    minSize: 176,
+    size: 208,
     sortAccessor: (row) => row.group,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
@@ -135,8 +135,8 @@ const crdColumns: Column<CRDRow>[] = [
     key: "plural",
     header: "Plural",
     kind: "text",
-    minSize: 144,
-    size: 176,
+    minSize: 128,
+    size: 160,
     sortAccessor: (row) => row.plural,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
@@ -148,7 +148,8 @@ const crdColumns: Column<CRDRow>[] = [
     key: "versions",
     header: "Versions",
     kind: "version",
-    minSize: 144,
+    minSize: 160,
+    size: 176,
     accessor: (row) => <ChipList items={row.versions} />,
     searchAccessor: (row) => row.versions.join(" "),
     sortable: false,
@@ -157,6 +158,8 @@ const crdColumns: Column<CRDRow>[] = [
     key: "scope",
     header: "Scope",
     kind: "badge",
+    minSize: 96,
+    size: 104,
     accessor: (row) => (
       <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.scope || "-"}

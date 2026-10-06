@@ -164,18 +164,20 @@ const accessModesColumn = <
 });
 
 const storageClassRef = <T extends { storageClass: string }>(): Column<T> =>
-  monoTextColumn<T>("storageClass", "Storage Class", (r) => r.storageClass, {
-    minSize: 112,
-    size: 120,
+  monoTextColumn<T>("storageClass", "Class", (r) => r.storageClass, {
+    ariaLabel: "Storage class",
+    minSize: 96,
+    size: 112,
   });
 
 export const pvColumns: Column<PersistentVolume>[] = [
-  nameStubColumn<PersistentVolume>(128),
+  nameStubColumn<PersistentVolume>(150),
   {
     key: "status",
     header: "Status",
     kind: "status",
-    size: 112,
+    size: 104,
+    minSize: 96,
     accessor: (row) => <StatusBadge status={row.status} />,
     sortAccessor: (row) => row.status,
   },
@@ -193,21 +195,22 @@ export const pvColumns: Column<PersistentVolume>[] = [
     "Claim",
     (r) => r.claimRef ?? "",
     {
-      minSize: 160,
-      size: 168,
+      minSize: 152,
+      size: 160,
     },
   ),
   ageColumn<PersistentVolume>(),
 ];
 
 export const pvcColumns: Column<PersistentVolumeClaim>[] = [
-  nameStubColumn<PersistentVolumeClaim>(128),
-  namespaceColumn<PersistentVolumeClaim>(),
+  nameStubColumn<PersistentVolumeClaim>(150),
+  { ...namespaceColumn<PersistentVolumeClaim>(), minSize: 120, size: 120 },
   {
     key: "status",
     header: "Status",
     kind: "status",
-    size: 112,
+    size: 104,
+    minSize: 96,
     accessor: (row) => <StatusBadge status={row.status} />,
     sortAccessor: (row) => row.status,
   },
@@ -223,8 +226,8 @@ export const pvcColumns: Column<PersistentVolumeClaim>[] = [
     key: "volumeName",
     header: "Volume",
     kind: "id",
-    minSize: 144,
-    size: 152,
+    minSize: 128,
+    size: 136,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.volumeName || "-"}

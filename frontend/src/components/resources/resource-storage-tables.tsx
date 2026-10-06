@@ -53,7 +53,7 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
     () => [
       withNameKind(
         nameColumn<PersistentVolume>(clusterId, "persistentvolumes"),
-        128,
+        150,
       ),
       ...pvColumns.slice(1),
       {
@@ -190,7 +190,7 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
     () => [
       withNameKind(
         nameColumn<PersistentVolumeClaim>(clusterId, "persistentvolumeclaims"),
-        128,
+        150,
       ),
       ...pvcColumns.slice(1),
       {
