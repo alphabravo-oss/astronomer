@@ -11,13 +11,13 @@
 import { useState } from "react";
 import { useAppForm, useStore } from "@/lib/form";
 import { Plus, X, Trash2, Pencil } from "lucide-react";
+import { CappedChips, TimestampCell } from "@/components/ui/cell-primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { formatRelativeTime } from "@/lib/utils";
 import type { AlertInhibition, InhibitionMatcher } from "@/types";
 import { toInhibitionWriteRequest } from "@/lib/api/alerting-inhibitions";
 import {
@@ -27,25 +27,8 @@ import {
   useDeleteInhibition,
 } from "./-inhibition-hooks";
 
-function MatcherChips({ matchers }: { matchers: InhibitionMatcher[] }) {
-  if (!matchers || matchers.length === 0) {
-    return <span className="text-xs text-muted-foreground">—</span>;
-  }
-  return (
-    <div className="flex flex-wrap gap-1">
-      {matchers.map((m, i) => (
-        <span
-          key={`${m.label}-${i}`}
-          className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
-        >
-          {m.label}
-          {m.isRegex ? "=~" : "="}
-          {m.value}
-        </span>
-      ))}
-    </div>
-  );
-}
+const matcherLabels = (matchers: InhibitionMatcher[]) =>
+  (matchers ?? []).map((m) => `${m.label}${m.isRegex ? "=~" : "="}${m.value}`);
 
 export function InhibitionPanel() {
   const { data, isLoading, isError, refetch } = useInhibitions();
@@ -61,6 +44,8 @@ export function InhibitionPanel() {
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 180,
       accessor: (row) => (
         <span className="font-medium text-foreground">{row.name}</span>
       ),
@@ -68,38 +53,41 @@ export function InhibitionPanel() {
     {
       key: "source",
       header: "Source matchers",
+      kind: "badge",
+      size: 240,
+      minSize: 200,
+      maxSize: 320,
       sortable: false,
-      accessor: (row) => <MatcherChips matchers={row.sourceMatchers} />,
+      accessor: (row) => (
+        <CappedChips items={matcherLabels(row.sourceMatchers)} />
+      ),
     },
     {
       key: "target",
       header: "Target matchers",
+      kind: "badge",
+      size: 240,
+      minSize: 200,
+      maxSize: 320,
       sortable: false,
-      accessor: (row) => <MatcherChips matchers={row.targetMatchers} />,
+      accessor: (row) => (
+        <CappedChips items={matcherLabels(row.targetMatchers)} />
+      ),
     },
     {
       key: "equal",
       header: "Equal labels",
+      kind: "badge",
+      size: 180,
+      minSize: 160,
+      maxSize: 260,
       sortable: false,
-      accessor: (row) =>
-        row.equalLabels && row.equalLabels.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {row.equalLabels.map((l) => (
-              <span
-                key={l}
-                className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
-              >
-                {l}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      accessor: (row) => <CappedChips items={row.equalLabels} />,
     },
     {
       key: "enabled",
       header: "Status",
+      kind: "status",
       accessor: (row) => (
         <StatusBadge
           status={row.enabled ? "active" : "disconnected"}
@@ -112,16 +100,17 @@ export function InhibitionPanel() {
     {
       key: "updated",
       header: "Updated",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.updatedAt)}
-        </span>
-      ),
+      kind: "age",
+      accessor: (row) => <TimestampCell value={row.updatedAt} />,
     },
     {
       key: "actions",
       header: "",
       sortable: false,
+      kind: "actions",
+      size: 88,
+      minSize: 88,
+      maxSize: 88,
       accessor: (row) => (
         <div className="flex items-center gap-1">
           <ActionButton

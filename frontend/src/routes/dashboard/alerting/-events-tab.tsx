@@ -1,4 +1,3 @@
-import { Tooltip } from "@/components/ui/tooltip";
 import { Check, CheckCircle } from "lucide-react";
 import { AlertInvestigation } from "./-alert-investigation";
 import { useInvestigationParam } from "@/components/resources/resource-navigation-context";
@@ -9,10 +8,11 @@ import {
   useAlertEvents,
   useResolveAlert,
 } from "@/lib/hooks/alerting";
+import { TimestampCell } from "@/components/ui/cell-primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
-import { cn, formatRelativeTime, statusBgColor } from "@/lib/utils";
+import { cn, statusBgColor } from "@/lib/utils";
 import type { AlertEvent } from "@/types";
 import { Select } from "@/components/ui/select";
 import { pageTableCount } from "@/lib/api/pagination";
@@ -60,6 +60,7 @@ export function EventsTab({
     {
       key: "severity",
       header: "Severity",
+      kind: "badge",
       accessor: (row) => (
         <span
           className={cn(
@@ -74,25 +75,29 @@ export function EventsTab({
     {
       key: "rule",
       header: "Rule",
+      kind: "name",
+      grow: false,
+      size: 200,
+      minSize: 160,
       accessor: (row) => (
         <ActionButton
           intent="ghost"
           size="sm"
           onClick={() => setSelected(row.id)}
         >
-          {row.ruleName || "Inspect alert"}
+          <span className="truncate">{row.ruleName || "Inspect alert"}</span>
         </ActionButton>
       ),
     },
     {
       key: "message",
       header: "Message",
+      kind: "text",
+      grow: true,
+      minSize: 240,
+      maxSize: 640,
       accessor: (row) => (
-        <Tooltip content={row.message}>
-          <span className="text-sm text-muted-foreground truncate max-w-75 block">
-            {row.message}
-          </span>
-        </Tooltip>
+        <span className="text-sm text-muted-foreground">{row.message}</span>
       ),
       sortable: false,
     },
@@ -102,6 +107,9 @@ export function EventsTab({
           {
             key: "cluster",
             header: "Cluster",
+            kind: "text",
+            size: 160,
+            minSize: 128,
             accessor: (row: AlertEvent) => (
               <span className="text-sm text-muted-foreground">
                 {row.clusterName || "--"}
@@ -112,15 +120,13 @@ export function EventsTab({
     {
       key: "firedAt",
       header: "Fired",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.firedAt)}
-        </span>
-      ),
+      kind: "age",
+      accessor: (row) => <TimestampCell value={row.firedAt} />,
     },
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (row) => <StatusBadge status={row.status} />,
     },
     {
@@ -170,6 +176,10 @@ export function EventsTab({
         </div>
       ),
       sortable: false,
+      kind: "actions",
+      size: 200,
+      minSize: 200,
+      maxSize: 200,
     },
   ];
 

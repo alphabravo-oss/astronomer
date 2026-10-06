@@ -3,20 +3,20 @@ import {
   useRetryLoggingOperation,
 } from "@/lib/hooks/logging";
 import { useSearchParam } from "@/lib/use-search-param";
+import { TimestampCell } from "@/components/ui/cell-primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
 import { Select } from "@/components/ui/select";
-import { capitalize, formatRelativeTime, cn } from "@/lib/utils";
+import { capitalize, cn } from "@/lib/utils";
 import type { LoggingOperation } from "@/types";
 import { X, RotateCcw } from "lucide-react";
-import { mapLoggingOperationStatus, truncate } from "./-utils";
+import { mapLoggingOperationStatus } from "./-utils";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
   OffsetPagination,
   useOffsetPagination,
 } from "@/components/ui/offset-pagination";
-import { Tooltip } from "@/components/ui/tooltip";
 
 export function OperationsTab() {
   const [statusFilter, setStatusFilter] = useSearchParam("op_status");
@@ -35,6 +35,7 @@ export function OperationsTab() {
     {
       key: "targetType",
       header: "Target Type",
+      kind: "badge",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.targetType}
@@ -45,6 +46,7 @@ export function OperationsTab() {
     {
       key: "operation",
       header: "Operation",
+      kind: "badge",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.operation}
@@ -55,6 +57,7 @@ export function OperationsTab() {
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (row) => (
         <StatusBadge
           status={mapLoggingOperationStatus(row.status)}
@@ -67,37 +70,29 @@ export function OperationsTab() {
     {
       key: "created",
       header: "Created",
-      accessor: (row) => (
-        <Tooltip content={row.createdAt}>
-          <span className="text-xs text-muted-foreground">
-            {formatRelativeTime(row.createdAt)}
-          </span>
-        </Tooltip>
-      ),
+      kind: "age",
+      accessor: (row) => <TimestampCell value={row.createdAt} />,
       sortAccessor: (row) => row.createdAt,
     },
     {
       key: "updated",
-      header: "Age / Updated",
-      accessor: (row) => (
-        <Tooltip content={row.updatedAt}>
-          <span className="text-xs text-muted-foreground">
-            {formatRelativeTime(row.updatedAt)}
-          </span>
-        </Tooltip>
-      ),
+      header: "Updated",
+      kind: "age",
+      accessor: (row) => <TimestampCell value={row.updatedAt} />,
       sortAccessor: (row) => row.updatedAt,
     },
     {
       key: "error",
       header: "Error",
+      kind: "text",
+      grow: true,
+      minSize: 240,
+      maxSize: 640,
       accessor: (row) =>
         row.errorMessage ? (
-          <Tooltip content={row.errorMessage}>
-            <span className="text-xs text-status-error/80 line-clamp-1 max-w-65 block">
-              {truncate(row.errorMessage, 80)}
-            </span>
-          </Tooltip>
+          <span className="text-xs text-status-error/80">
+            {row.errorMessage}
+          </span>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         ),
@@ -134,6 +129,10 @@ export function OperationsTab() {
         );
       },
       sortable: false,
+      kind: "actions",
+      size: 96,
+      minSize: 96,
+      maxSize: 96,
     },
   ];
 

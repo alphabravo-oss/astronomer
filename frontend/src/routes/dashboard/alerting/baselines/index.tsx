@@ -18,7 +18,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { formatRelativeTime } from "@/lib/utils";
+import { NumberCell, TimestampCell } from "@/components/ui/cell-primitives";
 import type { AnomalyBaseline } from "@/types";
 import { ArrowLeft, Activity, RefreshCw } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -37,13 +37,19 @@ function AnomalyBaselinesPage() {
     {
       key: "metric",
       header: "Metric",
+      kind: "name",
+      minSize: 240,
       accessor: (b: AnomalyBaseline) => (
         <span className="font-mono text-xs">{b.metric}</span>
       ),
+      sortAccessor: (b: AnomalyBaseline) => b.metric,
     },
     {
       key: "clusterId",
       header: "Cluster",
+      kind: "text",
+      size: 128,
+      minSize: 112,
       accessor: (b: AnomalyBaseline) => (
         <Tooltip content={b.clusterId}>
           <span className="font-mono text-xs text-muted-foreground">
@@ -55,6 +61,7 @@ function AnomalyBaselinesPage() {
     {
       key: "sampleCount",
       header: "Samples",
+      kind: "count",
       accessor: (b: AnomalyBaseline) => (
         <span
           className={
@@ -68,34 +75,38 @@ function AnomalyBaselinesPage() {
     {
       key: "mean",
       header: "Mean",
-      accessor: (b: AnomalyBaseline) => (
-        <span className="font-mono text-xs">{b.mean.toFixed(2)}</span>
-      ),
+      kind: "count",
+      accessor: (b: AnomalyBaseline) => <NumberCell value={b.mean} />,
+      sortAccessor: (b: AnomalyBaseline) => b.mean,
     },
     {
       key: "stddev",
       header: "Stddev",
-      accessor: (b: AnomalyBaseline) => (
-        <span className="font-mono text-xs">{b.stddev.toFixed(2)}</span>
-      ),
+      kind: "count",
+      accessor: (b: AnomalyBaseline) => <NumberCell value={b.stddev} />,
+      sortAccessor: (b: AnomalyBaseline) => b.stddev,
     },
     {
       key: "lastValue",
       header: "Last Value",
-      accessor: (b: AnomalyBaseline) => (
-        <span className="font-mono text-xs">{b.lastValue.toFixed(2)}</span>
-      ),
+      kind: "count",
+      size: 96,
+      accessor: (b: AnomalyBaseline) => <NumberCell value={b.lastValue} />,
+      sortAccessor: (b: AnomalyBaseline) => b.lastValue,
     },
     {
       key: "p95",
       header: "P95",
-      accessor: (b: AnomalyBaseline) => (
-        <span className="font-mono text-xs">{b.p95.toFixed(2)}</span>
-      ),
+      kind: "count",
+      accessor: (b: AnomalyBaseline) => <NumberCell value={b.p95} />,
+      sortAccessor: (b: AnomalyBaseline) => b.p95,
     },
     {
       key: "windowSeconds",
       header: "Window",
+      kind: "text",
+      minSize: 96,
+      size: 96,
       accessor: (b: AnomalyBaseline) => (
         <span className="text-xs text-muted-foreground">
           {formatWindow(b.windowSeconds)}
@@ -105,11 +116,8 @@ function AnomalyBaselinesPage() {
     {
       key: "updatedAt",
       header: "Updated",
-      accessor: (b: AnomalyBaseline) => (
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(b.updatedAt)}
-        </span>
-      ),
+      kind: "age",
+      accessor: (b: AnomalyBaseline) => <TimestampCell value={b.updatedAt} />,
     },
   ];
 
