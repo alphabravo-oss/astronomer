@@ -100,10 +100,11 @@ export const COLUMN_KINDS: Readonly<Record<ColumnKind, ColumnKindSpec>> = {
     overflow: "nowrap",
     numeric: true,
   },
+  // Fits "almost 2 years ago" at text-xs plus cell padding.
   age: {
-    size: 88,
-    minSize: 72,
-    maxSize: 120,
+    size: 140,
+    minSize: 140,
+    maxSize: 160,
     align: "left",
     overflow: "nowrap",
   },
