@@ -51,11 +51,11 @@ describe("ModalShell", () => {
     fireEvent.click(trigger);
     const child = screen.getByRole("dialog", { name: "Child picker" });
     within(child).getByLabelText("Close").focus();
-    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    fireEvent.keyDown(document.activeElement!, { key: "Tab", shiftKey: true });
     expect(
       within(child).getByRole("button", { name: "Select target" }),
     ).toHaveFocus();
-    fireEvent.keyDown(document, { key: "Tab" });
+    fireEvent.keyDown(document.activeElement!, { key: "Tab" });
     expect(within(child).getByLabelText("Close")).toHaveFocus();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(parentClose).not.toHaveBeenCalled();
@@ -137,10 +137,10 @@ describe("ModalShell", () => {
 
     expect(close).toHaveFocus();
 
-    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    fireEvent.keyDown(document.activeElement!, { key: "Tab", shiftKey: true });
     expect(submit).toHaveFocus();
 
-    fireEvent.keyDown(document, { key: "Tab" });
+    fireEvent.keyDown(document.activeElement!, { key: "Tab" });
     expect(close).toHaveFocus();
   });
 

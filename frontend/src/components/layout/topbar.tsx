@@ -1,7 +1,11 @@
 import { TopbarAccountMenu } from "./topbar-account-menu";
-import { useHeaderPopover } from "./use-header-popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useNavigate, useLocation } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/lib/theme";
 import {
@@ -109,11 +113,7 @@ function TopbarBreadcrumbs({
 
 function TopbarNotifications() {
   const navigate = useNavigate();
-  const {
-    open: notificationOpen,
-    setOpen: setNotificationOpen,
-    root: notificationRef,
-  } = useHeaderPopover();
+  const [notificationOpen, setNotificationOpen] = useState(false);
   const { data: alertEventsPage } = useAlertEvents({
     status: "firing",
     limit: 5,
@@ -138,132 +138,126 @@ function TopbarNotifications() {
     (alertEventSummary?.firing ?? 0) + actionableCharlieFindings.length;
 
   return (
-    <div ref={notificationRef} className="relative">
-      <button
-        onClick={() => setNotificationOpen(!notificationOpen)}
-        aria-label={
-          notificationCount > 0
-            ? `Notifications, ${notificationCount} unread`
-            : "Notifications"
-        }
-        aria-expanded={notificationOpen}
-        aria-haspopup="menu"
-        className="relative inline-flex items-center justify-center h-8 w-8 rounded-md
+    <Popover open={notificationOpen} onOpenChange={setNotificationOpen}>
+      <PopoverTrigger asChild>
+        <button
+          aria-label={
+            notificationCount > 0
+              ? `Notifications, ${notificationCount} unread`
+              : "Notifications"
+          }
+          className="relative inline-flex items-center justify-center h-8 w-8 rounded-md
           text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-      >
-        <Bell className="h-4 w-4" />
-        {notificationCount > 0 && (
-          <span className="absolute top-0.5 right-0.5 flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-status-error text-[10px] font-bold text-white">
-            {notificationCount > 99 ? "99+" : notificationCount}
-          </span>
-        )}
-      </button>
-      {notificationOpen && (
-        <div
-          data-header-popover
-          className="fixed right-3 top-24 mt-1 w-80 max-w-[calc(100vw-1.5rem)] sm:absolute sm:right-0 sm:top-full rounded-lg border border-border bg-popover shadow-xl z-50 overflow-hidden"
         >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <h4 className="text-sm font-medium text-foreground">
-              Notifications
-            </h4>
-            {(alertEventSummary?.firing ?? 0) > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-status-error/10 text-status-error font-medium">
-                {alertEventSummary?.firing} firing
-              </span>
-            )}
-          </div>
-          <div className="max-h-80 overflow-y-auto">
-            {importantFindings.map((finding) => (
-              <button
-                key={`charlie:${finding.id}`}
-                onClick={() => {
-                  void navigate({
-                    to: `/dashboard/charlie?tab=findings&finding=${encodeURIComponent(finding.id)}`,
-                  });
-                  setNotificationOpen(false);
-                }}
-                className="flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-accent/50"
-              >
-                <AlertCircle
-                  className={cn(
-                    "mt-0.5 h-4 w-4 shrink-0",
-                    finding.severity === "critical"
-                      ? "text-status-error"
-                      : "text-status-warning",
-                  )}
-                />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">
-                    {finding.title}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {finding.affectedResource.type}:{" "}
-                    {finding.affectedResource.id}
-                    {finding.confidence == null
-                      ? ""
-                      : ` · ${Math.round(finding.confidence * 100)}% confidence`}
-                  </span>
-                  {finding.reasonNoAction && (
-                    <span className="block truncate text-xs text-muted-foreground">
-                      No action: {finding.reasonNoAction}
-                    </span>
-                  )}
-                </span>
-              </button>
-            ))}
-            {recentAlerts.length === 0 && importantFindings.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No recent alerts
-              </div>
-            ) : (
-              recentAlerts.map((alert) => {
-                const SevIcon = severityIcon[alert.severity] || Info;
-                return (
-                  <div
-                    key={alert.id}
-                    className="flex items-start gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-accent/50 transition-colors"
-                  >
-                    <SevIcon
-                      className={cn(
-                        "h-4 w-4 shrink-0 mt-0.5",
-                        severityColor[alert.severity] ||
-                          "text-muted-foreground",
-                      )}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground font-medium truncate">
-                        {alert.ruleName}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {alert.message}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <StatusBadge status={alert.status} size="sm" />
-                        <span className="text-2xs text-muted-foreground">
-                          {formatRelativeTime(alert.firedAt)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-          <div className="px-4 py-2 border-t border-border">
+          <Bell className="h-4 w-4" />
+          {notificationCount > 0 && (
+            <span className="absolute top-0.5 right-0.5 flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-status-error text-[10px] font-bold text-white">
+              {notificationCount > 99 ? "99+" : notificationCount}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        data-header-popover
+        align="end"
+        className="w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg p-0 shadow-xl"
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h4 className="text-sm font-medium text-foreground">Notifications</h4>
+          {(alertEventSummary?.firing ?? 0) > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-status-error/10 text-status-error font-medium">
+              {alertEventSummary?.firing} firing
+            </span>
+          )}
+        </div>
+        <div className="max-h-80 overflow-y-auto">
+          {importantFindings.map((finding) => (
             <button
+              key={`charlie:${finding.id}`}
               onClick={() => {
-                void navigate({ to: "/dashboard/alerting" });
+                void navigate({
+                  to: `/dashboard/charlie?tab=findings&finding=${encodeURIComponent(finding.id)}`,
+                });
                 setNotificationOpen(false);
               }}
-              className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+              className="flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-accent/50"
             >
-              View all alerts
+              <AlertCircle
+                className={cn(
+                  "mt-0.5 h-4 w-4 shrink-0",
+                  finding.severity === "critical"
+                    ? "text-status-error"
+                    : "text-status-warning",
+                )}
+              />
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">
+                  {finding.title}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {finding.affectedResource.type}: {finding.affectedResource.id}
+                  {finding.confidence == null
+                    ? ""
+                    : ` · ${Math.round(finding.confidence * 100)}% confidence`}
+                </span>
+                {finding.reasonNoAction && (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    No action: {finding.reasonNoAction}
+                  </span>
+                )}
+              </span>
             </button>
-          </div>
+          ))}
+          {recentAlerts.length === 0 && importantFindings.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              No recent alerts
+            </div>
+          ) : (
+            recentAlerts.map((alert) => {
+              const SevIcon = severityIcon[alert.severity] || Info;
+              return (
+                <div
+                  key={alert.id}
+                  className="flex items-start gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-accent/50 transition-colors"
+                >
+                  <SevIcon
+                    className={cn(
+                      "h-4 w-4 shrink-0 mt-0.5",
+                      severityColor[alert.severity] || "text-muted-foreground",
+                    )}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-foreground font-medium truncate">
+                      {alert.ruleName}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      {alert.message}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StatusBadge status={alert.status} size="sm" />
+                      <span className="text-2xs text-muted-foreground">
+                        {formatRelativeTime(alert.firedAt)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
-      )}
-    </div>
+        <div className="px-4 py-2 border-t border-border">
+          <button
+            onClick={() => {
+              void navigate({ to: "/dashboard/alerting" });
+              setNotificationOpen(false);
+            }}
+            className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+          >
+            View all alerts
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

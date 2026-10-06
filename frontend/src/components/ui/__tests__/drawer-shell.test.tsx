@@ -45,7 +45,7 @@ describe("DrawerShell", () => {
       document.body,
     );
     expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
-    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    fireEvent.keyDown(document.activeElement!, { key: "Tab", shiftKey: true });
     expect(screen.getByRole("button", { name: "Next page" })).toHaveFocus();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
