@@ -1,4 +1,4 @@
-import { WorkloadActions } from "./workload-actions";
+import { WorkloadActions, WorkloadNameLink } from "./workload-actions";
 import { ErrorState } from "@/components/ui/empty-state";
 import { WorkloadTableDialogs } from "./workload-table-dialogs";
 import { collectionScope } from "@/lib/cluster-scope-collection";
@@ -10,6 +10,7 @@ import { useCluster } from "@/lib/hooks/clusters";
 import { useWorkloads, useRestartWorkload } from "@/lib/hooks/workloads";
 import { getWorkloadPods, type WorkloadSort } from "@/lib/api/workloads";
 import type { Column } from "@/components/ui/data-table";
+import { replicaSetsSubRow } from "@/components/resources/deployment-replicasets-subrow";
 import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
@@ -57,7 +58,6 @@ import {
 } from "@/components/resources/resource-action-policy";
 import type { Workload } from "@/types";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Link as RouterLink } from "@tanstack/react-router";
 import {
   RESOURCE_TITLES,
   WORKLOAD_KINDS,
@@ -195,20 +195,7 @@ function ScopedWorkloadsTable({
     () => [
       {
         ...workloadColumns[0],
-        accessor: (row) => (
-          <RouterLink
-            to={workloadDetailHref(
-              clusterId,
-              row.kind,
-              row.namespace,
-              row.name,
-            )}
-            onClick={(e) => e.stopPropagation()}
-            className="font-medium text-foreground font-mono text-xs hover:underline"
-          >
-            {row.name}
-          </RouterLink>
-        ),
+        accessor: (row) => <WorkloadNameLink clusterId={clusterId} row={row} />,
       },
       ...workloadColumns.slice(1),
       {
@@ -244,6 +231,9 @@ function ScopedWorkloadsTable({
       permissions,
       podPermissions,
       restartWorkload,
+      setDeleteTarget,
+      setScaleTarget,
+      setYamlTarget,
     ],
   );
   const serverColumns = workloadServerColumns(columns);
@@ -267,6 +257,7 @@ function ScopedWorkloadsTable({
         resourceType={resourceType}
         data={workloads}
         columns={serverColumns}
+        renderSubRow={replicaSetsSubRow(clusterId, resourceType)}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={(row) => {
           if (!permissions.read.allowed) {

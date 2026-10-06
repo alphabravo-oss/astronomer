@@ -283,3 +283,80 @@ test("expandable pod rows show container state and last termination", async ({
   await expect(containers).toContainText("app");
   await expect(containers).toContainText("OOMKilled, exit 137");
 });
+
+test("expandable deployment rows list the ReplicaSets they own, newest first", async ({
+  context,
+  page,
+}) => {
+  await mockApi(page, []);
+  await seedAuth(context, page, adminUser);
+  const pagination = {
+    total: 1,
+    limit: 20,
+    offset: 0,
+    has_more: false,
+    next_offset: null,
+    next_cursor: null,
+  };
+  await page.route(`**/api/v1/clusters/${CLUSTER_ID}/workloads/?*`, (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            name: "web",
+            namespace: "default",
+            kind: "Deployment",
+            clusterId: CLUSTER_ID,
+            clusterName: CLUSTER_ID,
+            status: "Running",
+            ready: "2/2",
+            replicas: 2,
+            desiredReplicas: 2,
+            images: ["nginx:1.25"],
+            createdAt: "2026-09-22T00:00:00Z",
+            labels: {},
+            annotations: {},
+          },
+        ],
+        pagination,
+      },
+    }),
+  );
+  const rs = (
+    name: string,
+    hash: string,
+    revision: number,
+    desired: number,
+  ) => ({
+    name,
+    namespace: "default",
+    clusterId: CLUSTER_ID,
+    labels: { "pod-template-hash": hash },
+    annotations: { "deployment.kubernetes.io/revision": String(revision) },
+    createdAt: "2026-09-22T00:00:00Z",
+    desired,
+    ready: desired,
+    available: desired,
+  });
+  await page.route(
+    `**/api/v1/clusters/${CLUSTER_ID}/resources/generic/replicasets/?*`,
+    (route) =>
+      route.fulfill({
+        json: {
+          data: [
+            rs("web-aaa111", "aaa111", 1, 0),
+            rs("web-bbb222", "bbb222", 2, 2),
+            rs("web-admin-ccc333", "ccc333", 7, 1),
+          ],
+          pagination: { ...pagination, total: 3 },
+        },
+      }),
+  );
+  await page.goto(`/dashboard/clusters/${CLUSTER_ID}/deployments`);
+  await page.getByRole("button", { name: "Expand row default/web" }).click();
+  const sets = page.getByRole("table", { name: "ReplicaSets of web" });
+  await expect(sets).toContainText("web-bbb222");
+  await expect(sets).toContainText("web-aaa111");
+  await expect(sets).not.toContainText("web-admin-ccc333");
+  await expect(sets).toContainText("Current");
+});

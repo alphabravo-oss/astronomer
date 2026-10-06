@@ -1,4 +1,4 @@
-import { useParams } from "@tanstack/react-router";
+import { Link as RouterLink, useParams } from "@tanstack/react-router";
 import {
   Terminal,
   FileText,
@@ -14,7 +14,10 @@ import {
   firstDeniedDecision,
   type ResourcePermissionDecisions,
 } from "@/components/resources/resource-action-policy";
-import { StopRowClick } from "@/components/resources/resource-table-primitives";
+import {
+  StopRowClick,
+  workloadDetailHref,
+} from "@/components/resources/resource-table-primitives";
 import {
   permissionDeniedReason,
   toastPermissionDenied,
@@ -145,5 +148,24 @@ export function WorkloadActions({
         items={items}
       />
     </StopRowClick>
+  );
+}
+
+/** Workload name cell: a link to its detail page that does not trigger the row click. */
+export function WorkloadNameLink({
+  clusterId,
+  row,
+}: {
+  clusterId: string;
+  row: Workload;
+}) {
+  return (
+    <RouterLink
+      to={workloadDetailHref(clusterId, row.kind, row.namespace, row.name)}
+      onClick={(e) => e.stopPropagation()}
+      className="font-medium text-foreground font-mono text-xs hover:underline"
+    >
+      {row.name}
+    </RouterLink>
   );
 }
