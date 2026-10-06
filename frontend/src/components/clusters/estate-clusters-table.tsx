@@ -39,6 +39,7 @@ export const estateClusterColumns: Column<Cluster>[] = [
     key: "status",
     header: "Status",
     kind: "status",
+    size: 120,
     accessor: (cluster) => <StatusBadge status={cluster.status} />,
     searchAccessor: (cluster) => cluster.status,
     sortAccessor: (cluster) => cluster.status,
@@ -67,6 +68,7 @@ export const estateClusterColumns: Column<Cluster>[] = [
     key: "version",
     header: "Version",
     kind: "version",
+    size: 120,
     accessor: (cluster) => (
       <span className="font-mono text-xs text-muted-foreground">
         {cluster.kubernetesVersion || "—"}

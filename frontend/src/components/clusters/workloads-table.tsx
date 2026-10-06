@@ -205,7 +205,8 @@ export function workloadColumns(clusterId: string): Column<WorkloadRow>[] {
     {
       key: "namespace",
       header: "Namespace",
-      kind: "text",
+      kind: "name",
+      grow: false,
       size: 192,
       minSize: 140,
       accessor: (workload) => (

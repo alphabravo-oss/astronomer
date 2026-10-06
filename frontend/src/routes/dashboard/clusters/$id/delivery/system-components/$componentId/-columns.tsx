@@ -18,6 +18,7 @@ export function systemVolumeColumns(
       header: "Claim",
       kind: "name",
       minSize: 240,
+      pin: "start",
       accessor: (row) => (
         <EntityCell
           primary={
@@ -122,6 +123,7 @@ export function systemVolumeColumns(
       key: "age",
       header: "Age",
       kind: "age",
+      size: 80,
       accessor: (row) => <TimestampCell value={row.createdAt} fallback="—" />,
       sortAccessor: (row) => row.createdAt || "",
     },

@@ -82,6 +82,7 @@ const resourceColumns: Column<NamespaceResourceRow>[] = [
     key: "status",
     header: "Status",
     kind: "status",
+    size: 168,
     accessor: (row) => <StatusBadge status={row.status} />,
   },
   {
@@ -97,6 +98,7 @@ const resourceColumns: Column<NamespaceResourceRow>[] = [
     key: "age",
     header: "Age",
     kind: "age",
+    size: 80,
     accessor: (row) => row.age,
     sortAccessor: (row) => Date.parse(row.createdAt) || 0,
   },

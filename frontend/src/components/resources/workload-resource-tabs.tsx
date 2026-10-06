@@ -75,6 +75,7 @@ function WorkloadPodsTab({
       key: "status",
       header: "Status",
       kind: "status",
+      size: 168,
       accessor: (pod) => (
         <StatusBadge status={pod.status?.trim() || pod.phase || "Unknown"} />
       ),
@@ -106,9 +107,10 @@ function WorkloadPodsTab({
     {
       key: "node",
       header: "Node",
-      kind: "text",
-      size: 220,
-      minSize: 170,
+      kind: "name",
+      grow: false,
+      size: 150,
+      minSize: 130,
       accessor: (pod) => (
         <span className="font-mono text-xs text-muted-foreground">
           {pod.node || "—"}
@@ -119,6 +121,7 @@ function WorkloadPodsTab({
       key: "age",
       header: "Age",
       kind: "age",
+      size: 80,
       accessor: (pod) => (
         <span className="text-xs text-muted-foreground">
           {pod.age || formatRelativeTime(pod.createdAt)}

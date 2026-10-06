@@ -32,9 +32,10 @@ const podColumns: Column<NodePod>[] = [
   {
     key: "namespace",
     header: "Namespace",
-    kind: "text",
-    size: 150,
-    minSize: 120,
+    kind: "name",
+    grow: false,
+    size: 130,
+    minSize: 110,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -45,6 +46,7 @@ const podColumns: Column<NodePod>[] = [
     key: "status",
     header: "Status",
     kind: "status",
+    size: 168,
     accessor: (row) => <StatusBadge status={row.status} />,
   },
   {
@@ -75,8 +77,8 @@ const podColumns: Column<NodePod>[] = [
     key: "image",
     header: "Image",
     kind: "text",
-    size: 280,
-    minSize: 220,
+    size: 200,
+    minSize: 170,
     accessor: (row) => (
       <ImageRefCell
         image={row.images?.[0]}
@@ -89,6 +91,7 @@ const podColumns: Column<NodePod>[] = [
     key: "age",
     header: "Age",
     kind: "age",
+    size: 80,
     accessor: (row) => (
       <TimestampCell
         value={row.createdAt}
@@ -113,6 +116,7 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
     key: "status",
     header: "Status",
     kind: "status",
+    size: 100,
     accessor: (row) => {
       const isHealthy =
         (row.type === "Ready" && row.status === "True") ||
@@ -157,10 +161,12 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
     key: "lastHeartbeat",
     header: "Heartbeat",
     kind: "age",
+    size: 119,
     accessor: (row) => (
       <TimestampCell
         value={row.lastHeartbeat}
         fallback="-"
+        suffix
         className="text-xs text-muted-foreground"
       />
     ),
@@ -169,10 +175,12 @@ const conditionColumns: Column<NodeDetailCondition>[] = [
     key: "lastTransition",
     header: "Transition",
     kind: "age",
+    size: 126,
     accessor: (row) => (
       <TimestampCell
         value={row.lastTransition}
         fallback="-"
+        suffix
         className="text-xs text-muted-foreground"
       />
     ),
@@ -207,6 +215,7 @@ const eventColumns: Column<NodeEvent>[] = [
     key: "type",
     header: "Type",
     kind: "status",
+    size: 100,
     accessor: (row) => (
       <span
         className={cn(
@@ -253,10 +262,12 @@ const eventColumns: Column<NodeEvent>[] = [
     key: "lastSeen",
     header: "Last Seen",
     kind: "age",
+    size: 119,
     accessor: (row) => (
       <TimestampCell
         value={row.lastTimestamp}
         fallback="-"
+        suffix
         className="text-xs text-muted-foreground"
       />
     ),

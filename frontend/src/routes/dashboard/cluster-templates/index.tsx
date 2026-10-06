@@ -112,7 +112,7 @@ function ClusterTemplatesPage() {
     },
     {
       key: "clusters",
-      header: "Clusters bound",
+      header: "Clusters",
       kind: "count",
       size: 120,
       accessor: (row) => (
@@ -124,8 +124,8 @@ function ClusterTemplatesPage() {
       key: "createdBy",
       header: "Created by",
       kind: "text",
-      size: 200,
-      minSize: 160,
+      size: 170,
+      minSize: 150,
       accessor: (row) => (
         <EntityCell
           primary={row.createdBy || "—"}

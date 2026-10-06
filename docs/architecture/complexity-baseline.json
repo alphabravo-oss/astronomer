@@ -64,7 +64,7 @@
     "frontend/src/components/rbac/create-binding-modal.tsx:CreateClusterBindingModal": 283,
     "frontend/src/components/rbac/role-editor.tsx:RoleEditor": 374,
     "frontend/src/components/resources/create-resource-dialog.tsx:CreateResourceEditor": 290,
-    "frontend/src/components/resources/generic-resource-table.tsx:GenericResourceTable": 279,
+    "frontend/src/components/resources/generic-resource-table.tsx:GenericResourceTable": 278,
     "frontend/src/components/resources/namespace-detail-page.tsx:NamespaceDetailPage": 252,
     "frontend/src/components/resources/secret-data-overview.tsx:decodeSecretValue": 285,
     "frontend/src/components/security/cis-scans-tab.tsx:CISScansTab": 248,

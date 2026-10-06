@@ -19,9 +19,10 @@ const jobColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
-    kind: "text",
-    size: 150,
-    minSize: 120,
+    kind: "name",
+    grow: false,
+    size: 130,
+    minSize: 110,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -32,6 +33,7 @@ const jobColumns: Column<GenericK8sResource>[] = [
     key: "status",
     header: "Status",
     kind: "status",
+    size: 120,
     accessor: (row) => <StatusBadge status={row.status || "Pending"} />,
   },
   {
@@ -49,6 +51,7 @@ const jobColumns: Column<GenericK8sResource>[] = [
     key: "age",
     header: "Age",
     kind: "age",
+    size: 80,
     accessor: (row) => (
       <TimestampCell
         value={row.createdAt}
@@ -73,9 +76,10 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
-    kind: "text",
-    size: 150,
-    minSize: 120,
+    kind: "name",
+    grow: false,
+    size: 130,
+    minSize: 110,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -98,17 +102,19 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
     key: "status",
     header: "Status",
     kind: "status",
+    size: 120,
     accessor: (row) => <StatusBadge status={row.status || "Active"} />,
   },
   {
     key: "lastSchedule",
     header: "Last Run",
     kind: "age",
-    size: 120,
+    size: 119,
     accessor: (row) => (
       <TimestampCell
         value={row.lastSchedule}
         fallback="-"
+        suffix
         className="text-xs text-muted-foreground"
       />
     ),
@@ -125,6 +131,7 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
     key: "age",
     header: "Age",
     kind: "age",
+    size: 80,
     accessor: (row) => (
       <TimestampCell
         value={row.createdAt}
@@ -234,9 +241,10 @@ const hpaColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
-    kind: "text",
-    size: 150,
-    minSize: 120,
+    kind: "name",
+    grow: false,
+    size: 130,
+    minSize: 110,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -278,6 +286,7 @@ const hpaColumns: Column<GenericK8sResource>[] = [
     key: "age",
     header: "Age",
     kind: "age",
+    size: 80,
     accessor: (row) => (
       <TimestampCell
         value={row.createdAt}
@@ -302,9 +311,10 @@ const resourceQuotaColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
-    kind: "text",
-    size: 150,
-    minSize: 120,
+    kind: "name",
+    grow: false,
+    size: 130,
+    minSize: 110,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -315,6 +325,7 @@ const resourceQuotaColumns: Column<GenericK8sResource>[] = [
     key: "age",
     header: "Age",
     kind: "age",
+    size: 80,
     accessor: (row) => (
       <TimestampCell
         value={row.createdAt}
@@ -339,9 +350,10 @@ const limitRangeColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
-    kind: "text",
-    size: 150,
-    minSize: 120,
+    kind: "name",
+    grow: false,
+    size: 130,
+    minSize: 110,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -352,6 +364,7 @@ const limitRangeColumns: Column<GenericK8sResource>[] = [
     key: "age",
     header: "Age",
     kind: "age",
+    size: 80,
     accessor: (row) => (
       <TimestampCell
         value={row.createdAt}
@@ -376,9 +389,10 @@ const pdbColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
-    kind: "text",
-    size: 150,
-    minSize: 120,
+    kind: "name",
+    grow: false,
+    size: 130,
+    minSize: 110,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -417,6 +431,7 @@ const pdbColumns: Column<GenericK8sResource>[] = [
     key: "age",
     header: "Age",
     kind: "age",
+    size: 80,
     accessor: (row) => (
       <TimestampCell
         value={row.createdAt}
@@ -665,9 +680,10 @@ const replicaSetColumns: Column<GenericK8sResource>[] = [
   {
     key: "namespace",
     header: "Namespace",
-    kind: "text",
-    size: 150,
-    minSize: 120,
+    kind: "name",
+    grow: false,
+    size: 130,
+    minSize: 110,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.namespace}
@@ -702,6 +718,7 @@ const replicaSetColumns: Column<GenericK8sResource>[] = [
     key: "age",
     header: "Age",
     kind: "age",
+    size: 80,
     accessor: (row) => (
       <TimestampCell
         value={row.createdAt}

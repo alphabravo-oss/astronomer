@@ -113,8 +113,8 @@ export function SnapshotSchedulesTable({
       key: "namespaces",
       header: "Namespaces",
       kind: "badge",
-      size: 220,
-      minSize: 180,
+      size: 190,
+      minSize: 160,
       maxSize: 280,
       accessor: (schedule) => (
         <ChipsCell
@@ -153,10 +153,13 @@ export function SnapshotSchedulesTable({
       key: "lastRun",
       header: "Last run",
       kind: "date",
+      size: 112,
+      minSize: 105,
       accessor: (schedule) => (
         <TimestampCell
           value={schedule.lastRun}
           fallback="—"
+          suffix
           className="text-xs text-muted-foreground"
         />
       ),
@@ -248,8 +251,8 @@ export function SnapshotsTable({
       key: "source",
       header: "Source",
       kind: "text",
-      size: 200,
-      minSize: 150,
+      size: 150,
+      minSize: 130,
       accessor: (snapshot) =>
         snapshot.source === "schedule" ? (
           <Tooltip content={snapshot.scheduleName}>
@@ -279,10 +282,13 @@ export function SnapshotsTable({
       key: "started",
       header: "Started",
       kind: "date",
+      size: 112,
+      minSize: 105,
       accessor: (snapshot) => (
         <TimestampCell
           value={snapshot.startTimestamp}
           fallback="—"
+          suffix
           className="text-xs text-muted-foreground"
         />
       ),
@@ -292,10 +298,13 @@ export function SnapshotsTable({
       key: "completed",
       header: "Completed",
       kind: "date",
+      size: 112,
+      minSize: 105,
       accessor: (snapshot) => (
         <TimestampCell
           value={snapshot.completionTimestamp}
           fallback="—"
+          suffix
           className="text-xs text-muted-foreground"
         />
       ),

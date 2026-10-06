@@ -6,6 +6,8 @@ import {
   ImageRefCell,
   StatusReasonCell,
   TimestampCell,
+  UsageGauge,
+  shortAge,
   splitImageRef,
 } from "@/components/tables/cells";
 
@@ -63,9 +65,18 @@ describe("ChipsCell", () => {
 });
 
 describe("TimestampCell", () => {
-  it("renders relative text for a timestamp", () => {
-    render(<TimestampCell value={new Date().toISOString()} />);
-    expect(screen.getByText(/ago/)).toBeTruthy();
+  it("renders compact relative text, with an optional ago suffix", () => {
+    const threeHours = new Date(
+      Date.now() - 3 * 3_600_000 - 5_000,
+    ).toISOString();
+    render(
+      <>
+        <TimestampCell value={threeHours} />
+        <TimestampCell value={threeHours} suffix />
+      </>,
+    );
+    expect(screen.getByText("3h")).toBeTruthy();
+    expect(screen.getByText("3h ago")).toBeTruthy();
   });
 
   it("falls back for missing and zero timestamps", () => {
@@ -93,5 +104,28 @@ describe("EntityCell and StatusReasonCell", () => {
     );
     expect(screen.getByText("Degraded")).toBeTruthy();
     expect(screen.getByText("stale heartbeat")).toBeTruthy();
+  });
+});
+
+describe("shortAge", () => {
+  const now = Date.parse("2026-10-06T12:00:00Z");
+  it("compacts to the largest whole unit", () => {
+    const at = (ms: number) => new Date(now - ms).toISOString();
+    expect(shortAge(at(10_000), now)).toBe("now");
+    expect(shortAge(at(14 * 60_000), now)).toBe("14m");
+    expect(shortAge(at(5 * 3_600_000), now)).toBe("5h");
+    expect(shortAge(at(3 * 86_400_000), now)).toBe("3d");
+    expect(shortAge(at(75 * 86_400_000), now)).toBe("2mo");
+    expect(shortAge(at(900 * 86_400_000), now)).toBe("2y");
+  });
+});
+
+describe("UsageGauge", () => {
+  it("renders the percent label and clamps the bar", () => {
+    const { container } = render(<UsageGauge pct={140} label="140%" />);
+    expect(screen.getByText("140%")).toBeTruthy();
+    const fill = container.querySelector(".gauge-bar-fill") as HTMLElement;
+    expect(fill.style.width).toBe("100%");
+    expect(fill.className).toContain("bg-status-error");
   });
 });

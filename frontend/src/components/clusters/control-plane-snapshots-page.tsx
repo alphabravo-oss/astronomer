@@ -116,8 +116,8 @@ function controlPlaneSnapshotColumns(
       key: "createdBy",
       header: "Taken by",
       kind: "text",
-      size: 200,
-      minSize: 160,
+      size: 150,
+      minSize: 130,
       accessor: (snapshot) => (
         <span className="text-xs text-muted-foreground">
           {snapshot.createdBy || "—"}
@@ -129,10 +129,13 @@ function controlPlaneSnapshotColumns(
       key: "createdAt",
       header: "Created",
       kind: "date",
+      size: 119,
+      minSize: 105,
       accessor: (snapshot) => (
         <TimestampCell
           value={snapshot.createdAt}
           fallback="—"
+          suffix
           className="text-xs text-muted-foreground"
         />
       ),
@@ -142,10 +145,13 @@ function controlPlaneSnapshotColumns(
       key: "completedAt",
       header: "Completed",
       kind: "date",
+      size: 119,
+      minSize: 105,
       accessor: (snapshot) => (
         <TimestampCell
           value={snapshot.completedAt}
           fallback="—"
+          suffix
           className="text-xs text-muted-foreground"
         />
       ),
@@ -155,8 +161,8 @@ function controlPlaneSnapshotColumns(
       key: "actions",
       header: "",
       kind: "actions",
-      size: 120,
-      minSize: 120,
+      size: 100,
+      minSize: 100,
       maxSize: 140,
       sortable: false,
       accessor: (snapshot) => (

@@ -22,6 +22,7 @@ export function agentColumns(
       header: "Cluster",
       kind: "name",
       minSize: 220,
+      pin: "start",
       accessor: (row) => (
         <EntityCell
           primary={row.clusterDisplayName || row.clusterName}
@@ -65,7 +66,7 @@ export function agentColumns(
       key: "compatibility",
       header: "Compatibility",
       kind: "badge",
-      size: 130,
+      size: 150,
       accessor: (row) => (
         <Tooltip content={row.compatibilityMessage}>
           <span

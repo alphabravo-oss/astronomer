@@ -54,6 +54,7 @@ export function nameColumn<T extends { name: string; namespace?: string }>(
     key: "name",
     header: "Name",
     kind: "name",
+    minSize: 200,
     accessor: (row) => (
       <NameLink
         clusterId={clusterId}

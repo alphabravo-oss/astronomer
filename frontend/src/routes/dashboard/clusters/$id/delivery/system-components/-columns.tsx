@@ -216,6 +216,7 @@ export function systemComponentColumns(
       key: "age",
       header: "Age",
       kind: "age",
+      size: 80,
       accessor: (row) => (
         <TimestampCell value={row.createdAt} fallback="Unknown" />
       ),

@@ -287,7 +287,7 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<Namespace>[]>(
     () => [
-      nameColumn<Namespace>(clusterId, "namespaces", { minSize: 200 }),
+      nameColumn<Namespace>(clusterId, "namespaces"),
       ...nsColumns.slice(1),
       {
         key: "actions",
@@ -626,7 +626,7 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
   const columns = useMemo<Column<Pod>[]>(
     () => [
       // Override the shared name cell with a drill-down link into pod detail.
-      nameColumn<Pod>(clusterId, "pods", { minSize: 260 }),
+      nameColumn<Pod>(clusterId, "pods"),
       ...podColumns.slice(1),
       {
         key: "actions",

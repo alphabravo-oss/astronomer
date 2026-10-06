@@ -8,7 +8,11 @@ import {
   providerDisplayName,
   distributionDisplayName,
 } from "@/lib/utils";
-import { EntityCell, TimestampCell } from "@/components/tables/cells";
+import {
+  EntityCell,
+  TimestampCell,
+  UsageGauge,
+} from "@/components/tables/cells";
 import type { Cluster } from "@/types";
 import type { Column } from "@/components/ui/data-table";
 
@@ -34,7 +38,7 @@ export function clusterColumns(
       key: "status",
       header: "Status",
       kind: "status",
-      size: 140,
+      size: 136,
       accessor: (row) =>
         row.decommissioning ? (
           <StatusBadge status="decommissioning" label="Decommissioning" pulse />
@@ -46,9 +50,9 @@ export function clusterColumns(
     },
     {
       key: "distribution",
-      header: "Distribution",
+      header: "Platform",
       kind: "badge",
-      size: 140,
+      size: 112,
       accessor: (row) => (
         <div className="space-y-0.5">
           <span className="rounded-sm bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground">
@@ -67,6 +71,7 @@ export function clusterColumns(
       key: "version",
       header: "K8s",
       kind: "version",
+      size: 112,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.kubernetesVersion}
@@ -91,28 +96,15 @@ export function clusterColumns(
       key: "cpu",
       header: "CPU%",
       kind: "percent",
-      size: 120,
+      size: 104,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <div className="w-10 gauge-bar">
-            <div
-              className={`gauge-bar-fill ${
-                row.cpuPercentage >= 90
-                  ? "bg-status-error"
-                  : row.cpuPercentage >= 75
-                    ? "bg-status-warning"
-                    : "bg-status-success"
-              }`}
-              style={{ width: `${Math.min(row.cpuPercentage, 100)}%` }}
-            />
-          </div>
-          <span className="text-xs tabular-nums text-muted-foreground w-9">
-            {formatPercentage(
-              row.cpuPercentage,
-              row.cpuPercentage < 10 ? 1 : 0,
-            )}
-          </span>
-        </div>
+        <UsageGauge
+          pct={row.cpuPercentage}
+          label={formatPercentage(
+            row.cpuPercentage,
+            row.cpuPercentage < 10 ? 1 : 0,
+          )}
+        />
       ),
       sortAccessor: (row) => row.cpuPercentage,
     },
@@ -120,39 +112,27 @@ export function clusterColumns(
       key: "mem",
       header: "Mem%",
       kind: "percent",
-      size: 120,
+      size: 104,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <div className="w-10 gauge-bar">
-            <div
-              className={`gauge-bar-fill ${
-                row.memoryPercentage >= 90
-                  ? "bg-status-error"
-                  : row.memoryPercentage >= 75
-                    ? "bg-status-warning"
-                    : "bg-status-success"
-              }`}
-              style={{ width: `${Math.min(row.memoryPercentage, 100)}%` }}
-            />
-          </div>
-          <span className="text-xs tabular-nums text-muted-foreground w-9">
-            {formatPercentage(
-              row.memoryPercentage,
-              row.memoryPercentage < 10 ? 1 : 0,
-            )}
-          </span>
-        </div>
+        <UsageGauge
+          pct={row.memoryPercentage}
+          label={formatPercentage(
+            row.memoryPercentage,
+            row.memoryPercentage < 10 ? 1 : 0,
+          )}
+        />
       ),
       sortAccessor: (row) => row.memoryPercentage,
     },
     {
       key: "heartbeat",
-      header: "Heartbeat",
+      header: "Seen",
       kind: "age",
-      size: 120,
+      size: 84,
       accessor: (row) => (
         <TimestampCell
           value={row.lastHeartbeat}
+          suffix
           className="text-xs text-muted-foreground"
         />
       ),
