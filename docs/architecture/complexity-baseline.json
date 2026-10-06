@@ -73,7 +73,7 @@
     "frontend/src/components/window-manager/logs-tab.tsx:LogsTab": 312,
     "frontend/src/components/window-manager/window-manager.tsx:WindowManager": 261,
     "frontend/src/components/workloads/pod-logs-viewer.tsx:PodLogsViewer": 356,
-    "frontend/src/components/workloads/pod-terminal.tsx:PodTerminal": 342,
+    "frontend/src/components/workloads/pod-terminal.tsx:PodTerminal": 344,
     "frontend/src/routes/auth/login/index.tsx:LoginPage": 357,
     "frontend/src/routes/dashboard/-page.tsx:DashboardPage": 320,
     "frontend/src/routes/dashboard/alerting/-rule-modal.tsx:AlertRuleModal": 438,

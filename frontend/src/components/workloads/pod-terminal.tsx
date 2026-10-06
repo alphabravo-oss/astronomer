@@ -243,31 +243,28 @@ export function PodTerminal({
   // Fires once the wterm WASM core is up. The actual WS connect is driven by
   // the effect below (gated on `ready`) so that switching containers can
   // re-run it; here we just wire the imperative actions and mark ready.
-  const handleReady = useCallback(
-    (terminal: WTerm) => {
-      // wterm 0.3.x focuses its off-screen keyboard-input textarea while also
-      // marking it aria-hidden. A focused control cannot be hidden from the
-      // accessibility tree, so expose and name the terminal's real input.
-      const input = terminal.element.querySelector("textarea");
-      input?.removeAttribute("aria-hidden");
-      input?.setAttribute("aria-label", "Pod terminal input");
-      write(
-        `Connecting to \x1b[36m${pod}\x1b[0m / \x1b[33m${selectedContainer}\x1b[0m ...\r\n`,
-      );
-      if (actionsRef) {
-        actionsRef.current = {
-          focus,
-          clear: () => write("\x1b[2J\x1b[H"),
-          fit: () => {
-            /* wterm autoResize handles fit; no-op */
-          },
-        };
-      }
-      if (embedded) focus();
-      setReady(true);
-    },
-    [pod, selectedContainer, write, focus, embedded, actionsRef],
-  );
+  const handleReady = useCallback((terminal: WTerm) => {
+    // wterm 0.3.x focuses its off-screen keyboard-input textarea while also
+    // marking it aria-hidden. A focused control cannot be hidden from the
+    // accessibility tree, so expose and name the terminal's real input.
+    const input = terminal.element.querySelector("textarea");
+    input?.removeAttribute("aria-hidden");
+    input?.setAttribute("aria-label", "Pod terminal input");
+    write(
+      `Connecting to \x1b[36m${pod}\x1b[0m / \x1b[33m${selectedContainer}\x1b[0m ...\r\n`,
+    );
+    if (actionsRef) {
+      actionsRef.current = {
+        focus,
+        clear: () => write("\x1b[2J\x1b[H"),
+        fit: () => {
+          /* wterm autoResize handles fit; no-op */
+        },
+      };
+    }
+    if (embedded) focus();
+    setReady(true);
+  }, [pod, selectedContainer, write, focus, embedded, actionsRef]);
 
   // (Re)connect whenever the selected container changes, once the core is
   // ready. connectWebSocket's identity tracks selectedContainer, so picking a
