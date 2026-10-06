@@ -1,4 +1,3 @@
-
 /**
  * Rendered-Helm-values preview for a monitoring stack.
  *
@@ -66,7 +65,7 @@ export function StackPreviewDialog({
       size="xl"
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-2xs text-muted-foreground">
             {preview?.desiredSpecHash
               ? `spec ${preview.desiredSpecHash.slice(0, 12)}`
               : ""}

@@ -63,6 +63,7 @@ import {
   type StackField,
   type StackFormValues,
 } from "@/components/monitoring/stack-spec";
+import { Tooltip } from "@/components/ui/tooltip";
 
 export interface StackLifecyclePermissions {
   /** monitoring:read — status + preview. */
@@ -577,7 +578,7 @@ function StackSummary({
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-6">
       {rows.map(([label, value]) => (
         <div key={label} className="min-w-0">
-          <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <dt className="text-2xs font-medium uppercase tracking-wider text-muted-foreground">
             {label}
           </dt>
           <dd className="truncate text-xs text-foreground">{value}</dd>
@@ -601,12 +602,11 @@ function StackFieldControl({
       {field.label}
       {field.required && <span className="text-status-error">*</span>}
       {field.replaceTrigger && (
-        <span
-          className="rounded-sm bg-muted px-1 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground"
-          title="Changing this needs a reinstall (Replace), not an in-place upgrade."
-        >
-          replace
-        </span>
+        <Tooltip content="Changing this needs a reinstall (Replace), not an in-place upgrade.">
+          <span className="rounded-sm bg-muted px-1 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
+            replace
+          </span>
+        </Tooltip>
       )}
     </span>
   );

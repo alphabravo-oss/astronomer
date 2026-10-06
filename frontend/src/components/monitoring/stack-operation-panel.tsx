@@ -1,4 +1,3 @@
-
 /**
  * The in-flight / failed / gave-up surface for one monitoring-stack operation.
  *
@@ -41,6 +40,7 @@ import {
 } from "@/components/ui/operation-timeline";
 import { cn } from "@/lib/utils";
 import type { MonitoringOperationTracking } from "@/components/monitoring/hooks";
+import { Tooltip } from "@/components/ui/tooltip";
 
 function formatElapsed(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -129,16 +129,18 @@ export function StackOperationPanel({
             {tracker.isFailure && !superseded ? " failed" : ""}
           </span>
           {op.attemptCount > 1 && (
-            <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
               attempt {op.attemptCount}
             </span>
           )}
         </div>
       }
       headerMeta={
-        <span className="tabular-nums" title={`Operation ${op.id}`}>
-          {formatElapsed(tracker.elapsedMs)}
-        </span>
+        <Tooltip content={`Operation ${op.id}`}>
+          <span className="tabular-nums">
+            {formatElapsed(tracker.elapsedMs)}
+          </span>
+        </Tooltip>
       }
       steps={steps}
       emptyLabel={
