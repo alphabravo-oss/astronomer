@@ -408,24 +408,11 @@ func observedInventory(reconciler *unstructured.Unstructured) protocol.DeliveryI
 	}
 	inventory := protocol.DeliveryInventory{Entries: len(entries)}
 	for _, raw := range entries {
-		id, ok := raw.(string)
+		resource, ok := fluxResourceIdentity(raw)
 		if !ok {
 			continue
 		}
-		parts := strings.Split(id, "_")
-		if len(parts) != 5 || parts[1] == "" || parts[2] == "" || parts[4] == "" {
-			continue
-		}
-		apiVersion := parts[1]
-		if parts[0] != "" {
-			apiVersion = parts[0] + "/" + parts[1]
-		}
-		inventory.Resources = append(inventory.Resources, protocol.DeliveryResourceIdentity{
-			APIVersion: apiVersion,
-			Kind:       parts[2],
-			Namespace:  parts[3],
-			Name:       parts[4],
-		})
+		inventory.Resources = append(inventory.Resources, resource)
 		if len(inventory.Resources) == protocol.MaxDeliveryInventoryEntries {
 			break
 		}

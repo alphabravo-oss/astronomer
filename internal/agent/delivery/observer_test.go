@@ -25,7 +25,7 @@ func observedObjects(assignment protocol.DeliveryAssignmentV2) (*unstructured.Un
 	reconciler := managedObject(assignment, kustomizationGVK, names.ControlNamespace, names.Base, nil)
 	reconciler.SetGeneration(9)
 	reconciler.Object["status"] = map[string]any{
-		"inventory":  map[string]any{"entries": []any{"apps_v1_Deployment_workload_app", "_v1_Service_workload_app"}},
+		"inventory":  map[string]any{"entries": []any{map[string]any{"id": "workload_app_apps_Deployment", "v": "v1"}, map[string]any{"id": "workload_app__Service", "v": "v1"}}},
 		"conditions": []any{map[string]any{"type": "Ready", "status": "True", "reason": "ReconciliationSucceeded", "observedGeneration": int64(9)}},
 	}
 	return source, reconciler
