@@ -65,7 +65,12 @@ type estateMetricsTarget struct {
 
 func loadEstateManifest(path string) (estateManifest, string, error) {
 	var m estateManifest
-	raw, err := os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return m, "", errors.New("cannot read estate manifest")
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
 	if err != nil {
 		return m, "", errors.New("cannot read estate manifest")
 	}
@@ -84,7 +89,7 @@ func loadEstateManifest(path string) (estateManifest, string, error) {
 }
 func (m estateManifest) validate() error {
 	if m.Schema != estateSchema || (m.Tier != 1 && m.Tier != 10 && m.Tier != 100) || len(m.Members) < 2 || len(m.Members) > 10 {
-		return errors.New("estate requires schema v1, tier 1/10/100, and 2–10 members")
+		return errors.New("estate requires schema v2, tier 1/10/100, and 2–10 members")
 	}
 	if err := m.validatePhases(); err != nil {
 		return err

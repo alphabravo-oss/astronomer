@@ -135,7 +135,7 @@ func collectEstateMetrics(ctx, requests context.Context, deadline time.Time, c *
 			}
 		}
 		if err != nil {
-			r.Errors++
+			r.recordScrapeError()
 		}
 		select {
 		case <-ctx.Done():

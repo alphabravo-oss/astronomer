@@ -42,6 +42,7 @@ type estateSeries struct {
 	LastAt  time.Time         `json:"last_at"`
 }
 type estateMetricReport struct {
+	Transport         *estateTransportReport   `json:"transport_evidence"`
 	BoundarySkipped   int                      `json:"boundary_scrapes_excluded"`
 	TargetSHA256      string                   `json:"target_sha256"`
 	Member            string                   `json:"member"`
@@ -67,6 +68,7 @@ func parseEstateMetrics(raw []byte, instance string) ([]estatePoint, error) {
 	}
 	points := []estatePoint{}
 	seen := map[string]bool{}
+	transportCount, otherCount, markerCount := 0, 0, 0
 	for name, f := range families {
 		if !estateMetricAllowed(name) {
 			continue
@@ -95,9 +97,12 @@ func parseEstateMetrics(raw []byte, instance string) ([]estatePoint, error) {
 			if math.IsNaN(p.Value) || math.IsInf(p.Value, 0) || p.Value < 0 {
 				return nil, errors.New("invalid metric value")
 			}
-			expectedCounter := name == "astronomer_agent_observation_requests_total" || name == "process_cpu_seconds_total"
+			expectedCounter := name == "astronomer_agent_observation_requests_total" || name == "process_cpu_seconds_total" || name == estateTransportCounter
 			if p.Counter != expectedCounter {
 				return nil, errors.New("incorrect metric type")
+			}
+			if err := estateTransportValue(p); err != nil {
+				return nil, err
 			}
 			key := estatePointKey(p)
 			if seen[key] {
@@ -105,18 +110,30 @@ func parseEstateMetrics(raw []byte, instance string) ([]estatePoint, error) {
 			}
 			seen[key] = true
 			points = append(points, p)
-			if len(points) > 256 {
+			switch name {
+			case estateTransportCounter:
+				transportCount++
+			case estateTransportSentinel, estateProcessStart:
+				markerCount++
+			default:
+				otherCount++
+			}
+			if transportCount > estateTransportSeriesLimit || otherCount > estateLegacySeriesLimit || markerCount > 2 {
 				return nil, errors.New("metric cardinality exceeds bound")
 			}
+
 		}
 	}
 	sort.Slice(points, func(i, j int) bool { return estatePointKey(points[i]) < estatePointKey(points[j]) })
 	return points, nil
 }
 func estateMetricAllowed(n string) bool {
-	return slices.Contains([]string{"astronomer_agent_observation_requests_total", "process_cpu_seconds_total", "process_resident_memory_bytes", "process_open_fds", "go_memstats_heap_alloc_bytes", "go_goroutines", estateObservationPrefix + "source_available", estateObservationPrefix + "sampled_at_timestamp_seconds", estateObservationPrefix + "observed_at_timestamp_seconds"}, n)
+	return estateTransportMetric(n) || slices.Contains([]string{"astronomer_agent_observation_requests_total", "process_cpu_seconds_total", "process_resident_memory_bytes", "process_open_fds", "go_memstats_heap_alloc_bytes", "go_goroutines", estateObservationPrefix + "source_available", estateObservationPrefix + "sampled_at_timestamp_seconds", estateObservationPrefix + "observed_at_timestamp_seconds"}, n)
 }
 func estateMetricLabels(n string, labels map[string]string, instance string) error {
+	if estateTransportMetric(n) {
+		return estateTransportLabels(n, labels, instance)
+	}
 	if !strings.HasPrefix(n, "astronomer_") {
 		if len(labels) != 0 {
 			return errors.New("unexpected process metric labels")
@@ -149,6 +166,10 @@ func estatePointKey(p estatePoint) string {
 }
 func (r *estateMetricReport) observe(raw []byte, points []estatePoint, now time.Time) {
 	r.Samples++
+	if r.Transport == nil {
+		r.Transport = newEstateTransportReport()
+	}
+	r.Transport.observe(points, now)
 	if r.Series == nil {
 		r.Series = map[string]*estateSeries{}
 	}
@@ -160,6 +181,9 @@ func (r *estateMetricReport) observe(raw []byte, points []estatePoint, now time.
 	seen := map[string]bool{}
 	values := map[string]float64{}
 	for _, p := range points {
+		if estateTransportMetric(p.Name) {
+			continue
+		}
 		key := estatePointKey(p)
 		seen[key] = true
 		values[p.Name+"/"+p.Labels["source"]] = p.Value
@@ -248,4 +272,13 @@ func (r estateMetricReport) problems() []string {
 		problems = append(problems, r.Member+": open FD growth exceeds existing budget")
 	}
 	return problems
+}
+
+func (r *estateMetricReport) recordScrapeError() {
+	r.Errors++
+	if r.Transport == nil {
+		r.Transport = newEstateTransportReport()
+	}
+	r.Transport.ScrapeErrors++
+	r.Transport.refresh()
 }

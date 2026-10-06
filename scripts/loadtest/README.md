@@ -332,7 +332,8 @@ samples, not transport failures. Preflight duration is not agent cold start.
 Outputs are Markdown, adjacent `.json`, and `.sha256` covering both files. Metric
 URLs and token paths/values are omitted. A hash identifies each declared metric
 origin/producer; per-member series preserve only allowlisted kind/verb/outcome/
-source labels. The collector bounds bodies to 4 MiB and samples to 256 series;
+source labels. The collector bounds bodies to 4 MiB and legacy observation/process samples to
+256 series;
 unknown selected-family labels fail rather than introduce resource-name labels.
 It reduces samples online, keeping a timestamped hash chain and bounded per-series
 counts/min/max/deltas, not unbounded raw metric bodies. Resets and gaps invalidate
@@ -386,8 +387,47 @@ membership is a prerequisite. No invented query filters or RBAC changes are used
 Reports compare only identical v2 phase/rate/scope/timing definitions and frozen
 fixture/environment provenance. V1 reports are not comparable with v2.
 
-Tracked observation LIST/WATCH counters do not cover legacy direct reads,
-discovery/dynamic requests or assignment GETs. Therefore this increment always
-leaves ≥80% LIST reduction and zero recurring assignment GET claims `NOT_RUN`.
-Those require equivalent complete attributable baseline/candidate request evidence,
-real changes with correlated observations, and matched repeated live windows.
+The collector also understands the actual
+`astronomer_agent_kubernetes_requests_total` counter and
+`astronomer_agent_kubernetes_request_instrumentation_info{schema="v1"}=1`
+installation marker. It strictly permits the producer's four consumers, five
+operations, eighteen resource labels and seven outcomes: at most 2,520 transport
+series, independently of the existing 256-series observation/process bound.
+The marker and unlabeled `process_start_time_seconds` add at most two series.
+Counter values must be finite nonnegative integers below 2^53. Names, namespaces,
+URLs and arbitrary errors cannot enter report labels. Existing observation and
+freshness requirements remain unchanged.
+
+Per-member `transport_evidence` reports schema/process-start coverage, first/last
+scrape times, observed restarts, failed scrapes, timing gaps, per-series outcomes,
+per-consumer/operation aggregates and a family total. `window_delta` covers only
+the first-to-last successful sampled interval, not unobserved phase edges. It is
+null unless coverage is complete for that interval. `observed_adjacent_delta`
+counts only monotonic increments between adjacent valid samples sharing the same
+observed process-start value, with no failed scrape or excessive timing gap.
+These descriptive increments are not substitutes for a complete window.
+
+CounterVec series are sparse. A newly seen series is **not** assigned an implicit
+starting zero; its first observed value is not counted as a delta. Late birth,
+disappearance/reappearance or observed counter reset makes that series' complete
+window and affected aggregate unavailable. Increments never bridge a missing
+series/scrape, invalid marker/identity, observed process restart or >30s sample
+gap. Changed process-start values invalidate the window even if the new counter
+has already surpassed the old value. All-failed and trailing-failed scrape paths
+retain unavailable evidence, not a fabricated zero.
+
+A stable absent vector can report zero observed instrumented-family growth only
+when the installation marker and process-start value remain valid and unchanged;
+this relies on the current CounterVec implementation never deleting label sets.
+The sentinel proves installation of this transport family, not all-client
+coverage. Process-start timestamps are sampled restart evidence, not a
+cryptographic identity: timestamp collisions or events hidden between scrapes
+cannot be ruled out. The counters count observable wrapped RoundTrip attempts,
+not watch frames, underlying transport retries or every process client.
+
+No comparison/acceptance CLI is added here. The ≥80% LIST reduction and zero
+recurring assignment GET criteria remain `NOT_RUN` pending matched complete
+transport windows, successful workload/coverage, preserved freshness and actual
+repeated execution. A transport-instrumented baseline missing observation
+metadata still fails existing freshness checks; it must never be presented as
+freshness-qualified. The current strict report comparator remains unchanged.
