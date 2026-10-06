@@ -21,7 +21,7 @@ describe("form primitives", () => {
   it("renders an input with the shared control chrome", () => {
     render(<Input aria-label="Host" placeholder="smtp.example.com" />);
     const input = screen.getByLabelText("Host");
-    expect(input).toHaveClass("h-9", "rounded-md", "border-input");
+    expect(input).toHaveClass("h-(--control-h)", "rounded-md", "border-input");
     expect(input).toHaveAttribute("placeholder", "smtp.example.com");
   });
 
@@ -35,7 +35,7 @@ describe("form primitives", () => {
       </>,
     );
     expect(screen.getByLabelText("Provider")).toHaveClass(
-      "h-9",
+      "h-(--control-h)",
       "rounded-md",
       "appearance-none",
       "pr-9",

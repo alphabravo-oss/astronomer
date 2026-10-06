@@ -23,7 +23,7 @@ describe("Page layout primitives", () => {
     );
 
     expect(screen.getByText("Content")).toBeInTheDocument();
-    expect(container.firstChild).toHaveClass("space-y-6");
+    expect(container.firstChild).toHaveClass("space-y-(--gap-section)");
   });
 
   it("renders title, description, eyebrow, and actions", () => {

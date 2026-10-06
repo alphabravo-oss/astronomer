@@ -30,6 +30,8 @@ const manifest = JSON.parse(
 // capture failure never fails the smoke tier.
 const galleryDir = path.join(testDir, "..", "..", "gallery");
 const galleryEnabled = process.env.SMOKE_GALLERY === "1";
+// SMOKE_DENSITY=compact forces data-density="compact" before axe/screenshot.
+const forcedDensity = process.env.SMOKE_DENSITY === "compact";
 if (galleryEnabled) {
   fs.mkdirSync(galleryDir, { recursive: true });
 }
@@ -37,7 +39,7 @@ if (galleryEnabled) {
 function galleryPath(entry: ManifestEntry): string {
   const name =
     entry.url.replace(/^\//, "").replace(/[^a-zA-Z0-9._-]+/g, "_") || "root";
-  return path.join(galleryDir, `${name}.png`);
+  return path.join(galleryDir, `${name}${forcedDensity ? ".compact" : ""}.png`);
 }
 
 async function stabilizeForAccessibility(
@@ -85,6 +87,11 @@ for (const entry of manifest) {
     }
     await expect(page.getByTestId("route-error-boundary")).toHaveCount(0);
     await expect(page.getByTestId("route-not-found")).toHaveCount(0);
+    if (forcedDensity) {
+      await page.evaluate(() =>
+        document.documentElement.setAttribute("data-density", "compact"),
+      );
+    }
     await stabilizeForAccessibility(page);
     const accessibility = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])

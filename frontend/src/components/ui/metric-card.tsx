@@ -84,14 +84,14 @@ export function MetricCard({
       {...wrapperProps}
       className={cn(
         "block rounded-lg border border-border bg-card transition-colors hover:bg-card/80",
-        dense ? "p-3" : "p-5",
+        dense ? "p-3" : "p-(--card-p)",
         className,
       )}
     >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           {heading && (
-            <p className="text-sm font-medium text-muted-foreground">
+            <p className="text-body font-medium text-muted-foreground">
               {heading}
             </p>
           )}
@@ -115,7 +115,7 @@ export function MetricCard({
             )}
           </div>
           {subtitle && (
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
+            <p className="text-meta text-muted-foreground">{subtitle}</p>
           )}
         </div>
 

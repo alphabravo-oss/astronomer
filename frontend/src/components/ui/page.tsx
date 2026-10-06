@@ -11,7 +11,9 @@ export function PageShell({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={cn("space-y-6", className)}>{children}</div>;
+  return (
+    <div className={cn("space-y-(--gap-section)", className)}>{children}</div>
+  );
 }
 
 export function PageHeader({
@@ -40,7 +42,7 @@ export function PageHeader({
             {eyebrow}
           </div>
         ) : null}
-        <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">
+        <h1 className="truncate text-page-title font-semibold tracking-tight text-foreground">
           {title}
         </h1>
         {description ? (
@@ -130,7 +132,7 @@ export function ResourceMasthead({
           <div className="flex flex-wrap items-center gap-2">
             <h1
               className={cn(
-                "truncate text-2xl font-semibold tracking-tight text-foreground",
+                "truncate text-page-title font-semibold tracking-tight text-foreground",
                 mono && "font-mono",
               )}
             >
@@ -190,7 +192,9 @@ export function PageSection({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             {title ? (
-              <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+              <h2 className="text-section-title font-semibold text-foreground">
+                {title}
+              </h2>
             ) : null}
             {description ? (
               <p className="mt-1 text-sm text-muted-foreground">

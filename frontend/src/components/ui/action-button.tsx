@@ -34,10 +34,10 @@ const intentClass: Record<ActionIntent, string> = {
 };
 
 const sizeClass: Record<ActionSize, string> = {
-  sm: "h-8 px-3 text-xs",
-  md: "h-9 px-4 text-sm",
-  icon: "h-8 w-8 p-0",
-  xs: "h-6 px-2 text-xs",
+  sm: "h-[calc(var(--control-h)-0.25rem)] px-3 text-meta",
+  md: "h-(--control-h) px-4 text-body",
+  icon: "h-[calc(var(--control-h)-0.25rem)] w-[calc(var(--control-h)-0.25rem)] p-0",
+  xs: "h-6 px-2 text-meta",
   "icon-xs": "h-6 w-6 p-0",
   none: "",
 };
