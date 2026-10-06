@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/tools/clientcmd"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
@@ -151,10 +152,13 @@ func runAgent() error {
 	if err != nil {
 		return fmt.Errorf("initialize delivery dynamic client: %w", err)
 	}
-	deliveryExecutor, err := agentdelivery.NewExecutor(deliveryDynamic)
+	metadataClient, err := metadata.NewForConfig(restConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("initialize observation metadata client: %w", err)
 	}
+	subscriber := agent.NewStateSubscriber(proxy.Client(), client, log)
+	subscriber.SetMetadataClient(metadataClient)
+	subscriber.SetConnectionWatcher(client)
 	deliveryStore, err := agentdelivery.NewKubernetesCheckpointStore(proxy.Client(), agent.DefaultAgentNamespace)
 	if err != nil {
 		return err
@@ -163,26 +167,22 @@ func runAgent() error {
 	if err != nil {
 		return err
 	}
-	deliveryRuntime, err := agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
+	deliveryProbe.WithDynamicClient(deliveryDynamic).WithObservationSource(subscriber)
+	deliveryRuntime, err := agent.NewObservedDeliveryRuntime(agentdelivery.RuntimeConfig{
 		ClusterID: clusterID, AgentVersion: version.Version,
 		PollInterval: time.Second, StatusInterval: time.Second,
 		ValidationPolicy: agentdelivery.ValidationPolicy{AllowPlatformScope: true},
 		Connected:        client.IsConnected, Logger: log,
-	}, deliveryExecutor, deliveryStore, deliveryProbe)
+		ObservationFreshness: client.ObservationFreshnessEnabled,
+	}, deliveryDynamic, deliveryStore, deliveryProbe)
 	if err != nil {
 		return err
 	}
+	client.SetObservationRetry(deliveryRuntime.RetryObservation)
 	client.RegisterHandler(protocol.MsgDeliveryStateResponse, deliveryRuntime.HandleStateResponse)
 	client.RegisterHandler(protocol.MsgDeliveryReconcile, deliveryRuntime.HandleReconcile)
 	mirror := agent.NewMirrorSubscriber(proxy.Client(), deliveryDynamic, client, log)
 	mirror.SetConnectionWatcher(client)
-	go mirror.Run(ctx)
-	go func() {
-		if err := deliveryRuntime.Run(ctx, client.SendFunc(ctx)); err != nil && ctx.Err() == nil {
-			log.Error("live delivery runtime stopped", "error", err)
-			stop()
-		}
-	}()
 	client.SetConnectionListener(func(connected bool) {
 		if connected {
 			log.Info("live browser fixture ready", "cluster_id", clusterID)
@@ -190,7 +190,9 @@ func runAgent() error {
 			log.Warn("live browser fixture disconnected", "cluster_id", clusterID)
 		}
 	})
-	return client.Connect(ctx)
+	return runFixtureObservers(ctx, client.Connect, subscriber.Run, mirror.Run, func(runCtx context.Context) error {
+		return deliveryRuntime.Run(runCtx, client.SendFunc(runCtx))
+	})
 }
 
 type k8sFixture struct {
