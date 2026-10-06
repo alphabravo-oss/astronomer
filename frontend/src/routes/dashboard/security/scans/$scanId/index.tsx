@@ -293,6 +293,100 @@ function SummaryStrip({ scan }: { scan: import("@/types").CISScanDetail }) {
   );
 }
 
+function findingColumns(expanded: ReadonlySet<string>): Column<CISFinding>[] {
+  return [
+    {
+      key: "expand",
+      header: "",
+      sortable: false,
+      kind: "select",
+      pin: false,
+      width: "32px",
+      accessor: (row) => (
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 text-muted-foreground transition-transform",
+            expanded.has(row.testId) && "rotate-180",
+          )}
+        />
+      ),
+    },
+    {
+      key: "testId",
+      header: "Test ID",
+      kind: "version",
+      size: 120,
+      accessor: (row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.testId}
+        </span>
+      ),
+      sortAccessor: (row) => row.testId,
+    },
+    {
+      key: "description",
+      header: "Description",
+      kind: "text",
+      grow: true,
+      minSize: 240,
+      maxSize: 720,
+      accessor: (row) => (
+        <span className="text-sm text-foreground">{row.description}</span>
+      ),
+      sortAccessor: (row) => row.description,
+    },
+    {
+      key: "severity",
+      header: "Severity",
+      kind: "badge",
+      size: 100,
+      minSize: 96,
+      accessor: (row) => (
+        <span
+          className={cn(
+            "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase tracking-wide",
+            severityClass(row.severity),
+          )}
+        >
+          {row.severity}
+        </span>
+      ),
+      sortAccessor: (row) => severityRank(row.severity),
+    },
+    {
+      key: "status",
+      header: "Status",
+      kind: "status",
+      size: 96,
+      accessor: (row) => (
+        <span
+          className={cn(
+            "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase",
+            findingStatusClass(row.status),
+          )}
+        >
+          {row.status}
+        </span>
+      ),
+      sortAccessor: (row) => row.status,
+    },
+    {
+      key: "remediation",
+      header: "Remediation",
+      kind: "text",
+      size: 280,
+      minSize: 240,
+      maxSize: 480,
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground">
+          {row.remediation || "—"}
+        </span>
+      ),
+      sortable: false,
+    },
+  ];
+}
+
 function FindingsSection({
   findings,
   status,
@@ -341,85 +435,7 @@ function FindingsSection({
       });
   }, [findings, severityFilter, statusFilter]);
 
-  const columns: Column<CISFinding>[] = [
-    {
-      key: "expand",
-      header: "",
-      sortable: false,
-      width: "32px",
-      accessor: (row) => (
-        <ChevronDown
-          className={cn(
-            "h-3.5 w-3.5 text-muted-foreground transition-transform",
-            expanded.has(row.testId) && "rotate-180",
-          )}
-        />
-      ),
-    },
-    {
-      key: "testId",
-      header: "Test ID",
-      width: "120px",
-      accessor: (row) => (
-        <span className="font-mono text-xs text-muted-foreground">
-          {row.testId}
-        </span>
-      ),
-      sortAccessor: (row) => row.testId,
-    },
-    {
-      key: "description",
-      header: "Description",
-      accessor: (row) => (
-        <span className="text-sm text-foreground line-clamp-2">
-          {row.description}
-        </span>
-      ),
-      sortAccessor: (row) => row.description,
-    },
-    {
-      key: "severity",
-      header: "Severity",
-      width: "100px",
-      accessor: (row) => (
-        <span
-          className={cn(
-            "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase tracking-wide",
-            severityClass(row.severity),
-          )}
-        >
-          {row.severity}
-        </span>
-      ),
-      sortAccessor: (row) => severityRank(row.severity),
-    },
-    {
-      key: "status",
-      header: "Status",
-      width: "90px",
-      accessor: (row) => (
-        <span
-          className={cn(
-            "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase",
-            findingStatusClass(row.status),
-          )}
-        >
-          {row.status}
-        </span>
-      ),
-      sortAccessor: (row) => row.status,
-    },
-    {
-      key: "remediation",
-      header: "Remediation",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground line-clamp-1">
-          {row.remediation || "—"}
-        </span>
-      ),
-      sortable: false,
-    },
-  ];
+  const columns = findingColumns(expanded);
 
   if (findings.length === 0) {
     return (

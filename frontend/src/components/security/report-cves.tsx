@@ -63,6 +63,11 @@ function PagedReportCVEs({ clusterId, reportId, severity }: Props) {
           {
             key: "cve",
             header: "CVE",
+            kind: "text",
+            wrap: true,
+            grow: true,
+            minSize: 320,
+            maxSize: 4000,
             sortable: false,
             accessor: (row) => <CVECard row={row} />,
           },

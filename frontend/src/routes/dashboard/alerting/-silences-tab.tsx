@@ -1,6 +1,6 @@
 import { useAlertSilences } from "@/lib/hooks/alerting";
+import { CappedChips, TimestampCell } from "@/components/ui/cell-primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { formatRelativeTime } from "@/lib/utils";
 import type { AlertSilence } from "@/types";
 
 export function SilencesTab() {
@@ -10,6 +10,10 @@ export function SilencesTab() {
     {
       key: "reason",
       header: "Reason",
+      kind: "text",
+      grow: true,
+      minSize: 200,
+      maxSize: 560,
       accessor: (row) => (
         <span className="font-medium text-foreground">{row.reason}</span>
       ),
@@ -17,6 +21,9 @@ export function SilencesTab() {
     {
       key: "duration",
       header: "Duration",
+      kind: "text",
+      size: 96,
+      minSize: 88,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">{row.duration}</span>
       ),
@@ -24,23 +31,23 @@ export function SilencesTab() {
     {
       key: "matchers",
       header: "Matchers",
+      kind: "badge",
+      size: 300,
+      minSize: 240,
+      maxSize: 360,
       accessor: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {Object.entries(row.matchers).map(([k, v]) => (
-            <span
-              key={k}
-              className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
-            >
-              {k}={v}
-            </span>
-          ))}
-        </div>
+        <CappedChips
+          items={Object.entries(row.matchers).map(([k, v]) => `${k}=${v}`)}
+        />
       ),
       sortable: false,
     },
     {
       key: "creator",
       header: "Creator",
+      kind: "text",
+      size: 160,
+      minSize: 120,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">{row.createdBy}</span>
       ),
@@ -48,11 +55,10 @@ export function SilencesTab() {
     {
       key: "endsAt",
       header: "Expires",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.endsAt)}
-        </span>
-      ),
+      kind: "age",
+      size: 120,
+      maxSize: 160,
+      accessor: (row) => <TimestampCell value={row.endsAt} />,
     },
   ];
 

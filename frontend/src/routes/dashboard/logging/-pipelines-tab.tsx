@@ -10,10 +10,14 @@ import {
   deleteLoggingPipeline,
   updateLoggingPipeline,
 } from "@/lib/api/logging";
+import {
+  CappedChips,
+  NameSubCell,
+  TimestampCell,
+} from "@/components/ui/cell-primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { formatRelativeTime } from "@/lib/utils";
 import type { LoggingPipeline } from "@/types";
 import { Trash2 } from "lucide-react";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -75,23 +79,21 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
     {
       key: "name",
       header: "Pipeline",
+      kind: "name",
+      minSize: 220,
       accessor: (row) => (
-        <div>
-          <Link
-            to={String(`/dashboard/logging/pipelines/${row.id}`)}
-            search={{ pipelinePage: page }}
-            className="font-medium text-foreground hover:underline"
-          >
-            {row.name}
-          </Link>
-          {row.description && (
-            <Tooltip content={row.description}>
-              <p className="text-xs text-muted-foreground truncate max-w-75">
-                {row.description}
-              </p>
-            </Tooltip>
-          )}
-        </div>
+        <NameSubCell
+          title={
+            <Link
+              to={String(`/dashboard/logging/pipelines/${row.id}`)}
+              search={{ pipelinePage: page }}
+              className="hover:underline"
+            >
+              {row.name}
+            </Link>
+          }
+          subtitle={row.description}
+        />
       ),
     },
     ...(clusterId
@@ -100,6 +102,9 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
           {
             key: "cluster",
             header: "Cluster",
+            kind: "text",
+            size: 160,
+            minSize: 128,
             accessor: (row: LoggingPipeline) => (
               <span className="text-sm text-muted-foreground">
                 {row.clusterName || row.clusterId || "Unavailable"}
@@ -110,27 +115,11 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
     {
       key: "namespaces",
       header: "Namespaces",
-      accessor: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {row.namespaces.length === 0 ? (
-            <span className="text-xs text-muted-foreground">All</span>
-          ) : (
-            row.namespaces.slice(0, 3).map((ns) => (
-              <span
-                key={ns}
-                className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
-              >
-                {ns}
-              </span>
-            ))
-          )}
-          {row.namespaces.length > 3 && (
-            <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
-              +{row.namespaces.length - 3}
-            </span>
-          )}
-        </div>
-      ),
+      kind: "badge",
+      size: 220,
+      minSize: 180,
+      maxSize: 280,
+      accessor: (row) => <CappedChips items={row.namespaces} empty="All" />,
       sortable: false,
     },
     {
@@ -140,11 +129,15 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
         <span className="tabular-nums text-sm">{row.outputNames.length}</span>
       ),
       sortAccessor: (row) => row.outputNames.length,
-      align: "center",
+      kind: "count",
     },
     {
       key: "enabled",
       header: "Enabled",
+      kind: "badge",
+      size: 88,
+      minSize: 80,
+      maxSize: 96,
       accessor: (row) => (
         <PipelineToggle
           row={row}
@@ -157,11 +150,10 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
     {
       key: "created",
       header: "Created",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.createdAt)}
-        </span>
-      ),
+      kind: "age",
+      size: 120,
+      maxSize: 160,
+      accessor: (row) => <TimestampCell value={row.createdAt} />,
     },
     {
       key: "actions",
@@ -170,6 +162,7 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
         <PipelineDelete row={row} onDelete={() => setDeleteTarget(row)} />
       ),
       sortable: false,
+      kind: "actions",
     },
   ];
 
