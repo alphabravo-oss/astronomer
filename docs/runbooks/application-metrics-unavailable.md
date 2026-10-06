@@ -61,3 +61,34 @@ temporary rule file and evaluates `deploy/testdata/application-metrics.test.yaml
 Without `promtool`, evaluation is explicitly skipped; render tests alone do not
 prove PromQL behavior. Fixtures cover absence, all replicas down, recovery,
 healthy replicas, other releases/namespaces, and targets becoming stale.
+
+## Management-plane dashboard
+
+The management-plane dashboard has separate server and worker scrape availability
+panels. A value of 1 means at least one discovered replica is up; 0 means every
+discovered replica is down. An absent series displays **No data**, not healthy or
+idle. Aggregate availability does not establish complete replica coverage: inspect
+individual Prometheus targets when a replica or its application metrics are missing.
+
+Process CPU (cores), Go heap in-use bytes, and goroutine panels show each replica
+using the default Go/Prometheus collectors already served by server and worker.
+They retain gaps for missing metrics and filter out targets with `up != 1`.
+CPU rates require at least two samples. The disconnected-agent count likewise
+uses only currently healthy server targets; no connection series yields no data,
+not a fabricated zero. This is scrape health, not proof of fresh agent observations.
+
+Helm sets the dashboard's `metrics_namespace` and `metrics_fullname` constants to
+the release namespace and resolved chart fullname. This follows the metrics
+Services even when ServiceMonitors live in a different namespace. The standalone
+JSON defaults both constants to `astronomer`; when importing it directly, edit
+those constants to the installation's namespace and metrics Service name prefix.
+Grafana's normal Prometheus datasource configuration is still required. Other
+existing dashboard panels retain their original query scope; these constants
+scope the new resource/availability panels and disconnected-agent count only.
+Enabling dashboards does not enable ServiceMonitors.
+
+Cache observation freshness, sync state, and downstream API work panels remain a
+follow-up to Plan 030 E05 when the bounded producer metrics are implemented. Do
+not infer those measurements from scrape availability or invent metric names.
+Dashboard render tests verify selectors and missing-data configuration; they do
+not evaluate PromQL or prove live target discovery.

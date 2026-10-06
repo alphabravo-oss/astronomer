@@ -2,10 +2,10 @@
   "title": "Astronomer — Management Plane",
   "uid": "astronomer-management-plane",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "tags": ["astronomer", "management-plane"],
   "time": {"from": "now-6h", "to": "now"},
-  "templating": {"list": []},
+  "templating": {"list": [{"name": "metrics_namespace", "type": "constant", "label": "Metrics namespace", "query": "astronomer", "current": {"text": "astronomer", "value": "astronomer"}, "hide": 0}, {"name": "metrics_fullname", "type": "constant", "label": "Metrics service prefix", "query": "astronomer", "current": {"text": "astronomer", "value": "astronomer"}, "hide": 0}]},
   "panels": [
     {
       "title": "HTTP 5xx ratio (5m)",
@@ -29,10 +29,11 @@
     },
     {
       "title": "Agents disconnected",
+      "description": "Counts only series from currently healthy server scrape targets. No data means no observed connection metrics; inspect scrape availability before interpreting this count.",
       "type": "stat",
       "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
-      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}},
-      "targets": [{"expr": "count(astronomer_agent_connections == 0) or vector(0)", "refId": "A"}]
+      "fieldConfig": {"defaults": {"noValue": "No data", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}},
+      "targets": [{"expr": "sum((astronomer_agent_connections{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == bool 0) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1))", "refId": "A", "instant": true}]
     },
     {
       "title": "HTTP request rate by status class",
@@ -129,6 +130,178 @@
       "gridPos": {"x": 16, "y": 44, "w": 8, "h": 4},
       "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}},
       "targets": [{"expr": "sum(increase(kube_job_status_failed{job_name=~\".*-management-backup-.*|.*-restore-drill-.*\"}[24h]))", "refId": "A"}]
+    },
+    {
+      "title": "Server scrape availability",
+      "description": "1 means at least one replica is scraped successfully; 0 means all discovered replicas are down. No data means no target is discovered. This does not prove every replica is healthy.",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "max(up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"})",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "Worker scrape availability",
+      "description": "1 means at least one replica is scraped successfully; 0 means all discovered replicas are down. No data means no target is discovered. This does not prove every replica is healthy.",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No data",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "max(up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"})",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "Process CPU usage (cores)",
+      "description": "Per scraped server/worker replica. Missing or failed scrapes remain gaps; CPU rates require at least two samples.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cores",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(process_cpu_seconds_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "legendFormat": "server {{pod}} / {{instance}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(process_cpu_seconds_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"}[5m]) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} == 1)",
+          "legendFormat": "worker {{pod}} / {{instance}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Go heap in use",
+      "description": "Per scraped server/worker replica. Missing or failed scrapes remain gaps;",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 52,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "go_memstats_heap_inuse_bytes{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "legendFormat": "server {{pod}} / {{instance}}",
+          "refId": "A"
+        },
+        {
+          "expr": "go_memstats_heap_inuse_bytes{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} == 1)",
+          "legendFormat": "worker {{pod}} / {{instance}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Go goroutines",
+      "description": "Per scraped server/worker replica. Missing or failed scrapes remain gaps;",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 16,
+        "y": 52,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "No data",
+          "custom": {
+            "spanNulls": false
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "go_goroutines{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+          "legendFormat": "server {{pod}} / {{instance}}",
+          "refId": "A"
+        },
+        {
+          "expr": "go_goroutines{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} == 1)",
+          "legendFormat": "worker {{pod}} / {{instance}}",
+          "refId": "B"
+        }
+      ]
     }
   ]
 }
