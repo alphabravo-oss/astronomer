@@ -59,6 +59,62 @@ omitted; per-kind availability reporting belongs to the subsequent snapshot work
 Successful observation and healthy reconciliation are separate: a current
 observation can correctly report an unhealthy workload.
 
+## Shared typed source (delivery activation pending)
+
+`StateSubscriber` owns one informer per Deployment, StatefulSet, DaemonSet, Pod,
+PersistentVolumeClaim, and StorageClass. PVC and StorageClass typed projections
+replace their metadata watchers; they do not add duplicate watches. Existing live
+invalidation/replay and health inventory consumers reuse the same stores.
+Projections retain required metadata, controller identity/hardening switches,
+readiness, images, resource requests/limits, and storage facts. They omit workload
+environment values, arbitrary command arguments/annotations, storage parameters,
+and secret bodies. Returned snapshots are deep copies of projected objects.
+
+A compact namespace/name/UID/resource-version fingerprint set tracks completed
+paginated LISTs and subsequent watch changes. A snapshot is current only after
+its informer store matches that set and the individual kind has synchronized.
+Initial `HasSynced` alone never certifies a replacement LIST after an expired
+watch. Bookmarks are explicitly requested; WatchList initial-event semantics are
+not used by these tracked informers. A successful watch-open or snapshot read
+never renews source time. Successful LIST completion, watch events, and bookmarks
+supply candidate times, certified only when the application barrier matches.
+
+LIST requests have a 15-second context bound and watches roll over after 75
+seconds. Source age is bounded to four minutes, below the protocol's five-minute
+ceiling. Quiet servers that do not provide bookmarks schedule a repair LIST when
+another full watch plus LIST/grace budget would cross that age limit: with the
+defaults, after 150 seconds without progress. Planned repair retains still-fresh,
+matching evidence for at most 20 seconds while the reflector relists; it cannot
+revive a disconnected source whose existing grace has expired. A replacement
+revision must pass the store application barrier before it becomes current.
+Normal timeout/clean EOF gets five seconds of reconnect grace with its **old**
+time; a resumed stream must show progress to recover after clean-EOF grace.
+Explicit watch errors, 403 permission loss, and 410 expiry immediately invalidate
+current state. Cancellation fences retained stores even during reflector backoff.
+Each kind fails independently; a denied PVC store does not stall healthy workloads.
+
+Steady snapshot reads make zero Kubernetes calls. Bookmarkless repair adds one
+LIST per kind per 150 seconds, an 80% lower steady-state rate than one per 30
+seconds (90% lower than one per 15 seconds). These rates exclude startup, failure
+recovery, discovery, and dynamic operator inventory, and are not live benchmark
+acceptance. The local fake-client baseline measured ten direct platform probes
+at 60 typed LISTs plus 30 controller GETs; six tracked kinds bootstrap with six
+LISTs/six WATCHs, then 600 snapshot reads add zero API calls.
+
+`astronomer_agent_observation_requests_total{astronomer_instance_id,kind,verb,outcome}` counts
+actual LIST/WATCH call results. Separate
+`astronomer_agent_observation_watch_events_total{astronomer_instance_id,kind,outcome}` counts
+stream closure/errors, rollover, and synthetic repair. Never sum lifecycle events
+as API requests. Kinds are the six fixed types; verbs are `list`/`watch`; outcomes
+are fixed `success`, `error`, `denied`, `expired`, `canceled` for API results and
+`closed`, `rollover`, `repair`, `error`, `denied`, `expired`, `canceled` for lifecycle
+events. No resource names, namespaces, error strings, or tenant labels are added.
+
+Delivery still uses direct probes in this change. Negotiated source consumption,
+remote/embedded wiring, shared discovery/dynamic refresh, and heartbeat headroom
+remain the next integration step; these source tests do not establish live
+Kubernetes watch behavior or end-to-end request reduction.
+
 ## Persistence, API, and coalescing
 
 The existing controller `observed_at` database column receives the validated
@@ -104,6 +160,8 @@ suppression. Detail source times are shown only when valid.
 
 ```sh
 go test ./pkg/protocol ./internal/delivery/status ./internal/delivery/compatibility ./internal/agent/delivery
+go test -race ./internal/agent/observation
+go test -race ./internal/agent -run 'Test(StateSubscriber|SharedObservation)'
 go test ./internal/agent -run 'Test(ObservationNegotiation|QueuedExtended)'
 npm --prefix frontend test -- src/lib/system-component-freshness.test.ts 'src/routes/dashboard/clusters/$id/delivery/system-components/-freshness.test.tsx'
 ```

@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/metadata/metadatainformer"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agent/observation"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -130,8 +131,6 @@ var metadataInformerKinds = []metadataKind{
 	{"Ingress", "networking.k8s.io", "v1", schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}},
 	{"NetworkPolicy", "networking.k8s.io", "v1", schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}},
 	{"PersistentVolume", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumes"}},
-	{"PersistentVolumeClaim", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}},
-	{"StorageClass", "storage.k8s.io", "v1", schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "storageclasses"}},
 	{"HorizontalPodAutoscaler", "autoscaling", "v2", schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}},
 	{"ServiceAccount", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "serviceaccounts"}},
 	{"Role", "rbac.authorization.k8s.io", "v1", schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}},
@@ -313,8 +312,9 @@ type StateSubscriber struct {
 	// Keyed by kind; populated by attach() as each informer is registered. The
 	// Events informer is deliberately EXCLUDED (replaying historical Events
 	// would flood — exactly what eventIsRecent guards against).
-	storeMu sync.RWMutex
-	stores  map[string]stateStoreEntry
+	storeMu      sync.RWMutex
+	stores       map[string]stateStoreEntry
+	observations map[observation.Kind]*observation.Tracker
 
 	// conn is the connection watcher whose IsConnected reading the replay loop
 	// polls. nil-safe: when unwired (tests / older callers) the replay goroutine
@@ -412,8 +412,7 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 
 	factory := informers.NewSharedInformerFactory(s.client, getStateSubscriberResyncPeriod())
 
-	// Register per-resource handlers. The handler funcs share the same
-	// dispatch logic; only the Kind / API group differ.
+	s.registerObservations(factory)
 	s.registerCore(factory)
 	s.registerApps(factory)
 	s.registerEvents(factory)
@@ -422,7 +421,7 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 	stopCh := ctx.Done()
 
 	factory.Start(stopCh)
-	defer factory.Shutdown()
+	defer s.shutdownObservations(factory)
 
 	// P4.6 informer expansion: metadata-only informers for the built-in
 	// kinds beyond the typed set, a Helm-release-filtered Secret informer,
