@@ -40,7 +40,6 @@
     "internal/worker/tasks/gitops_sync.go": 926,
     "internal/worker/tasks/project_reconcile.go": 1099,
     "scripts/code-health-inventory.mjs": 812,
-    "scripts/loadtest/main.go": 813,
     "scripts/loadtest/report.go": 977,
     "scripts/openapi-request-fields.mjs": 862,
     "scripts/operation-task-inventory.mjs": 745

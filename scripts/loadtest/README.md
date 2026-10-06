@@ -431,3 +431,7 @@ transport windows, successful workload/coverage, preserved freshness and actual
 repeated execution. A transport-instrumented baseline missing observation
 metadata still fails existing freshness checks; it must never be presented as
 freshness-qualified. The current strict report comparator remains unchanged.
+
+Offline before/after estate reports can be compared without network access using
+the [offline comparison contract](REAL_ESTATE_COMPARISON.md). Results distinguish
+descriptive request rates from optimization eligibility and never qualify a release.
