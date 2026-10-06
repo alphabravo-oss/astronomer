@@ -6,12 +6,14 @@
  * server-side; renders inside a settings page that is already admin-gated.
  */
 
+import { SkeletonText } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
-import { KeyRound, RefreshCw, Loader2 } from "lucide-react";
+import { KeyRound, RefreshCw } from "lucide-react";
 import { getKeyStatus } from "@/lib/api/admin-security";
 import { queryKeys } from "@/lib/query-keys";
 import { formatDate } from "@/lib/utils";
 import { ErrorState } from "@/components/ui/empty-state";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function KeyStatusPanel() {
   const { data, isLoading, isError, refetch, isFetching } = useKeyStatusQuery();
@@ -29,20 +31,21 @@ export function KeyStatusPanel() {
             landed here.
           </p>
         </div>
-        <button
-          type="button"
+        <ActionButton
+          intent="bare"
+          size="none"
           onClick={() => refetch()}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           Refresh
-        </button>
+        </ActionButton>
       </div>
 
       {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading key status…
+        <div role="status" aria-busy="true" className="py-4">
+          <span className="sr-only">Loading key status…</span>
+          <SkeletonText lines={2} />
         </div>
       ) : isError ? (
         <ErrorState
