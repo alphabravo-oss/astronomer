@@ -126,7 +126,7 @@ function LoginPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left panel - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-linear-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex-col justify-between p-12 overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 relative bg-linear-to-br from-hero-from via-hero-via to-hero-from flex-col justify-between p-12 overflow-hidden">
         {/* Background pattern */}
         <div className="absolute inset-0 opacity-3">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -160,7 +160,7 @@ function LoginPage() {
               <span className="text-xl font-semibold text-white tracking-tight leading-tight">
                 {productName}
               </span>
-              {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<span className="text-11 text-zinc-500 leading-tight">
+              <span className="text-11 text-hero-subtle leading-tight">
                 by AlphaBravo
               </span>
             </div>
@@ -168,19 +168,19 @@ function LoginPage() {
         </div>
 
         <div className="relative space-y-4">
-          {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<h1 className="text-4xl font-bold text-white leading-tight">
+          {/* eslint-disable-line no-restricted-syntax -- brand hero heading */}<h1 className="text-4xl font-bold text-white leading-tight">
             Kubernetes Multi-Cluster
             <br />
             <span className="text-gradient">Management Platform</span>
           </h1>
-          {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<p className="text-lg text-zinc-400 max-w-md leading-relaxed">
+          <p className="text-lg text-hero-muted max-w-md leading-relaxed">
             Manage, monitor, and secure your entire Kubernetes infrastructure
             from a single control plane. Built for enterprise scale.
           </p>
         </div>
 
         <div className="relative space-y-4">
-          {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<div className="flex items-center gap-8 text-sm text-zinc-500">
+          <div className="flex items-center gap-8 text-sm text-hero-subtle">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-status-success" />
               Multi-cluster management
@@ -194,13 +194,13 @@ function LoginPage() {
               Enterprise RBAC
             </div>
           </div>
-          {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<p className="text-xs text-zinc-600">
+          <p className="text-xs text-hero-faint">
             Developed by{" "}
             <a
               href="https://alphabravo.io"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-zinc-500 hover:text-zinc-300 transition-colors" /* eslint-disable-line no-restricted-syntax -- marketing hero */
+              className="text-hero-subtle hover:text-hero-hover transition-colors"
             >
               AlphaBravo
             </a>
