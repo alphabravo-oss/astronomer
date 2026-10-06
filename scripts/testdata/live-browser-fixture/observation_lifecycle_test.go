@@ -21,6 +21,8 @@ func TestFixtureSharesNegotiatedObservationComposition(t *testing.T) {
 	body = body[start : start+end]
 	for _, want := range []string{
 		"metadata.NewForConfig(restConfig)",
+		"restConfig = proxy.RESTConfig()",
+		"agentdelivery.NewClusterProbeForConfig(proxy.Client(), restConfig, true)",
 		"subscriber := agent.NewStateSubscriber(proxy.Client(), client, log)",
 		"subscriber.SetMetadataClient(metadataClient)",
 		"subscriber.SetConnectionWatcher(client)",

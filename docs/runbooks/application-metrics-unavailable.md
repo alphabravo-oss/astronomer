@@ -125,3 +125,21 @@ an absent metric, including whether the deployed producer version exports it.
 Dashboard render tests verify selectors and missing-data configuration; they do
 not evaluate PromQL or prove live target discovery. Real PromQL evaluation needs
 Prometheus or promtool; its absence is not a successful evaluation.
+
+### Kubernetes request attribution
+
+Instrumented agent transports expose
+`astronomer_agent_kubernetes_requests_total` and the fixed-schema
+`astronomer_agent_kubernetes_request_instrumentation_info` sentinel. These cover
+the shared agent client family, not every Kubernetes client in the process. The
+[observation architecture](../architecture/delivery-observation-freshness.md#attributable-kubernetes-request-measurements)
+defines the consumer boundaries, allowed labels and exclusions.
+
+Before treating a missing GET/LIST series as zero, verify the installed sentinel,
+member `/healthz.cluster_id`, scrape coverage, process restarts and matching
+producer version. The sentinel alone establishes none of those other conditions.
+Watch events are not HTTP requests; count watch establishments and actual retry
+attempts separately from stream progress. Existing tracked-source request panels
+and the engineering collector do not yet consume this new family. A historical
+baseline requires the same instrumentation backport; absent old-version metrics
+cannot establish a performance improvement.

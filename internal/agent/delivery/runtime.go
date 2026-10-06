@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -463,6 +464,7 @@ func (r *Runtime) sendStatusPayload(send Sender, payload protocol.DeliveryStatus
 }
 
 func (r *Runtime) observe(ctx context.Context, accepted AcceptedAssignment) (*unstructured.Unstructured, *unstructured.Unstructured, error) {
+	ctx = kuberequests.WithConsumer(ctx, kuberequests.DeliveryAssignmentObservation)
 	var sourceIdentity, reconcilerIdentity *ObjectIdentity
 	for index := range accepted.Objects {
 		identity := accepted.Objects[index]

@@ -157,11 +157,11 @@ func ensureLocalFluxUntilReady(ctx context.Context, logger *slog.Logger) error {
 		logger.Info("local Flux bootstrap skipped: server is not running in-cluster")
 		return nil
 	}
-	clientset, err := kubernetes.NewForConfig(restConfig)
+	restConfig, clientset, err := newLocalAgentKubernetesClient(restConfig)
 	if err != nil {
 		return fmt.Errorf("create local Flux readiness client: %w", err)
 	}
-	probe, err := agentdelivery.NewClusterProbe(clientset, clientset.Discovery(), false)
+	probe, err := agentdelivery.NewClusterProbeForConfig(clientset, restConfig, false)
 	if err != nil {
 		return fmt.Errorf("create local Flux readiness probe: %w", err)
 	}
@@ -247,7 +247,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		return nil, nil
 	}
 
-	clientset, err := kubernetes.NewForConfig(restCfg)
+	restCfg, clientset, err := newLocalAgentKubernetesClient(restCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create local agent clientset: %w", err)
 	}
@@ -337,7 +337,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery checkpoint: %w", err)
 		}
-		deliveryProbe, err := agentdelivery.NewClusterProbe(clientset, clientset.Discovery(), true)
+		deliveryProbe, err := agentdelivery.NewClusterProbeForConfig(clientset, restCfg, true)
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery capability probe: %w", err)
 		}

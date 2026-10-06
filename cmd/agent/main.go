@@ -362,7 +362,7 @@ func runConnect(logger *slog.Logger) error {
 			return fmt.Errorf("initialize delivery checkpoint: %w", err)
 		}
 		allowPlatformScope := cfg.PrivilegeProfile == "admin"
-		deliveryProbe, err := agentdelivery.NewClusterProbe(client, client.Discovery(), allowPlatformScope)
+		deliveryProbe, err := agentdelivery.NewClusterProbeForConfig(client, restConfig, allowPlatformScope)
 		if err != nil {
 			return fmt.Errorf("initialize delivery capability probe: %w", err)
 		}

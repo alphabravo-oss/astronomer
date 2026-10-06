@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 	"github.com/alphabravocompany/astronomer-go/internal/agent/observation"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -116,11 +117,11 @@ func NewAssignmentCache(client dynamic.Interface, opts AssignmentCacheOptions) (
 		lw := &assignmentListWatch{&cache.ListWatch{
 			ListWithContextFunc: func(ctx context.Context, o metav1.ListOptions) (runtime.Object, error) {
 				o.LabelSelector = ManagedByLabel + "=" + ManagedByValue
-				return tracker.List(ctx, o, func(ctx context.Context, o metav1.ListOptions) (runtime.Object, error) { return resource.List(ctx, o) })
+				return tracker.List(kuberequests.WithConsumer(ctx, kuberequests.DeliveryAssignmentObservation), o, func(ctx context.Context, o metav1.ListOptions) (runtime.Object, error) { return resource.List(ctx, o) })
 			},
 			WatchFuncWithContext: func(ctx context.Context, o metav1.ListOptions) (watch.Interface, error) {
 				o.LabelSelector = ManagedByLabel + "=" + ManagedByValue
-				return tracker.Watch(ctx, o, resource.Watch)
+				return tracker.Watch(kuberequests.WithConsumer(ctx, kuberequests.DeliveryAssignmentObservation), o, resource.Watch)
 			},
 		}}
 		informer := cache.NewSharedIndexInformer(lw, &unstructured.Unstructured{}, 0, cache.Indexers{})

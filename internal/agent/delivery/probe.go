@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
+	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -50,6 +51,7 @@ func NewClusterProbe(client kubernetes.Interface, discoveryClient discovery.Disc
 }
 
 func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryControllerInventory, Capabilities, error) {
+	ctx = kuberequests.WithConsumer(ctx, kuberequests.DeliveryInventory)
 	data := p.readDiscovery(ctx, false)
 	inventory, capabilities, err := evaluateControllers(data, func(name string) (*appsv1.Deployment, error) {
 		return p.client.AppsV1().Deployments(DeliverySystemNamespace).Get(ctx, name, metav1.GetOptions{})

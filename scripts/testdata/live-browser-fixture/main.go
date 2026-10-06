@@ -148,6 +148,7 @@ func runAgent() error {
 	client.RegisterHandler(protocol.MsgK8sRequest, fixture.handle)
 	client.RegisterHandler(protocol.MsgDecommission, fixture.decommission)
 
+	restConfig = proxy.RESTConfig()
 	deliveryDynamic, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return fmt.Errorf("initialize delivery dynamic client: %w", err)
@@ -163,7 +164,7 @@ func runAgent() error {
 	if err != nil {
 		return err
 	}
-	deliveryProbe, err := agentdelivery.NewClusterProbe(proxy.Client(), proxy.Client().Discovery(), true)
+	deliveryProbe, err := agentdelivery.NewClusterProbeForConfig(proxy.Client(), restConfig, true)
 	if err != nil {
 		return err
 	}

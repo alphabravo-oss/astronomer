@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 	"github.com/alphabravocompany/astronomer-go/internal/agent/observation"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -63,10 +64,10 @@ func (s *StateSubscriber) registerObservations(factory informers.SharedInformerF
 		inf := factory.InformerFor(resource.object, func(_ kubernetes.Interface, resync time.Duration) cache.SharedIndexInformer {
 			lw := &trackedListWatch{&cache.ListWatch{
 				ListWithContextFunc: func(ctx context.Context, o metav1.ListOptions) (runtime.Object, error) {
-					return tracker.List(ctx, o, resource.list)
+					return tracker.List(kuberequests.WithConsumer(ctx, kuberequests.SharedObservation), o, resource.list)
 				},
 				WatchFuncWithContext: func(ctx context.Context, o metav1.ListOptions) (watch.Interface, error) {
-					return tracker.Watch(ctx, o, resource.watch)
+					return tracker.Watch(kuberequests.WithConsumer(ctx, kuberequests.SharedObservation), o, resource.watch)
 				},
 			}}
 			informer := cache.NewSharedIndexInformer(lw, resource.object, resync, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})

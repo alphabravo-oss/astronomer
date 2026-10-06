@@ -268,3 +268,60 @@ must not be replaced with `updated_at`, event time or the compatibility assessme
 field. Reported-phase filters/counts remain reported-state views, not claims of
 fresh source health. UI expiry/presentation work is tracked separately from this
 backend integration.
+
+### Attributable Kubernetes request measurements
+
+The agent shared Kubernetes client family now installs a copied-config transport
+wrapper at both K8sProxy constructors and embedded-agent client initialization.
+Subsequent clients built from the returned RESTConfig inherit it, including the
+browser member fixture. Existing authentication/token-file rotation, prior
+transport-wrapper order and rate settings are retained. A dedicated discovery
+client supplies the inventory consumer for legacy methods that discard caller
+context; it reuses the typed client's discovery limiter and HTTP timeout policy.
+No additional typed/dynamic clientset, informer or metrics endpoint is introduced.
+
+`astronomer_agent_kubernetes_requests_total` has the existing instance label plus
+fixed `consumer`, `operation`, `resource`, and `outcome` labels:
+
+- Consumers: `shared_observation`, `delivery_inventory`,
+  `delivery_assignment_observation`, `other`.
+- Operations: `list`, `get`, `watch`, `discovery`, `other`.
+- Resources: the fixed API-group/resource allowlist in
+  `internal/agent/kuberequests/classify.go`; unknown resources map to `other`.
+- Outcomes: `1xx` through `5xx`, `transport_error`, or `other`.
+
+Counts describe observable RoundTrip attempts, including client-go retries,
+pagination requests and retries made by pre-existing transport wrappers. Watch
+establishment counts once; watch frames, TCP connection attempts and retries
+internal to Go's underlying http.Transport are not additional counts. Nested
+instrumentation on copied configs records only the innermost attempt, using
+request-local spans without mutating the caller's request or context. Mutations,
+subresources and unknown paths remain `other`; no namespace, object name, URL,
+query, resource version or credential becomes a label.
+
+Consumer tags are applied inside the six typed informer LIST/WATCH callbacks and
+five assignment-cache callbacks. This is necessary because factory.Start does
+not propagate context values. Direct legacy assignment reads are tagged only in
+Runtime.observe; other Executor.Get callers remain `other`. Both direct and
+shared controller/system probes tag their own reads and discovery/dynamic work.
+Health, checkpoint, mutation and other shared-client traffic is counted but remains
+`other` unless it enters an explicitly tagged observation callback. Other process
+clients, external tools, independent Helm/client construction and upgraded stream
+paths that bypass these transports are outside the stated client-family coverage.
+
+`astronomer_agent_kubernetes_request_instrumentation_info{schema="v1"}=1` appears
+when an instrumented transport is installed, with the existing instance label.
+It proves installed transport-family instrumentation, not all-process coverage,
+member identity, completeness across process restarts, or successful requests.
+Missing request series alone are not proof of zero activity. Future collectors
+must verify this schema sentinel, metric-target/member identity, sample coverage,
+process start/reset behavior and candidate provenance before interpreting an
+absent bounded counter combination. Source freshness and completed work remain
+independent acceptance conditions.
+
+Historical uninstrumented baselines cannot be compared to these counters as if
+they reported zero calls. Backport the same transport instrumentation, consumer
+boundaries and label schema to the historical baseline, then run matched workload
+windows. Keep delivery-induced reads, shared-store maintenance, other traffic and
+repair/retry load separately attributable. This instrumentation increment does
+not change collector parsers or dashboard queries and proves no live reduction.

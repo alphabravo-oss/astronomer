@@ -12,6 +12,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 	"github.com/alphabravocompany/astronomer-go/internal/agent/observation"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -31,6 +32,7 @@ func (p *ClusterProbe) WithObservationSource(source observation.Source) *Cluster
 	return p
 }
 func (p *ClusterProbe) InspectObserved(ctx context.Context) (protocol.DeliveryControllerInventory, Capabilities, error) {
+	ctx = kuberequests.WithConsumer(ctx, kuberequests.DeliveryInventory)
 	if p.observations == nil {
 		return protocol.DeliveryControllerInventory{}, Capabilities{}, fmt.Errorf("shared observation source is required")
 	}
