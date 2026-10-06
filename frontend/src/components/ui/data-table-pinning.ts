@@ -183,7 +183,7 @@ export function pinnedPlacements(
 // Style helpers shared by the semantic table and the virtualized grid
 // ---------------------------------------------------------------------------
 
-/** Inline sizing for a `<th>`/`<td>` in the semantic table. */
+/** Inline sizing for a header or data cell in the semantic table. */
 export function tableCellStyle(
   layout: ResolvedColumnLayout,
   options: { resizedWidth?: number; pinned?: PinnedPlacement },

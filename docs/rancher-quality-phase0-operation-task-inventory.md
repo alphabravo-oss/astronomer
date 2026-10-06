@@ -9,8 +9,8 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 ## Scan Scope
 
 - Worker Go files scanned: 103
-- Handler Go files scanned: 344
-- Production source files scanned: 482
+- Handler Go files scanned: 345
+- Production source files scanned: 483
 - Task constants resolved: 160
 - Worker handler registrations: 91
 - Periodic schedules: 62

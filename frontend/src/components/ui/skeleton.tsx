@@ -1,4 +1,5 @@
 import type { HTMLAttributes } from "react";
+import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 // Decorative placeholder; the surrounding region owns aria-busy/aria-live.
@@ -56,13 +57,13 @@ export function SkeletonTableRows({
   return (
     <>
       {Array.from({ length: rows }, (_, r) => (
-        <tr key={r} className="border-b border-border last:border-0">
+        <TableRow key={r} className="border-b border-border last:border-0">
           {Array.from({ length: columns }, (_, c) => (
-            <td key={c} className="px-4 py-3">
+            <TableCell key={c} className="px-4 py-3">
               <Skeleton className={cn("h-3", c === 0 ? "w-32" : "w-16")} />
-            </td>
+            </TableCell>
           ))}
-        </tr>
+        </TableRow>
       ))}
     </>
   );

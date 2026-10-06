@@ -3,16 +3,9 @@
  * URL carries. Pure helpers; no React.
  */
 import type { ColumnPinningState } from "@/components/ui/data-table-layout";
+import type { OpenAPIComponents } from "@/types/openapi.generated";
 
-export interface TableViewState {
-  v?: number;
-  search?: string;
-  filters?: Record<string, string[]>;
-  sort?: Array<{ id: string; desc: boolean }>;
-  hidden?: string[];
-  order?: string[];
-  pinning?: ColumnPinningState;
-}
+export type TableViewState = OpenAPIComponents["schemas"]["TableViewState"];
 
 export const VIEW_STATE_VERSION = 1;
 

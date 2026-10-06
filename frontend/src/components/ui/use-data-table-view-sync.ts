@@ -138,7 +138,14 @@ export function useDataTableViewSync<T>({
         persistVisibility(nextVisibility);
       }
       setColumnOrder(state.order ?? []);
-      setUserPinning(state.pinning ?? null);
+      setUserPinning(
+        state.pinning
+          ? {
+              start: state.pinning.start ?? [],
+              end: state.pinning.end ?? [],
+            }
+          : null,
+      );
       table.setPageIndex(0);
     },
     [
