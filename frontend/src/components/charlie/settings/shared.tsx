@@ -6,7 +6,7 @@ import type { CharlieOnboardingInput } from "@/lib/api/charlie-admin";
 export const button =
   "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors motion-reduce:transition-none hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50";
 export const field =
-  "h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring";
+  "h-(--control-h) w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring";
 
 export function Section({
   title,
@@ -18,7 +18,7 @@ export function Section({
   children?: ReactNode;
 }) {
   return (
-    <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+    <section className="space-y-4 rounded-xl border border-border bg-card p-(--card-p)">
       <div>
         <h2 className="font-semibold">{title}</h2>
         {description && (

@@ -12,14 +12,17 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Plus, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { formatRelativeTime } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
-import { useDeleteGroupMapping, useGroupMappings } from "@/components/settings/hooks";
+import {
+  useDeleteGroupMapping,
+  useGroupMappings,
+} from "@/components/settings/hooks";
 import type { GroupMappingView } from "@/lib/api/settings";
 import { BareButton } from "@/components/form/bare-button";
 
@@ -161,12 +164,7 @@ function GroupMappingsPage() {
           Back to Settings
         </RouterLink>
         <PageHeader
-          title={
-            <span className="inline-flex items-center gap-2">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              SSO group mappings
-            </span>
-          }
+          title="SSO group mappings"
           description="Bind an SSO group to a platform role, optionally scoped to one cluster or project."
         />
         <GroupMappingsTable />

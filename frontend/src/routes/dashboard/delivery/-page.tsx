@@ -534,7 +534,6 @@ function ProjectDeliveryOverview({
     >
       <PageShell>
         <PageHeader
-          eyebrow="Continuous Delivery"
           title="Delivery overview"
           description="Astronomer-owned intent and rollout policy with local, pull-based convergence on managed clusters."
         />

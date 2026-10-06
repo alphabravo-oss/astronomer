@@ -11,7 +11,7 @@ import {
   KindBadge,
   MastheadDetails,
 } from "@/components/resources/resource-masthead-details";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { TabStrip } from "@/components/ui/tabs";
 import { k8sResourcePath } from "@/lib/k8s-paths";
 import { usePermissionDecision } from "@/lib/permission-hooks";
@@ -37,7 +37,9 @@ const TABS = [
 
 function NodeDetailPage() {
   const params = Route.useParams();
-  return <NodeDetailPageBody clusterId={params.id} nodeName={params.nodeName} />;
+  return (
+    <NodeDetailPageBody clusterId={params.id} nodeName={params.nodeName} />
+  );
 }
 
 // Split from NodeDetailPage so tests can render the real page body without
@@ -109,7 +111,7 @@ export function NodeDetailPageBody({
   }
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <p className="sr-only" role="status" aria-live="polite">
         {actions.nodeOperation.isPending
           ? `Node operation ${actions.nodeOperation.operationState.phase}`
@@ -234,7 +236,7 @@ export function NodeDetailPageBody({
         canUpdate={nodeUpdateDecision.allowed}
         blockedReason={nodeUpdateBlockedReason}
       />
-    </div>
+    </PageShell>
   );
 }
 

@@ -57,7 +57,7 @@ function ProjectMembersPage({ projectId }: { projectId: string }) {
   return (
     <section
       id={PROJECT_MEMBERS_CARD_ID}
-      className="rounded-xl border border-border bg-card p-5 space-y-4"
+      className="rounded-xl border border-border bg-card p-(--card-p) space-y-4"
     >
       <header>
         <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">

@@ -118,7 +118,7 @@ export function ExtForm({ extensionName, spec, context }: ExtFormProps) {
               id={`ext-${input.name}`}
               value={String(values[input.name] ?? "")}
               onChange={(e) => set(input.name, e.target.value)}
-              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              className="h-(--control-h) w-full rounded-lg border border-border bg-background px-3 text-sm"
             >
               {(input.options ?? []).map((opt) => (
                 <option key={opt} value={opt}>
@@ -141,7 +141,7 @@ export function ExtForm({ extensionName, spec, context }: ExtFormProps) {
               value={String(values[input.name] ?? "")}
               maxLength={input.maxLength}
               onChange={(e) => set(input.name, e.target.value)}
-              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              className="h-(--control-h) w-full rounded-lg border border-border bg-background px-3 text-sm"
             />
           )}
         </div>
@@ -161,7 +161,7 @@ export function ExtForm({ extensionName, spec, context }: ExtFormProps) {
       <BareButton
         type="submit"
         disabled={status === "submitting" || missing.length > 0}
-        className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex h-(--control-h) items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {status === "submitting" ? "Submitting…" : spec.submitLabel || "Submit"}
       </BareButton>

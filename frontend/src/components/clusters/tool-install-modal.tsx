@@ -192,7 +192,7 @@ export function ToolInstallModal({
               onClick={() =>
                 mode === "form" ? switchToYaml() : setMode("form")
               }
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-xs font-medium
+              className="inline-flex items-center gap-1.5 h-(--control-h) px-3 rounded-lg border border-border text-xs font-medium
                 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
               {mode === "form" ? (
@@ -247,7 +247,7 @@ export function ToolInstallModal({
       </div>
 
       {mode === "form" ? (
-        <div className="space-y-6">
+        <div className="space-y-(--gap-section)">
           <p className="text-xs text-muted-foreground">
             Configure the common settings below, or switch to{" "}
             <span className="font-medium">Edit YAML</span> for full control.

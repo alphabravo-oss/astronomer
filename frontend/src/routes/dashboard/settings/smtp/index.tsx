@@ -398,7 +398,7 @@ function SmtpSummary({
         </div>
         <BareButton
           onClick={onEdit}
-          className="inline-flex shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+          className="inline-flex shrink-0 items-center gap-1.5 h-(--control-h) px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
         >
           {configured ? (
             <Pencil className="h-3.5 w-3.5" />
@@ -459,7 +459,7 @@ function SmtpPageInner() {
       </QueryStates>
     );
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <SmtpSummary config={initial} onEdit={() => setEditing(true)} />
       <EmailsTable />
       {editing && (
@@ -490,12 +490,7 @@ function SmtpSettingsPage() {
         </RouterLink>
         <PageHeader
           eyebrow="Settings · Email"
-          title={
-            <span className="inline-flex items-center gap-2">
-              <Mail className="h-5 w-5 text-muted-foreground" />
-              Email & SMTP
-            </span>
-          }
+          title="Email & SMTP"
           description="Outbound mail server, test-send, and audit log of recent emails."
         />
         <SmtpPageInner />

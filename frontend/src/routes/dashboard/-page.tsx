@@ -204,7 +204,7 @@ export function DashboardPage() {
       </section>
 
       {/* Two-column: Recent Activity (wider) + Platform health (signals) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-(--gap-section)">
         <section className="lg:col-span-2 space-y-3">
           <h2 className="text-lg font-medium text-foreground">
             Recent Activity

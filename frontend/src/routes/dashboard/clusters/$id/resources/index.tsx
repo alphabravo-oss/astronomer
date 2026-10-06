@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader, PageShell } from "@/components/ui/page";
 /**
  * Cluster Resources tab — sprint 069 CRD-mirror v2 read-only view.
  *
@@ -570,7 +570,7 @@ function ClusterResourcesPage() {
   });
 
   return (
-    <div className="p-6">
+    <PageShell>
       <PageHeader
         title="Cluster resources"
         description="A read-only view of the policy / routing / quota objects installed in this cluster. Data is mirrored from the cluster agent every ~10 minutes; rows you delete in the cluster disappear here within roughly an hour."
@@ -642,7 +642,7 @@ function ClusterResourcesPage() {
       >
         <LimitRangesTable rows={limitRangesQ.data ?? []} />
       </Section>
-    </div>
+    </PageShell>
   );
 }
 

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
@@ -16,46 +16,67 @@ export function PageShell({
   );
 }
 
+/**
+ * Layout routes (e.g. Delivery) can publish a scope line here; every
+ * `PageHeader` below them that does not set its own `eyebrow` shows it, so the
+ * scope notice lives in the header's eyebrow slot instead of floating above it.
+ */
+const PageEyebrowContext = createContext<ReactNode>(null);
+export const PageEyebrowProvider = PageEyebrowContext.Provider;
+
+/**
+ * Fixed slots, top to bottom: `eyebrow` (scope line), `title` (+ inline
+ * `status`), `description` (one sentence), `tabs` (route navigation: a `<nav>`
+ * of links, never role=tablist). `actions` sit on the right of the title block.
+ * No page-level icon next to the title: icons belong to nav, not headings.
+ */
 export function PageHeader({
   title,
   description,
   eyebrow,
+  status,
   actions,
+  tabs,
   className,
 }: {
   title: ReactNode;
   description?: ReactNode;
   eyebrow?: ReactNode;
+  status?: ReactNode;
   actions?: ReactNode;
+  tabs?: ReactNode;
   className?: string;
 }) {
+  const scopeEyebrow = useContext(PageEyebrowContext);
+  const eyebrowContent = eyebrow ?? scopeEyebrow;
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
-        className,
-      )}
-    >
-      <div className="min-w-0">
-        {eyebrow ? (
-          <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {eyebrow}
+    <div className={cn("space-y-3", className)}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          {eyebrowContent ? (
+            <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {eyebrowContent}
+            </div>
+          ) : null}
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h1 className="truncate text-page-title font-semibold tracking-tight text-foreground">
+              {title}
+            </h1>
+            {status}
+          </div>
+          {description ? (
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              {description}
+            </p>
+          ) : null}
+        </div>
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {actions}
           </div>
         ) : null}
-        <h1 className="truncate text-page-title font-semibold tracking-tight text-foreground">
-          {title}
-        </h1>
-        {description ? (
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            {description}
-          </p>
-        ) : null}
       </div>
-      {actions ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {actions}
-        </div>
-      ) : null}
+      {tabs ? <div className="border-b border-border">{tabs}</div> : null}
     </div>
   );
 }

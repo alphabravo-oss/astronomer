@@ -41,7 +41,7 @@ function ClusterAlertingPage() {
           <div className="flex items-center gap-2">
             <RouterLink
               to="/dashboard/alerting"
-              className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+              className="inline-flex h-(--control-h) items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
             >
               Fleet inbox
             </RouterLink>

@@ -281,7 +281,7 @@ function DexSettingsPage() {
                         { id: "", name: "", redirectURIs: [], public: false },
                       ])
                     }
-                    className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-dashed border-border text-sm
+                    className="inline-flex items-center gap-2 h-(--control-h) px-3 rounded-lg border border-dashed border-border text-sm
                   text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -351,7 +351,7 @@ function DexSummary({
 }) {
   const configured = !!values.issuer.trim();
   return (
-    <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+    <div className="rounded-xl border border-border bg-card p-(--card-p) space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-foreground">
@@ -363,7 +363,7 @@ function DexSummary({
         </div>
         <BareButton
           onClick={onEdit}
-          className="inline-flex shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+          className="inline-flex shrink-0 items-center gap-1.5 h-(--control-h) px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
         >
           {configured ? (
             <Pencil className="h-3.5 w-3.5" />

@@ -12,7 +12,7 @@ import {
 import type { K8sObject } from "@/components/resources/resource-detail-model";
 import { supportsRolloutHistory } from "@/components/resources/rollout-history";
 import { PermissionState } from "@/components/ui/empty-state";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import {
   KindBadge,
   MastheadDetails,
@@ -209,7 +209,7 @@ export function ResourceDetail({
     collectionHref ?? `/dashboard/clusters/${clusterId}/${resourceType}`;
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       {isPod && origin && (
         <Link to={origin} className="text-sm text-primary hover:underline">
           Back to workload
@@ -293,7 +293,7 @@ export function ResourceDetail({
         yamlEdit={yamlEdit}
         onRetry={() => void resourceQuery.refetch()}
       />
-    </div>
+    </PageShell>
   );
 }
 

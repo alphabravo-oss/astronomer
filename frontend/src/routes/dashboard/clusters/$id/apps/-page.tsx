@@ -36,7 +36,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
-import { Package, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Link as RouterLink } from "@tanstack/react-router";
 
 import { queryKeys } from "@/lib/query-keys";
@@ -50,7 +50,8 @@ import {
   toastPermissionDenied,
 } from "@/lib/permission-hooks";
 import { ActionButton } from "@/components/ui/action-button";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader, PageShell } from "@/components/ui/page";
+import { InfoCallout } from "@/components/ui/info-callout";
 import { TabStrip } from "@/components/ui/tabs";
 import { useTabParam } from "@/lib/use-tab-param";
 import {
@@ -262,18 +263,9 @@ export function ClusterAppsPage() {
   const failedCount = countFailedReleases(installed.data?.data ?? []);
 
   return (
-    <div className="space-y-6 p-4">
-      <p className="text-xs text-muted-foreground">
-        Installed releases are cluster-wide. Project visibility controls catalog
-        choices; namespace selection does not filter installed releases or
-        repositories.
-      </p>
+    <PageShell>
       <PageHeader
-        title={
-          <span className="inline-flex items-center gap-2">
-            <Package className="h-6 w-6" /> Apps
-          </span>
-        }
+        title="Apps"
         description={
           <AppsDescription clusterId={clusterId} name={cluster?.displayName} />
         }
@@ -291,6 +283,12 @@ export function ClusterAppsPage() {
           </>
         }
       />
+
+      <InfoCallout>
+        Installed releases are cluster-wide. Project visibility controls catalog
+        choices; namespace selection does not filter installed releases or
+        repositories.
+      </InfoCallout>
 
       <TabStrip
         tabs={SECTIONS.map((s) => ({
@@ -374,7 +372,7 @@ export function ClusterAppsPage() {
         deleteFailedPending={deleteFailed.isPending}
         onConfirmDeleteFailed={() => deleteFailed.mutate()}
       />
-    </div>
+    </PageShell>
   );
 }
 

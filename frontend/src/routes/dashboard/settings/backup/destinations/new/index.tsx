@@ -6,7 +6,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useId, useState } from "react";
 import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
 import { Card } from "@/components/ui/card";
@@ -73,7 +73,7 @@ function NewDestinationForm() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <Card radius="xl" padding="lg" className="space-y-4">
         <LabeledField label="Name">
           {(id) => (
@@ -154,7 +154,10 @@ function NewDestinationForm() {
             )}
           </LabeledField>
         </div>
-        <LabeledField label="Cron schedule" helper="UTC. Default is 03:00 every day.">
+        <LabeledField
+          label="Cron schedule"
+          helper="UTC. Default is 03:00 every day."
+        >
           {(id) => (
             <Input
               id={id}
@@ -218,9 +221,7 @@ function NewDestinationForm() {
 
       <div className="flex items-center justify-end gap-2">
         <ActionButton
-          onClick={() =>
-            void navigate({ to: "/dashboard/settings/backup" })
-          }
+          onClick={() => void navigate({ to: "/dashboard/settings/backup" })}
         >
           Cancel
         </ActionButton>
@@ -256,12 +257,7 @@ function NewDestinationPage() {
         </RouterLink>
         <PageHeader
           eyebrow="Settings · Backup · New"
-          title={
-            <span className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-muted-foreground" />
-              Add S3 destination
-            </span>
-          }
+          title="Add S3 destination"
           description="Credentials are stored encrypted. The dump CronJob starts as soon as you save."
         />
         <NewDestinationForm />

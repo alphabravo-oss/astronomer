@@ -9,7 +9,7 @@ export function GeneralTab({ onEdit }: { onEdit: () => void }) {
     useGeneralSettings();
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-(--gap-section)">
       {generalLoading ? (
         <LoadingSkeleton label="Loading" heading />
       ) : (
