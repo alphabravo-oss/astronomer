@@ -51,6 +51,7 @@ import type {
 } from "@/lib/api/settings";
 import { MANAGEMENT_BACKUP_SECRET_SENTINEL } from "@/lib/api/settings";
 import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 function statusToVariant(status: BackupDrillResultView["status"]) {
   switch (status) {
@@ -181,10 +182,11 @@ export function DestinationsSection({
             {
               key: "name",
               header: "Name",
+              kind: "name",
               accessor: (row) => (
-                <div>
-                  <p className="text-sm text-foreground">{row.name}</p>
-                  <p className="text-2xs text-muted-foreground font-mono">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-foreground">{row.name}</p>
+                  <p className="truncate font-mono text-2xs text-muted-foreground">
                     {row.bucket}
                   </p>
                 </div>
@@ -193,6 +195,9 @@ export function DestinationsSection({
             {
               key: "schedule",
               header: "Schedule",
+              kind: "text",
+              size: 150,
+              minSize: 120,
               accessor: (row) => (
                 <span className="text-xs text-muted-foreground">
                   {row.schedule ? cronToHuman(row.schedule) : "—"}
@@ -202,6 +207,8 @@ export function DestinationsSection({
             {
               key: "status",
               header: "Status",
+              kind: "status",
+              size: 104,
               accessor: (row) => (
                 <StatusBadge
                   status={
@@ -235,19 +242,25 @@ export function DestinationsSection({
             {
               key: "last",
               header: "Last job",
+              kind: "age",
+              size: 105,
               accessor: (row) => (
                 <span className="text-xs text-muted-foreground">
-                  {row.lastJob?.completionTime
-                    ? formatRelativeTime(row.lastJob.completionTime)
-                    : row.lastJob?.startTime
-                      ? formatRelativeTime(row.lastJob.startTime)
-                      : "never"}
+                  <RelativeTime
+                    value={
+                      row.lastJob?.completionTime ?? row.lastJob?.startTime
+                    }
+                    fallback="never"
+                  />
                 </span>
               ),
             },
             {
               key: "actions",
               header: "",
+              kind: "actions",
+              size: 112,
+              maxSize: 112,
               sortable: false,
               accessor: (row) =>
                 row.readOnly ? (
@@ -258,29 +271,29 @@ export function DestinationsSection({
                   <div className="flex items-center justify-end gap-1">
                     <ActionButton
                       intent="ghost"
-                      size="sm"
+                      size="icon"
+                      aria-label="Run"
+                      tooltip="Run backup now"
                       icon={<Play className="h-3.5 w-3.5" />}
                       onClick={() => run.mutate(row.id)}
                       disabled={run.isPending || !row.enabled}
-                    >
-                      Run
-                    </ActionButton>
+                    />
                     <ActionButton
                       intent="ghost"
-                      size="sm"
+                      size="icon"
+                      aria-label="Edit"
+                      tooltip="Edit destination"
                       icon={<Pencil className="h-3.5 w-3.5" />}
                       onClick={() => setEditor(row)}
-                    >
-                      Edit
-                    </ActionButton>
+                    />
                     <ActionButton
                       intent="ghost"
-                      size="sm"
+                      size="icon"
+                      aria-label="Remove"
+                      tooltip="Remove destination"
                       icon={<Trash2 className="h-3.5 w-3.5" />}
                       onClick={() => setRemove(row)}
-                    >
-                      Remove
-                    </ActionButton>
+                    />
                   </div>
                 ),
             },
@@ -650,15 +663,19 @@ function HistoryTable() {
     {
       key: "startedAt",
       header: "Started",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {formatRelativeTime(row.startedAt)}
+          <RelativeTime value={row.startedAt} />
         </span>
       ),
     },
     {
       key: "status",
       header: "Status",
+      kind: "status",
+      size: 104,
       accessor: (row) => (
         <StatusBadge
           status={statusToVariant(row.status)}
@@ -670,6 +687,8 @@ function HistoryTable() {
     {
       key: "schemaVersion",
       header: "Schema",
+      kind: "version",
+      size: 98,
       accessor: (row) => (
         <span className="text-xs font-mono text-muted-foreground">
           {row.schemaVersion != null ? row.schemaVersion : "—"}
@@ -679,7 +698,8 @@ function HistoryTable() {
     {
       key: "duration",
       header: "Duration",
-      align: "right",
+      kind: "count",
+      size: 112,
       accessor: (row) => (
         <span className="text-xs font-mono tabular-nums text-muted-foreground">
           {durationLabel(row.startedAt, row.finishedAt)}
@@ -689,9 +709,12 @@ function HistoryTable() {
     {
       key: "error",
       header: "Error",
+      kind: "text",
+      grow: true,
+      minSize: 160,
       sortable: false,
       accessor: (row) => (
-        <span className="text-xs text-status-error truncate max-w-65 block">
+        <span className="text-xs text-status-error">
           {row.errorMessage || "—"}
         </span>
       ),
@@ -773,12 +796,7 @@ export function AstronomerBackupPage() {
         </RouterLink>
         <PageHeader
           eyebrow="Settings · Backup"
-          title={
-            <span className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-muted-foreground" />
-              Astronomer backup
-            </span>
-          }
+          title="Astronomer backup"
           description="Nightly dump of Astronomer's own database to one or more S3 buckets. Workload snapshots live on each cluster after Velero is installed there."
         />
         <QueryStates

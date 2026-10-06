@@ -1,10 +1,8 @@
-
 import { Link as RouterLink } from "@tanstack/react-router";
 import type { ElementType, ReactNode } from "react";
 import {
   AlertCircle,
   Clock3,
-  Loader2,
   Lock,
   RefreshCw,
   TriangleAlert,
@@ -13,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ActionButton } from "@/components/ui/action-button";
+import { Skeleton, SkeletonText } from "@/components/ui/skeleton";
 
 type StateTone = "neutral" | "danger" | "warning" | "info";
 
@@ -66,6 +65,8 @@ interface StatePanelProps {
   className?: string;
   iconClassName?: string;
   role?: string;
+  /** Replace the icon with a skeleton block and mark the panel aria-busy (retry/progress states). */
+  busy?: boolean;
 }
 
 const toneClass: Record<StateTone, string> = {
@@ -88,18 +89,22 @@ export function StatePanel({
   className,
   iconClassName,
   role,
+  busy = false,
 }: StatePanelProps) {
   const hasAction = !!actionLabel && (!!actionHref || !!onAction);
 
   return (
     <div
       role={role}
+      aria-busy={busy || undefined}
       className={cn(
         "flex min-w-0 flex-col items-center justify-center space-y-3 py-16 text-center",
         className,
       )}
     >
-      {Icon && (
+      {busy ? (
+        <Skeleton className="h-12 w-12 rounded-lg" />
+      ) : Icon ? (
         <div
           className={cn(
             "flex h-12 w-12 items-center justify-center rounded-lg",
@@ -108,9 +113,11 @@ export function StatePanel({
         >
           <Icon className={cn("h-6 w-6", iconClassName)} />
         </div>
-      )}
+      ) : null}
       <div className="w-full min-w-0 space-y-1 px-4">
-        <p className="break-words text-base font-medium text-foreground">{title}</p>
+        <p className="break-words text-base font-medium text-foreground">
+          {title}
+        </p>
         {description && (
           <p className="mx-auto max-w-md break-words text-sm text-muted-foreground">
             {description}
@@ -164,6 +171,11 @@ export function EmptyState(props: EmptyStateProps) {
   );
 }
 
+/**
+ * Page-level loading: a skeleton block, never a spinner (spinners belong inside
+ * buttons). `title`/`description` stay available to assistive tech through
+ * sr-only text on a busy `role="status"` region.
+ */
 export function LoadingState({
   title = "Loading",
   description,
@@ -174,14 +186,20 @@ export function LoadingState({
   className?: string;
 }) {
   return (
-    <StatePanel
-      icon={Loader2}
-      title={title}
-      description={description}
-      tone="info"
-      iconClassName="animate-spin"
-      className={className}
-    />
+    <div
+      role="status"
+      aria-busy="true"
+      className={cn(
+        "mx-auto flex w-full max-w-md min-w-0 flex-col items-center space-y-3 py-16",
+        className,
+      )}
+    >
+      <Skeleton className="h-12 w-12 rounded-lg" />
+      <Skeleton className="h-4 w-40" />
+      <SkeletonText lines={2} className="w-full max-w-xs" />
+      <span className="sr-only">{title}</span>
+      {description ? <span className="sr-only">{description}</span> : null}
+    </div>
   );
 }
 
@@ -333,11 +351,10 @@ export function RetryingState({
 }) {
   return (
     <StatePanel
-      icon={Loader2}
       title={title}
       description={description}
       tone="info"
-      iconClassName="animate-spin"
+      busy
       className={className}
       role="status"
     />

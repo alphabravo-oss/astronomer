@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/data-table-empty-state";
 import {
   SELECT_COLUMN_WIDTH,
+  minTableWidth,
   tableCellStyle,
   type PinnedPlacement,
   type ResolvedColumnLayout,
@@ -102,6 +103,10 @@ export function SemanticDataTable<T extends RowData>({
   // Sticky cells only need an opaque background when the table can scroll
   // sideways; in fit layout they keep the row's own hover/selected tint.
   const scrolls = layout === "scroll";
+  const widthFloor = minTableWidth(
+    activeColumns.map((col) => layouts.get(col.key)),
+    (selectable ? 40 : 0) + (expandable ? 40 : 0),
+  );
   const stickyBg = scrolls ? "bg-background" : undefined;
   const pinnedClasses = (
     placement: PinnedPlacement | undefined,
@@ -153,7 +158,9 @@ export function SemanticDataTable<T extends RowData>({
       <div
         className={cn(
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          layout === "scroll" ? "overflow-x-auto" : "overflow-x-hidden",
+          scrolls || widthFloor !== undefined
+            ? "overflow-x-auto"
+            : "overflow-x-hidden",
         )}
         role="region"
         aria-label={
@@ -162,7 +169,11 @@ export function SemanticDataTable<T extends RowData>({
         tabIndex={0}
         data-table-region=""
       >
-        <Table layout={layout} className="w-full text-sm">
+        <Table
+          layout={layout}
+          className="w-full text-sm"
+          style={widthFloor ? { minWidth: widthFloor } : undefined}
+        >
           <TableHeader>
             <TableRow className="border-b border-border bg-muted/50">
               {selectable && (

@@ -50,7 +50,7 @@ import { BARE_BUTTON } from "@/lib/bare-button";
 export function ClusterSnapshotsPage() {
   const { id } = useParams({ from: "/dashboard/clusters/$id" });
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <ClusterVeleroSnapshotsPage />
       <SnapshotRestoreHistory clusterId={id} />
     </div>

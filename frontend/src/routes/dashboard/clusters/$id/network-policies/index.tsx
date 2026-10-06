@@ -25,7 +25,7 @@ import { QueryStates } from "@/components/ui/query-states";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 import { Plus, Trash2, RefreshCw, Loader2 } from "lucide-react";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -151,7 +151,7 @@ function ClusterNetworkPoliciesPage() {
     return <QueryStates query={templatesQuery}>{null}</QueryStates>;
 
   return (
-    <div className="space-y-4">
+    <PageShell>
       <ResourceMasthead
         backTo={`/dashboard/clusters/${clusterID}`}
         backLabel="Back to cluster"
@@ -326,7 +326,7 @@ function ClusterNetworkPoliciesPage() {
             : undefined
         }
       />
-    </div>
+    </PageShell>
   );
 }
 

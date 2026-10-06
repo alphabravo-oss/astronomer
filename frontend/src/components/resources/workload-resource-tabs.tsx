@@ -219,7 +219,7 @@ export function ResourceMetricsTab(props: WorkloadTabProps) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">Time range:</span>
         {["1h", "6h", "24h", "7d"].map((value) => (
@@ -253,7 +253,7 @@ export function ResourceMetricsTab(props: WorkloadTabProps) {
                 charts.
               </div>
             ) : null}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-(--gap-section) lg:grid-cols-2">
               <MetricsChart
                 title="CPU usage and limit"
                 series={[metrics.cpuUsage, metrics.cpuCapacity]}

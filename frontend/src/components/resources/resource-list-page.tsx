@@ -13,7 +13,7 @@ import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import type { ActionMenuItem } from "@/components/ui/action-menu";
 import { ResourceActionMenu } from "./resource-action-menu";
 import { ActionButton } from "@/components/ui/action-button";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
 import { GenericResourceTable } from "@/components/resources/generic-resource-table";
 import {
@@ -609,10 +609,10 @@ export function ClusterResourcePage() {
   };
 
   return (
-    <div className="space-y-4">
+    <PageShell>
       <PageHeader title={title} />
       {renderTable()}
-    </div>
+    </PageShell>
   );
 }
 

@@ -20,7 +20,6 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   };
 });
 
-
 describe("EmptyState", () => {
   it("renders title and description", () => {
     render(
@@ -105,6 +104,11 @@ describe("EmptyState", () => {
     expect(
       screen.getByText("Fetching current consumption."),
     ).toBeInTheDocument();
+    // Page-level loading is a skeleton in a busy status region, not a spinner.
+    const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Loading quota usage")).toHaveClass("sr-only");
+    expect(status.querySelector(".animate-spin")).toBeNull();
   });
 
   it("renders retryable shared errors", () => {

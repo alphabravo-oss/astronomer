@@ -68,27 +68,35 @@ export function RemoteStoragePicker({
                 {
                   key: "name",
                   header: "Name",
+                  kind: "name",
                   accessor: (row) => row.name,
                   sortable: false,
                 },
                 {
                   key: "bucket",
                   header: "Bucket",
+                  kind: "text",
+                  size: 140,
+                  minSize: 110,
                   accessor: (row) => row.bucket,
                   sortable: false,
                 },
                 {
                   key: "select",
                   header: "Select",
+                  kind: "actions",
+                  size: 96,
+                  maxSize: 96,
                   sortable: false,
                   accessor: (row) => (
                     <ActionButton
+                      aria-label={`Select ${row.name}`}
                       onClick={() => {
                         onChange(row.id);
                         setOpen(false);
                       }}
                     >
-                      Select {row.name}
+                      Select
                     </ActionButton>
                   ),
                 },

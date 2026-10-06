@@ -17,6 +17,10 @@ import {
   makeRowClick,
   nameColumn,
 } from "@/components/resources/resource-table-primitives";
+import {
+  ACTIONS_COLUMN,
+  withNameKind,
+} from "@/components/resources/networking-table-cells";
 import { ActionButton } from "@/components/ui/action-button";
 import type { ActionMenuItem } from "@/components/ui/action-menu";
 import { ResourceActionMenu } from "./resource-action-menu";
@@ -145,12 +149,10 @@ export function GenericResourceTable({
 
   const columns = useMemo<Column<GenericK8sResource>[]>(
     () => [
-      nameColumn<GenericK8sResource>(clusterId, resourceType),
+      withNameKind(nameColumn<GenericK8sResource>(clusterId, resourceType)),
       ...baseColumns.slice(1),
       {
-        key: "actions",
-        header: "",
-        rowActions: true,
+        ...ACTIONS_COLUMN,
         accessor: (row) => {
           const items: ActionMenuItem[] = [
             {

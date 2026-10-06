@@ -444,7 +444,7 @@ export function AutomationTab() {
               <label className="space-y-1 text-sm">
                 <span className="block font-medium">Mode ceiling</span>
                 <select
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-(--control-h) w-full rounded-md border border-input bg-background px-3 text-sm"
                   value={r.modeCeiling}
                   onChange={(event) =>
                     update(i, {

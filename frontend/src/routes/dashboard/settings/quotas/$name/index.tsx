@@ -96,7 +96,7 @@ function QuotaPlanForm({ initial }: { initial: QuotaPlanView }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <div className="rounded-xl border border-border bg-card p-6 space-y-4">
         <h2 className="text-base font-semibold text-foreground">
           Identification
@@ -282,15 +282,7 @@ function QuotaPlanDetailPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
         </RouterLink>
-        <PageHeader
-          eyebrow="Settings · Quota plan"
-          title={
-            <span className="flex items-center gap-2">
-              <Gauge className="h-5 w-5 text-muted-foreground" />
-              Edit plan
-            </span>
-          }
-        />
+        <PageHeader eyebrow="Settings · Quota plan" title="Edit plan" />
         <QuotaPlanInner />
       </PageShell>
     </SettingsAuthGate>

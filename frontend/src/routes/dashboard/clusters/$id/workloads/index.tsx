@@ -10,7 +10,7 @@ import {
   ErrorState,
   LoadingState,
 } from "@/components/ui/empty-state";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import { useNavigate } from "@tanstack/react-router";
 import { useClusterNamespaces } from "@/lib/hooks/clusters";
 import { useWorkloads } from "@/lib/hooks/workloads";
@@ -78,7 +78,7 @@ function WorkloadsPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <PageShell>
       <PageHeader
         title="Workloads"
         description="All Deployments, StatefulSets, DaemonSets, Jobs, and CronJobs in this cluster."
@@ -197,7 +197,7 @@ function WorkloadsPage() {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 

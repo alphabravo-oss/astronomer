@@ -281,8 +281,28 @@ export function computeColumnWidths(
       ? undefined
       : (layout.size ?? parsePx(layout.cssWidth) ?? layout.minSize),
   );
-  const fixedTotal = widths.reduce<number>((sum, w) => sum + (w ?? 0), 0);
   const growIdx = widths.flatMap((w, i) => (w === undefined ? [i] : []));
+  // When the preferred fixed sizes plus the flexible columns' minimums do not
+  // fit, shrink the fixed columns proportionally toward their own minimums so
+  // the grow column is never squeezed to nothing. Anything still over budget
+  // overflows (scroll layout) rather than clipping the flexible column.
+  const growMin = growIdx.reduce((sum, i) => sum + layouts[i].minSize, 0);
+  const preferred = widths.reduce<number>((sum, w) => sum + (w ?? 0), 0);
+  const deficit = preferred + growMin - containerWidth;
+  if (deficit > 0) {
+    const slack = widths.map((w, i) =>
+      w === undefined ? 0 : Math.max(w - layouts[i].minSize, 0),
+    );
+    const slackTotal = slack.reduce((sum, v) => sum + v, 0);
+    if (slackTotal > 0) {
+      const cut = Math.min(deficit, slackTotal) / slackTotal;
+      for (let i = 0; i < widths.length; i += 1) {
+        const w = widths[i];
+        if (w !== undefined) widths[i] = w - slack[i] * cut;
+      }
+    }
+  }
+  const fixedTotal = widths.reduce<number>((sum, w) => sum + (w ?? 0), 0);
   let remaining = Math.max(containerWidth - fixedTotal, 0);
   let open = growIdx.slice();
   const result = widths.map((w) => w ?? 0);
@@ -311,6 +331,26 @@ export function computeColumnWidths(
     remaining = Math.max(remaining, 0);
   }
   return result;
+}
+
+/**
+ * Smallest width at which a `fit` table can render without squeezing a
+ * flexible column below its minimum: fixed columns at their preferred size
+ * plus each grow column at its minSize. Undefined for fully legacy tables so
+ * their historical equal-share layout is untouched. Narrower containers (a
+ * phone) then scroll sideways instead of overlapping cells.
+ */
+export function minTableWidth(
+  layouts: ReadonlyArray<ResolvedColumnLayout | undefined>,
+  leadWidth = 0,
+): number | undefined {
+  if (!layouts.some((l) => l?.sized)) return undefined;
+  const total = layouts.reduce((sum, l) => {
+    if (!l) return sum;
+    if (l.grow) return sum + l.minSize;
+    return sum + (l.size ?? parsePx(l.cssWidth) ?? l.minSize);
+  }, leadWidth);
+  return Math.ceil(total);
 }
 
 export function parsePx(width: string | undefined): number | undefined {

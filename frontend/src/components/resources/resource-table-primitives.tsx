@@ -48,13 +48,13 @@ export function StopRowClick({ children }: { children: ReactNode }) {
 export function nameColumn<T extends { name: string; namespace?: string }>(
   clusterId: string,
   resourceType: string,
-  overrides: Partial<Column<T>> = {},
+  opts: { minSize?: number } = {},
 ): Column<T> {
   return {
     key: "name",
     header: "Name",
     kind: "name",
-    minSize: 200,
+    ...opts,
     accessor: (row) => (
       <NameLink
         clusterId={clusterId}
@@ -64,7 +64,6 @@ export function nameColumn<T extends { name: string; namespace?: string }>(
       />
     ),
     sortAccessor: (row) => row.name,
-    ...overrides,
   };
 }
 

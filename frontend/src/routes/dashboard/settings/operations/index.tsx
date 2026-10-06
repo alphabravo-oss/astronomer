@@ -15,12 +15,11 @@ import { DataTable, type Column } from "@/components/ui/data-table";
  */
 
 import { useState, useMemo } from "react";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import {
   RefreshCw,
   RotateCw,
   Trash2,
-  Activity,
   AlertTriangle,
   CheckCircle2,
   Database,
@@ -47,6 +46,7 @@ import { useOperationMutation } from "@/lib/hooks/operation-mutation";
 import { QueryStates } from "@/components/ui/query-states";
 import { Tooltip } from "@/components/ui/tooltip";
 import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 function OperationsBody() {
   const qc = useQueryClient();
@@ -85,7 +85,9 @@ function OperationsBody() {
   const outbox = useQuery({
     queryKey: queryKeys.adminOperations.outbox(outboxStatus),
     queryFn: ({ signal }) => listTaskOutbox(outboxStatus, signal),
-    refetchInterval: liveFallback(10_000),
+    // `admin_queue.changed` routes only the queue summary + DLQ keys, not the
+    // task outbox, so this list polls regardless of stream state.
+    refetchInterval: 10_000,
   });
 
   const retry = useOperationMutation({
@@ -132,7 +134,7 @@ function OperationsBody() {
   });
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <p className="sr-only" role="status" aria-live="polite">
         {retry.isPending
           ? `DLQ retry ${retry.operationState.phase}`
@@ -143,11 +145,7 @@ function OperationsBody() {
       <ResourceMasthead
         backTo="/dashboard/settings"
         backLabel="Back to Settings"
-        title={
-          <span className="inline-flex items-center gap-2">
-            <Activity className="h-5 w-5" /> Operations
-          </span>
-        }
+        title="Operations"
         description="Live view of the asynq worker queues + DLQ. Audited; superuser-only."
       />
 
@@ -270,7 +268,7 @@ function OperationsBody() {
           pendingRetry={retryOutbox.isPending}
         />
       </section>
-    </div>
+    </PageShell>
   );
 }
 
@@ -279,6 +277,8 @@ function queueColumns(activeQueue: string): Column<QueueSummary>[] {
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 160,
       accessor: (r) => (
         <span
           className={
@@ -296,38 +296,35 @@ function queueColumns(activeQueue: string): Column<QueueSummary>[] {
     {
       key: "pending",
       header: "Pending",
+      kind: "count",
       accessor: (r) => <span className="tabular-nums">{r.pending}</span>,
       sortAccessor: (r) => r.pending,
-      align: "right",
-      width: "6rem",
     },
     {
       key: "active",
       header: "Active",
+      kind: "count",
       accessor: (r) => <span className="tabular-nums">{r.active}</span>,
       sortAccessor: (r) => r.active,
-      align: "right",
-      width: "6rem",
     },
     {
       key: "scheduled",
       header: "Scheduled",
+      kind: "count",
       accessor: (r) => <span className="tabular-nums">{r.scheduled}</span>,
       sortAccessor: (r) => r.scheduled,
-      align: "right",
-      width: "7rem",
     },
     {
       key: "retry",
       header: "Retry",
+      kind: "count",
       accessor: (r) => <span className="tabular-nums">{r.retry}</span>,
       sortAccessor: (r) => r.retry,
-      align: "right",
-      width: "6rem",
     },
     {
       key: "dlq",
       header: "DLQ",
+      kind: "count",
       accessor: (r) => (
         <span
           className={
@@ -339,24 +336,22 @@ function queueColumns(activeQueue: string): Column<QueueSummary>[] {
         </span>
       ),
       sortAccessor: (r) => r.archived,
-      align: "right",
-      width: "6rem",
     },
     {
       key: "completed",
       header: "Completed",
+      kind: "count",
       accessor: (r) => (
         <span className="tabular-nums text-muted-foreground">
           {r.completed}
         </span>
       ),
       sortAccessor: (r) => r.completed,
-      align: "right",
-      width: "7rem",
     },
     {
       key: "state",
       header: "State",
+      kind: "status",
       accessor: (r) =>
         r.paused ? (
           <span className="inline-flex items-center gap-1 text-xs text-status-warning">
@@ -370,7 +365,6 @@ function queueColumns(activeQueue: string): Column<QueueSummary>[] {
       searchAccessor: (r) => (r.paused ? "paused" : "running"),
       sortAccessor: (r) => (r.paused ? "paused" : "running"),
       filter: { label: "State" },
-      width: "8rem",
     },
   ];
 }
@@ -393,6 +387,7 @@ function QueueTable({
       columns={columns}
       keyExtractor={(r) => r.name}
       density="compact"
+      layout="scroll"
       loading={loading}
       onRowClick={(r) => onSelect(r.name)}
       searchPlaceholder="Search queues..."
@@ -414,6 +409,9 @@ function dlqColumns(
     {
       key: "type",
       header: "Task type",
+      kind: "text",
+      size: 160,
+      minSize: 130,
       accessor: (row) => <span className="font-mono text-xs">{row.type}</span>,
       searchAccessor: (row) => row.type,
       sortAccessor: (row) => row.type,
@@ -421,6 +419,9 @@ function dlqColumns(
     {
       key: "id",
       header: "ID",
+      kind: "id",
+      size: 168,
+      minSize: 128,
       accessor: (row) => (
         <span className="font-mono text-[11px] text-muted-foreground">
           {row.id.length > 16 ? row.id.slice(0, 16) + "…" : row.id}
@@ -432,41 +433,40 @@ function dlqColumns(
     {
       key: "retried",
       header: "Retries",
+      kind: "count",
       accessor: (row) => <span className="tabular-nums">{row.retried}</span>,
       sortAccessor: (row) => row.retried,
-      align: "right",
-      width: "6rem",
     },
     {
       key: "last_err",
       header: "Last error",
+      kind: "text",
+      grow: true,
+      minSize: 220,
+      maxSize: 720,
       accessor: (row) => (
-        <Tooltip content={row.last_err}>
-          <span
-            className="text-xs text-status-error block max-w-md truncate"
-          >
-            {row.last_err || "—"}
-          </span>
-        </Tooltip>
+        <span className="text-xs text-status-error">{row.last_err || "—"}</span>
       ),
       searchAccessor: (row) => row.last_err,
     },
     {
       key: "last_failed_at",
       header: "Failed at",
+      kind: "age",
+      size: 119,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {row.last_failed_at
-            ? new Date(row.last_failed_at).toLocaleString()
-            : "—"}
+          <RelativeTime value={row.last_failed_at} fallback="—" />
         </span>
       ),
       sortAccessor: (row) => row.last_failed_at || "",
-      width: "12rem",
     },
     {
       key: "actions",
       header: "Actions",
+      kind: "actions",
+      size: 208,
+      maxSize: 208,
       hideable: false,
       accessor: (row) => (
         <div className="inline-flex items-center gap-1">
@@ -488,8 +488,6 @@ function dlqColumns(
           </BareButton>
         </div>
       ),
-      align: "right",
-      width: "12rem",
     },
   ];
 }
@@ -528,6 +526,7 @@ function DLQTable({
       columns={columns}
       keyExtractor={(row) => row.id}
       density="compact"
+      layout="scroll"
       loading={loading}
       searchPlaceholder="Search dead-letter tasks..."
       emptyState={{
@@ -546,14 +545,16 @@ function taskOutboxColumns(
     {
       key: "task_type",
       header: "Task type",
+      kind: "name",
+      grow: false,
+      size: 200,
+      minSize: 160,
       accessor: (row) => (
         <div>
           <div className="font-mono text-xs">{row.task_type}</div>
           {row.dedupe_key && (
             <Tooltip content={row.dedupe_key}>
-              <div
-                className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground"
-              >
+              <div className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground">
                 {row.dedupe_key}
               </div>
             </Tooltip>
@@ -566,19 +567,20 @@ function taskOutboxColumns(
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (row) => (
-        <span className={taskOutboxStatusClass(row.status)}>
-          {row.status}
-        </span>
+        <span className={taskOutboxStatusClass(row.status)}>{row.status}</span>
       ),
       searchAccessor: (row) => row.status,
       sortAccessor: (row) => row.status,
       filter: { label: "Status" },
-      width: "9rem",
     },
     {
       key: "queue_name",
       header: "Queue",
+      kind: "text",
+      size: 120,
+      minSize: 100,
       accessor: (row) => (
         <span className="font-mono text-xs">{row.queue_name}</span>
       ),
@@ -588,45 +590,46 @@ function taskOutboxColumns(
     {
       key: "attempts",
       header: "Attempts",
+      kind: "count",
       accessor: (row) => (
         <span className="tabular-nums">
           {row.attempt_count}/{row.max_delivery_attempts}
         </span>
       ),
       sortAccessor: (row) => row.attempt_count,
-      align: "right",
-      width: "7rem",
     },
     {
       key: "next_attempt_at",
       header: "Next attempt",
+      kind: "age",
+      size: 140,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {row.next_attempt_at
-            ? new Date(row.next_attempt_at).toLocaleString()
-            : "—"}
+          <RelativeTime value={row.next_attempt_at} fallback="—" />
         </span>
       ),
       sortAccessor: (row) => row.next_attempt_at || "",
-      width: "12rem",
     },
     {
       key: "last_error",
       header: "Last error",
+      kind: "text",
+      grow: true,
+      minSize: 220,
+      maxSize: 720,
       accessor: (row) => (
-        <Tooltip content={row.last_error || ""}>
-          <span
-            className="block max-w-md truncate text-xs text-status-error"
-          >
-            {row.last_error || "—"}
-          </span>
-        </Tooltip>
+        <span className="text-xs text-status-error">
+          {row.last_error || "—"}
+        </span>
       ),
       searchAccessor: (row) => row.last_error || "",
     },
     {
       key: "actions",
       header: "Actions",
+      kind: "actions",
+      size: 112,
+      maxSize: 112,
       hideable: false,
       accessor: (row) => (
         <BareButton
@@ -638,8 +641,6 @@ function taskOutboxColumns(
           <RotateCw className="h-3 w-3" /> Retry
         </BareButton>
       ),
-      align: "right",
-      width: "8rem",
     },
   ];
 }
@@ -667,6 +668,7 @@ function TaskOutboxTable({
       columns={columns}
       keyExtractor={(row) => row.id}
       density="compact"
+      layout="scroll"
       loading={loading}
       searchPlaceholder="Search task outbox..."
       emptyState={{

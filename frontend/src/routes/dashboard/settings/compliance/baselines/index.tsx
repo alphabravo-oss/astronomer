@@ -10,16 +10,13 @@ import { OverlayShell } from "@/components/ui/overlay-shell";
  * "View diff" drawer + Apply / Revert action. Active card is badged.
  */
 import { useState } from "react";
-import { useComplianceBaselines, useComplianceBaselineDiff } from "@/lib/hooks/policy-queries";
-import { QueryStates } from "@/components/ui/query-states";
-import { ResourceMasthead } from "@/components/ui/page";
 import {
-  CheckCircle2,
-  History,
-  Loader2,
-  Shield,
-  Undo2,
-} from "lucide-react";
+  useComplianceBaselines,
+  useComplianceBaselineDiff,
+} from "@/lib/hooks/policy-queries";
+import { QueryStates } from "@/components/ui/query-states";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
+import { CheckCircle2, History, Loader2, Shield, Undo2 } from "lucide-react";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -53,7 +50,7 @@ function BaselineCard({
   latestApplicationId: string | null;
 }) {
   return (
-    <div className="rounded-lg border bg-card p-5 flex flex-col gap-4">
+    <div className="rounded-lg border bg-card p-(--card-p) flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -131,6 +128,10 @@ const diffColumns: Column<DiffRow>[] = [
   {
     key: "field",
     header: "Field",
+    kind: "name",
+    grow: false,
+    size: 148,
+    minSize: 120,
     accessor: (r) => <span className="font-mono text-xs">{r.field}</span>,
     searchAccessor: (r) => r.field,
     sortAccessor: (r) => r.field,
@@ -138,6 +139,10 @@ const diffColumns: Column<DiffRow>[] = [
   {
     key: "current",
     header: "Current",
+    kind: "text",
+    wrap: true,
+    size: 140,
+    minSize: 120,
     accessor: (r) => (
       <span className="font-mono text-xs text-muted-foreground break-all">
         {r.current}
@@ -148,6 +153,10 @@ const diffColumns: Column<DiffRow>[] = [
   {
     key: "target",
     header: "Target",
+    kind: "text",
+    wrap: true,
+    grow: true,
+    minSize: 120,
     accessor: (r) => (
       <span className="font-mono text-xs break-all">{r.target}</span>
     ),
@@ -183,8 +192,7 @@ function DiffDrawer({
             searchable={false}
             emptyState={{
               title: "No changes",
-              description:
-                "Baseline already matches current state.",
+              description: "Baseline already matches current state.",
             }}
           />
         )}
@@ -197,7 +205,8 @@ function ComplianceBaselinesPage() {
   const baselinesQuery = useComplianceBaselines();
   const baselines = baselinesQuery.data?.baselines ?? [];
   const history = baselinesQuery.data?.history ?? [];
-  const [diffBaseline, setDiffBaseline] = useState<ComplianceBaselineView | null>(null);
+  const [diffBaseline, setDiffBaseline] =
+    useState<ComplianceBaselineView | null>(null);
   const loading = baselinesQuery.isLoading;
   const [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState<
@@ -208,7 +217,9 @@ function ComplianceBaselinesPage() {
 
   const latestApplicationId = history[0]?.id ?? null;
 
-  const reload = async () => { await baselinesQuery.refetch(); };
+  const reload = async () => {
+    await baselinesQuery.refetch();
+  };
 
   const handleApply = async (b: ComplianceBaselineView) => {
     setBusy(true);
@@ -258,11 +269,12 @@ function ComplianceBaselinesPage() {
     }
   };
 
-  if (baselinesQuery.isError) return <QueryStates query={baselinesQuery}>{null}</QueryStates>;
+  if (baselinesQuery.isError)
+    return <QueryStates query={baselinesQuery}>{null}</QueryStates>;
 
   return (
     <SettingsAuthGate>
-      <div className="space-y-6">
+      <PageShell>
         <ResourceMasthead
           backTo="/dashboard/settings/compliance"
           backLabel="Compliance"
@@ -321,7 +333,12 @@ function ComplianceBaselinesPage() {
           )}
         </section>
 
-        {diffBaseline ? <DiffDrawer baseline={diffBaseline} onClose={() => setDiffBaseline(null)} /> : null}
+        {diffBaseline ? (
+          <DiffDrawer
+            baseline={diffBaseline}
+            onClose={() => setDiffBaseline(null)}
+          />
+        ) : null}
         <ConfirmDialog
           open={confirmation !== null}
           onClose={() => setConfirmation(null)}
@@ -371,7 +388,7 @@ function ComplianceBaselinesPage() {
             <Loader2 className="w-6 h-6 animate-spin text-white" />
           </OverlayShell>
         ) : null}
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

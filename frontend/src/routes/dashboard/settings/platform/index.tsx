@@ -113,7 +113,7 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
   }
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-(--gap-section) pb-24">
       <form.AppForm>
         <form.FormErrorSummary serverError={save.error?.message} />
       </form.AppForm>

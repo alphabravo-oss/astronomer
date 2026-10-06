@@ -110,7 +110,7 @@ function ComponentOperations({
   workloadHref: string;
 }) {
   return (
-    <div className="grid gap-6 xl:grid-cols-2">
+    <div className="grid gap-(--gap-section) xl:grid-cols-2">
       <PageSection
         title="Resource posture"
         description="Aggregate requests and limits across desired workload replicas."

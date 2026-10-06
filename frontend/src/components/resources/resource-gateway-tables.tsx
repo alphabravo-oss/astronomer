@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
 import { useNavigate } from "@tanstack/react-router";
-import { formatRelativeTime } from "@/lib/utils";
 import { ActionButton } from "@/components/ui/action-button";
 import { ResourceActionMenu } from "./resource-action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -21,6 +20,7 @@ import {
   makeRowClick,
   nameColumn,
 } from "@/components/resources/resource-table-primitives";
+import { withNameKind } from "@/components/resources/networking-table-cells";
 import { k8sResourcePath } from "@/lib/k8s-paths";
 import {
   permissionDeniedReason,
@@ -33,316 +33,12 @@ import type {
   ReferenceGrant,
 } from "@/types";
 import { Code, Pencil, Plus, Trash2 } from "lucide-react";
-
-function ConditionPill({
-  status,
-  trueLabel,
-  falseLabel,
-}: {
-  status: string;
-  trueLabel: string;
-  falseLabel: string;
-}) {
-  if (!status) return <span className="text-xs text-muted-foreground">—</span>;
-  if (status === "True") {
-    return (
-      <span className="text-xs px-1.5 py-0.5 rounded-sm bg-status-success/10 text-status-success">
-        {trueLabel}
-      </span>
-    );
-  }
-  if (status === "False") {
-    return (
-      <span className="text-xs px-1.5 py-0.5 rounded-sm bg-status-error/10 text-status-error">
-        {falseLabel}
-      </span>
-    );
-  }
-  return (
-    <span className="text-xs px-1.5 py-0.5 rounded-sm bg-muted text-muted-foreground">
-      {status}
-    </span>
-  );
-}
-
-const gatewayColumns: Column<Gateway>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "class",
-    header: "Class",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.gatewayClassName || "-"}
-      </span>
-    ),
-  },
-  {
-    key: "listeners",
-    header: "Listeners",
-    accessor: (row) => (
-      <div className="flex gap-1 flex-wrap">
-        {row.listenerSummary?.length ? (
-          row.listenerSummary.map((s, i) => (
-            <span
-              key={`${s}-${i}`}
-              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
-            >
-              {s}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        )}
-      </div>
-    ),
-    sortable: false,
-  },
-  {
-    key: "addresses",
-    header: "Addresses",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-50 block">
-        {row.addresses?.join(", ") || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "programmed",
-    header: "Programmed",
-    accessor: (row) => (
-      <ConditionPill
-        status={row.programmed}
-        trueLabel="Programmed"
-        falseLabel="Failed"
-      />
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
-];
-
-// Shared column definition for HTTPRoute / GRPCRoute / TLSRoute / TCPRoute /
-// UDPRoute. The L4 routes (TCP/UDP) won't populate hostnames; their column
-// just renders empty.
-const routeColumns: Column<GatewayRoute>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "parents",
-    header: "Parent Gateways",
-    accessor: (row) => (
-      <div className="flex gap-1 flex-wrap">
-        {row.parentSummary?.length ? (
-          row.parentSummary.map((p, i) => (
-            <span
-              key={`${p}-${i}`}
-              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
-            >
-              {p}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        )}
-      </div>
-    ),
-    sortable: false,
-  },
-  {
-    key: "hostnames",
-    header: "Hostnames",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-50 block">
-        {row.hostnames?.join(", ") || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "rules",
-    header: "Rules",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.ruleCount}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
-];
-
-const gatewayClassColumns: Column<GatewayClass>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "controllerName",
-    header: "Controller",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-70 block">
-        {row.controllerName}
-      </span>
-    ),
-  },
-  {
-    key: "accepted",
-    header: "Accepted",
-    accessor: (row) => (
-      <ConditionPill
-        status={row.accepted}
-        trueLabel="Accepted"
-        falseLabel="Rejected"
-      />
-    ),
-    align: "center",
-  },
-  {
-    key: "description",
-    header: "Description",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground truncate max-w-65 block">
-        {row.description || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
-];
-
-const referenceGrantColumns: Column<ReferenceGrant>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "from",
-    header: "From",
-    accessor: (row) => (
-      <div className="flex gap-1 flex-wrap">
-        {row.from?.length ? (
-          row.from.map((f, i) => (
-            <span
-              key={`${f.kind}-${f.namespace}-${i}`}
-              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
-            >
-              {f.kind}@{f.namespace}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        )}
-      </div>
-    ),
-    sortable: false,
-  },
-  {
-    key: "to",
-    header: "To",
-    accessor: (row) => (
-      <div className="flex gap-1 flex-wrap">
-        {row.to?.length ? (
-          row.to.map((t, i) => (
-            <span
-              key={`${t.kind}-${t.name}-${i}`}
-              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
-            >
-              {t.kind}
-              {t.name ? `/${t.name}` : ""}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        )}
-      </div>
-    ),
-    sortable: false,
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
-];
+import {
+  gatewayClassColumns,
+  gatewayColumns,
+  referenceGrantColumns,
+  routeColumns,
+} from "@/components/resources/resource-gateway-columns";
 
 // useK8sDelete provides the mutation; per-row dialog state lives in each
 // table. Shared utility to render the action menu for a namespaced row.
@@ -415,12 +111,13 @@ export function GatewaysTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<Gateway>[]>(
     () => [
-      nameColumn<Gateway>(clusterId, "gateways"),
+      withNameKind(nameColumn<Gateway>(clusterId, "gateways"), 112),
       ...gatewayColumns.slice(1),
       {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <NamespacedActions
             clusterId={clusterId}
@@ -553,12 +250,13 @@ function RouteTable<T extends GatewayRoute>({
 
   const columns = useMemo<Column<T>[]>(
     () => [
-      nameColumn<T>(clusterId, resourceType),
+      withNameKind(nameColumn<T>(clusterId, resourceType)),
       ...(routeColumns.slice(1) as Column<T>[]),
       {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <NamespacedActions
             clusterId={clusterId}
@@ -736,12 +434,13 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<GatewayClass>[]>(
     () => [
-      nameColumn<GatewayClass>(clusterId, "gatewayclasses"),
+      withNameKind(nameColumn<GatewayClass>(clusterId, "gatewayclasses")),
       ...gatewayClassColumns.slice(1),
       {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => {
           const path = k8sResourcePath("gatewayclasses", row.name);
           const title = `GatewayClass: ${row.name}`;
@@ -867,12 +566,13 @@ export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<ReferenceGrant>[]>(
     () => [
-      nameColumn<ReferenceGrant>(clusterId, "referencegrants"),
+      withNameKind(nameColumn<ReferenceGrant>(clusterId, "referencegrants")),
       ...referenceGrantColumns.slice(1),
       {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <NamespacedActions
             clusterId={clusterId}

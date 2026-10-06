@@ -24,6 +24,7 @@ import {
   makeRowClick,
   nameColumn,
 } from "@/components/resources/resource-table-primitives";
+import { withNameKind } from "@/components/resources/networking-table-cells";
 import { k8sResourcePath } from "@/lib/k8s-paths";
 import {
   permissionDeniedReason,
@@ -45,12 +46,13 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<K8sService>[]>(
     () => [
-      nameColumn<K8sService>(clusterId, "services"),
+      withNameKind(nameColumn<K8sService>(clusterId, "services")),
       ...serviceColumns.slice(1),
       {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -103,7 +105,6 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -206,12 +207,13 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<Ingress>[]>(
     () => [
-      nameColumn<Ingress>(clusterId, "ingresses"),
+      withNameKind(nameColumn<Ingress>(clusterId, "ingresses")),
       ...ingressColumns.slice(1),
       {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -264,7 +266,6 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -370,12 +371,13 @@ export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<NetworkPolicy>[]>(
     () => [
-      nameColumn<NetworkPolicy>(clusterId, "networkpolicies"),
+      withNameKind(nameColumn<NetworkPolicy>(clusterId, "networkpolicies")),
       ...networkPolicyColumns.slice(1),
       {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -428,7 +430,6 @@ export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],

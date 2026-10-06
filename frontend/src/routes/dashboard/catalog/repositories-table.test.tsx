@@ -94,7 +94,7 @@ describe("catalog Repositories table", () => {
   it('renders a relative last-synced time instead of "Never" for a synced repo', () => {
     renderTable();
     const row = rowFor("bitnami");
-    expect(within(row).getByText(/about 2 hours ago/)).toBeInTheDocument();
+    expect(within(row).getByText(/^2h ago$/)).toBeInTheDocument();
     expect(within(row).queryByText("Never")).not.toBeInTheDocument();
   });
 

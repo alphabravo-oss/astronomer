@@ -1,4 +1,3 @@
-import { Tooltip } from "@/components/ui/tooltip";
 import { Check, CheckCircle } from "lucide-react";
 import { AlertInvestigation } from "./-alert-investigation";
 import { useInvestigationParam } from "@/components/resources/resource-navigation-context";
@@ -9,15 +8,162 @@ import {
   useAlertEvents,
   useResolveAlert,
 } from "@/lib/hooks/alerting";
+import { TimestampCell } from "@/components/ui/cell-primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
-import { cn, formatRelativeTime, statusBgColor } from "@/lib/utils";
+import { cn, statusBgColor } from "@/lib/utils";
 import type { AlertEvent } from "@/types";
 import { Select } from "@/components/ui/select";
 import { pageTableCount } from "@/lib/api/pagination";
 
 const ALERT_EVENTS_PAGE_SIZE = 50;
+
+function eventColumns({
+  clusterId,
+  onSelect,
+  onAcknowledge,
+  onResolve,
+  pending,
+}: {
+  clusterId?: string;
+  onSelect: (id: string) => void;
+  onAcknowledge: (id: string) => void;
+  onResolve: (id: string) => void;
+  pending: boolean;
+}): Column<AlertEvent>[] {
+  return [
+    {
+      key: "severity",
+      header: "Severity",
+      kind: "badge",
+      size: 96,
+      accessor: (row) => (
+        <span
+          className={cn(
+            "text-xs px-2 py-0.5 rounded-sm capitalize font-medium",
+            statusBgColor(row.severity),
+          )}
+        >
+          {row.severity}
+        </span>
+      ),
+    },
+    {
+      key: "rule",
+      header: "Rule",
+      kind: "name",
+      size: 150,
+      minSize: 130,
+      grow: false,
+      accessor: (row) => (
+        <ActionButton
+          intent="ghost"
+          size="sm"
+          tooltip={row.ruleName || undefined}
+          onClick={() => onSelect(row.id)}
+        >
+          <span className="truncate">{row.ruleName || "Inspect alert"}</span>
+        </ActionButton>
+      ),
+    },
+    {
+      key: "message",
+      header: "Message",
+      kind: "text",
+      minSize: 180,
+      grow: true,
+      maxSize: 640,
+      accessor: (row) => (
+        <span className="text-sm text-muted-foreground">{row.message}</span>
+      ),
+      sortable: false,
+    },
+    ...(clusterId
+      ? []
+      : [
+          {
+            key: "cluster",
+            header: "Cluster",
+            kind: "text",
+            size: 112,
+            minSize: 96,
+            accessor: (row: AlertEvent) => (
+              <span className="text-sm text-muted-foreground">
+                {row.clusterName || "--"}
+              </span>
+            ),
+          } as Column<AlertEvent>,
+        ]),
+    {
+      key: "firedAt",
+      header: "Fired",
+      kind: "age",
+      size: 120,
+      maxSize: 160,
+      accessor: (row) => <TimestampCell value={row.firedAt} />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      kind: "status",
+      size: 140,
+      accessor: (row) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: "actions",
+      header: "",
+      accessor: (row) => (
+        <div className="flex items-center gap-1">
+          {row.status === "firing" && (
+            <>
+              <ActionButton
+                size="sm"
+                intent="ghost"
+                tooltip="Acknowledge"
+                disabled={pending}
+                onClick={() => onAcknowledge(row.id)}
+                icon={<Check className="h-3 w-3" />}
+                className="h-auto px-2 py-1"
+              >
+                Ack
+              </ActionButton>
+              <ActionButton
+                size="sm"
+                intent="ghost"
+                tooltip="Resolve"
+                disabled={pending}
+                onClick={() => onResolve(row.id)}
+                icon={<CheckCircle className="h-3 w-3" />}
+                className="h-auto px-2 py-1 hover:text-status-success hover:bg-status-success/10"
+              >
+                Resolve
+              </ActionButton>
+            </>
+          )}
+          {row.status === "acknowledged" && (
+            <ActionButton
+              size="sm"
+              intent="ghost"
+              tooltip="Resolve"
+              disabled={pending}
+              onClick={() => onResolve(row.id)}
+              icon={<CheckCircle className="h-3 w-3" />}
+              className="h-auto px-2 py-1 hover:text-status-success hover:bg-status-success/10"
+            >
+              Resolve
+            </ActionButton>
+          )}
+        </div>
+      ),
+      sortable: false,
+      kind: "actions",
+      size: 168,
+      minSize: 168,
+      maxSize: 168,
+    },
+  ];
+}
 
 export function EventsTab({
   clusterId,
@@ -56,122 +202,13 @@ export function EventsTab({
   const resolveAlert = useResolveAlert();
   const events = eventsPage?.data ?? [];
 
-  const columns: Column<AlertEvent>[] = [
-    {
-      key: "severity",
-      header: "Severity",
-      accessor: (row) => (
-        <span
-          className={cn(
-            "text-xs px-2 py-0.5 rounded-sm capitalize font-medium",
-            statusBgColor(row.severity),
-          )}
-        >
-          {row.severity}
-        </span>
-      ),
-    },
-    {
-      key: "rule",
-      header: "Rule",
-      accessor: (row) => (
-        <ActionButton
-          intent="ghost"
-          size="sm"
-          onClick={() => setSelected(row.id)}
-        >
-          {row.ruleName || "Inspect alert"}
-        </ActionButton>
-      ),
-    },
-    {
-      key: "message",
-      header: "Message",
-      accessor: (row) => (
-        <Tooltip content={row.message}>
-          <span className="text-sm text-muted-foreground truncate max-w-75 block">
-            {row.message}
-          </span>
-        </Tooltip>
-      ),
-      sortable: false,
-    },
-    ...(clusterId
-      ? []
-      : [
-          {
-            key: "cluster",
-            header: "Cluster",
-            accessor: (row: AlertEvent) => (
-              <span className="text-sm text-muted-foreground">
-                {row.clusterName || "--"}
-              </span>
-            ),
-          } as Column<AlertEvent>,
-        ]),
-    {
-      key: "firedAt",
-      header: "Fired",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.firedAt)}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      accessor: (row) => <StatusBadge status={row.status} />,
-    },
-    {
-      key: "actions",
-      header: "",
-      accessor: (row) => (
-        <div className="flex items-center gap-1">
-          {row.status === "firing" && (
-            <>
-              <ActionButton
-                size="sm"
-                intent="ghost"
-                tooltip="Acknowledge"
-                disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
-                onClick={() => acknowledgeAlert.mutate(row.id)}
-                icon={<Check className="h-3 w-3" />}
-                className="h-auto px-2 py-1"
-              >
-                Ack
-              </ActionButton>
-              <ActionButton
-                size="sm"
-                intent="ghost"
-                tooltip="Resolve"
-                disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
-                onClick={() => resolveAlert.mutate(row.id)}
-                icon={<CheckCircle className="h-3 w-3" />}
-                className="h-auto px-2 py-1 hover:text-status-success hover:bg-status-success/10"
-              >
-                Resolve
-              </ActionButton>
-            </>
-          )}
-          {row.status === "acknowledged" && (
-            <ActionButton
-              size="sm"
-              intent="ghost"
-              tooltip="Resolve"
-              disabled={acknowledgeAlert.isPending || resolveAlert.isPending}
-              onClick={() => resolveAlert.mutate(row.id)}
-              icon={<CheckCircle className="h-3 w-3" />}
-              className="h-auto px-2 py-1 hover:text-status-success hover:bg-status-success/10"
-            >
-              Resolve
-            </ActionButton>
-          )}
-        </div>
-      ),
-      sortable: false,
-    },
-  ];
+  const columns = eventColumns({
+    clusterId,
+    onSelect: setSelected,
+    onAcknowledge: (id) => acknowledgeAlert.mutate(id),
+    onResolve: (id) => resolveAlert.mutate(id),
+    pending: acknowledgeAlert.isPending || resolveAlert.isPending,
+  });
 
   const serverColumns = columns.map((column) => ({
     ...column,

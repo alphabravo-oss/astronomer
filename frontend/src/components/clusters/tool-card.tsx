@@ -88,7 +88,7 @@ export function ToolCard({
     clusterDisconnectedReason || uninstallDisabledReason;
 
   return (
-    <div className="rounded-lg border border-border p-5 space-y-4">
+    <div className="rounded-lg border border-border p-(--card-p) space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">

@@ -48,6 +48,8 @@ function MonitoringFleetPage() {
     {
       key: "name",
       header: "Cluster",
+      kind: "name",
+      minSize: 200,
       accessor: (row) => (
         <div className="min-w-0">
           <p className="font-medium text-foreground truncate">
@@ -62,11 +64,13 @@ function MonitoringFleetPage() {
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (row) => <StatusBadge status={row.status} />,
     },
     {
       key: "cpu",
       header: "CPU",
+      kind: "percent",
       accessor: (row) => (
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatPercentage(row.cpuPercentage, 0)}
@@ -77,6 +81,7 @@ function MonitoringFleetPage() {
     {
       key: "memory",
       header: "Memory",
+      kind: "percent",
       accessor: (row) => (
         <span className="text-xs tabular-nums text-muted-foreground">
           {formatPercentage(row.memoryPercentage, 0)}
@@ -93,7 +98,7 @@ function MonitoringFleetPage() {
         </span>
       ),
       sortAccessor: (row) => row.podCount,
-      align: "center",
+      kind: "count",
     },
     {
       key: "open",
@@ -108,7 +113,10 @@ function MonitoringFleetPage() {
         </RouterLink>
       ),
       sortable: false,
-      align: "right",
+      kind: "actions",
+      size: 104,
+      minSize: 104,
+      maxSize: 104,
     },
   ];
 

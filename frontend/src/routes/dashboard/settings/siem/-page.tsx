@@ -45,6 +45,7 @@ import {
 } from "./-hooks";
 import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 import { BareButton } from "@/components/form/bare-button";
+import { CappedChips, RelativeTime } from "@/components/admin/table-cells";
 
 export const TRANSPORTS: { value: string; label: string }[] = [
   { value: "syslog_udp", label: "Syslog (UDP)" },
@@ -80,10 +81,11 @@ function SIEMForwardersList() {
     {
       key: "name",
       header: "Name",
+      kind: "name",
       accessor: (row) => (
-        <div>
-          <p className="font-medium text-foreground">{row.name}</p>
-          <p className="text-2xs font-mono text-muted-foreground truncate max-w-80">
+        <div className="min-w-0">
+          <p className="truncate font-medium text-foreground">{row.name}</p>
+          <p className="truncate font-mono text-2xs text-muted-foreground">
             {row.endpoint}
           </p>
         </div>
@@ -92,6 +94,9 @@ function SIEMForwardersList() {
     {
       key: "transport",
       header: "Transport",
+      kind: "badge",
+      size: 104,
+      sortable: false,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {transportLabel(row.transport)}
@@ -102,31 +107,26 @@ function SIEMForwardersList() {
     {
       key: "filters",
       header: "Event filters",
+      kind: "badge",
+      size: 140,
+      minSize: 130,
+      maxSize: 280,
       sortable: false,
-      accessor: (row) =>
-        row.eventFilters && row.eventFilters.length > 0 ? (
-          <div className="flex flex-wrap gap-1 max-w-60">
-            {row.eventFilters.slice(0, 3).map((f) => (
-              <span
-                key={f}
-                className="text-2xs px-1.5 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
-              >
-                {f}
-              </span>
-            ))}
-            {row.eventFilters.length > 3 && (
-              <span className="text-2xs text-muted-foreground">
-                +{row.eventFilters.length - 3}
-              </span>
-            )}
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">All events</span>
-        ),
+      accessor: (row) => (
+        <CappedChips
+          items={row.eventFilters ?? []}
+          max={1}
+          mono
+          empty="All events"
+        />
+      ),
+      searchAccessor: (row) => (row.eventFilters ?? []).join(" "),
     },
     {
       key: "status",
       header: "Status",
+      kind: "status",
+      size: 98,
       accessor: (row) => (
         <StatusBadge
           status={row.enabled ? "active" : "disconnected"}
@@ -139,15 +139,20 @@ function SIEMForwardersList() {
     {
       key: "updated",
       header: "Updated",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.updatedAt)}
+          <RelativeTime value={row.updatedAt} />
         </span>
       ),
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 120,
+      maxSize: 120,
       sortable: false,
       accessor: (row) => (
         <div className="flex items-center gap-1">

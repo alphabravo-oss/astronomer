@@ -32,6 +32,7 @@ import {
   LoadingState,
   PermissionState,
 } from "@/components/ui/empty-state";
+import { InfoCallout } from "@/components/ui/info-callout";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -611,6 +612,13 @@ export default function UiGallery() {
         />
         <ResourceMasthead title="Loading" loading />
         <PageSection title="PageSection">Section body</PageSection>
+        <InfoCallout>Installed releases are cluster-wide.</InfoCallout>
+        <InfoCallout
+          tone="warning"
+          action={<ActionButton size="sm">Review</ActionButton>}
+        >
+          Two clusters are behind on agent version.
+        </InfoCallout>
         <WizardStepper
           currentStep={2}
           steps={[

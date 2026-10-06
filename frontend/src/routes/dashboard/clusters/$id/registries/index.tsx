@@ -559,7 +559,7 @@ function RegistryDialog({
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
               placeholder="e.g. registry.example.com or 123.dkr.ecr.us-east-1.amazonaws.com"
-              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
+              className="w-full h-(--control-h) px-3 rounded-lg border border-border bg-background text-sm font-mono
                 placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             />
           )}
@@ -581,7 +581,7 @@ function RegistryDialog({
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
+                className="w-full h-(--control-h) px-3 rounded-lg border border-border bg-background text-sm font-mono
                   focus:outline-hidden focus:ring-2 focus:ring-ring"
               />
             )}
@@ -612,7 +612,7 @@ function RegistryDialog({
                     }
                   }}
                   onBlur={field.handleBlur}
-                  className="w-full h-9 pl-3 pr-9 rounded-lg border border-border bg-background text-sm font-mono
+                  className="w-full h-(--control-h) pl-3 pr-9 rounded-lg border border-border bg-background text-sm font-mono
                     focus:outline-hidden focus:ring-2 focus:ring-ring"
                 />
               )}
@@ -652,7 +652,7 @@ function RegistryDialog({
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
               placeholder="auto"
-              className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
+              className="w-full h-(--control-h) px-3 rounded-lg border border-border bg-background text-sm font-mono
                 placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             />
           )}

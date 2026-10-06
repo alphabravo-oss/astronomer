@@ -6,7 +6,6 @@ import {
 } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { ActionButton } from "@/components/ui/action-button";
-import { formatRelativeTime } from "@/lib/utils";
 import type {
   AccessBinding,
   Cluster,
@@ -21,6 +20,7 @@ import {
   bindingTarget,
   roleTitle,
 } from "@/components/rbac/binding-utils";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 interface BindingsTabProps {
   bindings: AccessBinding[];
@@ -70,6 +70,7 @@ export function BindingsTab({
     {
       key: "subject",
       header: "Subject",
+      kind: "name",
       accessor: (row) => (
         <span className="font-medium text-foreground">
           {bindingSubject(row, users)}
@@ -80,6 +81,8 @@ export function BindingsTab({
     {
       key: "scope",
       header: "Scope",
+      kind: "badge",
+      size: 96,
       accessor: (row) => (
         <Badge variant="secondary" className="capitalize">
           {row.scope}
@@ -91,6 +94,9 @@ export function BindingsTab({
     {
       key: "role",
       header: "Role",
+      kind: "text",
+      size: 150,
+      minSize: 130,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">{roleName(row)}</span>
       ),
@@ -99,6 +105,9 @@ export function BindingsTab({
     {
       key: "target",
       header: "Applies to",
+      kind: "text",
+      size: 180,
+      minSize: 150,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {bindingTarget(row, clusters, projects)}
@@ -109,15 +118,18 @@ export function BindingsTab({
     {
       key: "created",
       header: "Created",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.createdAt)}
+          <RelativeTime value={row.createdAt} />
         </span>
       ),
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
       accessor: (row) => (
         <div className="flex items-center justify-end">
           <ActionButton

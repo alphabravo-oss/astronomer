@@ -65,7 +65,7 @@ export function TargetRefsEditor({ value, onChange }: TargetRefsEditorProps) {
         <BareButton
           onClick={addCluster}
           disabled={!pendingCluster}
-          className="inline-flex items-center gap-1 h-9 px-3 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1 h-(--control-h) px-3 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
         >
           <Plus className="h-3.5 w-3.5" />
           Add
