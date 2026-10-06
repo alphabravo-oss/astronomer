@@ -119,7 +119,7 @@ function FetchingWidget({
       }
       if (isEmptyResponse(data, "object")) {
         return (
-          <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-border bg-card p-(--card-p) text-sm text-muted-foreground">
             {spec.emptyText || "No data"}
           </div>
         );

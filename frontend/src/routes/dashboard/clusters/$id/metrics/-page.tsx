@@ -10,7 +10,7 @@ export function ClusterMetricsWorkspace({ clusterId }: { clusterId: string }) {
     "view",
   );
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <TabStrip
         aria-label="Metrics views"
         tabs={[

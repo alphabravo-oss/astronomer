@@ -10,7 +10,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTabParam } from "@/lib/use-tab-param";
 import { queryKeys } from "@/lib/query-keys";
 import { toastError } from "@/lib/toast";
-import { Copy, Check, Download, Server } from "lucide-react";
+import { Copy, Check, Download } from "lucide-react";
 import {
   confirmRegistration,
   getClusterManifestWithToken,
@@ -225,14 +225,7 @@ export function RegistrationConnectStep({
     <div>
       <div className="mb-6">
         <PageHeader
-          title={
-            <span className="inline-flex items-center gap-3">
-              <span className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                <Server className="h-5 w-5 text-muted-foreground" />
-              </span>
-              {showProgress ? "Adoption progress" : "Install the agent"}
-            </span>
-          }
+          title={showProgress ? "Adoption progress" : "Install the agent"}
           description={
             showProgress
               ? "Watch the existing cluster connect and apply its baseline"
@@ -368,7 +361,7 @@ export function RegistrationConnectStep({
               <ActionButton
                 {...BARE_BUTTON}
                 onClick={onDownload}
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent"
+                className="inline-flex items-center gap-1.5 h-(--control-h) px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent"
               >
                 <Download className="h-3.5 w-3.5" />
                 Download YAML
@@ -435,7 +428,7 @@ export function RegistrationConnectStep({
           </div>
         </>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-(--gap-section)">
           <RegistrationTimeline
             clusterId={clusterId}
             onReady={() => setIsReady(true)}

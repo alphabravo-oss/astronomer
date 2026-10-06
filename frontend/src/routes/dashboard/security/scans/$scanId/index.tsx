@@ -179,7 +179,7 @@ function ScanDetailPage() {
                 tabIndex={isTerminal ? undefined : -1}
                 download={`cis-scan-${scan.id}.csv`}
                 className={cn(
-                  "inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border",
+                  "inline-flex items-center gap-2 h-(--control-h) px-4 rounded-lg border border-border",
                   "text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors",
                   !isTerminal && "opacity-50 pointer-events-none",
                 )}

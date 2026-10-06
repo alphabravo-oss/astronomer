@@ -58,7 +58,7 @@ function ComplianceForm() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <div className="rounded-xl border border-border bg-card p-6 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-foreground">
@@ -148,12 +148,7 @@ function CompliancePage() {
         </RouterLink>
         <PageHeader
           eyebrow="Settings · Compliance"
-          title={
-            <span className="flex items-center gap-2">
-              <FileArchive className="h-5 w-5 text-muted-foreground" />
-              Compliance exports
-            </span>
-          }
+          title="Compliance exports"
           description="Build a ZIP of audit + RBAC + config for a date range. Large windows may take longer, but the export downloads directly when complete."
         />
         <ComplianceForm />

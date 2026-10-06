@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useFeatureFlags } from "@/lib/hooks/clusters";
 import { useAuthStore } from "@/lib/store";
 import { PermissionState, StatePanel } from "@/components/ui/empty-state";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { TabStrip } from "@/components/ui/tabs";
 import {
   CHARLIE_ADMIN_TABS,
@@ -93,7 +93,7 @@ export function CharlieAdminContent() {
       to: `/dashboard/settings/charlie?${mergeCharlieSearch(params, { tab: next })}`,
     });
   return (
-    <div className="space-y-6">
+    <PageShell>
       <ResourceMasthead
         backTo="/dashboard/settings"
         backLabel="Back to settings"
@@ -132,6 +132,6 @@ export function CharlieAdminContent() {
         {tab === "access" && <AccessTab />}
         {tab === "diagnostics" && <DiagnosticsTab />}
       </div>
-    </div>
+    </PageShell>
   );
 }

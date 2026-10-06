@@ -20,7 +20,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useAppForm, useStore } from "@/lib/form";
 import { FormShell } from "@/components/ui/form-shell";
-import { ArrowLeft, GitBranch, Play, RefreshCw } from "lucide-react";
+import { ArrowLeft, Play, RefreshCw } from "lucide-react";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
@@ -124,14 +124,9 @@ function DetailInner({ id }: { id: string }) {
   }
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <PageHeader
-        title={
-          <span className="flex items-center gap-3">
-            <GitBranch className="h-5 w-5 text-muted-foreground" />
-            {source.name}
-          </span>
-        }
+        title={source.name}
         description={
           <span className="font-mono">
             {source.repo_url} · {source.branch}
@@ -223,7 +218,7 @@ function DetailInner({ id }: { id: string }) {
                   value={field.state.value ?? ""}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono"
+                  className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm font-mono"
                 />
               )}
             </form.Field>
@@ -242,7 +237,7 @@ function DetailInner({ id }: { id: string }) {
                   value={field.state.value ?? ""}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono"
+                  className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm font-mono"
                 />
               )}
             </form.Field>
@@ -267,7 +262,7 @@ function DetailInner({ id }: { id: string }) {
                     )
                   }
                   onBlur={field.handleBlur}
-                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
+                  className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm"
                 >
                   <option value="none">None</option>
                   <option value="https_token">HTTPS token</option>
@@ -292,7 +287,7 @@ function DetailInner({ id }: { id: string }) {
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   disabled={authMode === "none"}
-                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
+                  className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
                   placeholder={authMode === "none" ? "(not required)" : ""}
                 />
               )}
@@ -320,7 +315,7 @@ function DetailInner({ id }: { id: string }) {
                     field.handleChange(e.target.value as "manual" | "interval")
                   }
                   onBlur={field.handleBlur}
-                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
+                  className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm"
                 >
                   <option value="interval">Interval</option>
                   <option value="manual">Manual only</option>
@@ -345,7 +340,7 @@ function DetailInner({ id }: { id: string }) {
                   onChange={(e) => field.handleChange(Number(e.target.value))}
                   onBlur={field.handleBlur}
                   disabled={syncMode === "manual"}
-                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
+                  className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
                 />
               )}
             </form.Field>
@@ -369,7 +364,7 @@ function DetailInner({ id }: { id: string }) {
                     )
                   }
                   onBlur={field.handleBlur}
-                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
+                  className="w-full h-(--control-h) px-3 rounded-sm border bg-background text-sm"
                 >
                   <option value="log">Log only</option>
                   <option value="tombstone">Tombstone</option>
@@ -503,7 +498,7 @@ function DetailInner({ id }: { id: string }) {
           </pre>
         </div>
       ) : null}
-    </div>
+    </PageShell>
   );
 }
 

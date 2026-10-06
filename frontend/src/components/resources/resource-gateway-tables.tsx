@@ -1,15 +1,6 @@
 import { useMemo, useState } from "react";
 import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  ageColumn,
-  chWidth,
-  chipColumn,
-  countColumn,
-  namespaceColumn,
-  plainNameColumn,
-  textColumn,
-} from "@/components/resources/resource-column-kit";
 import { ActionButton } from "@/components/ui/action-button";
 import { ResourceActionMenu } from "./resource-action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -29,6 +20,7 @@ import {
   makeRowClick,
   nameColumn,
 } from "@/components/resources/resource-table-primitives";
+import { withNameKind } from "@/components/resources/networking-table-cells";
 import { k8sResourcePath } from "@/lib/k8s-paths";
 import {
   permissionDeniedReason,
@@ -41,150 +33,12 @@ import type {
   ReferenceGrant,
 } from "@/types";
 import { Code, Pencil, Plus, Trash2 } from "lucide-react";
-
-function ConditionPill({
-  status,
-  trueLabel,
-  falseLabel,
-}: {
-  status: string;
-  trueLabel: string;
-  falseLabel: string;
-}) {
-  if (!status) return <span className="text-xs text-muted-foreground">—</span>;
-  if (status === "True") {
-    return (
-      <span className="text-xs px-1.5 py-0.5 rounded-sm bg-status-success/10 text-status-success">
-        {trueLabel}
-      </span>
-    );
-  }
-  if (status === "False") {
-    return (
-      <span className="text-xs px-1.5 py-0.5 rounded-sm bg-status-error/10 text-status-error">
-        {falseLabel}
-      </span>
-    );
-  }
-  return (
-    <span className="text-xs px-1.5 py-0.5 rounded-sm bg-muted text-muted-foreground">
-      {status}
-    </span>
-  );
-}
-
-const gatewayColumns: Column<Gateway>[] = [
-  plainNameColumn<Gateway>(),
-  namespaceColumn<Gateway>(),
-  textColumn<Gateway>("class", "Class", (row) => row.gatewayClassName, {
-    mono: true,
-    size: 124,
-    minSize: 112,
-  }),
-  chipColumn<Gateway>("listeners", "Listeners", (row) => row.listenerSummary, {
-    size: 124,
-    minSize: 112,
-    maxSize: 280,
-    max: 1,
-  }),
-  chipColumn<Gateway>("addresses", "Addresses", (row) => row.addresses, {
-    size: 124,
-    minSize: 112,
-    maxSize: 300,
-    max: 1,
-  }),
-  {
-    key: "programmed",
-    header: "Programmed",
-    kind: "status",
-    size: 104,
-    accessor: (row) => (
-      <ConditionPill
-        status={row.programmed}
-        trueLabel="Programmed"
-        falseLabel="Failed"
-      />
-    ),
-    searchAccessor: (row) => row.programmed,
-  },
-  ageColumn<Gateway>((row) => row.createdAt),
-];
-
-// Shared column definition for HTTPRoute / GRPCRoute / TLSRoute / TCPRoute /
-// UDPRoute. The L4 routes (TCP/UDP) won't populate hostnames; their column
-// just renders empty.
-const routeColumns: Column<GatewayRoute>[] = [
-  plainNameColumn<GatewayRoute>(),
-  namespaceColumn<GatewayRoute>(),
-  chipColumn<GatewayRoute>(
-    "parents",
-    "Parent Gateways",
-    (row) => row.parentSummary,
-    {
-      size: 170,
-      minSize: chWidth(16),
-      maxSize: 320,
-      max: 1,
-    },
-  ),
-  chipColumn<GatewayRoute>("hostnames", "Hostnames", (row) => row.hostnames, {
-    size: 190,
-    minSize: chWidth(22),
-    maxSize: 400,
-    max: 1,
-  }),
-  countColumn<GatewayRoute>("rules", "Rules", (row) => row.ruleCount),
-  ageColumn<GatewayRoute>((row) => row.createdAt),
-];
-
-const gatewayClassColumns: Column<GatewayClass>[] = [
-  plainNameColumn<GatewayClass>(),
-  textColumn<GatewayClass>(
-    "controllerName",
-    "Controller",
-    (row) => row.controllerName,
-    { mono: true, size: 240, minSize: chWidth(26) },
-  ),
-  {
-    key: "accepted",
-    header: "Accepted",
-    kind: "status",
-    size: 100,
-    accessor: (row) => (
-      <ConditionPill
-        status={row.accepted}
-        trueLabel="Accepted"
-        falseLabel="Rejected"
-      />
-    ),
-    searchAccessor: (row) => row.accepted,
-  },
-  textColumn<GatewayClass>(
-    "description",
-    "Description",
-    (row) => row.description,
-    { size: 220, minSize: chWidth(24), sortable: false },
-  ),
-  ageColumn<GatewayClass>((row) => row.createdAt),
-];
-
-const referenceGrantColumns: Column<ReferenceGrant>[] = [
-  plainNameColumn<ReferenceGrant>(),
-  namespaceColumn<ReferenceGrant>(),
-  chipColumn<ReferenceGrant>(
-    "from",
-    "From",
-    (row) => row.from?.map((f) => `${f.kind}@${f.namespace}`),
-    { size: 180, minSize: chWidth(16), maxSize: 320, max: 1 },
-  ),
-  chipColumn<ReferenceGrant>(
-    "to",
-    "To",
-    (row) => row.to?.map((t) => `${t.kind}${t.name ? `/${t.name}` : ""}`),
-    { size: 180, minSize: chWidth(16), maxSize: 320, max: 1 },
-  ),
-  ageColumn<ReferenceGrant>((row) => row.createdAt),
-];
+import {
+  gatewayClassColumns,
+  gatewayColumns,
+  referenceGrantColumns,
+  routeColumns,
+} from "@/components/resources/resource-gateway-columns";
 
 // useK8sDelete provides the mutation; per-row dialog state lives in each
 // table. Shared utility to render the action menu for a namespaced row.
@@ -257,7 +111,7 @@ export function GatewaysTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<Gateway>[]>(
     () => [
-      nameColumn<Gateway>(clusterId, "gateways"),
+      withNameKind(nameColumn<Gateway>(clusterId, "gateways"), 112),
       ...gatewayColumns.slice(1),
       {
         key: "actions",
@@ -276,6 +130,7 @@ export function GatewaysTable({ clusterId }: { clusterId: string }) {
           />
         ),
         sortable: false,
+        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -395,7 +250,7 @@ function RouteTable<T extends GatewayRoute>({
 
   const columns = useMemo<Column<T>[]>(
     () => [
-      nameColumn<T>(clusterId, resourceType),
+      withNameKind(nameColumn<T>(clusterId, resourceType)),
       ...(routeColumns.slice(1) as Column<T>[]),
       {
         key: "actions",
@@ -414,6 +269,7 @@ function RouteTable<T extends GatewayRoute>({
           />
         ),
         sortable: false,
+        align: "center" as const,
       },
     ],
     [clusterId, resourceType, kindLabel, permissions],
@@ -578,7 +434,7 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<GatewayClass>[]>(
     () => [
-      nameColumn<GatewayClass>(clusterId, "gatewayclasses"),
+      withNameKind(nameColumn<GatewayClass>(clusterId, "gatewayclasses")),
       ...gatewayClassColumns.slice(1),
       {
         key: "actions",
@@ -625,6 +481,7 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
           );
         },
         sortable: false,
+        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -709,7 +566,7 @@ export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<ReferenceGrant>[]>(
     () => [
-      nameColumn<ReferenceGrant>(clusterId, "referencegrants"),
+      withNameKind(nameColumn<ReferenceGrant>(clusterId, "referencegrants")),
       ...referenceGrantColumns.slice(1),
       {
         key: "actions",
@@ -728,6 +585,7 @@ export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
           />
         ),
         sortable: false,
+        align: "center" as const,
       },
     ],
     [clusterId, permissions],

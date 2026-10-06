@@ -129,7 +129,7 @@ export function ResourceOverview({
 
   if (kindSpecific) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-(--gap-section)">
         {kindSpecific}
         {/* Tailored overview already summarises status; skip the generic dump. */}
         <GenericOverview
@@ -227,7 +227,7 @@ function GenericOverview({
       : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <Section title="Metadata">
         <KeyValueTable entries={metadataEntries} />
       </Section>

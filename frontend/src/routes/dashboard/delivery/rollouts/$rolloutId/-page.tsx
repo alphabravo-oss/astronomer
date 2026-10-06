@@ -32,13 +32,62 @@ import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
 import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { toastSuccess } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
 
 type RolloutAction = "pause" | "resume" | "abort" | "retry" | "rollback";
+
+const clusterColumns: Column<DeliveryRolloutCluster>[] = [
+  {
+    key: "cluster",
+    header: "Cluster",
+    kind: "id",
+    grow: true,
+    size: 300,
+    minSize: 240,
+    maxSize: 480,
+    accessor: (row) => row.clusterId,
+    sortAccessor: (row) => row.clusterId,
+  },
+  {
+    key: "cohort",
+    header: "Cohort / order",
+    kind: "text",
+    size: 154,
+    minSize: 154,
+    accessor: (row) => `${row.cohort} / ${row.releaseOrder}`,
+  },
+  {
+    key: "state",
+    header: "State",
+    kind: "status",
+    accessor: (row) => <DeliveryPhaseBadge value={row.state} />,
+  },
+  {
+    key: "action",
+    header: "Assignment",
+    kind: "text",
+    size: 140,
+    minSize: 126,
+    accessor: (row) => row.assignmentAction,
+  },
+  {
+    key: "attempt",
+    header: "Attempt",
+    kind: "count",
+    accessor: (row) => row.attempt,
+  },
+  {
+    key: "updated",
+    header: "Updated",
+    kind: "age",
+    accessor: (row) => <AgeCell value={row.updatedAt} />,
+    sortAccessor: (row) => row.updatedAt,
+  },
+];
 
 export function RolloutDetailPage() {
   const { rolloutId } = useParams({ strict: false }) as { rolloutId: string };
@@ -125,34 +174,6 @@ export function RolloutDetailPage() {
           ),
       )
     : [];
-  const clusterColumns: Column<DeliveryRolloutCluster>[] = [
-    {
-      key: "cluster",
-      header: "Cluster",
-      accessor: (row) => <code className="text-xs">{row.clusterId}</code>,
-    },
-    {
-      key: "cohort",
-      header: "Cohort / order",
-      accessor: (row) => `${row.cohort} / ${row.releaseOrder}`,
-    },
-    {
-      key: "state",
-      header: "State",
-      accessor: (row) => <DeliveryPhaseBadge value={row.state} />,
-    },
-    {
-      key: "action",
-      header: "Assignment",
-      accessor: (row) => row.assignmentAction,
-    },
-    { key: "attempt", header: "Attempt", accessor: (row) => row.attempt },
-    {
-      key: "updated",
-      header: "Updated",
-      accessor: (row) => formatRelativeTime(row.updatedAt),
-    },
-  ];
   return (
     <DeliveryShell
       projectId={projectId}

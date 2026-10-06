@@ -122,7 +122,7 @@ function DashboardError({ error, reset }: ErrorComponentProps) {
       />
       <RouterLink
         to="/dashboard"
-        className="-mt-6 inline-flex h-9 items-center gap-2 rounded-lg border border-border px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="-mt-6 inline-flex h-(--control-h) items-center gap-2 rounded-lg border border-border px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <LayoutDashboard className="h-4 w-4" />
         Back to dashboard

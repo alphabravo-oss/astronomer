@@ -12,9 +12,12 @@ import {
   crDetailHref,
   crdListHref,
 } from "@/lib/k8s-paths";
-import { formatRelativeTime } from "@/lib/utils";
+import {
+  ageColumn,
+  namespaceColumn,
+} from "@/components/resources/networking-table-cells";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
 import { ActionButton } from "@/components/ui/action-button";
 import { PermissionState, ErrorState } from "@/components/ui/empty-state";
@@ -141,6 +144,7 @@ function ScopedCustomResourceList({
         key: "name",
         header: "Name",
         kind: "name",
+        minSize: 200,
         sortAccessor: (row) => row.name,
         accessor: (row) => (
           <Link
@@ -161,31 +165,8 @@ function ScopedCustomResourceList({
           </Link>
         ),
       },
-      {
-        key: "namespace",
-        header: "Namespace",
-        kind: "text",
-        size: 124,
-        minSize: 112,
-        searchAccessor: (row) => row.namespace || "Cluster scoped",
-        accessor: (row) => (
-          <span className="text-xs text-muted-foreground font-mono">
-            {row.namespace || "Cluster scoped"}
-          </span>
-        ),
-      },
-      {
-        key: "age",
-        header: "Age",
-        kind: "age",
-        size: 120,
-        minSize: 112,
-        accessor: (row) => (
-          <span className="text-xs text-muted-foreground">
-            {row.createdAt ? formatRelativeTime(row.createdAt) : "-"}
-          </span>
-        ),
-      },
+      namespaceColumn<CRRow>("Cluster scoped"),
+      ageColumn<CRRow>("-"),
     ],
     [clusterId, group, version, plural, search],
   );
@@ -193,7 +174,7 @@ function ScopedCustomResourceList({
   if (!canList) return <PermissionState permission="custom_resources:list" />;
 
   return (
-    <div className="space-y-4">
+    <PageShell>
       <ResourceMasthead
         backTo={crdListHref(clusterId)}
         title={plural}
@@ -295,6 +276,6 @@ function ScopedCustomResourceList({
           </ActionButton>
         </div>
       </QueryStates>
-    </div>
+    </PageShell>
   );
 }

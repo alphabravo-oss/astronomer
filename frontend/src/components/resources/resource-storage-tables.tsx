@@ -21,6 +21,7 @@ import {
   makeRowClick,
   nameColumn,
 } from "@/components/resources/resource-table-primitives";
+import { withNameKind } from "@/components/resources/networking-table-cells";
 import { k8sResourcePath } from "@/lib/k8s-paths";
 import {
   permissionDeniedReason,
@@ -50,9 +51,10 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<PersistentVolume>[]>(
     () => [
-      nameColumn<PersistentVolume>(clusterId, "persistentvolumes", {
-        minSize: 240,
-      }),
+      withNameKind(
+        nameColumn<PersistentVolume>(clusterId, "persistentvolumes"),
+        128,
+      ),
       ...pvColumns.slice(1),
       {
         key: "actions",
@@ -103,6 +105,7 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
+        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -185,7 +188,10 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<PersistentVolumeClaim>[]>(
     () => [
-      nameColumn<PersistentVolumeClaim>(clusterId, "persistentvolumeclaims"),
+      withNameKind(
+        nameColumn<PersistentVolumeClaim>(clusterId, "persistentvolumeclaims"),
+        128,
+      ),
       ...pvcColumns.slice(1),
       {
         key: "actions",
@@ -244,6 +250,7 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
+        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -351,6 +358,8 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
       {
         key: "name",
         header: "Name",
+        kind: "name",
+        minSize: 200,
         accessor: (row) => (
           <div className="flex items-center gap-2">
             <NameLink
@@ -397,6 +406,7 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
+        align: "center" as const,
       },
     ],
     [clusterId, permissions],

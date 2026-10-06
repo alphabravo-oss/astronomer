@@ -616,7 +616,7 @@ export function PodResourceOverview({
     });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <div
         className={cn(
           "flex items-start gap-3 rounded-lg border px-4 py-3",

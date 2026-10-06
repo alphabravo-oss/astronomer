@@ -15,12 +15,11 @@ import { DataTable, type Column } from "@/components/ui/data-table";
  */
 
 import { useState, useMemo } from "react";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import {
   RefreshCw,
   RotateCw,
   Trash2,
-  Activity,
   AlertTriangle,
   CheckCircle2,
   Database,
@@ -85,7 +84,9 @@ function OperationsBody() {
   const outbox = useQuery({
     queryKey: queryKeys.adminOperations.outbox(outboxStatus),
     queryFn: ({ signal }) => listTaskOutbox(outboxStatus, signal),
-    refetchInterval: liveFallback(10_000),
+    // `admin_queue.changed` routes only the queue summary + DLQ keys, not the
+    // task outbox, so this list polls regardless of stream state.
+    refetchInterval: 10_000,
   });
 
   const retry = useOperationMutation({
@@ -132,7 +133,7 @@ function OperationsBody() {
   });
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <p className="sr-only" role="status" aria-live="polite">
         {retry.isPending
           ? `DLQ retry ${retry.operationState.phase}`
@@ -143,11 +144,7 @@ function OperationsBody() {
       <ResourceMasthead
         backTo="/dashboard/settings"
         backLabel="Back to Settings"
-        title={
-          <span className="inline-flex items-center gap-2">
-            <Activity className="h-5 w-5" /> Operations
-          </span>
-        }
+        title="Operations"
         description="Live view of the asynq worker queues + DLQ. Audited; superuser-only."
       />
 
@@ -270,7 +267,7 @@ function OperationsBody() {
           pendingRetry={retryOutbox.isPending}
         />
       </section>
-    </div>
+    </PageShell>
   );
 }
 
@@ -442,9 +439,7 @@ function dlqColumns(
       header: "Last error",
       accessor: (row) => (
         <Tooltip content={row.last_err}>
-          <span
-            className="text-xs text-status-error block max-w-md truncate"
-          >
+          <span className="text-xs text-status-error block max-w-md truncate">
             {row.last_err || "—"}
           </span>
         </Tooltip>
@@ -551,9 +546,7 @@ function taskOutboxColumns(
           <div className="font-mono text-xs">{row.task_type}</div>
           {row.dedupe_key && (
             <Tooltip content={row.dedupe_key}>
-              <div
-                className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground"
-              >
+              <div className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground">
                 {row.dedupe_key}
               </div>
             </Tooltip>
@@ -567,9 +560,7 @@ function taskOutboxColumns(
       key: "status",
       header: "Status",
       accessor: (row) => (
-        <span className={taskOutboxStatusClass(row.status)}>
-          {row.status}
-        </span>
+        <span className={taskOutboxStatusClass(row.status)}>{row.status}</span>
       ),
       searchAccessor: (row) => row.status,
       sortAccessor: (row) => row.status,
@@ -615,9 +606,7 @@ function taskOutboxColumns(
       header: "Last error",
       accessor: (row) => (
         <Tooltip content={row.last_error || ""}>
-          <span
-            className="block max-w-md truncate text-xs text-status-error"
-          >
+          <span className="block max-w-md truncate text-xs text-status-error">
             {row.last_error || "—"}
           </span>
         </Tooltip>

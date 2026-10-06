@@ -11,7 +11,7 @@ import { createFileRoute } from "@tanstack/react-router";
  *     for capacity planning.
  */
 import { Link as RouterLink } from "@tanstack/react-router";
-import { ArrowLeft, Gauge } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ErrorState, LoadingState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
@@ -109,7 +109,8 @@ function UsageInner() {
       header: "Plan",
       accessor: (row) => (
         <RouterLink
-          to="/dashboard/settings/quotas/$name" params={{ name: row.planName }}
+          to="/dashboard/settings/quotas/$name"
+          params={{ name: row.planName }}
           className="text-sm text-foreground hover:underline font-mono"
         >
           {row.planName}
@@ -137,7 +138,7 @@ function UsageInner() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <div className="rounded-xl border border-border bg-card p-6 space-y-4">
         <div>
           <h2 className="text-base font-semibold text-foreground">
@@ -217,12 +218,7 @@ function QuotaUsagePage() {
         </RouterLink>
         <PageHeader
           eyebrow="Settings · Quota usage"
-          title={
-            <span className="flex items-center gap-2">
-              <Gauge className="h-5 w-5 text-muted-foreground" />
-              Deployment-wide quota usage
-            </span>
-          }
+          title="Deployment-wide quota usage"
         />
         <UsageInner />
       </PageShell>

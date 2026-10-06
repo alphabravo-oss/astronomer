@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader, PageShell } from "@/components/ui/page";
 /**
  * Cluster Resources tab — sprint 069 CRD-mirror v2 read-only view.
  *
@@ -50,7 +50,8 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { ActionButton } from "@/components/ui/action-button";
 import { BARE_BUTTON } from "@/lib/bare-button";
-import { ChipList, chWidth } from "@/components/resources/resource-column-kit";
+import { Tooltip } from "@/components/ui/tooltip";
+import { ChipList } from "@/components/resources/networking-table-cells";
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -68,6 +69,22 @@ function fmtRelative(iso?: string): string {
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
 }
+
+function LastSeen({ iso }: { iso?: string }) {
+  const valid = iso && !Number.isNaN(Date.parse(iso));
+  return (
+    <Tooltip content={valid ? new Date(iso).toLocaleString() : undefined}>
+      <span className="text-muted-foreground">{fmtRelative(iso)}</span>
+    </Tooltip>
+  );
+}
+
+const LAST_SEEN_COLUMN = {
+  key: "lastSeen",
+  header: "Last seen",
+  kind: "age",
+  minSize: 128,
+} as const;
 
 // parseQuantity converts a Kubernetes-style quantity string to a number
 // where possible (so we can compute used/hard ratios). Returns NaN for
@@ -154,6 +171,7 @@ const ingressClassColumns: Column<MirroredIngressClass>[] = [
     key: "name",
     header: "Name",
     kind: "name",
+    minSize: 200,
     accessor: (r) => <span className="font-mono">{r.name}</span>,
     searchAccessor: (r) => r.name,
     sortAccessor: (r) => r.name,
@@ -162,8 +180,8 @@ const ingressClassColumns: Column<MirroredIngressClass>[] = [
     key: "controller",
     header: "Controller",
     kind: "text",
-    size: 220,
-    minSize: chWidth(26),
+    minSize: 224,
+    size: 260,
     accessor: (r) => (
       <span className="font-mono text-xs">{r.controller || "—"}</span>
     ),
@@ -173,7 +191,6 @@ const ingressClassColumns: Column<MirroredIngressClass>[] = [
   {
     key: "default",
     header: "Default",
-    searchAccessor: (r) => (r.isDefault ? "default" : ""),
     accessor: (r) =>
       r.isDefault ? (
         <span className="rounded-full bg-status-success/10 px-2 py-0.5 text-xs text-status-success">
@@ -186,15 +203,9 @@ const ingressClassColumns: Column<MirroredIngressClass>[] = [
     kind: "badge",
   },
   {
-    key: "lastSeen",
-    header: "Last seen",
-    accessor: (r) => (
-      <span className="text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
-    ),
+    ...LAST_SEEN_COLUMN,
+    accessor: (r) => <LastSeen iso={r.lastSeenAt} />,
     sortAccessor: (r) => r.lastSeenAt || "",
-    kind: "age",
-    size: 120,
-    minSize: 112,
   },
 ];
 
@@ -241,6 +252,7 @@ const gatewayClassColumns: Column<MirroredGatewayClass>[] = [
     key: "name",
     header: "Name",
     kind: "name",
+    minSize: 200,
     accessor: (r) => <span className="font-mono">{r.name}</span>,
     searchAccessor: (r) => r.name,
     sortAccessor: (r) => r.name,
@@ -249,8 +261,8 @@ const gatewayClassColumns: Column<MirroredGatewayClass>[] = [
     key: "controller",
     header: "Controller",
     kind: "text",
-    size: 220,
-    minSize: chWidth(26),
+    minSize: 224,
+    size: 260,
     accessor: (r) => (
       <span className="font-mono text-xs">{r.controllerName || "—"}</span>
     ),
@@ -267,15 +279,9 @@ const gatewayClassColumns: Column<MirroredGatewayClass>[] = [
     kind: "status",
   },
   {
-    key: "lastSeen",
-    header: "Last seen",
-    accessor: (r) => (
-      <span className="text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
-    ),
+    ...LAST_SEEN_COLUMN,
+    accessor: (r) => <LastSeen iso={r.lastSeenAt} />,
     sortAccessor: (r) => r.lastSeenAt || "",
-    kind: "age",
-    size: 120,
-    minSize: 112,
   },
 ];
 
@@ -300,8 +306,8 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
     key: "namespace",
     header: "Namespace",
     kind: "text",
-    size: 140,
-    minSize: chWidth(14),
+    minSize: 136,
+    size: 168,
     accessor: (r) => <span className="font-mono">{r.namespace}</span>,
     searchAccessor: (r) => r.namespace,
     sortAccessor: (r) => r.namespace,
@@ -311,6 +317,7 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
     key: "name",
     header: "Name",
     kind: "name",
+    minSize: 200,
     accessor: (r) => <span className="font-mono">{r.name}</span>,
     searchAccessor: (r) => r.name,
     sortAccessor: (r) => r.name,
@@ -319,19 +326,8 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
     key: "types",
     header: "Types",
     kind: "badge",
-    size: 140,
-    accessor: (r) => (
-      <>
-        {(r.policyTypes ?? []).map((t) => (
-          <span
-            key={t}
-            className="mr-1 rounded-full bg-muted px-2 py-0.5 text-xs"
-          >
-            {t}
-          </span>
-        ))}
-      </>
-    ),
+    minSize: 144,
+    accessor: (r) => <ChipList items={r.policyTypes} mono={false} />,
     searchAccessor: (r) => (r.policyTypes ?? []).join(" "),
   },
   {
@@ -353,15 +349,9 @@ const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
     kind: "badge",
   },
   {
-    key: "lastSeen",
-    header: "Last seen",
-    accessor: (r) => (
-      <span className="text-muted-foreground">{fmtRelative(r.lastSeenAt)}</span>
-    ),
+    ...LAST_SEEN_COLUMN,
+    accessor: (r) => <LastSeen iso={r.lastSeenAt} />,
     sortAccessor: (r) => r.lastSeenAt || "",
-    kind: "age",
-    size: 120,
-    minSize: 112,
   },
 ];
 
@@ -479,41 +469,48 @@ interface LimitRangeItem {
   min?: Record<string, string>;
 }
 
-const limitRangeMapColumn = (
-  key: "default" | "defaultRequest" | "min" | "max",
-  header: string,
-  opts: Partial<Column<LimitRangeItem & { _key: number }>> = {},
-): Column<LimitRangeItem & { _key: number }> => ({
-  key,
-  header,
-  kind: "text",
-  size: 180,
-  minSize: chWidth(20),
-  accessor: (l) => <ChipList items={mapEntries(l[key])} empty="—" />,
-  searchAccessor: (l) => mapEntries(l[key]).join(" "),
-  sortable: false,
-  ...opts,
-});
-
 const limitRangeItemColumns: Column<LimitRangeItem & { _key: number }>[] = [
   {
     key: "type",
     header: "Type",
     kind: "text",
-    size: 140,
-    minSize: chWidth(12),
+    minSize: 112,
+    size: 112,
     accessor: (l) => <span className="font-mono">{l.type ?? "—"}</span>,
     sortAccessor: (l) => l.type ?? "",
   },
-  limitRangeMapColumn("default", "Default", {
+  {
+    key: "default",
+    header: "Default",
+    kind: "text",
     grow: true,
-    minSize: chWidth(22),
-  }),
-  limitRangeMapColumn("defaultRequest", "Default Req.", {
-    minSize: chWidth(22),
-  }),
-  limitRangeMapColumn("min", "Min"),
-  limitRangeMapColumn("max", "Max"),
+    minSize: 200,
+    accessor: (l) => <ChipList items={fmtItems(l.default)} empty="—" />,
+  },
+  {
+    key: "defaultRequest",
+    header: "Default request",
+    kind: "text",
+    minSize: 184,
+    size: 184,
+    accessor: (l) => <ChipList items={fmtItems(l.defaultRequest)} empty="—" />,
+  },
+  {
+    key: "min",
+    header: "Min",
+    kind: "text",
+    minSize: 152,
+    size: 152,
+    accessor: (l) => <ChipList items={fmtItems(l.min)} empty="—" />,
+  },
+  {
+    key: "max",
+    header: "Max",
+    kind: "text",
+    minSize: 152,
+    size: 152,
+    accessor: (l) => <ChipList items={fmtItems(l.max)} empty="—" />,
+  },
 ];
 
 function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
@@ -562,7 +559,7 @@ function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
   );
 }
 
-function mapEntries(m?: Record<string, string>): string[] {
+function fmtItems(m?: Record<string, string>): string[] {
   return Object.entries(m ?? {}).map(([k, v]) => `${k}=${v}`);
 }
 
@@ -595,7 +592,7 @@ function ClusterResourcesPage() {
   });
 
   return (
-    <div className="p-6">
+    <PageShell>
       <PageHeader
         title="Cluster resources"
         description="A read-only view of the policy / routing / quota objects installed in this cluster. Data is mirrored from the cluster agent every ~10 minutes; rows you delete in the cluster disappear here within roughly an hour."
@@ -667,7 +664,7 @@ function ClusterResourcesPage() {
       >
         <LimitRangesTable rows={limitRangesQ.data ?? []} />
       </Section>
-    </div>
+    </PageShell>
   );
 }
 

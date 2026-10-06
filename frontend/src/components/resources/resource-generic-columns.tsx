@@ -1,16 +1,17 @@
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { Column } from "@/components/ui/data-table";
 import { formatRelativeTime } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   ageColumn,
-  chWidth,
-  chipColumn,
   countColumn,
+  monoTextColumn,
+  nameStubColumn,
   namespaceColumn,
-  plainNameColumn,
-  textColumn,
-} from "@/components/resources/resource-column-kit";
+} from "@/components/resources/networking-table-cells";
 import type { GenericK8sResource } from "@/types";
+
+const nameCol = () => nameStubColumn<GenericK8sResource>();
 
 const jobColumns: Column<GenericK8sResource>[] = [
   {
@@ -119,31 +120,36 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
 ];
 
 export const configMapColumns: Column<GenericK8sResource>[] = [
-  plainNameColumn<GenericK8sResource>(),
+  nameCol(),
   namespaceColumn<GenericK8sResource>(),
-  countColumn<GenericK8sResource>("data", "Data", (row) => row.dataCount),
-  ageColumn<GenericK8sResource>((row) => row.createdAt),
+  countColumn<GenericK8sResource>("data", "Data", (r) => r.dataCount ?? 0),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const secretColumns: Column<GenericK8sResource>[] = [
-  plainNameColumn<GenericK8sResource>(),
+  nameCol(),
   namespaceColumn<GenericK8sResource>(),
   {
     key: "type",
     header: "Type",
     kind: "badge",
-    size: 240,
-    minSize: chWidth(26),
-    maxSize: 380,
+    minSize: 180,
+    size: 224,
+    maxSize: 320,
     accessor: (row) => (
-      <span className="inline-block max-w-full truncate rounded-sm bg-muted px-1.5 py-0.5 align-middle text-2xs text-muted-foreground">
-        {row.type || "Opaque"}
-      </span>
+      <Tooltip content={row.type || "Opaque"}>
+        <span
+          data-cell-clip=""
+          className="block min-w-0 truncate px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground"
+        >
+          {row.type || "Opaque"}
+        </span>
+      </Tooltip>
     ),
-    searchAccessor: (row) => row.type || "Opaque",
+    sortAccessor: (row) => row.type || "Opaque",
   },
-  countColumn<GenericK8sResource>("data", "Data", (row) => row.dataCount),
-  ageColumn<GenericK8sResource>((row) => row.createdAt),
+  countColumn<GenericK8sResource>("data", "Data", (r) => r.dataCount ?? 0),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const hpaColumns: Column<GenericK8sResource>[] = [
@@ -320,89 +326,101 @@ const pdbColumns: Column<GenericK8sResource>[] = [
 ];
 
 const crdColumns: Column<GenericK8sResource>[] = [
-  plainNameColumn<GenericK8sResource>(),
-  textColumn<GenericK8sResource>("group", "Group", (row) => row.group, {
-    mono: true,
-    size: 220,
-    minSize: chWidth(24),
-  }),
-  textColumn<GenericK8sResource>("kind", "Kind", (row) => row.kind, {
-    size: 130,
-    minSize: 112,
+  { ...nameCol(), minSize: 160 },
+  monoTextColumn<GenericK8sResource>("group", "Group", (r) => r.group ?? "", {
+    minSize: 200,
+    size: 208,
   }),
   {
-    ...textColumn<GenericK8sResource>(
-      "version",
-      "Version",
-      (row) => row.version,
+    key: "kind",
+    header: "Kind",
+    kind: "text",
+    minSize: 128,
+    size: 144,
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground">{row.kind}</span>
     ),
+    sortAccessor: (row) => row.kind ?? "",
+  },
+  {
+    key: "version",
+    header: "Version",
     kind: "version",
-    size: 96,
+    size: 112,
+    accessor: (row) => (
+      <span className="text-xs text-muted-foreground">{row.version}</span>
+    ),
+    sortAccessor: (row) => row.version ?? "",
   },
   {
     key: "scope",
     header: "Scope",
     kind: "badge",
+    size: 110,
     accessor: (row) => (
       <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.scope}
       </span>
     ),
-    searchAccessor: (row) => row.scope ?? "",
+    sortAccessor: (row) => row.scope ?? "",
   },
-  ageColumn<GenericK8sResource>((row) => row.createdAt),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const serviceAccountColumns: Column<GenericK8sResource>[] = [
-  plainNameColumn<GenericK8sResource>(),
+  nameCol(),
   namespaceColumn<GenericK8sResource>(),
   countColumn<GenericK8sResource>(
     "secrets",
     "Secrets",
-    (row) => row.secretsCount,
+    (r) => r.secretsCount ?? 0,
   ),
-  ageColumn<GenericK8sResource>((row) => row.createdAt),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const k8sRoleColumns: Column<GenericK8sResource>[] = [
-  plainNameColumn<GenericK8sResource>(),
-  namespaceColumn<GenericK8sResource>(),
-  countColumn<GenericK8sResource>("rules", "Rules", (row) => row.rulesCount),
-  ageColumn<GenericK8sResource>((row) => row.createdAt),
+  nameCol(),
+  namespaceColumn<GenericK8sResource>("-"),
+  countColumn<GenericK8sResource>("rules", "Rules", (r) => r.rulesCount ?? 0),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const k8sRoleBindingColumns: Column<GenericK8sResource>[] = [
-  plainNameColumn<GenericK8sResource>(),
-  namespaceColumn<GenericK8sResource>(),
-  textColumn<GenericK8sResource>(
+  nameCol(),
+  namespaceColumn<GenericK8sResource>("-"),
+  monoTextColumn<GenericK8sResource>(
     "role",
     "Role",
-    (row) => `${row.roleKind}/${row.roleName}`,
-    { mono: true, size: 220, minSize: chWidth(24) },
+    (r) => `${r.roleKind}/${r.roleName}`,
+    { minSize: 224, size: 260 },
   ),
   countColumn<GenericK8sResource>(
     "subjects",
     "Subjects",
-    (row) => row.subjectsCount,
+    (r) => r.subjectsCount ?? 0,
   ),
-  ageColumn<GenericK8sResource>((row) => row.createdAt),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const endpointColumns: Column<GenericK8sResource>[] = [
-  plainNameColumn<GenericK8sResource>(),
+  nameCol(),
   namespaceColumn<GenericK8sResource>(),
   countColumn<GenericK8sResource>(
     "endpoints",
     "Endpoints",
-    (row) => row.addressesCount,
+    (r) => r.addressesCount ?? 0,
   ),
-  chipColumn<GenericK8sResource>(
+  monoTextColumn<GenericK8sResource>(
     "ports",
     "Ports",
-    (row) => row.ports?.split(/,\s*/).filter(Boolean),
-    { size: 190, minSize: chWidth(16), maxSize: 280 },
+    (r) => String(r.ports ?? ""),
+    {
+      minSize: 144,
+      size: 168,
+      sortable: false,
+    },
   ),
-  ageColumn<GenericK8sResource>((row) => row.createdAt),
+  ageColumn<GenericK8sResource>(),
 ];
 
 const replicaSetColumns: Column<GenericK8sResource>[] = [

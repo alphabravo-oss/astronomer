@@ -11,7 +11,6 @@
 // The group segment uses '_' as a sentinel for the (rare) empty group so the
 // URL never has an empty path segment — see crListHref/crDetailHref.
 
-import { ChipList, chWidth } from "@/components/resources/resource-column-kit";
 import { useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
@@ -22,8 +21,11 @@ import { usePermissionDecision } from "@/lib/permission-hooks";
 import { ResourceDetail } from "@/components/resources/resource-detail";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { crResourcePath, crListHref } from "@/lib/k8s-paths";
-import { formatRelativeTime } from "@/lib/utils";
-import { PageHeader } from "@/components/ui/page";
+import {
+  ageColumn,
+  ChipList,
+} from "@/components/resources/networking-table-cells";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import { CustomResourceList } from "./custom-resource-list";
 import { QueryStates } from "@/components/ui/query-states";
 
@@ -110,6 +112,7 @@ const crdColumns: Column<CRDRow>[] = [
     key: "kind",
     header: "Kind",
     kind: "name",
+    minSize: 200,
     accessor: (row) => (
       <span className="font-medium text-foreground text-xs">{row.kind}</span>
     ),
@@ -119,9 +122,9 @@ const crdColumns: Column<CRDRow>[] = [
     key: "group",
     header: "Group",
     kind: "text",
-    size: 220,
-    minSize: chWidth(24),
-    searchAccessor: (row) => row.group,
+    minSize: 208,
+    size: 240,
+    sortAccessor: (row) => row.group,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.group || "-"}
@@ -132,9 +135,9 @@ const crdColumns: Column<CRDRow>[] = [
     key: "plural",
     header: "Plural",
     kind: "text",
-    size: 150,
-    minSize: chWidth(18),
-    searchAccessor: (row) => row.plural,
+    minSize: 144,
+    size: 176,
+    sortAccessor: (row) => row.plural,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.plural}
@@ -144,9 +147,8 @@ const crdColumns: Column<CRDRow>[] = [
   {
     key: "versions",
     header: "Versions",
-    kind: "badge",
-    size: 140,
-    minSize: chWidth(12),
+    kind: "version",
+    minSize: 144,
     accessor: (row) => <ChipList items={row.versions} />,
     searchAccessor: (row) => row.versions.join(" "),
     sortable: false,
@@ -164,16 +166,7 @@ const crdColumns: Column<CRDRow>[] = [
     filter: { label: "Scope" },
   },
   {
-    key: "age",
-    header: "Age",
-    kind: "age",
-    size: 120,
-    minSize: 112,
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.createdAt ? formatRelativeTime(row.createdAt) : "-"}
-      </span>
-    ),
+    ...ageColumn<CRDRow>("-"),
   },
 ];
 
@@ -231,7 +224,7 @@ function CRDList({ clusterId }: { clusterId: string }) {
   );
 
   return (
-    <div className="space-y-4">
+    <PageShell>
       <PageHeader title="Custom Resources" />
       <QueryStates
         query={query}
@@ -261,6 +254,6 @@ function CRDList({ clusterId }: { clusterId: string }) {
           }}
         />
       </QueryStates>
-    </div>
+    </PageShell>
   );
 }

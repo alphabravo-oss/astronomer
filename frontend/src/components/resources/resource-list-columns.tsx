@@ -8,28 +8,11 @@ import {
 import type {
   ClusterEvent,
   ClusterNode,
-  Ingress,
-  K8sService,
   Namespace,
-  NetworkPolicy,
-  PersistentVolume,
-  PersistentVolumeClaim,
   Pod,
-  StorageClass,
   Workload,
 } from "@/types";
 import { Tooltip } from "@/components/ui/tooltip";
-import {
-  AccessModesCell,
-  abbreviateAccessModes,
-  ageColumn,
-  chWidth,
-  chipColumn,
-  countColumn,
-  namespaceColumn,
-  plainNameColumn,
-  textColumn,
-} from "@/components/resources/resource-column-kit";
 
 // ── Column Definitions ──
 
@@ -425,261 +408,23 @@ const workloadColumns: Column<Workload>[] = [
   },
 ];
 
-const serviceColumns: Column<K8sService>[] = [
-  plainNameColumn<K8sService>(),
-  namespaceColumn<K8sService>(),
-  {
-    key: "type",
-    header: "Type",
-    kind: "badge",
-    size: 104,
-    accessor: (row) => (
-      <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
-        {row.type}
-      </span>
-    ),
-    searchAccessor: (row) => row.type,
-  },
-  {
-    key: "clusterIP",
-    header: "Cluster IP",
-    kind: "text",
-    size: 132,
-    minSize: 112,
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.clusterIP}
-      </span>
-    ),
-    searchAccessor: (row) => row.clusterIP ?? "",
-  },
-  chipColumn<K8sService>(
-    "ports",
-    "Ports",
-    (row) => row.ports?.map((p) => `${p.port}/${p.protocol}`),
-    { size: 180, minSize: chWidth(16), maxSize: 280 },
-  ),
-  ageColumn<K8sService>((row) => row.createdAt),
-];
-
-const ingressColumns: Column<Ingress>[] = [
-  plainNameColumn<Ingress>(),
-  namespaceColumn<Ingress>(),
-  textColumn<Ingress>("class", "Class", (row) => row.ingressClass, {
-    size: 110,
-    minSize: 96,
-  }),
-  chipColumn<Ingress>(
-    "hosts",
-    "Hosts",
-    (row) => (row.hosts?.length ? row.hosts : ["*"]),
-    { size: 200, minSize: chWidth(22), maxSize: 400, max: 1 },
-  ),
-  {
-    key: "tls",
-    header: "TLS",
-    kind: "status",
-    size: 72,
-    minSize: 64,
-    accessor: (row) => (
-      <span
-        className={cn(
-          "text-xs",
-          row.tls ? "text-status-success" : "text-muted-foreground",
-        )}
-      >
-        {row.tls ? "Yes" : "No"}
-      </span>
-    ),
-    searchAccessor: (row) => (row.tls ? "Yes" : "No"),
-  },
-  ageColumn<Ingress>((row) => row.createdAt),
-];
-
-const networkPolicyColumns: Column<NetworkPolicy>[] = [
-  plainNameColumn<NetworkPolicy>(),
-  namespaceColumn<NetworkPolicy>(),
-  chipColumn<NetworkPolicy>(
-    "policyTypes",
-    "Policy Types",
-    (row) => row.policyTypes,
-    { mono: false, size: 150 },
-  ),
-  countColumn<NetworkPolicy>(
-    "ingress",
-    "Ingress Rules",
-    (row) => row.ingressRules,
-    { size: 104 },
-  ),
-  countColumn<NetworkPolicy>(
-    "egress",
-    "Egress Rules",
-    (row) => row.egressRules,
-    { size: 104 },
-  ),
-  ageColumn<NetworkPolicy>((row) => row.createdAt),
-];
-
-const pvColumns: Column<PersistentVolume>[] = [
-  plainNameColumn<PersistentVolume>(),
-  {
-    key: "status",
-    header: "Status",
-    kind: "status",
-    size: 100,
-    accessor: (row) => <StatusBadge status={row.status} />,
-    searchAccessor: (row) => row.status,
-  },
-  {
-    key: "capacity",
-    header: "Capacity",
-    kind: "bytes",
-    size: 84,
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">{row.capacity}</span>
-    ),
-    searchAccessor: (row) => row.capacity ?? "",
-  },
-  {
-    key: "accessModes",
-    header: "Access Modes",
-    kind: "text",
-    size: 96,
-    minSize: 92,
-    accessor: (row) => <AccessModesCell modes={row.accessModes} />,
-    searchAccessor: (row) => abbreviateAccessModes(row.accessModes).join(" "),
-    sortable: false,
-  },
-  textColumn<PersistentVolume>(
-    "storageClass",
-    "Storage Class",
-    (row) => row.storageClass,
-    { size: 124, minSize: 112 },
-  ),
-  textColumn<PersistentVolume>("claimRef", "Claim", (row) => row.claimRef, {
-    mono: true,
-    size: 170,
-    minSize: chWidth(18),
-  }),
-  ageColumn<PersistentVolume>((row) => row.createdAt),
-];
-
-const pvcColumns: Column<PersistentVolumeClaim>[] = [
-  plainNameColumn<PersistentVolumeClaim>(),
-  namespaceColumn<PersistentVolumeClaim>(),
-  {
-    key: "status",
-    header: "Status",
-    kind: "status",
-    size: 104,
-    accessor: (row) => <StatusBadge status={row.status} />,
-    searchAccessor: (row) => row.status,
-  },
-  {
-    key: "capacity",
-    header: "Capacity",
-    kind: "bytes",
-    size: 88,
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">{row.capacity}</span>
-    ),
-    searchAccessor: (row) => row.capacity ?? "",
-  },
-  textColumn<PersistentVolumeClaim>(
-    "storageClass",
-    "Storage Class",
-    (row) => row.storageClass,
-    { size: 124, minSize: 112 },
-  ),
-  {
-    key: "volumeName",
-    header: "Volume",
-    kind: "id",
-    size: 170,
-    minSize: 130,
-    maxSize: 320,
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.volumeName || "-"}
-      </span>
-    ),
-    searchAccessor: (row) => row.volumeName ?? "",
-  },
-  ageColumn<PersistentVolumeClaim>((row) => row.createdAt),
-];
-
-const storageClassColumns: Column<StorageClass>[] = [
-  {
-    key: "name",
-    header: "Name",
-    kind: "name",
-    accessor: (row) => (
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 truncate font-medium text-foreground font-mono text-xs">
-          {row.name}
-        </span>
-        {row.isDefault && (
-          <span className="shrink-0 px-1.5 py-0.5 rounded-sm text-2xs bg-status-info/10 text-status-info">
-            default
-          </span>
-        )}
-      </div>
-    ),
-    searchAccessor: (row) => row.name,
-  },
-  textColumn<StorageClass>(
-    "provisioner",
-    "Provisioner",
-    (row) => row.provisioner,
-    { mono: true, size: 200, minSize: chWidth(22) },
-  ),
-  textColumn<StorageClass>(
-    "reclaimPolicy",
-    "Reclaim Policy",
-    (row) => row.reclaimPolicy,
-    { size: 112, minSize: 100 },
-  ),
-  textColumn<StorageClass>(
-    "volumeBindingMode",
-    "Binding Mode",
-    (row) => row.volumeBindingMode,
-    { size: 170, minSize: chWidth(20) },
-  ),
-  {
-    key: "expansion",
-    header: "Expansion",
-    kind: "status",
-    size: 96,
-    accessor: (row) => (
-      <span
-        className={cn(
-          "text-xs",
-          row.allowVolumeExpansion
-            ? "text-status-success"
-            : "text-muted-foreground",
-        )}
-      >
-        {row.allowVolumeExpansion ? "Allowed" : "No"}
-      </span>
-    ),
-    searchAccessor: (row) => (row.allowVolumeExpansion ? "Allowed" : "No"),
-  },
-];
-
 // ── Generic resource column definitions ──
 
 export {
   configMapColumns,
   eventColumns,
   genericColumnMap,
-  ingressColumns,
-  networkPolicyColumns,
   nodeColumns,
   nsColumns,
   podColumns,
+  workloadColumns,
+};
+
+export {
+  ingressColumns,
+  networkPolicyColumns,
   pvColumns,
   pvcColumns,
   serviceColumns,
   storageClassColumns,
-  workloadColumns,
-};
+} from "@/components/resources/resource-network-storage-columns";
