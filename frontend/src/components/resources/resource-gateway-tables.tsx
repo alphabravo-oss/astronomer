@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react";
 import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
 import { useNavigate } from "@tanstack/react-router";
-import { formatRelativeTime } from "@/lib/utils";
+import {
+  ageColumn,
+  chWidth,
+  chipColumn,
+  countColumn,
+  namespaceColumn,
+  plainNameColumn,
+  textColumn,
+} from "@/components/resources/resource-column-kit";
 import { ActionButton } from "@/components/ui/action-button";
 import { ResourceActionMenu } from "./resource-action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -66,67 +74,27 @@ function ConditionPill({
 }
 
 const gatewayColumns: Column<Gateway>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "class",
-    header: "Class",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.gatewayClassName || "-"}
-      </span>
-    ),
-  },
-  {
-    key: "listeners",
-    header: "Listeners",
-    accessor: (row) => (
-      <div className="flex gap-1 flex-wrap">
-        {row.listenerSummary?.length ? (
-          row.listenerSummary.map((s, i) => (
-            <span
-              key={`${s}-${i}`}
-              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
-            >
-              {s}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        )}
-      </div>
-    ),
-    sortable: false,
-  },
-  {
-    key: "addresses",
-    header: "Addresses",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-50 block">
-        {row.addresses?.join(", ") || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
+  plainNameColumn<Gateway>(),
+  namespaceColumn<Gateway>(),
+  textColumn<Gateway>("class", "Class", (row) => row.gatewayClassName, {
+    mono: true,
+    size: 180,
+    minSize: chWidth(16),
+  }),
+  chipColumn<Gateway>("listeners", "Listeners", (row) => row.listenerSummary, {
+    size: 190,
+    minSize: chWidth(16),
+    maxSize: 280,
+  }),
+  chipColumn<Gateway>("addresses", "Addresses", (row) => row.addresses, {
+    size: 200,
+    minSize: chWidth(20),
+    maxSize: 300,
+  }),
   {
     key: "programmed",
     header: "Programmed",
+    kind: "status",
     accessor: (row) => (
       <ConditionPill
         status={row.programmed}
@@ -134,113 +102,48 @@ const gatewayColumns: Column<Gateway>[] = [
         falseLabel="Failed"
       />
     ),
-    align: "center",
+    searchAccessor: (row) => row.programmed,
   },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  ageColumn<Gateway>((row) => row.createdAt),
 ];
 
 // Shared column definition for HTTPRoute / GRPCRoute / TLSRoute / TCPRoute /
 // UDPRoute. The L4 routes (TCP/UDP) won't populate hostnames; their column
 // just renders empty.
 const routeColumns: Column<GatewayRoute>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "parents",
-    header: "Parent Gateways",
-    accessor: (row) => (
-      <div className="flex gap-1 flex-wrap">
-        {row.parentSummary?.length ? (
-          row.parentSummary.map((p, i) => (
-            <span
-              key={`${p}-${i}`}
-              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
-            >
-              {p}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        )}
-      </div>
-    ),
-    sortable: false,
-  },
-  {
-    key: "hostnames",
-    header: "Hostnames",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-50 block">
-        {row.hostnames?.join(", ") || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "rules",
-    header: "Rules",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.ruleCount}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  plainNameColumn<GatewayRoute>(),
+  namespaceColumn<GatewayRoute>(),
+  chipColumn<GatewayRoute>(
+    "parents",
+    "Parent Gateways",
+    (row) => row.parentSummary,
+    {
+      size: 220,
+      minSize: chWidth(18),
+      maxSize: 320,
+    },
+  ),
+  chipColumn<GatewayRoute>("hostnames", "Hostnames", (row) => row.hostnames, {
+    size: 260,
+    minSize: chWidth(24),
+    maxSize: 400,
+  }),
+  countColumn<GatewayRoute>("rules", "Rules", (row) => row.ruleCount),
+  ageColumn<GatewayRoute>((row) => row.createdAt),
 ];
 
 const gatewayClassColumns: Column<GatewayClass>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "controllerName",
-    header: "Controller",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-70 block">
-        {row.controllerName}
-      </span>
-    ),
-  },
+  plainNameColumn<GatewayClass>(),
+  textColumn<GatewayClass>(
+    "controllerName",
+    "Controller",
+    (row) => row.controllerName,
+    { mono: true, size: 300, minSize: chWidth(30) },
+  ),
   {
     key: "accepted",
     header: "Accepted",
+    kind: "status",
     accessor: (row) => (
       <ConditionPill
         status={row.accepted}
@@ -248,100 +151,33 @@ const gatewayClassColumns: Column<GatewayClass>[] = [
         falseLabel="Rejected"
       />
     ),
-    align: "center",
+    searchAccessor: (row) => row.accepted,
   },
-  {
-    key: "description",
-    header: "Description",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground truncate max-w-65 block">
-        {row.description || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  textColumn<GatewayClass>(
+    "description",
+    "Description",
+    (row) => row.description,
+    { size: 280, minSize: chWidth(24), sortable: false },
+  ),
+  ageColumn<GatewayClass>((row) => row.createdAt),
 ];
 
 const referenceGrantColumns: Column<ReferenceGrant>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "from",
-    header: "From",
-    accessor: (row) => (
-      <div className="flex gap-1 flex-wrap">
-        {row.from?.length ? (
-          row.from.map((f, i) => (
-            <span
-              key={`${f.kind}-${f.namespace}-${i}`}
-              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
-            >
-              {f.kind}@{f.namespace}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        )}
-      </div>
-    ),
-    sortable: false,
-  },
-  {
-    key: "to",
-    header: "To",
-    accessor: (row) => (
-      <div className="flex gap-1 flex-wrap">
-        {row.to?.length ? (
-          row.to.map((t, i) => (
-            <span
-              key={`${t.kind}-${t.name}-${i}`}
-              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
-            >
-              {t.kind}
-              {t.name ? `/${t.name}` : ""}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        )}
-      </div>
-    ),
-    sortable: false,
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  plainNameColumn<ReferenceGrant>(),
+  namespaceColumn<ReferenceGrant>(),
+  chipColumn<ReferenceGrant>(
+    "from",
+    "From",
+    (row) => row.from?.map((f) => `${f.kind}@${f.namespace}`),
+    { size: 220, minSize: chWidth(18), maxSize: 320 },
+  ),
+  chipColumn<ReferenceGrant>(
+    "to",
+    "To",
+    (row) => row.to?.map((t) => `${t.kind}${t.name ? `/${t.name}` : ""}`),
+    { size: 220, minSize: chWidth(18), maxSize: 320 },
+  ),
+  ageColumn<ReferenceGrant>((row) => row.createdAt),
 ];
 
 // useK8sDelete provides the mutation; per-row dialog state lives in each
@@ -421,6 +257,7 @@ export function GatewaysTable({ clusterId }: { clusterId: string }) {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <NamespacedActions
             clusterId={clusterId}
@@ -433,7 +270,6 @@ export function GatewaysTable({ clusterId }: { clusterId: string }) {
           />
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -559,6 +395,7 @@ function RouteTable<T extends GatewayRoute>({
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <NamespacedActions
             clusterId={clusterId}
@@ -571,7 +408,6 @@ function RouteTable<T extends GatewayRoute>({
           />
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, resourceType, kindLabel, permissions],
@@ -742,6 +578,7 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => {
           const path = k8sResourcePath("gatewayclasses", row.name);
           const title = `GatewayClass: ${row.name}`;
@@ -782,7 +619,6 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
           );
         },
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -873,6 +709,7 @@ export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <NamespacedActions
             clusterId={clusterId}
@@ -885,7 +722,6 @@ export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
           />
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],

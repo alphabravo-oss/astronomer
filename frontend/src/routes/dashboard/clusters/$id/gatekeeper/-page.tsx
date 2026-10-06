@@ -55,6 +55,51 @@ spec:
     labels: ["team"]
 `;
 
+function ConstraintNameCell({ row }: { row: GatekeeperConstraint }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate font-medium text-foreground">{row.name}</p>
+      <p className="truncate text-2xs font-mono text-muted-foreground">
+        {row.kind}
+      </p>
+    </div>
+  );
+}
+
+/** Sync status with the last error underneath (full text in a Tooltip). */
+function ConstraintStatusCell({ row }: { row: GatekeeperConstraint }) {
+  if (row.source !== "custom") {
+    return <span className="text-xs text-muted-foreground">managed</span>;
+  }
+  const label =
+    row.desiredState === "absent"
+      ? row.syncStatus === "synced"
+        ? "deleted"
+        : "deleting"
+      : row.syncStatus;
+  return (
+    <div className="min-w-0 space-y-0.5">
+      <span
+        className={cn(
+          "inline-flex rounded-sm px-2 py-0.5 text-xs font-medium capitalize",
+          row.syncStatus === "synced"
+            ? "bg-status-success/10 text-status-success"
+            : row.syncStatus === "failed"
+              ? "bg-status-error/10 text-status-error"
+              : "bg-status-warning/10 text-status-warning",
+        )}
+      >
+        {label}
+      </span>
+      {row.lastError ? (
+        <Tooltip content={row.lastError}>
+          <p className="truncate text-2xs text-status-error">{row.lastError}</p>
+        </Tooltip>
+      ) : null}
+    </div>
+  );
+}
+
 export function ClusterGatekeeperPage() {
   const params = useParams({ strict: false });
   const clusterId = (params?.id as string) ?? "";
@@ -103,16 +148,14 @@ export function ClusterGatekeeperPage() {
     {
       key: "name",
       header: "Name",
-      accessor: (row) => (
-        <div>
-          <p className="font-medium text-foreground">{row.name}</p>
-          <p className="text-2xs font-mono text-muted-foreground">{row.kind}</p>
-        </div>
-      ),
+      kind: "name",
+      accessor: (row) => <ConstraintNameCell row={row} />,
+      searchAccessor: (row) => `${row.name} ${row.kind}`,
     },
     {
       key: "source",
       header: "Source",
+      kind: "badge",
       accessor: (row) => (
         <span
           className={cn(
@@ -130,6 +173,7 @@ export function ClusterGatekeeperPage() {
     {
       key: "enforcement",
       header: "Enforcement",
+      kind: "badge",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
           {row.enforcementAction || "—"}
@@ -140,7 +184,7 @@ export function ClusterGatekeeperPage() {
     {
       key: "violations",
       header: "Violations",
-      align: "center",
+      kind: "count",
       accessor: (row) => (
         <span
           className={cn(
@@ -158,41 +202,16 @@ export function ClusterGatekeeperPage() {
     {
       key: "status",
       header: "Status",
-      accessor: (row) =>
-        row.source === "custom" ? (
-          <div className="space-y-0.5">
-            <span
-              className={cn(
-                "inline-flex rounded-sm px-2 py-0.5 text-xs font-medium capitalize",
-                row.syncStatus === "synced"
-                  ? "bg-status-success/10 text-status-success"
-                  : row.syncStatus === "failed"
-                    ? "bg-status-error/10 text-status-error"
-                    : "bg-status-warning/10 text-status-warning",
-              )}
-            >
-              {row.desiredState === "absent"
-                ? row.syncStatus === "synced"
-                  ? "deleted"
-                  : "deleting"
-                : row.syncStatus}
-            </span>
-            {row.lastError ? (
-              <Tooltip content={row.lastError}>
-                <p className="max-w-56 truncate text-2xs text-status-error">
-                  {row.lastError}
-                </p>
-              </Tooltip>
-            ) : null}
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">managed</span>
-        ),
+      kind: "status",
+      size: 160,
+      minSize: 144,
+      accessor: (row) => <ConstraintStatusCell row={row} />,
       sortAccessor: (row) => row.syncStatus ?? "",
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
       sortable: false,
       accessor: (row) =>
         row.source === "custom" && row.desiredState !== "absent" ? (

@@ -1,6 +1,15 @@
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { Column } from "@/components/ui/data-table";
 import { formatRelativeTime } from "@/lib/utils";
+import {
+  ageColumn,
+  chWidth,
+  chipColumn,
+  countColumn,
+  namespaceColumn,
+  plainNameColumn,
+  textColumn,
+} from "@/components/resources/resource-column-kit";
 import type { GenericK8sResource } from "@/types";
 
 const jobColumns: Column<GenericK8sResource>[] = [
@@ -110,88 +119,31 @@ const cronJobColumns: Column<GenericK8sResource>[] = [
 ];
 
 export const configMapColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "data",
-    header: "Data",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.dataCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  plainNameColumn<GenericK8sResource>(),
+  namespaceColumn<GenericK8sResource>(),
+  countColumn<GenericK8sResource>("data", "Data", (row) => row.dataCount),
+  ageColumn<GenericK8sResource>((row) => row.createdAt),
 ];
 
 const secretColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
+  plainNameColumn<GenericK8sResource>(),
+  namespaceColumn<GenericK8sResource>(),
   {
     key: "type",
     header: "Type",
+    kind: "badge",
+    size: 260,
+    minSize: chWidth(28),
+    maxSize: 380,
     accessor: (row) => (
-      <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
+      <span className="inline-block max-w-full truncate rounded-sm bg-muted px-1.5 py-0.5 align-middle text-2xs text-muted-foreground">
         {row.type || "Opaque"}
       </span>
     ),
+    searchAccessor: (row) => row.type || "Opaque",
   },
-  {
-    key: "data",
-    header: "Data",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.dataCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  countColumn<GenericK8sResource>("data", "Data", (row) => row.dataCount),
+  ageColumn<GenericK8sResource>((row) => row.createdAt),
 ];
 
 const hpaColumns: Column<GenericK8sResource>[] = [
@@ -368,227 +320,89 @@ const pdbColumns: Column<GenericK8sResource>[] = [
 ];
 
 const crdColumns: Column<GenericK8sResource>[] = [
+  plainNameColumn<GenericK8sResource>(),
+  textColumn<GenericK8sResource>("group", "Group", (row) => row.group, {
+    mono: true,
+    size: 240,
+    minSize: chWidth(24),
+  }),
+  textColumn<GenericK8sResource>("kind", "Kind", (row) => row.kind, {
+    size: 160,
+    minSize: chWidth(14),
+  }),
   {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs truncate max-w-75 block">
-        {row.name}
-      </span>
+    ...textColumn<GenericK8sResource>(
+      "version",
+      "Version",
+      (row) => row.version,
     ),
-  },
-  {
-    key: "group",
-    header: "Group",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.group}
-      </span>
-    ),
-  },
-  {
-    key: "kind",
-    header: "Kind",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">{row.kind}</span>
-    ),
-  },
-  {
-    key: "version",
-    header: "Version",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">{row.version}</span>
-    ),
+    kind: "version",
+    size: 112,
   },
   {
     key: "scope",
     header: "Scope",
+    kind: "badge",
     accessor: (row) => (
       <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.scope}
       </span>
     ),
+    searchAccessor: (row) => row.scope ?? "",
   },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  ageColumn<GenericK8sResource>((row) => row.createdAt),
 ];
 
 const serviceAccountColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "secrets",
-    header: "Secrets",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.secretsCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  plainNameColumn<GenericK8sResource>(),
+  namespaceColumn<GenericK8sResource>(),
+  countColumn<GenericK8sResource>(
+    "secrets",
+    "Secrets",
+    (row) => row.secretsCount,
+  ),
+  ageColumn<GenericK8sResource>((row) => row.createdAt),
 ];
 
 const k8sRoleColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace || "-"}
-      </span>
-    ),
-  },
-  {
-    key: "rules",
-    header: "Rules",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.rulesCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  plainNameColumn<GenericK8sResource>(),
+  namespaceColumn<GenericK8sResource>(),
+  countColumn<GenericK8sResource>("rules", "Rules", (row) => row.rulesCount),
+  ageColumn<GenericK8sResource>((row) => row.createdAt),
 ];
 
 const k8sRoleBindingColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace || "-"}
-      </span>
-    ),
-  },
-  {
-    key: "role",
-    header: "Role",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.roleKind}/{row.roleName}
-      </span>
-    ),
-  },
-  {
-    key: "subjects",
-    header: "Subjects",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.subjectsCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  plainNameColumn<GenericK8sResource>(),
+  namespaceColumn<GenericK8sResource>(),
+  textColumn<GenericK8sResource>(
+    "role",
+    "Role",
+    (row) => `${row.roleKind}/${row.roleName}`,
+    { mono: true, size: 260, minSize: chWidth(24) },
+  ),
+  countColumn<GenericK8sResource>(
+    "subjects",
+    "Subjects",
+    (row) => row.subjectsCount,
+  ),
+  ageColumn<GenericK8sResource>((row) => row.createdAt),
 ];
 
 const endpointColumns: Column<GenericK8sResource>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "endpoints",
-    header: "Endpoints",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.addressesCount ?? 0}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "ports",
-    header: "Ports",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {row.ports || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  plainNameColumn<GenericK8sResource>(),
+  namespaceColumn<GenericK8sResource>(),
+  countColumn<GenericK8sResource>(
+    "endpoints",
+    "Endpoints",
+    (row) => row.addressesCount,
+  ),
+  chipColumn<GenericK8sResource>(
+    "ports",
+    "Ports",
+    (row) => row.ports?.split(/,\s*/).filter(Boolean),
+    { size: 200, minSize: chWidth(16), maxSize: 280 },
+  ),
+  ageColumn<GenericK8sResource>((row) => row.createdAt),
 ];
 
 const replicaSetColumns: Column<GenericK8sResource>[] = [

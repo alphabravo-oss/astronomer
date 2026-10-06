@@ -19,6 +19,17 @@ import type {
   Workload,
 } from "@/types";
 import { Tooltip } from "@/components/ui/tooltip";
+import {
+  AccessModesCell,
+  abbreviateAccessModes,
+  ageColumn,
+  chWidth,
+  chipColumn,
+  countColumn,
+  namespaceColumn,
+  plainNameColumn,
+  textColumn,
+} from "@/components/resources/resource-column-kit";
 
 // ── Column Definitions ──
 
@@ -415,104 +426,58 @@ const workloadColumns: Column<Workload>[] = [
 ];
 
 const serviceColumns: Column<K8sService>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
+  plainNameColumn<K8sService>(),
+  namespaceColumn<K8sService>(),
   {
     key: "type",
     header: "Type",
+    kind: "badge",
     accessor: (row) => (
       <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.type}
       </span>
     ),
+    searchAccessor: (row) => row.type,
   },
   {
     key: "clusterIP",
     header: "Cluster IP",
+    kind: "id",
+    size: 148,
+    minSize: chWidth(15),
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.clusterIP}
       </span>
     ),
+    searchAccessor: (row) => row.clusterIP ?? "",
   },
-  {
-    key: "ports",
-    header: "Ports",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {row.ports?.map((p) => `${p.port}/${p.protocol}`).join(", ") || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  chipColumn<K8sService>(
+    "ports",
+    "Ports",
+    (row) => row.ports?.map((p) => `${p.port}/${p.protocol}`),
+    { size: 200, minSize: chWidth(20), maxSize: 280 },
+  ),
+  ageColumn<K8sService>((row) => row.createdAt),
 ];
 
 const ingressColumns: Column<Ingress>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "class",
-    header: "Class",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.ingressClass || "-"}
-      </span>
-    ),
-  },
-  {
-    key: "hosts",
-    header: "Hosts",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-50 block">
-        {row.hosts?.join(", ") || "*"}
-      </span>
-    ),
-    sortable: false,
-  },
+  plainNameColumn<Ingress>(),
+  namespaceColumn<Ingress>(),
+  textColumn<Ingress>("class", "Class", (row) => row.ingressClass, {
+    size: 140,
+    minSize: chWidth(12),
+  }),
+  chipColumn<Ingress>(
+    "hosts",
+    "Hosts",
+    (row) => (row.hosts?.length ? row.hosts : ["*"]),
+    { size: 260, minSize: chWidth(26), maxSize: 400 },
+  ),
   {
     key: "tls",
     header: "TLS",
+    kind: "status",
     accessor: (row) => (
       <span
         className={cn(
@@ -523,252 +488,158 @@ const ingressColumns: Column<Ingress>[] = [
         {row.tls ? "Yes" : "No"}
       </span>
     ),
-    align: "center",
+    searchAccessor: (row) => (row.tls ? "Yes" : "No"),
   },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  ageColumn<Ingress>((row) => row.createdAt),
 ];
 
 const networkPolicyColumns: Column<NetworkPolicy>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "policyTypes",
-    header: "Policy Types",
-    accessor: (row) => (
-      <div className="flex gap-1">
-        {row.policyTypes?.map((t) => (
-          <span
-            key={t}
-            className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground"
-          >
-            {t}
-          </span>
-        ))}
-      </div>
-    ),
-    sortable: false,
-  },
-  {
-    key: "ingress",
-    header: "Ingress Rules",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.ingressRules}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "egress",
-    header: "Egress Rules",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.egressRules}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  plainNameColumn<NetworkPolicy>(),
+  namespaceColumn<NetworkPolicy>(),
+  chipColumn<NetworkPolicy>(
+    "policyTypes",
+    "Policy Types",
+    (row) => row.policyTypes,
+    { mono: false },
+  ),
+  countColumn<NetworkPolicy>(
+    "ingress",
+    "Ingress Rules",
+    (row) => row.ingressRules,
+  ),
+  countColumn<NetworkPolicy>(
+    "egress",
+    "Egress Rules",
+    (row) => row.egressRules,
+  ),
+  ageColumn<NetworkPolicy>((row) => row.createdAt),
 ];
 
 const pvColumns: Column<PersistentVolume>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
+  plainNameColumn<PersistentVolume>(),
   {
     key: "status",
     header: "Status",
+    kind: "status",
     accessor: (row) => <StatusBadge status={row.status} />,
+    searchAccessor: (row) => row.status,
   },
   {
     key: "capacity",
     header: "Capacity",
+    kind: "bytes",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {row.capacity}
-      </span>
+      <span className="text-xs text-muted-foreground">{row.capacity}</span>
     ),
+    searchAccessor: (row) => row.capacity ?? "",
   },
   {
     key: "accessModes",
     header: "Access Modes",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.accessModes?.join(", ")}
-      </span>
-    ),
+    kind: "text",
+    size: 120,
+    minSize: 112,
+    accessor: (row) => <AccessModesCell modes={row.accessModes} />,
+    searchAccessor: (row) => abbreviateAccessModes(row.accessModes).join(" "),
     sortable: false,
   },
-  {
-    key: "storageClass",
-    header: "Storage Class",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.storageClass || "-"}
-      </span>
-    ),
-  },
-  {
-    key: "claimRef",
-    header: "Claim",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.claimRef || "-"}
-      </span>
-    ),
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  textColumn<PersistentVolume>(
+    "storageClass",
+    "Storage Class",
+    (row) => row.storageClass,
+    { size: 160, minSize: chWidth(14) },
+  ),
+  textColumn<PersistentVolume>("claimRef", "Claim", (row) => row.claimRef, {
+    mono: true,
+    size: 260,
+    minSize: chWidth(24),
+  }),
+  ageColumn<PersistentVolume>((row) => row.createdAt),
 ];
 
 const pvcColumns: Column<PersistentVolumeClaim>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
+  plainNameColumn<PersistentVolumeClaim>(),
+  namespaceColumn<PersistentVolumeClaim>(),
   {
     key: "status",
     header: "Status",
+    kind: "status",
     accessor: (row) => <StatusBadge status={row.status} />,
+    searchAccessor: (row) => row.status,
   },
   {
     key: "capacity",
     header: "Capacity",
+    kind: "bytes",
     accessor: (row) => (
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {row.capacity}
-      </span>
+      <span className="text-xs text-muted-foreground">{row.capacity}</span>
     ),
+    searchAccessor: (row) => row.capacity ?? "",
   },
-  {
-    key: "storageClass",
-    header: "Storage Class",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.storageClass || "-"}
-      </span>
-    ),
-  },
+  textColumn<PersistentVolumeClaim>(
+    "storageClass",
+    "Storage Class",
+    (row) => row.storageClass,
+    { size: 160, minSize: chWidth(14) },
+  ),
   {
     key: "volumeName",
     header: "Volume",
+    kind: "id",
+    size: 220,
+    minSize: chWidth(24),
+    maxSize: 320,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.volumeName || "-"}
       </span>
     ),
+    searchAccessor: (row) => row.volumeName ?? "",
   },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
+  ageColumn<PersistentVolumeClaim>((row) => row.createdAt),
 ];
 
 const storageClassColumns: Column<StorageClass>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
     accessor: (row) => (
-      <div className="flex items-center gap-2">
-        <span className="font-medium text-foreground font-mono text-xs">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 truncate font-medium text-foreground font-mono text-xs">
           {row.name}
         </span>
         {row.isDefault && (
-          <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-status-info/10 text-status-info">
+          <span className="shrink-0 px-1.5 py-0.5 rounded-sm text-2xs bg-status-info/10 text-status-info">
             default
           </span>
         )}
       </div>
     ),
+    searchAccessor: (row) => row.name,
   },
-  {
-    key: "provisioner",
-    header: "Provisioner",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.provisioner}
-      </span>
-    ),
-  },
-  {
-    key: "reclaimPolicy",
-    header: "Reclaim Policy",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">{row.reclaimPolicy}</span>
-    ),
-  },
-  {
-    key: "volumeBindingMode",
-    header: "Binding Mode",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.volumeBindingMode}
-      </span>
-    ),
-  },
+  textColumn<StorageClass>(
+    "provisioner",
+    "Provisioner",
+    (row) => row.provisioner,
+    { mono: true, size: 240, minSize: chWidth(26) },
+  ),
+  textColumn<StorageClass>(
+    "reclaimPolicy",
+    "Reclaim Policy",
+    (row) => row.reclaimPolicy,
+    { size: 130, minSize: chWidth(12) },
+  ),
+  textColumn<StorageClass>(
+    "volumeBindingMode",
+    "Binding Mode",
+    (row) => row.volumeBindingMode,
+    { size: 190, minSize: chWidth(22) },
+  ),
   {
     key: "expansion",
     header: "Expansion",
+    kind: "status",
     accessor: (row) => (
       <span
         className={cn(
@@ -781,7 +652,7 @@ const storageClassColumns: Column<StorageClass>[] = [
         {row.allowVolumeExpansion ? "Allowed" : "No"}
       </span>
     ),
-    align: "center",
+    searchAccessor: (row) => (row.allowVolumeExpansion ? "Allowed" : "No"),
   },
 ];
 

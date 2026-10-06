@@ -1,4 +1,5 @@
 import { apiErrorStatus } from "@/lib/api/errors";
+import { chWidth } from "@/components/resources/resource-column-kit";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { collectionScope } from "@/lib/cluster-scope-collection";
 import { useClusterNamespaceScope } from "@/lib/cluster-scope";
@@ -140,6 +141,7 @@ function ScopedCustomResourceList({
       {
         key: "name",
         header: "Name",
+        kind: "name",
         sortAccessor: (row) => row.name,
         accessor: (row) => (
           <Link
@@ -154,7 +156,7 @@ function ScopedCustomResourceList({
               ) + search
             }
             onClick={(event) => event.stopPropagation()}
-            className="min-w-0 truncate font-medium text-foreground font-mono text-xs hover:underline"
+            className="font-medium text-foreground font-mono text-xs hover:underline"
           >
             {row.name}
           </Link>
@@ -163,6 +165,10 @@ function ScopedCustomResourceList({
       {
         key: "namespace",
         header: "Namespace",
+        kind: "text",
+        size: 160,
+        minSize: chWidth(14),
+        searchAccessor: (row) => row.namespace || "Cluster scoped",
         accessor: (row) => (
           <span className="text-xs text-muted-foreground font-mono">
             {row.namespace || "Cluster scoped"}
@@ -172,6 +178,7 @@ function ScopedCustomResourceList({
       {
         key: "age",
         header: "Age",
+        kind: "age",
         accessor: (row) => (
           <span className="text-xs text-muted-foreground">
             {row.createdAt ? formatRelativeTime(row.createdAt) : "-"}
@@ -223,6 +230,7 @@ function ScopedCustomResourceList({
               key: "actions",
               header: "Actions",
               rowActions: true,
+              kind: "actions",
               sortable: false,
               hideable: false,
               accessor: (row) => (

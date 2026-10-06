@@ -11,6 +11,7 @@
 // The group segment uses '_' as a sentinel for the (rare) empty group so the
 // URL never has an empty path segment — see crListHref/crDetailHref.
 
+import { ChipList, chWidth } from "@/components/resources/resource-column-kit";
 import { useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
@@ -108,6 +109,7 @@ const crdColumns: Column<CRDRow>[] = [
   {
     key: "kind",
     header: "Kind",
+    kind: "name",
     accessor: (row) => (
       <span className="font-medium text-foreground text-xs">{row.kind}</span>
     ),
@@ -116,6 +118,10 @@ const crdColumns: Column<CRDRow>[] = [
   {
     key: "group",
     header: "Group",
+    kind: "text",
+    size: 240,
+    minSize: chWidth(24),
+    searchAccessor: (row) => row.group,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.group || "-"}
@@ -125,6 +131,10 @@ const crdColumns: Column<CRDRow>[] = [
   {
     key: "plural",
     header: "Plural",
+    kind: "text",
+    size: 180,
+    minSize: chWidth(18),
+    searchAccessor: (row) => row.plural,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.plural}
@@ -134,16 +144,17 @@ const crdColumns: Column<CRDRow>[] = [
   {
     key: "versions",
     header: "Versions",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.versions.join(", ") || "-"}
-      </span>
-    ),
+    kind: "badge",
+    size: 150,
+    minSize: chWidth(12),
+    accessor: (row) => <ChipList items={row.versions} />,
+    searchAccessor: (row) => row.versions.join(" "),
     sortable: false,
   },
   {
     key: "scope",
     header: "Scope",
+    kind: "badge",
     accessor: (row) => (
       <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.scope || "-"}
@@ -155,6 +166,7 @@ const crdColumns: Column<CRDRow>[] = [
   {
     key: "age",
     header: "Age",
+    kind: "age",
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">
         {row.createdAt ? formatRelativeTime(row.createdAt) : "-"}

@@ -151,6 +151,7 @@ export function GenericResourceTable({
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => {
           const items: ActionMenuItem[] = [
             {
@@ -209,7 +210,6 @@ export function GenericResourceTable({
           );
         },
         sortable: false,
-        align: "center" as const,
       },
     ],
     [

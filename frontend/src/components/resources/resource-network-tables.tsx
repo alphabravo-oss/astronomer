@@ -51,6 +51,7 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -103,7 +104,6 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -212,6 +212,7 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -264,7 +265,6 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -376,6 +376,7 @@ export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -428,7 +429,6 @@ export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],

@@ -50,12 +50,15 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
 
   const columns = useMemo<Column<PersistentVolume>[]>(
     () => [
-      nameColumn<PersistentVolume>(clusterId, "persistentvolumes"),
+      nameColumn<PersistentVolume>(clusterId, "persistentvolumes", {
+        minSize: 240,
+      }),
       ...pvColumns.slice(1),
       {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -100,7 +103,6 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -189,6 +191,7 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -241,7 +244,6 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
@@ -370,6 +372,7 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
         key: "actions",
         header: "",
         rowActions: true,
+        kind: "actions",
         accessor: (row) => (
           <StopRowClick>
             <ResourceActionMenu
@@ -394,7 +397,6 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
           </StopRowClick>
         ),
         sortable: false,
-        align: "center" as const,
       },
     ],
     [clusterId, permissions],
