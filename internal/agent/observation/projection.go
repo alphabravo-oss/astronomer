@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Project preserves metadata used by live invalidation/replay and the exact
@@ -99,6 +100,8 @@ func containers(items []corev1.Container) []corev1.Container {
 func (s *Snapshot) copyObjects(objects []any) {
 	for _, raw := range objects {
 		switch item := raw.(type) {
+		case *unstructured.Unstructured:
+			s.Objects = append(s.Objects, item.DeepCopy())
 		case *appsv1.Deployment:
 			s.Deployments = append(s.Deployments, item.DeepCopy())
 		case *appsv1.StatefulSet:

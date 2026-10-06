@@ -6,6 +6,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -38,6 +39,9 @@ type Snapshot struct {
 	Pods            []*corev1.Pod
 	Claims          []*corev1.PersistentVolumeClaim
 	StorageClasses  []*storagev1.StorageClass
+	// Objects contains only caller-projected dynamic objects. Registering a
+	// dynamic tracker requires a transform that excludes raw spec/credentials.
+	Objects []*unstructured.Unstructured
 }
 
 type Source interface{ ObservationSnapshot(Kind) Snapshot }
