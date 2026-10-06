@@ -2,9 +2,9 @@
 
 Astronomer distinguishes the time Kubernetes state was observed from the time a
 tunnel message arrived. This extension prepares shared observation caches; the
-current runtime still uses direct Kubernetes probes. Cache-backed producers and
-UI age indicators are separate follow-up work and must land together before
-cached component health is presented to operators.
+current runtime still uses direct Kubernetes probes. Cache-backed producers are
+separate follow-up work. The component UI consumes source freshness before those
+producers can be enabled.
 
 ## Session negotiation and mixed versions
 
@@ -80,18 +80,39 @@ source time. Retransmitting an unchanged snapshot does not renew its age.
 Session and sequence fences remain authoritative for duplicate/replayed messages.
 
 The existing five-minute status heartbeat floor equals the fleet stale threshold.
-The cache rollout must establish refresh/heartbeat headroom and UI age handling;
-receipt restamping must not be used to conceal this boundary.
+Component UI age handling is implemented below. The cache rollout still needs
+refresh/heartbeat headroom and end-to-end integration verification; receipt
+restamping must not be used to conceal this boundary.
+
+## Component presentation
+
+The system-component list and detail pages use each component's source state,
+not controller receipt time, to interpret health. Current observations older than
+five minutes display as stale. Missing, invalid, or excessively future current
+timestamps display as unavailable. Explicit stale, unsynced, denied, absent,
+disconnected, and unavailable states replace cached health; the same state gates
+nested resource health and PVC phase badges. List counts, sorting, and health
+filters use that same effective state. Legacy payloads retain their reported
+health; detail labels source time as unavailable rather than inferring it.
+
+One existing 30-second UI clock per page advances age even when query data stays
+unchanged. It performs no network requests and is cleaned up on unmount. This
+bounds display expiry lag to one clock tick while preserving live-stream polling
+suppression. Detail source times are shown only when valid.
 
 ## Verification
 
 ```sh
 go test ./pkg/protocol ./internal/delivery/status ./internal/delivery/compatibility ./internal/agent/delivery
 go test ./internal/agent -run 'Test(ObservationNegotiation|QueuedExtended)'
+npm --prefix frontend test -- src/lib/system-component-freshness.test.ts 'src/routes/dashboard/clusters/$id/delivery/system-components/-freshness.test.tsx'
 ```
 
 Mixed-version tests use a frozen legacy inventory shape with strict decoding,
 exercise actual queued-frame rejection before WebSocket access, and verify retry,
 capability reset, stale/future rejection, immutable digests, and source-time
 preservation on coalesced persistence. These tests do not establish live
-multi-version deployment, real watch freshness, or browser freshness presentation.
+multi-version deployment, real watch freshness, or live browser acceptance.
+Frontend fake-clock tests cover unchanged-query expiry, consistent counts and
+badges, nested evidence, legacy behavior, and clock cleanup without additional
+API requests.

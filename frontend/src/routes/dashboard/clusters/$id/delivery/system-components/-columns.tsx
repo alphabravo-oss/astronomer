@@ -3,6 +3,7 @@ import { DeliveryPhaseBadge } from "@/components/delivery/shared";
 import type { Column } from "@/components/ui/data-table";
 import type { DeliverySystemComponent } from "@/lib/api/delivery-system";
 import { formatBytes, formatRelativeTime } from "@/lib/utils";
+import { componentFreshness } from "@/lib/system-component-freshness";
 import { replicaRedundancy } from "@/lib/system-component-availability";
 
 function ownerLabel(owner: string) {
@@ -14,6 +15,7 @@ function ownerLabel(owner: string) {
 
 export function systemComponentColumns(
   clusterId: string,
+  now: number,
 ): Column<DeliverySystemComponent>[] {
   return [
     {
@@ -68,8 +70,10 @@ export function systemComponentColumns(
     {
       key: "health",
       header: "Health",
-      accessor: (row) => <DeliveryPhaseBadge value={row.health} />,
-      sortAccessor: (row) => row.health,
+      accessor: (row) => (
+        <DeliveryPhaseBadge value={componentFreshness(row, now).health} />
+      ),
+      sortAccessor: (row) => componentFreshness(row, now).health,
       filter: { label: "Health" },
     },
     {
