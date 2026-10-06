@@ -1,6 +1,7 @@
 import { QueryStates } from "@/components/ui/query-states";
 import type { useClusterNamespaces } from "@/lib/hooks/clusters";
 import { cn } from "@/lib/utils";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function PipelineNamespaces({
   query,
@@ -23,9 +24,10 @@ export function PipelineNamespaces({
               </span>
             ) : (
               namespaces.map((ns) => (
-                <button
+                <ActionButton
+                  intent="bare"
+                  size="none"
                   key={ns.name}
-                  type="button"
                   aria-pressed={selected.includes(ns.name)}
                   onClick={() => onToggle(ns.name)}
                   className={cn(
@@ -36,7 +38,7 @@ export function PipelineNamespaces({
                   )}
                 >
                   {ns.name}
-                </button>
+                </ActionButton>
               ))
             )}
           </div>

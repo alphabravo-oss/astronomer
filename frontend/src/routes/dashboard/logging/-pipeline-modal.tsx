@@ -213,7 +213,7 @@ export function CreatePipelineModal({
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
               placeholder="Describe this pipeline's purpose"
-              className="min-h-[80px]"
+              className="min-h-20"
             />
           )}
         </pipelineForm.Field>
@@ -253,7 +253,7 @@ export function CreatePipelineModal({
             onClick={addLabel}
             disabled={!form.labelKey || !form.labelValue}
             icon={<Plus className="h-3.5 w-3.5" />}
-            title="Add label"
+            tooltip="Add label"
           />
         </div>
         {Object.entries(form.labels).length > 0 && (
@@ -264,13 +264,13 @@ export function CreatePipelineModal({
                 className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
               >
                 {k}={v}
-                <button
-                  type="button"
+                <ActionButton
+                  intent="ghost"
+                  size="icon-xs"
+                  tooltip="Remove label"
+                  icon={<X className="h-3 w-3" />}
                   onClick={() => removeLabel(k)}
-                  className="hover:text-foreground"
-                >
-                  <X className="h-3 w-3" />
-                </button>
+                />
               </span>
             ))}
           </div>

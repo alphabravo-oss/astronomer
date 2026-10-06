@@ -103,7 +103,9 @@ describe("OutputsTab system destination", () => {
       "System",
     );
     expect(screen.getByText("Astronomer logs")).toBeInTheDocument();
-    const deleteButtons = screen.getAllByTitle("Delete output");
+    const deleteButtons = screen.getAllByRole("button", {
+      name: "Delete output",
+    });
     expect(deleteButtons).toHaveLength(1);
   });
 
