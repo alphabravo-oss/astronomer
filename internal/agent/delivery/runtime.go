@@ -384,14 +384,18 @@ func (r *Runtime) processSnapshot(ctx context.Context, snapshot protocol.Deliver
 			delete(r.transient, deploymentID)
 		}
 	}
+	// Applied identities remain in memory for safe retries, but acknowledgment
+	// headers advance only after the store commits its durable summary.
+	candidate := r.checkpoint
 	if complete {
-		r.checkpoint.SnapshotGeneration = snapshot.SnapshotGeneration
-		r.checkpoint.SnapshotETag = snapshot.ETag
-		r.checkpoint.CredentialEpoch = snapshot.CredentialEpoch
+		candidate.SnapshotGeneration = snapshot.SnapshotGeneration
+		candidate.SnapshotETag = snapshot.ETag
+		candidate.CredentialEpoch = snapshot.CredentialEpoch
 	}
-	if err := r.store.Save(ctx, r.checkpoint); err != nil {
+	if err := r.store.Save(ctx, candidate); err != nil {
 		return fmt.Errorf("persist delivery checkpoint: %w", err)
 	}
+	r.checkpoint = candidate
 	if !complete {
 		return errors.New("delivery snapshot remains in progress")
 	}
