@@ -414,20 +414,20 @@ function TestStatusPill({ state }: { state?: "ok" | "fail" | "pending" }) {
   if (!state) return null;
   if (state === "pending") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-2xs border bg-status-info/10 text-status-info border-status-info/20">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] border bg-status-info/10 text-status-info border-status-info/20">
         <Loader2 className="h-3 w-3 animate-spin" /> Testing
       </span>
     );
   }
   if (state === "ok") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-2xs border bg-status-success/10 text-status-success border-status-success/20">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] border bg-status-success/10 text-status-success border-status-success/20">
         <CheckCircle2 className="h-3 w-3" /> Reachable
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-2xs border bg-status-error/10 text-status-error border-status-error/20">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] border bg-status-error/10 text-status-error border-status-error/20">
       <XCircle className="h-3 w-3" /> Failed
     </span>
   );

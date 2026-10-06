@@ -129,7 +129,7 @@ export function StackOperationPanel({
             {tracker.isFailure && !superseded ? " failed" : ""}
           </span>
           {op.attemptCount > 1 && (
-            <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
+            <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
               attempt {op.attemptCount}
             </span>
           )}

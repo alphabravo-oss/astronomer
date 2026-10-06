@@ -103,7 +103,7 @@ export function BrowseView({
                       {c.displayName || c.name}
                     </div>
                     {c.deprecated && (
-                      <span className="text-2xs text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded-sm">
+                      <span className="text-[10px] text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded-sm">
                         deprecated
                       </span>
                     )}

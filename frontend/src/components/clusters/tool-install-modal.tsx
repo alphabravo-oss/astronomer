@@ -338,7 +338,7 @@ function FormFieldRow({
         {field.help && (
           <p className="text-xs text-muted-foreground mt-0.5">{field.help}</p>
         )}
-        <p className="text-2xs text-muted-foreground/70 font-mono mt-0.5">
+        <p className="text-[10px] text-muted-foreground/70 font-mono mt-0.5">
           {field.path}
         </p>
       </div>
