@@ -28,6 +28,7 @@ import {
 } from "@/lib/permission-hooks";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { BareButton } from "@/components/form/bare-button";
 
 interface PodResourceOverviewProps {
   obj: K8sObject;
@@ -347,20 +348,20 @@ function ContainerCard({
           </p>
         </div>
         <div className="flex items-center gap-1.5">
-          <button
+          <BareButton
             type="button"
             onClick={openLogs}
             disabled={!logsAllowed}
-            title={logsAllowed ? "Open container logs" : logsReason}
+            disabledReason={logsAllowed ? "Open container logs" : logsReason}
             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FileText className="h-3.5 w-3.5" /> Logs
-          </button>
-          <button
+          </BareButton>
+          <BareButton
             type="button"
             onClick={openExec}
             disabled={!execAllowed || !running}
-            title={
+            disabledReason={
               !running
                 ? "Container must be running."
                 : execAllowed
@@ -370,7 +371,7 @@ function ContainerCard({
             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Terminal className="h-3.5 w-3.5" /> Shell
-          </button>
+          </BareButton>
         </div>
       </div>
 
@@ -798,4 +799,3 @@ function SummaryCard({
     />
   );
 }
-

@@ -14,6 +14,7 @@ import { detailHref } from "@/lib/k8s-paths";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { Pod } from "@/types";
+import { BareButton } from "@/components/form/bare-button";
 
 export type WorkloadResourceTabId =
   "workload-pods" | "workload-logs" | "workload-metrics";
@@ -211,7 +212,7 @@ export function ResourceMetricsTab(props: WorkloadTabProps) {
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">Time range:</span>
         {["1h", "6h", "24h", "7d"].map((value) => (
-          <button
+          <BareButton
             key={value}
             type="button"
             onClick={() => setRange(value)}
@@ -223,7 +224,7 @@ export function ResourceMetricsTab(props: WorkloadTabProps) {
             )}
           >
             {value}
-          </button>
+          </BareButton>
         ))}
       </div>
       <QueryStates

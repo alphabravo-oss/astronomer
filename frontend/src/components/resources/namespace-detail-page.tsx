@@ -27,6 +27,7 @@ import {
   useNamespaceResourceRows,
   type NamespaceResourceRow,
 } from "./namespace-resource-rows";
+import { BareButton } from "@/components/form/bare-button";
 
 type TabId =
   | "overview"
@@ -440,7 +441,7 @@ function ResourceGroup({
   onOpen: () => void;
 }) {
   return (
-    <button
+    <BareButton
       type="button"
       onClick={onOpen}
       className="rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40"
@@ -457,7 +458,7 @@ function ResourceGroup({
       <p className="mt-2 text-xs text-muted-foreground">
         Open the namespace-scoped {title.toLowerCase()} inventory
       </p>
-    </button>
+    </BareButton>
   );
 }
 

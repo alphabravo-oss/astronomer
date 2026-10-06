@@ -10,6 +10,7 @@ import {
 } from "@/lib/k8s-clone";
 import { useClusterResourcePermission } from "@/lib/permission-hooks";
 import { toastApiError } from "@/lib/toast";
+import { BareButton } from "@/components/form/bare-button";
 
 const CloneDialog = lazy(async () => ({
   default: (await import("./create-resource-dialog")).CreateResourceDialog,
@@ -88,35 +89,35 @@ export function ResourceDetailEditActions({
     <>
       {hasGuidedEditForm(kind) && (
         <Tooltip content={updateAllowed ? undefined : updateReason} wrap>
-          <button
+          <BareButton
             type="button"
             className={BTN}
             disabled={!updateAllowed}
             onClick={() => onEdit("guided")}
           >
             <FormInput className="h-3.5 w-3.5" /> Edit as form
-          </button>
+          </BareButton>
         </Tooltip>
       )}
       <Tooltip content={updateAllowed ? undefined : updateReason} wrap>
-        <button
+        <BareButton
           type="button"
           className={BTN}
           disabled={!updateAllowed}
           onClick={() => onEdit("yaml")}
         >
           <Pencil className="h-3.5 w-3.5" /> Edit YAML
-        </button>
+        </BareButton>
       </Tooltip>
       <Tooltip content={cloneDenied} wrap>
-        <button
+        <BareButton
           type="button"
           className={BTN}
           disabled={!!cloneDenied || pending}
           onClick={() => void clone()}
         >
           <Copy className="h-3.5 w-3.5" /> Clone
-        </button>
+        </BareButton>
       </Tooltip>
       {cloneYaml !== null && (
         <Suspense fallback={<span role="status">Loading clone editor…</span>}>

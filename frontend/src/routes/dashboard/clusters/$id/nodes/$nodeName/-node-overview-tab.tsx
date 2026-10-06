@@ -1,6 +1,16 @@
-import { Cpu, MemoryStick, Box, CheckCircle2, XCircle, Tag, Code, Plus } from "lucide-react";
+import {
+  Cpu,
+  MemoryStick,
+  Box,
+  CheckCircle2,
+  XCircle,
+  Tag,
+  Code,
+  Plus,
+} from "lucide-react";
 import { cn, formatBytes, formatCPU } from "@/lib/utils";
 import type { NodeDetail } from "@/types";
+import { BareButton } from "@/components/form/bare-button";
 
 function ResourceGauge({
   label,
@@ -175,16 +185,16 @@ export function OverviewTab({
               ({Object.keys(node.labels).length})
             </span>
           </div>
-          <button
+          <BareButton
             onClick={onOpenAddLabel}
             disabled={addLabelPending || !canUpdate}
-            title={blockedReason}
+            disabledReason={blockedReason}
             aria-label="Add label"
             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-3 w-3" /> Add
-          </button>
+          </BareButton>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(node.labels).map(([k, v]) => (
@@ -194,14 +204,14 @@ export function OverviewTab({
             >
               <span className="text-foreground">{k}</span>
               {v && <span>= {v}</span>}
-              <button
+              <BareButton
                 disabled={removeLabelPending || !canUpdate}
-                title={blockedReason}
+                disabledReason={blockedReason}
                 onClick={() => onRemoveLabel(k)}
                 className="ml-0.5 opacity-0 group-hover:opacity-100 text-status-error/70 hover:text-status-error transition-opacity disabled:cursor-not-allowed"
               >
                 <XCircle className="h-3 w-3" />
-              </button>
+              </BareButton>
             </span>
           ))}
         </div>
@@ -212,23 +222,21 @@ export function OverviewTab({
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Code className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium text-foreground">
-              Annotations
-            </h3>
+            <h3 className="text-sm font-medium text-foreground">Annotations</h3>
             <span className="text-xs text-muted-foreground">
               ({Object.keys(node.annotations).length})
             </span>
           </div>
-          <button
+          <BareButton
             onClick={onOpenAddAnnotation}
             disabled={addAnnotationPending || !canUpdate}
-            title={blockedReason}
+            disabledReason={blockedReason}
             aria-label="Add annotation"
             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus className="h-3 w-3" /> Add
-          </button>
+          </BareButton>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(node.annotations).map(([k, v]) => (
@@ -238,14 +246,14 @@ export function OverviewTab({
             >
               <span className="text-foreground">{k}</span>
               {v && <span>= {v}</span>}
-              <button
+              <BareButton
                 disabled={removeAnnotationPending || !canUpdate}
-                title={blockedReason}
+                disabledReason={blockedReason}
                 onClick={() => onRemoveAnnotation(k)}
                 className="ml-0.5 opacity-0 group-hover:opacity-100 text-status-error/70 hover:text-status-error transition-opacity disabled:cursor-not-allowed"
               >
                 <XCircle className="h-3 w-3" />
-              </button>
+              </BareButton>
             </span>
           ))}
         </div>

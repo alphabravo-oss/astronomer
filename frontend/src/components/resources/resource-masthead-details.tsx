@@ -18,6 +18,7 @@ import type { ResourceDiscoveryView } from "@/lib/api/resources";
 import { detailHref } from "@/lib/k8s-paths";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { BareButton } from "@/components/form/bare-button";
 
 type MetaItem = { label: string; value: ReactNode };
 
@@ -107,33 +108,33 @@ function ChipGroup({
       <span className="text-xs font-medium text-muted-foreground">{title}</span>
       {visible.map(([key, value]) => (
         <Tooltip key={key} content="Click to copy">
-          <button
+          <BareButton
             type="button"
             onClick={() => void copyPair(`${key}=${value}`)}
             className="max-w-xs truncate rounded-md border border-border bg-muted/40 px-2 py-0.5 font-mono text-2xs text-foreground transition-colors hover:bg-accent"
             aria-label={`Copy ${key}=${value}`}
           >
             {key}={value}
-          </button>
+          </BareButton>
         </Tooltip>
       ))}
       {hidden > 0 && (
-        <button
+        <BareButton
           type="button"
           onClick={() => setExpanded(true)}
           className="rounded-md px-2 py-0.5 text-2xs font-medium text-primary hover:underline"
         >
           +{hidden} more
-        </button>
+        </BareButton>
       )}
       {expanded && entries.length > CHIP_COLLAPSE_LIMIT && (
-        <button
+        <BareButton
           type="button"
           onClick={() => setExpanded(false)}
           className="rounded-md px-2 py-0.5 text-2xs font-medium text-muted-foreground hover:underline"
         >
           Show less
-        </button>
+        </BareButton>
       )}
     </div>
   );
