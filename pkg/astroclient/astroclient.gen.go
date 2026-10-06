@@ -6244,10 +6244,13 @@ type DeliveryResourceIdentity struct {
 
 // DeliveryResourceInventory defines model for DeliveryResourceInventory.
 type DeliveryResourceInventory struct {
-	Entries   int                         `json:"entries"`
-	Failed    int                         `json:"failed"`
-	Ready     int                         `json:"ready"`
-	Resources *[]DeliveryResourceIdentity `json:"resources,omitempty"`
+	Entries int `json:"entries"`
+	Failed  int `json:"failed"`
+
+	// Observation Optional negotiated source freshness for this deployment. Absent for legacy reports and local mutation decisions; never infer source freshness from receipt or event time.
+	Observation *DeliveryObservation        `json:"observation,omitempty"`
+	Ready       int                         `json:"ready"`
+	Resources   *[]DeliveryResourceIdentity `json:"resources,omitempty"`
 }
 
 // DeliveryRollout defines model for DeliveryRollout.

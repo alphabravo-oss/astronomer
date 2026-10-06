@@ -10225,6 +10225,9 @@ components:
       additionalProperties: false
       required: [entries, ready, failed]
       properties:
+        observation:
+          allOf: [{$ref: '#/components/schemas/DeliveryObservation'}]
+          description: Optional negotiated source freshness for this deployment. Absent for legacy reports and local mutation decisions; never infer source freshness from receipt or event time.
         entries: {type: integer, minimum: 0}
         ready: {type: integer, minimum: 0}
         failed: {type: integer, minimum: 0}

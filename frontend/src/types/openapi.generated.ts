@@ -2471,6 +2471,7 @@ export interface OpenAPIComponents {
           "name": string;
         };
     DeliveryResourceInventory: {
+          "observation"?: OpenAPIComponents['schemas']['DeliveryObservation'];
           "entries": number;
           "ready": number;
           "failed": number;
