@@ -1,3 +1,4 @@
+import { SkeletonText } from "@/components/ui/skeleton";
 import { pageTableCount } from "@/lib/api/pagination";
 import { lazy, Suspense, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -164,7 +165,14 @@ export function TargetsPage() {
         </PageShell>
       </DeliveryProjectGate>
       {creating && (
-        <Suspense fallback={<div role="status">Loading target form…</div>}>
+        <Suspense
+          fallback={
+            <div role="status" aria-busy="true">
+              <span className="sr-only">Loading target form…</span>
+              <SkeletonText lines={3} />
+            </div>
+          }
+        >
           <CreateTargetDialog
             key={projectId}
             projectId={projectId}

@@ -14,6 +14,7 @@ import type {
   DeliveryEstateSummary,
 } from "@/lib/api/delivery-system";
 import { cn } from "@/lib/utils";
+import { ActionButton } from "@/components/ui/action-button";
 
 /** True when nothing is adopted and every summary counter is zero. */
 export function isEstateEmpty(estate: DeliveryEstate | undefined): boolean {
@@ -49,11 +50,12 @@ export function EstateTile({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <ActionButton
+      intent="bare"
+      size="none"
       onClick={onClick}
       className={cn(
-        "flex items-start justify-between rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40 focus:outline-hidden focus:ring-2 focus:ring-ring",
+        "flex items-start justify-between whitespace-normal rounded-lg border border-border bg-card p-4 text-left font-normal transition-colors hover:bg-accent/40 focus:outline-hidden focus:ring-2 focus:ring-ring",
         active && "ring-2 ring-ring",
       )}
     >
@@ -66,7 +68,7 @@ export function EstateTile({
       <div className="rounded-md bg-muted p-2 text-muted-foreground">
         {icon}
       </div>
-    </button>
+    </ActionButton>
   );
 }
 

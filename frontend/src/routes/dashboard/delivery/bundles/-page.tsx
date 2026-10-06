@@ -12,8 +12,6 @@ import {
   DeliveryProjectGate,
   ErrorMessage,
   inputClass,
-  primaryButton,
-  secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
@@ -31,6 +29,7 @@ import { liveFallback } from "@/lib/live/status-store";
 import { formatRelativeTime } from "@/lib/utils";
 import { useNavigate } from "@tanstack/react-router";
 import { toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function BundlesPage() {
   const { projectId, projects, projectQuery, entityHref } =
@@ -103,13 +102,13 @@ export function BundlesPage() {
             description="Stable bundle identities with append-only, immutable and centrally verified versions."
             actions={
               canCreate ? (
-                <button
-                  className={primaryButton}
+                <ActionButton
+                  intent="primary"
                   type="button"
                   onClick={() => setCreating(true)}
                 >
                   <Plus className="h-4 w-4" /> New bundle
-                </button>
+                </ActionButton>
               ) : undefined
             }
           />
@@ -203,16 +202,16 @@ function CreateBundleDialog({
         </label>
         {mutation.isError && <ErrorMessage error={mutation.error} />}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
+          <ActionButton intent="default" type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="primary"
             type="submit"
-            className={primaryButton}
             disabled={mutation.isPending}
           >
             {mutation.isPending ? "Creating…" : "Create bundle"}
-          </button>
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>

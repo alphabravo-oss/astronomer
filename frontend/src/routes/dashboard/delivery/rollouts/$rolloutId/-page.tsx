@@ -16,8 +16,6 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
-  primaryButton,
-  secondaryButton,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
   withProjectQuery,
@@ -38,6 +36,7 @@ import { formatRelativeTime } from "@/lib/utils";
 import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
 
 type RolloutAction = "pause" | "resume" | "abort" | "retry" | "rollback";
 
@@ -188,10 +187,10 @@ export function RolloutDetailPage() {
               rollout ? (
                 <>
                   {availableActions.map((value) => (
-                    <button
+                    <ActionButton
+                      intent="default"
                       key={value}
                       type="button"
-                      className={secondaryButton}
                       disabled={
                         value === "rollback" ? !canRollback : !canUpdate
                       }
@@ -199,7 +198,7 @@ export function RolloutDetailPage() {
                     >
                       {actionIcon(value)}
                       {value}
-                    </button>
+                    </ActionButton>
                   ))}
                 </>
               ) : undefined
@@ -265,9 +264,9 @@ export function RolloutDetailPage() {
                         {gate.digest}
                       </p>
                     </div>
-                    <button
+                    <ActionButton
+                      intent="primary"
                       type="button"
-                      className={primaryButton}
                       disabled={!canApprove}
                       onClick={() =>
                         setApproval({
@@ -277,7 +276,7 @@ export function RolloutDetailPage() {
                       }
                     >
                       Review approval
-                    </button>
+                    </ActionButton>
                   </div>
                 ))}
               </div>
@@ -448,22 +447,22 @@ function ApprovalDialog({
         </p>
         {mutation.isError && <ErrorMessage error={mutation.error} />}
         <div className="flex justify-end gap-2">
-          <button
+          <ActionButton
+            intent="default"
             type="button"
-            className={secondaryButton}
             disabled={mutation.isPending}
             onClick={() => mutation.mutate("rejected")}
           >
             <X className="h-4 w-4" /> Reject
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="primary"
             type="button"
-            className={primaryButton}
             disabled={mutation.isPending}
             onClick={() => mutation.mutate("approved")}
           >
             <Check className="h-4 w-4" /> Approve exact digest
-          </button>
+          </ActionButton>
         </div>
       </div>
     </ModalShell>

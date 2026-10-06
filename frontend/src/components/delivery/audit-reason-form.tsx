@@ -1,12 +1,8 @@
 import { FormShell } from "@/components/ui/form-shell";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppForm } from "@/lib/form";
-import {
-  ErrorMessage,
-  primaryButton,
-  secondaryButton,
-  textareaClass,
-} from "./shared";
+import { ErrorMessage, textareaClass } from "./shared";
+import { ActionButton } from "@/components/ui/action-button";
 
 /** One controlled, auditable reason boundary for generation-fenced actions. */
 export function AuditReasonForm({
@@ -54,12 +50,12 @@ export function AuditReasonForm({
       </label>
       {error != null && <ErrorMessage error={error} />}
       <div className="flex justify-end gap-2">
-        <button type="button" className={secondaryButton} onClick={onClose}>
+        <ActionButton intent="default" type="button" onClick={onClose}>
           Cancel
-        </button>
-        <button type="submit" className={primaryButton} disabled={pending}>
+        </ActionButton>
+        <ActionButton intent="primary" type="submit" disabled={pending}>
           Confirm {action}
-        </button>
+        </ActionButton>
       </div>
     </FormShell>
   );
