@@ -19,15 +19,12 @@ import {
   ShieldCheck,
   Wrench,
   RefreshCw,
-  Trash2,
-  Pencil,
   ArrowRight,
   KeyRound,
 } from "lucide-react";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
-import { ActionMenu } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import {
@@ -36,8 +33,8 @@ import {
   useApplyDexConfig,
   useDexSettings,
 } from "@/components/auth/hooks";
-import { getConnectorMeta } from "@/components/auth/connector-meta";
 import type { DexConnector } from "@/types";
+import { connectorColumns } from "./-columns";
 
 function dexInstallState(settings: ReturnType<typeof useDexSettings>["data"]) {
   return {
@@ -69,85 +66,11 @@ function AuthOverviewPage() {
     }
   };
 
-  const columns: Column<DexConnector>[] = [
-    {
-      key: "type",
-      header: "Type",
-      accessor: (row) => {
-        const meta = getConnectorMeta(row.type);
-        const Icon = meta.icon;
-        return (
-          <div className="flex items-center gap-2">
-            <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-sm text-foreground">
-              {meta.label || row.type}
-            </span>
-          </div>
-        );
-      },
-      sortAccessor: (row) => row.type,
-    },
-    {
-      key: "name",
-      header: "Name",
-      accessor: (row) => (
-        <span className="font-mono text-xs text-muted-foreground">
-          {row.name}
-        </span>
-      ),
-      sortAccessor: (row) => row.name,
-    },
-    {
-      key: "displayName",
-      header: "Display Name",
-      accessor: (row) => (
-        <span className="text-sm text-foreground">
-          {row.displayName || "—"}
-        </span>
-      ),
-      sortAccessor: (row) => row.displayName,
-    },
-    {
-      key: "status",
-      header: "Status",
-      accessor: (row) => (
-        <StatusBadge
-          status={row.enabled ? "active" : "disconnected"}
-          label={row.enabled ? "Enabled" : "Disabled"}
-          size="sm"
-        />
-      ),
-      sortAccessor: (row) => (row.enabled ? "1" : "0"),
-    },
-    {
-      key: "actions",
-      header: "",
-      rowActions: true,
-      sortable: false,
-      align: "center",
-      accessor: (row) => (
-        <ActionMenu
-          items={[
-            {
-              label: "Edit",
-              icon: <Pencil className="h-3.5 w-3.5" />,
-              onClick: () =>
-                void navigate({
-                  to: `/dashboard/settings/auth/connectors/${row.id}`,
-                }),
-            },
-            {
-              label: "Delete",
-              icon: <Trash2 className="h-3.5 w-3.5" />,
-              onClick: () => setDeleteTarget(row),
-              variant: "destructive",
-              separator: true,
-            },
-          ]}
-        />
-      ),
-    },
-  ];
+  const columns = connectorColumns({
+    onEdit: (row) =>
+      void navigate({ to: `/dashboard/settings/auth/connectors/${row.id}` }),
+    onDelete: setDeleteTarget,
+  });
 
   return (
     <PageShell>

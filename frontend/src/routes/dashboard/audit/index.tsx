@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { ActionButton } from "@/components/ui/action-button";
@@ -44,6 +44,14 @@ import {
   type AuditFilters,
 } from "./-filters";
 import { BareButton } from "@/components/form/bare-button";
+import {
+  auditColumns,
+  rowTime,
+  actorLabel,
+  targetName,
+  rowDetail,
+  statusForBadge,
+} from "./-columns";
 
 function useAuditNames(
   rows: AuditLogEntry[],
@@ -134,117 +142,7 @@ function AuditLogPage() {
     setPage(0);
   };
 
-  const columns = useMemo<Column<AuditLogEntry>[]>(
-    () => [
-      {
-        key: "time",
-        header: "Time",
-        accessor: (row) => (
-          <div className="min-w-36">
-            <div className="text-xs font-mono text-foreground">
-              {formatDate(rowTime(row))}
-            </div>
-            <div className="text-2xs text-muted-foreground">
-              {formatRelativeTime(rowTime(row))}
-            </div>
-          </div>
-        ),
-        sortAccessor: (row) => rowTime(row),
-      },
-      {
-        key: "actor",
-        header: "Actor",
-        accessor: (row) => (
-          <div className="max-w-48">
-            <div className="truncate text-sm text-foreground">
-              {actorLabel(row, usersById)}
-            </div>
-            <div className="truncate text-2xs text-muted-foreground">
-              {row.actorAuthMethod || row.source || "—"}
-            </div>
-          </div>
-        ),
-        sortAccessor: (row) => actorLabel(row, usersById),
-      },
-      {
-        key: "action",
-        header: "Action",
-        accessor: (row) => (
-          <div className="max-w-64">
-            <div className="truncate font-mono text-xs text-foreground">
-              {row.action}
-            </div>
-            <span
-              className={cn(
-                "mt-1 inline-flex rounded-sm px-1.5 py-0.5 text-2xs",
-                actionClassStyle(row.actionClass),
-              )}
-            >
-              {row.actionClass || "mutation"}
-            </span>
-          </div>
-        ),
-        sortAccessor: (row) => row.action,
-      },
-      {
-        key: "target",
-        header: "Target",
-        accessor: (row) => (
-          <div className="max-w-56">
-            <div className="truncate text-sm text-foreground">
-              {targetName(row)}
-            </div>
-            <div className="truncate text-2xs text-muted-foreground">
-              {row.resourceType || "—"}
-            </div>
-          </div>
-        ),
-        sortAccessor: targetName,
-      },
-      {
-        key: "scope",
-        header: "Scope",
-        accessor: (row) => {
-          const scope = scopeLabels(row);
-          return (
-            <div className="max-w-52 space-y-1">
-              {scope.length ? (
-                scope.map((item) => (
-                  <div
-                    key={item}
-                    className="truncate font-mono text-2xs text-muted-foreground"
-                  >
-                    {item}
-                  </div>
-                ))
-              ) : (
-                <span className="text-xs text-muted-foreground">global</span>
-              )}
-            </div>
-          );
-        },
-        sortAccessor: (row) => scopeLabels(row).join(" "),
-      },
-      {
-        key: "result",
-        header: "Result",
-        accessor: (row) => (
-          <div className="space-y-1">
-            <StatusBadge
-              status={statusForBadge(row.status)}
-              label={row.status || "success"}
-              size="sm"
-            />
-            <div className="text-2xs text-muted-foreground">
-              {row.statusCode ?? 0}
-            </div>
-          </div>
-        ),
-        sortAccessor: (row) => row.statusCode ?? 0,
-      },
-    ],
-    [usersById],
-  );
+  const columns = useMemo(() => auditColumns(usersById), [usersById]);
 
   if (!read.allowed) return <PermissionState permission="audit:read" />;
   return (
@@ -478,6 +376,7 @@ function AuditLogPage() {
         columns={columns.map((column) => ({ ...column, sortable: false }))}
         keyExtractor={(row) => row.id}
         searchable={false}
+        exportCsv={{ filename: "audit-log" }}
         pageSize={PAGE_SIZE}
         loading={auditQuery.isLoading}
         isError={auditQuery.isError}
@@ -506,69 +405,6 @@ function AuditLogPage() {
       )}
     </PageShell>
   );
-}
-
-function rowTime(row: AuditLogEntry): string {
-  return row.createdAt || row.timestamp;
-}
-
-function actorLabel(
-  row: AuditLogEntry,
-  usersById: Map<string, string>,
-): string {
-  const id = row.userId || row.user;
-  if (id && usersById.has(id)) return usersById.get(id) || id;
-  return row.user || row.userId || "system";
-}
-
-function targetName(row: AuditLogEntry): string {
-  return row.resourceName || row.resourceId || row.path || "—";
-}
-
-function rowDetail(row: AuditLogEntry): Record<string, unknown> {
-  return row.detail && typeof row.detail === "object" ? row.detail : {};
-}
-
-function detailString(row: AuditLogEntry, ...keys: string[]): string {
-  const detail = rowDetail(row);
-  for (const key of keys) {
-    const value = detail[key];
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return "";
-}
-
-function scopeLabels(row: AuditLogEntry): string[] {
-  const out = new Set<string>();
-  const cluster =
-    row.resourceType === "cluster"
-      ? row.resourceId || row.resourceName
-      : detailString(row, "cluster_id", "clusterId", "cluster", "cluster_name");
-  const project =
-    row.resourceType === "project"
-      ? row.resourceId || row.resourceName
-      : detailString(row, "project_id", "projectId", "project", "project_name");
-  if (cluster) out.add(`cluster:${cluster}`);
-  if (project) out.add(`project:${project}`);
-  return Array.from(out);
-}
-
-function actionClassStyle(actionClass?: string): string {
-  switch (actionClass) {
-    case "read":
-      return "bg-info/10 text-info";
-    case "auth":
-      return "bg-status-warning/10 text-status-warning";
-    case "system":
-      return "bg-muted text-muted-foreground";
-    default:
-      return "bg-primary/10 text-primary";
-  }
-}
-
-function statusForBadge(status?: string): string {
-  if (status === "error" || status === "failure") return "error";
-  return "active";
 }
 
 function AuditDetailsDrawer({

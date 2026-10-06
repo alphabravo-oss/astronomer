@@ -65,21 +65,26 @@ export function RemoteRolePicker({
                 {
                   key: "name",
                   header: "Role",
+                  kind: "name",
                   accessor: roleTitle,
                   sortable: false,
                 },
                 {
                   key: "select",
                   header: "Select",
+                  kind: "actions",
+                  size: 96,
+                  maxSize: 96,
                   sortable: false,
                   accessor: (row) => (
                     <ActionButton
+                      aria-label={`Select ${roleTitle(row)}`}
                       onClick={() => {
                         onChange(row.id);
                         setOpen(false);
                       }}
                     >
-                      Select {roleTitle(row)}
+                      Select
                     </ActionButton>
                   ),
                 },

@@ -51,20 +51,25 @@ export function RemoteUserPicker({
               {
                 key: "user",
                 header: "User",
+                kind: "name",
                 accessor: (row) => row.displayName || row.username,
                 sortable: false,
               },
               {
                 key: "select",
                 header: "Select",
+                kind: "actions",
+                size: 96,
+                maxSize: 96,
                 accessor: (row) => (
                   <ActionButton
+                    aria-label={`Select ${row.username}`}
                     onClick={() => {
                       onChange(row.id);
                       setOpen(false);
                     }}
                   >
-                    Select {row.username}
+                    Select
                   </ActionButton>
                 ),
                 sortable: false,

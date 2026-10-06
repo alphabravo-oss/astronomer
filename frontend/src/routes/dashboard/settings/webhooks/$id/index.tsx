@@ -19,7 +19,7 @@ import {
 import { toastSuccess } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm } from "@/lib/form";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { pageCount, pageNumber } from "@/lib/api/pagination";
 import { ActionButton } from "@/components/ui/action-button";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -46,6 +46,7 @@ import type {
 } from "@/lib/api/settings";
 import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 const TAB_KEYS = ["config", "deliveries", "test"] as const;
 
@@ -262,15 +263,20 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
     {
       key: "createdAt",
       header: "Time",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {formatRelativeTime(row.createdAt)}
+          <RelativeTime value={row.createdAt} />
         </span>
       ),
     },
     {
       key: "eventType",
       header: "Event",
+      kind: "text",
+      grow: true,
+      minSize: 160,
       accessor: (row) => (
         <span className="text-xs font-mono px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {row.eventType}
@@ -280,6 +286,8 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
     {
       key: "status",
       header: "Status",
+      kind: "status",
+      size: 104,
       accessor: (row) => (
         <StatusBadge
           status={
@@ -297,8 +305,10 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
     {
       key: "responseCode",
       header: "HTTP",
+      kind: "count",
+      size: 84,
       accessor: (row) => (
-        <span className="text-xs font-mono tabular-nums text-muted-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           {row.responseCode ?? "--"}
         </span>
       ),
@@ -306,14 +316,18 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
     {
       key: "attempts",
       header: "Attempts",
-      align: "right",
+      kind: "count",
+      size: 112,
       accessor: (row) => (
-        <span className="tabular-nums text-sm">{row.attempts}</span>
+        <span className="text-sm">{row.attempts}</span>
       ),
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 96,
+      maxSize: 96,
       sortable: false,
       accessor: (row) => (
         <BareButton
