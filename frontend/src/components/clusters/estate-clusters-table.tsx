@@ -22,7 +22,8 @@ export const estateClusterColumns: Column<Cluster>[] = [
     header: "Name",
     accessor: (cluster) => (
       <RouterLink
-        to="/dashboard/clusters/$id" params={{ id: cluster.id }}
+        to="/dashboard/clusters/$id"
+        params={{ id: cluster.id }}
         className="font-medium text-foreground hover:underline"
       >
         {cluster.displayName || cluster.name}

@@ -48,6 +48,8 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
+import { ActionButton } from "@/components/ui/action-button";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 type Mode =
   | { kind: "install"; chartId: string; chartName: string }
@@ -369,9 +371,8 @@ export function AppInstallModal({
             <label className="text-xs font-medium text-muted-foreground">
               Values (YAML)
               {defaultValues.isLoading && (
-                <span className="ml-2 inline-flex items-center text-[10px] text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin mr-1" /> hydrating
-                  defaults…
+                <span className="ml-2 text-2xs" aria-busy="true">
+                  hydrating defaults…
                 </span>
               )}
             </label>
@@ -385,18 +386,19 @@ export function AppInstallModal({
               </QueryStates>
             )}
             {isUpgrade && !defaultValues.isError && defaultValues.data && (
-              <button
+              <ActionButton
+                {...BARE_BUTTON}
+                tooltip="Replace with the upstream chart's default values for the selected version"
                 onClick={() =>
                   form.setFieldValue(
                     "valuesYaml",
                     defaultValues.data!.defaultValues,
                   )
                 }
-                className="text-[11px] text-muted-foreground hover:text-foreground underline"
-                title="Replace with the upstream chart's default values for the selected version"
+                className="text-[11px] text-muted-foreground hover:text-foreground underline inline-block font-normal"
               >
                 Reset to chart defaults
-              </button>
+              </ActionButton>
             )}
           </div>
           <form.Field name="valuesYaml">
@@ -476,18 +478,20 @@ export function AppUninstallModal({
       titleIcon={<AlertTriangle className="h-5 w-5 text-status-error" />}
       footer={
         <div className="flex items-center justify-end gap-2">
-          <button
+          <ActionButton
+            {...BARE_BUTTON}
             onClick={onClose}
-            className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
+            className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted inline-block font-normal"
             disabled={pending}
           >
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            {...BARE_BUTTON}
+            disabledReason={confirmBlockedReason}
             onClick={handleConfirm}
             disabled={!confirmable}
-            title={confirmBlockedReason}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-status-error text-background hover:bg-status-error disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-status-error text-background hover:bg-status-error disabled:opacity-50 font-normal"
           >
             {pending ? (
               <>
@@ -496,7 +500,7 @@ export function AppUninstallModal({
             ) : (
               <>Uninstall</>
             )}
-          </button>
+          </ActionButton>
         </div>
       }
     >
@@ -558,18 +562,20 @@ function AppInstallFooter({
 }) {
   return (
     <div className="flex items-center justify-end gap-2">
-      <button
+      <ActionButton
+        {...BARE_BUTTON}
         onClick={onClose}
-        className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
+        className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted inline-block font-normal"
         disabled={pending}
       >
         Cancel
-      </button>
-      <button
+      </ActionButton>
+      <ActionButton
+        {...BARE_BUTTON}
+        disabledReason={reason}
         onClick={onSubmit}
         disabled={!submittable}
-        title={reason}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 font-normal"
       >
         {pending ? (
           <>
@@ -579,7 +585,7 @@ function AppInstallFooter({
         ) : (
           <>{upgrade ? "Upgrade" : "Install"}</>
         )}
-      </button>
+      </ActionButton>
     </div>
   );
 }

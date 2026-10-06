@@ -21,13 +21,7 @@ import { QueryStates } from "@/components/ui/query-states";
 
 import { useState } from "react";
 import { useParams } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  Loader2,
-  Plus,
-  Server,
-  ShieldAlert,
-} from "lucide-react";
+import { AlertTriangle, Plus, Server, ShieldAlert } from "lucide-react";
 
 import { useCluster } from "@/lib/hooks/clusters";
 import { useClustersUpdate } from "@/lib/permission-hooks";
@@ -45,6 +39,9 @@ import {
   type SnapshotSchedule,
   useVeleroSnapshotPage,
 } from "./snapshot-page-hooks";
+import { ActionButton } from "@/components/ui/action-button";
+import { SkeletonText } from "@/components/ui/skeleton";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 // This route renders the Velero workload-snapshots tab. Control-plane (etcd)
 // snapshots live in their own control-plane snapshot module and route. They
@@ -90,8 +87,9 @@ function ClusterVeleroSnapshotsPage() {
   // ─── Loading / not-found ────────────────────────────────────────────────
   if (clusterLoading || veleroQuery.isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="h-64 space-y-3 p-6" aria-busy="true">
+        <span className="sr-only">Loading snapshots…</span>
+        <SkeletonText lines={6} />
       </div>
     );
   }
@@ -159,17 +157,18 @@ function ClusterVeleroSnapshotsPage() {
             <h2 className="text-sm font-medium text-foreground">
               Snapshot schedules
             </h2>
-            <button
+            <ActionButton
+              {...BARE_BUTTON}
+              disabledReason={canWrite ? undefined : reason}
               onClick={() => canWrite && setScheduleOpen({ mode: "create" })}
               disabled={!canWrite}
-              title={canWrite ? undefined : reason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                 border border-border text-foreground hover:bg-accent transition-colors
                 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="h-3.5 w-3.5" />
               New Schedule
-            </button>
+            </ActionButton>
           </div>
           <SnapshotSchedulesTable
             loading={schedulesQuery.isLoading}
@@ -198,17 +197,18 @@ function ClusterVeleroSnapshotsPage() {
             <h2 className="text-sm font-medium text-foreground">
               Recent snapshots
             </h2>
-            <button
+            <ActionButton
+              {...BARE_BUTTON}
+              disabledReason={canWrite ? undefined : reason}
               onClick={() => canWrite && setNewSnapshotOpen(true)}
               disabled={!canWrite}
-              title={canWrite ? undefined : reason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
                 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="h-3.5 w-3.5" />
               New Snapshot
-            </button>
+            </ActionButton>
           </div>
           <SnapshotsTable
             loading={snapshotsQuery.isLoading}

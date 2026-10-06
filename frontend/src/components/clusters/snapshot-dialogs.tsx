@@ -26,6 +26,7 @@ import {
   type SnapshotSchedule,
   type SnapshotSpec,
 } from "@/lib/api/cluster-velero";
+import { BARE_BUTTON } from "@/lib/bare-button";
 
 export function parseCommaSeparated(value: string): string[] | undefined {
   const items = value
@@ -164,14 +165,14 @@ function NamespacePicker({
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs bg-muted border border-border text-muted-foreground"
             >
               {namespace}
-              <button
-                type="button"
+              <ActionButton
+                {...BARE_BUTTON}
                 onClick={() => toggle(namespace)}
-                className="hover:text-foreground"
+                className="hover:text-foreground inline-block font-normal"
                 aria-label={`Remove ${namespace}`}
               >
                 <XCircle className="h-3 w-3" />
-              </button>
+              </ActionButton>
             </span>
           ))}
         </div>

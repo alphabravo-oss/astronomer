@@ -28,6 +28,7 @@ import {
   OperationTimeline,
   type OperationTimelineStepStatus,
 } from "@/components/ui/operation-timeline";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Props {
   clusterId: string;
@@ -202,7 +203,12 @@ export function PhaseBadge({
   phase: RegistrationStatusView["phase"] | undefined;
 }) {
   if (!phase)
-    return <span className="text-xs text-muted-foreground">Loading...</span>;
+    return (
+      <span aria-busy="true" className="inline-flex items-center">
+        <span className="sr-only">Loading...</span>
+        <Skeleton className="h-3 w-12" />
+      </span>
+    );
   const colour =
     phase === "ready"
       ? "text-status-success"

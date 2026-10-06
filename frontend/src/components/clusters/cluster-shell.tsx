@@ -14,7 +14,6 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Loader2,
   Terminal as TerminalIcon,
   RefreshCw,
   AlertCircle,
@@ -36,6 +35,7 @@ import { createStreamTicket } from "@/lib/api/auth";
 import { wsBase } from "@/lib/env";
 import { cn } from "@/lib/utils";
 import { StatusBadge as UiStatusBadge } from "@/components/ui/status-badge";
+import { ActionButton } from "@/components/ui/action-button";
 
 export type ClusterShellStatus =
   "idle" | "opening" | "connecting" | "connected" | "disconnected" | "error";
@@ -44,6 +44,28 @@ interface ClusterShellProps {
   clusterId: string;
   visible?: boolean;
   onStatusChange?: (status: ClusterShellStatus) => void;
+}
+
+function ConnectButton({
+  onClick,
+  className,
+  children,
+}: {
+  onClick: () => void;
+  className?: string;
+  children: string;
+}) {
+  return (
+    <ActionButton
+      intent="primary"
+      size="sm"
+      icon={<Play className="h-3 w-3" />}
+      onClick={onClick}
+      className={className}
+    >
+      {children}
+    </ActionButton>
+  );
 }
 
 export function ClusterShell({
@@ -374,33 +396,31 @@ export function ClusterShell({
         </div>
         <div className="flex items-center gap-2">
           {isLive ? (
-            <button
+            <ActionButton
+              size="sm"
+              icon={<Square className="h-3 w-3" />}
+              tooltip="Close the WebSocket and tear down the in-cluster debug pod"
               onClick={handleDisconnect}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-background hover:bg-muted text-status-error"
-              title="Close the WebSocket and tear down the in-cluster debug pod"
+              className="text-status-error"
             >
-              <Square className="h-3 w-3" />
               Disconnect
-            </button>
+            </ActionButton>
           ) : isOpening ? (
-            <button
-              disabled
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground opacity-60"
-            >
-              <Loader2 className="h-3 w-3 animate-spin" />
+            <ActionButton intent="primary" size="sm" loading>
               Opening…
-            </button>
+            </ActionButton>
           ) : (
-            <button
+            <ActionButton
+              intent="primary"
+              size="sm"
+              icon={<Play className="h-3 w-3" />}
+              tooltip="Provision an ephemeral debug pod and open a shell"
               onClick={handleConnect}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90"
-              title="Provision an ephemeral debug pod and open a shell"
             >
-              <Play className="h-3 w-3" />
               {status === "disconnected" || status === "error"
                 ? "Reconnect"
                 : "Connect"}
-            </button>
+            </ActionButton>
           )}
         </div>
       </div>
@@ -418,8 +438,10 @@ export function ClusterShell({
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 bg-black text-white min-h-0 relative">
           {status === "opening" && (
-            <div className="absolute top-0 left-0 right-0 flex items-center gap-2 p-4 text-sm text-primary-foreground bg-black/70 z-10">
-              <Loader2 className="h-4 w-4 animate-spin" />
+            <div
+              className="absolute top-0 left-0 right-0 flex items-center gap-2 p-4 text-sm text-primary-foreground bg-black/70 z-10"
+              aria-busy="true"
+            >
               Preparing ephemeral debug pod...
             </div>
           )}
@@ -439,13 +461,7 @@ export function ClusterShell({
                   , opens a shell into it, and records every command line you
                   type to the audit log.
                 </p>
-                <button
-                  onClick={handleConnect}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90"
-                >
-                  <Play className="h-3 w-3" />
-                  Connect
-                </button>
+                <ConnectButton onClick={handleConnect}>Connect</ConnectButton>
               </div>
             </div>
           )}
@@ -470,13 +486,9 @@ export function ClusterShell({
                     {errorMsg}
                   </p>
                 )}
-                <button
-                  onClick={handleConnect}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 mt-4 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90"
-                >
-                  <Play className="h-3 w-3" />
+                <ConnectButton onClick={handleConnect} className="mt-4">
                   Reconnect
-                </button>
+                </ConnectButton>
               </div>
             </div>
           )}
@@ -534,7 +546,7 @@ export function ClusterShell({
                 ))}
             </ul>
           )}
-          <p className="mt-3 text-[10px] text-muted-foreground">
+          <p className="mt-3 text-2xs text-muted-foreground">
             Only your input lines are recorded — never output. See
             docs/kubectl-shell.md for the audit-log contract.
           </p>
