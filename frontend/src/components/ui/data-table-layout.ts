@@ -333,6 +333,26 @@ export function computeColumnWidths(
   return result;
 }
 
+/**
+ * Smallest width at which a `fit` table can render without squeezing a
+ * flexible column below its minimum: fixed columns at their preferred size
+ * plus each grow column at its minSize. Undefined for fully legacy tables so
+ * their historical equal-share layout is untouched. Narrower containers (a
+ * phone) then scroll sideways instead of overlapping cells.
+ */
+export function minTableWidth(
+  layouts: ReadonlyArray<ResolvedColumnLayout | undefined>,
+  leadWidth = 0,
+): number | undefined {
+  if (!layouts.some((l) => l?.sized)) return undefined;
+  const total = layouts.reduce((sum, l) => {
+    if (!l) return sum;
+    if (l.grow) return sum + l.minSize;
+    return sum + (l.size ?? parsePx(l.cssWidth) ?? l.minSize);
+  }, leadWidth);
+  return Math.ceil(total);
+}
+
 export function parsePx(width: string | undefined): number | undefined {
   if (!width) return undefined;
   const match = /^(\d+(?:\.\d+)?)(px|rem)?$/.exec(width.trim());

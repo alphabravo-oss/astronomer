@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   COLUMN_KINDS,
   computeColumnWidths,
+  minTableWidth,
   defaultPinning,
   flexCellStyle,
   headerFloor,
@@ -270,5 +271,22 @@ describe("ordering and pinning", () => {
     expect(moveColumn(["a", "b", "c"], "b", -1)).toEqual(["b", "a", "c"]);
     expect(moveColumn(["a", "b", "c"], "a", -1)).toEqual(["a", "b", "c"]);
     expect(moveColumn(["a", "b", "c"], "c", 1)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("minTableWidth", () => {
+  it("is undefined for fully legacy tables", () => {
+    expect(
+      minTableWidth([col("a"), col("b")].map(resolveColumnLayout)),
+    ).toBeUndefined();
+  });
+
+  it("sums fixed sizes plus the grow column minimum and lead columns", () => {
+    const layouts = [
+      resolveColumnLayout(col("n", { grow: true, minSize: 150, size: 150 })),
+      resolveColumnLayout(col("a", { size: 100, minSize: 60 })),
+      resolveColumnLayout(col("b", { size: 120, minSize: 60 })),
+    ];
+    expect(minTableWidth(layouts, 40)).toBe(150 + 100 + 120 + 40);
   });
 });
