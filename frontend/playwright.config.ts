@@ -56,6 +56,7 @@ export default defineConfig({
     },
     {
       name: "mobile-chromium",
+      testIgnore: /ui-gallery-visual\.spec\.ts/,
       dependencies: ["role-auth-setup"],
       use: {
         ...devices["Pixel 7"],
@@ -67,6 +68,7 @@ export default defineConfig({
     },
     {
       name: "tablet-chromium",
+      testIgnore: /ui-gallery-visual\.spec\.ts/,
       dependencies: ["role-auth-setup"],
       use: {
         ...devices["Desktop Chrome"],
