@@ -333,10 +333,7 @@ function ScopedWorkloadsTable({
   const columns = useMemo<Column<Workload>[]>(
     () => [
       {
-        key: "name",
-        header: "Name",
-        kind: "name",
-        minSize: 220,
+        ...workloadColumns[0],
         accessor: (row) => (
           <RouterLink
             to={workloadDetailHref(
