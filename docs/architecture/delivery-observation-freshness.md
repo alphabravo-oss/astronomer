@@ -211,3 +211,60 @@ multi-version deployment, real watch freshness, or live browser acceptance.
 Frontend fake-clock tests cover unchanged-query expiry, consistent counts and
 badges, nested evidence, legacy behavior, and clock cleanup without additional
 API requests.
+
+## Assignment source observations
+
+The unreleased `delivery-observation-v1` contract also covers optional top-level
+`observation` on each `DeliveryDeploymentStatusV2`. The assignment source uses
+five ownership-filtered Flux informers and one batch snapshot per status pass;
+see [Assignment observation cache](assignment-observation-cache.md).
+The inventory observation marker selects the same contract for the whole pass.
+Modern consumers never fall back to direct assignment GETs when a source is
+unsynced, denied or otherwise unavailable. Legacy passes keep direct reads and
+omit assignment observation fields. The final queued-write gate recognizes both
+inventory and deployment extensions and retries obsolete observation frames after
+a legacy reconnect, without discarding mutation/audit frames.
+
+For a current pair, the source timestamp is the earlier verified timestamp of
+source and reconciler. A known missing object is `absent`. If either dependency
+has never been verified, no combined source time exists: `current`, `absent` and
+`stale` without that required time become `unsynced`. Noncurrent assignments
+report `phase=unknown`, `observation_<state>` and no cached conditions, revision
+or inventory health. Ownership or checkpoint identity mismatches fail closed.
+Nested timestamps are excluded from semantic digests; state transitions remain.
+
+The mandatory legacy wire `observed_at` remains an assessment timestamp. For
+modern reports it is never used as database source freshness. Modern
+`cluster_deployments.last_observed_at` receives nested source time or SQL NULL.
+The public deployment `inventory.observation` preserves the same optional
+state/time object in the existing JSON column. Modern local apply/prune/deletion
+failure decisions and deleting/removed tombstone statuses are an explicit
+exception: they retain existing phase/error semantics, omit source observation,
+and store NULL source time. They must not carry cached ready conditions or
+revision data. Legacy rows retain their previous timestamp semantics.
+
+Modern transition/rollout decision events use server receipt time, separately
+from source time. A higher-sequence semantically coalesced report may refresh
+source metadata through the existing desired-generation/spec-digest/session/
+sequence fences, while preserving semantic deployment fields. That refresh emits
+no deployment transition, deletion-finalization, rollout, event, outbox or snapshot
+ack effects. The existing independent post-commit readiness-repair callback still
+runs so its documented periodic retry behavior is preserved. No migration or
+hand-edited SQLC output is involved.
+
+The runtime owns the cache under its lifetime context and joins it on shutdown;
+a management-tunnel reconnect does not recreate watches. It synchronizes
+subscriptions from loaded and updated accepted checkpoints and evicts completed
+removals. Dirty IDs schedule status only, with one non-resetting 250 ms debounce
+and an attempt interval capped at 15 seconds; periodic status resync remains.
+The same scheduler is serviced while waiting for a desired-state response, using
+that response wait's deadline for any status inspection. Mutation passes remain
+single-owner and serialized. Local tests establish bounded scheduling and zero
+recurring assignment GETs, not the live end-to-end p95 target; long mutation passes
+and deployment qualification still need measurement.
+
+The frontend deployment view consumes `inventory.observation`; source absence
+must not be replaced with `updated_at`, event time or the compatibility assessment
+field. Reported-phase filters/counts remain reported-state views, not claims of
+fresh source health. UI expiry/presentation work is tracked separately from this
+backend integration.

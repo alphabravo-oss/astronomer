@@ -309,6 +309,7 @@ func (s DeliveryStatusV2) SemanticDigest() string {
 	})
 	for index := range canonical.Deployments {
 		canonical.Deployments[index].ObservedAt = time.Time{}
+		canonical.Deployments[index].Observation = withoutObservationTime(canonical.Deployments[index].Observation)
 		canonical.Deployments[index].WarningCodes = append([]string(nil), canonical.Deployments[index].WarningCodes...)
 		sort.Strings(canonical.Deployments[index].WarningCodes)
 	}
@@ -320,22 +321,23 @@ func (s DeliveryStatusV2) SemanticDigest() string {
 }
 
 type DeliveryDeploymentStatusV2 struct {
-	DeploymentID     string              `json:"deployment_id"`
-	Generation       int64               `json:"generation"`
-	SpecDigest       string              `json:"spec_digest"`
-	Phase            string              `json:"phase"`
-	ObservedRevision string              `json:"observed_revision,omitempty"`
-	ObservedDigest   string              `json:"observed_digest,omitempty"`
-	SourceKind       string              `json:"source_kind,omitempty"`
-	SourceName       string              `json:"source_name,omitempty"`
-	ReconcilerKind   string              `json:"reconciler_kind,omitempty"`
-	ReconcilerName   string              `json:"reconciler_name,omitempty"`
-	ErrorCode        string              `json:"error_code,omitempty"`
-	WarningCodes     []string            `json:"warning_codes,omitempty"`
-	Message          string              `json:"message,omitempty"`
-	Conditions       []DeliveryCondition `json:"conditions,omitempty"`
-	Inventory        DeliveryInventory   `json:"inventory"`
-	ObservedAt       time.Time           `json:"observed_at"`
+	Observation      *DeliveryObservation `json:"observation,omitempty"`
+	DeploymentID     string               `json:"deployment_id"`
+	Generation       int64                `json:"generation"`
+	SpecDigest       string               `json:"spec_digest"`
+	Phase            string               `json:"phase"`
+	ObservedRevision string               `json:"observed_revision,omitempty"`
+	ObservedDigest   string               `json:"observed_digest,omitempty"`
+	SourceKind       string               `json:"source_kind,omitempty"`
+	SourceName       string               `json:"source_name,omitempty"`
+	ReconcilerKind   string               `json:"reconciler_kind,omitempty"`
+	ReconcilerName   string               `json:"reconciler_name,omitempty"`
+	ErrorCode        string               `json:"error_code,omitempty"`
+	WarningCodes     []string             `json:"warning_codes,omitempty"`
+	Message          string               `json:"message,omitempty"`
+	Conditions       []DeliveryCondition  `json:"conditions,omitempty"`
+	Inventory        DeliveryInventory    `json:"inventory"`
+	ObservedAt       time.Time            `json:"observed_at"`
 }
 
 type DeliveryCondition struct {
@@ -465,6 +467,9 @@ func (s DeliveryStatusV2) Validate() error {
 	seen := make(map[string]struct{}, len(s.Deployments))
 	for index := range s.Deployments {
 		deployment := s.Deployments[index]
+		if err := deployment.validateObservation(s.ControllerInventory.Observation != nil, time.Now().UTC()); err != nil {
+			return fmt.Errorf("deployment status %d: %w", index, err)
+		}
 		if !validUUID(deployment.DeploymentID) || deployment.Generation < 1 || !validDigest(deployment.SpecDigest) {
 			return fmt.Errorf("deployment status %d has invalid identity", index)
 		}

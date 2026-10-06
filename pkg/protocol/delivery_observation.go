@@ -102,3 +102,38 @@ func withoutObservationTime(o *DeliveryObservation) *DeliveryObservation {
 	}
 	return &DeliveryObservation{State: o.State}
 }
+
+// Mutation decisions do not claim source health. Their assessment timestamp
+// remains required, but modern persistence must keep source time NULL when the
+// observation object is absent. This exception preserves executor/tombstone
+// semantics without labeling a local decision as a cache observation.
+func (d DeliveryDeploymentStatusV2) validateObservation(modern bool, now time.Time) error {
+	if d.Observation == nil {
+		if !modern {
+			return nil
+		}
+		mutation := d.Phase == "deleting" || d.Phase == "removed"
+		if d.Phase == "failed" {
+			switch d.ErrorCode {
+			case "local_apply_failed", "local_inventory_failed", "local_prune_refused", "local_prune_failed", "local_deletion_failed":
+				mutation = true
+			}
+		}
+		if !mutation || len(d.Conditions) != 0 || d.Inventory.Ready != 0 || d.ObservedRevision != "" || d.ObservedDigest != "" {
+			return errors.New("modern deployment status requires source observation")
+		}
+		return nil
+	}
+	if !modern {
+		return errors.New("deployment observation requires modern inventory contract")
+	}
+	if err := d.Observation.validate(d.Phase == "ready" || d.Inventory.Ready > 0, now); err != nil {
+		return err
+	}
+	if d.Observation.State != ObservationCurrent {
+		if d.Phase != "unknown" || d.ErrorCode != "observation_"+string(d.Observation.State) || len(d.Conditions) != 0 || d.Inventory.Entries != 0 || d.Inventory.Ready != 0 || d.Inventory.Failed != 0 || len(d.Inventory.Resources) != 0 || d.ObservedRevision != "" || d.ObservedDigest != "" {
+			return errors.New("noncurrent deployment observation must report unknown without cached health")
+		}
+	}
+	return nil
+}

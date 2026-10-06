@@ -328,10 +328,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery dynamic client: %w", err)
 		}
-		deliveryExecutor, err := agentdelivery.NewExecutor(deliveryDynamic)
-		if err != nil {
-			return nil, fmt.Errorf("initialize local delivery executor: %w", err)
-		}
+
 		deliveryNamespace := strings.TrimSpace(deliveryConfig.Namespace)
 		if deliveryNamespace == "" {
 			deliveryNamespace = "astronomer"
@@ -345,14 +342,14 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 			return nil, fmt.Errorf("initialize local delivery capability probe: %w", err)
 		}
 		deliveryProbe.WithDynamicClient(deliveryDynamic).WithObservationSource(subscriber)
-		deliveryRuntime, err = agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
+		deliveryRuntime, err = agent.NewObservedDeliveryRuntime(agentdelivery.RuntimeConfig{
 			ClusterID:            clusterID.String(),
 			AgentVersion:         version.Version,
 			ValidationPolicy:     agentdelivery.ValidationPolicy{AllowPlatformScope: true},
 			Connected:            tunnelClient.IsConnected,
 			ObservationFreshness: tunnelClient.ObservationFreshnessEnabled,
 			Logger:               logger.With("component", "local-agent-delivery"),
-		}, deliveryExecutor, deliveryStore, deliveryProbe)
+		}, deliveryDynamic, deliveryStore, deliveryProbe)
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery runtime: %w", err)
 		}

@@ -1,8 +1,8 @@
 # Assignment observation cache
 
 Plan 030 E06 introduces a standalone read-only source for accepted Flux
-assignments. Runtime selection and event-driven status wiring are a separate
-integration step. This source does not apply, delete, acknowledge or persist
+assignments. Runtime selection and status-only scheduling use the negotiated
+[source freshness contract](delivery-observation-freshness.md#assignment-source-observations). This source does not apply, delete, acknowledge or persist
 assignments, and does not change mutation, audit or tombstone handling.
 
 ## Scope and lifecycle
@@ -48,14 +48,14 @@ Consumers must not normalize retained noncurrent objects as healthy.
 
 The single-slot `Wake` channel and bounded dirty-ID set coalesce events through
 an object-to-assignment reverse index. Lifecycle changes dirty affected subscribed
-kinds. `ConsumeDirty` drains this status-only notification state. A later runtime
-consumer must send status without treating every Flux event as a desired-state
+kinds. `ConsumeDirty` drains this status-only notification state. The runtime
+consumer sends status without treating every Flux event as a desired-state
 reconcile request. Periodic status resync remains necessary for quiet-source age
 expiry and snapshot/application barriers. Notification state does not own or
 modify the accepted checkpoint, so removing an observation subscription is not
 an instruction to delete its objects.
 
-Legacy direct observation remains an explicit runtime selection for integration;
+Legacy direct observation remains an explicit runtime selection;
 this standalone source never silently changes to direct reads when cache access
 fails. Existing metrics callbacks accept the five fixed Flux kind labels in
 addition to the six typed observation kinds; integration must wire those callbacks
@@ -76,5 +76,5 @@ missing CRDs, initial/revoked permissions, 410 expiry, interrupted watch recover
 concurrent subscription/read activity, bounded notification eviction and canceled
 startup/shutdown. These are local source tests, not proof of real-agent assignment
 tiers, live Kubernetes watch behavior, end-to-end freshness or production scale.
-Runtime negotiation/selection, dirty-status scheduling, checkpoint fences and
-live p95 freshness qualification remain E06 integration work.
+Runtime integration tests separately cover negotiation/selection, dirty-status
+scheduling and checkpoint fences. Live p95 freshness qualification remains open.

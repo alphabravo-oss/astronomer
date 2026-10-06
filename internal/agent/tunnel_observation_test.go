@@ -90,3 +90,24 @@ func TestQueuedExtendedObservationsAreRetriedAfterLegacyReconnect(t *testing.T) 
 		t.Fatal("direct legacy observation discarded")
 	}
 }
+
+func TestQueuedDeploymentObservationGuard(t *testing.T) {
+	tc := NewTunnelClient(testConfig(), testLogger())
+	tc.setObservationCapabilities(protocol.ConnectAckPayload{Accepted: true, Capabilities: []string{protocol.FeatureDeliveryObservation}})
+	tc.setConnected(true)
+	message := &protocol.Message{Type: protocol.MsgDeliveryStatus, Payload: []byte(`{"controller_inventory":{},"deployments":[{"observation":{"state":"unsynced"}}]}`)}
+	if tc.dropUnnegotiatedObservation(message) {
+		t.Fatal("modern deployment observation rejected")
+	}
+	retried := false
+	tc.SetObservationRetry(func(got *protocol.Message) { retried = got == message })
+	if err := tc.Send(message); err != nil {
+		t.Fatal(err)
+	}
+	tc.setConnected(false)
+	tc.setObservationCapabilities(protocol.ConnectAckPayload{Accepted: true})
+	tc.setConnected(true)
+	if !tc.writeQueued(context.Background(), <-tc.controlCh) || !retried {
+		t.Fatal("queued nested deployment extension escaped final-write gate")
+	}
+}

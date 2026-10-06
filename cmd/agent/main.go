@@ -356,10 +356,7 @@ func runConnect(logger *slog.Logger) error {
 		if err != nil {
 			return fmt.Errorf("initialize delivery dynamic client: %w", err)
 		}
-		deliveryExecutor, err := agentdelivery.NewExecutor(deliveryDynamic)
-		if err != nil {
-			return fmt.Errorf("initialize delivery executor: %w", err)
-		}
+
 		deliveryStore, err := agentdelivery.NewKubernetesCheckpointStore(client, agent.DefaultAgentNamespace)
 		if err != nil {
 			return fmt.Errorf("initialize delivery checkpoint: %w", err)
@@ -370,14 +367,14 @@ func runConnect(logger *slog.Logger) error {
 			return fmt.Errorf("initialize delivery capability probe: %w", err)
 		}
 		deliveryProbe.WithDynamicClient(deliveryDynamic).WithObservationSource(subscriber)
-		deliveryRuntime, err := agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
+		deliveryRuntime, err := agent.NewObservedDeliveryRuntime(agentdelivery.RuntimeConfig{
 			ClusterID:            cfg.ClusterID,
 			AgentVersion:         version.Version,
 			ValidationPolicy:     agentdelivery.ValidationPolicy{AllowPlatformScope: allowPlatformScope},
 			Connected:            tunnel.IsConnected,
 			ObservationFreshness: tunnel.ObservationFreshnessEnabled,
 			Logger:               logger,
-		}, deliveryExecutor, deliveryStore, deliveryProbe)
+		}, deliveryDynamic, deliveryStore, deliveryProbe)
 		if err != nil {
 			return fmt.Errorf("initialize delivery runtime: %w", err)
 		}

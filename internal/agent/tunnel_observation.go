@@ -34,6 +34,9 @@ func (tc *TunnelClient) dropUnnegotiatedObservation(msg *protocol.Message) bool 
 		return false
 	}
 	var envelope struct {
+		Deployments []struct {
+			Observation json.RawMessage `json:"observation"`
+		} `json:"deployments"`
 		Inventory struct {
 			Observation json.RawMessage `json:"observation"`
 			Components  []struct {
@@ -45,6 +48,9 @@ func (tc *TunnelClient) dropUnnegotiatedObservation(msg *protocol.Message) bool 
 		return false
 	}
 	extended := len(envelope.Inventory.Observation) != 0
+	for _, deployment := range envelope.Deployments {
+		extended = extended || len(deployment.Observation) != 0
+	}
 	for _, component := range envelope.Inventory.Components {
 		extended = extended || len(component.Observation) != 0
 	}

@@ -46,7 +46,7 @@
     "scripts/operation-task-inventory.mjs": 745
   },
   "functionCeilings": {
-    "cmd/agent/main.go:runConnect": 366,
+    "cmd/agent/main.go:runConnect": 363,
     "cmd/worker/main.go:main": 452,
     "frontend/src/components/auth/connector-form.tsx:ConnectorForm": 292,
     "frontend/src/components/charlie/settings/automation-tab.tsx:AutomationTab": 648,

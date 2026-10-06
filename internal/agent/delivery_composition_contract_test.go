@@ -17,7 +17,7 @@ func TestDeliveryCompositionSharesSubscriberBeforeObserverStart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			constructed, injected, run, health := 0, 0, 0, 0
+			constructed, injected, run, health, assignmentRuntime := 0, 0, 0, 0, 0
 			ast.Inspect(file, func(node ast.Node) bool {
 				if goStatement, ok := node.(*ast.GoStmt); ok {
 					ast.Inspect(goStatement.Call, func(child ast.Node) bool {
@@ -32,6 +32,14 @@ func TestDeliveryCompositionSharesSubscriberBeforeObserverStart(t *testing.T) {
 					return true
 				}
 				switch selectorName(call) {
+				case "NewObservedDeliveryRuntime":
+					if len(call.Args) == 4 {
+						client, clientOK := call.Args[1].(*ast.Ident)
+						probe, probeOK := call.Args[3].(*ast.Ident)
+						if clientOK && probeOK && client.Name == "deliveryDynamic" && probe.Name == "deliveryProbe" {
+							assignmentRuntime++
+						}
+					}
 				case "NewStateSubscriber":
 					constructed++
 				case "WithObservationSource":
@@ -66,8 +74,8 @@ func TestDeliveryCompositionSharesSubscriberBeforeObserverStart(t *testing.T) {
 					return true
 				})
 			}
-			if constructed != 1 || injected != 1 || health != 1 || run != 1 {
-				t.Fatalf("wiring: constructors=%d delivery=%d health=%d run=%d", constructed, injected, health, run)
+			if constructed != 1 || injected != 1 || health != 1 || run != 1 || assignmentRuntime != 1 {
+				t.Fatalf("wiring: constructors=%d delivery=%d health=%d run=%d assignmentRuntime=%d", constructed, injected, health, run, assignmentRuntime)
 			}
 		})
 	}
