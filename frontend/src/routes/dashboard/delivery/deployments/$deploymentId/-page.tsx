@@ -36,9 +36,17 @@ import { can } from "@/lib/permissions";
 import { formatRelativeTime } from "@/lib/utils";
 import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
+import { useClock } from "@/lib/hooks/use-clock";
+import {
+  deploymentFreshness,
+  reportedConditionStatus,
+} from "@/lib/deployment-freshness";
+import type { ObservationFreshness } from "@/lib/delivery-observation-freshness";
+import { DeploymentStatus, DeploymentObservationTime } from "../-freshness";
 import { toastSuccess } from "@/lib/toast";
 
 export function DeploymentDetailPage() {
+  const now = useClock();
   const { deploymentId } = useParams({ strict: false }) as {
     deploymentId: string;
   };
@@ -158,8 +166,8 @@ export function DeploymentDetailPage() {
             <>
               <DetailGrid>
                 <Detail
-                  label="Phase"
-                  value={<DeliveryPhaseBadge value={deployment.phase} />}
+                  label="Status"
+                  value={<DeploymentStatus deployment={deployment} now={now} />}
                 />
                 <Detail
                   label="Generation"
@@ -184,22 +192,23 @@ export function DeploymentDetailPage() {
                   value={`${deployment.reconcilerKind} ${deployment.reconcilerName}`}
                 />
                 <Detail
-                  label="Last observed"
+                  label="Observation time"
                   value={
-                    deployment.lastObservedAt
-                      ? new Date(deployment.lastObservedAt).toLocaleString()
-                      : "Never"
+                    <DeploymentObservationTime
+                      deployment={deployment}
+                      now={now}
+                    />
                   }
                 />
                 <Detail
-                  label="Last error"
+                  label="Last reported error"
                   value={deployment.lastErrorCode || "None"}
                 />
               </DetailGrid>
               {deployment.lastMessage && (
                 <div className="rounded-md border border-border bg-muted/20 p-3 text-sm">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Latest sanitized message
+                    Last reported sanitized message
                   </p>
                   <p className="mt-1">{deployment.lastMessage}</p>
                 </div>
@@ -207,7 +216,9 @@ export function DeploymentDetailPage() {
               <PageSection title="Normalized conditions">
                 <DataTable
                   data={deployment.conditions}
-                  columns={conditionColumns}
+                  columns={conditionColumns(
+                    deploymentFreshness(deployment, now),
+                  )}
                   keyExtractor={(row) => row.type}
                   searchable={false}
                   emptyState={{
@@ -417,34 +428,42 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
   },
 ];
 
-const conditionColumns: Column<DeliveryConditionView>[] = [
-  { key: "type", header: "Condition", accessor: (row) => row.type },
-  {
-    key: "status",
-    header: "Status",
-    accessor: (row) => (
-      <DeliveryPhaseBadge
-        value={
-          row.status === "True"
-            ? row.type === "Ready"
-              ? "ready"
-              : row.type.toLowerCase()
-            : row.status.toLowerCase()
-        }
-      />
-    ),
-  },
-  { key: "reason", header: "Reason", accessor: (row) => row.reason || "—" },
-  {
-    key: "message",
-    header: "Sanitized message",
-    accessor: (row) => (
-      <span className="max-w-xl whitespace-normal">{row.message || "—"}</span>
-    ),
-  },
-  {
-    key: "transition",
-    header: "Last transition",
-    accessor: (row) => formatRelativeTime(row.lastTransitionTime),
-  },
-];
+function conditionColumns(
+  freshness: ObservationFreshness,
+): Column<DeliveryConditionView>[] {
+  return [
+    { key: "type", header: "Condition", accessor: (row) => row.type },
+    {
+      key: "status",
+      header: "Status",
+      accessor: (row) =>
+        freshness.state === "current" ? (
+          <DeliveryPhaseBadge value={reportedConditionStatus(row)} />
+        ) : (
+          <div>
+            {freshness.state === "unknown" ? (
+              <span>Source freshness unknown</span>
+            ) : (
+              <DeliveryPhaseBadge value={freshness.state} />
+            )}
+            <p className="text-xs text-muted-foreground">
+              Reported status: {row.status}
+            </p>
+          </div>
+        ),
+    },
+    { key: "reason", header: "Reason", accessor: (row) => row.reason || "—" },
+    {
+      key: "message",
+      header: "Sanitized message",
+      accessor: (row) => (
+        <span className="max-w-xl whitespace-normal">{row.message || "—"}</span>
+      ),
+    },
+    {
+      key: "transition",
+      header: "Last transition",
+      accessor: (row) => formatRelativeTime(row.lastTransitionTime),
+    },
+  ];
+}

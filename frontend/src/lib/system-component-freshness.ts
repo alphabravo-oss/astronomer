@@ -1,7 +1,6 @@
 import type { DeliverySystemComponent } from "@/lib/api/delivery-system";
 
-const MAX_AGE_MS = 5 * 60_000;
-const MAX_FUTURE_SKEW_MS = 30_000;
+import { deliveryObservationFreshness } from "./delivery-observation-freshness";
 type Component = Pick<DeliverySystemComponent, "health" | "observation">;
 type ObservationState = NonNullable<Component["observation"]>["state"];
 
@@ -26,40 +25,15 @@ export function componentFreshness(
       attention: ["degraded", "unavailable"].includes(component.health),
     };
   }
-  const timestamp = observation.observedAt
-    ? Date.parse(observation.observedAt)
-    : NaN;
-  const validTime =
-    Number.isFinite(timestamp) && timestamp <= now + MAX_FUTURE_SKEW_MS;
-  let state = observation.state;
-  if (
-    ![
-      "current",
-      "stale",
-      "unsynced",
-      "denied",
-      "absent",
-      "disconnected",
-      "unavailable",
-    ].includes(state)
-  ) {
-    state = "unavailable";
-  }
-  if (
-    (observation.observedAt && !validTime) ||
-    (["current", "stale", "absent"].includes(state) && !validTime)
-  ) {
-    state = "unavailable";
-  } else if (state === "current" && now - timestamp > MAX_AGE_MS) {
-    state = "stale";
-  }
+  const freshness = deliveryObservationFreshness(observation, now);
+  const state = freshness.state === "unknown" ? "unavailable" : freshness.state;
   const health = state === "current" ? component.health : state;
   return {
     state,
     health,
     attention:
       state !== "current" || ["degraded", "unavailable"].includes(health),
-    observedAt: validTime ? observation.observedAt : undefined,
+    observedAt: freshness.observedAt,
   };
 }
 

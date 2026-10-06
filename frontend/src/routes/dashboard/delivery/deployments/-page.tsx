@@ -6,7 +6,6 @@ import { Layers } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import {
-  DeliveryPhaseBadge,
   DeliveryProjectGate,
   inputClass,
   useDeliveryWorkspace,
@@ -20,7 +19,12 @@ import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useNavigate, useLocation } from "@tanstack/react-router";
-import { formatRelativeTime } from "@/lib/utils";
+import { useClock } from "@/lib/hooks/use-clock";
+import {
+  deploymentFreshness,
+  deploymentDrift,
+} from "@/lib/deployment-freshness";
+import { DeploymentStatus, DeploymentObservationTime } from "./-freshness";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 
@@ -38,6 +42,7 @@ const phases: DeploymentPhase[] = [
 ];
 
 export function DeploymentsPage() {
+  const now = useClock();
   const {
     projectId,
     projects,
@@ -122,8 +127,8 @@ export function DeploymentsPage() {
     },
     {
       key: "phase",
-      header: "Phase",
-      accessor: (row) => <DeliveryPhaseBadge value={row.phase} />,
+      header: "Status",
+      accessor: (row) => <DeploymentStatus deployment={row} now={now} />,
     },
     {
       key: "revision",
@@ -143,20 +148,14 @@ export function DeploymentsPage() {
       key: "drift",
       header: "Drift",
       accessor: (row) =>
-        row.conditions.some(
-          (condition) =>
-            condition.type === "Drifted" && condition.status === "True",
-        ) ? (
-          <DeliveryPhaseBadge value="drifted" />
-        ) : (
-          "No drift reported"
-        ),
+        deploymentDrift(deploymentFreshness(row, now), row.conditions),
     },
     {
       key: "observed",
-      header: "Last observed",
-      accessor: (row) =>
-        row.lastObservedAt ? formatRelativeTime(row.lastObservedAt) : "Never",
+      header: "Observation time",
+      accessor: (row) => (
+        <DeploymentObservationTime deployment={row} now={now} />
+      ),
     },
   ];
   return (
@@ -178,6 +177,10 @@ export function DeploymentsPage() {
               : "Current desired and normalized observed state for every target and cluster pair."
           }
         />
+        <p className="text-sm text-muted-foreground">
+          Filters and totals use reported phase. Status reflects source
+          freshness.
+        </p>
         <DataTable
           data={query.data?.data ?? []}
           columns={columns}
@@ -200,14 +203,14 @@ export function DeploymentsPage() {
           toolbar={
             <div className="flex flex-wrap gap-2">
               <Select
-                aria-label="Deployment phase"
+                aria-label="Reported phase"
                 value={phase ?? ""}
                 onChange={(e) =>
                   updateSearch({ phase: e.target.value, page: 0 })
                 }
                 className={inputClass}
               >
-                <option value="">All phases</option>
+                <option value="">All reported phases</option>
                 {phases.map((value) => (
                   <option key={value} value={value}>
                     {value}
