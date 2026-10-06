@@ -318,7 +318,7 @@ export function ClusterControlPlaneSnapshotsPage() {
   );
   if (managed)
     return (
-      <div className="space-y-6">
+      <div className="space-y-(--gap-section)">
         {header}
         <EmptyState
           icon={Cloud}
@@ -340,7 +340,7 @@ export function ClusterControlPlaneSnapshotsPage() {
     );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       {header}
       <DataTable
         data={snapshotsQuery.data?.data ?? []}

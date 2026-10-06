@@ -317,7 +317,7 @@ function DexInstallCard({
 }) {
   const navigate = useNavigate();
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="rounded-xl border border-border bg-card p-(--card-p)">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">
           <div className="shrink-0 w-10 h-10 rounded-lg bg-muted flex items-center justify-center">

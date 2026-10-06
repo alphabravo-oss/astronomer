@@ -18,7 +18,10 @@ export function LoadingPanel({
     <div
       role="status"
       aria-busy="true"
-      className={cn("rounded-xl border border-border bg-card p-5", className)}
+      className={cn(
+        "rounded-xl border border-border bg-card p-(--card-p)",
+        className,
+      )}
     >
       <span className="sr-only">{title}</span>
       <SkeletonText lines={lines} />

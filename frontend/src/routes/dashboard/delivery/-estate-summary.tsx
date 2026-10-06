@@ -103,7 +103,7 @@ export function EstateKpiGrid({
   );
   const icon = "h-4 w-4";
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-(--gap-section) lg:grid-cols-2">
       {group("Cluster health", [
         [
           "Adopted",

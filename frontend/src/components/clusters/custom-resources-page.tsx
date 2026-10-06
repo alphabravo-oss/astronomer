@@ -22,7 +22,7 @@ import { ResourceDetail } from "@/components/resources/resource-detail";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { crResourcePath, crListHref } from "@/lib/k8s-paths";
 import { formatRelativeTime } from "@/lib/utils";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader, PageShell } from "@/components/ui/page";
 import { CustomResourceList } from "./custom-resource-list";
 import { QueryStates } from "@/components/ui/query-states";
 
@@ -217,7 +217,7 @@ function CRDList({ clusterId }: { clusterId: string }) {
   );
 
   return (
-    <div className="space-y-4">
+    <PageShell>
       <PageHeader title="Custom Resources" />
       <QueryStates
         query={query}
@@ -247,6 +247,6 @@ function CRDList({ clusterId }: { clusterId: string }) {
           }}
         />
       </QueryStates>
-    </div>
+    </PageShell>
   );
 }

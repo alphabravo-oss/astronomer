@@ -59,7 +59,7 @@ function ProjectOverviewPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       {/* Custom dashboard widgets (migration 058). Per-project scope —
           empty by default so the project overview stays clean unless
           the operator explicitly pins something here. */}
@@ -119,7 +119,7 @@ function ProjectOverviewPage() {
           <ProjectMembersCard projectId={project.id} />
         </div>
 
-        <div className="md:col-span-3 rounded-xl border border-border bg-card p-5 space-y-2">
+        <div className="md:col-span-3 rounded-xl border border-border bg-card p-(--card-p) space-y-2">
           <h3 className="text-sm font-medium text-foreground">Identifiers</h3>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
             <dt className="text-muted-foreground">Name</dt>

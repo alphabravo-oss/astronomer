@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import {
+  PageEyebrowProvider,
   PageHeader,
   PageSection,
   PageShell,
@@ -96,5 +97,47 @@ describe("Page layout primitives", () => {
     expect(
       screen.getByRole("link", { name: "Back to cluster" }),
     ).toHaveAttribute("href", "/dashboard/clusters/c-1");
+  });
+});
+
+describe("PageHeader slots", () => {
+  it("renders status beside the title and tabs as a nav (never a tablist)", () => {
+    render(
+      <PageHeader
+        title="Project"
+        status={<span>Healthy</span>}
+        tabs={
+          <nav aria-label="Sections">
+            <a href="/a">Overview</a>
+          </nav>
+        }
+      />,
+    );
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Project",
+    );
+    expect(screen.getByText("Healthy")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Sections" })).toBeVisible();
+    expect(screen.queryByRole("tablist")).toBeNull();
+  });
+
+  it("shows the layout-provided scope eyebrow unless the page sets its own", () => {
+    const { rerender } = render(
+      <PageEyebrowProvider value="Continuous Delivery · Project scope">
+        <PageHeader title="Sources" />
+      </PageEyebrowProvider>,
+    );
+    expect(
+      screen.getByText("Continuous Delivery · Project scope"),
+    ).toBeInTheDocument();
+    rerender(
+      <PageEyebrowProvider value="Continuous Delivery · Project scope">
+        <PageHeader title="Sources" eyebrow="Own" />
+      </PageEyebrowProvider>,
+    );
+    expect(screen.getByText("Own")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Continuous Delivery · Project scope"),
+    ).toBeNull();
   });
 });

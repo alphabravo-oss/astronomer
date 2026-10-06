@@ -25,7 +25,7 @@ import { TargetRefsEditor } from "./target-refs-editor";
 
 // This form's inputs are one notch tighter than the kit default — merged
 // over the kit's base input class (twMerge, later wins).
-const credInputClassName = "h-9 rounded-md focus:ring-1";
+const credInputClassName = "h-(--control-h) rounded-md focus:ring-1";
 
 export interface CredentialFormState {
   name: string;

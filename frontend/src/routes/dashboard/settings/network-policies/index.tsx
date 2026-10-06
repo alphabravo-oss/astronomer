@@ -25,15 +25,7 @@ import { useState } from "react";
 import { useNetworkPolicyTemplates } from "@/lib/hooks/policy-queries";
 import { QueryStates } from "@/components/ui/query-states";
 import { Link as RouterLink } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  Plus,
-  Trash2,
-  Save,
-  Copy,
-  Loader2,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, Copy, Loader2 } from "lucide-react";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm, useStore } from "@/lib/form";
@@ -78,19 +70,19 @@ function TemplateRow({
 }) {
   return (
     <TableRow className="border-b border-border last:border-0">
-      <TableCell className="px-3 py-3 align-top">
+      <TableCell className="px-3 py-(--row-py) align-top">
         <div className="font-medium text-foreground">{tmpl.name}</div>
         <div className="text-xs text-muted-foreground font-mono">
           {tmpl.slug}
         </div>
       </TableCell>
-      <TableCell className="px-3 py-3 align-top">
+      <TableCell className="px-3 py-(--row-py) align-top">
         <KindBadge kind={tmpl.kind} />
       </TableCell>
-      <TableCell className="px-3 py-3 align-top text-sm text-muted-foreground max-w-md">
+      <TableCell className="px-3 py-(--row-py) align-top text-sm text-muted-foreground max-w-md">
         {tmpl.description}
       </TableCell>
-      <TableCell className="px-3 py-3 align-top">
+      <TableCell className="px-3 py-(--row-py) align-top">
         <span
           className={`text-xs px-2 py-0.5 rounded-sm border font-medium ${
             tmpl.enabled
@@ -101,7 +93,7 @@ function TemplateRow({
           {tmpl.enabled ? "enabled" : "disabled"}
         </span>
       </TableCell>
-      <TableCell className="px-3 py-3 align-top text-right">
+      <TableCell className="px-3 py-(--row-py) align-top text-right">
         <div className="flex items-center justify-end gap-1">
           <BareButton
             className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-border hover:bg-muted"
@@ -208,11 +200,7 @@ function NetworkPoliciesPanel() {
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to settings
       </RouterLink>
       <PageHeader
-        title={
-          <span className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5" /> Network policy templates
-          </span>
-        }
+        title="Network policy templates"
         description="Pre-built Kubernetes NetworkPolicy bundles. Built-in rows are read-only — clone to create an editable custom row. Apply templates to namespaces from the cluster detail page's Network policies tab."
         actions={
           <BareButton

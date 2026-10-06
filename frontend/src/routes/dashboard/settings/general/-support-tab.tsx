@@ -58,7 +58,7 @@ export function SupportTab() {
   };
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-(--gap-section)">
       <div className="rounded-lg border border-border bg-card p-6 space-y-4">
         <div>
           <h3 className="text-sm font-semibold text-foreground">

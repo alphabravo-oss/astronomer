@@ -14,7 +14,7 @@ import {
 } from "@/lib/k8s-paths";
 import { formatRelativeTime } from "@/lib/utils";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
 import { ActionButton } from "@/components/ui/action-button";
 import { PermissionState, ErrorState } from "@/components/ui/empty-state";
@@ -185,7 +185,7 @@ function ScopedCustomResourceList({
   if (!canList) return <PermissionState permission="custom_resources:list" />;
 
   return (
-    <div className="space-y-4">
+    <PageShell>
       <ResourceMasthead
         backTo={crdListHref(clusterId)}
         title={plural}
@@ -286,6 +286,6 @@ function ScopedCustomResourceList({
           </ActionButton>
         </div>
       </QueryStates>
-    </div>
+    </PageShell>
   );
 }

@@ -111,13 +111,10 @@ function ClusterTemplateDetailPage() {
 
       <PageHeader
         eyebrow="Onboarding Bundle"
-        title={
-          <span className="flex items-center gap-2">
-            <Layers className="h-5 w-5 text-muted-foreground" />
-            {template.displayName}
-            <span className="text-xs text-muted-foreground font-mono font-normal">
-              {template.name}
-            </span>
+        title={template.displayName}
+        status={
+          <span className="text-xs text-muted-foreground font-mono font-normal">
+            {template.name}
           </span>
         }
         description={template.description || undefined}
@@ -138,7 +135,7 @@ function ClusterTemplateDetailPage() {
       />
 
       {/* Summary */}
-      <section className="rounded-xl border border-border bg-card p-5 space-y-3">
+      <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-3">
         <h2 className="text-sm font-medium text-foreground">Spec</h2>
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
           <DetailRow label="Environment" value={template.spec.environment} />

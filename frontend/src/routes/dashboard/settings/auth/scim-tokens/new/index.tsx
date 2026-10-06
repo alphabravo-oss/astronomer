@@ -6,7 +6,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Check, Copy, KeyRound, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Check, Copy, ShieldAlert } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -95,9 +95,12 @@ function NewSCIMTokenForm() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <Card radius="xl" padding="lg" className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground" htmlFor="scim-token-name">
+        <label
+          className="text-sm font-medium text-foreground"
+          htmlFor="scim-token-name"
+        >
           Name
         </label>
         <Input
@@ -146,12 +149,7 @@ function NewSCIMTokenPage() {
         </RouterLink>
         <PageHeader
           eyebrow="Settings · Auth · SCIM · New"
-          title={
-            <span className="flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-muted-foreground" />
-              Mint SCIM token
-            </span>
-          }
+          title="Mint SCIM token"
         />
         <NewSCIMTokenForm />
       </PageShell>

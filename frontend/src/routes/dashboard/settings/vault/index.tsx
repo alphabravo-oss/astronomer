@@ -27,8 +27,8 @@ import {
  * blank the stored secret.
  */
 import { useState } from "react";
-import { KeyRound, Plus, Trash2 } from "lucide-react";
-import { ResourceMasthead } from "@/components/ui/page";
+import { Plus, Trash2 } from "lucide-react";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
@@ -138,15 +138,11 @@ function VaultConnectionsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <PageShell>
       <ResourceMasthead
         backTo="/dashboard/settings"
         backLabel="Back to settings"
-        title={
-          <span className="inline-flex items-center gap-2">
-            <KeyRound className="h-5 w-5" /> Vault connections
-          </span>
-        }
+        title="Vault connections"
         actions={
           <BareButton
             onClick={() => setCreating(true)}
@@ -449,7 +445,7 @@ function VaultConnectionsPage() {
             : undefined
         }
       />
-    </div>
+    </PageShell>
   );
 }
 

@@ -444,7 +444,7 @@ function SavedSearchControls({
           id="logging-saved-search"
           value={controller.selectedId}
           onChange={(event) => controller.select(event.target.value)}
-          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          className="h-(--control-h) w-full rounded-md border border-input bg-background px-3 text-sm"
         >
           <option value="">New saved search</option>
           {controller.searches.map((saved) => (

@@ -333,7 +333,7 @@ export function SecretDataOverview({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <Section title="Secret">
         <KeyValueTable
           entries={[

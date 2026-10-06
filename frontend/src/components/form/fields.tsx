@@ -28,7 +28,7 @@ interface CommonFieldProps {
   disabled?: boolean;
   placeholder?: string;
   /** Extra input classes merged over the shared base (twMerge — later wins),
-   *  for forms whose inputs deviate from the default sizing (e.g. h-9/rounded-md). */
+   *  for forms whose inputs deviate from the default sizing (e.g. h-(--control-h)/rounded-md). */
   className?: string;
 }
 

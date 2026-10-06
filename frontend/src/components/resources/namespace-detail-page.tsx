@@ -14,7 +14,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TabStrip } from "@/components/ui/tabs";
 import { ageMetaItem } from "@/components/resources/resource-masthead-details";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { MetricCard } from "@/components/ui/metric-card";
 import {
   useNamespaceQueries,
@@ -141,7 +141,7 @@ export function NamespaceDetailPage({
   const activeError = activeQueries.find((query) => query.isError);
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <section className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border bg-gradient-to-r from-primary/10 via-card to-card px-6 py-5">
           <ResourceMasthead
@@ -332,7 +332,7 @@ export function NamespaceDetailPage({
           persistKey={`namespace:${tab}`}
         />
       ) : null}
-    </div>
+    </PageShell>
   );
 }
 

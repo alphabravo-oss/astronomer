@@ -8,7 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Key } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useCreateAPIToken } from "@/lib/hooks/user-settings";
 import { toastError } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
@@ -68,10 +68,13 @@ function NewTokenForm() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <Card radius="xl" padding="lg" className="space-y-4">
         <div className="space-y-1.5">
-          <label htmlFor="token-name" className="text-sm font-medium text-foreground">
+          <label
+            htmlFor="token-name"
+            className="text-sm font-medium text-foreground"
+          >
             Token Name
           </label>
           <Input
@@ -137,22 +140,14 @@ function NewTokenPage() {
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to API tokens
       </RouterLink>
-      <PageHeader
-        eyebrow="Settings · General · New"
-        title={
-          <span className="flex items-center gap-2">
-            <Key className="h-5 w-5 text-muted-foreground" />
-            Create API token
-          </span>
-        }
-      />
+      <PageHeader eyebrow="Settings · General · New" title="Create API token" />
       <NewTokenForm />
     </PageShell>
   );
 }
 
-export const Route = createFileRoute(
-  "/dashboard/settings/general/tokens/new/",
-)({
-  component: NewTokenPage,
-});
+export const Route = createFileRoute("/dashboard/settings/general/tokens/new/")(
+  {
+    component: NewTokenPage,
+  },
+);
