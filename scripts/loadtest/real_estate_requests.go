@@ -97,7 +97,7 @@ func doEstateRequest(ctx context.Context, client *http.Client, base, token strin
 		diagnostic = "transport"
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, (4<<20)+1))
 	if err != nil {
 		diagnostic = "body_read"
@@ -130,7 +130,8 @@ func estateRequestCatalog(m estateManifest, p estatePhaseSpec) []estateRequest {
 		return out
 	}
 	for _, member := range m.Members {
-		if p.Mode == "resources" {
+		switch p.Mode {
+		case "resources":
 			for _, kind := range []string{"pods", "deployments", "services"} {
 				group := "/api/v1"
 				if kind == "deployments" {
@@ -139,7 +140,7 @@ func estateRequestCatalog(m estateManifest, p estatePhaseSpec) []estateRequest {
 				path := "/api/v1/clusters/" + member.ClusterID + "/k8s" + group + "/namespaces/" + member.Namespace + "/" + kind + "?limit=500"
 				out = append(out, estateRequest{Scenario: "namespace_" + kind, Member: member.Name, Path: path, Validate: func(raw []byte) error { return validateEstateResourceBody(raw, member.Namespace) }})
 			}
-		} else if p.Mode == "delivery" {
+		case "delivery":
 			project := "project_id=" + member.ProjectID
 			out = append(out, estateRequest{Scenario: "delivery_inventory", Member: member.Name, Path: "/api/v1/delivery/clusters/" + member.ClusterID + "/inventory/?" + project, Validate: func(raw []byte) error { return validateEstateDeliveryBody(raw, member, "inventory", nil) }})
 			out = append(out, estateRequest{Scenario: "delivery_list", Member: member.Name, Path: "/api/v1/delivery/deployments/?" + project + "&cluster_id=" + member.ClusterID + "&limit=100&offset=0", Validate: func(raw []byte) error { return validateEstateDeliveryBody(raw, member, "list", nil) }})

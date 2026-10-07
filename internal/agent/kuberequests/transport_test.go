@@ -19,7 +19,7 @@ func TestRepeatedConfigAndPriorRetryWrapperCountUnderlyingAttempts(t *testing.T)
 	original := &rest.Config{Host: "https://kubernetes.test", QPS: 7, Burst: 9, RateLimiter: flowcontrol.NewFakeAlwaysRateLimiter(), Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		attempts++
 		order = append(order, "transport")
-		if r.Context().Value("retained") != "value" {
+		if r.Context().Value(retainedContextKey{}) != "value" {
 			t.Error("context value lost")
 		}
 		if attempts == 1 {
@@ -35,7 +35,7 @@ func TestRepeatedConfigAndPriorRetryWrapperCountUnderlyingAttempts(t *testing.T)
 			order = append(order, "retry")
 			resp, err := rt.RoundTrip(r)
 			if err == nil && resp.StatusCode == 503 {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				return rt.RoundTrip(r)
 			}
 			return resp, err
@@ -51,14 +51,14 @@ func TestRepeatedConfigAndPriorRetryWrapperCountUnderlyingAttempts(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), "retained", "value"))
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), retainedContextKey{}, "value"))
 	defer cancel()
 	request, _ := http.NewRequestWithContext(ctx, "GET", "https://kubernetes.test/api/v1/pods", nil)
 	resp, err := client.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if attempts != 2 || counterValue(DeliveryInventory, "list", "pods", "2xx")-beforeSuccess != 1 || counterValue(DeliveryInventory, "list", "pods", "5xx")-beforeError != 1 {
 		t.Fatal("retry attempts double counted or missing")
 	}
@@ -81,7 +81,7 @@ func TestExplicitConsumerOverridesDiscoveryDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if counterValue(SharedObservation, "get", "pods", "2xx")-before != 1 {
 		t.Fatal("default overrode explicit context")
 	}
@@ -137,6 +137,8 @@ func TestTokenFileAndExistingAuthWrapperPreserved(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 }
+
+type retainedContextKey struct{}

@@ -81,7 +81,7 @@ func readEstateBounded(path string, limit int64) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", errors.New("input_unreadable")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(file, limit+1))
 	if err != nil {
 		return nil, "", errors.New("input_unreadable")

@@ -114,7 +114,7 @@ func TestRealEstateSearchBodyRejectsPartialAndForeignResults(t *testing.T) {
 
 func readTestBody(t *testing.T, r *http.Response) []byte {
 	t.Helper()
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		t.Fatal(err)

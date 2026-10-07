@@ -55,9 +55,8 @@ func TestRealEstatePhaseManifestBounds(t *testing.T) {
 	if strings.Contains(q.Path, "cluster_id") || strings.Contains(q.Path, "project_id") || !strings.Contains(q.Path, "namespace=benchmark") {
 		t.Fatal("invented search filter")
 	}
-	r := newEstateReport(m, "digest", &config{})
 	m.Search.TokenFile = "private-path"
-	r = newEstateReport(m, "digest", &config{})
+	r := newEstateReport(m, "digest", &config{})
 	raw, _ := json.Marshal(r)
 	if strings.Contains(string(raw), "private-path") {
 		t.Fatal("search token path exposed")

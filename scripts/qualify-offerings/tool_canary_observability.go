@@ -176,7 +176,7 @@ func evaluateMetricCanary(ctx context.Context, client *http.Client, execution ex
 func prometheusMetricHasPositiveSample(raw []byte, metric string) bool {
 	for _, line := range strings.Split(string(raw), "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") || !(strings.HasPrefix(line, metric+"{") || strings.HasPrefix(line, metric+" ")) {
+		if line == "" || strings.HasPrefix(line, "#") || (!strings.HasPrefix(line, metric+"{") && !strings.HasPrefix(line, metric+" ")) {
 			continue
 		}
 		fields := strings.Fields(line)

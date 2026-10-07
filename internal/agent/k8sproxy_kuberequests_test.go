@@ -86,7 +86,7 @@ func TestSharedFactoryCallbacksTagActualListWatchRequests(t *testing.T) {
 		if r.URL.Query().Get("watch") == "true" {
 			reader, writer := io.Pipe()
 			body = reader
-			go func() { <-r.Context().Done(); writer.Close() }()
+			go func() { <-r.Context().Done(); _ = writer.Close() }()
 		} else {
 			version := "v1"
 			if strings.Contains(r.URL.Path, "/apps/") {

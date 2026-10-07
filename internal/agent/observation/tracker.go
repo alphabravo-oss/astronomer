@@ -185,7 +185,7 @@ func (t *Tracker) Snapshot() Snapshot {
 		switch {
 		case !matched:
 			out.Observation.State = protocol.ObservationUnsynced
-		case !t.active && !(t.repairing && now.Before(t.repairUntil)) && !now.Before(t.graceUntil):
+		case !t.active && (!t.repairing || !now.Before(t.repairUntil)) && !now.Before(t.graceUntil):
 			out.Observation.State = protocol.ObservationDisconnected
 		case now.Sub(t.candidate) > t.opts.MaxAge:
 			out.Observation.State = protocol.ObservationStale

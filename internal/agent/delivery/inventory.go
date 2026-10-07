@@ -6,7 +6,7 @@ import (
 	"unicode"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
-	"k8s.io/apimachinery/pkg/api/validation/path"
+	"k8s.io/apimachinery/pkg/api/validate/content"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -28,7 +28,7 @@ func fluxResourceIdentity(raw any) (protocol.DeliveryResourceIdentity, bool) {
 	}
 	namespace, name, group, kind := parts[0], parts[1], parts[2], parts[3]
 	if (namespace != "" && len(validation.IsDNS1123Label(namespace)) != 0) ||
-		name == "" || len(name) > 253 || len(path.IsValidPathSegmentName(name)) != 0 ||
+		name == "" || len(name) > 253 || len(content.IsPathSegmentName(name)) != 0 ||
 		strings.IndexFunc(name, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) }) >= 0 ||
 		(group != "" && len(validation.IsDNS1123Subdomain(group)) != 0) ||
 		len(kind) > 128 || !inventoryKindPattern.MatchString(kind) {

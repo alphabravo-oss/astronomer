@@ -142,7 +142,7 @@ func TestAssignmentCacheCallbacksTagListAndWatch(t *testing.T) {
 		}
 		if r.URL.Query().Get("watch") == "true" {
 			reader, writer := io.Pipe()
-			go func() { <-r.Context().Done(); writer.Close() }()
+			go func() { <-r.Context().Done(); _ = writer.Close() }()
 			resp := requestTestResponse("")
 			resp.Body = reader
 			return resp, nil

@@ -29,7 +29,7 @@ func estateGET(ctx context.Context, c *http.Client, endpoint, token string, dst 
 	if err != nil {
 		return errors.New("GET transport failed")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("GET returned HTTP %d", resp.StatusCode)
 	}

@@ -69,7 +69,7 @@ func loadEstateManifest(path string) (estateManifest, string, error) {
 	if err != nil {
 		return m, "", errors.New("cannot read estate manifest")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(file, (1<<20)+1))
 	if err != nil {
 		return m, "", errors.New("cannot read estate manifest")
@@ -169,7 +169,7 @@ func validEstateUUID(s string) bool {
 }
 func validateEstateURL(s string, metrics bool) error {
 	u, err := url.Parse(s)
-	if err != nil || (u.Scheme != "https" && !(u.Scheme == "http" && net.ParseIP(u.Hostname()) != nil && net.ParseIP(u.Hostname()).IsLoopback())) || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+	if err != nil || (u.Scheme != "https" && (u.Scheme != "http" || net.ParseIP(u.Hostname()) == nil || !net.ParseIP(u.Hostname()).IsLoopback())) || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
 		return errors.New("estate endpoints require credential-free HTTPS or numeric loopback HTTP URLs without query or fragment")
 	}
 	if (metrics && u.Path != "/metrics") || (!metrics && u.Path != "" && u.Path != "/") {

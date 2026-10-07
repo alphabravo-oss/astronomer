@@ -156,7 +156,7 @@ func readEstateMetrics(ctx context.Context, c *http.Client, endpoint, token stri
 	if err != nil {
 		return nil, errors.New("metric transport failed")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return nil, errors.New("metric scrape failed")
 	}

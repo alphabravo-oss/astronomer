@@ -165,7 +165,8 @@ export function DeploymentsPage() {
     },
     {
       key: "observed",
-      header: "Observation time",
+      header: "Observed",
+      ariaLabel: "Source observation time",
       kind: "age",
       size: 180,
       accessor: (row) => (

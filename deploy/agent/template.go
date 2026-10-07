@@ -8,7 +8,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/url"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,9 +18,6 @@ import (
 
 //go:embed install.yaml.template
 var installTemplate string
-
-//go:embed system-bootstrap.yaml.template
-var systemBootstrapTemplate string
 
 const (
 	PrivilegeProfileAnnotation        = "astronomer.io/agent-privilege-profile"
@@ -177,65 +173,6 @@ func mustAgentOverridesDigest(overrides AgentOverrides) string {
 		panic(err)
 	}
 	return digest
-}
-
-func renderSystemBootstrap(data InstallTemplateData) string {
-	artifactURL := strings.TrimSpace(data.SystemArtifactURL)
-	if artifactURL != "" && !strings.HasPrefix(artifactURL, "oci://") {
-		artifactURL = "oci://" + artifactURL
-	}
-	digest := strings.TrimSpace(data.SystemArtifactDigest)
-	issuer := strings.TrimSpace(data.SystemOIDCIssuer)
-	identity := strings.TrimSpace(data.SystemOIDCIdentity)
-	publicKeys := data.systemPublicKeys()
-	parsedArtifact, artifactErr := url.Parse(artifactURL)
-	validArtifact := artifactErr == nil && parsedArtifact.Scheme == "oci" && parsedArtifact.Host != "" && parsedArtifact.User == nil && parsedArtifact.RawQuery == "" && parsedArtifact.Fragment == "" &&
-		regexp.MustCompile(`^sha256:[0-9a-f]{64}$`).MatchString(digest)
-	if !validArtifact {
-		return ""
-	}
-	verifyPolicy, trustSecret := "", ""
-	if len(publicKeys) != 0 {
-		if issuer != "" || identity != "" || (protocol.DeliverySystemVerification{Provider: "cosign", PublicKeys: publicKeys}).Validate() != nil {
-			return ""
-		}
-		var secretData strings.Builder
-		for index, publicKey := range publicKeys {
-			name := "cosign.pub"
-			if index > 0 {
-				fingerprint := strings.TrimPrefix(protocol.DeliverySystemKeyFingerprint(publicKey), "sha256:")
-				name = "cosign-" + fingerprint + ".pub"
-			}
-			secretData.WriteString("  " + name + ": " + base64.StdEncoding.EncodeToString(publicKey) + "\n")
-		}
-		trustSecret = `---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: astronomer-system-release-trust
-  namespace: astronomer-delivery-system
-  labels:
-    app.kubernetes.io/managed-by: astronomer-agent
-    app.kubernetes.io/part-of: astronomer-delivery
-    delivery.astronomer.io/system: "true"
-type: Opaque
-data:
-` + secretData.String()
-		verifyPolicy = "    secretRef:\n      name: astronomer-system-release-trust"
-	} else {
-		parsedIssuer, issuerErr := url.Parse(issuer)
-		if issuerErr != nil || parsedIssuer.Scheme != "https" || parsedIssuer.Host == "" || parsedIssuer.User != nil || parsedIssuer.RawQuery != "" || parsedIssuer.Fragment != "" ||
-			identity == "" || len(identity) > 512 || strings.ContainsAny(identity, "\r\n\x00") {
-			return ""
-		}
-		verifyPolicy = "    matchOIDCIdentity:\n      - issuer: \"" + escapeYAMLDoubleQuoted(issuer) + "\"\n        subject: \"" + escapeYAMLDoubleQuoted(identity) + "\""
-	}
-	return "\n" + strings.NewReplacer(
-		"{{SYSTEM_ARTIFACT_URL}}", escapeYAMLDoubleQuoted(artifactURL),
-		"{{SYSTEM_ARTIFACT_DIGEST}}", digest,
-		"{{SYSTEM_TRUST_SECRET}}", trustSecret,
-		"{{SYSTEM_VERIFY_POLICY}}", verifyPolicy,
-	).Replace(systemBootstrapTemplate)
 }
 
 func (data InstallTemplateData) systemPublicKeys() [][]byte {
