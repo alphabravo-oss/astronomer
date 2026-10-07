@@ -19,6 +19,17 @@ Target release: **1.2.0**.
   validation, wrapped private-catalog CA backup, and a static HTTPS
   application-catalog air-gap export/import workflow.
 
+### Release qualification
+
+Publication of v1.2.0 requires automated builds, vulnerability/license scans,
+SBOMs and signing, clean installs on Kubernetes 1.33, 1.34 and 1.35, and a signed
+v1.1.0-to-v1.2.0 upgrade, backup/decryption and clean-restore rehearsal.
+Cloud-provider acceptance, production-scale certification, the Rancher comparison
+benchmark and human assistive-technology certification are deferred. These
+certifications are not claimed for this release. The v1.2.0 publication policy
+does not require a separately named release approver; this exception is scoped
+to this tag and does not relax the policy for subsequent releases.
+
 ### Upgrade notes from 1.1.0
 
 This release includes intentional API migration changes despite retaining the

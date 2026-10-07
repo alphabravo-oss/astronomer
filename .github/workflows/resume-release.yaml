@@ -399,9 +399,58 @@ jobs:
           kubectl logs --namespace astronomer --all-containers --tail=300 \
             -l app.kubernetes.io/instance=astronomer || true
 
+  rc-rehearsal:
+    name: qualify v1.2.0 upgrade, backup and clean restore
+    if: needs.preflight.outputs.image-tag == 'v1.2.0'
+    needs: [preflight, qualify]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ needs.preflight.outputs.image-tag }}
+          persist-credentials: false
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with: {version: v3.16.2}
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with: {cosign-release: v2.5.3}
+      - name: Install checksum-verified k3d
+        env: {K3D_VERSION: v5.8.3}
+        run: |
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/checksums.txt"
+          grep ' _dist/k3d-linux-amd64$' checksums.txt | sed 's#_dist/##' | sha256sum --check
+          sudo install -m 0755 k3d-linux-amd64 /usr/local/bin/k3d
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Rehearse exact owned disposable RC
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RC_DISPOSABLE_ACK: destroy-astronomer-rc-${{ github.run_id }}
+          RC_EVIDENCE_OUTPUT: rc-rehearsal-evidence.json
+        run: ./scripts/rehearse-release-candidate.sh "${{ needs.preflight.outputs.image-tag }}" "${{ inputs.source_run_id }}" "v1.1.0"
+      - name: Sign sanitized RC evidence
+        run: cosign sign-blob --yes --bundle rc-rehearsal-evidence.sigstore.json rc-rehearsal-evidence.json
+      - name: Retain sanitized RC evidence only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rc-rehearsal-${{ github.run_id }}
+          path: |
+            rc-rehearsal-evidence.json
+            rc-rehearsal-evidence.sigstore.json
+          if-no-files-found: error
+          retention-days: 90
+
   promote:
     name: publish recovered immutable GitHub Release
-    needs: [preflight, qualify]
+    needs: [preflight, qualify, rc-rehearsal]
+    if: >-
+      always() && !cancelled() && needs.preflight.result == 'success' && needs.qualify.result == 'success' &&
+      ((needs.preflight.outputs.image-tag == 'v1.2.0' && needs.rc-rehearsal.result == 'success') ||
+       (needs.preflight.outputs.image-tag != 'v1.2.0' && needs.rc-rehearsal.result == 'skipped'))
     runs-on: ubuntu-latest
     environment: release-production
     permissions:
@@ -412,6 +461,7 @@ jobs:
       - name: Checkout tagged configuration
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Download original release artifacts
@@ -426,7 +476,28 @@ jobs:
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
         with: {cosign-release: v2.5.3}
 
+      - name: Download current-run v1.2.0 rehearsal evidence
+        if: needs.preflight.outputs.image-tag == 'v1.2.0'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: rc-rehearsal-${{ github.run_id }}
+
+      - name: Verify automated v1.2.0 publication evidence
+        if: needs.preflight.outputs.image-tag == 'v1.2.0'
+        env:
+          TAG: ${{ needs.preflight.outputs.image-tag }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.tag-commit }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          PRODUCER_RUN_ID: ${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
+          RC_IDENTITY: https://github.com/${{ github.workflow_ref }}
+        run: |
+          python3 scripts/validate-automated-release.py --tag "$TAG" --source-commit "$SOURCE_COMMIT" \
+            --source-run-id "$SOURCE_RUN_ID" --producer-run-id "$PRODUCER_RUN_ID" \
+            --repository "$REPOSITORY" --rc-identity "$RC_IDENTITY"
+
       - name: Verify protected release approval and external accessibility evidence
+        if: needs.preflight.outputs.image-tag != 'v1.2.0'
         env:
           RELEASE_APPROVAL_JSON: ${{ vars.RELEASE_APPROVAL_JSON }}
           TAG: ${{ needs.preflight.outputs.image-tag }}
@@ -497,6 +568,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           TAG: ${{ needs.preflight.outputs.image-tag }}
         run: |
+          git show "refs/tags/$TAG:CHANGELOG.md" | awk '/^## Unreleased/{emit=1; next} /^## /{if (emit) exit} emit' > RELEASE_NOTES.md
+          test -s RELEASE_NOTES.md
           sort --unique ./*.digest > RELEASE_SUBJECTS
           cp RELEASE_SUBJECTS RELEASE_IMAGES
           find . -maxdepth 1 -type f \( \
@@ -504,17 +577,23 @@ jobs:
               -name 'sbom-*.spdx.json' -o -name 'provenance-*.slsa.json' -o \
               -name 'release-manifest.json' -o -name 'release-manifest.sigstore.json' -o \
               -name 'runtime-image-evidence.json' -o -name 'runtime-image-evidence.sigstore.json' -o \
+              -name 'RELEASE_NOTES.md' -o \
+              -name 'rc-rehearsal-evidence*.json' -o -name 'release-qualification.json' -o \
               -name 'values-production.yaml' -o \
               -name 'astronomer-images.txt' -o \
               -name 'RELEASE_IMAGES' -o -name 'RELEASE_SUBJECTS' \
             \) -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
-          gh release create "$TAG" \
+          qualification_assets=()
+          if [[ "$TAG" == v1.2.0 ]]; then
+            qualification_assets=(rc-rehearsal-evidence.json rc-rehearsal-evidence.sigstore.json release-qualification.json)
+          fi
+          gh release create "$TAG" "${qualification_assets[@]}" \
             --repo "$REPOSITORY" \
             --verify-tag \
-            --generate-notes \
+            --notes-file RELEASE_NOTES.md \
             --title "Astronomer ${TAG}" \
             astronomer-*.tgz *.tar.gz sbom-*.spdx.json provenance-*.slsa.json \
             release-manifest.json release-manifest.sigstore.json \
             runtime-image-evidence.json runtime-image-evidence.sigstore.json \
-            values-production.yaml astronomer-images.txt \
+            values-production.yaml astronomer-images.txt RELEASE_NOTES.md \
             RELEASE_IMAGES RELEASE_SUBJECTS SHA256SUMS
