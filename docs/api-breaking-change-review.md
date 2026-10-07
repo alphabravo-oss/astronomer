@@ -494,3 +494,82 @@ incorrectly documented top-level objects. Their fields remain inside `data`:
 - POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `targetKey` from the response with the `202` status
 - POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `targetType` from the response with the `202` status
 - POST /api/v1/catalog/operations/{id}/retry/ removed the optional property `updatedAt` from the response with the `202` status
+
+
+## 2026-10-07 catalog response documentation and tool form review
+
+The catalog preview, README and values handlers already called `RespondJSON`
+on base commit `f87b189f`, which wraps their payload in `data`. The previous
+OpenAPI descriptions incorrectly placed these properties at the root. This
+change corrects documentation and generated clients; it does not remove wire
+properties or introduce a new runtime envelope. The exact warnings below are
+limited to those three corrections.
+
+Tool form metadata adds the `multiline` widget for values that already accept
+multiline strings. The existing string/YAML paths remain available; the first-party
+renderer and generated clients handle the new value. External form renderers
+must recognize `multiline` or fall back to a text/YAML editor. This response-enum
+extension is explicitly recorded for the next release. This review against
+`main` is separate from the compatibility review against the last published tag.
+
+- POST /api/v1/catalog/applications/preview/ the response's body `type` changed from `object` to `any` for status `200`
+- POST /api/v1/catalog/applications/preview/ removed the required property `allowed` from the response with the `200` status
+- POST /api/v1/catalog/applications/preview/ removed the required property `application` from the response with the `200` status
+- POST /api/v1/catalog/applications/preview/ removed the required property `artifact_digest` from the response with the `200` status
+- POST /api/v1/catalog/applications/preview/ removed the required property `catalog_digest` from the response with the `200` status
+- POST /api/v1/catalog/applications/preview/ removed the required property `checks` from the response with the `200` status
+- POST /api/v1/catalog/applications/preview/ removed the required property `values_digest` from the response with the `200` status
+- GET /api/v1/catalog/charts/{id}/readme/ the response's body `type` changed from `object` to `any` for status `200`
+- GET /api/v1/catalog/charts/{id}/readme/ removed the optional property `chart` from the response with the `200` status
+- GET /api/v1/catalog/charts/{id}/readme/ removed the optional property `readme` from the response with the `200` status
+- GET /api/v1/catalog/charts/{id}/readme/ removed the optional property `version` from the response with the `200` status
+- GET /api/v1/catalog/charts/{id}/values/ the response's body `type` changed from `object` to `any` for status `200`
+- GET /api/v1/catalog/charts/{id}/values/ removed the optional property `chart` from the response with the `200` status
+- GET /api/v1/catalog/charts/{id}/values/ removed the optional property `default_values` from the response with the `200` status
+- GET /api/v1/catalog/charts/{id}/values/ removed the optional property `values_schema` from the response with the `200` status
+- GET /api/v1/catalog/charts/{id}/values/ removed the optional property `version` from the response with the `200` status
+- GET /api/v1/tools/ added the new `multiline` enum value to the `data/items/form_schema/allOf[#/components/schemas/ToolFormSchema]/fields/items/type` response property for the response status `200`
+- GET /api/v1/tools/slug/{slug} added the new `multiline` enum value to the `allOf[subschema #2]/data/form_schema/allOf[#/components/schemas/ToolFormSchema]/fields/items/type` response property for the response status `200`
+- GET /api/v1/tools/{slug} added the new `multiline` enum value to the `allOf[subschema #2]/data/form_schema/allOf[#/components/schemas/ToolFormSchema]/fields/items/type` response property for the response status `200`
+
+
+## 1.2.0 transition from the published 1.1.0 API
+
+On 2026-10-07 the release owner explicitly retained the 1.2.0 product version
+and reserved 2.0.0 for the upcoming refactor after being informed of the actual
+API incompatibilities. The existing cookie-only browser session design and
+canonical endpoints are retained. This is an intentional compatibility exception,
+not a claim that the removed fields were never shipped. The migration instructions
+are in [the 1.2.0 upgrade notes](../CHANGELOG.md#upgrade-notes-from-110).
+
+The tag comparison also reports the already-reviewed Charlie field rename with
+wording that differs from the main-branch comparison. Agent/cluster collection
+clients must use the canonical pagination envelopes; deprecated agent offsets
+are bounded. The activity spelling correction and retired delivery/kubeconfig
+aliases use the canonical routes described in the upgrade notes. These exact
+triples apply only to the published-tag transition; unrelated changes still fail.
+
+- GET /api/v1/activity/ api path removed without deprecation
+- POST /api/v1/admin/charlie/trigger-rules/ added the new required request property `estate_threshold_percent`
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ added the new required request property `estate_threshold_percent`
+- POST /api/v1/auth/login/ removed the optional property `data/refresh` from the response with the `200` status
+- POST /api/v1/auth/login/ removed the optional property `data/token` from the response with the `200` status
+- POST /api/v1/auth/refresh/ removed the request body
+- POST /api/v1/auth/refresh/ removed the optional property `refresh` from the response with the `200` status
+- POST /api/v1/auth/refresh/ removed the optional property `token` from the response with the `200` status
+- POST /api/v1/auth/totp/verify/ removed the optional property `data/refresh` from the response with the `200` status
+- POST /api/v1/auth/totp/verify/ removed the optional property `data/token` from the response with the `200` status
+- GET /api/v1/cluster-agents/ for the `query` request parameter `offset`, the max was set to `10000.00`
+- GET /api/v1/cluster-agents/ removed the optional property `data/items` from the response with the `200` status
+- GET /api/v1/cluster-agents/ removed the optional property `data/limit` from the response with the `200` status
+- GET /api/v1/cluster-agents/ removed the optional property `data/offset` from the response with the `200` status
+- GET /api/v1/cluster-agents/ removed the optional property `data/summary` from the response with the `200` status
+- GET /api/v1/cluster-agents/{cluster_id}/operations/ removed the optional property `data/items` from the response with the `200` status
+- GET /api/v1/cluster-agents/{cluster_id}/operations/ removed the optional property `data/limit` from the response with the `200` status
+- GET /api/v1/cluster-agents/{cluster_id}/operations/ removed the optional property `data/offset` from the response with the `200` status
+- GET /api/v1/clusters/ removed the optional property `count` from the response with the `200` status
+- GET /api/v1/clusters/ removed the optional property `next` from the response with the `200` status
+- GET /api/v1/clusters/ removed the optional property `previous` from the response with the `200` status
+- POST /api/v1/clusters/{id}/generate_kubeconfig api path removed without deprecation
+- GET /api/v1/clusters/{id}/kubeconfig api path removed without deprecation
+- GET /api/v1/delivery/fleet/ api path removed without deprecation

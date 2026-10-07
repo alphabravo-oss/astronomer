@@ -25,7 +25,7 @@ export function RemoteProjectPicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
-  const selected = useProject(value, { throwOnError: false });
+  const selected = useProject(value, { throwOnError: false, retry: false });
   const params = { page: pageIndex + 1, pageSize: 25, search };
   const query = useQuery({
     queryKey: queryKeys.projects.picker(clusterId, params),

@@ -581,3 +581,44 @@ v8.27.2 passes across all local Git refs; it does not exempt arbitrary credentia
 PR readiness also requires the outstanding program/provider/performance work to be
 explicitly scoped, and appropriate review of the combined change. The PR remains
 a draft while required checks are outstanding.
+
+
+## 2026-10-07 release-readiness corrections
+
+Follow-up release preparation fixed the remaining deterministic PR failures:
+management project/CIS/logging queries now expose errors promptly instead of
+waiting through the adopted-agent reconnect retry budget; mobile header actions
+wrap within the viewport; the install lifecycle fixture uses the real `data`
+envelope and normalized YAML. Fourteen mobile visual baselines were inspected
+against the intentional navigation/table/empty-state changes and updated without
+relaxing thresholds, including the corrected cluster action wrapping.
+
+The real live journey assertions now target the current permission explanation,
+the exact YAML Edit action, and the accessible direct-kubeconfig tooltip. A fresh
+host-owned disposable stack passed all 16 live journeys, including real Flux,
+Trivy ingestion, direct/proxy kubeconfig validation, and Velero backup/restore.
+Private evidence is under `/var/tmp/astronomer-release-20261007/live-local`.
+
+The worker race fixture previously used a once-per-minute snapshot schedule and
+could legitimately create a second snapshot when its replay crossed a minute.
+It now seeds a daily schedule that is due once immediately and next due six hours
+away. The real PostgreSQL/Redis worker race qualification passed (103 seconds).
+The production scheduler and task retry behavior are unchanged.
+
+The first host full E2E rerun passed 410/414 cases; three failures coincided with
+the disposable cluster changing host networking, and one was the newly fixed
+mobile header baseline. Focused functional tests and the corrected mobile header
+snapshots passed. The full matrix on the committed candidate must establish
+final qualification; these partial runs are not relabeled as a green matrix.
+
+The release owner chose **1.2.0**, reserving 2.0.0 for a planned refactor, after
+being informed that the v1.1.0 tag comparison contains real API incompatibilities.
+CHANGELOG and API policy documents disclose that transition and the exact
+compatibility-review entries distinguish wire-preserving catalog documentation
+corrections from intentional authentication/endpoint/pagination migrations.
+
+Release-history inspection found v1.1.0 was published by GitHub Actions run
+32448999389. Signed cloud/scale/Rancher/accessibility evidence requirements were
+introduced afterward; repository environments were empty at inspection and no
+release approval variable was configured. No external certification or human
+approval evidence is fabricated by local tests.

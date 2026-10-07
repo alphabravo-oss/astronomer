@@ -334,9 +334,11 @@ async function catalogCheckout(page: Page) {
     ]),
   );
   await jsonRoute(page, `/api/v1/catalog/charts/${release.chart_id}/values`, {
-    chart: "checkout",
-    version: "1.2.3",
-    default_values: "replicaCount: 1\n",
+    data: {
+      chart: "checkout",
+      version: "1.2.3",
+      default_values: "replicaCount: 1\n",
+    },
   });
   return projectId;
 }
@@ -398,7 +400,7 @@ test("install follows its accepted receipt through navigation, refresh and relea
     name: "Install checkout",
     exact: true,
   });
-  await expect(dialog.locator("textarea")).toHaveValue("replicaCount: 1\n");
+  await expect(dialog.locator("textarea")).toHaveValue("replicaCount: 1");
   await dialog
     .getByLabel("Release name", { exact: true })
     .fill(release.release_name);

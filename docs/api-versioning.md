@@ -1,5 +1,12 @@
 # API versioning
 
+> **1.2.0 transition exception:** this release retains the 1.2.0 product version
+> while introducing the explicitly listed authentication, endpoint and pagination
+> changes in [the upgrade notes](../CHANGELOG.md#upgrade-notes-from-110).
+> Those changes do not meet the general backward-compatibility guarantee below;
+> integrations must migrate. This is a release-specific exception, not a blanket
+> allowance for future breaking changes.
+
 This document describes the `/api/v1` contract from the *versioning*
 angle: what the version number promises, what counts as a breaking
 change (and therefore forces a new version), and the response-header

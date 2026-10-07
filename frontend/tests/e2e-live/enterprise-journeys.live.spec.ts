@@ -87,7 +87,9 @@ test("RBAC denial is explicit and hides privileged controls", async ({
     page.getByText("Permission required", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("cluster_templates:read", { exact: true }),
+    page.getByText("You need permission to view cluster templates.", {
+      exact: false,
+    }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /create/i })).toHaveCount(0);
 });
@@ -228,7 +230,7 @@ test("resource YAML dry-run gates and then applies the reviewed manifest", async
     `/dashboard/clusters/${clusterID}/configmaps/default/live-config`,
   );
   await page.getByRole("tab", { name: "YAML" }).click();
-  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
 
   // JSON is valid YAML and avoids Monaco's interactive auto-indentation
   // changing whitespace while Playwright inserts a multiline document.
@@ -309,7 +311,8 @@ test("direct kubeconfig is permission-aware, TLS-pinned, short-lived, and read-o
     name: "Direct kubeconfig",
   });
   await expect(directButton).toBeEnabled();
-  await expect(directButton).toHaveAttribute("title", /15 minutes/i);
+  await directButton.focus();
+  await expect(page.getByRole("tooltip")).toContainText(/15 minutes/i);
 
   const downloadPromise = page.waitForEvent("download");
   const responsePromise = page.waitForResponse(
@@ -520,7 +523,9 @@ test("workload snapshot restores deleted member data through the durable Velero 
     name: "Snapshot restore",
     exact: true,
   });
-  await expect(receiptDialog.getByText(restoreID, { exact: true })).toBeVisible();
+  await expect(
+    receiptDialog.getByText(restoreID, { exact: true }),
+  ).toBeVisible();
 
   await expect
     .poll(
