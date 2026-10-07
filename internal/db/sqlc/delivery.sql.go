@@ -4112,7 +4112,11 @@ func (q *Queries) ReleaseDeliveryRolloutLease(ctx context.Context, arg ReleaseDe
 const requestDeliveryTargetDeletionCAS = `-- name: RequestDeliveryTargetDeletionCAS :one
 WITH changed_target AS (
     UPDATE delivery_targets t
-    SET deletion_state = 'deleting', generation = generation + 1,
+    SET deletion_state = CASE WHEN EXISTS (
+            SELECT 1 FROM cluster_deployments d
+            WHERE d.target_id = t.id AND d.phase <> 'removed'
+        ) THEN 'deleting' ELSE 'deleted' END,
+        generation = generation + 1,
         resource_version = resource_version + 1, updated_by = $1
     WHERE t.id = $2 AND t.project_id = $3
       AND t.resource_version = $4

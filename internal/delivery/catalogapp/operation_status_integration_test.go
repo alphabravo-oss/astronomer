@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -78,5 +79,32 @@ func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
 	}
 	if _, err := readDeletionStatus(ctx, tx, uuid.New()); err == nil {
 		t.Fatal("missing target claimed removed")
+	}
+	for _, phase := range []string{"", "removed", "ready"} {
+		targetID := uuid.New()
+		exec(`INSERT INTO delivery_targets(id,project_id,name,bundle_version_id) VALUES($1,$2,$3,$4)`, targetID, project, targetID.String(), version)
+		if phase != "" {
+			exec(`INSERT INTO cluster_deployments(target_id,cluster_id,phase) VALUES($1,$2,$3)`, targetID, cluster, phase)
+		}
+		row, err := sqlc.New(tx).RequestDeliveryTargetDeletionCAS(ctx, sqlc.RequestDeliveryTargetDeletionCASParams{
+			ID: targetID, ProjectID: project, ExpectedResourceVersion: 1,
+		})
+		wantState, wantPhase, wantCount := "deleted", "removed", int64(0)
+		if phase == "ready" {
+			wantState, wantPhase, wantCount = "deleting", "pending", 1
+		}
+		if err != nil || row.DeletionState != wantState || row.DeploymentCount != wantCount {
+			t.Fatalf("delete target with deployment phase %q: state=%s count=%d error=%v", phase, row.DeletionState, row.DeploymentCount, err)
+		}
+		status, err := readDeletionStatus(ctx, tx, targetID)
+		if err != nil || status.Phase != wantPhase {
+			t.Fatalf("delete status with deployment phase %q: %+v %v", phase, status, err)
+		}
+		if phase == "ready" {
+			var action, storedPhase string
+			if err := tx.QueryRow(ctx, `SELECT action,phase FROM cluster_deployments WHERE target_id=$1`, targetID).Scan(&action, &storedPhase); err != nil || action != "delete" || storedPhase != "pending" {
+				t.Fatalf("active deployment must still await cluster deletion: action=%s phase=%s error=%v", action, storedPhase, err)
+			}
+		}
 	}
 }
