@@ -45,10 +45,10 @@ FROM gcr.io/projectsigstore/cosign:v2.6.0@sha256:71b96f6405dd3c3f081ebf73099f18e
 # Bump in the same commit that bumps the k8s.io/* dependencies in go.mod so
 # the shell's kubectl version never lags the cluster's server version far
 # enough to be in the "skew unsupported" zone. The official binary is scanned
-# separately from first-party code: it ships Kubernetes' own Go stdlib and
-# cannot be patched here.
+# with the full shell image; use signed upstream patch releases to refresh
+# its bundled Go runtime and libraries.
 FROM alpine:3.22@sha256:365499d9dccb7c8cfaffef995a6c382e71174585e0556f6476ead1c5971c39fb AS kubectl
-ARG KUBECTL_VERSION=v1.35.2
+ARG KUBECTL_VERSION=v1.35.9
 ARG TARGETARCH=amd64
 COPY --from=cosign /ko-app/cosign /usr/local/bin/cosign
 # GNU coreutils is builder-only and supplies strict checksum-file parsing.
@@ -74,7 +74,7 @@ FROM alpine:3.22@sha256:365499d9dccb7c8cfaffef995a6c382e71174585e0556f6476ead1c5
 ARG VERSION=1.2.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
-ARG KUBECTL_VERSION=v1.35.2
+ARG KUBECTL_VERSION=v1.35.9
 
 LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astronomer" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \

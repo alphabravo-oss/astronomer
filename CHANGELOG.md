@@ -28,6 +28,9 @@ Target release: **1.2.0**.
   database stays on PostgreSQL 16. Existing CNPG deployments using non-C
   collations must check OS collation-version changes and rebuild affected
   indexes before refreshing collation versions.
+- Update the signature-verified upstream kubectl binary to 1.35.9 and scan
+  the complete shell image without the former kubectl exclusion. Fresh frontend
+  builds refresh Alpine packages, including the corrected pcre2 package.
 - Retain unresolved upstream vulnerability findings with explicitly approved,
   expiring, exact-digest waivers for v1.2.0. Continue to prefer upstream fixes;
   no custom downstream builds are introduced. The approval covers 115

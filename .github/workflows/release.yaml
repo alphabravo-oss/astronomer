@@ -121,7 +121,7 @@ jobs:
           - { name: worker,   context: .,        dockerfile: deploy/docker/Dockerfile.worker,  imageName: astronomer-go-worker }
           - { name: agent,    context: .,        dockerfile: deploy/docker/Dockerfile.agent,   imageName: astronomer-go-agent }
           - { name: migrate,  context: .,        dockerfile: deploy/docker/Dockerfile.migrate, imageName: astronomer-go-migrate }
-          - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   imageName: astronomer-shell, skip_files: /usr/local/bin/kubectl }
+          - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   imageName: astronomer-shell }
           - { name: dr,       context: .,        dockerfile: deploy/docker/Dockerfile.dr,      imageName: astronomer-dr }
           - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile,              imageName: astronomer-frontend }
     steps:
@@ -267,7 +267,6 @@ jobs:
           vuln-type: os,library
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          skip-files: ${{ matrix.component.skip_files }}
           exit-code: "1"
 
       - name: Sign image by digest
