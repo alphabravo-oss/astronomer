@@ -21,7 +21,7 @@
     "internal/handler/auth.go": 805,
     "internal/handler/clusters_inventory.go": 844,
     "internal/handler/delivery/source.go": 917,
-    "internal/handler/delivery/target.go": 1025,
+    "internal/handler/delivery/target.go": 1022,
     "internal/handler/logging_reconciler.go": 890,
     "internal/handler/monitoring_sizer.go": 934,
     "internal/handler/monitoring_stack_grafana.go": 865,

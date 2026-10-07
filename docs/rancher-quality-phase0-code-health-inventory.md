@@ -10,8 +10,8 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 - Frontend source files: 1243
 - Frontend source lines: 230438
-- Go source files under `internal/` excluding generated sqlc and tests: 982
-- Go source files scanned for sqlc query references excluding generated sqlc: 2178
+- Go source files under `internal/` excluding generated sqlc and tests: 983
+- Go source files scanned for sqlc query references excluding generated sqlc: 2179
 - sqlc query declarations: 1267
 - Component files scanned: 456
 - Helm top-level values scanned: 35
@@ -113,7 +113,7 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
 - `isUniqueViolation` in [`internal/handler/cluster_templates_registry.go:336`](internal/handler/cluster_templates_registry.go:336), [`internal/projects/service.go:571`](internal/projects/service.go:571)
 - `missingCapabilities` in [`internal/agentcompat/compat.go:119`](internal/agentcompat/compat.go:119), [`internal/delivery/placement/placement.go:392`](internal/delivery/placement/placement.go:392)
-- `mustJSON` in [`internal/handler/delivery/target.go:715`](internal/handler/delivery/target.go:715), [`internal/worker/tasks/catalog_sync.go:675`](internal/worker/tasks/catalog_sync.go:675)
+- `mustJSON` in [`internal/handler/delivery/target.go:712`](internal/handler/delivery/target.go:712), [`internal/worker/tasks/catalog_sync.go:675`](internal/worker/tasks/catalog_sync.go:675)
 - `normalizeDigest` in [`internal/charlie/admin_diagnostics.go:198`](internal/charlie/admin_diagnostics.go:198), [`internal/delivery/catalogapp/service.go:536`](internal/delivery/catalogapp/service.go:536)
 - `nullableTime` in [`internal/charlie/cluster_agent_capability_adapter.go:192`](internal/charlie/cluster_agent_capability_adapter.go:192), [`internal/handler/alerting_responses.go:538`](internal/handler/alerting_responses.go:538)
 - `nullableUUID` in [`internal/charlie/delivery_capability_adapter.go:530`](internal/charlie/delivery_capability_adapter.go:530), [`internal/handler/alerting_responses.go:524`](internal/handler/alerting_responses.go:524), [`internal/handler/delivery/override_set.go:367`](internal/handler/delivery/override_set.go:367)

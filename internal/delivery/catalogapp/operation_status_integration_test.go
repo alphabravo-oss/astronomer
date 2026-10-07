@@ -5,9 +5,12 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -86,7 +89,7 @@ func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
 		if phase != "" {
 			exec(`INSERT INTO cluster_deployments(target_id,cluster_id,phase) VALUES($1,$2,$3)`, targetID, cluster, phase)
 		}
-		row, err := sqlc.New(tx).RequestDeliveryTargetDeletionCAS(ctx, sqlc.RequestDeliveryTargetDeletionCASParams{
+		row, err := deployment.RequestTargetDeletion(ctx, sqlc.New(tx), sqlc.RequestDeliveryTargetDeletionCASParams{
 			ID: targetID, ProjectID: project, ExpectedResourceVersion: 1,
 		})
 		wantState, wantPhase, wantCount := "deleted", "removed", int64(0)
@@ -106,5 +109,98 @@ func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
 				t.Fatalf("active deployment must still await cluster deletion: action=%s phase=%s error=%v", action, storedPhase, err)
 			}
 		}
+	}
+	verifyDeletionWaitsForConcurrentPlanner(t, pool)
+}
+
+func verifyDeletionWaitsForConcurrentPlanner(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	schema := pgx.Identifier{"target_delete_" + strings.ReplaceAll(uuid.NewString(), "-", "")}.Sanitize()
+	if _, err := pool.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := pool.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE"); err != nil {
+			t.Error(err)
+		}
+	}()
+	for _, table := range []string{"delivery_targets", "delivery_rollouts", "cluster_deployments"} {
+		if _, err := pool.Exec(ctx, "CREATE TABLE "+schema+"."+table+" (LIKE public."+table+" INCLUDING ALL)"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target, project, version := uuid.New(), uuid.New(), uuid.New()
+	if _, err := pool.Exec(ctx, "INSERT INTO "+schema+".delivery_targets(id,project_id,name,bundle_version_id) VALUES($1,$2,'concurrent',$3)", target, project, version); err != nil {
+		t.Fatal(err)
+	}
+	planner, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = planner.Rollback(context.Background()) }()
+	if _, err := planner.Exec(ctx, "SET LOCAL search_path TO "+schema+",public"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := planner.Exec(ctx, "SELECT id FROM delivery_targets WHERE id=$1 FOR UPDATE", target); err != nil {
+		t.Fatal(err)
+	}
+	type outcome struct {
+		row sqlc.RequestDeliveryTargetDeletionCASRow
+		err error
+	}
+	started := make(chan uint32, 1)
+	finished := make(chan outcome, 1)
+	go func() {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			finished <- outcome{err: err}
+			return
+		}
+		defer func() { _ = tx.Rollback(context.Background()) }()
+		if _, err := tx.Exec(ctx, "SET LOCAL search_path TO "+schema+",public"); err != nil {
+			finished <- outcome{err: err}
+			return
+		}
+		started <- tx.Conn().PgConn().PID()
+		row, err := deployment.RequestTargetDeletion(ctx, sqlc.New(tx), sqlc.RequestDeliveryTargetDeletionCASParams{ID: target, ProjectID: project, ExpectedResourceVersion: 1})
+		if err == nil {
+			err = tx.Commit(ctx)
+		}
+		finished <- outcome{row, err}
+	}()
+	var pid uint32
+	select {
+	case pid = <-started:
+	case result := <-finished:
+		t.Fatal(result.err)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	for {
+		var blocked bool
+		if err := pool.QueryRow(ctx, "SELECT COALESCE(wait_event_type='Lock',false) FROM pg_stat_activity WHERE pid=$1", pid).Scan(&blocked); err != nil {
+			t.Fatal(err)
+		}
+		if blocked {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	digest := "sha256:" + strings.Repeat("a", 64)
+	if _, err := planner.Exec(ctx, `INSERT INTO delivery_rollouts(target_id,target_generation,to_bundle_version_id,placement_digest,strategy_digest,request_digest,plan_digest,frozen_plan,state,idempotency_key) VALUES($1,1,$2,$3,$3,$3,$3,'{}','queued','concurrent')`, target, version, digest); err != nil {
+		t.Fatal(err)
+	}
+	if err := planner.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case result := <-finished:
+		if result.err != nil || result.row.DeletionState != "deleting" {
+			t.Fatalf("concurrent rollout must retain acknowledgment-based deletion: state=%s error=%v", result.row.DeletionState, result.err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
 	}
 }

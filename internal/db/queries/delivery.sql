@@ -360,11 +360,7 @@ RETURNING t.*;
 -- name: RequestDeliveryTargetDeletionCAS :one
 WITH changed_target AS (
     UPDATE delivery_targets t
-    SET deletion_state = CASE WHEN EXISTS (
-            SELECT 1 FROM cluster_deployments d
-            WHERE d.target_id = t.id AND d.phase <> 'removed'
-        ) THEN 'deleting' ELSE 'deleted' END,
-        generation = generation + 1,
+    SET deletion_state = 'deleting', generation = generation + 1,
         resource_version = resource_version + 1, updated_by = sqlc.narg(updated_by)
     WHERE t.id = sqlc.arg(id) AND t.project_id = sqlc.arg(project_id)
       AND t.resource_version = sqlc.arg(expected_resource_version)

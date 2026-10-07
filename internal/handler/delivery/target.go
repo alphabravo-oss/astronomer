@@ -9,6 +9,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
@@ -28,20 +29,16 @@ import (
 type TargetQueries interface {
 	CountDeliveryTargets(context.Context, uuid.UUID) (int64, error)
 	ListDeliveryTargets(context.Context, sqlc.ListDeliveryTargetsParams) ([]sqlc.DeliveryTarget, error)
-	CreateDeliveryTarget(context.Context, sqlc.CreateDeliveryTargetParams) (sqlc.DeliveryTarget, error)
 	GetDeliveryTarget(context.Context, sqlc.GetDeliveryTargetParams) (sqlc.DeliveryTarget, error)
 	GetDeliveryTargetByName(context.Context, sqlc.GetDeliveryTargetByNameParams) (sqlc.DeliveryTarget, error)
-	UpdateDeliveryTargetCAS(context.Context, sqlc.UpdateDeliveryTargetCASParams) (sqlc.DeliveryTarget, error)
-	RequestDeliveryTargetDeletionCAS(context.Context, sqlc.RequestDeliveryTargetDeletionCASParams) (sqlc.RequestDeliveryTargetDeletionCASRow, error)
-	MarkDeliveryTargetOrphaned(context.Context, sqlc.MarkDeliveryTargetOrphanedParams) (sqlc.MarkDeliveryTargetOrphanedRow, error)
 	GetComponentBundleVersion(context.Context, sqlc.GetComponentBundleVersionParams) (sqlc.ComponentBundleVersion, error)
 }
 
 type TargetMutationTx interface {
 	audit.OutboxQuerier
+	deployment.TargetDeletionQueries
 	CreateDeliveryTarget(context.Context, sqlc.CreateDeliveryTargetParams) (sqlc.DeliveryTarget, error)
 	UpdateDeliveryTargetCAS(context.Context, sqlc.UpdateDeliveryTargetCASParams) (sqlc.DeliveryTarget, error)
-	RequestDeliveryTargetDeletionCAS(context.Context, sqlc.RequestDeliveryTargetDeletionCASParams) (sqlc.RequestDeliveryTargetDeletionCASRow, error)
 	MarkDeliveryTargetOrphaned(context.Context, sqlc.MarkDeliveryTargetOrphanedParams) (sqlc.MarkDeliveryTargetOrphanedRow, error)
 }
 
@@ -480,7 +477,7 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 		var mutationErr error
-		row, mutationErr = q.RequestDeliveryTargetDeletionCAS(r.Context(), params)
+		row, mutationErr = deployment.RequestTargetDeletion(r.Context(), q, params)
 		if mutationErr != nil {
 			return mutationErr
 		}
