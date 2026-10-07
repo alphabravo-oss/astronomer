@@ -1,6 +1,6 @@
 name: release
 
-# A release is an immutable compatibility unit: one vX.Y.Z tag, six exact image
+# A release is an immutable compatibility unit: one vX.Y.Z tag, seven exact image
 # tags, and one exact OCI chart. No mutable `latest` channel is published, and
 # creates a visible GitHub Release until that OCI chart has installed on a clean
 # cluster and all first-party references have been verified.

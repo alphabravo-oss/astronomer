@@ -38,6 +38,8 @@ def validate(args, directory=Path(".")):
     runtime = values["runtime-image-evidence"]
     if runtime.get("result") != "passed" or runtime.get("release_version") != args.tag or runtime.get("release_manifest_sha256") != digest:
         raise ValueError("runtime image qualification does not bind the manifest")
+    if runtime.get("vulnerability_qualification") != "passed" or runtime.get("license_qualification") != "deferred":
+        raise ValueError("runtime report must pass vulnerabilities and disclose deferred license qualification")
     rc = values["rc-rehearsal-evidence"]
     approval.validate_rc(rc, args.tag, args.source_commit, args.source_run_id, args.producer_run_id)
     if rc["previous_version"] != "v1.1.0" or rc["release_manifest_sha256"] != digest:
@@ -54,6 +56,7 @@ def validate(args, directory=Path(".")):
         "external_certifications": {name: "deferred" for name in (
             "cloud_acceptance", "scale_certification", "rancher_benchmark", "human_accessibility")},
         "named_release_approver": "not_required_by_v1.2.0_policy",
+        "license_qualification": "deferred_findings_retained_in_runtime_image_evidence",
     }
 
 

@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location("runtime_qualifier",ROOT/"scripts/qualify-release-runtime-images.py")
@@ -28,5 +29,48 @@ class RuntimeQualifierTest(unittest.TestCase):
         self.assertIn((REF,"vulnerability","CVE-2099-1"),got)
         waiver["expires_at"]="2020-01-01T00:00:00Z"
         with self.assertRaises(ValueError): module.waiver_map({"schema_version":1,"waivers":[waiver]},dt.datetime(2026,1,1,tzinfo=dt.timezone.utc))
+
+    def test_v120_retains_license_findings_without_claiming_qualification(self):
+        result = module.qualify_findings("v1.2.0", REF, [], ["GPL-2.0-only", "NOASSERTION:busybox"])
+        self.assertEqual(result["license_unwaived"], 2)
+        self.assertEqual(result["license_findings"], ["GPL-2.0-only", "NOASSERTION:busybox"])
+        self.assertEqual(result["license_qualification"], "pending_review")
+
+    def test_v120_report_retains_findings_and_discloses_deferred_license_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.manifest()
+            manifest["release"] = {"version": "v1.2.0"}
+            documents = {"manifest": manifest, "waivers": {"schema_version": 1, "waivers": []}, "license-policy": {"schema_version": 1, "allowed_spdx_ids": ["MIT"]}}
+            args = ["qualify-release-runtime-images.py"]
+            for key, value in documents.items():
+                path = root / f"{key}.json"
+                path.write_text(json.dumps(value))
+                args.extend([f"--{key}", str(path)])
+            output = root / "report.json"
+            args.extend(["--work-dir", str(root / "evidence"), "--output", str(output)])
+            def fake_run(command, destination):
+                bodies = {
+                    "docker": {"manifests": [{"platform": {"os": "linux", "architecture": arch}} for arch in ("amd64", "arm64")]},
+                    "trivy": {"Results": []},
+                    "syft": {"packages": [{"name": "busybox", "licenseConcluded": "NOASSERTION", "licenseDeclared": "NOASSERTION"}]},
+                }
+                destination.write_text(json.dumps(bodies[command[0]]))
+            with patch("sys.argv", args), patch.object(module, "run", fake_run):
+                module.main()
+            report = json.loads(output.read_text())
+            self.assertEqual(report["license_qualification"], "deferred")
+            self.assertEqual(report["vulnerability_qualification"], "passed")
+            self.assertEqual(report["entries"][0]["license_findings"], ["NOASSERTION:busybox"])
+            self.assertEqual(report["entries"][0]["license_unwaived"], 1)
+
+    def test_v120_never_defers_vulnerabilities(self):
+        with self.assertRaises(ValueError):
+            module.qualify_findings("v1.2.0", REF, ["CVE-2099-1"], ["NOASSERTION:busybox"])
+
+    def test_other_versions_keep_license_qualification_mandatory(self):
+        for version in ("v1.1.0", "v1.2.1", "v1.3.0", "v2.0.0"):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                module.qualify_findings(version, REF, [], ["GPL-2.0-only"])
 
 if __name__=="__main__": unittest.main()

@@ -22,7 +22,7 @@ class AutomatedReleaseTest(unittest.TestCase):
         self.args = SimpleNamespace(tag="v1.2.0", source_commit="a" * 40, source_run_id="123", producer_run_id="456", repository="owner/repo", rc_identity="https://github.com/owner/repo/.github/workflows/resume-release.yaml@refs/heads/main")
         self.write("release-manifest", {"release": {"version": self.args.tag, "source_commit": self.args.source_commit}})
         digest = validator.approval.sha256(self.root / "release-manifest.json")
-        self.runtime = {"result": "passed", "release_version": self.args.tag, "release_manifest_sha256": digest}
+        self.runtime = {"result": "passed", "vulnerability_qualification": "passed", "license_qualification": "deferred", "release_version": self.args.tag, "release_manifest_sha256": digest}
         self.rc = dict(schema_version=1, result="passed", target_version=self.args.tag, previous_version="v1.1.0", source_commit=self.args.source_commit, source_run_id="123", producer_run_id="456", release_manifest_sha256=digest, upgrade_evidence_sha256=digest, backup_manifest_sha256=digest, backup_restore="passed", decrypt_proof="passed", clean_restore="passed", destructive_fence="owned_disposable_k3d", started_at="2026-10-07T12:00:00Z", completed_at="2026-10-07T12:10:00Z")
         self.write("runtime-image-evidence", self.runtime)
         self.write("rc-rehearsal-evidence", self.rc)
@@ -56,7 +56,7 @@ class AutomatedReleaseTest(unittest.TestCase):
                 validator.validate(self.args, self.root)
 
     def test_runtime_report_must_pass_and_bind_same_manifest(self):
-        for field, value in (("result", "failed"), ("release_version", "v1.1.0"), ("release_manifest_sha256", "sha256:" + "b" * 64)):
+        for field, value in (("result", "failed"), ("vulnerability_qualification", "failed"), ("license_qualification", "passed"), ("release_version", "v1.1.0"), ("release_manifest_sha256", "sha256:" + "b" * 64)):
             self.write("runtime-image-evidence", dict(self.runtime, **{field: value}))
             with self.subTest(field=field), self.assertRaises(ValueError):
                 validator.validate(self.args, self.root)
