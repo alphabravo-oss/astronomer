@@ -137,7 +137,7 @@ printf 'curl %s\n' "$*" >>"$RC_HARNESS_TRACE"
 case "$url" in
   */api/v1/auth/tokens/) printf '{"data":{"token":"rc-api-token"}}\n' ;;
   */api/v1/auth/login/) printf '{"data":{"token":"rc-auth-token"}}\n' ;;
-  */api/v1/admin/webhooks) printf '{"data":{"id":"11111111-1111-1111-1111-111111111111"}}\n' ;;
+  */api/v1/admin/webhooks/) printf '{"data":{"id":"11111111-1111-1111-1111-111111111111"}}\n' ;;
   *) printf '{}\n' ;;
 esac
 STUB

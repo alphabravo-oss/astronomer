@@ -92,7 +92,7 @@ openssl rand -hex 32 >"$work/webhook-secret"; chmod 0600 "$work/webhook-secret"
 webhook_sink="${RC_WEBHOOK_SINK:-scripts/rc-webhook-sink.py}"
 "$webhook_sink" --secret-file "$work/webhook-secret" --out "$work/webhook-proof.json" --port 18081 >"$work/webhook-sink.log" 2>&1 & sink_pid=$!
 webhook_payload="$(jq -cn --arg secret "$(<"$work/webhook-secret")" '{name:"rc-upgrade-decrypt-proof",url:"http://host.k3d.internal:18081/",secret:$secret,event_filters:["webhook.test_ping"],enabled:true,max_retries:0,timeout_seconds:10}')"
-webhook_id="$(curl -fsS -H 'Content-Type: application/json' -H "Authorization: Bearer $auth_token" --data-binary "$webhook_payload" http://127.0.0.1:18080/api/v1/admin/webhooks | jq -er '.data.id')"; unset webhook_payload
+webhook_id="$(curl -fsS -H 'Content-Type: application/json' -H "Authorization: Bearer $auth_token" --data-binary "$webhook_payload" http://127.0.0.1:18080/api/v1/admin/webhooks/ | jq -er '.data.id')"; unset webhook_payload
 
 # Release the port before upgrade-release starts its own readiness forward.
 kill "$port_forward_pid" >/dev/null 2>&1 || true; wait "$port_forward_pid" 2>/dev/null || true
@@ -103,7 +103,7 @@ for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:18080/health/ >/dev/null 2>&
 if ! kill -0 "$port_forward_pid" 2>/dev/null || ! curl -fsS http://127.0.0.1:18080/health/ >/dev/null; then
   die "upgraded RC API port-forward did not become ready"
 fi
-curl -fsS -X POST -H "Authorization: Bearer $auth_token" -H 'Idempotency-Key: rc-upgrade-decrypt-proof' "http://127.0.0.1:18080/api/v1/admin/webhooks/${webhook_id}/test" >/dev/null
+curl -fsS -X POST -H "Authorization: Bearer $auth_token" -H 'Idempotency-Key: rc-upgrade-decrypt-proof' "http://127.0.0.1:18080/api/v1/admin/webhooks/${webhook_id}/test/" >/dev/null
 for _ in $(seq 1 120); do [[ -f "$work/webhook-proof.json" ]] && break; sleep 1; done
 jq -e '.verified == true and (.body_sha256|test("^sha256:[a-f0-9]{64}$"))' "$work/webhook-proof.json" >/dev/null || die "upgraded product did not decrypt and sign the restored proof subscription"
 unset auth_token
