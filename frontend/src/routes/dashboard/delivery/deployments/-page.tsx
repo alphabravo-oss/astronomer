@@ -6,7 +6,6 @@ import { Layers } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import {
-  DeliveryPhaseBadge,
   DeliveryProjectGate,
   inputClass,
   useDeliveryWorkspace,
@@ -20,8 +19,13 @@ import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useNavigate, useLocation } from "@tanstack/react-router";
-import { AgeCell } from "@/components/ui/age-cell";
 import { StackedCell } from "@/components/ui/stacked-cell";
+import { useClock } from "@/lib/hooks/use-clock";
+import {
+  deploymentFreshness,
+  deploymentDrift,
+} from "@/lib/deployment-freshness";
+import { DeploymentStatus, DeploymentObservationTime } from "./-freshness";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 
@@ -39,6 +43,7 @@ const phases: DeploymentPhase[] = [
 ];
 
 export function DeploymentsPage() {
+  const now = useClock();
   const {
     projectId,
     projects,
@@ -128,9 +133,9 @@ export function DeploymentsPage() {
     },
     {
       key: "phase",
-      header: "Phase",
+      header: "Status",
       kind: "status",
-      accessor: (row) => <DeliveryPhaseBadge value={row.phase} />,
+      accessor: (row) => <DeploymentStatus deployment={row} now={now} />,
     },
     {
       key: "revision",
@@ -156,23 +161,16 @@ export function DeploymentsPage() {
       size: 150,
       maxSize: 200,
       accessor: (row) =>
-        row.conditions.some(
-          (condition) =>
-            condition.type === "Drifted" && condition.status === "True",
-        ) ? (
-          <DeliveryPhaseBadge value="drifted" />
-        ) : (
-          "No drift reported"
-        ),
+        deploymentDrift(deploymentFreshness(row, now), row.conditions),
     },
     {
       key: "observed",
-      header: "Observed",
-      ariaLabel: "Last observed",
+      header: "Observation time",
       kind: "age",
-      size: 112,
-      accessor: (row) => <AgeCell value={row.lastObservedAt} empty="Never" />,
-      sortAccessor: (row) => row.lastObservedAt ?? "",
+      size: 180,
+      accessor: (row) => (
+        <DeploymentObservationTime deployment={row} now={now} />
+      ),
     },
   ];
   return (
@@ -194,6 +192,10 @@ export function DeploymentsPage() {
               : "Current desired and normalized observed state for every target and cluster pair."
           }
         />
+        <p className="text-sm text-muted-foreground">
+          Filters and totals use reported phase. Status reflects source
+          freshness.
+        </p>
         <DataTable
           data={query.data?.data ?? []}
           columns={columns}
@@ -216,14 +218,14 @@ export function DeploymentsPage() {
           toolbar={
             <div className="flex flex-wrap gap-2">
               <Select
-                aria-label="Deployment phase"
+                aria-label="Reported phase"
                 value={phase ?? ""}
                 onChange={(e) =>
                   updateSearch({ phase: e.target.value, page: 0 })
                 }
                 className={inputClass}
               >
-                <option value="">All phases</option>
+                <option value="">All reported phases</option>
                 {phases.map((value) => (
                   <option key={value} value={value}>
                     {value}

@@ -19,7 +19,9 @@ func verifyReport(manifest caseManifest, evidence report) error {
 		return errors.New("qualification cleanup did not pass")
 	}
 	want := map[string]bool{}
+	definitions := map[string]caseDefinition{}
 	for _, definition := range manifest.Cases {
+		definitions[definition.ID] = definition
 		if definition.Required {
 			want[definition.ID] = true
 		}
@@ -35,6 +37,9 @@ func verifyReport(manifest caseManifest, evidence report) error {
 		}
 		switch result.State {
 		case "PASS":
+			if err := verifyPassingCase(definitions[result.ID], result); err != nil {
+				return fmt.Errorf("case %s: %w", result.ID, err)
+			}
 		case "NOT_SUPPORTED":
 			if strings.TrimSpace(result.Contract) == "" {
 				return fmt.Errorf("case %s lacks an explicit not-supported contract", result.ID)
@@ -81,6 +86,58 @@ func verifyReport(manifest caseManifest, evidence report) error {
 		return errors.New("report summary does not match its case and inventory results")
 	}
 	return nil
+}
+
+func verifyPassingCase(definition caseDefinition, result caseResult) error {
+	if result.Attempts < 1 || result.StartedAt == nil || result.CompletedAt == nil || result.CompletedAt.Before(*result.StartedAt) {
+		return errors.New("passing case lacks a valid execution interval and attempt count")
+	}
+	want := requiredDimensions(definition.Category)
+	seen := map[string]bool{}
+	for _, dimension := range result.Dimensions {
+		if seen[dimension.Name] {
+			return fmt.Errorf("duplicate dimension %s", dimension.Name)
+		}
+		seen[dimension.Name] = true
+		if dimension.ObservedAt.IsZero() || strings.TrimSpace(dimension.Reason) == "" {
+			return fmt.Errorf("dimension %s lacks timestamped evidence", dimension.Name)
+		}
+		if dimension.State != "PASS" && dimension.State != "NOT_APPLICABLE" {
+			return fmt.Errorf("dimension %s is %s", dimension.Name, dimension.State)
+		}
+		if dimension.State == "PASS" {
+			switch dimension.Name {
+			case "install", "upgrade", "rollback", "uninstall_cleanup":
+				if (definition.Category == "app" || definition.Category == "tool") && (dimension.HTTPStatus != http.StatusAccepted || dimension.OperationID == "" || dimension.IdempotencyKey == "") {
+					return fmt.Errorf("dimension %s lacks a durable 202 operation receipt", dimension.Name)
+				}
+			case "reconciliation":
+				if dimension.OperationID == "" || dimension.DesiredGeneration == nil || dimension.ObservedGeneration == nil || *dimension.DesiredGeneration != *dimension.ObservedGeneration {
+					return errors.New("reconciliation lacks matching desired and observed generations")
+				}
+			case "functional_canary":
+				if !validSHA256(dimension.ArtifactSHA) || dimension.SampleAt == nil || dimension.SampleAt.Before(*result.StartedAt) || dimension.SampleAt.After(*result.CompletedAt) {
+					return errors.New("functional canary lacks a fresh artifact digest and sample timestamp")
+				}
+			}
+		}
+	}
+	for _, name := range want {
+		if !seen[name] {
+			return fmt.Errorf("required dimension %s is missing", name)
+		}
+	}
+	return nil
+}
+
+func requiredDimensions(category string) []string {
+	if category == "app" || category == "tool" {
+		return []string{
+			"inventory", "preview", "install", "reconciliation", "functional_canary",
+			"authorization_isolation", "upgrade", "rollback", "restart_recovery", "uninstall_cleanup",
+		}
+	}
+	return []string{"contract", "functional_canary", "authorization_isolation", "restart_recovery", "cleanup"}
 }
 
 func verifyRegistryResult(contract registryContract, result registryResult, featureValues map[string]bool) error {

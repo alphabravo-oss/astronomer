@@ -117,6 +117,12 @@ func Transition(current Phase, ev Event, baseline bool) (Phase, error) {
 		switch ev {
 		case EventDeliveryApplying:
 			return PhaseProvisioning, nil
+		case EventDeliveryApplied:
+			// A reconnect can move a previously failed registration back to
+			// connected while Flux continues reconciling the existing release.
+			// If the next observation is already Ready, accept that authoritative
+			// result even though no new applying event was emitted.
+			return PhaseReady, nil
 		case EventNoProvisioning:
 			return PhaseReady, nil
 		case EventAgentConnected:

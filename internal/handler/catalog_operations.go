@@ -70,7 +70,7 @@ func (h *CatalogHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 	}
 	items := make([]map[string]any, 0, len(ops))
 	for _, op := range ops {
-		items = append(items, catalogOperationResponse(op))
+		items = append(items, h.catalogOperationResponseWithDelivery(r.Context(), op, false))
 	}
 	if !hasPager {
 		paging.Write(w, items, paging.FromPage(limit, offset, len(ops)))
@@ -98,11 +98,7 @@ func (h *CatalogHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
 		return
 	}
-	resp := catalogOperationResponse(op)
-	if events, err := h.queries.ListCatalogOperationEvents(r.Context(), op.ID); err == nil {
-		resp["events"] = catalogOperationEventsResponse(events)
-	}
-	h.enrichCatalogOperationDeliveryStatus(r.Context(), op, resp)
+	resp := h.catalogOperationResponseWithDelivery(r.Context(), op, true)
 	RespondJSON(w, http.StatusOK, resp)
 }
 
@@ -486,7 +482,7 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 		h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "rolling back Flux application to its previous immutable version", map[string]any{
 			"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
 		})
-		result, deliveryErr := h.delivery.Rollback(ctx, installation.ID, op.CreatedByID, op.ID.String())
+		result, deliveryErr := h.delivery.Rollback(ctx, installation.ID, int64(env.RollbackRevision), op.CreatedByID, op.ID.String())
 		if deliveryErr != nil {
 			_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_rollback", Revision: installation.Revision})
 			return deliveryErr
@@ -496,6 +492,16 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 		})
 		return nil
 	case "uninstall":
+		if strings.EqualFold(env.ChartName, "longhorn") {
+			prepared, prepareErr := prepareLonghornDeletion(ctx, h.k8s, clusterID, env.ConfirmDataDeletion, env.ConfirmFailedReleaseCleanup)
+			if prepareErr != nil {
+				_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_uninstall", Revision: installation.Revision})
+				return prepareErr
+			}
+			h.recordCatalogOperationEvent(ctx, op.ID, "warn", "uninstall.prepared", "Longhorn persistent-data deletion confirmed through the adopted-cluster agent", map[string]any{
+				"namespace": "longhorn-system", "setting": "deleting-confirmation-flag", "result": prepared,
+			})
+		}
 		h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "requesting fenced Flux application deletion", map[string]any{
 			"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
 		})
@@ -648,17 +654,19 @@ func (h *CatalogHandler) runReconciler(ctx context.Context) {
 }
 
 type catalogOperationEnvelope struct {
-	InstalledChartID string `json:"installedChartId"`
-	ProjectID        string `json:"projectId,omitempty"`
-	ClusterID        string `json:"clusterId"`
-	ReleaseName      string `json:"releaseName"`
-	Namespace        string `json:"namespace"`
-	ChartVersionID   string `json:"chartVersionId,omitempty"`
-	ChartName        string `json:"chartName,omitempty"`
-	RepoURL          string `json:"repoUrl,omitempty"`
-	Version          string `json:"version,omitempty"`
-	ChartDigest      string `json:"chartDigest,omitempty"`
-	ValuesOverride   string `json:"valuesOverride,omitempty"`
-	Notes            string `json:"notes,omitempty"`
-	RollbackRevision int    `json:"rollbackRevision,omitempty"`
+	InstalledChartID            string `json:"installedChartId"`
+	ProjectID                   string `json:"projectId,omitempty"`
+	ClusterID                   string `json:"clusterId"`
+	ReleaseName                 string `json:"releaseName"`
+	Namespace                   string `json:"namespace"`
+	ChartVersionID              string `json:"chartVersionId,omitempty"`
+	ChartName                   string `json:"chartName,omitempty"`
+	RepoURL                     string `json:"repoUrl,omitempty"`
+	Version                     string `json:"version,omitempty"`
+	ChartDigest                 string `json:"chartDigest,omitempty"`
+	ValuesOverride              string `json:"valuesOverride,omitempty"`
+	Notes                       string `json:"notes,omitempty"`
+	RollbackRevision            int    `json:"rollbackRevision,omitempty"`
+	ConfirmDataDeletion         bool   `json:"confirmDataDeletion,omitempty"`
+	ConfirmFailedReleaseCleanup bool   `json:"confirmFailedReleaseCleanup,omitempty"`
 }

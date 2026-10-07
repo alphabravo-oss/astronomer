@@ -52,7 +52,15 @@ class OfferingQualificationContractTest(unittest.TestCase):
     def test_evidence_schema_is_closed_at_every_evidence_object(self):
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
         self.assertFalse(schema["additionalProperties"])
-        for name in ("candidate", "target", "registry_result", "case_result", "summary", "cleanup"):
+        for name in (
+            "candidate",
+            "target",
+            "registry_result",
+            "case_result",
+            "dimension_result",
+            "summary",
+            "cleanup",
+        ):
             self.assertFalse(schema["$defs"][name]["additionalProperties"], name)
         self.assertEqual("astronomer-offering-qualification-v1", schema["properties"]["schema_version"]["const"])
 

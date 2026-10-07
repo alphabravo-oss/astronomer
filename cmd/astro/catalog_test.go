@@ -34,6 +34,8 @@ func TestCatalogReadbackCommandsUnwrapCanonicalAPIEnvelopes(t *testing.T) {
 		exchange       operatorExchange
 		response, want string
 	}{
+		{"chart readme", operatorExchange{args: []string{"catalog", "charts", "readme", id}, method: "GET", path: "/api/v1/catalog/charts/" + id + "/readme/", status: 200}, `{"data":{"chart":"demo","version":"1.2.3","readme":"# Demo chart"}}`, "# Demo chart"},
+		{"chart values", operatorExchange{args: []string{"catalog", "charts", "values", id}, method: "GET", path: "/api/v1/catalog/charts/" + id + "/values/", status: 200}, `{"data":{"chart":"demo","version":"1.2.3","default_values":"replicaCount: 2"}}`, "replicaCount: 2"},
 		{"values", operatorExchange{args: []string{"catalog", "installed", "get-values", id}, method: "GET", path: "/api/v1/catalog/installed/" + id + "/values/", status: 200}, `{"data":{"release_name":"demo","namespace":"default","values_override":"replicas: 2"}}`, "replicas: 2"},
 		{"operation", operatorExchange{args: []string{"catalog", "operations", "get", id}, method: "GET", path: "/api/v1/catalog/operations/" + id + "/", status: 200}, `{"data":{"id":"` + id + `","status":"running","journalStatus":"completed","deliveryPhase":"pending","events":[{"message":"queued"}]}}`, "queued"},
 		{"retry", operatorExchange{args: []string{"catalog", "operations", "retry", id}, method: "POST", path: "/api/v1/catalog/operations/" + id + "/retry/", status: 202, idempotent: true}, `{"data":{"id":"` + id + `","status":"pending","journalStatus":"pending"}}`, "pending"},

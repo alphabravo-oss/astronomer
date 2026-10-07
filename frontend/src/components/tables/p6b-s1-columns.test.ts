@@ -23,9 +23,17 @@ const tables: Record<string, Column<never>[]> = {
   agents: agentColumns(noop, noop) as Column<never>[],
   metricsNodes: clusterMetricColumns("c").nodeColumns as Column<never>[],
   metricsNamespaces: clusterMetricColumns("c").nsColumns as Column<never>[],
-  systemComponents: systemComponentColumns("c") as Column<never>[],
-  systemVolumes: systemVolumeColumns("c") as Column<never>[],
-  systemResources: systemResourceColumns("c") as Column<never>[],
+  systemComponents: systemComponentColumns("c", Date.now()) as Column<never>[],
+  systemVolumes: systemVolumeColumns("c", {
+    state: "current",
+    health: "healthy",
+    attention: false,
+  }) as Column<never>[],
+  systemResources: systemResourceColumns("c", {
+    state: "current",
+    health: "healthy",
+    attention: false,
+  }) as Column<never>[],
   ...Object.fromEntries(
     [
       "jobs",

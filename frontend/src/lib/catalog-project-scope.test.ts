@@ -3,6 +3,8 @@ import * as generated from "@/lib/api/generated/client";
 import {
   getHelmCharts,
   getHelmChartVersions,
+  getHelmChartReadme,
+  getHelmChartValues,
   installHelmChart,
   upgradeInstalledChart,
 } from "@/lib/api/catalog";
@@ -11,6 +13,7 @@ import {
   installChartOnCluster,
   listCatalogCharts,
   listRecommendedCharts,
+  previewCatalogApplication,
 } from "@/lib/api/cluster-apps";
 
 vi.mock("@/lib/api/generated/client", async (importOriginal) => {
@@ -21,8 +24,10 @@ vi.mock("@/lib/api/generated/client", async (importOriginal) => {
     getCatalogCharts: vi.fn(),
     getCatalogRecommendationsPopular: vi.fn(),
     getCatalogChartsByIdVersions: vi.fn(),
+    getCatalogChartsByIdReadme: vi.fn(),
     getCatalogChartsByIdValues: vi.fn(),
     postCatalogInstalled: vi.fn(),
+    postCatalogApplicationsPreview: vi.fn(),
     putCatalogInstalledByIdUpgrade: vi.fn(),
   };
 });
@@ -116,15 +121,25 @@ describe("catalog project isolation", () => {
       pagination: { limit: 50, offset: 0, has_more: false, next_offset: null },
     });
     vi.mocked(generated.getCatalogChartsByIdValues).mockResolvedValueOnce({
-      chart: "metrics",
-      version: "1.2.3",
-      default_values: "",
+      data: {
+        chart: "metrics",
+        version: "1.2.3",
+        default_values: "replicas: 2\n",
+        values_schema: { type: "object" },
+      },
     });
 
     await listCatalogCharts({ projectId: "project-1", limit: 60 });
     await listRecommendedCharts("project-1", 12);
     await getHelmChartVersions("project-1", "chart-1");
-    await getChartDefaultValues("project-1", "chart-1", "1.2.3");
+    await expect(
+      getChartDefaultValues("project-1", "chart-1", "1.2.3"),
+    ).resolves.toEqual({
+      chart: "metrics",
+      version: "1.2.3",
+      defaultValues: "replicas: 2\n",
+      valuesSchema: { type: "object" },
+    });
 
     expect(generated.getCatalogCharts).toHaveBeenCalledWith({
       query: { project_id: "project-1", limit: 60, offset: undefined },
@@ -143,6 +158,67 @@ describe("catalog project isolation", () => {
       path: { id: "chart-1" },
       query: { project_id: "project-1", version: "1.2.3" },
       signal: undefined,
+    });
+  });
+
+  it("unwraps chart documentation and values response envelopes", async () => {
+    vi.mocked(generated.getCatalogChartsByIdReadme).mockResolvedValueOnce({
+      data: {
+        chart: "metrics",
+        version: "1.2.3",
+        readme: "# Metrics",
+      },
+    });
+    vi.mocked(generated.getCatalogChartsByIdValues).mockResolvedValueOnce({
+      data: {
+        chart: "metrics",
+        version: "1.2.3",
+        default_values: "replicas: 2\n",
+        values_schema: { type: "object" },
+      },
+    });
+
+    await expect(
+      getHelmChartReadme("project-1", "chart-1", "1.2.3"),
+    ).resolves.toBe("# Metrics");
+    await expect(
+      getHelmChartValues("project-1", "chart-1", "1.2.3"),
+    ).resolves.toEqual({
+      chart: "metrics",
+      version: "1.2.3",
+      defaultValues: "replicas: 2\n",
+      valuesSchema: { type: "object" },
+    });
+  });
+
+  it("previews install and upgrade with the operation-specific API contract", async () => {
+    vi.mocked(generated.postCatalogApplicationsPreview).mockResolvedValueOnce({
+      data: {
+        allowed: true,
+        checks: [],
+        application: "metrics-server",
+        artifact_digest: `sha256:${"a".repeat(64)}`,
+        values_digest: `sha256:${"b".repeat(64)}`,
+        catalog_digest: `sha256:${"c".repeat(64)}`,
+      },
+    });
+    await expect(
+      previewCatalogApplication({
+        clusterId: "cluster-1",
+        chartVersionId: "version-1",
+        namespace: "monitoring",
+        valuesOverride: "replicas: 2",
+        operation: "upgrade",
+      }),
+    ).resolves.toMatchObject({ allowed: true, checks: [] });
+    expect(generated.postCatalogApplicationsPreview).toHaveBeenCalledWith({
+      body: {
+        cluster_id: "cluster-1",
+        chart_version_id: "version-1",
+        namespace: "monitoring",
+        values_override: "replicas: 2",
+        operation: "upgrade",
+      },
     });
   });
 

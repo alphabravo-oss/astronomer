@@ -215,7 +215,7 @@ func TestPreflightAdoptsAnInFlightPodInsteadOfDeletingIt(t *testing.T) {
 		t.Fatalf("seed in-flight preflight pod: %v", err)
 	}
 
-	pod := preflightPod(name, DefaultAgentNamespace, testTargetImage, operationID, corev1.PodSpec{})
+	pod := preflightPod(name, DefaultAgentNamespace, testTargetImage, operationID, corev1.PullAlways, corev1.PodSpec{})
 	got, err := fixture.handler.adoptOrCreatePreflightPod(context.Background(), DefaultAgentNamespace, name, operationID, pod)
 	if err != nil {
 		t.Fatalf("adoptOrCreatePreflightPod: %v", err)
@@ -243,7 +243,7 @@ func TestPreflightAdoptsAnInFlightPodInsteadOfDeletingIt(t *testing.T) {
 		t.Fatalf("seed terminal preflight pod: %v", err)
 	}
 	if _, err := fixture.handler.adoptOrCreatePreflightPod(context.Background(), DefaultAgentNamespace, terminal, operationID,
-		preflightPod(terminal, DefaultAgentNamespace, testCurrentImage, operationID, corev1.PodSpec{})); err != nil {
+		preflightPod(terminal, DefaultAgentNamespace, testCurrentImage, operationID, corev1.PullAlways, corev1.PodSpec{})); err != nil {
 		t.Fatalf("adoptOrCreatePreflightPod on a terminal pod: %v", err)
 	}
 	if i := fixture.recorder.indexOf("delete pods"); i < 0 {

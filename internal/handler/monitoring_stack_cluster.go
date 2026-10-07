@@ -176,16 +176,26 @@ func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request)
 	}
 	cfg, ok, _ := h.loadStackConfig(r.Context(), clusterID)
 	replaceRequired, reasons := clusterMonitoringReplaceRequired(cfg, ok, req)
+	baselineOwnership := h.clusterMetricsBaselineOwnership(r.Context(), clusterID)
+	operatorConflicts, conflictErr := h.clusterMonitoringOperatorConflicts(r.Context(), clusterID, req.Namespace, req.ReleaseName)
+	if conflictErr != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError,
+			"Could not verify Prometheus operator ownership: "+conflictErr.Error())
+		return
+	}
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"clusterId": clusterID,
 		"chart": map[string]any{
 			"repoUrl":   "https://prometheus-community.github.io/helm-charts",
 			"chartName": "kube-prometheus-stack",
 		},
-		"values":          sanitizeMonitoringValues(values),
-		"desiredSpecHash": specHash(values),
-		"requiresReplace": replaceRequired,
-		"replaceReasons":  reasons,
+		"values":            sanitizeMonitoringValues(values),
+		"desiredSpecHash":   specHash(values),
+		"requiresReplace":   replaceRequired,
+		"replaceReasons":    reasons,
+		"baselineOwnership": baselineOwnership,
+		"blocked":           len(operatorConflicts) > 0,
+		"operatorConflicts": operatorConflicts,
 	})
 }
 
@@ -220,6 +230,9 @@ func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request)
 		respondStackPayloadError(w, r, err)
 		return
 	}
+	if h.monitoringOperatorConflictResponse(w, r, clusterID, req) {
+		return
+	}
 	op, err := h.stageClusterStackMutation(r, clusterID, req, values, "installing", "install", "monitoring.stack.install")
 	if err != nil {
 		respondMonitoringMutationError(w, r, err, http.StatusInternalServerError, apierror.MonitoringError, "Failed to stage monitoring stack installation")
@@ -237,6 +250,9 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbUpdate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
+		return
+	}
+	if h.monitoringOperatorConflictResponse(w, r, clusterID, req) {
 		return
 	}
 	cfg, ok, loadErr := h.loadStackConfig(r.Context(), clusterID)
@@ -270,6 +286,9 @@ func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request)
 	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbUpdate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
+		return
+	}
+	if h.monitoringOperatorConflictResponse(w, r, clusterID, req) {
 		return
 	}
 	if _, _, loadErr := h.loadStackConfig(r.Context(), clusterID); loadErr != nil {
@@ -498,6 +517,14 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	}
 	grafanaValues := h.clusterGrafanaValues(req, clusterID, enableGrafana)
 	values := map[string]any{
+		// The managed baseline operator owns only this release namespace. A
+		// cluster-wide watch makes any separately installed Prometheus stack's
+		// operator race this one for the same CRs, producing alternating pod
+		// templates and transiently healthy Helm releases with no stable
+		// service endpoints.
+		"prometheusOperator": map[string]any{
+			"namespaces": map[string]any{"releaseNamespace": true},
+		},
 		"additionalPrometheusRulesMap": map[string]any{
 			"astronomer-cluster-metadata": map[string]any{
 				"groups": []any{
@@ -546,6 +573,15 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 		"kube-state-metrics": map[string]any{
 			"metricLabelsAllowlist": monitoringKubeStateMetricLabelAllowlist,
 		},
+	}
+	if h.clusterMetricsBaselineOwnership(ctx, clusterID).Detected {
+		// Quick Start already owns these exporters through immutable Flux
+		// delivery targets. Reuse them instead of creating a second owner. This
+		// also means uninstalling the full stack naturally falls back to the
+		// lightweight baseline without an exporter outage.
+		values["kubeStateMetrics"] = map[string]any{"enabled": false}
+		values["nodeExporter"] = map[string]any{"enabled": false}
+		values["prometheus"].(map[string]any)["additionalServiceMonitors"] = baselineMetricsServiceMonitors()
 	}
 	if enableSidecar && req.StorageConfigID != "" {
 		// storageConfigId is a body-supplied reference to a GLOBAL object whose
@@ -630,34 +666,6 @@ func (h *MonitoringHandler) monitoringClusterInfoLabels(ctx context.Context, clu
 		}
 	}
 	return labels
-}
-
-func clusterMonitoringReplaceRequired(cfg sqlc.ClusterMonitoringConfig, exists bool, req MonitoringStackRequest) (bool, []string) {
-	if !exists || cfg.Status == "uninstalled" {
-		return false, nil
-	}
-	reasons := []string{}
-	if cfg.StackNamespace != "" && cfg.StackNamespace != req.Namespace {
-		reasons = append(reasons, "namespace change")
-	}
-	if cfg.PrometheusReleaseName != "" && cfg.PrometheusReleaseName != req.ReleaseName {
-		reasons = append(reasons, "release name change")
-	}
-	if cfg.StorageConfigID.Valid != (req.StorageConfigID != "") {
-		reasons = append(reasons, "object storage mode change")
-	} else if cfg.StorageConfigID.Valid && req.StorageConfigID != "" && uuid.UUID(cfg.StorageConfigID.Bytes).String() != req.StorageConfigID {
-		reasons = append(reasons, "object storage configuration change")
-	}
-	if cfg.ObjectStorageSecretName != "" && req.ObjectStorageSecretName != "" && cfg.ObjectStorageSecretName != req.ObjectStorageSecretName {
-		reasons = append(reasons, "object storage secret change")
-	}
-	if cfg.StorageClass != req.StorageClass {
-		reasons = append(reasons, "storage class change")
-	}
-	if cfg.StorageSize != "" && cfg.StorageSize != req.StorageSize {
-		reasons = append(reasons, "storage size change")
-	}
-	return len(reasons) > 0, reasons
 }
 
 func parseOptionalUUID(raw string) pgtype.UUID {

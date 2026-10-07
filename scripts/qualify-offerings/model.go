@@ -29,13 +29,15 @@ type registryContract struct {
 }
 
 type qualificationConfig struct {
-	SchemaVersion     string            `json:"schema_version"`
-	BaseURL           string            `json:"base_url"`
-	TokenFile         string            `json:"token_file"`
-	ExpectedCommit    string            `json:"expected_commit"`
-	AllowLoopbackHTTP bool              `json:"allow_loopback_http,omitempty"`
-	TargetIDs         map[string]string `json:"target_ids"`
-	MemberTargets     []memberTarget    `json:"member_targets,omitempty"`
+	SchemaVersion       string            `json:"schema_version"`
+	BaseURL             string            `json:"base_url"`
+	TokenFile           string            `json:"token_file"`
+	RestrictedTokenFile string            `json:"restricted_token_file,omitempty"`
+	ExpectedCommit      string            `json:"expected_commit"`
+	AllowLoopbackHTTP   bool              `json:"allow_loopback_http,omitempty"`
+	TargetIDs           map[string]string `json:"target_ids"`
+	MemberTargets       []memberTarget    `json:"member_targets,omitempty"`
+	CaseTargets         map[string]string `json:"case_targets,omitempty"`
 }
 
 type memberTarget struct {
@@ -87,10 +89,29 @@ type registryResult struct {
 }
 
 type caseResult struct {
-	ID       string `json:"id"`
-	State    string `json:"state"`
-	Reason   string `json:"reason"`
-	Contract string `json:"not_supported_contract,omitempty"`
+	ID          string            `json:"id"`
+	State       string            `json:"state"`
+	Reason      string            `json:"reason"`
+	Contract    string            `json:"not_supported_contract,omitempty"`
+	Attempts    int               `json:"attempts,omitempty"`
+	StartedAt   *time.Time        `json:"started_at,omitempty"`
+	CompletedAt *time.Time        `json:"completed_at,omitempty"`
+	Dimensions  []dimensionResult `json:"dimensions,omitempty"`
+}
+
+type dimensionResult struct {
+	Name               string     `json:"name"`
+	State              string     `json:"state"`
+	Reason             string     `json:"reason"`
+	ObservedAt         time.Time  `json:"observed_at"`
+	HTTPStatus         int        `json:"http_status,omitempty"`
+	OperationID        string     `json:"operation_id,omitempty"`
+	ArtifactSHA        string     `json:"artifact_sha256,omitempty"`
+	IdempotencyKey     string     `json:"idempotency_key,omitempty"`
+	TargetClusterID    string     `json:"target_cluster_id,omitempty"`
+	DesiredGeneration  *int64     `json:"desired_generation,omitempty"`
+	ObservedGeneration *int64     `json:"observed_generation,omitempty"`
+	SampleAt           *time.Time `json:"sample_at,omitempty"`
 }
 
 type resultSummary struct {

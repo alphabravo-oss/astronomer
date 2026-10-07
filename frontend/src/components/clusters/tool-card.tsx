@@ -38,6 +38,7 @@ interface ToolCardProps {
   tool: ClusterTool;
   toolStatus?: ClusterToolStatus;
   onInstall: (slug: string) => void;
+  onUpgrade?: (slug: string) => void;
   onUninstall: (slug: string) => void;
   onAdopt: (slug: string, releaseName: string) => void;
   onRecover?: (slug: string, action: "retry" | "rollback") => void;
@@ -54,6 +55,7 @@ export function ToolCard({
   tool,
   toolStatus,
   onInstall,
+  onUpgrade,
   onUninstall,
   onAdopt,
   onRecover,
@@ -68,10 +70,9 @@ export function ToolCard({
   const status = normalizeToolStatus(toolStatus?.status);
   const badge = statusToBadge[status] || statusToBadge.unknown;
   const Icon = toolIcons[tool.slug] || Wrench;
-  const isInProgress =
-    status === "installing" ||
-    status === "upgrading" ||
-    status === "uninstalling";
+  const isInProgress = ["installing", "upgrading", "uninstalling"].includes(
+    status,
+  );
   const clusterDisconnectedReason = clusterDisconnected
     ? "Cluster is disconnected"
     : undefined;
@@ -85,6 +86,8 @@ export function ToolCard({
   const adoptBlockedReason = clusterDisconnectedReason || adoptDisabledReason;
   const uninstallBlockedReason =
     clusterDisconnectedReason || uninstallDisabledReason;
+  const upgradeBlockedReason =
+    clusterDisconnectedReason || recoveryDisabledReason;
 
   return (
     <div className="rounded-lg border border-border p-(--card-p) space-y-4">
@@ -163,14 +166,24 @@ export function ToolCard({
         )}
 
         {status === "installed" && (
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {onUpgrade && (
+              <BareButton
+                onClick={() => onUpgrade(tool.slug)}
+                disabled={!!upgradeBlockedReason}
+                disabledReason={upgradeBlockedReason}
+                className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs font-medium disabled:opacity-50"
+              >
+                Configure
+              </BareButton>
+            )}
             {onRecover &&
               toolStatus?.operation?.operationType === "upgrade" && (
                 <BareButton
-                  disabledReason={retryDisabledReason}
                   onClick={() => onRecover(tool.slug, "rollback")}
                   disabled={!!retryDisabledReason}
-                  className="h-8 px-3 rounded-md border border-border text-xs disabled:opacity-50 inline-block font-normal"
+                  disabledReason={retryDisabledReason}
+                  className="h-8 px-3 rounded-md border border-border text-xs disabled:opacity-50"
                 >
                   Roll back upgrade
                 </BareButton>
@@ -264,6 +277,14 @@ export function ToolCard({
                   Roll back
                 </BareButton>
               )}
+            <BareButton
+              onClick={() => onUninstall(tool.slug)}
+              disabled={uninstalling || !!uninstallBlockedReason}
+              title={uninstallBlockedReason}
+              className="h-8 px-3 rounded-md border border-border text-xs disabled:opacity-50"
+            >
+              Remove failed release
+            </BareButton>
           </div>
         )}
       </div>

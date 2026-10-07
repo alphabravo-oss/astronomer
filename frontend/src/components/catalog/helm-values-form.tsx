@@ -1,4 +1,3 @@
-
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -73,7 +72,15 @@ export function HelmValuesForm({
         )}
         {Object.entries(schema.properties || {}).map(([key, childSchema]) => {
           const childPath = [...path, key];
+          const condition = childSchema["x-astronomer-show-when"];
+          if (
+            condition &&
+            String(getValueAtPath(value, condition.path.split("."))) !==
+              condition.equals
+          )
+            return null;
           const childType = schemaType(childSchema);
+          const required = schema.required?.includes(key) ?? false;
           const rawValue =
             objectValue[key] ?? defaultValueForSchema(childSchema);
 
@@ -102,9 +109,11 @@ export function HelmValuesForm({
           return (
             <ScalarField
               key={childPath.join(".")}
+              id={`helm-value-${childPath.join("-")}`}
               schema={childSchema}
               label={labelFor(childSchema, key)}
               value={rawValue}
+              required={required}
               onChange={(nextScalar) =>
                 onChange(setValueAtPath(value, childPath, nextScalar))
               }
@@ -119,35 +128,60 @@ export function HelmValuesForm({
 }
 
 function ScalarField({
+  id,
   schema,
   label,
   value,
+  required = false,
   onChange,
 }: {
+  id: string;
   schema: HelmValuesSchemaNode;
   label: string;
   value: unknown;
+  required?: boolean;
   onChange: (next: unknown) => void;
 }) {
   const type = schemaType(schema);
+  const multiline =
+    schema.format === "multiline" || String(value ?? "").includes("\n");
 
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">{label}</label>
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor={id} className="text-sm font-medium text-foreground">
+          {label}
+          {required && <span aria-hidden="true"> *</span>}
+        </label>
+        {schema["x-astronomer-group"] && (
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {schema["x-astronomer-group"]}
+          </span>
+        )}
+      </div>
       {type === "boolean" ? (
-        <label className="inline-flex items-center gap-2 text-sm text-foreground">
+        <div className="inline-flex items-center gap-2 text-sm text-foreground">
           <input
+            id={id}
             type="checkbox"
+            required={required}
             checked={Boolean(value)}
             onChange={(e) => onChange(e.target.checked)}
             className="h-4 w-4 rounded-sm border-border"
           />
-          Enabled
-        </label>
+          <span aria-hidden="true">Enabled</span>
+        </div>
       ) : schema.enum && schema.enum.length > 0 ? (
         <Select
+          id={id}
           value={String(value ?? "")}
-          onChange={(e) => onChange(e.target.value)}
+          required={required}
+          onChange={(e) => {
+            const selected = schema.enum?.find(
+              (item) => String(item) === e.target.value,
+            );
+            onChange(selected ?? e.target.value);
+          }}
         >
           {schema.enum.map((item) => (
             <option key={String(item)} value={String(item)}>
@@ -157,7 +191,12 @@ function ScalarField({
         </Select>
       ) : type === "integer" || type === "number" ? (
         <Input
+          id={id}
           type="number"
+          required={required}
+          min={schema.minimum}
+          max={schema.maximum}
+          step={schema.multipleOf}
           value={typeof value === "number" ? value : Number(value ?? 0)}
           onChange={(e) =>
             onChange(
@@ -167,12 +206,25 @@ function ScalarField({
             )
           }
         />
-      ) : (
+      ) : multiline ? (
         <Textarea
+          id={id}
           value={String(value ?? "")}
+          required={required}
           onChange={(e) => onChange(e.target.value)}
-          rows={String(value ?? "").includes("\n") ? 4 : 2}
+          rows={6}
           className="min-h-0 resize-y"
+        />
+      ) : (
+        <Input
+          id={id}
+          type={schema.format === "password" ? "password" : "text"}
+          required={required}
+          value={String(value ?? "")}
+          minLength={schema.minLength}
+          maxLength={schema.maxLength}
+          pattern={schema.pattern}
+          onChange={(e) => onChange(e.target.value)}
         />
       )}
       {helpText(schema)}
@@ -248,6 +300,7 @@ function ArrayField({
                   />
                 ) : (
                   <ScalarField
+                    id={`helm-value-${itemPath.join("-")}`}
                     schema={itemsSchema}
                     label={itemsSchema.title || `Item ${index + 1}`}
                     value={item}

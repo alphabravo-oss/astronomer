@@ -1278,6 +1278,11 @@ type Querier interface {
 	ListAnomalyBaselinesForScopes(ctx context.Context, arg ListAnomalyBaselinesForScopesParams) ([]AnomalyBaseline, error)
 	ListApiserverAllowlistSnapshots(ctx context.Context, arg ListApiserverAllowlistSnapshotsParams) ([]ApiserverAllowlistSnapshot, error)
 	ListApiserverAuditEventsByCluster(ctx context.Context, arg ListApiserverAuditEventsByClusterParams) ([]ApiserverAuditEvent, error)
+	// Repository browsing intentionally keeps only a small rolling window of
+	// recent releases.  A verified application pin is part of the product's
+	// install contract, so retain it even after newer upstream releases push it
+	// outside that window.
+	ListApplicationCatalogPinsByRepository(ctx context.Context, repositoryID uuid.UUID) ([]ListApplicationCatalogPinsByRepositoryRow, error)
 	ListApplicationCatalogPresentations(ctx context.Context) ([]ListApplicationCatalogPresentationsRow, error)
 	ListApplicationCatalogSources(ctx context.Context) ([]DeliveryCatalog, error)
 	ListApplicationsForCluster(ctx context.Context, clusterID uuid.UUID) ([]NetworkPolicyApplication, error)

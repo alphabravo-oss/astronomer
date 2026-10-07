@@ -1,10 +1,11 @@
 import type { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
+import { CatalogIcon } from "@/components/catalog/catalog-icon";
 import { QueryStates } from "@/components/ui/query-states";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import type { PaginatedResponse } from "@/types";
-import { Box, ExternalLink, Search } from "lucide-react";
+import { ExternalLink, Search } from "lucide-react";
 import type { ClusterAppRow } from "@/lib/api/cluster-apps";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { BareButton } from "@/components/form/bare-button";
@@ -85,17 +86,12 @@ export function BrowseView({
                 key={c.id}
                 className="border border-border rounded-lg p-3 flex gap-3 bg-card hover:border-muted-foreground/40 transition-colors"
               >
-                <div className="h-10 w-10 shrink-0 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-                  {c.iconUrl ? (
-                    <img
-                      src={c.iconUrl}
-                      alt=""
-                      className="h-10 w-10 object-contain"
-                    />
-                  ) : (
-                    <Box className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
+                <CatalogIcon
+                  src={c.iconUrl}
+                  label={c.displayName || c.name}
+                  className="h-10 w-10 rounded-md"
+                  imageClassName="h-10 w-10"
+                />
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-medium text-sm text-foreground truncate">

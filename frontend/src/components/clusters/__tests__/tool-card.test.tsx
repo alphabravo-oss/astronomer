@@ -68,6 +68,7 @@ describe("ToolCard", () => {
   it("retries the durable operation and offers rollback without starting a new install", () => {
     const onRecover = vi.fn();
     const onInstall = vi.fn();
+    const onUninstall = vi.fn();
     const toolStatus: ClusterToolStatus = {
       slug: tool.slug,
       name: tool.name,
@@ -96,17 +97,21 @@ describe("ToolCard", () => {
         toolStatus={toolStatus}
         onInstall={onInstall}
         onRecover={onRecover}
-        onUninstall={vi.fn()}
+        onUninstall={onUninstall}
         onAdopt={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     fireEvent.click(screen.getByRole("button", { name: "Roll back" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove failed release" }),
+    );
     expect(onRecover.mock.calls).toEqual([
       [tool.slug, "retry"],
       [tool.slug, "rollback"],
     ]);
     expect(onInstall).not.toHaveBeenCalled();
+    expect(onUninstall).toHaveBeenCalledWith(tool.slug);
   });
   it("renders no preset dropdown", () => {
     render(

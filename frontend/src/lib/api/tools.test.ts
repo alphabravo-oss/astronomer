@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as generated from "@/lib/api/generated/client";
-import { getTools, previewToolInstall, uninstallTool } from "@/lib/api/tools";
+import {
+  getToolConfiguration,
+  getTools,
+  previewToolInstall,
+  uninstallTool,
+} from "@/lib/api/tools";
 
 vi.mock("@/lib/api/generated/client", async (importOriginal) => {
   const actual =
@@ -9,6 +14,7 @@ vi.mock("@/lib/api/generated/client", async (importOriginal) => {
     ...actual,
     deleteToolsBySlugUninstall: vi.fn(),
     getTools: vi.fn(),
+    getToolsBySlugConfiguration: vi.fn(),
     postToolsBySlugPreview: vi.fn(),
   };
 });
@@ -117,6 +123,7 @@ describe("tools generated API boundary", () => {
           },
         ],
         preset: "production",
+        checks: [],
       },
     });
 
@@ -124,6 +131,7 @@ describe("tools generated API boundary", () => {
       previewToolInstall("fluent-bit", {
         cluster_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
         preset: "production",
+        values_override: "replicas: 2",
       }),
     ).resolves.toEqual({
       charts: [
@@ -135,6 +143,47 @@ describe("tools generated API boundary", () => {
         },
       ],
       preset: "production",
+      checks: [],
+    });
+    expect(generated.postToolsBySlugPreview).toHaveBeenCalledWith({
+      path: { slug: "fluent-bit" },
+      body: {
+        cluster_id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        preset: "production",
+        values_override: "replicas: 2",
+      },
+    });
+  });
+
+  it("maps the saved multi-release configuration", async () => {
+    vi.mocked(generated.getToolsBySlugConfiguration).mockResolvedValueOnce({
+      data: {
+        preset: "development",
+        values_yaml: "istiod:\n  replicaCount: 1\n",
+        releases: [
+          {
+            id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            release_name: "istiod",
+            namespace: "istio-system",
+            revision: 3,
+          },
+        ],
+      },
+    });
+
+    await expect(
+      getToolConfiguration("istio", "4fa85f64-5717-4562-b3fc-2c963f66afa6"),
+    ).resolves.toEqual({
+      preset: "development",
+      valuesYaml: "istiod:\n  replicaCount: 1\n",
+      releases: [
+        {
+          id: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+          releaseName: "istiod",
+          namespace: "istio-system",
+          revision: 3,
+        },
+      ],
     });
   });
 
@@ -150,6 +199,48 @@ describe("tools generated API boundary", () => {
       path: { slug: "fluent-bit" },
       headerParams: { "Idempotency-Key": expect.stringMatching(UUID_V4) },
       body: { cluster_id: clusterId },
+    });
+  });
+
+  it("sends explicit persistent-data confirmation on destructive uninstall", async () => {
+    vi.mocked(generated.deleteToolsBySlugUninstall).mockResolvedValueOnce({
+      data: operationWire,
+    });
+    const clusterId = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+
+    await uninstallTool("longhorn", {
+      cluster_id: clusterId,
+      confirm_data_deletion: true,
+    });
+
+    expect(generated.deleteToolsBySlugUninstall).toHaveBeenCalledWith({
+      path: { slug: "longhorn" },
+      headerParams: { "Idempotency-Key": expect.stringMatching(UUID_V4) },
+      body: {
+        cluster_id: clusterId,
+        confirm_data_deletion: true,
+      },
+    });
+  });
+
+  it("sends explicit failed-release cleanup confirmation", async () => {
+    vi.mocked(generated.deleteToolsBySlugUninstall).mockResolvedValueOnce({
+      data: operationWire,
+    });
+    const clusterId = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+
+    await uninstallTool("cis-operator", {
+      cluster_id: clusterId,
+      confirm_failed_release_cleanup: true,
+    });
+
+    expect(generated.deleteToolsBySlugUninstall).toHaveBeenCalledWith({
+      path: { slug: "cis-operator" },
+      headerParams: { "Idempotency-Key": expect.stringMatching(UUID_V4) },
+      body: {
+        cluster_id: clusterId,
+        confirm_failed_release_cleanup: true,
+      },
     });
   });
 });

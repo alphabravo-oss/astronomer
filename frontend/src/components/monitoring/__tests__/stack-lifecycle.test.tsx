@@ -488,7 +488,7 @@ describe.each(FAMILIES)("$name lifecycle screen", (family) => {
       // Shared installation requires an explicit cluster choice, never a
       // first-page isLocal guess. Exercise the real picker's keyboard path.
       expect(
-        within(panel).getByRole("button", { name: "Install" }),
+        within(panel).getByRole("button", { name: "Review & install" }),
       ).toBeDisabled();
       fireEvent.click(
         within(panel).getByRole("combobox", { name: "Management cluster" }),
@@ -501,9 +501,17 @@ describe.each(FAMILIES)("$name lifecycle screen", (family) => {
     }
     family.prepareInstall?.(panel);
 
-    const install = within(panel).getByRole("button", { name: "Install" });
+    const install = within(panel).getByRole("button", {
+      name: "Review & install",
+    });
     await waitFor(() => expect(install).not.toBeDisabled());
     fireEvent.click(install);
+
+    await waitFor(() => expect(stackPreview).toHaveBeenCalled());
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Install these values" }),
+    );
 
     await waitFor(() => expect(stackLifecycle).toHaveBeenCalled());
     expect(stackLifecycle.mock.calls[0][1]).toBe("install");
@@ -682,6 +690,101 @@ describe("hosted Loki feature flag", () => {
 // ─────────────────────────────────────────────────────────────────────
 
 describe("per-cluster monitoring stack page", () => {
+  it("explains baseline exporter reuse before installing the full stack", async () => {
+    grant(["read", "create", "update", "delete"]);
+    statusPerTarget({ cluster: { status: "not_configured" } });
+    stackPreview.mockResolvedValueOnce({
+      clusterId: CLUSTER_ID,
+      chart: {
+        repoUrl: "https://prometheus-community.github.io/helm-charts",
+        chartName: "kube-prometheus-stack",
+      },
+      values: {
+        kubeStateMetrics: { enabled: false },
+        nodeExporter: { enabled: false },
+      },
+      desiredSpecHash: "abcdef1234567890",
+      requiresReplace: false,
+      replaceReasons: null,
+      baselineOwnership: {
+        detected: true,
+        mode: "reuse",
+        components: ["kube-state-metrics", "prometheus-node-exporter"],
+        message:
+          "Quick Start exporters stay Flux-managed; the full stack disables its duplicate exporters and scrapes the existing services.",
+      },
+    });
+    render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, {
+      wrapper: Wrapper,
+    });
+
+    const panel = await screen.findByTestId("stack-panel-cluster");
+    fireEvent.click(within(panel).getByRole("button", { name: /^Set up / }));
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Review & install" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText("Quick Start baseline will be reused"),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByText(/stay Flux-managed/)).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("kube-state-metrics, prometheus-node-exporter"),
+    ).toBeInTheDocument();
+    expect(stackLifecycle).not.toHaveBeenCalled();
+  });
+
+  it("blocks apply when another Prometheus operator watches the namespace", async () => {
+    grant(["read", "create", "update", "delete"]);
+    statusPerTarget({ cluster: { status: "not_configured" } });
+    stackPreview.mockResolvedValueOnce({
+      clusterId: CLUSTER_ID,
+      chart: {
+        repoUrl: "https://prometheus-community.github.io/helm-charts",
+        chartName: "kube-prometheus-stack",
+      },
+      values: {},
+      desiredSpecHash: "abcdef1234567890",
+      requiresReplace: false,
+      replaceReasons: null,
+      blocked: true,
+      operatorConflicts: [
+        {
+          namespace: "astronomer-kube-prometheus",
+          name: "kube-prometheus-stack-operator",
+          releaseName: "kube-prometheus-stack",
+          watchesAllNamespaces: true,
+        },
+      ],
+    });
+    render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, {
+      wrapper: Wrapper,
+    });
+
+    const panel = await screen.findByTestId("stack-panel-cluster");
+    fireEvent.click(within(panel).getByRole("button", { name: /^Set up / }));
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Review & install" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        "Another Prometheus operator watches this namespace",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        /astronomer-kube-prometheus\/kube-prometheus-stack-operator/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Install these values" }),
+    ).not.toBeInTheDocument();
+    expect(stackLifecycle).not.toHaveBeenCalled();
+  });
+
   it("honours a monitoring grant scoped to this cluster exactly like the API", async () => {
     grantOnCluster(CLUSTER_ID, ["read", "create", "update", "delete"]);
     statusPerTarget({ cluster: { status: "not_configured" } });

@@ -114,14 +114,13 @@ func (m *SystemManager) Reconcile(ctx context.Context, release protocol.Delivery
 	// to the older image recorded in that system release; the signed Flux
 	// artifact is still reconciled below.
 
-	// Enrollment already materializes the exact reviewed controller set.
-	// Treat that as complete so the first released generation does not wait
-	// on a still-reconciling system OCIRepository, and so a disconnected
-	// official flux-manifests artifact is not applied over the overlay.
-	if match, err := m.liveControllersMatch(ctx); err != nil {
+	// Enrollment materializes the exact reviewed controller set before custom
+	// resources can be discovered. Always create the signed system source and
+	// Kustomization after the agent connects, even when those controllers
+	// already match the release.
+	controllersMatch, err := m.liveControllersMatch(ctx)
+	if err != nil {
 		return false, err
-	} else if match {
-		return true, nil
 	}
 
 	objects := systemObjects(release)
@@ -131,6 +130,12 @@ func (m *SystemManager) Reconcile(ctx context.Context, release protocol.Delivery
 		}
 	}
 	if release.Suspend {
+		return true, nil
+	}
+	// The enrollment overlay is already the reviewed controller distribution.
+	// The system source now exists for subsequent reconciliation, but initial
+	// enrollment need not wait for that source to fetch the same distribution.
+	if controllersMatch {
 		return true, nil
 	}
 	return m.ready(ctx, release)

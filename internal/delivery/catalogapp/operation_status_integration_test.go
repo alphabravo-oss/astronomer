@@ -32,7 +32,7 @@ func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cluster, project, source, bundle, version, target, oldRollout, newRollout := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	cluster, project, source, bundle, version, target, oldRollout, newRollout, pendingRollout := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	digest := "sha256:" + strings.Repeat("a", 64)
 	exec(`INSERT INTO clusters(id,name,display_name) VALUES($1,$2,$2)`, cluster, cluster.String())
 	exec(`INSERT INTO projects(id,name,display_name,cluster_id) VALUES($1,$2,$2,$3)`, project, project.String(), cluster)
@@ -43,7 +43,7 @@ func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
 	for _, fixture := range []struct {
 		id    uuid.UUID
 		state string
-	}{{oldRollout, "failed"}, {newRollout, "succeeded"}} {
+	}{{oldRollout, "failed"}, {newRollout, "succeeded"}, {pendingRollout, "queued"}} {
 		exec(`INSERT INTO delivery_rollouts(id,target_id,target_generation,to_bundle_version_id,placement_digest,strategy_digest,request_digest,plan_digest,frozen_plan,state,idempotency_key,last_error_code) VALUES($1,$2,1,$3,$4,$4,$4,$4,'{}',$5,$6,'original-error')`, fixture.id, target, version, digest, fixture.state, fixture.id.String())
 	}
 	status, err := readRolloutStatus(ctx, tx, target, oldRollout)
@@ -59,6 +59,14 @@ func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
 	}
 	for _, state := range []string{"active", "deleting", "deleted"} {
 		exec(`UPDATE delivery_targets SET deletion_state=$2 WHERE id=$1`, target, state)
+		status, err = readRolloutStatus(ctx, tx, target, pendingRollout)
+		wantRollout, wantCode := "pending", "original-error"
+		if state != "active" {
+			wantRollout = "failed"
+		}
+		if err != nil || status.Phase != wantRollout || status.LastErrorCode != wantCode {
+			t.Fatalf("pending rollout with target %s: %+v %v", state, status, err)
+		}
 		status, err = readDeletionStatus(ctx, tx, target)
 		want := "pending"
 		if state == "deleted" {

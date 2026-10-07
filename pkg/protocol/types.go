@@ -255,12 +255,17 @@ type DecommissionStepResult struct {
 // AgentUpgradePayload asks the agent to update its own Deployment image.
 // OperationID maps back to agent_lifecycle_operations.id.
 type AgentUpgradePayload struct {
-	OperationID     string `json:"operation_id"`
-	ClusterID       string `json:"cluster_id"`
-	TargetVersion   string `json:"target_version"`
-	TargetImage     string `json:"target_image"`
-	AgentNamespace  string `json:"agent_namespace,omitempty"`
-	AgentDeployment string `json:"agent_deployment,omitempty"`
+	OperationID   string `json:"operation_id"`
+	ClusterID     string `json:"cluster_id"`
+	TargetVersion string `json:"target_version"`
+	TargetImage   string `json:"target_image"`
+	// TargetPullPolicy controls how Kubernetes resolves the target image.
+	// Empty preserves the secure default, Always. Never is accepted only for
+	// immutable digest references and supports explicitly pre-staged air-gap
+	// rollouts without weakening the default registry-availability proof.
+	TargetPullPolicy string `json:"target_pull_policy,omitempty"`
+	AgentNamespace   string `json:"agent_namespace,omitempty"`
+	AgentDeployment  string `json:"agent_deployment,omitempty"`
 	// RollbackImage is the image the in-cluster upgrade watchdog restores when
 	// the replacement agent never becomes Ready. Empty means "whatever the
 	// Deployment is running right now", which the agent reads for itself and
@@ -354,9 +359,10 @@ type ConnectPayload struct {
 
 // ConnectAckPayload is sent by the server to acknowledge a connection.
 type ConnectAckPayload struct {
-	SessionID     string `json:"session_id"`
-	ServerVersion string `json:"server_version"`
-	AgentToken    string `json:"agent_token,omitempty"`
+	Capabilities  []string `json:"capabilities,omitempty"`
+	SessionID     string   `json:"session_id"`
+	ServerVersion string   `json:"server_version"`
+	AgentToken    string   `json:"agent_token,omitempty"`
 	// AuditIngestToken is the scoped outbound API token (clusters:write only)
 	// the agent uses with httpAuditSender to POST audit batches over plain
 	// HTTP instead of the WS tunnel (PATH A). Empty when the server does not

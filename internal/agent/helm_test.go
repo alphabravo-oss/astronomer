@@ -5,7 +5,22 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"helm.sh/helm/v3/pkg/cli"
 )
+
+func TestHelmSettingsForNamespaceIsRequestLocal(t *testing.T) {
+	t.Parallel()
+
+	base := cli.New()
+	base.SetNamespace("astronomer-system")
+	request := helmSettingsForNamespace(base, "cis-operator-system")
+	if request.Namespace() != "cis-operator-system" {
+		t.Fatalf("request namespace = %q", request.Namespace())
+	}
+	if base.Namespace() != "astronomer-system" {
+		t.Fatalf("shared settings namespace mutated to %q", base.Namespace())
+	}
+}
 
 func TestHelmReadyTimeout(t *testing.T) {
 	t.Parallel()

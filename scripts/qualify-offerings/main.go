@@ -1,6 +1,6 @@
 // qualify-offerings records and verifies Plan 028 offering evidence. Inventory
-// mode is deliberately GET-only; mutation scenarios are added as explicit case
-// executors rather than accepting arbitrary methods or request bodies.
+// mode is deliberately GET-only; run mode permits only compiled case executors
+// rather than accepting arbitrary methods or request bodies.
 package main
 
 import (
@@ -40,17 +40,19 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: qualify-offerings inventory|preflight|verify [flags]")
+		return errors.New("usage: qualify-offerings inventory|preflight|run|verify [flags]")
 	}
 	switch args[0] {
 	case "inventory":
 		return runInventory(ctx, args[1:])
 	case "preflight":
 		return runPreflight(ctx, args[1:])
+	case "run":
+		return runQualification(ctx, args[1:])
 	case "verify":
 		return runVerify(args[1:])
 	default:
-		return fmt.Errorf("unsupported mode %q (expected inventory, preflight, or verify)", args[0])
+		return fmt.Errorf("unsupported mode %q (expected inventory, preflight, run, or verify)", args[0])
 	}
 }
 

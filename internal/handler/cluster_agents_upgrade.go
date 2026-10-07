@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
@@ -227,9 +228,27 @@ func (h *ClusterAgentHandler) buildUpgradePlanForCluster(ctx context.Context, cl
 		connected = conn.Status == "connected"
 	}
 	agent := buildClusterAgentItem(cluster, conn, connected, now)
-	plan, err := h.buildUpgradePlan(cluster, agent, req)
+	operations, err := h.queries.ListAgentLifecycleOperationsByCluster(ctx, sqlc.ListAgentLifecycleOperationsByClusterParams{
+		ClusterID: clusterID,
+		Limit:     100,
+		Offset:    0,
+	})
+	if err != nil {
+		return sqlc.Cluster{}, agentUpgradePlanResponse{}, &clusterAgentHandlerError{status: http.StatusInternalServerError, code: "operation_error", message: "Failed to load agent lifecycle history"}
+	}
+	currentImage := lastSucceededAgentImage(operations, agent.AgentVersion)
+	plan, err := h.buildUpgradePlan(cluster, agent, currentImage, req)
 	if err != nil {
 		return sqlc.Cluster{}, agentUpgradePlanResponse{}, &clusterAgentHandlerError{status: http.StatusInternalServerError, code: apierror.InternalError, message: "Failed to render agent configuration"}
 	}
 	return cluster, plan, nil
+}
+
+func lastSucceededAgentImage(operations []sqlc.AgentLifecycleOperation, currentVersion string) string {
+	for _, operation := range operations {
+		if operation.Status == agentlifecycle.StatusSucceeded && operation.TargetVersion == currentVersion && strings.TrimSpace(operation.TargetImage) != "" {
+			return operation.TargetImage
+		}
+	}
+	return ""
 }

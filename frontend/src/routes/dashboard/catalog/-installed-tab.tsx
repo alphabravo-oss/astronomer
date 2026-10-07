@@ -20,7 +20,10 @@ export function InstalledTab({
   installed: InstalledChart[] | undefined;
   loading: boolean;
   onRollback: (id: string, revision: number) => void;
-  onUninstall: (id: string) => void | Promise<void>;
+  onUninstall: (request: {
+    id: string;
+    confirmDataDeletion?: boolean;
+  }) => void | Promise<void>;
   uninstallPending?: boolean;
 }) {
   const [uninstallTarget, setUninstallTarget] = useState<InstalledChart | null>(
@@ -177,11 +180,22 @@ export function InstalledTab({
         onClose={() => setUninstallTarget(null)}
         onConfirm={async () => {
           if (!uninstallTarget) return;
-          await onUninstall(uninstallTarget.id);
+          const isLonghorn =
+            uninstallTarget.releaseName === "longhorn" &&
+            uninstallTarget.namespace === "longhorn-system";
+          await onUninstall({
+            id: uninstallTarget.id,
+            confirmDataDeletion: isLonghorn || undefined,
+          });
           setUninstallTarget(null);
         }}
         title="Uninstall release"
-        description="This removes the Helm release from its cluster."
+        description={
+          uninstallTarget?.releaseName === "longhorn" &&
+          uninstallTarget.namespace === "longhorn-system"
+            ? "This enables Longhorn's deletion confirmation and removes the release, including managed volumes and their stored data."
+            : "This removes the Helm release from its cluster."
+        }
         confirmText="Uninstall"
         confirmValue={uninstallTarget?.releaseName}
         variant="destructive"
@@ -190,10 +204,17 @@ export function InstalledTab({
           uninstallTarget
             ? {
                 scope: `${uninstallTarget.releaseName} in ${uninstallTarget.namespace}`,
-                consequences: [
-                  "The release and its managed Kubernetes resources will be removed.",
-                  "Application availability may be interrupted immediately.",
-                ],
+                consequences:
+                  uninstallTarget.releaseName === "longhorn" &&
+                  uninstallTarget.namespace === "longhorn-system"
+                    ? [
+                        "Astronomer will enable Longhorn's deletion-confirmation setting through the cluster agent.",
+                        "Longhorn volumes and their stored data may be permanently deleted.",
+                      ]
+                    : [
+                        "The release and its managed Kubernetes resources will be removed.",
+                        "Application availability may be interrupted immediately.",
+                      ],
                 recovery:
                   "Reinstall the chart and restore any separately backed-up application data.",
               }

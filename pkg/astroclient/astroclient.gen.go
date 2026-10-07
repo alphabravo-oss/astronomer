@@ -93,6 +93,20 @@ const (
 	AgentTolerationOperatorExists AgentTolerationOperator = "Exists"
 )
 
+// Defines values for AgentUpgradePlanTargetPullPolicy.
+const (
+	AgentUpgradePlanTargetPullPolicyAlways       AgentUpgradePlanTargetPullPolicy = "Always"
+	AgentUpgradePlanTargetPullPolicyIfNotPresent AgentUpgradePlanTargetPullPolicy = "IfNotPresent"
+	AgentUpgradePlanTargetPullPolicyNever        AgentUpgradePlanTargetPullPolicy = "Never"
+)
+
+// Defines values for AgentUpgradePlanRequestTargetPullPolicy.
+const (
+	AgentUpgradePlanRequestTargetPullPolicyAlways       AgentUpgradePlanRequestTargetPullPolicy = "Always"
+	AgentUpgradePlanRequestTargetPullPolicyIfNotPresent AgentUpgradePlanRequestTargetPullPolicy = "IfNotPresent"
+	AgentUpgradePlanRequestTargetPullPolicyNever        AgentUpgradePlanRequestTargetPullPolicy = "Never"
+)
+
 // Defines values for AlertEventSeverity.
 const (
 	AlertEventSeverityCritical AlertEventSeverity = "critical"
@@ -1087,6 +1101,17 @@ const (
 	DeliveryLabelExpressionOperatorNotIn        DeliveryLabelExpressionOperator = "NotIn"
 )
 
+// Defines values for DeliveryObservationState.
+const (
+	DeliveryObservationStateAbsent       DeliveryObservationState = "absent"
+	DeliveryObservationStateCurrent      DeliveryObservationState = "current"
+	DeliveryObservationStateDenied       DeliveryObservationState = "denied"
+	DeliveryObservationStateDisconnected DeliveryObservationState = "disconnected"
+	DeliveryObservationStateStale        DeliveryObservationState = "stale"
+	DeliveryObservationStateUnavailable  DeliveryObservationState = "unavailable"
+	DeliveryObservationStateUnsynced     DeliveryObservationState = "unsynced"
+)
+
 // Defines values for DeliveryOverrideSetScope.
 const (
 	DeliveryOverrideSetScopeCluster      DeliveryOverrideSetScope = "cluster"
@@ -1625,6 +1650,12 @@ const (
 	MonitoringOperationTargetTypeSharedThanos       MonitoringOperationTargetType = "shared_thanos"
 )
 
+// Defines values for MonitoringStackPreviewBaselineOwnershipMode.
+const (
+	MonitoringStackPreviewBaselineOwnershipModeFullStack MonitoringStackPreviewBaselineOwnershipMode = "full_stack"
+	MonitoringStackPreviewBaselineOwnershipModeReuse     MonitoringStackPreviewBaselineOwnershipMode = "reuse"
+)
+
 // Defines values for NativeRBACRuleVerbs.
 const (
 	NativeRBACRuleVerbsAsterisk NativeRBACRuleVerbs = "*"
@@ -2063,11 +2094,12 @@ const (
 
 // Defines values for ToolFormFieldType.
 const (
-	ToolFormFieldTypeBoolean ToolFormFieldType = "boolean"
-	ToolFormFieldTypeNumber  ToolFormFieldType = "number"
-	ToolFormFieldTypeSelect  ToolFormFieldType = "select"
-	ToolFormFieldTypeStorage ToolFormFieldType = "storage"
-	ToolFormFieldTypeString  ToolFormFieldType = "string"
+	ToolFormFieldTypeBoolean   ToolFormFieldType = "boolean"
+	ToolFormFieldTypeMultiline ToolFormFieldType = "multiline"
+	ToolFormFieldTypeNumber    ToolFormFieldType = "number"
+	ToolFormFieldTypeSelect    ToolFormFieldType = "select"
+	ToolFormFieldTypeStorage   ToolFormFieldType = "storage"
+	ToolFormFieldTypeString    ToolFormFieldType = "string"
 )
 
 // Defines values for ToolOperationOperationType.
@@ -2093,6 +2125,13 @@ const (
 	ToolOperationEventLevelError ToolOperationEventLevel = "error"
 	ToolOperationEventLevelInfo  ToolOperationEventLevel = "info"
 	ToolOperationEventLevelWarn  ToolOperationEventLevel = "warn"
+)
+
+// Defines values for ToolPreflightCheckStatus.
+const (
+	ToolPreflightCheckStatusBlock ToolPreflightCheckStatus = "block"
+	ToolPreflightCheckStatusPass  ToolPreflightCheckStatus = "pass"
+	ToolPreflightCheckStatusWarn  ToolPreflightCheckStatus = "warn"
 )
 
 // Defines values for UpdateClusterRequestBadgeColor.
@@ -2320,6 +2359,12 @@ const (
 	CreateAuditExportParamsResultSuccess CreateAuditExportParamsResult = "success"
 )
 
+// Defines values for PostCatalogApplicationsPreviewJSONBodyOperation.
+const (
+	PostCatalogApplicationsPreviewJSONBodyOperationInstall PostCatalogApplicationsPreviewJSONBodyOperation = "install"
+	PostCatalogApplicationsPreviewJSONBodyOperationUpgrade PostCatalogApplicationsPreviewJSONBodyOperation = "upgrade"
+)
+
 // Defines values for ListCharlieFindingsParamsStatus.
 const (
 	ListCharlieFindingsParamsStatusAcknowledged ListCharlieFindingsParamsStatus = "acknowledged"
@@ -2423,6 +2468,12 @@ const (
 	GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRangeN24h GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRange = "24h"
 	GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRangeN6h  GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRange = "6h"
 	GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRangeN7d  GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRange = "7d"
+)
+
+// Defines values for GetClustersByIdManifestParamsScope.
+const (
+	GetClustersByIdManifestParamsScopeAgent GetClustersByIdManifestParamsScope = "agent"
+	GetClustersByIdManifestParamsScopeFull  GetClustersByIdManifestParamsScope = "full"
 )
 
 // Defines values for GetClustersByIdMetricsParamsRange.
@@ -2838,29 +2889,33 @@ type AgentUpgradeOperationResponse struct {
 // AgentUpgradePlan defines model for AgentUpgradePlan.
 type AgentUpgradePlan struct {
 	// AgentOverrides Bounded per-cluster agent PodSpec customization. Platform-owned Linux placement and security settings remain immutable.
-	AgentOverrides          AgentOverrides     `json:"agent_overrides"`
-	BatchSize               int                `json:"batch_size"`
-	Blockers                *[]string          `json:"blockers,omitempty"`
-	CanaryClusterIds        *[]string          `json:"canary_cluster_ids,omitempty"`
-	ClusterId               openapi_types.UUID `json:"cluster_id"`
-	ClusterName             string             `json:"cluster_name"`
-	ConfigurationDigest     string             `json:"configuration_digest"`
-	CurrentImage            *string            `json:"current_image,omitempty"`
-	CurrentVersion          *string            `json:"current_version,omitempty"`
-	MaxUnavailable          int                `json:"max_unavailable"`
-	PlanDigest              string             `json:"plan_digest"`
-	PostUpgradeHealthChecks []string           `json:"post_upgrade_health_checks"`
-	PreflightChecks         []string           `json:"preflight_checks"`
-	PrivilegeProfile        string             `json:"privilege_profile"`
-	Ready                   bool               `json:"ready"`
-	Rollback                []string           `json:"rollback"`
-	RollbackImage           *string            `json:"rollback_image,omitempty"`
-	Steps                   []string           `json:"steps"`
-	Strategy                string             `json:"strategy"`
-	TargetImage             string             `json:"target_image"`
-	TargetVersion           string             `json:"target_version"`
-	Validation              []string           `json:"validation"`
+	AgentOverrides          AgentOverrides                   `json:"agent_overrides"`
+	BatchSize               int                              `json:"batch_size"`
+	Blockers                *[]string                        `json:"blockers,omitempty"`
+	CanaryClusterIds        *[]string                        `json:"canary_cluster_ids,omitempty"`
+	ClusterId               openapi_types.UUID               `json:"cluster_id"`
+	ClusterName             string                           `json:"cluster_name"`
+	ConfigurationDigest     string                           `json:"configuration_digest"`
+	CurrentImage            *string                          `json:"current_image,omitempty"`
+	CurrentVersion          *string                          `json:"current_version,omitempty"`
+	MaxUnavailable          int                              `json:"max_unavailable"`
+	PlanDigest              string                           `json:"plan_digest"`
+	PostUpgradeHealthChecks []string                         `json:"post_upgrade_health_checks"`
+	PreflightChecks         []string                         `json:"preflight_checks"`
+	PrivilegeProfile        string                           `json:"privilege_profile"`
+	Ready                   bool                             `json:"ready"`
+	Rollback                []string                         `json:"rollback"`
+	RollbackImage           *string                          `json:"rollback_image,omitempty"`
+	Steps                   []string                         `json:"steps"`
+	Strategy                string                           `json:"strategy"`
+	TargetImage             string                           `json:"target_image"`
+	TargetPullPolicy        AgentUpgradePlanTargetPullPolicy `json:"target_pull_policy"`
+	TargetVersion           string                           `json:"target_version"`
+	Validation              []string                         `json:"validation"`
 }
+
+// AgentUpgradePlanTargetPullPolicy defines model for AgentUpgradePlan.TargetPullPolicy.
+type AgentUpgradePlanTargetPullPolicy string
 
 // AgentUpgradePlanRequest defines model for AgentUpgradePlanRequest.
 type AgentUpgradePlanRequest struct {
@@ -2870,8 +2925,14 @@ type AgentUpgradePlanRequest struct {
 	RollbackImage    *string   `json:"rollback_image,omitempty"`
 	Strategy         *string   `json:"strategy,omitempty"`
 	TargetImage      *string   `json:"target_image,omitempty"`
-	TargetVersion    *string   `json:"target_version,omitempty"`
+
+	// TargetPullPolicy Use Never only with an immutable sha256 digest that has been staged on every eligible cluster node.
+	TargetPullPolicy *AgentUpgradePlanRequestTargetPullPolicy `json:"target_pull_policy,omitempty"`
+	TargetVersion    *string                                  `json:"target_version,omitempty"`
 }
+
+// AgentUpgradePlanRequestTargetPullPolicy Use Never only with an immutable sha256 digest that has been staged on every eligible cluster node.
+type AgentUpgradePlanRequestTargetPullPolicy string
 
 // AgentUpgradeRecommendation defines model for AgentUpgradeRecommendation.
 type AgentUpgradeRecommendation struct {
@@ -3639,6 +3700,15 @@ type CatalogRepositorySyncReceiptStatus string
 // CatalogRepositorySyncReceiptEnvelope defines model for CatalogRepositorySyncReceiptEnvelope.
 type CatalogRepositorySyncReceiptEnvelope struct {
 	Data CatalogRepositorySyncReceipt `json:"data"`
+}
+
+// CatalogUninstallRequest defines model for CatalogUninstallRequest.
+type CatalogUninstallRequest struct {
+	// ConfirmDataDeletion Required when uninstalling Longhorn because its managed volumes and stored data may be deleted.
+	ConfirmDataDeletion *bool `json:"confirm_data_deletion,omitempty"`
+
+	// ConfirmFailedReleaseCleanup Allows Astronomer to recreate Longhorn's deletion setting when cleaning up an incomplete failed release.
+	ConfirmFailedReleaseCleanup *bool `json:"confirm_failed_release_cleanup,omitempty"`
 }
 
 // CatalogUserDiscovery defines model for CatalogUserDiscovery.
@@ -5824,10 +5894,12 @@ type DeliveryControllerInventory struct {
 	ErrorCode           string                                         `json:"error_code"`
 	FluxVersion         string                                         `json:"flux_version"`
 	KubernetesVersion   string                                         `json:"kubernetes_version"`
-	ObservedAt          *time.Time                                     `json:"observed_at"`
-	Ready               bool                                           `json:"ready"`
-	SystemComponents    []DeliverySystemComponent                      `json:"system_components"`
-	UpdatedAt           time.Time                                      `json:"updated_at"`
+
+	// ObservedAt Source observation time for negotiated agents; receipt time for legacy agents. Null means no source observation exists. Unavailable source state is reflected in error_code and ready=false.
+	ObservedAt       *time.Time                `json:"observed_at"`
+	Ready            bool                      `json:"ready"`
+	SystemComponents []DeliverySystemComponent `json:"system_components"`
+	UpdatedAt        time.Time                 `json:"updated_at"`
 }
 
 // DeliveryControllerInventoryCompatibilityStatus defines model for DeliveryControllerInventory.CompatibilityStatus.
@@ -5996,6 +6068,16 @@ type DeliveryLabelExpression struct {
 // DeliveryLabelExpressionOperator defines model for DeliveryLabelExpression.Operator.
 type DeliveryLabelExpressionOperator string
 
+// DeliveryObservation Negotiated source freshness. Legacy observations omit this object. Timestamps are source observation times, never message receipt times. Current observations older than five minutes must be treated as stale.
+type DeliveryObservation struct {
+	// ObservedAt Required for current, stale, and absent states. Omitted when a source has never been observed; no timestamp is fabricated.
+	ObservedAt *time.Time               `json:"observed_at,omitempty"`
+	State      DeliveryObservationState `json:"state"`
+}
+
+// DeliveryObservationState defines model for DeliveryObservation.State.
+type DeliveryObservationState string
+
 // DeliveryOverrideSet defines model for DeliveryOverrideSet.
 type DeliveryOverrideSet struct {
 	CreatedAt  time.Time                `json:"created_at"`
@@ -6162,10 +6244,13 @@ type DeliveryResourceIdentity struct {
 
 // DeliveryResourceInventory defines model for DeliveryResourceInventory.
 type DeliveryResourceInventory struct {
-	Entries   int                         `json:"entries"`
-	Failed    int                         `json:"failed"`
-	Ready     int                         `json:"ready"`
-	Resources *[]DeliveryResourceIdentity `json:"resources,omitempty"`
+	Entries int `json:"entries"`
+	Failed  int `json:"failed"`
+
+	// Observation Optional negotiated source freshness for this deployment. Absent for legacy reports and local mutation decisions; never infer source freshness from receipt or event time.
+	Observation *DeliveryObservation        `json:"observation,omitempty"`
+	Ready       int                         `json:"ready"`
+	Resources   *[]DeliveryResourceIdentity `json:"resources,omitempty"`
 }
 
 // DeliveryRollout defines model for DeliveryRollout.
@@ -6529,36 +6614,39 @@ type DeliverySystemCompatibilityEnvelope struct {
 
 // DeliverySystemComponent defines model for DeliverySystemComponent.
 type DeliverySystemComponent struct {
-	Category                string                                `json:"category"`
-	Compatibility           *DeliverySystemComponentCompatibility `json:"compatibility,omitempty"`
-	CpuLimit                *string                               `json:"cpu_limit,omitempty"`
-	CpuRequest              *string                               `json:"cpu_request,omitempty"`
-	CreatedAt               *time.Time                            `json:"created_at,omitempty"`
-	DefaultStorage          *bool                                 `json:"default_storage,omitempty"`
-	DesiredReplicas         *int32                                `json:"desired_replicas,omitempty"`
-	Detail                  *string                               `json:"detail,omitempty"`
-	Health                  DeliverySystemComponentHealth         `json:"health"`
-	HighAvailability        bool                                  `json:"high_availability"`
-	Id                      string                                `json:"id"`
-	Images                  *[]string                             `json:"images,omitempty"`
-	Kind                    string                                `json:"kind"`
-	ManagementMethod        string                                `json:"management_method"`
-	MemoryLimit             *string                               `json:"memory_limit,omitempty"`
-	MemoryRequest           *string                               `json:"memory_request,omitempty"`
-	Name                    string                                `json:"name"`
-	Namespace               *string                               `json:"namespace,omitempty"`
-	Owner                   DeliverySystemComponentOwner          `json:"owner"`
-	ReadyReplicas           *int32                                `json:"ready_replicas,omitempty"`
-	Resources               *[]DeliverySystemResource             `json:"resources,omitempty"`
-	StorageClass            *string                               `json:"storage_class,omitempty"`
-	StorageDriver           *string                               `json:"storage_driver,omitempty"`
-	StorageProvisionedBytes *int64                                `json:"storage_provisioned_bytes,omitempty"`
-	StorageReplicaCount     *int32                                `json:"storage_replica_count,omitempty"`
-	StorageUsedBytes        *int64                                `json:"storage_used_bytes,omitempty"`
-	SupportedActions        *[]string                             `json:"supported_actions,omitempty"`
-	UpdateState             *DeliverySystemComponentUpdateState   `json:"update_state,omitempty"`
-	Version                 *string                               `json:"version,omitempty"`
-	Volumes                 *[]DeliverySystemVolume               `json:"volumes,omitempty"`
+	Category         string                                `json:"category"`
+	Compatibility    *DeliverySystemComponentCompatibility `json:"compatibility,omitempty"`
+	CpuLimit         *string                               `json:"cpu_limit,omitempty"`
+	CpuRequest       *string                               `json:"cpu_request,omitempty"`
+	CreatedAt        *time.Time                            `json:"created_at,omitempty"`
+	DefaultStorage   *bool                                 `json:"default_storage,omitempty"`
+	DesiredReplicas  *int32                                `json:"desired_replicas,omitempty"`
+	Detail           *string                               `json:"detail,omitempty"`
+	Health           DeliverySystemComponentHealth         `json:"health"`
+	HighAvailability bool                                  `json:"high_availability"`
+	Id               string                                `json:"id"`
+	Images           *[]string                             `json:"images,omitempty"`
+	Kind             string                                `json:"kind"`
+	ManagementMethod string                                `json:"management_method"`
+	MemoryLimit      *string                               `json:"memory_limit,omitempty"`
+	MemoryRequest    *string                               `json:"memory_request,omitempty"`
+	Name             string                                `json:"name"`
+	Namespace        *string                               `json:"namespace,omitempty"`
+
+	// Observation Negotiated source freshness. Legacy observations omit this object. Timestamps are source observation times, never message receipt times. Current observations older than five minutes must be treated as stale.
+	Observation             *DeliveryObservation                `json:"observation,omitempty"`
+	Owner                   DeliverySystemComponentOwner        `json:"owner"`
+	ReadyReplicas           *int32                              `json:"ready_replicas,omitempty"`
+	Resources               *[]DeliverySystemResource           `json:"resources,omitempty"`
+	StorageClass            *string                             `json:"storage_class,omitempty"`
+	StorageDriver           *string                             `json:"storage_driver,omitempty"`
+	StorageProvisionedBytes *int64                              `json:"storage_provisioned_bytes,omitempty"`
+	StorageReplicaCount     *int32                              `json:"storage_replica_count,omitempty"`
+	StorageUsedBytes        *int64                              `json:"storage_used_bytes,omitempty"`
+	SupportedActions        *[]string                           `json:"supported_actions,omitempty"`
+	UpdateState             *DeliverySystemComponentUpdateState `json:"update_state,omitempty"`
+	Version                 *string                             `json:"version,omitempty"`
+	Volumes                 *[]DeliverySystemVolume             `json:"volumes,omitempty"`
 }
 
 // DeliverySystemComponentCompatibility defines model for DeliverySystemComponent.Compatibility.
@@ -8503,16 +8591,38 @@ type MonitoringSizerVerdict struct {
 
 // MonitoringStackPreview defines model for MonitoringStackPreview.
 type MonitoringStackPreview struct {
-	Chart struct {
+	BaselineOwnership *struct {
+		Components []string                                    `json:"components"`
+		Detected   bool                                        `json:"detected"`
+		Message    *string                                     `json:"message,omitempty"`
+		Mode       MonitoringStackPreviewBaselineOwnershipMode `json:"mode"`
+	} `json:"baselineOwnership,omitempty"`
+
+	// Blocked True when a discovered cluster condition makes applying these values unsafe.
+	Blocked *bool `json:"blocked,omitempty"`
+	Chart   struct {
 		ChartName string `json:"chartName"`
 		RepoUrl   string `json:"repoUrl"`
 	} `json:"chart"`
-	ClusterId       openapi_types.UUID     `json:"clusterId"`
-	DesiredSpecHash string                 `json:"desiredSpecHash"`
+	ClusterId       openapi_types.UUID `json:"clusterId"`
+	DesiredSpecHash string             `json:"desiredSpecHash"`
+
+	// OperatorConflicts Prometheus operators outside this managed release that can reconcile its namespace.
+	OperatorConflicts *[]struct {
+		ExcludedNamespaces   *[]string `json:"excludedNamespaces,omitempty"`
+		Name                 string    `json:"name"`
+		Namespace            string    `json:"namespace"`
+		ReleaseName          *string   `json:"releaseName,omitempty"`
+		WatchedNamespaces    *[]string `json:"watchedNamespaces,omitempty"`
+		WatchesAllNamespaces bool      `json:"watchesAllNamespaces"`
+	} `json:"operatorConflicts,omitempty"`
 	ReplaceReasons  *[]string              `json:"replaceReasons"`
 	RequiresReplace bool                   `json:"requiresReplace"`
 	Values          map[string]interface{} `json:"values"`
 }
+
+// MonitoringStackPreviewBaselineOwnershipMode defines model for MonitoringStackPreview.BaselineOwnership.Mode.
+type MonitoringStackPreviewBaselineOwnershipMode string
 
 // MonitoringStackPreviewEnvelope defines model for MonitoringStackPreviewEnvelope.
 type MonitoringStackPreviewEnvelope struct {
@@ -10683,6 +10793,18 @@ type ToolChart struct {
 	Version     *string `json:"version,omitempty"`
 }
 
+// ToolConfiguration defines model for ToolConfiguration.
+type ToolConfiguration struct {
+	Preset   string `json:"preset"`
+	Releases []struct {
+		Id          openapi_types.UUID `json:"id"`
+		Namespace   string             `json:"namespace"`
+		ReleaseName string             `json:"release_name"`
+		Revision    int                `json:"revision"`
+	} `json:"releases"`
+	ValuesYaml string `json:"values_yaml"`
+}
+
 // ToolControllerStatus defines model for ToolControllerStatus.
 type ToolControllerStatus struct {
 	LatestFailure      *map[string]interface{}    `json:"latestFailure"`
@@ -10701,17 +10823,27 @@ type ToolControllerStatusEnvelope struct {
 	Data ToolControllerStatus `json:"data"`
 }
 
+// ToolFormCondition defines model for ToolFormCondition.
+type ToolFormCondition struct {
+	Equals string `json:"equals"`
+	Path   string `json:"path"`
+}
+
 // ToolFormField defines model for ToolFormField.
 type ToolFormField struct {
-	Default          *string           `json:"default,omitempty"`
-	Group            string            `json:"group"`
-	Help             *string           `json:"help,omitempty"`
-	Label            string            `json:"label"`
-	Options          *[]string         `json:"options,omitempty"`
-	Path             string            `json:"path"`
-	Placeholder      *string           `json:"placeholder,omitempty"`
-	StorageClassPath *string           `json:"storage_class_path,omitempty"`
-	Type             ToolFormFieldType `json:"type"`
+	Default          *string            `json:"default,omitempty"`
+	Group            string             `json:"group"`
+	Help             *string            `json:"help,omitempty"`
+	Label            string             `json:"label"`
+	Maximum          *float32           `json:"maximum,omitempty"`
+	Minimum          *float32           `json:"minimum,omitempty"`
+	Options          *[]string          `json:"options,omitempty"`
+	Path             string             `json:"path"`
+	Placeholder      *string            `json:"placeholder,omitempty"`
+	ShowWhen         *ToolFormCondition `json:"show_when,omitempty"`
+	Step             *float32           `json:"step,omitempty"`
+	StorageClassPath *string            `json:"storage_class_path,omitempty"`
+	Type             ToolFormFieldType  `json:"type"`
 }
 
 // ToolFormFieldType defines model for ToolFormField.Type.
@@ -10757,6 +10889,16 @@ type ToolOperationEvent struct {
 // ToolOperationEventLevel defines model for ToolOperationEvent.Level.
 type ToolOperationEventLevel string
 
+// ToolPreflightCheck defines model for ToolPreflightCheck.
+type ToolPreflightCheck struct {
+	Code    string                   `json:"code"`
+	Message string                   `json:"message"`
+	Status  ToolPreflightCheckStatus `json:"status"`
+}
+
+// ToolPreflightCheckStatus defines model for ToolPreflightCheck.Status.
+type ToolPreflightCheckStatus string
+
 // ToolPreview defines model for ToolPreview.
 type ToolPreview struct {
 	Charts []struct {
@@ -10766,12 +10908,19 @@ type ToolPreview struct {
 		ReleaseName  *string `json:"release_name,omitempty"`
 		ValuesYaml   string  `json:"values_yaml"`
 	} `json:"charts"`
-	Preset string `json:"preset"`
+	Checks []ToolPreflightCheck `json:"checks"`
+	Preset string               `json:"preset"`
 }
 
 // ToolUninstallRequest defines model for ToolUninstallRequest.
 type ToolUninstallRequest struct {
 	ClusterId openapi_types.UUID `json:"cluster_id"`
+
+	// ConfirmDataDeletion Required for tools such as Longhorn whose uninstall can delete persistent data.
+	ConfirmDataDeletion *bool `json:"confirm_data_deletion,omitempty"`
+
+	// ConfirmFailedReleaseCleanup Explicitly acknowledges removal of an incomplete release from a failed Astronomer install. The server still verifies the original chart, version, and revision before uninstalling it.
+	ConfirmFailedReleaseCleanup *bool `json:"confirm_failed_release_cleanup,omitempty"`
 }
 
 // UpdateClusterGroupRequest defines model for UpdateClusterGroupRequest.
@@ -12089,11 +12238,15 @@ type GetBackupsStorageParams struct {
 
 // PostCatalogApplicationsPreviewJSONBody defines parameters for PostCatalogApplicationsPreview.
 type PostCatalogApplicationsPreviewJSONBody struct {
-	ChartVersionId openapi_types.UUID `json:"chart_version_id"`
-	ClusterId      openapi_types.UUID `json:"cluster_id"`
-	Namespace      string             `json:"namespace"`
-	ValuesOverride *string            `json:"values_override,omitempty"`
+	ChartVersionId openapi_types.UUID                               `json:"chart_version_id"`
+	ClusterId      openapi_types.UUID                               `json:"cluster_id"`
+	Namespace      string                                           `json:"namespace"`
+	Operation      *PostCatalogApplicationsPreviewJSONBodyOperation `json:"operation,omitempty"`
+	ValuesOverride *string                                          `json:"values_override,omitempty"`
 }
+
+// PostCatalogApplicationsPreviewJSONBodyOperation defines parameters for PostCatalogApplicationsPreview.
+type PostCatalogApplicationsPreviewJSONBodyOperation string
 
 // GetCatalogChartsParams defines parameters for GetCatalogCharts.
 type GetCatalogChartsParams struct {
@@ -12931,6 +13084,14 @@ type PostClustersByIdLoggingOutputsByOutputIdRotateTokenParams struct {
 	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
+
+// GetClustersByIdManifestParams defines parameters for GetClustersByIdManifest.
+type GetClustersByIdManifestParams struct {
+	Scope *GetClustersByIdManifestParamsScope `form:"scope,omitempty" json:"scope,omitempty"`
+}
+
+// GetClustersByIdManifestParamsScope defines parameters for GetClustersByIdManifest.
+type GetClustersByIdManifestParamsScope string
 
 // GetClustersByIdMetricsParams defines parameters for GetClustersByIdMetrics.
 type GetClustersByIdMetricsParams struct {
@@ -14114,6 +14275,11 @@ type PostToolsBySlugAdoptParams struct {
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetToolsBySlugConfigurationParams defines parameters for GetToolsBySlugConfiguration.
+type GetToolsBySlugConfigurationParams struct {
+	ClusterId openapi_types.UUID `form:"cluster_id" json:"cluster_id"`
+}
+
 // PostToolsBySlugInstallParams defines parameters for PostToolsBySlugInstall.
 type PostToolsBySlugInstallParams struct {
 	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
@@ -14563,6 +14729,9 @@ type PutCatalogChartsByIdFavoriteJSONRequestBody PutCatalogChartsByIdFavoriteJSO
 
 // PostCatalogInstalledJSONRequestBody defines body for PostCatalogInstalled for application/json ContentType.
 type PostCatalogInstalledJSONRequestBody PostCatalogInstalledJSONBody
+
+// DeleteCatalogInstalledByIdJSONRequestBody defines body for DeleteCatalogInstalledById for application/json ContentType.
+type DeleteCatalogInstalledByIdJSONRequestBody = CatalogUninstallRequest
 
 // PostCatalogInstalledByIdRollbackJSONRequestBody defines body for PostCatalogInstalledByIdRollback for application/json ContentType.
 type PostCatalogInstalledByIdRollbackJSONRequestBody PostCatalogInstalledByIdRollbackJSONBody
@@ -21216,8 +21385,10 @@ type ClientInterface interface {
 
 	PostCatalogInstalled(ctx context.Context, params *PostCatalogInstalledParams, body PostCatalogInstalledJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// DeleteCatalogInstalledById request
-	DeleteCatalogInstalledById(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DeleteCatalogInstalledByIdWithBody request with any body
+	DeleteCatalogInstalledByIdWithBody(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	DeleteCatalogInstalledById(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, body DeleteCatalogInstalledByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCatalogInstalledById request
 	GetCatalogInstalledById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -22037,7 +22208,7 @@ type ClientInterface interface {
 	PostClustersByIdLoggingOutputsByOutputIdRotateToken(ctx context.Context, id openapi_types.UUID, outputId openapi_types.UUID, params *PostClustersByIdLoggingOutputsByOutputIdRotateTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByIdManifest request
-	GetClustersByIdManifest(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetClustersByIdManifest(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdManifestParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByIdMetrics request
 	GetClustersByIdMetrics(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdMetricsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -23281,6 +23452,9 @@ type ClientInterface interface {
 	PostToolsBySlugAdoptWithBody(ctx context.Context, slug string, params *PostToolsBySlugAdoptParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostToolsBySlugAdopt(ctx context.Context, slug string, params *PostToolsBySlugAdoptParams, body PostToolsBySlugAdoptJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetToolsBySlugConfiguration request
+	GetToolsBySlugConfiguration(ctx context.Context, slug string, params *GetToolsBySlugConfigurationParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostToolsBySlugInstallWithBody request with any body
 	PostToolsBySlugInstallWithBody(ctx context.Context, slug string, params *PostToolsBySlugInstallParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -27436,8 +27610,20 @@ func (c *Client) PostCatalogInstalled(ctx context.Context, params *PostCatalogIn
 	return c.Client.Do(req)
 }
 
-func (c *Client) DeleteCatalogInstalledById(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteCatalogInstalledByIdRequest(c.Server, id, params)
+func (c *Client) DeleteCatalogInstalledByIdWithBody(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteCatalogInstalledByIdRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteCatalogInstalledById(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, body DeleteCatalogInstalledByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteCatalogInstalledByIdRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -31012,8 +31198,8 @@ func (c *Client) PostClustersByIdLoggingOutputsByOutputIdRotateToken(ctx context
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetClustersByIdManifest(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetClustersByIdManifestRequest(c.Server, id)
+func (c *Client) GetClustersByIdManifest(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdManifestParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByIdManifestRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -36474,6 +36660,18 @@ func (c *Client) PostToolsBySlugAdoptWithBody(ctx context.Context, slug string, 
 
 func (c *Client) PostToolsBySlugAdopt(ctx context.Context, slug string, params *PostToolsBySlugAdoptParams, body PostToolsBySlugAdoptJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostToolsBySlugAdoptRequest(c.Server, slug, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetToolsBySlugConfiguration(ctx context.Context, slug string, params *GetToolsBySlugConfigurationParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetToolsBySlugConfigurationRequest(c.Server, slug, params)
 	if err != nil {
 		return nil, err
 	}
@@ -48763,8 +48961,19 @@ func NewPostCatalogInstalledRequestWithBody(server string, params *PostCatalogIn
 	return req, nil
 }
 
-// NewDeleteCatalogInstalledByIdRequest generates requests for DeleteCatalogInstalledById
-func NewDeleteCatalogInstalledByIdRequest(server string, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams) (*http.Request, error) {
+// NewDeleteCatalogInstalledByIdRequest calls the generic DeleteCatalogInstalledById builder with application/json body
+func NewDeleteCatalogInstalledByIdRequest(server string, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, body DeleteCatalogInstalledByIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDeleteCatalogInstalledByIdRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewDeleteCatalogInstalledByIdRequestWithBody generates requests for DeleteCatalogInstalledById with any type of body
+func NewDeleteCatalogInstalledByIdRequestWithBody(server string, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -48789,10 +48998,12 @@ func NewDeleteCatalogInstalledByIdRequest(server string, id openapi_types.UUID, 
 		return nil, err
 	}
 
-	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	req, err := http.NewRequest("DELETE", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	if params != nil {
 
@@ -60610,7 +60821,7 @@ func NewPostClustersByIdLoggingOutputsByOutputIdRotateTokenRequest(server string
 }
 
 // NewGetClustersByIdManifestRequest generates requests for GetClustersByIdManifest
-func NewGetClustersByIdManifestRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+func NewGetClustersByIdManifestRequest(server string, id openapi_types.UUID, params *GetClustersByIdManifestParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -60633,6 +60844,28 @@ func NewGetClustersByIdManifestRequest(server string, id openapi_types.UUID) (*h
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -77368,6 +77601,58 @@ func NewPostToolsBySlugAdoptRequestWithBody(server string, slug string, params *
 	return req, nil
 }
 
+// NewGetToolsBySlugConfigurationRequest generates requests for GetToolsBySlugConfiguration
+func NewGetToolsBySlugConfigurationRequest(server string, slug string, params *GetToolsBySlugConfigurationParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "slug", runtime.ParamLocationPath, slug)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tools/%s/configuration", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, params.ClusterId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPostToolsBySlugInstallRequest calls the generic PostToolsBySlugInstall builder with application/json body
 func NewPostToolsBySlugInstallRequest(server string, slug string, params *PostToolsBySlugInstallParams, body PostToolsBySlugInstallJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -80367,8 +80652,10 @@ type ClientWithResponsesInterface interface {
 
 	PostCatalogInstalledWithResponse(ctx context.Context, params *PostCatalogInstalledParams, body PostCatalogInstalledJSONRequestBody, reqEditors ...RequestEditorFn) (*PostCatalogInstalledResponse, error)
 
-	// DeleteCatalogInstalledByIdWithResponse request
-	DeleteCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error)
+	// DeleteCatalogInstalledByIdWithBodyWithResponse request with any body
+	DeleteCatalogInstalledByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error)
+
+	DeleteCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, body DeleteCatalogInstalledByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error)
 
 	// GetCatalogInstalledByIdWithResponse request
 	GetCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdResponse, error)
@@ -81188,7 +81475,7 @@ type ClientWithResponsesInterface interface {
 	PostClustersByIdLoggingOutputsByOutputIdRotateTokenWithResponse(ctx context.Context, id openapi_types.UUID, outputId openapi_types.UUID, params *PostClustersByIdLoggingOutputsByOutputIdRotateTokenParams, reqEditors ...RequestEditorFn) (*PostClustersByIdLoggingOutputsByOutputIdRotateTokenResponse, error)
 
 	// GetClustersByIdManifestWithResponse request
-	GetClustersByIdManifestWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByIdManifestResponse, error)
+	GetClustersByIdManifestWithResponse(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdManifestParams, reqEditors ...RequestEditorFn) (*GetClustersByIdManifestResponse, error)
 
 	// GetClustersByIdMetricsWithResponse request
 	GetClustersByIdMetricsWithResponse(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdMetricsParams, reqEditors ...RequestEditorFn) (*GetClustersByIdMetricsResponse, error)
@@ -82432,6 +82719,9 @@ type ClientWithResponsesInterface interface {
 	PostToolsBySlugAdoptWithBodyWithResponse(ctx context.Context, slug string, params *PostToolsBySlugAdoptParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostToolsBySlugAdoptResponse, error)
 
 	PostToolsBySlugAdoptWithResponse(ctx context.Context, slug string, params *PostToolsBySlugAdoptParams, body PostToolsBySlugAdoptJSONRequestBody, reqEditors ...RequestEditorFn) (*PostToolsBySlugAdoptResponse, error)
+
+	// GetToolsBySlugConfigurationWithResponse request
+	GetToolsBySlugConfigurationWithResponse(ctx context.Context, slug string, params *GetToolsBySlugConfigurationParams, reqEditors ...RequestEditorFn) (*GetToolsBySlugConfigurationResponse, error)
 
 	// PostToolsBySlugInstallWithBodyWithResponse request with any body
 	PostToolsBySlugInstallWithBodyWithResponse(ctx context.Context, slug string, params *PostToolsBySlugInstallParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostToolsBySlugInstallResponse, error)
@@ -89183,11 +89473,13 @@ func (r GetCatalogApplicationsResponse) StatusCode() int {
 type PostCatalogApplicationsPreviewResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CatalogInstallationPreview
-	JSON400      *ErrorResponse
-	JSON403      *ErrorResponse
-	JSON404      *ErrorResponse
-	JSON409      *ErrorResponse
+	JSON200      *struct {
+		Data CatalogInstallationPreview `json:"data"`
+	}
+	JSON400 *ErrorResponse
+	JSON403 *ErrorResponse
+	JSON404 *ErrorResponse
+	JSON409 *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -89289,9 +89581,11 @@ type GetCatalogChartsByIdReadmeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Chart   *string `json:"chart,omitempty"`
-		Readme  *string `json:"readme,omitempty"`
-		Version *string `json:"version,omitempty"`
+		Data struct {
+			Chart   *string `json:"chart,omitempty"`
+			Readme  *string `json:"readme,omitempty"`
+			Version *string `json:"version,omitempty"`
+		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON404 *ErrorEnvelope
@@ -89317,14 +89611,16 @@ type GetCatalogChartsByIdValuesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Chart *string `json:"chart,omitempty"`
+		Data struct {
+			Chart *string `json:"chart,omitempty"`
 
-		// DefaultValues values.yaml as a raw string
-		DefaultValues *string `json:"default_values,omitempty"`
+			// DefaultValues values.yaml as a raw string
+			DefaultValues *string `json:"default_values,omitempty"`
 
-		// ValuesSchema JSON schema (raw JSON object)
-		ValuesSchema *map[string]interface{} `json:"values_schema,omitempty"`
-		Version      *string                 `json:"version,omitempty"`
+			// ValuesSchema JSON schema (raw JSON object)
+			ValuesSchema *map[string]interface{} `json:"values_schema,omitempty"`
+			Version      *string                 `json:"version,omitempty"`
+		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON404 *ErrorEnvelope
@@ -104219,6 +104515,36 @@ func (r PostToolsBySlugAdoptResponse) StatusCode() int {
 	return 0
 }
 
+type GetToolsBySlugConfigurationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data ToolConfiguration `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+	JSON409 *Conflict
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetToolsBySlugConfigurationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetToolsBySlugConfigurationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PostToolsBySlugInstallResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -108177,9 +108503,17 @@ func (c *ClientWithResponses) PostCatalogInstalledWithResponse(ctx context.Conte
 	return ParsePostCatalogInstalledResponse(rsp)
 }
 
-// DeleteCatalogInstalledByIdWithResponse request returning *DeleteCatalogInstalledByIdResponse
-func (c *ClientWithResponses) DeleteCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error) {
-	rsp, err := c.DeleteCatalogInstalledById(ctx, id, params, reqEditors...)
+// DeleteCatalogInstalledByIdWithBodyWithResponse request with arbitrary body returning *DeleteCatalogInstalledByIdResponse
+func (c *ClientWithResponses) DeleteCatalogInstalledByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error) {
+	rsp, err := c.DeleteCatalogInstalledByIdWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteCatalogInstalledByIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) DeleteCatalogInstalledByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteCatalogInstalledByIdParams, body DeleteCatalogInstalledByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*DeleteCatalogInstalledByIdResponse, error) {
+	rsp, err := c.DeleteCatalogInstalledById(ctx, id, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -110786,8 +111120,8 @@ func (c *ClientWithResponses) PostClustersByIdLoggingOutputsByOutputIdRotateToke
 }
 
 // GetClustersByIdManifestWithResponse request returning *GetClustersByIdManifestResponse
-func (c *ClientWithResponses) GetClustersByIdManifestWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByIdManifestResponse, error) {
-	rsp, err := c.GetClustersByIdManifest(ctx, id, reqEditors...)
+func (c *ClientWithResponses) GetClustersByIdManifestWithResponse(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdManifestParams, reqEditors ...RequestEditorFn) (*GetClustersByIdManifestResponse, error) {
+	rsp, err := c.GetClustersByIdManifest(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -114765,6 +115099,15 @@ func (c *ClientWithResponses) PostToolsBySlugAdoptWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParsePostToolsBySlugAdoptResponse(rsp)
+}
+
+// GetToolsBySlugConfigurationWithResponse request returning *GetToolsBySlugConfigurationResponse
+func (c *ClientWithResponses) GetToolsBySlugConfigurationWithResponse(ctx context.Context, slug string, params *GetToolsBySlugConfigurationParams, reqEditors ...RequestEditorFn) (*GetToolsBySlugConfigurationResponse, error) {
+	rsp, err := c.GetToolsBySlugConfiguration(ctx, slug, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetToolsBySlugConfigurationResponse(rsp)
 }
 
 // PostToolsBySlugInstallWithBodyWithResponse request with arbitrary body returning *PostToolsBySlugInstallResponse
@@ -128054,7 +128397,9 @@ func ParsePostCatalogApplicationsPreviewResponse(rsp *http.Response) (*PostCatal
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CatalogInstallationPreview
+		var dest struct {
+			Data CatalogInstallationPreview `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -128236,9 +128581,11 @@ func ParseGetCatalogChartsByIdReadmeResponse(rsp *http.Response) (*GetCatalogCha
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Chart   *string `json:"chart,omitempty"`
-			Readme  *string `json:"readme,omitempty"`
-			Version *string `json:"version,omitempty"`
+			Data struct {
+				Chart   *string `json:"chart,omitempty"`
+				Readme  *string `json:"readme,omitempty"`
+				Version *string `json:"version,omitempty"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -128280,14 +128627,16 @@ func ParseGetCatalogChartsByIdValuesResponse(rsp *http.Response) (*GetCatalogCha
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Chart *string `json:"chart,omitempty"`
+			Data struct {
+				Chart *string `json:"chart,omitempty"`
 
-			// DefaultValues values.yaml as a raw string
-			DefaultValues *string `json:"default_values,omitempty"`
+				// DefaultValues values.yaml as a raw string
+				DefaultValues *string `json:"default_values,omitempty"`
 
-			// ValuesSchema JSON schema (raw JSON object)
-			ValuesSchema *map[string]interface{} `json:"values_schema,omitempty"`
-			Version      *string                 `json:"version,omitempty"`
+				// ValuesSchema JSON schema (raw JSON object)
+				ValuesSchema *map[string]interface{} `json:"values_schema,omitempty"`
+				Version      *string                 `json:"version,omitempty"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -156084,6 +156433,76 @@ func ParsePostToolsBySlugAdoptResponse(rsp *http.Response) (*PostToolsBySlugAdop
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetToolsBySlugConfigurationResponse parses an HTTP response from a GetToolsBySlugConfigurationWithResponse call
+func ParseGetToolsBySlugConfigurationResponse(rsp *http.Response) (*GetToolsBySlugConfigurationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetToolsBySlugConfigurationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data ToolConfiguration `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ServiceUnavailable

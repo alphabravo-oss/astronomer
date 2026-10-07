@@ -1,9 +1,11 @@
-import { useOperationIntent } from "@/lib/use-operation-intent";
-import { useUpgradeValues } from "./app-upgrade-values";
 import {
   CatalogVersionSelect,
   useCatalogVersionSelection,
 } from "@/components/catalog/version-selection";
+import { useOperationIntent } from "@/lib/use-operation-intent";
+import { AppInstallValuesEditor } from "./app-install-values-editor";
+import { useUpgradeValues } from "./app-upgrade-values";
+import { useAppInstallPreview } from "./use-app-install-preview";
 /**
  * App install / upgrade modal — sprint 082+.
  *
@@ -12,47 +14,48 @@ import {
  * "Upgrade" action). Two key differences between the modes:
  *
  *   • mode='install' → POST /catalog/installed/, release_name + ns are
- *     editable, defaults to chart name / 'default'.
+ *     editable, defaults to the chart name and its supported system namespace.
  *   • mode='upgrade' → PUT /catalog/installed/{id}/upgrade/, release_name
  *     + ns are read-only (those are the release identity), version
  *     dropdown is the user's actual control.
  *
- * YAML editor:
+ * Values editor:
  *   • Pre-filled from GET /catalog/charts/{chart_id}/values/?version=
  *     which lazy-hydrates the chart's defaults on first call (~1-2s)
  *     then caches.
  *   • On upgrade mode it's pre-filled with the release's current
  *     values_override so the user sees what they currently have, not
  *     a wall of fresh defaults to wade through.
- *   • Plain <textarea> for v1 — Monaco / CodeMirror would be nice but
- *     out of scope. YAML correctness isn't validated client-side;
- *     helm install will fail clearly on bad YAML.
+ *   • Curated Settings and full YAML round-trip through the same override.
+ *     Review is backed by the public server preview and blocks mutation when
+ *     validation or preflight finds an unsafe configuration.
  *
  * Submission returns a durable catalog operation receipt. The caller tracks
  * that operation and its Flux rollout; acceptance is not workload readiness.
  */
 
-import { useEffect, useRef } from "react";
 import { QueryStates } from "@/components/ui/query-states";
 import { useAppForm, useStore } from "@/lib/form";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
-  getChartDefaultValues,
   installChartOnCluster,
   upgradeClusterApp,
 } from "@/lib/api/cluster-apps";
-import { queryKeys } from "@/lib/query-keys";
+import { recommendedCatalogNamespace } from "@/lib/catalog-chart-fields";
+import { catalogInstallDefaultValues } from "@/lib/catalog-install-defaults";
+import { parseHelmValuesYAML } from "@/lib/helm-values-schema";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
+import { queryKeys } from "@/lib/query-keys";
 import {
   AppInstallFooter,
   ChartInstallationNotes,
   HAS_CRDS,
 } from "./app-install-parts";
-import { BareButton } from "@/components/form/bare-button";
 export { AppUninstallModal } from "./app-uninstall-modal";
 
 type Mode =
@@ -110,7 +113,10 @@ export function AppInstallModal({
     defaultValues: {
       selectedVersionId: mode.kind === "upgrade" ? mode.currentVersionId : "",
       releaseName: mode.kind === "upgrade" ? mode.releaseName : mode.chartName,
-      namespace: mode.kind === "upgrade" ? mode.namespace : "default",
+      namespace:
+        mode.kind === "upgrade"
+          ? mode.namespace
+          : recommendedCatalogNamespace(mode.chartName),
       valuesYaml: mode.kind === "upgrade" ? mode.currentValues : "",
     },
     onSubmit: () => install.mutate(),
@@ -125,10 +131,12 @@ export function AppInstallModal({
   );
   const releaseName = useStore(form.store, (s) => s.values.releaseName);
   const namespace = useStore(form.store, (s) => s.values.namespace);
-  // Tracks whether we've already pre-filled defaults for the chosen
-  // version — used so that switching versions in install mode
-  // refreshes the YAML, but typing into the editor doesn't get
-  // clobbered by a re-render of the same version.
+  const valuesYaml = useStore(form.store, (s) => s.values.valuesYaml);
+  const [editorMode, setEditorMode] = useState<"form" | "yaml" | "review">(
+    "form",
+  );
+  const [yamlError, setYamlError] = useState<string | null>(null);
+  // Hydrate each selected version once so background renders preserve edits.
   const hydratedForVersion = useRef("");
 
   const versions = useCatalogVersionSelection(
@@ -139,37 +147,41 @@ export function AppInstallModal({
   );
   const selectedVersion = versions.selected;
 
-  // Hydrate values.yaml when the version changes. In upgrade mode we
-  // intentionally DON'T overwrite the user's current values with the
-  // new version's defaults — that would silently revert their
-  // customisation. Show a "Reset to chart defaults" button instead.
-  const defaultValues = useQuery({
-    queryKey: queryKeys.catalog.installChartValues(
-      projectId,
-      mode.chartId,
-      selectedVersion?.version,
-    ),
-    queryFn: ({ signal }) =>
-      getChartDefaultValues(
-        projectId,
-        mode.chartId,
-        selectedVersion?.version,
-        signal,
-      ),
-    enabled: !!projectId && !!selectedVersion?.version,
-    throwOnError: false,
+  const {
+    defaultValues,
+    valuesSchema,
+    schemaValues,
+    preview,
+    blockingPreview,
+  } = useAppInstallPreview({
+    projectId,
+    chartId: mode.chartId,
+    chartName: mode.chartName,
+    version: selectedVersion?.version,
+    clusterId,
+    selectedVersionId,
+    namespace,
+    valuesYaml,
+    isUpgrade,
+    editorMode,
   });
 
   useEffect(() => {
     if (isUpgrade) return; // don't auto-clobber on upgrade
     if (defaultValues.isError || !defaultValues.data) return;
-    const key = selectedVersionId;
-    if (hydratedForVersion.current === key) return;
-    form.setFieldValue("valuesYaml", defaultValues.data.defaultValues);
-    hydratedForVersion.current = key;
+    if (hydratedForVersion.current === selectedVersionId) return;
+    form.setFieldValue(
+      "valuesYaml",
+      catalogInstallDefaultValues(
+        mode.chartName,
+        defaultValues.data.defaultValues,
+      ),
+    );
+    hydratedForVersion.current = selectedVersionId;
   }, [
     defaultValues.data,
     defaultValues.isError,
+    mode.chartName,
     form,
     selectedVersionId,
     isUpgrade,
@@ -181,6 +193,12 @@ export function AppInstallModal({
       if (isUpgrade && (!upgradeValues.isSuccess || upgradeValues.isError))
         throw new Error("Load the saved release values before upgrading");
       const value = form.state.values;
+      if (
+        value.valuesYaml.trim() &&
+        parseHelmValuesYAML(value.valuesYaml) == null
+      ) {
+        throw new Error("Values must be valid YAML containing an object");
+      }
       const idempotencyKey = intent.keyFor({
         mode,
         clusterId,
@@ -243,6 +261,9 @@ export function AppInstallModal({
     releaseName.trim() !== "" &&
     namespace.trim() !== "" &&
     !install.isPending &&
+    !yamlError &&
+    !blockingPreview &&
+    !(editorMode === "review" && (preview.isLoading || preview.isError)) &&
     !submitBlockedReason &&
     (!isUpgrade || (upgradeValues.isSuccess && !upgradeValues.isError));
 
@@ -251,7 +272,21 @@ export function AppInstallModal({
       toastWarning(submitBlockedReason);
       return;
     }
+    if (valuesYaml.trim() && parseHelmValuesYAML(valuesYaml) == null) {
+      setYamlError("Values must be valid YAML containing an object.");
+      return;
+    }
+    setYamlError(null);
     void form.handleSubmit();
+  };
+
+  const switchEditorMode = (next: "form" | "yaml" | "review") => {
+    if (next === "form" && schemaValues == null) {
+      setYamlError("Fix the YAML before returning to the form.");
+      return;
+    }
+    setYamlError(null);
+    setEditorMode(next);
   };
 
   const slowInstall = SLOW_INSTALL_CHARTS.has(mode.chartName);
@@ -276,7 +311,12 @@ export function AppInstallModal({
           pending={install.isPending}
           onSubmit={handleSubmit}
           submittable={submittable}
-          reason={submitBlockedReason}
+          reason={
+            submitBlockedReason ??
+            blockingPreview?.description ??
+            yamlError ??
+            undefined
+          }
           upgrade={isUpgrade}
         />
       }
@@ -357,60 +397,23 @@ export function AppInstallModal({
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-muted-foreground">
-              Values (YAML)
-              {defaultValues.isLoading && (
-                <span className="ml-2 text-2xs" aria-busy="true">
-                  hydrating defaults…
-                </span>
-              )}
-            </label>
-            {defaultValues.isError && (
-              <QueryStates
-                query={defaultValues}
-                permission="catalog:read"
-                errorTitle="Could not load chart defaults"
-              >
-                {null}
-              </QueryStates>
-            )}
-            {isUpgrade && !defaultValues.isError && defaultValues.data && (
-              <BareButton
-                tooltip="Replace with the upstream chart's default values for the selected version"
-                onClick={() =>
-                  form.setFieldValue(
-                    "valuesYaml",
-                    defaultValues.data!.defaultValues,
-                  )
-                }
-                className="text-11 text-muted-foreground hover:text-foreground underline inline-block font-normal"
-              >
-                Reset to chart defaults
-              </BareButton>
-            )}
-          </div>
-          <form.Field name="valuesYaml">
-            {(field) => (
-              <textarea
-                value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-                onBlur={field.handleBlur}
-                rows={16}
-                spellCheck={false}
-                className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono focus:outline-hidden focus:ring-1 focus:ring-ring resize-y"
-                placeholder="# values.yaml — overrides applied on top of chart defaults"
-              />
-            )}
-          </form.Field>
-          <p className="text-11 text-muted-foreground">
-            Vault references like{" "}
-            <code className="font-mono">${`{vault://secret/path#key}`}</code>{" "}
-            are resolved at install time. Sensitive values stay in Vault rather
-            than this row.
-          </p>
-        </div>
+        <AppInstallValuesEditor
+          defaultValues={defaultValues}
+          isUpgrade={isUpgrade}
+          valuesSchema={valuesSchema}
+          editorMode={editorMode}
+          switchEditorMode={switchEditorMode}
+          preview={preview}
+          chartName={mode.chartName}
+          version={selectedVersion?.version ?? ""}
+          namespace={namespace}
+          releaseName={releaseName}
+          schemaValues={schemaValues}
+          valuesYaml={valuesYaml}
+          onValuesChange={(value) => form.setFieldValue("valuesYaml", value)}
+          setYamlError={setYamlError}
+          yamlError={yamlError}
+        />
       </div>
     </ModalShell>
   );

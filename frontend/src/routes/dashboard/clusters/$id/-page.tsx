@@ -49,6 +49,7 @@ import { renderForCluster } from "@/lib/api/dashboards";
 export {
   AnomalyBaselinesPanel,
   isNoisyCapabilityCondition,
+  isRedundantHealthyConnectivityCondition,
 } from "./-cluster-panels";
 
 const routeApi = getRouteApi("/dashboard/clusters/$id/");
@@ -63,7 +64,8 @@ export function ClusterDetailPage() {
   const { data: conditions } = useClusterConditions(clusterId);
   const { data: metricsSummary, isError: metricsError } =
     useClusterMetricsSummary(clusterId);
-  const { data: events } = useClusterEvents(clusterId, { limit: 10 });
+  const eventsQuery = useClusterEvents(clusterId, { limit: 10 });
+
   const toolsQuery = useClusterToolsStatus(clusterId);
   const toolsMetric = toolStatusMetric(toolsQuery);
   // Image-vuln severity rollup — same endpoint the Image Scans tab
@@ -84,9 +86,7 @@ export function ClusterDetailPage() {
   const directPermission = useClustersUpdate(clusterId);
   const kubeconfig = useClusterKubeconfig(clusterId, cluster, directPermission);
   const deleteMutation = useDeleteCluster();
-  // Service-mesh badge data (sprint 071). Cheap query — the row is one
-  // SELECT keyed by cluster_id; if no detection has run yet the API
-  // returns an "unknown" stub so we can render "—" without a 404 dance.
+  // Missing mesh detection renders an unknown state.
   const { data: meshDetection } = useQuery({
     queryKey: queryKeys.clusterPages.serviceMeshHeader(clusterId),
     queryFn: () => getServiceMeshDetection(clusterId),
@@ -304,7 +304,7 @@ export function ClusterDetailPage() {
         toolsMetric={toolsMetric}
       />
 
-      <ClusterRecentEvents events={events} />
+      <ClusterRecentEvents query={eventsQuery} />
 
       {/* T7.2 — Anomaly baselines surface. The nightly
           nightly baseline job fills these rows but no UI

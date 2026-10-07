@@ -4,6 +4,7 @@ import {
   type EmptyStateActionProps,
 } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { CatalogIcon } from "@/components/catalog/catalog-icon";
 import { cn } from "@/lib/utils";
 import type { HelmChart, HelmChartCategory } from "@/types";
 import { Package, Search, X } from "lucide-react";
@@ -133,20 +134,12 @@ export function BrowseTab({
                 transition-colors group"
             >
               <div className="flex items-start gap-3">
-                <div className="shrink-0 h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden">
-                  {chart.iconUrl ? (
-                    <img
-                      src={chart.iconUrl}
-                      alt={chart.displayName}
-                      width={32}
-                      height={32}
-                      loading="lazy"
-                      className="h-8 w-8 object-contain"
-                    />
-                  ) : (
-                    <Package className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
+                <CatalogIcon
+                  src={chart.iconUrl}
+                  label={chart.displayName || chart.name}
+                  className="h-10 w-10"
+                  imageClassName="h-8 w-8"
+                />
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground text-sm truncate group-hover:text-primary transition-colors">
                     {chart.displayName || chart.name}

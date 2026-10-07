@@ -1555,6 +1555,32 @@ components:
         desiredSpecHash: {type: string}
         requiresReplace: {type: boolean}
         replaceReasons: {type: array, nullable: true, items: {type: string}}
+        blocked:
+          type: boolean
+          description: True when a discovered cluster condition makes applying these values unsafe.
+        operatorConflicts:
+          type: array
+          description: Prometheus operators outside this managed release that can reconcile its namespace.
+          items:
+            type: object
+            additionalProperties: false
+            required: [namespace, name, watchesAllNamespaces]
+            properties:
+              namespace: {type: string}
+              name: {type: string}
+              releaseName: {type: string}
+              watchedNamespaces: {type: array, items: {type: string}}
+              excludedNamespaces: {type: array, items: {type: string}}
+              watchesAllNamespaces: {type: boolean}
+        baselineOwnership:
+          type: object
+          additionalProperties: false
+          required: [detected, mode, components]
+          properties:
+            detected: {type: boolean}
+            mode: {type: string, enum: [full_stack, reuse]}
+            components: {type: array, items: {type: string}}
+            message: {type: string}
     MonitoringStackStatus:
       type: object
       additionalProperties: false
@@ -5512,6 +5538,11 @@ components:
           type: string
         target_image:
           type: string
+        target_pull_policy:
+          type: string
+          enum: [Always, IfNotPresent, Never]
+          default: Always
+          description: Use Never only with an immutable sha256 digest that has been staged on every eligible cluster node.
         strategy:
           type: string
           default: agent_self_rollout
@@ -5532,7 +5563,7 @@ components:
     AgentUpgradePlan:
       type: object
       additionalProperties: false
-      required: [cluster_id, cluster_name, target_version, target_image, privilege_profile, agent_overrides, configuration_digest, plan_digest, strategy, batch_size, max_unavailable, ready, preflight_checks, steps, post_upgrade_health_checks, validation, rollback]
+      required: [cluster_id, cluster_name, target_version, target_image, target_pull_policy, privilege_profile, agent_overrides, configuration_digest, plan_digest, strategy, batch_size, max_unavailable, ready, preflight_checks, steps, post_upgrade_health_checks, validation, rollback]
       properties:
         cluster_id:
           type: string
@@ -5547,6 +5578,9 @@ components:
           type: string
         target_image:
           type: string
+        target_pull_policy:
+          type: string
+          enum: [Always, IfNotPresent, Never]
         rollback_image:
           type: string
         privilege_profile:
@@ -6804,13 +6838,25 @@ components:
       properties:
         path: {type: string}
         label: {type: string}
-        type: {type: string, enum: [string, number, boolean, select, storage]}
+        type: {type: string, enum: [string, number, boolean, select, multiline, storage]}
         group: {type: string}
         default: {type: string}
         options: {type: array, items: {type: string}}
         help: {type: string}
         placeholder: {type: string}
         storage_class_path: {type: string}
+        minimum: {type: number}
+        maximum: {type: number}
+        step: {type: number, minimum: 0, exclusiveMinimum: true}
+        show_when:
+          $ref: '#/components/schemas/ToolFormCondition'
+    ToolFormCondition:
+      type: object
+      additionalProperties: false
+      required: [path, equals]
+      properties:
+        path: {type: string}
+        equals: {type: string}
     ToolFormSchema:
       type: object
       additionalProperties: false
@@ -6905,10 +6951,26 @@ components:
       required: [cluster_id]
       properties:
         cluster_id: {type: string, format: uuid}
+        confirm_data_deletion:
+          type: boolean
+          description: Required for tools such as Longhorn whose uninstall can delete persistent data.
+        confirm_failed_release_cleanup:
+          type: boolean
+          description: Explicitly acknowledges removal of an incomplete release from a failed Astronomer install. The server still verifies the original chart, version, and revision before uninstalling it.
+    CatalogUninstallRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        confirm_data_deletion:
+          type: boolean
+          description: Required when uninstalling Longhorn because its managed volumes and stored data may be deleted.
+        confirm_failed_release_cleanup:
+          type: boolean
+          description: Allows Astronomer to recreate Longhorn's deletion setting when cleaning up an incomplete failed release.
     ToolPreview:
       type: object
       additionalProperties: false
-      required: [charts, preset]
+      required: [charts, preset, checks]
       properties:
         charts:
           type: array
@@ -6923,6 +6985,35 @@ components:
               namespace: {type: string}
               values_yaml: {type: string}
         preset: {type: string}
+        checks:
+          type: array
+          items: {$ref: '#/components/schemas/ToolPreflightCheck'}
+    ToolPreflightCheck:
+      type: object
+      additionalProperties: false
+      required: [code, status, message]
+      properties:
+        code: {type: string}
+        status: {type: string, enum: [pass, warn, block]}
+        message: {type: string}
+    ToolConfiguration:
+      type: object
+      additionalProperties: false
+      required: [preset, values_yaml, releases]
+      properties:
+        preset: {type: string}
+        values_yaml: {type: string}
+        releases:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, release_name, namespace, revision]
+            properties:
+              id: {type: string, format: uuid}
+              release_name: {type: string}
+              namespace: {type: string}
+              revision: {type: integer}
     ToolOperationEvent:
       type: object
       additionalProperties: false
@@ -10227,6 +10318,9 @@ components:
       additionalProperties: false
       required: [entries, ready, failed]
       properties:
+        observation:
+          allOf: [{$ref: '#/components/schemas/DeliveryObservation'}]
+          description: Optional negotiated source freshness for this deployment. Absent for legacy reports and local mutation decisions; never infer source freshness from receipt or event time.
         entries: {type: integer, minimum: 0}
         ready: {type: integer, minimum: 0}
         failed: {type: integer, minimum: 0}
@@ -11020,13 +11114,29 @@ components:
         ready: {type: boolean}
         compatibility_status: {type: string, enum: [compatible, incompatible, upgrade_required, degraded]}
         error_code: {type: string}
-        observed_at: {type: string, format: date-time, nullable: true}
+        observed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Source observation time for negotiated agents; receipt time for legacy agents. Null means no source observation exists. Unavailable source state is reflected in error_code and ready=false.
         updated_at: {type: string, format: date-time}
+    DeliveryObservation:
+      type: object
+      additionalProperties: false
+      required: [state]
+      description: Negotiated source freshness. Legacy observations omit this object. Timestamps are source observation times, never message receipt times. Current observations older than five minutes must be treated as stale.
+      properties:
+        state: {type: string, enum: [current, stale, unsynced, denied, absent, disconnected, unavailable]}
+        observed_at:
+          type: string
+          format: date-time
+          description: Required for current, stale, and absent states. Omitted when a source has never been observed; no timestamp is fabricated.
     DeliverySystemComponent:
       type: object
       additionalProperties: false
       required: [id, name, category, owner, management_method, kind, health, high_availability]
       properties:
+        observation: {$ref: '#/components/schemas/DeliveryObservation'}
         id: {type: string, maxLength: 192}
         name: {type: string, maxLength: 128}
         category: {type: string, maxLength: 64}
@@ -18434,6 +18544,34 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/tools/{slug}/configuration:
+    get:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "catalog:read on the requested cluster"
+      operationId: getToolsBySlugConfiguration
+      tags: [Tools]
+      summary: Read the durable effective configuration of an installed managed tool
+      description: Values may contain credentials and are authorized against the exact cluster. Multi-release values are reconstructed under their declared values keys.
+      x-astronomer-route-class: public-api
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, minLength: 1}}
+        - {name: cluster_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Installed tool configuration.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/DataEnvelope'}
+                  - properties:
+                      data: {$ref: '#/components/schemas/ToolConfiguration'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/tools/{slug}/install:
     post:
       x-astronomer-auth: "bearer-or-session"
@@ -21775,12 +21913,19 @@ paths:
         - Clusters
       summary: Agent install manifest
       description: |
-        Returns a kubectl-applyable YAML manifest that installs the
-        Astronomer agent into the target cluster. Each call mints a
+        Returns a kubectl-applyable YAML manifest. The default `full` scope
+        bootstraps Flux and the Astronomer agent. The `agent` scope is the
+        safe repeat-apply artifact for an already adopted cluster and excludes
+        resources now owned by Flux controllers. Each call mints a
         fresh registration token bound to the cluster ID; tokens
-        expire 24h after issue. The manifest includes the agent's
+        expire 1h after issue. The manifest includes the agent's
         ServiceAccount + ClusterRole + Secret + Deployment + Service +
         NetworkPolicy + PodDisruptionBudget.
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          schema: {type: string, enum: [full, agent], default: full}
       responses:
         '200':
           description: YAML manifest
@@ -23471,7 +23616,7 @@ paths:
         - clusters
       security: []
       description: |
-        Unauthenticated. Consumed by `curl -sfL <server>/api/v1/register/<token>.yaml | kubectl apply --server-side --field-manager=astronomer-bootstrap -f -`. The `.yaml` suffix on the token is stripped server-side.
+        Unauthenticated. Consumed by `curl -sfL <server>/api/v1/register/<token>.yaml | kubectl apply --server-side --force-conflicts --field-manager=astronomer-bootstrap -f -`. The `.yaml` suffix on the token is stripped server-side.
       parameters:
         - name: token
           in: path
@@ -26514,12 +26659,17 @@ paths:
                 chart_version_id: {type: string, format: uuid}
                 namespace: {type: string}
                 values_override: {type: string, maxLength: 1048576}
+                operation: {type: string, enum: [install, upgrade], default: install}
       responses:
         '200':
           description: Side-effect-free trust, compatibility, and configuration preview.
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/CatalogInstallationPreview'}
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/CatalogInstallationPreview'}
         '400': {$ref: '#/components/responses/ErrorResponse'}
         '403': {$ref: '#/components/responses/ErrorResponse'}
         '404': {$ref: '#/components/responses/ErrorResponse'}
@@ -26738,14 +26888,18 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  chart:
-                    type: string
-                  version:
-                    type: string
-                  readme:
-                    type: string
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          chart:
+                            type: string
+                          version:
+                            type: string
+                          readme:
+                            type: string
         '400':
           description: Invalid chart ID.
           content:
@@ -26801,18 +26955,22 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  chart:
-                    type: string
-                  version:
-                    type: string
-                  default_values:
-                    type: string
-                    description: values.yaml as a raw string
-                  values_schema:
-                    type: object
-                    description: JSON schema (raw JSON object)
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          chart:
+                            type: string
+                          version:
+                            type: string
+                          default_values:
+                            type: string
+                            description: values.yaml as a raw string
+                          values_schema:
+                            type: object
+                            description: JSON schema (raw JSON object)
         '400':
           description: Invalid chart ID.
           content:
@@ -27213,6 +27371,12 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogUninstallRequest'
       responses:
         '202':
           description: Uninstall accepted (returns the catalog operation).

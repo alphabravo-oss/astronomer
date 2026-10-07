@@ -6,8 +6,8 @@ import (
 )
 
 func TestUserTableViewsMigration(t *testing.T) {
-	up := readMigration(t, "067_user_table_views.up.sql")
-	down := readMigration(t, "067_user_table_views.down.sql")
+	up := readMigration(t, "071_user_table_views.up.sql")
+	down := readMigration(t, "071_user_table_views.down.sql")
 	for _, want := range []string{
 		"user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE",
 		"UNIQUE (user_id, table_key, name)",

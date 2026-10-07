@@ -1,7 +1,4 @@
-import {
-  shouldRetryQuery,
-  shouldThrowQueryError,
-} from "@/lib/query-retry";
+import { shouldRetryQuery, shouldThrowQueryError } from "@/lib/query-retry";
 
 describe("shouldRetryQuery", () => {
   it.each([400, 401, 403, 404, 409, 422])(
@@ -11,7 +8,7 @@ describe("shouldRetryQuery", () => {
     },
   );
 
-  it.each([408, 429, 500, 502, 503])(
+  it.each([408, 429, 500, 502])(
     "retries transient HTTP %i responses within the budget",
     (status) => {
       expect(shouldRetryQuery(0, { response: { status } })).toBe(true);
@@ -20,6 +17,12 @@ describe("shouldRetryQuery", () => {
     },
   );
 
+  it("keeps retrying a 503 through a bounded reconnect window", () => {
+    expect(shouldRetryQuery(0, { status: 503 })).toBe(true);
+    expect(shouldRetryQuery(5, { response: { status: 503 } })).toBe(true);
+    expect(shouldRetryQuery(6, { status: 503 })).toBe(false);
+  });
+
   it("retries transport errors without an HTTP status within the budget", () => {
     expect(shouldRetryQuery(0, new Error("connection reset"))).toBe(true);
     expect(shouldRetryQuery(2, new Error("connection reset"))).toBe(false);
@@ -27,12 +30,16 @@ describe("shouldRetryQuery", () => {
 });
 
 describe("shouldThrowQueryError", () => {
-  it.each([500, 502, 503])(
+  it.each([500, 502, 504])(
     "routes HTTP %i through the error boundary",
     (status) => {
       expect(shouldThrowQueryError({ status })).toBe(true);
     },
   );
+
+  it("keeps a transient 503 available to the affected panel", () => {
+    expect(shouldThrowQueryError({ status: 503 })).toBe(false);
+  });
 
   it.each([400, 401, 403, 404, 409, 422])(
     "leaves HTTP %i available for page-specific states",

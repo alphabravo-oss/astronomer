@@ -498,6 +498,10 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 	if err := yaml.Unmarshal(body, &index); err != nil {
 		return 0, 0, fmt.Errorf("parse index yaml: %w", err)
 	}
+	pinnedVersions, err := catalog.ApplicationCatalogPinsByRepository(ctx, h.queries, repo.ID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("load application catalog pins: %w", err)
+	}
 	for chartName, versions := range index.Entries {
 		if chartName == "" || len(versions) == 0 {
 			continue
@@ -514,9 +518,7 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 		slices.SortStableFunc(versions, func(a, b helmIndexChartVer) int {
 			return catalog.CompareVersionsDesc(a.Version, b.Version)
 		})
-		if len(versions) > catalog.MaxIndexVersionsPerChart {
-			versions = versions[:catalog.MaxIndexVersionsPerChart]
-		}
+		versions = catalog.RetainRecentOrPinnedVersions(versions, func(version helmIndexChartVer) string { return version.Version }, pinnedVersions[chartName])
 		// Pick the first non-empty descriptive fields across all versions —
 		// some repos only set icon/home on the latest version.
 		first := versions[0]

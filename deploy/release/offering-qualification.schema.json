@@ -113,8 +113,34 @@
         },
         "reason": {"type": "string", "maxLength": 4000},
         "not_supported_contract": {"type": "string", "minLength": 1, "maxLength": 4000}
+		,"attempts": {"type": "integer", "minimum": 1}
+		,"started_at": {"type": "string", "format": "date-time"}
+		,"completed_at": {"type": "string", "format": "date-time"}
+		,"dimensions": {
+		  "type": "array",
+		  "items": {"$ref": "#/$defs/dimension_result"}
+		}
       }
     },
+	"dimension_result": {
+	  "type": "object",
+	  "additionalProperties": false,
+	  "required": ["name", "state", "reason", "observed_at"],
+	  "properties": {
+		"name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+		"state": {"type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "NOT_APPLICABLE"]},
+		"reason": {"type": "string", "minLength": 1, "maxLength": 4000},
+		"observed_at": {"type": "string", "format": "date-time"},
+		"http_status": {"type": "integer", "minimum": 100, "maximum": 599},
+		"operation_id": {"type": "string", "minLength": 1, "maxLength": 256},
+		"artifact_sha256": {"$ref": "#/$defs/sha256"},
+		"idempotency_key": {"type": "string", "minLength": 1, "maxLength": 256},
+		"target_cluster_id": {"type": "string", "minLength": 1, "maxLength": 256},
+		"desired_generation": {"type": "integer", "minimum": 1},
+		"observed_generation": {"type": "integer", "minimum": 1},
+		"sample_at": {"type": "string", "format": "date-time"}
+	  }
+	},
     "summary": {
       "type": "object",
       "additionalProperties": false,

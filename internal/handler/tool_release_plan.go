@@ -31,6 +31,9 @@ type toolRelease struct {
 }
 
 func buildToolReleasePlan(tool sqlc.ClusterTool, releaseName, valuesYAML string) ([]toolRelease, error) {
+	if tool.Slug == DexToolSlug {
+		return nil, errors.New("Dex is bundled with the Astronomer management chart; enable dex.enabled and use the Auth settings workflow")
+	}
 	charts, err := parseToolCharts(tool.Charts)
 	if err != nil {
 		return nil, fmt.Errorf("invalid tool charts: %w", err)

@@ -50,3 +50,26 @@ func TestInferSchema_EmptyIsNil(t *testing.T) {
 		t.Error("empty values should infer nil (no form)")
 	}
 }
+
+func TestMergeChartSchemasKeepsInferredCoverageAndUpstreamConstraints(t *testing.T) {
+	inferred := inferSchema(map[string]interface{}{
+		"loki": map[string]interface{}{
+			"storage":      map[string]interface{}{"type": "s3"},
+			"auth_enabled": true,
+		},
+	})
+	upstream := json.RawMessage(`{"type":"object","properties":{"loki":{"type":"object","properties":{"auth_enabled":{"type":"boolean","description":"Require tenant authentication"}}}}}`)
+	var merged map[string]any
+	if err := json.Unmarshal(mergeChartSchemas(inferred, upstream), &merged); err != nil {
+		t.Fatal(err)
+	}
+	loki := merged["properties"].(map[string]any)["loki"].(map[string]any)
+	properties := loki["properties"].(map[string]any)
+	if _, ok := properties["storage"]; !ok {
+		t.Fatal("partial upstream schema removed an inferred value")
+	}
+	auth := properties["auth_enabled"].(map[string]any)
+	if auth["description"] != "Require tenant authentication" {
+		t.Fatalf("upstream metadata was not retained: %v", auth)
+	}
+}

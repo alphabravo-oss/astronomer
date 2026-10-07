@@ -15,12 +15,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -95,6 +97,56 @@ func TestSystemManagerReconcilesOnlyFixedSuspendedObjects(t *testing.T) {
 		if action.GetNamespace() != DeliverySystemNamespace || (action.GetVerb() != "get" && action.GetVerb() != "patch") {
 			t.Fatalf("unexpected system action: %#v", action)
 		}
+	}
+}
+
+func TestSystemManagerCreatesSystemObjectsWhenEnrolledControllersMatch(t *testing.T) {
+	release := systemReleaseFixture()
+	manager, dynamicClient := systemManagerFixture(t, release)
+	ctx := context.Background()
+	for _, resource := range []struct {
+		gvr  schema.GroupVersionResource
+		name string
+	}{
+		{ociRepositoryGVKToResource(), systemObjectName},
+		{kustomizationGVKToResource(), systemObjectName},
+	} {
+		if err := dynamicClient.Resource(resource.gvr).Namespace(DeliverySystemNamespace).Delete(ctx, resource.name, metav1.DeleteOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	images, err := fluxdistribution.ControllerImages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := manager.client.(*kubernetesfake.Clientset)
+	for name, image := range images {
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: DeliverySystemNamespace},
+			Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "manager", Image: image.Reference + "@" + image.Digest}},
+			}}},
+		}
+		if _, err := client.AppsV1().Deployments(DeliverySystemNamespace).Create(ctx, deployment, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	complete, err := manager.Reconcile(ctx, release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !complete {
+		t.Fatal("matching enrolled controllers with suspended system objects should be complete")
+	}
+	patches := 0
+	for _, action := range dynamicClient.Actions() {
+		if action.GetVerb() == "patch" {
+			patches++
+		}
+	}
+	if patches != 2 {
+		t.Fatalf("system source and Kustomization patches = %d, want 2; actions=%#v", patches, dynamicClient.Actions())
 	}
 }
 

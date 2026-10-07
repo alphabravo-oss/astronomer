@@ -5,12 +5,17 @@ import type {
   DeliverySystemResource,
   DeliverySystemVolume,
 } from "@/lib/api/delivery-system";
+import {
+  evidenceHealth,
+  type ComponentFreshness,
+} from "@/lib/system-component-freshness";
 import { crDetailHref, crListHref } from "@/lib/k8s-paths";
 import { formatBytes } from "@/lib/utils";
 import { EntityCell, TimestampCell } from "@/components/tables/cells";
 
 export function systemVolumeColumns(
   clusterId: string,
+  freshness: ComponentFreshness,
 ): Column<DeliverySystemVolume>[] {
   return [
     {
@@ -45,8 +50,10 @@ export function systemVolumeColumns(
       key: "phase",
       header: "Phase",
       kind: "status",
-      accessor: (row) => <DeliveryPhaseBadge value={row.phase} />,
-      sortAccessor: (row) => row.phase,
+      accessor: (row) => (
+        <DeliveryPhaseBadge value={evidenceHealth(freshness, row.phase)} />
+      ),
+      sortAccessor: (row) => evidenceHealth(freshness, row.phase),
       filter: { label: "Phases" },
     },
     {
@@ -133,6 +140,7 @@ export function systemVolumeColumns(
 
 export function systemResourceColumns(
   clusterId: string,
+  freshness: ComponentFreshness,
 ): Column<DeliverySystemResource>[] {
   return [
     {
@@ -182,9 +190,10 @@ export function systemResourceColumns(
       key: "health",
       header: "Health",
       kind: "status",
-      accessor: (row) =>
-        row.health ? <DeliveryPhaseBadge value={row.health} /> : "Unknown",
-      sortAccessor: (row) => row.health || "unknown",
+      accessor: (row) => (
+        <DeliveryPhaseBadge value={evidenceHealth(freshness, row.health)} />
+      ),
+      sortAccessor: (row) => evidenceHealth(freshness, row.health),
       filter: { label: "Health" },
     },
     {

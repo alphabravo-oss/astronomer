@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -11,6 +13,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (h *ToolHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +57,7 @@ func (h *ToolHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ToolHandler) Preview(w http.ResponseWriter, r *http.Request) {
-	_, req, plan, _, err := h.resolveAction(r)
+	tool, req, plan, _, err := h.resolveAction(r)
 	if err != nil {
 		if errors.Is(err, errToolNotFound) {
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Tool not found")
@@ -62,13 +66,29 @@ func (h *ToolHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
 		return
 	}
+	clusterID, err := uuid.Parse(req.ClusterID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbRead) {
+		return
+	}
 	charts := make([]map[string]any, 0, len(plan))
 	for _, release := range plan {
 		charts = append(charts, map[string]any{"chart_name": release.ChartName, "chart_version": release.Version, "namespace": release.Namespace, "release_name": release.ReleaseName, "values_yaml": release.ValuesYAML})
 	}
+	allowedRelease := ""
+	if tool.Slug == "prometheus-node-exporter" {
+		if installed, lookupErr := h.findInstalledTool(r.Context(), clusterID, tool.Slug); lookupErr == nil {
+			allowedRelease = installed.ReleaseName
+		}
+	}
+	checks := h.toolPreflightChecks(r.Context(), tool.Slug, req.ClusterID, plan, allowedRelease)
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"charts": charts,
 		"preset": req.Preset,
+		"checks": checks,
 	})
 }
 
@@ -113,6 +133,10 @@ func (h *ToolHandler) Install(w http.ResponseWriter, r *http.Request) {
 	}
 	if msg, ok := h.checkToolScope(r.Context(), tool.Slug, clusterID); !ok {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.WrongClusterScope, msg)
+		return
+	}
+	if blocked := blockingToolPreflight(h.toolPreflightChecks(r.Context(), tool.Slug, req.ClusterID, plan, "")); blocked != "" {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
 		return
 	}
 	// Migration 067 — the values blob keeps its ${vault://...} markers in
@@ -173,6 +197,43 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.LookupError, "Failed to lookup installed tool")
 		return
 	}
+	// An omitted preset or values document means "preserve the installed
+	// configuration" on upgrade. This makes the public API safe for automation
+	// as well as the UI: an upgrade request can never erase prior advanced keys
+	// merely because its caller did not first read and replay them.
+	if req.Preset == "" || strings.TrimSpace(req.ValuesOverride) == "" {
+		rows, listErr := h.installedToolReleases(r, clusterID, tool.Slug)
+		if listErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to load installed tool configuration")
+			return
+		}
+		savedValues, savedPreset, _, combineErr := combineInstalledToolValues(tool, rows)
+		if combineErr != nil {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Installed tool configuration cannot be reconstructed")
+			return
+		}
+		if req.Preset == "" {
+			req.Preset = savedPreset
+		}
+		if strings.TrimSpace(req.ValuesOverride) == "" {
+			req.ValuesOverride = savedValues
+		}
+		var distributionYAML string
+		if cluster, lookupErr := h.queries.GetClusterByID(r.Context(), clusterID); lookupErr == nil {
+			distributionYAML = distributionInstallValues(tool.Slug, cluster.Distribution)
+		}
+		valuesYAML := mergeValueLayers(distributionYAML, presetValuesYAML(tool.Presets, req.Preset), req.ValuesOverride)
+		if validationErr := validateToolFormValues(tool.Slug, valuesYAML); validationErr != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, validationErr.Error())
+			return
+		}
+		plan, err = buildToolReleasePlan(tool, req.ReleaseName, valuesYAML)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
+			return
+		}
+	}
+	restoreToolActionRequestBody(r, req)
 	releaseName := existing.ReleaseName
 	if len(plan) == 1 {
 		if req.ReleaseName != "" && req.ReleaseName != releaseName {
@@ -181,6 +242,10 @@ func (h *ToolHandler) Upgrade(w http.ResponseWriter, r *http.Request) {
 		}
 		plan[0].ReleaseName = releaseName
 		plan[0].Namespace = existing.Namespace
+	}
+	if blocked := blockingToolPreflight(h.toolPreflightChecks(r.Context(), tool.Slug, req.ClusterID, plan, existing.ReleaseName)); blocked != "" {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
+		return
 	}
 	// Migration 067 — the values blob keeps its ${vault://...} markers in
 	// both the payload and the installed_charts row; the reconciler
@@ -231,7 +296,11 @@ func (h *ToolHandler) queueToolReversal(w http.ResponseWriter, r *http.Request, 
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, verb) {
 		return
 	}
-	restoreToolActionRequestBody(r, toolActionRequest{ClusterID: req.ClusterID})
+	if operation == "uninstall" && slug == "longhorn" && !req.ConfirmDataDeletion {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Longhorn uninstall requires explicit confirmation that persistent data may be deleted")
+		return
+	}
+	restoreToolActionRequestBody(r, req)
 	// Migration 057: maintenance window gate.
 	if blocked := h.checkToolMaintenanceWindow(w, r, clusterID, "tool."+operation); blocked {
 		return
@@ -239,7 +308,7 @@ func (h *ToolHandler) queueToolReversal(w http.ResponseWriter, r *http.Request, 
 	// The durable plan also owns releases created just before a process crash,
 	// even when no installed_charts row was committed. Execution verifies the
 	// exact Helm operation marker before removing such a release.
-	previous, err := h.queries.GetLatestToolOperationForTarget(r.Context(), sqlc.GetLatestToolOperationForTargetParams{TargetType: "tool_installation", TargetKey: operationTargetKey(clusterID, slug)})
+	previous, err := h.latestToolOwnershipOperation(r.Context(), clusterID, slug, operation)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Installed tool has no durable release plan")
 		return
@@ -271,17 +340,63 @@ func (h *ToolHandler) queueToolReversal(w http.ResponseWriter, r *http.Request, 
 			}
 		}
 	}
+	if operation == "uninstall" {
+		env.ConfirmDataDeletion = req.ConfirmDataDeletion
+		env.ConfirmFailedReleaseCleanup = req.ConfirmFailedReleaseCleanup &&
+			previous.Status == "failed" &&
+			(previous.OperationType == "install" || previous.OperationType == "upgrade")
+		if env.ConfirmFailedReleaseCleanup {
+			var source toolOperationEnvelope
+			if err := json.Unmarshal(previous.Payload, &source); err != nil || len(source.Releases) != len(env.Releases) {
+				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Invalid source release plan")
+				return
+			}
+			for i := range env.Releases {
+				env.Releases[i].ExpectedRevision = source.Releases[i].ExpectedRevision
+				env.Releases[i].OperationMarker = source.Releases[i].OperationMarker
+			}
+		}
+	}
 	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
 	op, err := h.createAuditedToolOperation(r, "tool_installation", operationTargetKey(clusterID, slug), operation, env, currentUserUUID(r), mutationAuditEvent{action: "tool." + operation, resourceType: "tool", resourceID: tool.ID.String(), resourceName: slug, status: http.StatusAccepted, detail: map[string]any{
-		"cluster_id": req.ClusterID, "releases": toolPlanAudit(env), "source_operation_id": previous.ID.String(),
+		"cluster_id": req.ClusterID, "releases": toolPlanAudit(env), "source_operation_id": previous.ID.String(), "confirm_data_deletion": req.ConfirmDataDeletion, "confirm_failed_release_cleanup": env.ConfirmFailedReleaseCleanup,
 	}})
 	if err != nil {
 		respondToolMutationError(w, r, err, apierror.EnqueueError, "Failed to enqueue tool "+operation)
 		return
 	}
 	RespondAcceptedOperation(w, "/api/v1/tools/operations/"+op.ID.String()+"/", toolOperationResponse(op))
+}
+
+func (h *ToolHandler) latestToolOwnershipOperation(ctx context.Context, clusterID uuid.UUID, slug, reversal string) (sqlc.ToolOperation, error) {
+	operations, err := h.queries.ListToolOperations(ctx, sqlc.ListToolOperationsParams{
+		Limit:      100,
+		TargetType: pgtype.Text{String: "tool_installation", Valid: true},
+		TargetKey:  pgtype.Text{String: operationTargetKey(clusterID, slug), Valid: true},
+	})
+	if err != nil {
+		return sqlc.ToolOperation{}, err
+	}
+	if len(operations) == 0 {
+		return sqlc.ToolOperation{}, pgx.ErrNoRows
+	}
+	if operations[0].Status == "running" || operations[0].Status == "pending" {
+		return operations[0], nil
+	}
+	for _, operation := range operations {
+		if operation.OperationType == "uninstall" && operation.Status == "completed" {
+			return sqlc.ToolOperation{}, pgx.ErrNoRows
+		}
+		if operation.OperationType == "install" || operation.OperationType == "upgrade" {
+			return operation, nil
+		}
+		if reversal == "uninstall" && operation.OperationType == "adopt" && operation.Status == "completed" {
+			return operation, nil
+		}
+	}
+	return sqlc.ToolOperation{}, pgx.ErrNoRows
 }
 
 func (h *ToolHandler) Adopt(w http.ResponseWriter, r *http.Request) {

@@ -11,6 +11,23 @@ the chart.
 {{- if .Values.metrics.dashboards.enabled }}
 {{- range $path, $bytes := .Files.Glob "dashboards/*.json" }}
 {{- $name := trimSuffix ".json" (base $path) }}
+{{- $content := $.Files.Get $path }}
+{{- if eq $name "management-plane" }}
+{{- $dashboard := mustFromJson $content }}
+{{- range $variable := $dashboard.templating.list }}
+{{- $value := "" }}
+{{- if eq $variable.name "metrics_namespace" }}
+{{- $value = $.Release.Namespace }}
+{{- else if eq $variable.name "metrics_fullname" }}
+{{- $value = include "astronomer.fullname" $ }}
+{{- end }}
+{{- if $value }}
+{{- $_ := set $variable "query" $value }}
+{{- $_ := set $variable "current" (dict "text" $value "value" $value) }}
+{{- end }}
+{{- end }}
+{{- $content = mustToPrettyJson $dashboard }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -28,6 +45,6 @@ metadata:
     {{- end }}
 data:
   {{ $name }}.json: |-
-{{ $.Files.Get $path | indent 4 }}
+{{ $content | indent 4 }}
 {{- end }}
 {{- end }}

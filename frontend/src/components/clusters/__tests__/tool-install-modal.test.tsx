@@ -23,6 +23,7 @@ vi.mock("@tanstack/react-query", () => ({
           valuesYaml: "replicaCount: 1\nautoscaleEnabled: false\n",
         },
       ],
+      checks: [],
     },
   }),
 }));
@@ -71,6 +72,7 @@ const tool: ClusterTool = {
         type: "number",
         group: "Control plane",
         default: "2",
+        showWhen: { path: "istiod.autoscaleEnabled", equals: "false" },
       },
       {
         path: "istiod.autoscaleEnabled",
@@ -78,6 +80,12 @@ const tool: ClusterTool = {
         type: "boolean",
         group: "Control plane",
         default: "true",
+      },
+      {
+        path: "istiod.telemetry.accessLogFormat",
+        label: "Access log format",
+        type: "multiline",
+        group: "Telemetry",
       },
     ],
   },
@@ -128,5 +136,131 @@ describe("ToolInstallModal release plans", () => {
     expect(yaml.load(confirm.mock.calls[0][0])).toEqual({
       istiod: { replicaCount: 3 },
     });
+  });
+
+  it("round-trips advanced YAML through the settings form without losing it", () => {
+    const confirm = vi.fn();
+    render(
+      <ToolInstallModal
+        tool={tool}
+        clusterId="cluster"
+        preset="development"
+        onConfirm={confirm}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Values override (YAML)" }),
+      {
+        target: {
+          value:
+            "istiod:\n  replicaCount: 4\n  advancedSetting:\n    enabled: true\n",
+        },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("spinbutton", { name: "Replicas" })).toHaveValue(4);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Replicas" }), {
+      target: { value: "5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Install" }));
+    expect(yaml.load(confirm.mock.calls[0][0])).toEqual({
+      istiod: {
+        replicaCount: 5,
+        advancedSetting: { enabled: true },
+      },
+    });
+  });
+
+  it("blocks invalid YAML from review and install", () => {
+    const confirm = vi.fn();
+    render(
+      <ToolInstallModal
+        tool={tool}
+        clusterId="cluster"
+        preset="development"
+        onConfirm={confirm}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Values override (YAML)" }),
+      {
+        target: { value: "istiod: [" },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("valid YAML");
+    expect(screen.getByRole("button", { name: "Install" })).toBeDisabled();
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("shows dependent settings only when their controlling value matches", () => {
+    render(
+      <ToolInstallModal
+        tool={tool}
+        clusterId="cluster"
+        preset="development"
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("spinbutton", { name: "Replicas" })).toBeVisible();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Autoscale" }));
+    expect(
+      screen.queryByRole("spinbutton", { name: "Replicas" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("edits multiline chart configuration without flattening it", () => {
+    const confirm = vi.fn();
+    render(
+      <ToolInstallModal
+        tool={tool}
+        clusterId="cluster"
+        preset="development"
+        onConfirm={confirm}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Access log format" }),
+      { target: { value: "line one\nline two" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Install" }));
+    expect(yaml.load(confirm.mock.calls[0][0])).toEqual({
+      istiod: { telemetry: { accessLogFormat: "line one\nline two" } },
+    });
+  });
+
+  it("hydrates saved effective values for a configure operation", () => {
+    const confirm = vi.fn();
+    render(
+      <ToolInstallModal
+        tool={tool}
+        clusterId="cluster"
+        preset="default"
+        action="upgrade"
+        initialPreset="development"
+        initialValuesYaml={
+          "istiod:\n  replicaCount: 4\n  autoscaleEnabled: false\n  advancedSetting:\n    enabled: true\n"
+        }
+        onConfirm={confirm}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("spinbutton", { name: "Replicas" })).toHaveValue(4);
+    expect(screen.getAllByText("Saved").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    expect(yaml.load(confirm.mock.calls[0][0])).toEqual({
+      istiod: {
+        replicaCount: 4,
+        autoscaleEnabled: false,
+        advancedSetting: { enabled: true },
+      },
+    });
+    expect(confirm.mock.calls[0][1]).toBe("development");
   });
 });

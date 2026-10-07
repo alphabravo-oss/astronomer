@@ -151,12 +151,13 @@ func (e *Executor) Prune(ctx context.Context, identities []ObjectIdentity) error
 }
 
 // BeginDeletion advances a tombstone without racing Flux finalizers. The
-// reconciler is suspended and foreground-deleted first; sources, credentials,
-// and RBAC are removed only after it is actually gone. The returned boolean is
-// true only when every recorded object is absent.
+// reconciler is foreground-deleted while it is still active so Flux can run
+// its uninstall/prune finalizer. Sources, credentials, and RBAC are removed
+// only after the reconciler is actually gone. The returned boolean is true
+// only when every recorded object is absent.
 func (e *Executor) BeginDeletion(ctx context.Context, assignment protocol.DeliveryAssignmentV2, tombstone protocol.DeliveryDeletionV2, materialization Materialization, recorded []ObjectIdentity) (bool, error) {
-	if tombstone.DeploymentID != assignment.DeploymentID || tombstone.Generation != assignment.Generation || tombstone.SpecDigest != assignment.SpecDigest {
-		return false, errors.New("deletion tombstone does not match the accepted assignment generation and digest")
+	if err := validateDeletionBoundary(assignment, tombstone); err != nil {
+		return false, err
 	}
 	if tombstone.Orphan {
 		for _, identity := range recorded {
@@ -185,7 +186,7 @@ func (e *Executor) BeginDeletion(ctx context.Context, assignment protocol.Delive
 		if identity.Kind != "Kustomization" && identity.Kind != "HelmRelease" {
 			continue
 		}
-		present, err := e.existsWithFence(ctx, identity, tombstone)
+		present, err := e.existsWithFence(ctx, identity, assignment)
 		if err != nil {
 			return false, err
 		}
@@ -193,9 +194,6 @@ func (e *Executor) BeginDeletion(ctx context.Context, assignment protocol.Delive
 			continue
 		}
 		reconcilerPresent = true
-		if err := e.suspend(ctx, assignment, materialization, identity); err != nil {
-			return false, fmt.Errorf("suspend %s: %w", identity, err)
-		}
 		if err := e.delete(ctx, identity, metav1.DeletePropagationForeground); err != nil {
 			return false, fmt.Errorf("delete reconciler %s: %w", identity, err)
 		}
@@ -209,7 +207,7 @@ func (e *Executor) BeginDeletion(ctx context.Context, assignment protocol.Delive
 		if identity.Kind == "Namespace" || identity.Kind == "Kustomization" || identity.Kind == "HelmRelease" {
 			continue
 		}
-		present, err := e.existsWithFence(ctx, identity, tombstone)
+		present, err := e.existsWithFence(ctx, identity, assignment)
 		if err != nil {
 			return false, err
 		}
@@ -242,7 +240,7 @@ func (e *Executor) suspend(ctx context.Context, assignment protocol.DeliveryAssi
 	return err
 }
 
-func (e *Executor) existsWithFence(ctx context.Context, identity ObjectIdentity, tombstone protocol.DeliveryDeletionV2) (bool, error) {
+func (e *Executor) existsWithFence(ctx context.Context, identity ObjectIdentity, assignment protocol.DeliveryAssignmentV2) (bool, error) {
 	resource, namespaced, err := resourceForIdentity(identity)
 	if err != nil {
 		return false, err
@@ -255,8 +253,8 @@ func (e *Executor) existsWithFence(ctx context.Context, identity ObjectIdentity,
 		return false, fmt.Errorf("read deletion candidate %s: %w", identity, err)
 	}
 	labels, annotations := object.GetLabels(), object.GetAnnotations()
-	if labels[ManagedByLabel] != ManagedByValue || labels[DeploymentIDLabel] != tombstone.DeploymentID ||
-		annotations[SpecDigestAnnotation] != tombstone.SpecDigest || annotations[GenerationAnnotation] != strconv.FormatInt(tombstone.Generation, 10) {
+	if labels[ManagedByLabel] != ManagedByValue || labels[DeploymentIDLabel] != assignment.DeploymentID ||
+		annotations[SpecDigestAnnotation] != assignment.SpecDigest || annotations[GenerationAnnotation] != strconv.FormatInt(assignment.Generation, 10) {
 		return false, fmt.Errorf("refusing deletion because object fence changed: %s", identity)
 	}
 	return true, nil

@@ -179,17 +179,44 @@ export async function getChartDefaultValues(
   chartId: string,
   version?: string,
   signal?: AbortSignal,
-): Promise<{ chart: string; version: string; defaultValues: string }> {
+): Promise<{
+  chart: string;
+  version: string;
+  defaultValues: string;
+  valuesSchema: Record<string, unknown>;
+}> {
   const wire = await generated.getCatalogChartsByIdValues({
     path: { id: chartId },
     query: { project_id: projectId, version },
     signal,
   });
+  const values = wire.data;
   return {
-    chart: wire.chart ?? "",
-    version: wire.version ?? "",
-    defaultValues: wire.default_values ?? "",
+    chart: values?.chart ?? "",
+    version: values?.version ?? "",
+    defaultValues: values?.default_values ?? "",
+    valuesSchema: values?.values_schema ?? {},
   };
+}
+
+export async function previewCatalogApplication(input: {
+  clusterId: string;
+  chartVersionId: string;
+  namespace: string;
+  valuesOverride: string;
+  operation: "install" | "upgrade";
+}): Promise<OpenAPIComponents["schemas"]["CatalogInstallationPreview"]> {
+  const wire = await generated.postCatalogApplicationsPreview({
+    body: {
+      cluster_id: input.clusterId,
+      chart_version_id: input.chartVersionId,
+      namespace: input.namespace,
+      values_override: input.valuesOverride || undefined,
+      operation: input.operation,
+    },
+  });
+  if (!wire.data) throw new Error("Catalog preview response omitted data");
+  return wire.data;
 }
 
 // Kick off a fresh install on this cluster. Returns the created

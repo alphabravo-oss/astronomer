@@ -1,19 +1,31 @@
-import { useId, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import * as yaml from "js-yaml";
-import { previewToolInstall } from "@/lib/api/tools";
-import { queryKeys } from "@/lib/query-keys";
-import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { FileCode2, SlidersHorizontal } from "lucide-react";
+import { ModalShell } from "@/components/ui/modal-shell";
+import { previewToolInstall } from "@/lib/api/tools";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
-import type { ClusterTool, ToolFormField } from "@/types";
+import { queryKeys } from "@/lib/query-keys";
 import { toastWarning } from "@/lib/toast";
+import type { ClusterTool, ToolFormField } from "@/types";
+import { useQuery } from "@tanstack/react-query";
+import * as yaml from "js-yaml";
+import { useMemo, useState } from "react";
+import {
+  EditorMode,
+  PresetSelector,
+  ToolInstallFooter,
+  ToolYamlEditor,
+} from "./tool-install-controls";
+import {
+  coerce,
+  groupFields,
+  parseOverride,
+  withPath,
+  withoutPath,
+} from "./tool-install-values";
+import { ToolSettingsEditor } from "./tool-settings-editor";
 import { previewToolFieldValues } from "./tool-values";
-import { BareButton } from "@/components/form/bare-button";
+import { ToolValuesReview } from "./tool-values-review";
+import { useToolInstallPreview } from "./use-tool-install-preview";
 
 interface ToolInstallModalProps {
   tool: ClusterTool;
@@ -23,70 +35,43 @@ interface ToolInstallModalProps {
   onClose: () => void;
   installing?: boolean;
   confirmDecision?: PermissionDecision;
+  action?: "install" | "upgrade";
+  initialValuesYaml?: string;
+  initialPreset?: string;
+  loadingInitialValues?: boolean;
+  initialValuesError?: Error | null;
 }
 
 const EMPTY_TOOL_FIELDS: ToolFormField[] = [];
 
-// setPath writes value into a nested object at a dot-path, creating intermediate
-// objects as needed: setPath({}, "a.b.c", 1) => { a: { b: { c: 1 } } }.
-function setPath(root: Record<string, unknown>, path: string, value: unknown) {
-  const parts = path.split(".");
-  let node = root;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const k = parts[i];
-    if (typeof node[k] !== "object" || node[k] === null) node[k] = {};
-    node = node[k] as Record<string, unknown>;
+export function ToolInstallModal(props: ToolInstallModalProps) {
+  if (props.action === "upgrade" && props.initialValuesYaml === undefined) {
+    return (
+      <ModalShell
+        title={`Configure ${props.tool.name}`}
+        onClose={props.onClose}
+        size="lg"
+        footer={<ActionButton onClick={props.onClose}>Close</ActionButton>}
+      >
+        <p
+          role={props.initialValuesError ? "alert" : "status"}
+          className={
+            props.initialValuesError
+              ? "text-sm text-status-error"
+              : "text-sm text-muted-foreground"
+          }
+        >
+          {props.initialValuesError
+            ? `Saved configuration unavailable: ${props.initialValuesError.message}`
+            : "Loading the saved configuration…"}
+        </p>
+      </ModalShell>
+    );
   }
-  node[parts[parts.length - 1]] = value;
+  return <ToolInstallModalEditor {...props} />;
 }
 
-function coerce(field: ToolFormField, raw: string): unknown {
-  if (field.type === "number") {
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : raw;
-  }
-  if (field.type === "boolean") return raw === "true";
-  return raw;
-}
-
-// Build a values-override object from the form field values, including every
-// field with a non-empty value (their real chart paths, so Helm accepts them).
-function buildOverride(
-  fields: ToolFormField[],
-  values: Record<string, string>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const f of fields) {
-    const raw = values[f.path];
-    if (raw === undefined || raw === "") continue;
-    setPath(out, f.path, coerce(f, raw));
-    if (
-      f.type === "storage" &&
-      f.storageClassPath &&
-      values[f.storageClassPath]
-    ) {
-      setPath(out, f.storageClassPath, values[f.storageClassPath]);
-    }
-  }
-  return out;
-}
-
-function groupFields(
-  fields: ToolFormField[],
-): Array<[string, ToolFormField[]]> {
-  const order = ["Scaling", "Storage", "Resources", "Networking", "General"];
-  const byGroup = new Map<string, ToolFormField[]>();
-  for (const f of fields) {
-    const g = f.group || "General";
-    if (!byGroup.has(g)) byGroup.set(g, []);
-    byGroup.get(g)!.push(f);
-  }
-  return Array.from(byGroup.entries()).sort(
-    (a, b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99),
-  );
-}
-
-export function ToolInstallModal({
+function ToolInstallModalEditor({
   tool,
   clusterId,
   preset,
@@ -94,19 +79,21 @@ export function ToolInstallModal({
   onClose,
   installing,
   confirmDecision,
+  action = "install",
+  initialValuesYaml,
+  initialPreset,
+  loadingInitialValues,
+  initialValuesError,
 }: ToolInstallModalProps) {
+  const isUpgrade = action === "upgrade";
   const fields = tool.formSchema?.fields ?? EMPTY_TOOL_FIELDS;
   const hasForm = fields.length > 0;
-  const [mode, setMode] = useState<"form" | "yaml">(hasForm ? "form" : "yaml");
-  // The preset is an install-time choice, so it lives here rather than on the
-  // card: on the card it rendered next to every tool (installed ones included),
-  // reading as a per-tool environment switch instead of "which chart values to
-  // install with". `preset` seeds it from the cluster's environment. The chart
-  // preview below keys on this, so switching presets re-previews live.
-  const presetNames = Object.keys(tool.presets);
+  const [mode, setMode] = useState<EditorMode>(hasForm ? "form" : "yaml");
+  // Presets belong to the install editor; changing one refreshes its preview.
+  const presetNames = useMemo(() => Object.keys(tool.presets), [tool.presets]);
   const [selectedPreset, setSelectedPreset] = useState(() =>
-    presetNames.includes(preset)
-      ? preset
+    presetNames.includes(initialPreset ?? preset)
+      ? (initialPreset ?? preset)
       : presetNames.includes("default")
         ? "default"
         : (presetNames[0] ?? ""),
@@ -114,17 +101,33 @@ export function ToolInstallModal({
 
   // Only operator edits override the selected preset. Schema display defaults
   // must never silently replace development/production sizing.
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [yamlText, setYamlText] = useState("");
+  const [overrideValues, setOverrideValues] = useState<Record<string, unknown>>(
+    () => parseOverride(initialValuesYaml ?? "") ?? {},
+  );
+  const [yamlText, setYamlText] = useState(initialValuesYaml ?? "");
+  const [yamlError, setYamlError] = useState<string | null>(() =>
+    initialValuesYaml !== undefined && parseOverride(initialValuesYaml) == null
+      ? "The saved tool configuration is not valid YAML."
+      : null,
+  );
+  const [editedPaths, setEditedPaths] = useState<Set<string>>(() => new Set());
 
   // Chart metadata (name/version/namespace) for the header.
   const { data: preview, isLoading } = useQuery({
-    queryKey: queryKeys.tools.preview(tool.slug, clusterId, selectedPreset),
+    queryKey: queryKeys.tools.preview(
+      tool.slug,
+      clusterId,
+      selectedPreset,
+      isUpgrade ? (initialValuesYaml ?? "") : "",
+    ),
     queryFn: () =>
       previewToolInstall(tool.slug, {
         cluster_id: clusterId,
         preset: selectedPreset,
+        values_override:
+          isUpgrade && initialValuesYaml ? initialValuesYaml : undefined,
       }),
+    enabled: !isUpgrade || initialValuesYaml !== undefined,
   });
   const charts = preview?.charts ?? [];
   const presetValues = useMemo(
@@ -134,11 +137,54 @@ export function ToolInstallModal({
 
   const groups = useMemo(() => groupFields(fields), [fields]);
 
+  const overrideYaml = useMemo(
+    () =>
+      Object.keys(overrideValues).length
+        ? yaml.dump(overrideValues, { lineWidth: -1, noRefs: true })
+        : "",
+    [overrideValues],
+  );
+
+  const effectivePreview = useToolInstallPreview(
+    tool.slug,
+    clusterId,
+    selectedPreset,
+    overrideYaml,
+    mode === "review" &&
+      !yamlError &&
+      (!isUpgrade || initialValuesYaml !== undefined),
+  );
+
+  const preflightChecks =
+    effectivePreview.data?.checks ?? preview?.checks ?? [];
+  const blockingCheck = preflightChecks.find(
+    (check) => check.status === "block",
+  );
+
   const switchToYaml = () => {
-    // Regenerate the YAML from the current form values so the two stay in sync.
-    const override = buildOverride(fields, values);
-    setYamlText(Object.keys(override).length ? yaml.dump(override) : "");
+    setYamlText(overrideYaml);
+    setYamlError(null);
     setMode("yaml");
+  };
+
+  const applyYaml = (): boolean => {
+    const parsed = parseOverride(yamlText);
+    if (parsed == null) {
+      setYamlError("Values override must be valid YAML containing an object.");
+      return false;
+    }
+    setOverrideValues(parsed);
+    setYamlError(null);
+    return true;
+  };
+
+  const switchMode = (next: EditorMode) => {
+    if (mode === "yaml" && !applyYaml()) return;
+    if (next === "yaml") {
+      switchToYaml();
+      return;
+    }
+    setMode(next);
   };
 
   const confirmBlockedReason =
@@ -153,17 +199,22 @@ export function ToolInstallModal({
     }
     let override: string | undefined;
     if (mode === "yaml") {
+      if (!applyYaml()) return;
       override = yamlText.trim() || undefined;
     } else {
-      const obj = buildOverride(fields, values);
-      override = Object.keys(obj).length ? yaml.dump(obj) : undefined;
+      override = overrideYaml || undefined;
     }
     onConfirm(override, selectedPreset);
   };
 
   return (
     <ModalShell
-      title={`Install ${tool.name}`}
+      title={`${isUpgrade ? "Configure" : "Install"} ${tool.name}`}
+      subtitle={
+        isUpgrade
+          ? "Review saved values, change common settings or edit the complete YAML, then preview the exact release plan."
+          : "Choose a preset, adjust common settings, and review the exact release plan before installation."
+      }
       onClose={onClose}
       size="lg"
       panelClassName="max-w-2xl max-h-[88vh] bg-popover flex flex-col overflow-hidden"
@@ -185,216 +236,78 @@ export function ToolInstallModal({
         ) : undefined
       }
       footer={
-        <div className="flex items-center justify-between gap-2">
-          {hasForm ? (
-            <BareButton
-              onClick={() =>
-                mode === "form" ? switchToYaml() : setMode("form")
-              }
-              className="inline-flex items-center gap-1.5 h-(--control-h) px-3 rounded-lg border border-border text-xs font-medium
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              {mode === "form" ? (
-                <FileCode2 className="h-3.5 w-3.5" />
-              ) : (
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-              )}
-              {mode === "form" ? "Edit YAML" : "Back to form"}
-            </BareButton>
-          ) : (
-            <span />
-          )}
-          <div className="flex items-center gap-2">
-            <ActionButton onClick={onClose}>Cancel</ActionButton>
-            <ActionButton
-              intent="primary"
-              onClick={handleConfirm}
-              disabled={installing || isLoading || !!confirmBlockedReason}
-              disabledReason={confirmBlockedReason}
-              loading={installing}
-            >
-              Install
-            </ActionButton>
-          </div>
-        </div>
+        <ToolInstallFooter
+          hasForm={hasForm}
+          mode={mode}
+          onModeChange={switchMode}
+          onClose={onClose}
+          onConfirm={handleConfirm}
+          installing={installing}
+          action={action}
+          disabled={
+            isLoading ||
+            !!loadingInitialValues ||
+            !!initialValuesError ||
+            !!confirmBlockedReason ||
+            !!yamlError ||
+            !!blockingCheck
+          }
+          disabledReason={
+            confirmBlockedReason ??
+            initialValuesError?.message ??
+            blockingCheck?.message
+          }
+        />
       }
     >
-      <div className="mb-5 space-y-1.5">
-        <label
-          htmlFor="tool-preset"
-          className="text-sm font-medium text-foreground"
-        >
-          Preset
-        </label>
-        <Select
-          id="tool-preset"
-          value={selectedPreset}
-          onChange={(e) => setSelectedPreset(e.target.value)}
-        >
-          {(presetNames.length ? presetNames : [""]).map((name) => (
-            <option key={name} value={name}>
-              {name
-                ? name.charAt(0).toUpperCase() + name.slice(1)
-                : "Chart defaults"}
-            </option>
-          ))}
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          Sizing and replica defaults for this install. Defaults to the
-          cluster&apos;s environment.
-        </p>
-      </div>
+      <PresetSelector
+        names={presetNames}
+        value={selectedPreset}
+        onChange={setSelectedPreset}
+        isUpgrade={isUpgrade}
+      />
 
       {mode === "form" ? (
-        <div className="space-y-(--gap-section)">
-          <p className="text-xs text-muted-foreground">
-            Configure the common settings below, or switch to{" "}
-            <span className="font-medium">Edit YAML</span> for full control.
-            Anything you leave at its default is taken from the chart.
-          </p>
-          {groups.map(([group, groupFieldsList]) => (
-            <section key={group} className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {group}
-              </h3>
-              <div className="space-y-3">
-                {groupFieldsList.map((f) => (
-                  <FormFieldRow
-                    key={f.path}
-                    field={f}
-                    value={
-                      values[f.path] ?? presetValues[f.path] ?? f.default ?? ""
-                    }
-                    classValue={
-                      f.storageClassPath
-                        ? (values[f.storageClassPath] ?? "")
-                        : ""
-                    }
-                    onChange={(v) =>
-                      setValues((prev) => ({ ...prev, [f.path]: v }))
-                    }
-                    onClassChange={(v) =>
-                      f.storageClassPath &&
-                      setValues((prev) => ({
-                        ...prev,
-                        [f.storageClassPath as string]: v,
-                      }))
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
+        <ToolSettingsEditor
+          groups={groups}
+          overrides={overrideValues}
+          presetValues={presetValues}
+          editedPaths={editedPaths}
+          isUpgrade={isUpgrade}
+          onChange={(field, value) => {
+            setEditedPaths((previous) => new Set(previous).add(field.path));
+            setOverrideValues((previous) =>
+              withPath(previous, field.path, coerce(field, value)),
+            );
+          }}
+          onReset={(field) => {
+            setEditedPaths((previous) => new Set(previous).add(field.path));
+            setOverrideValues((previous) => withoutPath(previous, field.path));
+          }}
+          onStorageClassChange={(path, value) =>
+            setOverrideValues((previous) => withPath(previous, path, value))
+          }
+        />
+      ) : mode === "yaml" ? (
+        <ToolYamlEditor
+          value={yamlText}
+          error={yamlError}
+          onChange={(value) => {
+            setYamlText(value);
+            setYamlError(null);
+          }}
+          onBlur={applyYaml}
+        />
       ) : (
-        <div className="space-y-1.5">
-          <label
-            className="text-sm font-medium text-foreground"
-            htmlFor="field-a5c99297-243"
-          >
-            Values override (YAML)
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Merged on top of the chart defaults and the selected preset.
-          </p>
-          <textarea
-            id="field-a5c99297-243"
-            value={yamlText}
-            onChange={(e) => setYamlText(e.target.value)}
-            rows={18}
-            placeholder={
-              "# e.g.\nreplicas: 2\nresources:\n  requests:\n    cpu: 100m"
-            }
-            className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
-              placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring resize-none"
-          />
-        </div>
-      )}
-    </ModalShell>
-  );
-}
-
-function FormFieldRow({
-  field,
-  value,
-  classValue,
-  onChange,
-  onClassChange,
-}: {
-  field: ToolFormField;
-  value: string;
-  classValue: string;
-  onChange: (v: string) => void;
-  onClassChange: (v: string) => void;
-}) {
-  const inputId = useId();
-  return (
-    <div className="grid sm:grid-cols-[minmax(0,1fr)_220px] items-center gap-3">
-      <div>
-        <label htmlFor={inputId} className="text-sm text-foreground">
-          {field.label}
-        </label>
-        {field.help && (
-          <p className="text-xs text-muted-foreground mt-0.5">{field.help}</p>
-        )}
-        <p className="text-10 text-muted-foreground/70 font-mono mt-0.5">
-          {field.path}
-        </p>
-      </div>
-      {field.type === "boolean" ? (
-        <label className="inline-flex items-center gap-2 justify-self-end cursor-pointer">
-          <input
-            id={inputId}
-            aria-label={field.label}
-            type="checkbox"
-            checked={value === "true"}
-            onChange={(e) => onChange(e.target.checked ? "true" : "false")}
-            className="h-4 w-4 rounded-sm border-border"
-          />
-          <span className="text-xs text-muted-foreground">
-            {value === "true" ? "Enabled" : "Disabled"}
-          </span>
-        </label>
-      ) : field.type === "select" ? (
-        <Select
-          id={inputId}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-8"
-        >
-          {(field.options ?? []).map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </Select>
-      ) : field.type === "storage" ? (
-        <div className="flex gap-2">
-          <Input
-            id={inputId}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={field.placeholder || "10Gi"}
-            className="h-8 w-24"
-          />
-          <Input
-            aria-label={`${field.label} storage class`}
-            value={classValue}
-            onChange={(e) => onClassChange(e.target.value)}
-            placeholder="storageClass"
-            className="h-8 flex-1"
-          />
-        </div>
-      ) : (
-        <Input
-          id={inputId}
-          type={field.type === "number" ? "number" : "text"}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={field.placeholder}
-          className="h-8"
+        <ToolValuesReview
+          baseline={charts}
+          effective={effectivePreview.data?.charts ?? []}
+          loading={effectivePreview.isLoading}
+          error={effectivePreview.error}
+          checks={preflightChecks}
+          isUpgrade={isUpgrade}
         />
       )}
-    </div>
+    </ModalShell>
   );
 }

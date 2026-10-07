@@ -13,6 +13,7 @@ import {
 } from "@/lib/hooks/clusters";
 import { useAnomalyBaselines } from "@/lib/hooks/alerting";
 import { type ServiceMeshKind } from "@/lib/api/cluster-service-mesh";
+import { ActionButton } from "@/components/ui/action-button";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { QueryStates } from "@/components/ui/query-states";
@@ -25,6 +26,7 @@ import {
   capitalize,
 } from "@/lib/utils";
 import {
+  RotateCcw,
   Activity,
   AlertTriangle,
   CheckCircle2,
@@ -74,12 +76,30 @@ export function isNoisyCapabilityCondition(c: ClusterCondition): boolean {
   return CAPABILITY_CONDITIONS.has(c.type) && c.status !== "True";
 }
 
+export function isRedundantHealthyConnectivityCondition(
+  condition: ClusterCondition,
+  conditions: ClusterCondition[],
+): boolean {
+  return (
+    condition.type === "AgentReachable" &&
+    condition.status === "True" &&
+    conditions.some(
+      (candidate) =>
+        candidate.type === "Connected" && candidate.status === "True",
+    )
+  );
+}
+
 export function ClusterConditionsBar({
   conditions,
 }: {
   conditions: ClusterCondition[];
 }) {
-  const visible = conditions.filter((c) => !isNoisyCapabilityCondition(c));
+  const visible = conditions.filter(
+    (c) =>
+      !isNoisyCapabilityCondition(c) &&
+      !isRedundantHealthyConnectivityCondition(c, conditions),
+  );
   if (visible.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -384,10 +404,12 @@ export function ClusterPlatformHealthRow({
 }
 
 export function ClusterRecentEvents({
-  events,
+  query,
 }: {
-  events: NonNullable<ReturnType<typeof useClusterEvents>["data"]> | undefined;
+  query: ReturnType<typeof useClusterEvents>;
 }) {
+  const { data: events, isError } = query;
+  const onRetry = () => void query.refetch();
   return (
     <>
       {/* Recent Events */}
@@ -396,7 +418,24 @@ export function ClusterRecentEvents({
           Recent Events
         </h3>
         <div className="rounded-lg border border-border overflow-hidden">
-          {events && events.length > 0 ? (
+          {isError ? (
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 text-sm"
+              role="status"
+            >
+              <span className="text-muted-foreground">
+                Recent events are temporarily unavailable while the cluster
+                reconnects.
+              </span>
+              <ActionButton
+                size="sm"
+                icon={<RotateCcw className="h-3.5 w-3.5" />}
+                onClick={onRetry}
+              >
+                Retry
+              </ActionButton>
+            </div>
+          ) : events && events.length > 0 ? (
             <div className="divide-y divide-border">
               {events.slice(0, 8).map((event) => (
                 <div

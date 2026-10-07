@@ -1,0 +1,127 @@
+{
+  "schema_version": "astronomer-real-estate-v2",
+  "assignment_tier_per_member": 1,
+  "environment": {
+    "id": "dev-example",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "images_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "chart_values_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "dataset_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "hardware_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "kubernetes_version": "v1.31.0",
+    "replicas": {
+      "server": 1,
+      "worker": 1
+    }
+  },
+  "members": [
+    {
+      "name": "member-1",
+      "cluster_id": "00000000-0000-4000-8000-000000000001",
+      "project_id": "00000000-0000-4000-8000-000000000011",
+      "namespace": "benchmark",
+      "privilege_profile": "privileged",
+      "assignments": [
+        {
+          "deployment_id": "00000000-0000-4000-8000-000000000021",
+          "target_id": "00000000-0000-4000-8000-000000000031",
+          "generation": 1,
+          "spec_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "rendered_resources": [
+            {
+              "api_version": "apps/v1",
+              "kind": "Deployment",
+              "name": "fixture",
+              "namespace": "benchmark"
+            }
+          ]
+        }
+      ],
+      "namespace_resource_counts": {
+        "pods": 1,
+        "deployments": 1,
+        "services": 1
+      },
+      "metrics": {
+        "url": "http://127.0.0.1:18081/metrics",
+        "instance_id": "unknown"
+      }
+    },
+    {
+      "name": "member-2",
+      "cluster_id": "00000000-0000-4000-8000-000000000002",
+      "project_id": "00000000-0000-4000-8000-000000000012",
+      "namespace": "benchmark",
+      "privilege_profile": "privileged",
+      "assignments": [
+        {
+          "deployment_id": "00000000-0000-4000-8000-000000000022",
+          "target_id": "00000000-0000-4000-8000-000000000032",
+          "generation": 1,
+          "spec_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "rendered_resources": [
+            {
+              "api_version": "apps/v1",
+              "kind": "Deployment",
+              "name": "fixture",
+              "namespace": "benchmark"
+            }
+          ]
+        }
+      ],
+      "namespace_resource_counts": {
+        "pods": 1,
+        "deployments": 1,
+        "services": 1
+      },
+      "metrics": {
+        "url": "http://127.0.0.1:18082/metrics",
+        "instance_id": "unknown"
+      }
+    }
+  ],
+  "phases": [
+    {
+      "name": "idle",
+      "mode": "idle",
+      "rps": 0,
+      "warmup_seconds": 300,
+      "measurement_seconds": 1800
+    },
+    {
+      "name": "resources",
+      "mode": "resources",
+      "rps": 1,
+      "warmup_seconds": 300,
+      "measurement_seconds": 1800
+    },
+    {
+      "name": "delivery",
+      "mode": "delivery",
+      "rps": 1,
+      "warmup_seconds": 300,
+      "measurement_seconds": 1800
+    },
+    {
+      "name": "search",
+      "mode": "search",
+      "rps": 0.1,
+      "warmup_seconds": 300,
+      "measurement_seconds": 1800
+    }
+  ],
+  "search": {
+    "namespace": "benchmark",
+    "types": [
+      "pods",
+      "deployments",
+      "services"
+    ],
+    "limit": 1000,
+    "expected_active_cluster_ids": [
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+      "00000000-0000-4000-8000-000000000003"
+    ]
+  }
+}

@@ -40,8 +40,12 @@ func boundSystemComponents(components []protocol.SystemComponent) []protocol.Sys
 		}
 		// Optional observations must not invalidate the primary delivery state.
 		// Report unavailable observation explicitly; never invent healthy data.
-		if err := (protocol.DeliveryControllerInventory{SystemComponents: []protocol.SystemComponent{*component}}).Validate(); err != nil {
-			*component = protocol.SystemComponent{ID: fmt.Sprintf("unavailable-observation-%d", i), Name: "Inventory observation unavailable", Health: "unknown", Detail: "An optional system-component observation failed protocol validation and was excluded. Delivery reconciliation is unaffected."}
+		if err := (protocol.DeliveryControllerInventory{Observation: component.Observation, SystemComponents: []protocol.SystemComponent{*component}}).Validate(); err != nil {
+			var unavailable *protocol.DeliveryObservation
+			if component.Observation != nil {
+				unavailable = &protocol.DeliveryObservation{State: protocol.ObservationUnavailable}
+			}
+			*component = protocol.SystemComponent{Observation: unavailable, ID: fmt.Sprintf("unavailable-observation-%d", i), Name: "Inventory observation unavailable", Health: "unknown", Detail: "An optional system-component observation failed protocol validation and was excluded. Delivery reconciliation is unaffected."}
 		}
 	}
 	return components

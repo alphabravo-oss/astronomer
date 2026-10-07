@@ -116,6 +116,7 @@ describe("generated cluster agents API", () => {
         cluster_name: "cluster-one",
         target_version: "1.1.0",
         target_image: "agent:1.1.0",
+        target_pull_policy: "Always",
         privilege_profile: "operator",
         agent_overrides: {},
         configuration_digest:

@@ -1,3 +1,4 @@
+import { toolQueryKeys } from "./query-keys-tools";
 import type { EffectivePermissionParams } from "@/lib/api/rbac";
 import type { ResourceType } from "@/lib/api/resources";
 
@@ -595,6 +596,22 @@ export const queryKeys = {
       chartId: string,
       version?: string,
     ) => ["catalog", projectId, "chart-values", chartId, version] as const,
+    applicationPreview: (
+      clusterId: string,
+      chartVersionId: string,
+      namespace: string,
+      values: string,
+      operation: "install" | "upgrade",
+    ) =>
+      [
+        "catalog",
+        "application-preview",
+        clusterId,
+        chartVersionId,
+        namespace,
+        values,
+        operation,
+      ] as const,
     chart: (scopeId: string, chartId: string) =>
       ["catalog", scopeId, "chart", chartId] as const,
     chartReadme: (scopeId: string, chartId: string, version?: string) =>
@@ -625,17 +642,7 @@ export const queryKeys = {
     // routing table on `security_scan.changed` events.
     scansAll: ["security", "scans"] as const,
   },
-  tools: {
-    all: ["tools"] as const,
-    list: () => ["tools", "list"] as const,
-    detail: (slug: string) => ["tools", "detail", slug] as const,
-    clusterStatus: (clusterId: string) =>
-      ["tools", "clusterStatus", clusterId] as const,
-    preview: (toolSlug: string, clusterId: string, preset: string) =>
-      ["tools", "preview", toolSlug, clusterId, preset] as const,
-    operation: (operationId: string) =>
-      ["tools", "operation", operationId] as const,
-  },
+  tools: toolQueryKeys,
   generic: {
     all: ["generic"] as const,
     counts: (clusterId: string) => ["generic", clusterId, "counts"] as const,

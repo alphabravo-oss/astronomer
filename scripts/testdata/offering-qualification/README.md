@@ -8,8 +8,10 @@ manifest diverge.
 Copy `config.example.json` outside the repository and fill in explicit,
 task-owned target IDs. `member_targets` must name at least two distinct member
 clusters, projects and namespaces, together with each expected agent privilege
-profile. `token_file` must point to an owner-only file; credentials must never
-be embedded in the config or evidence.
+profile. `token_file` and optional `restricted_token_file` must point to
+owner-only files; credentials must never be embedded in the config or evidence.
+The restricted credential should be an API token with read-only scopes so
+authorization-denial cases can prove that mutating routes fail closed.
 
 Before any mutating qualification case, prove the estate through public GET
 APIs:

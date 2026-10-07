@@ -315,7 +315,7 @@ export function RegistrationConnectStep({
               </div>
               <p className="text-xs text-muted-foreground">
                 The URL pulls a freshly-rendered manifest signed with a
-                single-use registration token (24h TTL). The agent host must be
+                single-use registration token (1h TTL). The agent host must be
                 able to reach{" "}
                 <code className="font-mono">{curlOrigin || "this server"}</code>
                 .

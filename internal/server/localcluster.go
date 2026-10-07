@@ -157,11 +157,11 @@ func ensureLocalFluxUntilReady(ctx context.Context, logger *slog.Logger) error {
 		logger.Info("local Flux bootstrap skipped: server is not running in-cluster")
 		return nil
 	}
-	clientset, err := kubernetes.NewForConfig(restConfig)
+	restConfig, clientset, err := newLocalAgentKubernetesClient(restConfig)
 	if err != nil {
 		return fmt.Errorf("create local Flux readiness client: %w", err)
 	}
-	probe, err := agentdelivery.NewClusterProbe(clientset, clientset.Discovery(), false)
+	probe, err := agentdelivery.NewClusterProbeForConfig(clientset, restConfig, false)
 	if err != nil {
 		return fmt.Errorf("create local Flux readiness probe: %w", err)
 	}
@@ -247,7 +247,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		return nil, nil
 	}
 
-	clientset, err := kubernetes.NewForConfig(restCfg)
+	restCfg, clientset, err := newLocalAgentKubernetesClient(restCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create local agent clientset: %w", err)
 	}
@@ -313,16 +313,22 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 	svcProxy := agent.NewServiceProxy(logger)
 	tunnelClient.RegisterHandler(protocol.MsgServiceProxyRequest, svcProxy.HandleRequest)
 
+	subscriber := agent.NewStateSubscriber(clientset, tunnelClient, logger.With("component", "local-agent"))
+	// P4.6 informer expansion: metadata-only informers (extra built-in
+	// kinds, Helm release Secrets, discover-if-present CRDs).
+	if mc, mErr := metadata.NewForConfig(restCfg); mErr == nil {
+		subscriber.SetMetadataClient(mc)
+	} else {
+		logger.Warn("local agent: metadata client init failed; expanded informer set disabled", "error", mErr)
+	}
+
 	var deliveryRuntime *agentdelivery.Runtime
 	if deliveryConfig.Enabled {
 		deliveryDynamic, err := dynamic.NewForConfig(restCfg)
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery dynamic client: %w", err)
 		}
-		deliveryExecutor, err := agentdelivery.NewExecutor(deliveryDynamic)
-		if err != nil {
-			return nil, fmt.Errorf("initialize local delivery executor: %w", err)
-		}
+
 		deliveryNamespace := strings.TrimSpace(deliveryConfig.Namespace)
 		if deliveryNamespace == "" {
 			deliveryNamespace = "astronomer"
@@ -331,18 +337,19 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery checkpoint: %w", err)
 		}
-		deliveryProbe, err := agentdelivery.NewClusterProbe(clientset, clientset.Discovery(), true)
+		deliveryProbe, err := agentdelivery.NewClusterProbeForConfig(clientset, restCfg, true)
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery capability probe: %w", err)
 		}
-		deliveryProbe.WithDynamicClient(deliveryDynamic)
-		deliveryRuntime, err = agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
-			ClusterID:        clusterID.String(),
-			AgentVersion:     version.Version,
-			ValidationPolicy: agentdelivery.ValidationPolicy{AllowPlatformScope: true},
-			Connected:        tunnelClient.IsConnected,
-			Logger:           logger.With("component", "local-agent-delivery"),
-		}, deliveryExecutor, deliveryStore, deliveryProbe)
+		deliveryProbe.WithDynamicClient(deliveryDynamic).WithObservationSource(subscriber)
+		deliveryRuntime, err = agent.NewObservedDeliveryRuntime(agentdelivery.RuntimeConfig{
+			ClusterID:            clusterID.String(),
+			AgentVersion:         version.Version,
+			ValidationPolicy:     agentdelivery.ValidationPolicy{AllowPlatformScope: true},
+			Connected:            tunnelClient.IsConnected,
+			ObservationFreshness: tunnelClient.ObservationFreshnessEnabled,
+			Logger:               logger.With("component", "local-agent-delivery"),
+		}, deliveryDynamic, deliveryStore, deliveryProbe)
 		if err != nil {
 			return nil, fmt.Errorf("initialize local delivery runtime: %w", err)
 		}
@@ -362,6 +369,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 			return nil, fmt.Errorf("initialize local system manager: %w", err)
 		}
 		deliveryRuntime.SetSystemManager(systemManager)
+		tunnelClient.SetObservationRetry(deliveryRuntime.RetryObservation)
 		tunnelClient.RegisterHandler(protocol.MsgDeliveryStateResponse, deliveryRuntime.HandleStateResponse)
 		tunnelClient.RegisterHandler(protocol.MsgDeliveryReconcile, deliveryRuntime.HandleReconcile)
 	}
@@ -386,6 +394,9 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		logger.Debug("local agent metrics client unavailable", "error", err)
 	}
 
+	health.SetInventorySource(subscriber)
+	subscriber.SetConnectionWatcher(tunnelClient)
+
 	return func(ctx context.Context) error {
 		loops := []namedRuntimeLoop{
 			namedRuntimeLoop{name: "local-agent-observers", run: func(ctx context.Context) {
@@ -401,18 +412,6 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 					case <-ticker.C:
 					}
 				}
-				subscriber := agent.NewStateSubscriber(clientset, tunnelClient, logger.With("component", "local-agent"))
-				// P4.6 informer expansion: metadata-only informers (extra built-in
-				// kinds, Helm release Secrets, discover-if-present CRDs).
-				if mc, mErr := metadata.NewForConfig(restCfg); mErr == nil {
-					subscriber.SetMetadataClient(mc)
-				} else {
-					logger.Warn("local agent: metadata client init failed; expanded informer set disabled", "error", mErr)
-				}
-				// Serve the heartbeat/metrics node + pod inventory from the informer
-				// caches this subscriber already maintains, instead of re-listing the
-				// whole cluster from the apiserver on every tick.
-				health.SetInventorySource(subscriber)
 				// Track every tunnel transition, not just the first connect, so
 				// collection pauses while the embedded tunnel is down.
 				tunnelClient.SetConnectionListener(health.SetConnected)

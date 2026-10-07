@@ -3260,6 +3260,10 @@
     "pattern": "/api/v1/tools/{slug}/adopt"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/tools/{slug}/configuration"
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/tools/{slug}/install"
   },

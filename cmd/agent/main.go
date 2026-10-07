@@ -209,6 +209,25 @@ func runConnect(logger *slog.Logger) error {
 		// Health server (probes for k8s).
 		go health.ServeHealth(ctx, cfg.HealthAddr)
 
+		subscriber := agent.NewStateSubscriber(client, tunnel, logger)
+		subscriber.SetWatchSecrets(agent.ProfileAllowsSecrets(cfg.PrivilegeProfile))
+		// P4.6 informer expansion: metadata-only informers (extra
+		// built-in kinds, Helm release Secrets, discover-if-present
+		// CRDs). Failure to build the client just skips the expansion.
+		if mc, mErr := metadata.NewForConfig(restConfig); mErr == nil {
+			subscriber.SetMetadataClient(mc)
+		} else {
+			logger.Warn("state subscriber: metadata client init failed; expanded informer set disabled", "error", mErr)
+		}
+		// Wire the tunnel as the connection watcher so the subscriber's
+		// replay loop re-emits cached informer state on every WS reconnect
+		// (L12 defense-in-depth — mirrors the MirrorSubscriber wiring below).
+		subscriber.SetConnectionWatcher(tunnel)
+		// Serve the heartbeat/metrics node + pod inventory from these
+		// informer caches instead of re-listing the whole cluster from the
+		// apiserver every 30s. Set before Run: until the caches report
+		// synced the reporter transparently uses its paged fallback.
+		health.SetInventorySource(subscriber)
 		// Live state subscriber: SharedInformerFactory fan-out for resource
 		// CRUD. Wait for tunnel readiness in its own goroutine; on RBAC
 		// failure (insufficient list/watch on the SA) the subscriber logs and
@@ -223,25 +242,6 @@ func runConnect(logger *slog.Logger) error {
 				case <-pollTicker.C:
 				}
 			}
-			subscriber := agent.NewStateSubscriber(client, tunnel, logger)
-			subscriber.SetWatchSecrets(agent.ProfileAllowsSecrets(cfg.PrivilegeProfile))
-			// P4.6 informer expansion: metadata-only informers (extra
-			// built-in kinds, Helm release Secrets, discover-if-present
-			// CRDs). Failure to build the client just skips the expansion.
-			if mc, mErr := metadata.NewForConfig(restConfig); mErr == nil {
-				subscriber.SetMetadataClient(mc)
-			} else {
-				logger.Warn("state subscriber: metadata client init failed; expanded informer set disabled", "error", mErr)
-			}
-			// Wire the tunnel as the connection watcher so the subscriber's
-			// replay loop re-emits cached informer state on every WS reconnect
-			// (L12 defense-in-depth — mirrors the MirrorSubscriber wiring below).
-			subscriber.SetConnectionWatcher(tunnel)
-			// Serve the heartbeat/metrics node + pod inventory from these
-			// informer caches instead of re-listing the whole cluster from the
-			// apiserver every 30s. Set before Run: until the caches report
-			// synced the reporter transparently uses its paged fallback.
-			health.SetInventorySource(subscriber)
 			subscriber.Run(ctx)
 		}()
 
@@ -356,27 +356,25 @@ func runConnect(logger *slog.Logger) error {
 		if err != nil {
 			return fmt.Errorf("initialize delivery dynamic client: %w", err)
 		}
-		deliveryExecutor, err := agentdelivery.NewExecutor(deliveryDynamic)
-		if err != nil {
-			return fmt.Errorf("initialize delivery executor: %w", err)
-		}
+
 		deliveryStore, err := agentdelivery.NewKubernetesCheckpointStore(client, agent.DefaultAgentNamespace)
 		if err != nil {
 			return fmt.Errorf("initialize delivery checkpoint: %w", err)
 		}
 		allowPlatformScope := cfg.PrivilegeProfile == "admin"
-		deliveryProbe, err := agentdelivery.NewClusterProbe(client, client.Discovery(), allowPlatformScope)
+		deliveryProbe, err := agentdelivery.NewClusterProbeForConfig(client, restConfig, allowPlatformScope)
 		if err != nil {
 			return fmt.Errorf("initialize delivery capability probe: %w", err)
 		}
-		deliveryProbe.WithDynamicClient(deliveryDynamic)
-		deliveryRuntime, err := agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
-			ClusterID:        cfg.ClusterID,
-			AgentVersion:     version.Version,
-			ValidationPolicy: agentdelivery.ValidationPolicy{AllowPlatformScope: allowPlatformScope},
-			Connected:        tunnel.IsConnected,
-			Logger:           logger,
-		}, deliveryExecutor, deliveryStore, deliveryProbe)
+		deliveryProbe.WithDynamicClient(deliveryDynamic).WithObservationSource(subscriber)
+		deliveryRuntime, err := agent.NewObservedDeliveryRuntime(agentdelivery.RuntimeConfig{
+			ClusterID:            cfg.ClusterID,
+			AgentVersion:         version.Version,
+			ValidationPolicy:     agentdelivery.ValidationPolicy{AllowPlatformScope: allowPlatformScope},
+			Connected:            tunnel.IsConnected,
+			ObservationFreshness: tunnel.ObservationFreshnessEnabled,
+			Logger:               logger,
+		}, deliveryDynamic, deliveryStore, deliveryProbe)
 		if err != nil {
 			return fmt.Errorf("initialize delivery runtime: %w", err)
 		}
@@ -398,8 +396,7 @@ func runConnect(logger *slog.Logger) error {
 		}
 		deliveryRuntime.SetSystemManager(systemManager)
 		deliveryRuntime.SetPauseGuard(pauseGuard)
-		tunnel.RegisterHandler(protocol.MsgDeliveryStateResponse, deliveryRuntime.HandleStateResponse)
-		tunnel.RegisterHandler(protocol.MsgDeliveryReconcile, deliveryRuntime.HandleReconcile)
+		registerDeliveryRuntime(tunnel, deliveryRuntime)
 		go func() {
 			if err := deliveryRuntime.Run(ctx, tunnel.SendFunc(ctx)); err != nil && ctx.Err() == nil {
 				logger.Error("delivery runtime stopped", "error", err)

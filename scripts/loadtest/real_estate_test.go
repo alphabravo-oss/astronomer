@@ -1,0 +1,51 @@
+package main
+
+import (
+	"testing"
+)
+
+func TestRealEstateManifestRejectsShortcuts(t *testing.T) {
+	m := estateTestManifest()
+	if err := m.validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, mutate := range []func(*estateManifest){
+		func(m *estateManifest) { m.Members = m.Members[:1] },
+		func(m *estateManifest) { m.Tier = 5 },
+		func(m *estateManifest) { m.Members[1].ClusterID = m.Members[0].ClusterID },
+		func(m *estateManifest) { m.Members[0].Assignments = nil },
+		func(m *estateManifest) { m.Members[0].Metrics.URL = "https://user:password@metrics.test/metrics" },
+	} {
+		candidate := estateTestManifest()
+		mutate(&candidate)
+		if candidate.validate() == nil {
+			t.Fatal("invalid manifest accepted")
+		}
+	}
+}
+func TestRealEstateWindows(t *testing.T) {
+	for _, mutate := range []func(*estateManifest){
+		func(m *estateManifest) { m.Phases[0].WarmupSeconds = 299 },
+		func(m *estateManifest) { m.Phases[0].MeasurementSeconds = 1799 },
+		func(m *estateManifest) { m.Phases[0].Mode = "idle" },
+	} {
+		m := estateTestManifest()
+		mutate(&m)
+		if m.validate() == nil {
+			t.Fatal("invalid phase shortcut accepted")
+		}
+	}
+}
+
+func TestRealEstateAcceptsLoopbackPortForward(t *testing.T) {
+	for _, endpoint := range []string{"http://127.0.0.1:8081/metrics", "http://[::1]:8081/metrics", "https://agent.test/metrics"} {
+		if err := validateEstateURL(endpoint, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, endpoint := range []string{"http://localhost:8081/metrics", "http://10.0.0.1/metrics", "https://a/metrics?token=x", "https://u:p@a/metrics"} {
+		if validateEstateURL(endpoint, true) == nil {
+			t.Fatal("unsafe target accepted")
+		}
+	}
+}

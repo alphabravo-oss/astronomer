@@ -144,3 +144,44 @@ func TestRetryAfterRequiresNewerExplicitRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestTargetObservationAllowsFluxSelfHealingAfterRolloutFailure(t *testing.T) {
+	got := evaluateTargetObservation("failed", true, false, "ready", "", true)
+	if !got.ready || got.failed || got.code != "" {
+		t.Fatalf("self-healed target observation = %+v, want ready", got)
+	}
+}
+
+func TestTargetObservationPreservesTerminalAndRetrySemantics(t *testing.T) {
+	for name, tc := range map[string]struct {
+		rolloutState    string
+		retryRequested  bool
+		deploymentPhase string
+		deploymentError string
+		want            targetObservation
+	}{
+		"terminal rollout": {
+			rolloutState: "failed",
+			want:         targetObservation{failed: true, code: "built_in_rollout_failed"},
+		},
+		"explicit retry suppresses terminal rollout": {
+			rolloutState: "failed", retryRequested: true,
+			want: targetObservation{},
+		},
+		"active rollout suppresses stale deployment failure": {
+			rolloutState: "progressing", deploymentPhase: "failed", deploymentError: "stale_failure",
+			want: targetObservation{},
+		},
+		"deployment failure after a successful rollout": {
+			rolloutState: "succeeded", deploymentPhase: "failed", deploymentError: "install_failed",
+			want: targetObservation{failed: true, code: "install_failed"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := evaluateTargetObservation(tc.rolloutState, true, tc.retryRequested, tc.deploymentPhase, tc.deploymentError, true)
+			if got != tc.want {
+				t.Fatalf("target observation = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}

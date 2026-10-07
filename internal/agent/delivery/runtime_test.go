@@ -38,7 +38,7 @@ func TestRuntimeSuppressesUnchangedStatusUntilHeartbeatFloor(t *testing.T) {
 	payload.SessionSequence++
 	payload.Deployments[0].ObservedAt = now.Add(time.Minute)
 	payload.StatusDigest = payload.SemanticDigest()
-	if err := runtime.sendStatusPayload(sender, payload, now.Add(time.Minute)); err != nil {
+	if err := runtime.sendStatusPayload(sender, payload, now.Add(deliveryStatusHeartbeatFloor/2)); err != nil {
 		t.Fatal(err)
 	}
 	if sent != 1 || runtime.sequence != 1 {
@@ -148,6 +148,12 @@ func TestRuntimeValidatesWholeSnapshotBeforeWritesAndZeroesCredentials(t *testin
 
 func TestRuntimeApplyRestartCheckpointAndStagedDeletion(t *testing.T) {
 	runtime, store := newRuntimeFixture(t)
+	source, err := NewAssignmentCache(runtime.executor.client, AssignmentCacheOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime.config.AssignmentObservations = source
+
 	assignment := gitAssignment()
 	snapshot := canonicalSnapshot(t, 1, []protocol.DeliveryAssignmentV2{assignment}, nil)
 	if err := runtime.processSnapshot(context.Background(), snapshot, testCapabilities()); err != nil {
@@ -156,6 +162,10 @@ func TestRuntimeApplyRestartCheckpointAndStagedDeletion(t *testing.T) {
 	if runtime.checkpoint.SnapshotGeneration != 1 || len(runtime.checkpoint.Assignments) != 1 {
 		t.Fatalf("unexpected accepted checkpoint: %#v", runtime.checkpoint)
 	}
+	if len(source.SnapshotAssignments()) != 1 {
+		t.Fatal("accepted checkpoint was not subscribed")
+	}
+
 	encoded := strings.Builder{}
 	for _, accepted := range store.value.Assignments {
 		encoded.WriteString(accepted.ControlNamespace)
@@ -169,7 +179,7 @@ func TestRuntimeApplyRestartCheckpointAndStagedDeletion(t *testing.T) {
 		}
 	}
 
-	tombstone := protocol.DeliveryDeletionV2{DeploymentID: assignment.DeploymentID, Generation: assignment.Generation, SpecDigest: assignment.SpecDigest}
+	tombstone := protocol.DeliveryDeletionV2{DeploymentID: assignment.DeploymentID, Generation: assignment.Generation + 1, SpecDigest: assignment.SpecDigest}
 	deletion := canonicalSnapshot(t, 2, nil, []protocol.DeliveryDeletionV2{tombstone})
 	for stage := 0; stage < 2; stage++ {
 		if err := runtime.processSnapshot(context.Background(), deletion, testCapabilities()); err == nil || !strings.Contains(err.Error(), "in progress") {
@@ -178,6 +188,10 @@ func TestRuntimeApplyRestartCheckpointAndStagedDeletion(t *testing.T) {
 		if runtime.checkpoint.SnapshotGeneration != 1 {
 			t.Fatal("deletion was acknowledged before all fenced objects disappeared")
 		}
+		if len(source.SnapshotAssignments()) != 1 {
+			t.Fatal("incomplete deletion evicted accepted subscription")
+		}
+
 	}
 	if err := runtime.processSnapshot(context.Background(), deletion, testCapabilities()); err != nil {
 		t.Fatal(err)
@@ -185,6 +199,10 @@ func TestRuntimeApplyRestartCheckpointAndStagedDeletion(t *testing.T) {
 	if runtime.checkpoint.SnapshotGeneration != 2 || len(runtime.checkpoint.Assignments) != 0 {
 		t.Fatalf("deletion was not durably acknowledged: %#v", runtime.checkpoint)
 	}
+	if len(source.SnapshotAssignments()) != 0 || len(source.ConsumeDirty()) != 0 {
+		t.Fatal("removed checkpoint retained observation work")
+	}
+
 	if runtime.transient[assignment.DeploymentID].Phase != "removed" {
 		t.Fatal("removed status was not retained for server acknowledgement")
 	}

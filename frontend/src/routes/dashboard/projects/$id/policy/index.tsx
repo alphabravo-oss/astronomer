@@ -79,13 +79,13 @@ const netpolOptions: {
     value: "isolated",
     label: "Isolated",
     description:
-      "Default-deny ingress to project namespaces; only explicit NetworkPolicies allow traffic.",
+      "Allow platform controllers; block workload ingress unless another NetworkPolicy allows it.",
   },
   {
     value: "allow-same-project",
     label: "Allow same project",
     description:
-      "Allow pods within the project to talk freely; deny ingress from other namespaces.",
+      "Allow platform controllers and pods in this project; block ingress from other projects.",
   },
   {
     value: "none",
@@ -156,25 +156,23 @@ function PolicyPage() {
   // Aggregate cluster-level usage to render in the resource-quota section
   // preview. One project may span multiple namespaces; we sum and present a
   // single "X/Y" alongside the input so the operator has a sanity check.
-  const usageSummary = useMemo(() => {
-    if (!usage) return null;
-    const rows = usage.rows ?? [];
-    return {
-      cpuUsed: rows.reduce((a, r) => a + parseCpu(r.cpuUsed), 0),
-      cpuLimit: rows.reduce((a, r) => a + parseCpu(r.cpuLimit), 0),
-      memoryUsed: rows.reduce((a, r) => a + parseMemMiB(r.memoryUsed), 0),
-      memoryLimit: rows.reduce((a, r) => a + parseMemMiB(r.memoryLimit), 0),
-      podsUsed: rows.reduce((a, r) => a + (r.podsUsed || 0), 0),
-      podsLimit: rows.reduce((a, r) => a + (r.podsLimit || 0), 0),
-    };
-  }, [usage]);
+  const usageSummary = useMemo(() => summarizeQuotaUsage(usage), [usage]);
 
   if (isLoading) {
     return <LoadingSkeleton label="Loading" heading />;
   }
 
   return (
-    <div className="space-y-(--gap-section)"><form.AppForm><form.FormErrorSummary serverError={updateMutation.error ? extractApiErrorMessage(updateMutation.error) : null} /></form.AppForm>
+    <div className="space-y-(--gap-section)">
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={
+            updateMutation.error
+              ? extractApiErrorMessage(updateMutation.error)
+              : null
+          }
+        />
+      </form.AppForm>
       {!canEdit && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -576,3 +574,18 @@ function formatMiB(mib: number): string {
 export const Route = createFileRoute("/dashboard/projects/$id/policy/")({
   component: PolicyPage,
 });
+
+function summarizeQuotaUsage(
+  usage: ReturnType<typeof useProjectQuotaUsage>["data"],
+) {
+  if (!usage) return null;
+  const rows = usage.rows ?? [];
+  return {
+    cpuUsed: rows.reduce((a, r) => a + parseCpu(r.cpuUsed), 0),
+    cpuLimit: rows.reduce((a, r) => a + parseCpu(r.cpuLimit), 0),
+    memoryUsed: rows.reduce((a, r) => a + parseMemMiB(r.memoryUsed), 0),
+    memoryLimit: rows.reduce((a, r) => a + parseMemMiB(r.memoryLimit), 0),
+    podsUsed: rows.reduce((a, r) => a + (r.podsUsed || 0), 0),
+    podsLimit: rows.reduce((a, r) => a + (r.podsLimit || 0), 0),
+  };
+}

@@ -7,8 +7,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
@@ -187,11 +189,18 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		if catalogStore, ok := h.queries.(applicationCatalogQuerier); ok {
 			presentation, presentationErr := catalogStore.GetApplicationCatalogPresentationByChartVersion(r.Context(), cvID)
 			if presentationErr == nil {
+				version, err = h.hydrateChartVersion(r.Context(), version)
+				if err != nil {
+					RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Chart configuration metadata is temporarily unavailable")
+					return
+				}
 				cluster, clusterErr := h.queries.GetClusterByID(r.Context(), clusterID)
 				if clusterErr != nil {
 					RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 					return
 				}
+				req.ValuesOverride = catalogInstallValues(presentation.Slug, cluster.Distribution, req.ValuesOverride)
+				params.ValuesOverride = req.ValuesOverride
 				checks, allowed := catalogInstallChecks(cluster, version, presentation, req.ValuesOverride)
 				if !allowed {
 					RespondJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": apierror.Conflict, "message": "Catalog installation prerequisites failed", "checks": checks}})
@@ -270,6 +279,12 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 }
 
 // DeleteInstalledChart handles DELETE /api/v1/catalog/installed/{id}/.
+// openapi:request CatalogUninstallRequest
+type catalogUninstallRequest struct {
+	ConfirmDataDeletion         bool `json:"confirm_data_deletion"`
+	ConfirmFailedReleaseCleanup bool `json:"confirm_failed_release_cleanup"`
+}
+
 func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -288,12 +303,25 @@ func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Req
 	if blocked := h.checkCatalogMaintenanceWindow(w, r, installation.ClusterID, "helm.uninstall"); blocked {
 		return
 	}
+	var req catalogUninstallRequest
+	if r.Body != nil && r.ContentLength != 0 && !decodeAndValidate(w, r, &req) {
+		return
+	}
+	_, chart, _, resolveErr := h.resolveInstalledChartRelease(r.Context(), installation)
+	if resolveErr != nil {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Installed chart identity could not be resolved")
+		return
+	}
+	if strings.EqualFold(chart.Name, "longhorn") && !req.ConfirmDataDeletion {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Longhorn uninstall requires explicit confirmation that persistent data may be deleted")
+		return
+	}
 	statusParams := sqlc.UpdateInstalledChartStatusParams{
 		ID:       installation.ID,
 		Status:   "pending_uninstall",
 		Revision: installation.Revision,
 	}
-	envelope := catalogOperationEnvelope{InstalledChartID: installation.ID.String(), ClusterID: installation.ClusterID.String(), ReleaseName: installation.ReleaseName, Namespace: installation.Namespace}
+	envelope := catalogOperationEnvelope{InstalledChartID: installation.ID.String(), ClusterID: installation.ClusterID.String(), ReleaseName: installation.ReleaseName, Namespace: installation.Namespace, ChartName: chart.Name, ConfirmDataDeletion: req.ConfirmDataDeletion, ConfirmFailedReleaseCleanup: req.ConfirmFailedReleaseCleanup}
 	if !RequireOperationIdempotencyKey(w, r) {
 		return
 	}
@@ -518,6 +546,32 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		version = requestedVersion
 		targetVersionID = pgtype.UUID{Bytes: requestedID, Valid: true}
 	}
+	if catalogStore, ok := h.queries.(applicationCatalogQuerier); ok {
+		presentation, presentationErr := catalogStore.GetApplicationCatalogPresentationByChartVersion(r.Context(), version.ID)
+		if presentationErr == nil {
+			version, err = h.hydrateChartVersion(r.Context(), version)
+			if err != nil {
+				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Chart configuration metadata is temporarily unavailable")
+				return
+			}
+			cluster, clusterErr := h.queries.GetClusterByID(r.Context(), installed.ClusterID)
+			if clusterErr != nil {
+				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+				return
+			}
+			if req.ValuesOverride != nil {
+				valuesOverride = mergeValueLayers(distributionInstallValues(presentation.Slug, cluster.Distribution), valuesOverride)
+			}
+			checks, allowed := catalogInstallChecks(cluster, version, presentation, valuesOverride)
+			if !allowed {
+				RespondJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": apierror.Conflict, "message": "Catalog upgrade prerequisites failed", "checks": checks}})
+				return
+			}
+		} else if !errors.Is(presentationErr, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to verify catalog application trust")
+			return
+		}
+	}
 	updateParams := sqlc.UpdateInstalledChartValuesParams{
 		ID:             id,
 		ChartVersionID: targetVersionID,
@@ -662,6 +716,22 @@ func (h *CatalogHandler) ListInstalledChartRevisions(w http.ResponseWriter, r *h
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, installed.ClusterID, rbac.ResourceCatalog, rbac.VerbRead) {
+		return
+	}
+	if installed.RequestID.Valid && h.delivery != nil {
+		revs, historyErr := h.delivery.Revisions(r.Context(), installed.ID)
+		if historyErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to load application revision history")
+			return
+		}
+		if revs == nil {
+			revs = []catalogapp.Revision{}
+		}
+		RespondJSON(w, http.StatusOK, map[string]any{
+			"release_name": installed.ReleaseName,
+			"namespace":    installed.Namespace,
+			"revisions":    revs,
+		})
 		return
 	}
 	if h.helm == nil {

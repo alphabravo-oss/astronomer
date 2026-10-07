@@ -26,7 +26,7 @@ var errToolNotFound = errors.New("tool not found")
 // resolveAction consumes the request body before the maintenance gate runs.
 // Restore a canonical copy so defer mode captures a complete, replayable
 // request envelope rather than an empty body.
-func restoreToolActionRequestBody(r *http.Request, req toolActionRequest) {
+func restoreToolActionRequestBody(r *http.Request, req any) {
 	if r == nil {
 		return
 	}

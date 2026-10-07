@@ -71,6 +71,10 @@ func TestShellImageContainsOfflineDexPreflightToolchain(t *testing.T) {
 func TestShellDockerfileCopiesDexValidatorLocalDependencyClosure(t *testing.T) {
 	cmd := exec.Command("go", "list", "-deps", "-f", `{{if .Module}}{{if eq .Module.Path "github.com/alphabravocompany/astronomer-go"}}{{.Dir}}{{end}}{{end}}`, "./cmd/dexconfigcheck")
 	cmd.Dir = ".."
+	// This check only needs the package dependency graph. Disable VCS stamping
+	// so it also runs from exported sources and worktrees whose parent checkout
+	// is intentionally unavailable to the Go subprocess.
+	cmd.Env = append(os.Environ(), "GOFLAGS=-buildvcs=false")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("list dexconfigcheck dependencies: %v", err)

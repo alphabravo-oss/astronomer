@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/metadata/metadatainformer"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agent/observation"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -116,29 +117,6 @@ type metadataKind struct {
 	apiGroup   string
 	apiVersion string
 	gvr        schema.GroupVersionResource
-}
-
-// metadataInformerKinds is the P4.6 expansion set: built-in kinds watched
-// metadata-only (same MsgStateUpdate shape, no bodies, no secret surface).
-// Always present on any supported apiserver, so they share the main
-// metadata factory; RBAC-denied informers fail to sync and are logged
-// without crashing the subscriber (bounded sync wait in Run).
-var metadataInformerKinds = []metadataKind{
-	{"Namespace", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}},
-	{"Job", "batch", "v1", schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "jobs"}},
-	{"CronJob", "batch", "v1", schema.GroupVersionResource{Group: "batch", Version: "v1", Resource: "cronjobs"}},
-	{"Ingress", "networking.k8s.io", "v1", schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}},
-	{"NetworkPolicy", "networking.k8s.io", "v1", schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}},
-	{"PersistentVolume", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumes"}},
-	{"PersistentVolumeClaim", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "persistentvolumeclaims"}},
-	{"StorageClass", "storage.k8s.io", "v1", schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "storageclasses"}},
-	{"HorizontalPodAutoscaler", "autoscaling", "v2", schema.GroupVersionResource{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}},
-	{"ServiceAccount", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "serviceaccounts"}},
-	{"Role", "rbac.authorization.k8s.io", "v1", schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}},
-	{"RoleBinding", "rbac.authorization.k8s.io", "v1", schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"}},
-	{"ClusterRole", "rbac.authorization.k8s.io", "v1", schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}},
-	{"ClusterRoleBinding", "rbac.authorization.k8s.io", "v1", schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"}},
-	{"ResourceQuota", "", "v1", schema.GroupVersionResource{Version: "v1", Resource: "resourcequotas"}},
 }
 
 // crdInformerKinds are the discover-if-present CRDs. Each gets its own
@@ -267,13 +245,14 @@ func (r *stateRateLimiter) size() int {
 // lacks list/watch on a resource, the corresponding informer fails to sync
 // and is logged but never crashes the process.
 type StateSubscriber struct {
-	client  kubernetes.Interface
-	sender  stateSender
-	log     *slog.Logger
-	limiter *stateRateLimiter
-	ready   atomic.Bool
-	readyCh chan struct{}
-	once    sync.Once
+	client      kubernetes.Interface
+	sender      stateSender
+	log         *slog.Logger
+	limiter     *stateRateLimiter
+	ready       atomic.Bool
+	readyCh     chan struct{}
+	syncTimeout time.Duration
+	once        sync.Once
 
 	// bootstrapSeen records Add callbacks delivered before the initial cache
 	// barrier. bootstrapPending records cache objects whose Add callback was
@@ -312,8 +291,9 @@ type StateSubscriber struct {
 	// Keyed by kind; populated by attach() as each informer is registered. The
 	// Events informer is deliberately EXCLUDED (replaying historical Events
 	// would flood — exactly what eventIsRecent guards against).
-	storeMu sync.RWMutex
-	stores  map[string]stateStoreEntry
+	storeMu      sync.RWMutex
+	stores       map[string]stateStoreEntry
+	observations map[observation.Kind]*observation.Tracker
 
 	// conn is the connection watcher whose IsConnected reading the replay loop
 	// polls. nil-safe: when unwired (tests / older callers) the replay goroutine
@@ -324,7 +304,8 @@ type StateSubscriber struct {
 	// no context of their own — can bound their blocking send and abandon it on
 	// shutdown. Written once at the top of Run, before any informer is started,
 	// so every reader is ordered after the write.
-	runCtx context.Context
+	runCtx            context.Context
+	discoveryRevision atomic.Uint64
 }
 
 // NewStateSubscriber constructs a StateSubscriber. The sender must be a live
@@ -341,6 +322,7 @@ func NewStateSubscriber(client kubernetes.Interface, sender stateSender, log *sl
 		log:              log,
 		limiter:          newStateRateLimiter(getStateSubscriberMinInterval(), getStateSubscriberEvictAfter()),
 		readyCh:          make(chan struct{}),
+		syncTimeout:      30 * time.Second,
 		startedAt:        time.Now(),
 		watchSecrets:     false,
 		stores:           make(map[string]stateStoreEntry),
@@ -377,8 +359,9 @@ func (s *StateSubscriber) SetWatchSecrets(enabled bool) {
 	}
 }
 
-// WaitReady blocks until the informer caches have synced and the subscriber is
-// ready to emit live updates, or until ctx is cancelled.
+// WaitReady blocks until bounded bootstrap finishes and the subscriber may
+// emit live updates, or until ctx is cancelled. Individual kinds can remain
+// unsynced; inventory readers must check their own cache availability.
 func (s *StateSubscriber) WaitReady(ctx context.Context) bool {
 	if s == nil {
 		return false
@@ -398,6 +381,9 @@ func (s *StateSubscriber) WaitReady(ctx context.Context) bool {
 // per-resource handlers, and starts the eviction goroutine. RBAC failures
 // during initial sync are logged at WARN; the agent continues to run.
 func (s *StateSubscriber) Run(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
 	if s.client == nil {
 		s.log.Warn("state subscriber: nil clientset, skipping live updates")
 		return
@@ -406,17 +392,16 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 
 	factory := informers.NewSharedInformerFactory(s.client, getStateSubscriberResyncPeriod())
 
-	// Register per-resource handlers. The handler funcs share the same
-	// dispatch logic; only the Kind / API group differ.
+	s.registerObservations(factory)
 	s.registerCore(factory)
 	s.registerApps(factory)
 	s.registerEvents(factory)
 	s.log.Debug("state subscriber: handlers registered, starting factory")
 
-	stopCh := make(chan struct{})
-	defer close(stopCh)
+	stopCh := ctx.Done()
 
 	factory.Start(stopCh)
+	defer s.shutdownObservations(factory)
 
 	// P4.6 informer expansion: metadata-only informers for the built-in
 	// kinds beyond the typed set, a Helm-release-filtered Secret informer,
@@ -426,10 +411,12 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 	var metaFactory metadatainformer.SharedInformerFactory
 	if s.meta != nil {
 		metaFactory = metadatainformer.NewSharedInformerFactory(s.meta, getStateSubscriberResyncPeriod())
+		s.registerDiscoveryRevision(metaFactory)
 		for _, k := range metadataInformerKinds {
 			s.attach(metaFactory.ForResource(k.gvr).Informer(), k.kind, k.apiGroup, k.apiVersion)
 		}
 		metaFactory.Start(stopCh)
+		defer metaFactory.Shutdown()
 		s.startHelmSecretInformer(stopCh)
 		for _, k := range crdInformerKinds {
 			go s.runCRDInformer(ctx, k, stopCh)
@@ -437,33 +424,8 @@ func (s *StateSubscriber) Run(ctx context.Context) {
 		go s.runGatekeeperConstraints(ctx, stopCh)
 	}
 
-	// Wait for the initial list to populate; if some informers fail to sync
-	// (typically RBAC), log and continue. We do NOT abort: a partial subscriber
-	// is still better than polling-only.
-	synced := factory.WaitForCacheSync(stopCh)
-	for typ, ok := range synced {
-		if !ok {
-			s.log.Warn("state subscriber: cache failed to sync (RBAC?)", "type", fmt.Sprintf("%T", typ))
-		}
-	}
-	if metaFactory != nil {
-		// Bounded wait: a single RBAC-denied metadata informer must not
-		// stall readiness forever (that would suppress every typed kind's
-		// events too — the ready gate is subscriber-wide).
-		syncStop := make(chan struct{})
-		go func() {
-			select {
-			case <-stopCh:
-			case <-time.After(30 * time.Second):
-			}
-			close(syncStop)
-		}()
-		msynced := metaFactory.WaitForCacheSync(syncStop)
-		for typ, ok := range msynced {
-			if !ok {
-				s.log.Warn("state subscriber: metadata cache failed to sync (RBAC?)", "type", fmt.Sprintf("%v", typ))
-			}
-		}
+	if !s.waitForInitialCaches(ctx, factory, metaFactory) {
+		return
 	}
 	s.finishBootstrap()
 	s.once.Do(func() { close(s.readyCh) })

@@ -89,6 +89,13 @@ func CAChecksumFromPEM(caPEM string) string {
 }
 
 func RenderInstallYAML(data InstallTemplateData) string {
+	return fluxdistribution.InstallYAML() + "\n" + RenderAgentYAML(data)
+}
+
+// RenderAgentYAML returns the repeat-apply portion of the bootstrap manifest.
+// Flux controllers take ownership of their own Deployments after the initial
+// install, so a day-two agent refresh must not attempt to reclaim those fields.
+func RenderAgentYAML(data InstallTemplateData) string {
 	// Cluster management is authorized per user by Astronomer RBAC. Legacy
 	// enrollment profiles no longer restrict newly rendered agent installations.
 	profile := PrivilegeProfileAdmin
@@ -158,7 +165,7 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{AGENT_SELF_MANAGEMENT_DEPLOYMENT_RULES}}", SelfManagementOwnDeploymentRulesYAML(),
 		"{{DIRECT_KUBECONFIG_RBAC_RULES}}", viewerRBACRulesYAML,
 	).Replace(installTemplate)
-	return fluxdistribution.InstallYAML() + "\n" + agentManifest + renderSystemBootstrap(data)
+	return agentManifest
 }
 
 func mustAgentOverridesDigest(overrides AgentOverrides) string {
