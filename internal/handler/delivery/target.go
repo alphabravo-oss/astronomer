@@ -745,7 +745,7 @@ func (h *TargetHandler) requireReadyBundle(ctx context.Context, projectID, versi
 	if err != nil {
 		return err
 	}
-	if row.State != "ready" || row.VerificationStatus != "verified" {
+	if !bundleReadyForDelivery(row) {
 		return errBundleNotReady
 	}
 	if row.Scope == string(model.ScopePlatform) {
@@ -784,7 +784,7 @@ func (h *TargetHandler) validateConfigurationRefs(ctx context.Context, projectID
 }
 
 var (
-	errBundleNotReady         = errors.New("bundle version must be ready and verified")
+	errBundleNotReady         = errors.New("bundle version must be ready and satisfy its source trust policy")
 	errPlatformScopeForbidden = errors.New("platform-scoped bundle targets require a superuser")
 )
 

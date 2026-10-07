@@ -723,3 +723,21 @@ is reachable. No vulnerability waivers were added. The owner's v1.2.0 license
 qualification deferral remains unchanged and does not waive this vulnerability
 gate. Private raw reports and the candidate-image summary are retained under
 `/var/tmp/astronomer-release-20261007/trivy-preflight/`.
+
+The corrected automatic RustFS runner subsequently passed all 16 tests without
+manual intervention, including real object verification and completed backup /
+restore. Local revision 226 runs seven images built from `9776b29a`, preserves all
+six application Secrets and both PVCs, and passed readiness, saved-view CRUD,
+cluster proxy, estate, compatibility and Grafana API checks. Its fresh database
+backup was restored and compared before upgrade. Stale v1.0.0 OCI artifact
+references were cleared for this development deployment, which uses the current
+embedded authenticated Flux distribution; it is not a published v1.2.0 release.
+
+Local Trivy installation then exposed a second API mismatch: resolution correctly
+records an explicitly unsigned source policy as `unsigned`, but target creation
+accepted only `verified`. Target admission now accepts that status only when the
+immutable source snapshot explicitly allows unsigned artifacts and has a valid
+trust policy. Missing, malformed, contradictory, failed and pending states remain
+blocked, and platform targets still require a superuser. Handler, resolver and
+rollout race tests passed. Local CI run 68 was intentionally stopped to include
+this fix in the next complete matrix; it is not recorded as a passing run.
