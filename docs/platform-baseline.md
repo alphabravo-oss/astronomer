@@ -11,7 +11,7 @@ The current v1.2 baseline contains three components:
 | Component                  | Chart version | Namespace                 | Release name               |
 | -------------------------- | ------------- | ------------------------- | -------------------------- |
 | `trivy-operator`           | `0.37.0`      | `astronomer-trivy-system` | `trivy-operator`           |
-| `kube-state-metrics`       | `8.0.0`       | `astronomer-monitoring`   | `kube-state-metrics`       |
+| `kube-state-metrics`       | `8.6.0`       | `astronomer-monitoring`   | `kube-state-metrics`       |
 | `prometheus-node-exporter` | `4.56.1`      | `astronomer-monitoring`   | `prometheus-node-exporter` |
 
 The release manifest, built-in bundle archive, air-gap image inventory, and

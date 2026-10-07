@@ -29,12 +29,13 @@ def references(manifest):
     if not result or any(not REF.fullmatch(ref) for ref in result): raise ValueError("release contains a mutable or malformed image reference")
     return result
 
-def waiver_map(document, now):
+def waiver_map(document, now, release_version=None):
     if document["schema_version"] != 1 or not isinstance(document["waivers"],list): raise ValueError("invalid waiver document")
     result={}
     exact={"reference","category","ids","reason","approved_by","expires_at"}
     for waiver in document["waivers"]:
-        if not isinstance(waiver,dict) or set(waiver)!=exact or not REF.fullmatch(waiver["reference"]): raise ValueError("waiver violates closed exact-reference schema")
+        if not isinstance(waiver,dict) or set(waiver) not in (exact, exact | {"release_version"}) or not REF.fullmatch(waiver["reference"]): raise ValueError("waiver violates closed exact-reference schema")
+        if "release_version" in waiver and (not isinstance(waiver["release_version"],str) or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+",waiver["release_version"]) or waiver["release_version"] != release_version): raise ValueError("waiver release version does not match the manifest")
         if waiver["category"] not in {"vulnerability","license"} or not waiver["ids"] or not all(isinstance(x,str) and x for x in waiver["ids"]): raise ValueError("waiver category/ids invalid")
         if not waiver["reason"].strip() or not waiver["approved_by"].strip(): raise ValueError("waiver requires reason and approver")
         expiry=dt.datetime.fromisoformat(waiver["expires_at"].replace("Z","+00:00"))
@@ -63,7 +64,7 @@ def main():
     p=argparse.ArgumentParser(); p.add_argument("--manifest",type=Path,required=True); p.add_argument("--waivers",type=Path,required=True); p.add_argument("--license-policy",type=Path,required=True); p.add_argument("--work-dir",type=Path,required=True); p.add_argument("--output",type=Path,required=True); a=p.parse_args()
     manifest=json.loads(a.manifest.read_text()); waivers=load_closed(a.waivers,{"schema_version","waivers"},"waivers"); policy=load_closed(a.license_policy,{"schema_version","allowed_spdx_ids"},"license policy")
     if policy["schema_version"]!=1 or not isinstance(policy["allowed_spdx_ids"],list): raise ValueError("invalid license policy")
-    allowed=set(policy["allowed_spdx_ids"]); now=dt.datetime.now(dt.timezone.utc); indexed=waiver_map(waivers,now)
+    allowed=set(policy["allowed_spdx_ids"]); now=dt.datetime.now(dt.timezone.utc); indexed=waiver_map(waivers,now,manifest["release"]["version"])
     a.work_dir.mkdir(parents=True,exist_ok=True); entries=[]
     for index,ref in enumerate(references(manifest)):
         prefix=a.work_dir/f"image-{index:03d}"; raw=prefix.with_suffix(".manifest.json"); run(["docker","buildx","imagetools","inspect",ref,"--raw"],raw)

@@ -298,7 +298,9 @@ postgres:
   cloudNativePG:
     clusterName: ""          # Empty derives <release>-postgres.
     instances: 1             # Set 3 for HA production.
-    imageName: ghcr.io/cloudnative-pg/postgresql:17.6
+    # Standard images use the separately managed Barman Cloud plugin below.
+    # Stay on PostgreSQL 17; pin the maintained OS build as well as the server.
+    imageName: ghcr.io/cloudnative-pg/postgresql:17.11-202610050823-standard-trixie@sha256:d456fe7392b0b2147b4cea0dc124d51aee7ad3ec522c57f3177799e01f29a2d1
     storage:
       # Longhorn is thin-provisioned, so this is a logical ceiling rather than
       # eager disk consumption. 50Gi leaves practical room for WAL, indexes,
@@ -750,7 +752,7 @@ dex:
     whenUnsatisfiable: ScheduleAnyway
   image:
     repository: dexidp/dex
-    tag: v2.41.1
+    tag: v2.45.1
     digest: ""
     registry: ""              # T23 air-gapped override; falls back to image.registry
   # Issuer URL Astronomer seeds into dex_settings on first boot. When empty
@@ -1452,7 +1454,7 @@ managementLogging:
     # registry in air-gapped installs via .registry or the chart-wide
     # image.registry prefix (T23).
     repository: fluent/fluent-bit
-    tag: "3.2.4"
+    tag: "5.1.3"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry

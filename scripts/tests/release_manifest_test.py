@@ -105,7 +105,7 @@ class ReleaseManifestTest(unittest.TestCase):
         runtime_sources = {item["source_reference"] for item in first["astronomer"]["runtime_images"]}
         self.assertIn("third.example.test/database/postgres:16", runtime_sources)
         self.assertIn(
-            "registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:85108987d044b18a098126732f98602df408888c0f7d456241f5abefb9744bc1",
+            "registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b",
             runtime_sources,
         )
 
@@ -113,6 +113,15 @@ class ReleaseManifestTest(unittest.TestCase):
         self.resolved.write_text("{}", encoding="utf-8")
         with self.assertRaisesRegex(GENERATOR.ManifestError, "has no immutable resolution"):
             GENERATOR.build(self.args())
+
+    def test_tagged_digest_is_canonical_without_losing_registry_port(self) -> None:
+        source = f"third.example.test:5443/database/postgres:17.11-standard-trixie@{digest('b')}"
+        self.inventory.write_text(source + "\n", encoding="utf-8")
+        result = GENERATOR.runtime_images(self.inventory, self.resolved, {}, [])
+        self.assertEqual(result, [{"source_reference": source, "reference": f"third.example.test:5443/database/postgres@{digest('b')}"}])
+        self.inventory.write_text(source + "\n" + result[0]["reference"] + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(GENERATOR.ManifestError, "duplicate identities"):
+            GENERATOR.runtime_images(self.inventory, self.resolved, {}, [])
 
     def test_moved_chart_version_and_mutable_charlie_fail_closed(self) -> None:
         args = self.args()

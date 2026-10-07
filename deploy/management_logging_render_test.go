@@ -197,7 +197,7 @@ func TestManagementLoggingDaemonSet_RespectsImageRegistry(t *testing.T) {
 	)
 	// The T23 air-gapped registry override prepends to the third-party
 	// image just like every other utility image in the chart.
-	if !strings.Contains(out, "internal.example.com/fluent/fluent-bit:3.2.4") {
+	if !strings.Contains(out, "internal.example.com/fluent/fluent-bit:5.1.3") {
 		t.Fatalf("image.registry override not applied to fluent-bit image:\n%s", out)
 	}
 	// And the DaemonSet itself must exist.

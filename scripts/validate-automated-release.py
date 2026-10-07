@@ -2,16 +2,47 @@
 """Verify the explicitly scoped v1.2.0 automated publication qualification."""
 
 import argparse
+import datetime as dt
+import hashlib
 import importlib.util
 import json
+import tarfile
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location("approval", Path(__file__).with_name("validate-release-approval.py"))
 approval = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(approval)
+spec = importlib.util.spec_from_file_location("runtime", Path(__file__).with_name("qualify-release-runtime-images.py"))
+runtime_policy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(runtime_policy)
 
 
-def validate(args, directory=Path(".")):
+def validate_waivers(runtime, directory, tag, now):
+    # Recovery may reuse signed scans, but approval must still be valid when
+    # publishing. Read only the retained document; never extract the archive.
+    with tarfile.open(directory / "runtime-image-evidence.tar.gz", "r:gz") as archive:
+        member = archive.getmember("runtime-image-evidence/waivers.json")
+        if not member.isfile() or member.size > 1024 * 1024:
+            raise ValueError("invalid retained waiver document")
+        content = archive.extractfile(member).read()
+    if "sha256:" + hashlib.sha256(content).hexdigest() != runtime.get("waivers_sha256"):
+        raise ValueError("retained waivers do not bind the signed runtime report")
+    document = json.loads(content)
+    if not isinstance(document, dict) or set(document) != {"schema_version", "waivers"}:
+        raise ValueError("invalid retained waiver document")
+    indexed = runtime_policy.waiver_map(document, now, tag)
+    used = set()
+    for entry in runtime["entries"]:
+        allowed = {digest for (ref, _, _), digest in indexed.items() if ref == entry["reference"]}
+        applied = set(entry["applied_waivers"])
+        if not applied.issubset(allowed):
+            raise ValueError("runtime report applies an unknown or wrong-image waiver")
+        used.update(applied)
+    if used != set(indexed.values()):
+        raise ValueError("unused retained waiver is forbidden")
+
+
+def validate(args, directory=Path("."), now=None):
     if args.tag != "v1.2.0":
         raise ValueError("automated publication exception applies only to v1.2.0")
     if not approval.COMMIT.fullmatch(args.source_commit) or any(
@@ -40,6 +71,7 @@ def validate(args, directory=Path(".")):
         raise ValueError("runtime image qualification does not bind the manifest")
     if runtime.get("vulnerability_qualification") != "passed" or runtime.get("license_qualification") != "deferred":
         raise ValueError("runtime report must pass vulnerabilities and disclose deferred license qualification")
+    validate_waivers(runtime, directory, args.tag, now or dt.datetime.now(dt.timezone.utc))
     rc = values["rc-rehearsal-evidence"]
     approval.validate_rc(rc, args.tag, args.source_commit, args.source_run_id, args.producer_run_id)
     if rc["previous_version"] != "v1.1.0" or rc["release_manifest_sha256"] != digest:

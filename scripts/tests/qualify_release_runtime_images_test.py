@@ -36,6 +36,18 @@ class RuntimeQualifierTest(unittest.TestCase):
         self.assertEqual(result["license_findings"], ["GPL-2.0-only", "NOASSERTION:busybox"])
         self.assertEqual(result["license_qualification"], "pending_review")
 
+    def test_release_scoped_waiver_cannot_carry_to_another_release(self):
+        waiver={"reference":REF,"category":"vulnerability","ids":["CVE-2099-1"],"reason":"owner accepted upstream risk","approved_by":"release owner","expires_at":"2099-01-01T00:00:00Z","release_version":"v1.2.0"}
+        document={"schema_version":1,"waivers":[waiver]}
+        now=dt.datetime(2026,1,1,tzinfo=dt.timezone.utc)
+        accepted=module.waiver_map(document,now,"v1.2.0")
+        self.assertIn((REF,"vulnerability","CVE-2099-1"),accepted)
+        self.assertNotIn((REF.replace("a"*64,"b"*64),"vulnerability","CVE-2099-1"),accepted)
+        self.assertNotIn((REF,"vulnerability","CVE-2099-2"),accepted)
+        for version in (None,"v1.2.1","v2.0.0"):
+            with self.subTest(version=version), self.assertRaisesRegex(ValueError,"release version"):
+                module.waiver_map(document,now,version)
+
     def test_v120_report_retains_findings_and_discloses_deferred_license_status(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

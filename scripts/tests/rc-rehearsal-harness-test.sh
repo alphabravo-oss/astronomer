@@ -57,8 +57,8 @@ jq -n --arg commit "$source_commit" --arg chart "$target_chart" --argjson images
       {source_reference:"busybox:1.36",reference:("fixture@sha256:"+("7"*64))},
       {source_reference:"postgres:16-alpine",reference:("fixture@sha256:"+("8"*64))},
       {source_reference:"valkey/valkey:8-alpine",reference:("fixture@sha256:"+("9"*64))},
-      {source_reference:"dexidp/dex:v2.41.1",reference:("fixture@sha256:"+("a"*64))},
-      {source_reference:"fluent/fluent-bit:3.2.4",reference:("fixture@sha256:"+("d"*64))}
+      {source_reference:"dexidp/dex:v2.45.1",reference:("fixture@sha256:"+("a"*64))},
+      {source_reference:"fluent/fluent-bit:5.1.3",reference:("fixture@sha256:"+("d"*64))}
     ]
   }
 }' >"$state/target/release-manifest.json"
