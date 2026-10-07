@@ -6847,7 +6847,7 @@ components:
         storage_class_path: {type: string}
         minimum: {type: number}
         maximum: {type: number}
-        step: {type: number, minimum: 0, exclusiveMinimum: true}
+        step: {type: number, minimum: 0, not: {enum: [0]}}
         show_when:
           $ref: '#/components/schemas/ToolFormCondition'
     ToolFormCondition:
