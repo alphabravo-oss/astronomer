@@ -124,8 +124,10 @@ grep -Fq 'video: "retain-on-failure"' "$ROOT/frontend/playwright.config.ts"
 
 # Count declarations at any TypeScript indentation level. The retained Trivy
 # journey is intentionally nested under `if (trivyEnabled)` and CI enables it
-# through the runner environment handoff asserted above.
-live_test_count="$(grep -RhE '^[[:space:]]*test\(' "$ROOT/frontend/tests/e2e-live" --include='*.spec.ts' | wc -l | tr -d ' ')"
+# through the runner environment handoff asserted above. Optional engineering
+# measurements are excluded from the default live project during discovery;
+# their parameterized declarations are not part of these 16 release journeys.
+live_test_count="$(grep -RhE '^[[:space:]]*test\(' "$ROOT/frontend/tests/e2e-live" --include='*.spec.ts' --exclude='efficiency.live.spec.ts' | wc -l | tr -d ' ')"
 [[ "$live_test_count" == "16" ]] || {
   echo "live-browser runner expects 16 explicit retry-free journeys, found $live_test_count" >&2
   exit 1
