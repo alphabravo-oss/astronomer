@@ -343,7 +343,10 @@ if [[ -n "$postgres_pod" ]]; then
     # Positional parameters and POSTGRES_USER expand inside the remote pod shell.
     # shellcheck disable=SC2016
     restored_proof="$("${kubectl_cmd[@]}" exec --namespace "$namespace" "$postgres_pod" -- sh -ec \
-      'psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$1" -At --set=proof_id="$2" -c "SELECT count(*) FROM webhook_subscriptions WHERE id=:'"'"'proof_id'"'"'::uuid AND secret_encrypted <> '"'"''"'"'"' sh "$verify_database" "$RC_DECRYPT_PROOF_WEBHOOK_ID")" || restore_status=$?
+      'psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$1" -At --set=proof_id="$2" <<SQL
+SELECT count(*) FROM webhook_subscriptions WHERE id=:'"'"'proof_id'"'"'::uuid AND secret_encrypted <> '"'"''"'"';
+SQL
+' sh "$verify_database" "$RC_DECRYPT_PROOF_WEBHOOK_ID")" || restore_status=$?
     [[ "$restored_proof" == 1 ]] || restore_status=1
     unset restored_proof
   fi
@@ -505,10 +508,11 @@ if [[ "${RC_REPLACE_DATABASE_FROM_BACKUP:-0}" == 1 ]]; then
   # positional parameters must remain literal until that shell runs.
   # shellcheck disable=SC2016
   "${kubectl_cmd[@]}" exec --namespace "$namespace" "$postgres_pod" -- sh -ec '
-    psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname=postgres --set=live="$POSTGRES_DB" --set=restored="$1" \
-      -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'"'"'live'"'"' AND pid <> pg_backend_pid();" \
-      -c "DROP DATABASE :\"live\";" \
-      -c "ALTER DATABASE :\"restored\" RENAME TO :\"live\";"
+    psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname=postgres --set=live="$POSTGRES_DB" --set=restored="$1" <<SQL
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'"'"'live'"'"' AND pid <> pg_backend_pid();
+DROP DATABASE :"live";
+ALTER DATABASE :"restored" RENAME TO :"live";
+SQL
   ' sh "$verify_database" || die "owned-disposable RC database replacement failed"
   rc_database_replaced=1
   rc_database_restore_mode=live_replaced

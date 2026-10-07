@@ -135,6 +135,7 @@ set -euo pipefail
 url="${*: -1}"
 printf 'curl %s\n' "$*" >>"$RC_HARNESS_TRACE"
 case "$url" in
+  */api/v1/auth/tokens/) printf '{"data":{"token":"rc-api-token"}}\n' ;;
   */api/v1/auth/login/) printf '{"data":{"token":"rc-auth-token"}}\n' ;;
   */api/v1/admin/webhooks) printf '{"data":{"id":"11111111-1111-1111-1111-111111111111"}}\n' ;;
   *) printf '{}\n' ;;
@@ -281,6 +282,11 @@ quiesce_line="$(line_of 'quiesce ')"
 restore_line="$(line_of 'restore-live')"
 migration_line="$(line_of 'target-migration')"
 ((quiesce_line < restore_line && restore_line < migration_line))
+
+# A persistent disposable API token, rather than the expiring login JWT,
+# authenticates the post-upgrade proof across the browser-session migration.
+grep -Fq '/api/v1/auth/tokens/' "$trace"
+grep -F "Authorization: Bearer rc-api-token" "$trace" | grep -Fq "/api/v1/admin/webhooks/${webhook_id}/test"
 
 # Product proof is invoked after upgrade and the exact fenced cluster is the
 # only destructive cleanup target.
