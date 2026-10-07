@@ -4,7 +4,7 @@
 
 ## Status and baseline
 
-- Status: IMPLEMENTED on `feat/031-ui-refinement`, all three `make verify-enterprise` scopes passing, with the residuals listed in [031-evidence/after.md](./031-evidence/after.md): image search/presence blocked on a backend filter, server-side audit/alerting table mode blocked on endpoint parameters, no hand QA. Measurements, verification and open items are in that file.
+- Status (2026-10-07): integrated with Plan 030 on `integrate/030-031-local-k3s` and deployed to local k3s as `1.2.0-local.1322c98e`; see the dated update in [031-evidence/after.md](./031-evidence/after.md). Historical October 6 status: IMPLEMENTED on `feat/031-ui-refinement`, all three `make verify-enterprise` scopes passing, with the residuals listed in [031-evidence/after.md](./031-evidence/after.md): image search/presence blocked on a backend filter, server-side audit/alerting table mode blocked on endpoint parameters, no hand QA. Measurements, verification and open items are in that file.
 - Priority: P1 for visible defects (topbar wrap, table truncation, contradictory status, jargon leaks). P2 for primitives, table depth and density.
 - Effort: L overall. Each phase is S–M and independently mergeable.
 - Risk: MEDIUM. A new primitive dependency touches every overlay; CSP, bundle budget, focus handling and test selectors must stay green.

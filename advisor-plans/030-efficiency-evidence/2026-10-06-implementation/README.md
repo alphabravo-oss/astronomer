@@ -1,6 +1,6 @@
 # Plan 030 implementation evidence — 2026-10-06
 
-Status: BLOCKED — live estate access and remaining verification prerequisites unavailable. Full plan remains open.
+Status as of 2026-10-07: **integrated and deployed to local k3s; full Plan 030 remains open**. See [the consolidation and deployment record](#2026-10-07-consolidation-and-local-deployment). The October 6 entries below are historical evidence from the restricted environment.
 
 ## Provenance and isolation
 
@@ -456,3 +456,82 @@ Final implementation HEAD `d1d4875abffb678d3019504a2a523e79efe59378`, branch `im
 The same k3s/Docker/network restriction has persisted across multiple goal turns; repeated retries cannot produce live evidence. Resume requires an execution environment authorized to reach the existing k3s/Docker estate and required verification dependencies. First re-establish live deployed provenance, RustFS reachability/version/ownership and telemetry; execute the approved separate-bucket dev worksheet. Then perform the reviewed real-member baseline/candidate windows, integration repairs supported by current evidence, freshness/fault/reconnect/browser measurements, isolated recovery, canary/soak and rollback proof. Retain Plan016 release authority. Off-host production recovery remains explicitly deferred, not an extra prerequisite imposed on the user's dev choice.
 
 Verification also remains open for authoritative backend/frontend and LocalCI, socket-dependent suites, supported Node runtime/full frontend unit suite (including the recorded Charlie timeout), PromQL execution and actual browsers. Helm, source compilation and the scoped successes above do not replace those checks. This status is BLOCKED rather than complete; no efficiency percentage, live health, recovery success or rollout readiness is awarded.
+
+
+## 2026-10-07 consolidation and local deployment
+
+The user authorized worktree cleanup, consolidation, local deployment and functional validation, with PR decisions deferred. The network restriction from October 6 is no longer present. No branch was pushed and no PR was created, updated or merged during this work.
+
+### Source and cleanup
+
+- Active checkout: `/root/astronomer-all/astronomer`, branch `integrate/030-031-local-k3s`.
+- Combined Plan 031 tip `6099df97`, Plan 030 tip `d1d4875a`, and the previously deployed offering-runner lineage `14341d1b`. Merge commit `94bac627`; integration fixes `be148222`; test fixes `2619df28` and `b341ac35`; contract fix `1322c98e`; optional browser-runner correction `66653597`.
+- Archived all **43 secondary Astronomer worktrees**, including dirty/untracked/ignored contents, before removing them. Only the primary checkout remains. Removed **65 integrated or patch-equivalent local branches**. Other repositories were left alone.
+- Recovery archive: `/root/astronomer-all/.worktree-archives/20261007-consolidation` (private permissions). Verified Git bundles retain original refs; individual compressed worktree archives have recorded SHA-256s. `removed-worktrees.json`, `branch-cleanup.json` and `preserved-branches.json` map every action and original tip.
+- Eight tips remain under `archive/20261007/`: `feat/031-6b-a`, `feat/031-6b-c`, `feat/031-6b-d`, `feat/031-cc-gap-report`, `feat/031-p4`, `implement/027-api-workflows`, `implement/027-cr-scope`, and `implement/030-baseline-metrics`.
+- The 031 alternatives overlap later integrated P4/P6b implementations; the gap report predates the final 031 measurements. The 027 branches overlap later catalog/workflow fixes; the 030 baseline is a deliberately separate measurement control. They have non-equivalent commits, so their original tips were retained rather than silently discarded or indiscriminately merged. Archived screenshots and scratch tests are not claimed as newly integrated product changes.
+- Active branches are now `main`, the existing `feat/offering-functional-runner` PR branch, and the integration branch. Main remains `f87b189f`. Existing PR #46 remains draft/open; this integration has no PR.
+
+### Integration corrections
+
+The UI branch used migration 067 for saved views, while the deployed offering branch already used migrations 067–070. Saved views now use **071**, and chart/compatibility/schema checks agree. No existing migration was rewritten on the live database.
+
+Merge conflict resolution preserved both the refined UI and offering form/preview/review behavior. Oversized units were extracted without raising complexity ceilings. Generated SQL/OpenAPI artifacts were refreshed. Verification also found and corrected an invalid queued-operation fixture, an accessibility header mismatch, audit ownership assertions after extraction, a concurrent test-fixture map race, and an OpenAPI positive-number constraint incompatible with the schema validator. The constraint retains strict positivity and works with the pinned generator.
+
+The optional browser engineering suite is now excluded during discovery unless `LIVE_BROWSER_ENGINEERING=1`; the live runner records an explicit `not_run` artifact otherwise. Enabled discovery contains eight journeys. Its delivery-inventory assertion now follows the actual `controller_inventory.system_components` envelope. These are test-only corrections, not evidence of a completed performance run.
+
+### Deployed identity and preservation
+
+- Endpoint: `https://astronomer.dev.alphabravo.io`.
+- k3s node: `astronomer-dev-1-mj`, Kubernetes `v1.35.7+k3s1`.
+- Astronomer Helm revision **225**; monitoring Helm revision **6**. Both report `deployed`.
+- Seven images built from clean commit **`1322c98e7914427fb094f33cdc156ae285ed0f11`**, version **`1.2.0-local.1322c98e`**, imported into local k3s and pinned by digest. Subsequent changes are test-runner/documentation only. Exact digests and source-tree hash are in the private evidence below.
+- Builds used Go 1.26.6, Node 24.21.0, the repository runtime Dockerfile stages for Go binaries, and the original frontend/shell/DR Dockerfiles. Host Go builds were CGO-disabled and stamped with source identity; this is local deployment evidence, not a release build attestation.
+- Database schema **71**, dirty **false**. `/health` and `/readyz` pass. Frontend, server and worker are 1/1; the local agent and delivery inventory report the new version.
+- Six pre-existing non-Helm Secret data maps, both PVC identities, and the Grafana proxy key were verified unchanged. PostgreSQL and Redis were preserved.
+- A pre-upgrade PostgreSQL custom-format backup was restored into a temporary verification database; schema and core record counts matched. Only that verification database was dropped. This is a local database recovery check, not a management-plane/off-host DR qualification.
+- Grafana's unavailable proxy image was replaced through the existing Helm release; its pod is 3/3 and authenticated proxy health reports `database: ok`.
+- Existing ServiceMonitor/rule/dashboard wiring was enabled for this deployment. Prometheus reports the new server and worker targets `up`; PromQL queries return 1 for each. Observation timestamps and request/cache metrics are emitted.
+
+### Verification completed
+
+| Check | Result and scope |
+| --- | --- |
+| Frontend enterprise gate | PASS at `be148222`: 2,307 unit tests, lint, types, production build, budgets, zero npm audit vulnerabilities. Product frontend source is unchanged in the final image apart from build stamps. |
+| Full Go tests and full race suite | PASS at `b341ac35`, including the fixed concurrent fixture. The backend invocation subsequently stopped on the OpenAPI schema issue; that failed invocation is retained as failed evidence. |
+| API-contract enterprise gate | PASS at `66653597` after the schema and optional-test fixes: build/vet, API package tests, generated contracts, documentation/complexity/dependency checks, route/error/security contracts and zero-unowned-quarantine policy. This completes the failed contract portion; it is not relabeled as a fresh full backend invocation. |
+| Helm enterprise gate | PASS at `b341ac35`: lint, renders and chart contracts. Chart source is unchanged afterward. |
+| Real PostgreSQL integration | PASS: 21/21 tests, including saved-view concurrency on schema 71. |
+| Focused fixture race regression | PASS: 25 consecutive concurrent-replay executions under the race detector. |
+| Browser-runner selection | Disabled: no engineering tests collected; enabled: eight collected. Type-check, ShellCheck and quarantine policy pass. No engineering performance run claimed. |
+| Live saved views | API create/list/update/default/delete round trip passed; test records removed. UI save, page reload, reapply and confirmed delete also passed. |
+| Live cluster and delivery | Authenticated Kubernetes node read succeeds. Two existing Flux assignments are ready; inventory reports 3 and 5 resource identities, with current source observations. |
+| Live UI | T3 browser checked login/session, overview, cluster list/detail, workloads, Tools, delivery estate/system components, project-scoped catalog, schema-backed install form and Grafana. The form was canceled without installing an add-on. Cluster list checked at 390px and desktop with no document overflow. Final overview shows the deployed version. |
+
+These checks establish a functioning local rollout, not completion of the whole efficiency program or release qualification. No full Local CI matrix, real-member scale run, sustained soak, or destructive rollback drill was performed in this session.
+
+### Remaining work and observed limitations
+
+1. **Plan 030 performance/recovery qualification remains open:** matched real-member baseline/candidate measurements, LIST/GET reduction and memory evidence, fault/freshness/reconnect drills, scale/soak/canary/rollback proof, and the dedicated RustFS/management-plane recovery worksheet. Do not claim an efficiency percentage from this rollout.
+2. **Plan 031 features remain incomplete:** backend image search/presence support and server-side audit/alerting sort/filter parameters. This session performed a focused live UI walkthrough, not the entire keyboard/accessibility/visual matrix.
+3. **Charlie is disabled** in its authoritative/requested mode. Its two old pods still fail registry pulls with 401. Fresh authorized onboarding/credential recovery is required before testing an enabled integration; this rollout did not enable it.
+4. **Flux source-controller reports 1/2 ready.** The second pod is waiting for the leader lease and its artifact-port readiness probe fails; the leader reconciles both assignments. This existed for 11 days before the rollout. Assess the intended standby-readiness behavior before changing its probe or replica policy.
+5. **Known workload overview defect:** healthy DaemonSets appear `0/1`/`Unknown`. The backend summary reads replica fields rather than DaemonSet counters; the mapping is byte-identical to main. The detailed system inventory reports its own observations. This pre-existing display bug was identified, not repaired here.
+6. **Tool/ownership reconciliation needs follow-up:** Tools reports no installed add-ons while system inventory and Flux show existing baseline exporters and cluster-owned cert-manager/ingress. Both old monitoring-stack exporters and baseline exporters remain present. No duplicate stack was installed to force green status.
+7. Grafana's home page loads through the authenticated proxy; its external RSS/news panel reports a feed error. This does not invalidate the Grafana database/proxy health check.
+8. Before PR submission: decide the scope of the existing offering draft versus this combined branch, resolve the chosen remaining defects, and run the repository's lockfile-pinned full Local CI PR matrix. No push/merge decision is implied by local deployment success.
+
+### Evidence and recovery locations
+
+Private evidence directory: `/var/tmp/astro-consolidation-20261007` (contains credentials/backups; do not publish wholesale).
+
+- `final-state.json`, `final-images.tsv`, `build-provenance-final.json`, `source-final-before.json` identify the final runtime and images.
+- `database-before.pgcustom`, `backup.log`, `values-before.json`, `manifest-before.yaml`, `helm-history-before.json` preserve pre-upgrade recovery state.
+- `deploy-final.log`, `deploy-grafana-final.log`, `render-contract-review.log` record the final upgrades and preservation checks; `rollout-be148222/` retains the first rollout's provenance.
+- `api-validation.json`, `api-validation-final.log`, `delivery-inventory-final.json`, `prometheus-targets-final.json`, `prometheus-up-query.json`, `postgres-integration.log` contain live/test evidence.
+- Frontend gate: `gates/frontend-final/20261007T142545Z-1511351-be14822227f3/evidence.json`.
+- Full Go/race and the original contract failure: `gates/backend-complete/20261007T144115Z-1553578-b341ac35e633/evidence.json`.
+- Completed API contract gate: `gates/api-complete/20261007T145432Z-1584680-66653597785a/evidence.json`.
+- Helm gate: `gates/helm-final/20261007T144808Z-1572105-b341ac35e633/evidence.json`.
+
+Rollback must account for schema 71. The migration is additive, but the older image's schema guard must not be bypassed casually. Keep the tested database backup and old release values/images; no rollback or data deletion is part of this handoff.

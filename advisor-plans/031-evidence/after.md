@@ -1,5 +1,7 @@
 # Plan 031 after-measurements (2026-10-06, final integration tip)
 
+2026-10-07 update: combined with Plan 030, archived the old worktrees and deployed locally as `1.2.0-local.1322c98e`. A focused live UI walkthrough passed; full-plan residuals remain. See the [consolidation and deployment record](../030-efficiency-evidence/2026-10-06-implementation/README.md#2026-10-07-consolidation-and-local-deployment). The measurements below describe the October 6 tip.
+
 Measured with the plan commands in `frontend/`, excluding tests and `components/ui/`.
 
 | Signal | Baseline | After | Target | Status |

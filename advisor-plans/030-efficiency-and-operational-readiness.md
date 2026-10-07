@@ -2,7 +2,7 @@
 
 ## Status and review boundary
 
-- Status: **BLOCKED — reviewed implementation at `d1d4875a`; live estate access and remaining verification prerequisites unavailable**. Implementation remains authorized; the full plan is not complete.
+- Status (2026-10-07): **INTEGRATED AND DEPLOYED LOCALLY**, combined with Plan 031 on `integrate/030-031-local-k3s`; k3s runs `1.2.0-local.1322c98e`. Core live checks pass. Performance, scale/soak and full recovery qualification remain open; the full plan is not complete. See the dated consolidation record in the implementation ledger.
 - Current evidence: [implementation ledger](./030-efficiency-evidence/2026-10-06-implementation/README.md).
 - Planned against Astronomer commit `f87b189f`, October 6, 2026.
 - Priority: P1; effort: multi-week program, delivered as independently verifiable changes.
