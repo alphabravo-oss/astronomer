@@ -622,3 +622,61 @@ Release-history inspection found v1.1.0 was published by GitHub Actions run
 introduced afterward; repository environments were empty at inspection and no
 release approval variable was configured. No external certification or human
 approval evidence is fabricated by local tests.
+
+### v1.2.0 publication policy and final local fixes (2026-10-07)
+
+The owner explicitly selected automated publication for v1.2.0, with cloud,
+scale, Rancher benchmark and human accessibility certifications deferred and
+no separately named release approver required. A subsequent real SBOM check
+found the newly introduced strict license policy rejects existing dependencies
+(BusyBox lacks asserted license metadata; PostgreSQL includes GPL and other
+licenses outside that policy). The owner separately authorized deferring license
+qualification for this tag while retaining findings and SBOMs. The signed runtime
+report now explicitly distinguishes passed vulnerability checks from deferred
+license qualification; unresolved findings are preserved, not zeroed or waived.
+Other versions retain mandatory license and external approval policies.
+
+Release and recovery publication now require an automatic v1.1.0 upgrade,
+backup/decryption and clean-restore rehearsal. Promotion verifies exact signing
+identities, original and producer run IDs, commit/tag and matching manifest
+hashes. Evidence and a qualification disclosure are attached to the release.
+The rehearsal review fixed actual PostgreSQL variable substitution (stdin rather
+than `psql -c`), readiness-port ownership, disposable API-token lifetime,
+canonical webhook routes, and the seventh DR image. Actual SQL extracted from
+the script passed against an owned PostgreSQL 16 database, including proof-row
+verification and live-database replacement. Release contracts, all deployment
+package tests, 17 Python qualification-verifier tests, the executable rehearsal
+harness, ShellCheck and actionlint passed.
+
+Full lockfile-pinned Local CI run 66 completed in 101m 10s: **22 passed, 3 failed**.
+Backend, offering-static, all eleven stateful entries, PostgreSQL streaming
+failover, the real live-browser stack and all seven image build/scan/SBOM entries
+passed. The live stack passed all 16 browser journeys and verified real Flux,
+Trivy, direct read-only member credentials, and completed Velero backup/restore.
+The E2E job passed all 414 cases and all 310 route-smoke cases before its tablet
+visual matrix failed. The other failures were a stale generated frontend source
+inventory and a restore-ordering assertion tied to the old SQL spelling.
+The aggregate did not run after those first-wave failures; this is not a green
+full-matrix claim.
+
+Corrected frontend enterprise verification passed with a stable source tree at
+`f5e4632e45add1c4292193b35333c76d2168abad`: 2,307 tests, lint/types/build/bundle
+checks and zero npm audit vulnerabilities. Corrected Helm enterprise verification
+passed with a stable source tree at
+`7f9bb5b1d794c9ca432c4de0a505158ed4f621a4`. Tablet screenshot review found a real
+header defect: scope filters compressed action buttons into a 228px column.
+The action group now wraps as a unit into an 88px two-row header. A viewport-height
+regression assertion and 20 individually reviewed light/dark tablet baselines
+cover the fix and intended prior UI changes. The final complete visual matrix
+passed **80/80**; focused lint and TypeScript checks passed. Intermediate host
+browser runs caught `ERR_NETWORK_CHANGED` during concurrent Docker network
+teardown, and one overlapping run lost its shared preview server. Those are
+recorded failures, not retries hidden by the test configuration; the final run
+was isolated after container jobs ended and passed without relaxed thresholds.
+
+The local k3s deployment remains the previously verified `1322c98e` runtime until
+the released artifacts are deployed. Final GitHub checks on the pushed PR head,
+merge, tagged release qualification and publication are still pending at this
+record's creation. Private raw logs, SBOM preflight output and test evidence are
+retained under `/var/tmp/astronomer-release-20261007`; no private credentials or
+backup archives are committed.
