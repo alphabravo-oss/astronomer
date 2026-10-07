@@ -12,8 +12,9 @@ Run from the repository root with the existing live fixture/credential setup:
 LIVE_BROWSER_ENGINEERING=1 scripts/test-live-browser.sh
 ```
 
-Without that flag, these journeys attach `collection_status: "not_run"` and skip.
-Skipped journeys provide no live gate coverage. Enabled execution requires the
+Without that flag, the live project excludes these journeys during discovery and
+the runner writes `engineering-not-run.json` with `collection_status: "not_run"`.
+Excluded journeys provide no live gate coverage. Enabled execution requires the
 existing cluster, project, backup namespace, and backup ConfigMap fixture variables; the denied
 journey also requires `LIVE_RESTRICTED_EMAIL` and `LIVE_RESTRICTED_PASSWORD`.
 Missing fixtures fail explicitly. Existing runner prerequisites still apply.
@@ -79,7 +80,7 @@ cd frontend
 npm test -- src/test/engineering-metrics.test.ts src/test/engineering-recorder.test.ts
 npm run type-check
 npm run lint
-npx playwright test --project=live --list tests/e2e-live/efficiency.live.spec.ts
+LIVE_BROWSER_ENGINEERING=1 npx playwright test --project=live --list tests/e2e-live/efficiency.live.spec.ts
 ```
 
 Offline tests exercise numeric privacy projection, response classifications,

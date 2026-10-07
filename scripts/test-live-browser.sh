@@ -44,6 +44,11 @@ suffix="$$-$(date +%s)-$(openssl rand -hex 4)"
 artifact_dir="${LIVE_BROWSER_ARTIFACT_DIR:-${TMPDIR:-/tmp}/astronomer-live-browser-$suffix}"
 mkdir -p "$artifact_dir/bin" "$artifact_dir/playwright-report" "$artifact_dir/test-results"
 artifact_dir="$(cd "$artifact_dir" && pwd)"
+if [[ "${LIVE_BROWSER_ENGINEERING:-0}" != "1" ]]; then
+  cat >"$artifact_dir/engineering-not-run.json" <<'JSON'
+{"schema_version":"astronomer-browser-engineering/v1","scope":"engineering_browser_measurement","qualification":"not_evaluated","collection_status":"not_run","reason":"engineering_mode_disabled"}
+JSON
+fi
 minio_build_dir="$(mktemp -d)"
 
 postgres_container="astronomer-live-browser-pg-$suffix"

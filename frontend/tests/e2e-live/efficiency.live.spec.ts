@@ -25,24 +25,12 @@ function fixture(name: string) {
   if (!value) throw new Error("required engineering fixture is missing");
   return value;
 }
-test.beforeEach(async ({ page }, info) => {
+test.beforeEach(({ page }) => {
   void page;
-  if (!enabled) {
-    await info.attach("engineering-not-run.json", {
-      contentType: "application/json",
-      body: JSON.stringify({
-        schema_version: "astronomer-browser-engineering/v1",
-        scope: "engineering_browser_measurement",
-        qualification: "not_evaluated",
-        collection_status: "not_run",
-        reason: "engineering_mode_disabled",
-      }),
-    });
-    test.skip(
-      true,
-      "Engineering measurements are opt-in; NOT_RUN artifact attached",
+  if (!enabled)
+    throw new Error(
+      "Engineering measurements require LIVE_BROWSER_ENGINEERING=1",
     );
-  }
   fixture("LIVE_FIXTURE_CLUSTER_ID");
   fixture("LIVE_FIXTURE_PROJECT_ID");
   fixture("LIVE_FIXTURE_BACKUP_NAMESPACE");
@@ -176,7 +164,7 @@ for (const journey of [
           `/dashboard/clusters/${cluster}/delivery/system-components?project=${project}`,
         );
         const result = await data(await response);
-        const component = result?.system_components?.[0];
+        const component = result?.controller_inventory?.system_components?.[0];
         if (!component || typeof component.name !== "string")
           throw new Error("engineering component fixture absent");
         await expect(

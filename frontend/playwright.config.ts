@@ -116,6 +116,11 @@ export default defineConfig({
       // its diagnostics.
       name: "live",
       testDir: "./tests/e2e-live",
+      // Optional measurement journeys are selected before collection, never skipped.
+      testIgnore:
+        process.env.LIVE_BROWSER_ENGINEERING === "1"
+          ? undefined
+          : /efficiency\.live\.spec\.ts/,
       retries: 0,
       // Headroom for the login helper waiting out the backend's fixed-window
       // login rate limiter (up to ~60s) on top of real-network latencies.
