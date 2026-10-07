@@ -35,17 +35,17 @@ tar -czf "$state/target/astronomer-1.2.0.tgz" -C "$work/chart" astronomer
 cp "$state/target/astronomer-1.2.0.tgz" "$state/previous/astronomer-1.1.0.tgz"
 
 image_refs=()
-for component in server worker agent migrate frontend shell; do
+for component in server worker agent migrate frontend shell dr; do
   ordinal=$((${#image_refs[@]} + 1))
   digest="sha256:$(printf '%064d' "$ordinal")"
   repository="astronomer-go-${component}"
-  [[ "$component" == frontend || "$component" == shell ]] && repository="astronomer-${component}"
+  [[ "$component" == frontend || "$component" == shell || "$component" == dr ]] && repository="astronomer-${component}"
   ref="ghcr.io/alphabravo-oss/${repository}@${digest}"
   image_refs+=("$ref")
   printf '%s\n' "$ref" >"$state/target/${component}.digest"
 done
 image_json="$(printf '%s\n' "${image_refs[@]}" | jq -R . | jq -s \
-  'to_entries | map({name:(["server","worker","agent","migrate","frontend","shell"][.key]),reference:.value})')"
+  'to_entries | map({name:(["server","worker","agent","migrate","frontend","shell","dr"][.key]),reference:.value})')"
 target_chart="sha256:$(sha256sum "$state/target/astronomer-1.2.0.tgz" | awk '{print $1}')"
 previous_chart="sha256:$(sha256sum "$state/previous/astronomer-1.1.0.tgz" | awk '{print $1}')"
 jq -n --arg commit "$source_commit" --arg chart "$target_chart" --argjson images "$image_json" '{
@@ -62,7 +62,7 @@ jq -n --arg commit "$source_commit" --arg chart "$target_chart" --argjson images
     ]
   }
 }' >"$state/target/release-manifest.json"
-jq -n --arg commit "$previous_commit" --arg chart "$previous_chart" --argjson images "$image_json" \
+jq -n --arg commit "$previous_commit" --arg chart "$previous_chart" --argjson images "$(jq 'map(select(.name != "dr"))' <<<"$image_json")" \
   '{release:{version:"v1.1.0",source_commit:$commit},astronomer:{chart:{content_digest:$chart},images:$images}}' \
   >"$state/previous/release-manifest.json"
 printf '{}\n' | tee "$state/target/release-manifest.sigstore.json" \

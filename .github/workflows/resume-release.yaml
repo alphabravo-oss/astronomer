@@ -571,7 +571,7 @@ jobs:
           git show "refs/tags/$TAG:CHANGELOG.md" | awk '/^## Unreleased/{emit=1; next} /^## /{if (emit) exit} emit' > RELEASE_NOTES.md
           test -s RELEASE_NOTES.md
           sort --unique ./*.digest > RELEASE_SUBJECTS
-          cp RELEASE_SUBJECTS RELEASE_IMAGES
+          jq -r '.astronomer.images[].reference' release-manifest.json | sort --unique > RELEASE_IMAGES
           find . -maxdepth 1 -type f \( \
               -name 'astronomer-*.tgz' -o -name '*.tar.gz' -o \
               -name 'sbom-*.spdx.json' -o -name 'provenance-*.slsa.json' -o \

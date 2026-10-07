@@ -173,7 +173,11 @@ if [[ -n "$release_artifact_dir" ]]; then
   if [[ -f "$release_artifact_dir/RELEASE_IMAGES" && ! -L "$release_artifact_dir/RELEASE_IMAGES" ]]; then
     cp -- "$release_artifact_dir/RELEASE_IMAGES" "$backup_dir/release-assets/RELEASE_IMAGES"
   else
-    for component in server worker agent migrate frontend shell; do
+    components=(server worker agent migrate frontend shell)
+    if jq -e 'any(.astronomer.images[]; .name == "dr")' "$release_artifact_dir/release-manifest.json" >/dev/null; then
+      components+=(dr)
+    fi
+    for component in "${components[@]}"; do
       [[ -f "$release_artifact_dir/${component}.digest" && ! -L "$release_artifact_dir/${component}.digest" ]] || die "pre-promotion artifact is missing regular file ${component}.digest"
       sed -n '1p' "$release_artifact_dir/${component}.digest"
     done | sort --unique >"$backup_dir/release-assets/RELEASE_IMAGES"
@@ -224,8 +228,16 @@ agent_ref="$(release_image_ref astronomer-go-agent)"
 migrate_ref="$(release_image_ref astronomer-go-migrate)"
 frontend_ref="$(release_image_ref astronomer-frontend)"
 shell_ref="$(release_image_ref astronomer-shell)"
-[[ "$(grep -Ec '^[^#[:space:]]' "$backup_dir/release-assets/RELEASE_IMAGES")" == 6 ]] || \
-  die "RELEASE_IMAGES must contain exactly the six first-party images"
+# Releases before 1.2.0 have six images; the signed 1.2.0 set adds the DR
+# tool image. The exact manifest comparison below rejects extra references.
+image_refs=("$server_ref" "$worker_ref" "$agent_ref" "$migrate_ref" "$frontend_ref" "$shell_ref")
+dr_ref=""
+if jq -e 'any(.astronomer.images[]; .name == "dr")' "$backup_dir/release-assets/release-manifest.json" >/dev/null; then
+  dr_ref="$(release_image_ref astronomer-dr)"
+  image_refs+=("$dr_ref")
+fi
+[[ "$(grep -Ec '^[^#[:space:]]' "$backup_dir/release-assets/RELEASE_IMAGES")" == "${#image_refs[@]}" ]] || \
+  die "RELEASE_IMAGES must contain exactly the first-party image set"
 
 runtime_digest() {
   local source="$1"
@@ -247,7 +259,7 @@ jq -e --rawfile refs "$backup_dir/release-assets/RELEASE_IMAGES" '
   ([.astronomer.images[].reference] | sort) == ($refs | split("\n") | map(select(length > 0)) | sort)
 ' "$backup_dir/release-assets/release-manifest.json" >/dev/null || \
   die "signed release manifest does not bind the exact first-party image set"
-for ref in "$server_ref" "$worker_ref" "$agent_ref" "$migrate_ref" "$frontend_ref" "$shell_ref"; do
+for ref in "${image_refs[@]}"; do
   cosign verify \
     --certificate-identity "$release_identity" \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
@@ -444,6 +456,10 @@ release_args=(
 )
 
 printf 'Running server-side dry run with preserved values and immutable release images\n'
+if [[ -n "$dr_ref" ]]; then
+  release_args+=(--set-string "managementBackup.image.digest=${dr_ref##*@}" --set-string "managementRestoreDrill.image.digest=${dr_ref##*@}")
+fi
+
 "${helm_cmd[@]}" upgrade "${release_args[@]}" --dry-run=server --hide-secret >"$backup_dir/dry-run.yaml"
 
 if ((dry_run_only)); then
