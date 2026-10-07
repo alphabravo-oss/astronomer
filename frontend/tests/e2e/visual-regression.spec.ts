@@ -50,6 +50,14 @@ for (const theme of ["dark", "light"] as const) {
       }, theme);
       await page.goto(route.url);
       await expect(page.getByTestId("app-shell")).toBeVisible();
+      if (
+        route.name === "resource-explorer" &&
+        test.info().project.name === "tablet-chromium"
+      ) {
+        // Scope filters must not squeeze the action controls into a tall column.
+        const header = await page.locator("header").first().boundingBox();
+        expect(header?.height).toBeLessThanOrEqual(112);
+      }
       await expect(page).toHaveScreenshot(`${route.name}-${theme}.png`, {
         animations: "disabled",
         fullPage: true,

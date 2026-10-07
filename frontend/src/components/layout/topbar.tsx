@@ -330,7 +330,7 @@ export function Topbar() {
     visibleTheme === "dark" ? Moon : visibleTheme === "light" ? Sun : Monitor;
 
   return (
-    <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 py-2 lg:flex-nowrap border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
+    <header className="sticky top-0 z-30 flex min-h-14 flex-wrap items-center gap-2 py-2 border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
       <BareButton
         onClick={() => setMobileSidebarOpen(true)}
         className="mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden font-normal"
@@ -363,7 +363,7 @@ export function Topbar() {
       </div>
 
       {/* Right: Actions */}
-      <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
+      <div className="ml-auto flex shrink-0 items-center justify-end gap-1">
         <ClusterShellLauncher
           clusterId={activeClusterId}
           clusterName={
