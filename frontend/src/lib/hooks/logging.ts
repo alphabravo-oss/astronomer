@@ -150,6 +150,8 @@ export function useLoggingOperations(params?: {
   return useQuery({
     queryKey: queryKeys.logging.operations(params),
     queryFn: ({ signal }) => getLoggingOperations(params, signal),
+    // Keep pagination failure/recovery visible instead of waiting for agent reconnect retries.
+    retry: false,
     throwOnError: false,
     // `logging_operation.changed` drives freshness while the stream is open;
     // poll so pending -> running -> completed transitions still appear when

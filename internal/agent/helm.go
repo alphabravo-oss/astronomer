@@ -49,10 +49,39 @@ func (h *HelmHandler) actionConfig(namespace string) (*action.Configuration, err
 	logFunc := func(format string, v ...interface{}) {
 		h.log.Debug(fmt.Sprintf(format, v...), "component", "helm")
 	}
-	if err := cfg.Init(h.settings.RESTClientGetter(), namespace, h.driver, logFunc); err != nil {
+	settings := helmSettingsForNamespace(h.settings, namespace)
+	if err := cfg.Init(settings.RESTClientGetter(), namespace, h.driver, logFunc); err != nil {
 		return nil, fmt.Errorf("init helm config: %w", err)
 	}
 	return cfg, nil
+}
+
+// helmSettingsForNamespace returns a request-local settings copy. Helm's
+// action configuration uses the namespace argument for release storage, while
+// its Kubernetes client gets the default namespace from EnvSettings. Without
+// setting both, namespace-implicit chart resources such as hooks are created
+// in the agent pod's own namespace instead of the requested release namespace.
+func helmSettingsForNamespace(base *cli.EnvSettings, namespace string) *cli.EnvSettings {
+	settings := cli.New()
+	settings.KubeConfig = base.KubeConfig
+	settings.KubeContext = base.KubeContext
+	settings.KubeToken = base.KubeToken
+	settings.KubeAsUser = base.KubeAsUser
+	settings.KubeAsGroups = append([]string(nil), base.KubeAsGroups...)
+	settings.KubeAPIServer = base.KubeAPIServer
+	settings.KubeCaFile = base.KubeCaFile
+	settings.KubeInsecureSkipTLSVerify = base.KubeInsecureSkipTLSVerify
+	settings.KubeTLSServerName = base.KubeTLSServerName
+	settings.Debug = base.Debug
+	settings.RegistryConfig = base.RegistryConfig
+	settings.RepositoryConfig = base.RepositoryConfig
+	settings.RepositoryCache = base.RepositoryCache
+	settings.PluginsDirectory = base.PluginsDirectory
+	settings.MaxHistory = base.MaxHistory
+	settings.BurstLimit = base.BurstLimit
+	settings.QPS = base.QPS
+	settings.SetNamespace(namespace)
+	return settings
 }
 
 // helmResult constructs a HELM_RESULT response message.

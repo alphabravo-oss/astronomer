@@ -149,7 +149,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 			DistributionDigest: payload.ControllerInventory.DistributionDigest,
 			KubernetesVersion:  payload.ControllerInventory.KubernetesVersion,
 			Ready:              payload.ControllerInventory.Ready, CompatibilityStatus: string(compatibilityResult.Status),
-			ErrorCode: compatibilityResult.Code, ObservedAt: timestamp(time.Now().UTC()),
+			ErrorCode: compatibilityResult.Code, ObservedAt: inventoryObservedAt(payload.ControllerInventory, time.Now().UTC()),
 			StatusDigest: payload.StatusDigest, AgentSessionID: sessionID, AgentSequence: payload.SessionSequence,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -162,13 +162,13 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 		semanticChanged := accepted.StatusChanged
 		if !semanticChanged {
 			statusResults = append(statusResults, "coalesced")
-			return nil
+			return refreshDeploymentSourceTimes(ctx, tx, payload, authenticatedCluster, sessionID)
 		}
 		if systemTx, ok := tx.(systemInventoryTransaction); ok {
 			observedAt := time.Now().UTC()
 			observed, err := systemTx.ObserveDeliverySystemAssignment(ctx, sqlc.ObserveDeliverySystemAssignmentParams{
 				ClusterID: authenticatedCluster, ObservedDistributionDigest: payload.ControllerInventory.DistributionDigest,
-				ObservedAgentVersion: payload.ControllerInventory.AgentVersion, ObservedAt: timestamp(observedAt),
+				ObservedAgentVersion: payload.ControllerInventory.AgentVersion, ObservedAt: inventoryObservedAt(payload.ControllerInventory, observedAt),
 				InventoryReady: payload.ControllerInventory.Ready, CompatibilityStatus: string(compatibilityResult.Status),
 				ErrorCode: compatibilityResult.Code,
 			})
@@ -200,6 +200,8 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 
 		for index := range payload.Deployments {
 			observation := payload.Deployments[index]
+			modern := payload.ControllerInventory.Observation != nil
+			eventTime := deploymentEventTime(observation, modern, time.Now().UTC())
 			deploymentID, _ := uuid.Parse(observation.DeploymentID)
 			current, err := tx.GetClusterDeploymentForDeliveryStatus(ctx, sqlc.GetClusterDeploymentForDeliveryStatusParams{
 				ID: deploymentID, ClusterID: authenticatedCluster,
@@ -217,7 +219,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 			}
 			conditions := sanitizeConditions(observation.Conditions)
 			conditionsJSON, _ := json.Marshal(conditions)
-			inventoryJSON, _ := json.Marshal(observation.Inventory)
+			inventoryJSON, _ := json.Marshal(deploymentInventory{DeliveryInventory: observation.Inventory, Observation: observation.Observation})
 			errorCode := observation.ErrorCode
 			if errorCode == "" && len(observation.WarningCodes) != 0 {
 				errorCode = observation.WarningCodes[0]
@@ -229,7 +231,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 				Conditions: conditionsJSON, SourceKind: observation.SourceKind, SourceName: observation.SourceName,
 				ReconcilerKind: observation.ReconcilerKind, ReconcilerName: observation.ReconcilerName,
 				Inventory: inventoryJSON, AgentSessionID: sessionID, AgentSequence: payload.SessionSequence,
-				LastErrorCode: errorCode, LastMessage: message, LastObservedAt: timestamp(observation.ObservedAt), ID: deploymentID,
+				LastErrorCode: errorCode, LastMessage: message, LastObservedAt: deploymentSourceTime(observation, modern), ID: deploymentID,
 			})
 			if errors.Is(err, pgx.ErrNoRows) {
 				statusResults = append(statusResults, "replay_rejected")
@@ -244,7 +246,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 					DeploymentID: deploymentID, RolloutID: current.CurrentRolloutID,
 					EventType: "status_transition", FromPhase: current.Phase, ToPhase: updated.Phase,
 					Generation: observation.Generation, SpecDigest: observation.SpecDigest,
-					ReasonCode: errorCode, Message: message, ObservedAt: observation.ObservedAt,
+					ReasonCode: errorCode, Message: message, ObservedAt: eventTime,
 				}); err != nil {
 					return fmt.Errorf("persist cluster deployment event %s: %w", observation.DeploymentID, err)
 				}
@@ -278,7 +280,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 					RolloutID: advanced.RolloutID, ClusterID: pgtype.UUID{Bytes: advanced.ClusterID, Valid: true},
 					DecisionDigest: decisionDigest.String(), EventType: "status_advance",
 					FromState: advanced.FromState, ToState: advanced.State,
-					ReasonCode: updated.LastErrorCode, Fence: advanced.Fence, OccurredAt: observation.ObservedAt,
+					ReasonCode: updated.LastErrorCode, Fence: advanced.Fence, OccurredAt: eventTime,
 				}); err != nil {
 					return fmt.Errorf("append rollout status event: %w", err)
 				}

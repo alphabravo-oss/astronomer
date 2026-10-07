@@ -1,4 +1,3 @@
-
 /**
  * DIR-02: schema-lite form for ConfigMap create (name + data keys) as an
  * alternative to pure YAML for common day-2 edits. YAML power mode remains
@@ -8,6 +7,7 @@ import { useState } from "react";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useK8sCreate } from "@/lib/hooks/kubernetes-proxy";
 import { toastApiError, toastSuccess } from "@/lib/toast";
+import { BareButton } from "@/components/form/bare-button";
 
 type Props = {
   open: boolean;
@@ -72,19 +72,18 @@ export function ConfigMapFormDialog({
         <label className="block text-sm">
           Value
           <textarea
-            className="mt-1 w-full border rounded-sm px-2 py-1 bg-background font-mono text-xs min-h-[120px]"
+            className="mt-1 w-full border rounded-sm px-2 py-1 bg-background font-mono text-xs min-h-30"
             value={value}
             onChange={(e) => setValue(e.target.value)}
           />
         </label>
-        <button
-          type="button"
-          className="rounded-sm bg-primary text-primary-foreground px-3 py-1.5 text-sm"
+        <BareButton
+          className="rounded-sm bg-primary text-primary-foreground px-3 py-1.5 text-sm inline-block font-normal"
           onClick={submit}
           disabled={create.isPending}
         >
           Create
-        </button>
+        </BareButton>
       </div>
     </ModalShell>
   );

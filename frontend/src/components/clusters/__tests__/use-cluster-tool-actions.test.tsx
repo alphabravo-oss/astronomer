@@ -4,6 +4,7 @@ import type { ClusterTool, ClusterToolStatus } from "@/types";
 
 const mocks = vi.hoisted(() => ({
   install: vi.fn(),
+  upgrade: vi.fn(),
   uninstall: vi.fn(),
   adopt: vi.fn(),
   recover: vi.fn(),
@@ -12,6 +13,18 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/hooks/tools", () => ({
   useInstallTool: () => ({ mutate: mocks.install, isPending: false }),
+  useUpgradeTool: () => ({ mutate: mocks.upgrade, isPending: false }),
+  useToolConfiguration: () => ({
+    data: {
+      preset: "production",
+      valuesYaml: "istiod:\n  replicaCount: 2",
+      releases: [],
+    },
+    isLoading: false,
+    isSuccess: true,
+    isError: false,
+    error: null,
+  }),
   useUninstallTool: () => ({ mutate: mocks.uninstall, isPending: false }),
   useAdoptTool: () => ({ mutate: mocks.adopt }),
   useRecoverTool: () => ({ mutate: mocks.recover, isPending: false }),
@@ -119,6 +132,31 @@ describe("useClusterToolActions", () => {
     );
   });
 
+  it("loads durable values and uses update permission for an upgrade", () => {
+    const readyStatus = { ...status, status: "installed" as const };
+    const { result } = renderHook(() =>
+      useClusterToolActions({ ...props, statuses: [readyStatus] }),
+    );
+    act(() => result.current.cardProps(tool).onUpgrade?.(tool.slug));
+    expect(result.current.installDialog).toMatchObject({
+      action: "upgrade",
+      initialPreset: "production",
+      initialValuesYaml: "istiod:\n  replicaCount: 2",
+    });
+    act(() =>
+      result.current.installDialog?.onConfirm(
+        "istiod:\n  replicaCount: 3",
+        "production",
+      ),
+    );
+    expect(mocks.upgrade.mock.calls[0][0]).toEqual({
+      slug: "istio",
+      cluster_id: "cluster",
+      preset: "production",
+      values_override: "istiod:\n  replicaCount: 3",
+    });
+  });
+
   it("retries the original operation directly but requires confirmation for rollback", () => {
     const { result } = renderHook(() => useClusterToolActions(props));
     act(() => result.current.cardProps(tool).onRecover?.(tool.slug, "retry"));
@@ -158,11 +196,32 @@ describe("useClusterToolActions", () => {
     expect(mocks.uninstall.mock.calls[0][0]).toEqual({
       slug: "istio",
       cluster_id: "cluster",
+      confirm_failed_release_cleanup: true,
     });
     act(() =>
       mocks.uninstall.mock.calls[0][1].onSuccess({ id: "uninstall-operation" }),
     );
     expect(result.current.progress?.operationId).toBe("uninstall-operation");
+  });
+
+  it("requires explicit persistent-data deletion for Longhorn", () => {
+    const longhorn = { ...tool, slug: "longhorn", name: "Longhorn" };
+    const { result } = renderHook(() =>
+      useClusterToolActions({ ...props, tools: [longhorn] }),
+    );
+    act(() => result.current.cardProps(longhorn).onUninstall(longhorn.slug));
+    expect(result.current.confirmation?.confirmValue).toBe("Longhorn");
+    expect(result.current.confirmation?.impact?.consequences).toContain(
+      "Longhorn volumes and their stored data may be permanently deleted by the chart's uninstall job.",
+    );
+    act(() => {
+      void result.current.confirmation?.onConfirm();
+    });
+    expect(mocks.uninstall.mock.calls[0][0]).toEqual({
+      slug: "longhorn",
+      cluster_id: "cluster",
+      confirm_data_deletion: true,
+    });
   });
 
   it("denies recovery before opening a dialog and preserves adoption scope", () => {

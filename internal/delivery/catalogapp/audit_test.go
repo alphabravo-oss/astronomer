@@ -24,3 +24,20 @@ func TestCatalogRolloutIntentPreservesActorScopeAndRetryIdentity(t *testing.T) {
 		t.Fatal("different targets share an audit identity")
 	}
 }
+
+func TestCatalogRollbackIntentPreservesActorScopeAndRetryIdentity(t *testing.T) {
+	installationID, projectID, clusterID, targetID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	actorID := pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	key := uuid.NewString()
+	first := catalogRollbackAuditIntent(installationID, projectID, clusterID, targetID, actorID, key, "constellation")
+	second := catalogRollbackAuditIntent(installationID, projectID, clusterID, targetID, actorID, key, "constellation")
+	if first.IsZero() || first.DedupeKey != second.DedupeKey {
+		t.Fatal("missing or unstable rollback audit intent")
+	}
+	if first.Event.UserID != actorID || first.Event.Detail["project_id"] != projectID.String() || first.Event.Detail["cluster_id"] != clusterID.String() {
+		t.Fatal("rollback intent lost initiating actor or tenant scope")
+	}
+	if first.Event.Detail["installation_id"] != installationID.String() || first.Event.ResourceName != "constellation" {
+		t.Fatal("rollback intent lost installation identity")
+	}
+}

@@ -7,6 +7,13 @@ useDefault = true
 id = "generic-api-key"
 
   [[rules.allowlists]]
+  description = "Offering report fixture uses a literal idempotency marker, not an authentication credential"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^scripts/qualify-offerings/main_test\.go$''']
+  regexes = ['''^\s*dimension\.IdempotencyKey = "idempotency-1"\s*$''']
+
+  [[rules.allowlists]]
   description = "Generated source inventories contain SHA-256 content digests, not credentials"
   condition = "AND"
   regexTarget = "line"

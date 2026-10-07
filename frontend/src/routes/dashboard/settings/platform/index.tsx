@@ -9,7 +9,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useMemo, useEffect, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Pencil, Save } from "lucide-react";
+import { ArrowLeft, Pencil, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
@@ -31,6 +31,9 @@ import {
   diffPlatformSettings,
   hydratePlatformSettings,
 } from "@/lib/platform-settings-model";
+import { Tooltip } from "@/components/ui/tooltip";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 // Banner textareas are text-sm / row-sized, unlike the kit's mono default —
 // merged over the kit textarea class (twMerge, later wins).
@@ -105,14 +108,12 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <LoadingSkeleton label="Loading" heading />
     );
   }
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-(--gap-section) pb-24">
       <form.AppForm>
         <form.FormErrorSummary serverError={save.error?.message} />
       </form.AppForm>
@@ -148,11 +149,12 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
                   placeholder="#3b82f6"
                   className="flex-1 font-mono"
                 />
-                <div
-                  className="w-10 h-10 rounded-lg border border-border"
-                  style={{ backgroundColor: field.state.value }}
-                  title={field.state.value}
-                />
+                <Tooltip content={field.state.value}>
+                  <div
+                    className="w-10 h-10 rounded-lg border border-border"
+                    style={{ backgroundColor: field.state.value }}
+                  />
+                </Tooltip>
               </div>
             )}
           </form.Field>
@@ -300,8 +302,7 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
           {(timeoutMinutes) => (
             <p className="text-xs text-muted-foreground">
               Absolute JWT <span className="font-mono">exp</span> applied on
-              every mint and refresh (setting key{" "}
-              <span className="font-mono">session.timeout_minutes</span>).
+              every mint and refresh (the session timeout setting).
               Activity does not slide the access token; use refresh to obtain a
               new one under this same cap. Compliance baselines may pin this
               value (e.g. 15–20 minutes).
@@ -377,9 +378,8 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
                   ).map((opt) => {
                     const active = field.state.value === opt.v;
                     return (
-                      <button
+                      <BareButton
                         key={opt.v}
-                        type="button"
                         onClick={() => field.handleChange(opt.v)}
                         className={cn(
                           "text-left p-3 rounded-lg border transition-colors",
@@ -394,7 +394,7 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
                         <p className="text-xs text-muted-foreground mt-1">
                           {opt.hint}
                         </p>
-                      </button>
+                      </BareButton>
                     );
                   })}
                 </div>
@@ -478,9 +478,7 @@ function PlatformSummary({ onEdit }: { onEdit: () => void }) {
   );
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-32 rounded-xl border border-border bg-card">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <LoadingSkeleton label="Loading" heading className="rounded-xl border border-border bg-card p-6" />
     );
   }
   const features = Object.entries(g.features);

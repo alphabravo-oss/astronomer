@@ -20,9 +20,12 @@ export const estateClusterColumns: Column<Cluster>[] = [
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 200,
     accessor: (cluster) => (
       <RouterLink
-        to="/dashboard/clusters/$id" params={{ id: cluster.id }}
+        to="/dashboard/clusters/$id"
+        params={{ id: cluster.id }}
         className="font-medium text-foreground hover:underline"
       >
         {cluster.displayName || cluster.name}
@@ -35,15 +38,18 @@ export const estateClusterColumns: Column<Cluster>[] = [
   {
     key: "status",
     header: "Status",
+    kind: "status",
+    size: 120,
     accessor: (cluster) => <StatusBadge status={cluster.status} />,
     searchAccessor: (cluster) => cluster.status,
     sortAccessor: (cluster) => cluster.status,
     filter: { label: "Status" },
-    width: "9rem",
   },
   {
     key: "provider",
     header: "Provider",
+    kind: "badge",
+    size: 150,
     accessor: (cluster) => (
       <div className="space-y-0.5">
         <span className="block text-xs text-muted-foreground">
@@ -57,11 +63,12 @@ export const estateClusterColumns: Column<Cluster>[] = [
     searchAccessor: (cluster) =>
       `${cluster.provider} ${cluster.distribution}`.trim(),
     sortAccessor: (cluster) => cluster.provider,
-    width: "8rem",
   },
   {
     key: "version",
     header: "Version",
+    kind: "version",
+    size: 120,
     accessor: (cluster) => (
       <span className="font-mono text-xs text-muted-foreground">
         {cluster.kubernetesVersion || "—"}
@@ -69,33 +76,31 @@ export const estateClusterColumns: Column<Cluster>[] = [
     ),
     searchAccessor: (cluster) => cluster.kubernetesVersion || "",
     sortAccessor: (cluster) => cluster.kubernetesVersion || "",
-    width: "8rem",
   },
   {
     key: "nodes",
     header: "Nodes",
+    kind: "count",
     accessor: (cluster) => (
       <span className="font-mono text-xs tabular-nums">
         {cluster.nodeCount}
       </span>
     ),
     sortAccessor: (cluster) => cluster.nodeCount,
-    align: "right",
-    width: "6rem",
   },
   {
     key: "pods",
     header: "Pods",
+    kind: "count",
     accessor: (cluster) => (
       <span className="font-mono text-xs tabular-nums">{cluster.podCount}</span>
     ),
     sortAccessor: (cluster) => cluster.podCount,
-    align: "right",
-    width: "6rem",
   },
   {
     key: "cpu",
     header: "CPU",
+    kind: "percent",
     accessor: (cluster) => (
       <span
         className={cn(
@@ -107,12 +112,11 @@ export const estateClusterColumns: Column<Cluster>[] = [
       </span>
     ),
     sortAccessor: (cluster) => cluster.cpuPercentage ?? -1,
-    align: "right",
-    width: "6rem",
   },
   {
     key: "memory",
     header: "Memory",
+    kind: "percent",
     accessor: (cluster) => (
       <span
         className={cn(
@@ -124,8 +128,6 @@ export const estateClusterColumns: Column<Cluster>[] = [
       </span>
     ),
     sortAccessor: (cluster) => cluster.memoryPercentage ?? -1,
-    align: "right",
-    width: "7rem",
   },
 ];
 

@@ -1,12 +1,21 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useDebouncedValue } from "@tanstack/react-pacer";
-import { Check, ChevronsUpDown, Loader2, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronsUpDown, Search } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+} from "react";
 
 import { useCluster } from "@/lib/hooks/clusters";
 import { useClusterSearch } from "@/lib/hooks/cluster-search";
 import { cn } from "@/lib/utils";
 import type { Cluster } from "@/types";
+import { ActionButton } from "@/components/ui/action-button";
+import { SkeletonText } from "@/components/ui/skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 interface RemoteClusterPickerProps {
   value: string;
@@ -24,6 +33,18 @@ interface RemoteClusterPickerProps {
 
 function clusterLabel(cluster: Cluster): string {
   return cluster.displayName || cluster.name;
+}
+
+function PickerTextButton({
+  className,
+  ...props
+}: ComponentProps<typeof ActionButton>) {
+  return (
+    <BareButton
+      className={cn("font-normal whitespace-normal shrink", className)}
+      {...props}
+    />
+  );
 }
 
 /**
@@ -118,11 +139,10 @@ export function RemoteClusterPicker({
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
-      <button
+      <BareButton
         ref={triggerRef}
         id={id}
         name={name}
-        type="button"
         role="combobox"
         aria-label={ariaLabel}
         aria-controls={listboxID}
@@ -136,13 +156,13 @@ export function RemoteClusterPicker({
             setOpen(true);
           }
         }}
-        className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-3 text-left text-sm text-foreground outline-hidden focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-(--control-h) w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-3 text-left text-sm text-foreground outline-hidden focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-normal whitespace-normal shrink"
       >
         <span className={cn("truncate", !value && "text-muted-foreground")}>
           {value ? selectedText : placeholder}
         </span>
         <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </button>
+      </BareButton>
 
       {open ? (
         <div className="absolute z-50 mt-1 w-full min-w-72 overflow-hidden rounded-md border border-border bg-popover shadow-xl">
@@ -199,22 +219,19 @@ export function RemoteClusterPicker({
             className="max-h-72 overflow-y-auto"
           >
             {searchQuery.isLoading || term.trim() !== debouncedTerm.trim() ? (
-              <div
-                role="status"
-                className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground"
-              >
-                <Loader2 className="h-4 w-4 animate-spin" /> Searching clusters…
+              <div role="status" aria-busy="true" className="px-3 py-4">
+                <span className="sr-only">Searching clusters…</span>
+                <SkeletonText lines={2} />
               </div>
             ) : searchQuery.isError ? (
               <div role="alert" className="px-3 py-4 text-sm text-status-error">
                 Could not load clusters.
-                <button
-                  type="button"
-                  className="ml-2 underline"
+                <PickerTextButton
+                  className="ml-2 underline inline-block"
                   onClick={() => void searchQuery.refetch()}
                 >
                   Retry
-                </button>
+                </PickerTextButton>
               </div>
             ) : rowCount === 0 ? (
               <div className="px-3 py-6 text-center text-sm text-muted-foreground">
@@ -238,8 +255,7 @@ export function RemoteClusterPicker({
                       }}
                     >
                       {loadMore ? (
-                        <button
-                          type="button"
+                        <PickerTextButton
                           disabled={searchQuery.isFetchingNextPage}
                           onClick={() => void searchQuery.fetchNextPage()}
                           className="flex h-full w-full items-center justify-center rounded-sm text-sm text-primary hover:bg-accent disabled:opacity-50"
@@ -247,17 +263,16 @@ export function RemoteClusterPicker({
                           {searchQuery.isFetchingNextPage
                             ? "Loading more…"
                             : "Load more clusters"}
-                        </button>
+                        </PickerTextButton>
                       ) : (
-                        <button
+                        <BareButton
                           id={`${listboxID}-option-${virtualRow.index}`}
-                          type="button"
                           role="option"
                           aria-selected={cluster.id === value}
                           onMouseEnter={() => setActiveIndex(virtualRow.index)}
                           onClick={() => select(cluster)}
                           className={cn(
-                            "flex h-full w-full items-center gap-2 rounded-sm px-2 text-left hover:bg-accent",
+                            "flex h-full w-full items-center gap-2 rounded-sm px-2 text-left hover:bg-accent font-normal whitespace-normal shrink",
                             activeIndex === virtualRow.index && "bg-accent",
                           )}
                         >
@@ -278,7 +293,7 @@ export function RemoteClusterPicker({
                           {cluster.id === value ? (
                             <Check className="h-4 w-4 shrink-0 text-primary" />
                           ) : null}
-                        </button>
+                        </BareButton>
                       )}
                     </div>
                   );

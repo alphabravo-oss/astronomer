@@ -145,6 +145,9 @@ export function useClusterNamespaces(clusterId: string) {
     queryKey: queryKeys.clusters.namespaces(clusterId),
     queryFn: ({ signal }) => getClusterNamespaces(clusterId, signal),
     enabled: !!clusterId,
+    // Agent reconnects are surfaced by the scope controls without replacing
+    // the cluster route with a global error boundary.
+    throwOnError: false,
   });
 }
 
@@ -160,6 +163,7 @@ export function useClusterEvents(
     queryFn: ({ signal }) => getClusterEvents(clusterId, { ...params, signal }),
     enabled: !!clusterId,
     refetchInterval: liveFallback(15000),
+    throwOnError: false,
   });
 }
 

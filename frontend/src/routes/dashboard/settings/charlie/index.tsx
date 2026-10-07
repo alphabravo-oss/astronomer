@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useFeatureFlags } from "@/lib/hooks/clusters";
 import { useAuthStore } from "@/lib/store";
 import { PermissionState, StatePanel } from "@/components/ui/empty-state";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { TabStrip } from "@/components/ui/tabs";
 import {
   CHARLIE_ADMIN_TABS,
@@ -22,6 +22,7 @@ import { AutomationTab } from "@/components/charlie/settings/automation-tab";
 import { AccessTab } from "@/components/charlie/settings/access-tab";
 import { DiagnosticsTab } from "@/components/charlie/settings/diagnostics-tab";
 import { Unavailable } from "@/components/charlie/settings/shared";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
 export { AgentTab } from "@/components/charlie/settings/agent-tab";
 export {
@@ -74,13 +75,7 @@ export function CharlieAdminContent() {
     flags.data?.["feature.charlie"] !== true &&
     flags.data?.["feature.charlie"] !== false
   )
-    return (
-      <StatePanel
-        icon={Loader2}
-        iconClassName="animate-spin motion-reduce:animate-none"
-        title="Loading Charlie settings"
-      />
-    );
+    return <LoadingSkeleton label="Loading Charlie settings" />;
   if (!canManageCharlie(user))
     return (
       <PermissionState
@@ -98,7 +93,7 @@ export function CharlieAdminContent() {
       to: `/dashboard/settings/charlie?${mergeCharlieSearch(params, { tab: next })}`,
     });
   return (
-    <div className="space-y-6">
+    <PageShell>
       <ResourceMasthead
         backTo="/dashboard/settings"
         backLabel="Back to settings"
@@ -137,6 +132,6 @@ export function CharlieAdminContent() {
         {tab === "access" && <AccessTab />}
         {tab === "diagnostics" && <DiagnosticsTab />}
       </div>
-    </div>
+    </PageShell>
   );
 }

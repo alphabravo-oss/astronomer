@@ -15,8 +15,6 @@ import {
   DeliveryProjectGate,
   DeliveryShell,
   ErrorMessage,
-  primaryButton,
-  secondaryButton,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
 } from "@/components/delivery/shared";
@@ -31,8 +29,10 @@ import {
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { queryKeys } from "@/lib/query-keys";
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
 
 const scopes = [
   "organization",
@@ -102,59 +102,69 @@ export function OverrideSetsPage() {
     {
       key: "name",
       header: "Override",
+      kind: "name",
+      minSize: 200,
       accessor: (row) => (
-        <div>
-          <p className="font-medium">{row.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {row.enabled ? "Enabled" : "Disabled"}
-          </p>
-        </div>
+        <StackedCell
+          primary={row.name}
+          secondary={row.enabled ? "Enabled" : "Disabled"}
+        />
       ),
       sortAccessor: (row) => row.name,
     },
     {
       key: "scope",
       header: "Scope",
+      kind: "badge",
       accessor: (row) => <span className="capitalize">{row.scope}</span>,
       sortAccessor: (row) => row.scope,
     },
     {
       key: "precedence",
       header: "Precedence",
+      kind: "count",
       accessor: (row) => row.precedence,
       sortAccessor: (row) => row.precedence,
     },
     {
       key: "configuration",
       header: "Configuration",
+      kind: "text",
+      size: 200,
+      minSize: 147,
       accessor: (row) =>
         `${Object.keys(row.values).length} values · ${(row.patches ?? []).length} patches`,
     },
     {
       key: "updated",
       header: "Updated",
-      accessor: (row) => formatRelativeTime(row.updatedAt),
+      kind: "age",
+      accessor: (row) => <AgeCell value={row.updatedAt} />,
       sortAccessor: (row) => row.updatedAt,
     },
     {
       key: "actions",
       header: "Actions",
+      kind: "actions",
+      size: 220,
+      minSize: 220,
+      maxSize: 220,
       accessor: (row) => (
         <div className="flex gap-2">
-          <button
-            className={secondaryButton}
+          <ActionButton
+            intent="default"
             disabled={!canUpdate}
             onClick={() => setEditing(row)}
           >
             <Pencil className="h-4 w-4" /> Edit
-          </button>
-          <button
-            className={secondaryButton}
+          </ActionButton>
+          <ActionButton
+            intent="default"
             disabled={!canDelete || remove.isPending}
             onClick={() => setDeleting(row)}
           >
             <Trash2 className="h-4 w-4" /> Delete
-          </button>
+          </ActionButton>
         </div>
       ),
     },
@@ -181,12 +191,9 @@ export function OverrideSetsPage() {
             description="Apply deterministic organization-to-rollout value layers. Equal-precedence conflicts are rejected before a rollout can be planned."
             actions={
               canCreate ? (
-                <button
-                  className={primaryButton}
-                  onClick={() => setEditing(null)}
-                >
+                <ActionButton intent="primary" onClick={() => setEditing(null)}>
                   <Plus className="h-4 w-4" /> New override
-                </button>
+                </ActionButton>
               ) : undefined
             }
           />
@@ -378,16 +385,16 @@ function OverrideEditor({
           <ErrorMessage error={localError ?? mutation.error} />
         ) : null}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
+          <ActionButton intent="default" type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="primary"
             type="submit"
-            className={primaryButton}
             disabled={mutation.isPending}
           >
             Save override
-          </button>
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>

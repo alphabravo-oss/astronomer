@@ -18,7 +18,7 @@ with tempfile.TemporaryDirectory() as directory:
         "--commit", "abc123", "--workflow", "smoke", "--run-id", "42", "--run-attempt", "1",
         "--job", "smoke", "--repository", "example/astronomer", "--ref", "refs/heads/main",
         "--cluster-name", "smoke-42", "--cluster-id", "cluster-id", "--kubernetes-version", "v1.35.0",
-        "--flux-version", "v2.9.3", "--agent-image", "agent@sha256:a", "--shell-image", "shell@sha256:b",
+        "--flux-version", "v2.9.6", "--agent-image", "agent@sha256:a", "--shell-image", "shell@sha256:b",
         "--k3s-image", "k3s@sha256:c", "--flux-image", "source@sha256:d",
         "--management-image", "server@sha256:e", "--check", "agent_connected",
         "--skipped-check", "vulnerability_reports_not_in_default_baseline",

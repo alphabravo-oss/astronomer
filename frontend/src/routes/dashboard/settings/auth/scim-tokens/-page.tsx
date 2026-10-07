@@ -13,9 +13,10 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
-import { formatRelativeTime } from "@/lib/utils";
 import type { SCIMToken } from "@/types";
 import { useSCIMTokens, useRevokeSCIMToken } from "./-hooks";
+import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 function SCIMTokensList() {
   const navigate = useNavigate();
@@ -28,16 +29,23 @@ function SCIMTokensList() {
     {
       key: "name",
       header: "Name",
+      kind: "name",
       accessor: (row) => (
         <div className="flex items-center gap-2">
-          <KeyRound className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-foreground">{row.name}</span>
+          <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate font-medium text-foreground">
+            {row.name}
+          </span>
         </div>
       ),
     },
     {
       key: "prefix",
       header: "Token",
+      kind: "id",
+      size: 128,
+      minSize: 112,
+      sortAccessor: (row) => row.prefix,
       accessor: (row) => (
         <span className="text-xs font-mono text-muted-foreground">
           {row.prefix}…
@@ -48,36 +56,42 @@ function SCIMTokensList() {
     {
       key: "lastUsedAt",
       header: "Last used",
+      kind: "age",
+      size: 119,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {row.lastUsedAt ? formatRelativeTime(row.lastUsedAt) : "Never"}
+          <RelativeTime value={row.lastUsedAt} />
         </span>
       ),
     },
     {
       key: "createdAt",
       header: "Created",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.createdAt)}
+          <RelativeTime value={row.createdAt} />
         </span>
       ),
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
       sortable: false,
       accessor: (row) => (
-        <button
+        <BareButton
+          aria-label="Revoke token"
           onClick={(e) => {
             e.stopPropagation();
             setRevokeTarget(row);
           }}
           className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-          title="Revoke token"
+          tooltip="Revoke token"
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </BareButton>
       ),
     },
   ];

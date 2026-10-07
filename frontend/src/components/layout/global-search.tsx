@@ -1,27 +1,20 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { Search } from "lucide-react";
+import { useUIStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { BareButton } from "@/components/form/bare-button";
+
+const openPalette = () => useUIStore.getState().setCommandPaletteOpen(true);
 
 /**
- * GlobalSearch is the topbar input that opens the cross-cluster search
- * page. It is intentionally light-weight: typing alone does NOT issue a
- * search request — the user must press Enter (or "/" to focus) to
- * navigate to /dashboard/search?name=<query>. This keeps every keystroke
- * cheap and avoids competing with the search page's own debounce.
- *
- * Keyboard shortcut: "/" focuses the input. Cmd/Ctrl+K is reserved for
- * the global command palette (command-palette.tsx owns that shortcut); the
- * kbd hint rendered here is a visual (non-interactive, so it stays clear of
- * axe's touch-target-size checks) pointer to it, freeing the topbar from a
- * separate ⌘K chip.
+ * GlobalSearch is the topbar search field. It is a button styled as a field:
+ * clicking it (or pressing "/") opens the command palette, which lists
+ * pages, clusters and cross-cluster resource searches. Cmd/Ctrl+K opens the
+ * same palette (command-palette.tsx owns that shortcut); the kbd hints are
+ * visual only so they stay clear of axe's touch-target-size checks.
  */
 export function GlobalSearch() {
-  const navigate = useNavigate();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState("");
-  // "/" focuses the search input unless the user is already typing in a
-  // form control.
+  // "/" opens the palette unless the user is already typing in a form control.
   useEffect(() => {
     function onKeydown(e: KeyboardEvent) {
       if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -33,63 +26,34 @@ export function GlobalSearch() {
         active?.getAttribute("contenteditable") === "true";
       if (!isTypingTarget) {
         e.preventDefault();
-        inputRef.current?.focus();
-        inputRef.current?.select();
+        openPalette();
       }
     }
     document.addEventListener("keydown", onKeydown);
     return () => document.removeEventListener("keydown", onKeydown);
   }, []);
 
-  const submit = () => {
-    const q = value.trim();
-    const target = q
-      ? `/dashboard/search?name=${encodeURIComponent(q)}`
-      : "/dashboard/search";
-    void navigate({ to: target });
-  };
-
   return (
-    <div className="relative w-full max-w-xs">
-      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            submit();
-          }
-          if (e.key === "Escape") {
-            inputRef.current?.blur();
-          }
-        }}
-        placeholder="Search resources..."
-        aria-label="Global resource search"
-        className={cn(
-          "w-full h-8 pl-8 pr-16 rounded-md border border-border bg-background text-sm",
-          "text-foreground placeholder:text-muted-foreground",
-          "focus:outline-hidden focus:ring-1 focus:ring-ring focus:border-ring",
-          "transition-colors",
-        )}
-      />
-      <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 pointer-events-none">
-        <kbd
-          className="hidden md:inline-flex items-center gap-0.5
-            px-1.5 py-0.5 rounded-sm border border-border text-[10px] text-muted-foreground font-mono"
-        >
+    <BareButton
+      onClick={openPalette}
+      aria-label="Search resources"
+      aria-haspopup="dialog"
+      className={cn(
+        "relative flex h-8 w-full items-center gap-2 rounded-md border border-border bg-background pl-8 pr-16 text-left text-sm",
+        "text-muted-foreground transition-colors hover:bg-accent/50",
+        "focus:outline-hidden focus:ring-1 focus:ring-ring focus:border-ring font-normal whitespace-normal shrink",
+      )}
+    >
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+      <span className="truncate">Search resources...</span>
+      <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+        <kbd className="hidden items-center rounded-sm border border-border px-1.5 py-0.5 font-mono text-10 md:inline-flex">
           /
         </kbd>
-        <kbd
-          title="Command palette"
-          className="hidden sm:inline-flex items-center gap-0.5 rounded-sm border border-border
-            px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground"
-        >
+        <kbd className="hidden items-center rounded-sm border border-border px-1.5 py-0.5 font-mono text-10 sm:inline-flex">
           ⌘K
         </kbd>
-      </div>
-    </div>
+      </span>
+    </BareButton>
   );
 }

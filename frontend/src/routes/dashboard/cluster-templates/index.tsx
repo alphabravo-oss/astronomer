@@ -33,7 +33,9 @@ import {
   canWriteClusterTemplates,
 } from "@/components/projects/hooks";
 import { formatRelativeTime } from "@/lib/utils";
+import { EntityCell } from "@/components/tables/cells";
 import type { ClusterTemplate } from "@/lib/api/project-detail";
+import { BareButton } from "@/components/form/bare-button";
 
 function ClusterTemplatesPage() {
   const navigate = useNavigate();
@@ -57,8 +59,8 @@ function ClusterTemplatesPage() {
           permission="cluster_templates:read"
           description={
             <>
-              You need <span className="font-mono">cluster_templates:read</span>{" "}
-              to view templates. Ask an administrator to grant the role.
+              You need permission to view cluster templates. Ask an
+              administrator to grant the role.
             </>
           }
           className="rounded-lg border border-border bg-muted/30 p-6"
@@ -71,23 +73,27 @@ function ClusterTemplatesPage() {
     {
       key: "name",
       header: "Template",
+      kind: "name",
+      minSize: 240,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-medium text-foreground">{row.displayName}</p>
-            <p className="text-xs text-muted-foreground font-mono">
-              {row.name}
-            </p>
-          </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <EntityCell
+            primary={row.displayName}
+            secondary={<span className="font-mono">{row.name}</span>}
+          />
         </div>
       ),
     },
     {
       key: "description",
       header: "Description",
+      kind: "text",
+      size: 280,
+      minSize: 200,
+      maxSize: 520,
       accessor: (row) => (
-        <span className="text-sm text-muted-foreground truncate max-w-[320px] block">
+        <span className="text-sm text-muted-foreground">
           {row.description || "—"}
         </span>
       ),
@@ -96,6 +102,7 @@ function ClusterTemplatesPage() {
     {
       key: "environment",
       header: "Environment",
+      kind: "badge",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.spec.environment}
@@ -105,38 +112,45 @@ function ClusterTemplatesPage() {
     },
     {
       key: "clusters",
-      header: "Clusters bound",
+      header: "Clusters",
+      ariaLabel: "Clusters bound",
+      kind: "count",
+      size: 120,
       accessor: (row) => (
         <span className="text-sm tabular-nums">{row.clustersBound}</span>
       ),
       sortAccessor: (row) => row.clustersBound,
-      align: "center",
     },
     {
       key: "createdBy",
       header: "Created by",
+      kind: "text",
+      size: 170,
+      minSize: 150,
       accessor: (row) => (
-        <div className="text-xs text-muted-foreground">
-          <p>{row.createdBy || "—"}</p>
-          <p>{formatRelativeTime(row.createdAt)}</p>
-        </div>
+        <EntityCell
+          primary={row.createdBy || "—"}
+          primaryClassName="font-normal text-xs text-muted-foreground"
+          secondary={formatRelativeTime(row.createdAt)}
+        />
       ),
       sortable: false,
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
       accessor: (row) => (
         <div className="flex items-center gap-1 justify-end">
           {canWrite && (
-            <button
-              type="button"
+            <BareButton
+              aria-label="Delete template"
               onClick={() => setDeleteTarget(row)}
               className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-              title="Delete template"
+              tooltip="Delete template"
             >
               <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            </BareButton>
           )}
         </div>
       ),
@@ -182,8 +196,8 @@ function ClusterTemplatesPage() {
                   onAction: () =>
                     void navigate({ to: "/dashboard/cluster-templates/new" }),
                 } satisfies EmptyStateActionProps)
-              // terminal: read-only viewers can't create a bundle from here.
-              : { terminal: true })}
+              : // terminal: read-only viewers can't create a bundle from here.
+                { terminal: true })}
           />
         }
       >

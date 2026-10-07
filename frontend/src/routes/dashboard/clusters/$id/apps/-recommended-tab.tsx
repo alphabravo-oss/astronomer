@@ -4,6 +4,7 @@ import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import { AlertTriangle, Star } from "lucide-react";
 import type { ClusterAppRow } from "@/lib/api/cluster-apps";
+import { BareButton } from "@/components/form/bare-button";
 
 export function RecommendedView({
   q,
@@ -77,22 +78,25 @@ export function RecommendedView({
                   )}
                 </div>
                 {isInstalled ? (
-                  <span className="text-[11px] text-status-success font-medium">
+                  <span className="text-11 text-status-success font-medium">
                     Already installed
                   </span>
                 ) : (
-                  <button
-                    className="text-[11px] text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
-                    disabled={!installDecision.allowed}
-                    title={
+                  <BareButton
+                    tooltip={
+                      !installDecision.allowed ? undefined : "Install chart"
+                    }
+                    disabledReason={
                       !installDecision.allowed
                         ? permissionDeniedReason(installDecision)
-                        : "Install chart"
+                        : undefined
                     }
+                    className="text-11 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline inline-block font-normal"
+                    disabled={!installDecision.allowed}
                     onClick={() => onInstall(c.chartId, c.name)}
                   >
                     Install →
-                  </button>
+                  </BareButton>
                 )}
               </article>
             );

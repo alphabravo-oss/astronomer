@@ -21,7 +21,7 @@ describe("form primitives", () => {
   it("renders an input with the shared control chrome", () => {
     render(<Input aria-label="Host" placeholder="smtp.example.com" />);
     const input = screen.getByLabelText("Host");
-    expect(input).toHaveClass("h-9", "rounded-md", "border-input");
+    expect(input).toHaveClass("h-(--control-h)", "rounded-md", "border-input");
     expect(input).toHaveAttribute("placeholder", "smtp.example.com");
   });
 
@@ -35,19 +35,18 @@ describe("form primitives", () => {
       </>,
     );
     expect(screen.getByLabelText("Provider")).toHaveClass(
-      "h-9",
+      "h-(--control-h)",
       "rounded-md",
       "appearance-none",
       "pr-9",
     );
-    expect(screen.getByLabelText("Provider").nextElementSibling).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
+    expect(
+      screen.getByLabelText("Provider").nextElementSibling,
+    ).toHaveAttribute("aria-hidden", "true");
     expect(screen.getByLabelText("Provider").parentElement).toHaveClass(
       "max-w-xs",
     );
-    expect(screen.getByLabelText("Notes")).toHaveClass("min-h-[120px]");
+    expect(screen.getByLabelText("Notes")).toHaveClass("min-h-30");
   });
 });
 
@@ -131,6 +130,13 @@ describe("MetricCard", () => {
     expect(screen.getByText("CPU")).toBeInTheDocument();
   });
 
+  it("shows skeletons instead of the value while loading", () => {
+    render(<MetricCard title="Pods" value="12" loading />);
+    expect(screen.getByText("Pods")).toBeInTheDocument();
+    expect(screen.queryByText("12")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading Pods");
+  });
+
   it("still supports the title prop", () => {
     render(<MetricCard title="Memory" value="1 GiB" />);
     expect(screen.getByText("Memory")).toBeInTheDocument();
@@ -158,16 +164,18 @@ describe("MetricCard", () => {
 describe("Field", () => {
   it("renders a label, control, and description", () => {
     render(
-      <Field label="Host" description="Reachable from the cluster." htmlFor="host">
+      <Field
+        label="Host"
+        description="Reachable from the cluster."
+        htmlFor="host"
+      >
         <input id="host" />
       </Field>,
     );
     expect(
       screen.getByLabelText("Host", { selector: "input" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Reachable from the cluster."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Reachable from the cluster.")).toBeInTheDocument();
   });
 
   it("renders an alert instead of the description when there's an error", () => {

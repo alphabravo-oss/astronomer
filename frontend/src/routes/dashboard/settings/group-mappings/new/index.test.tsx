@@ -27,11 +27,13 @@ vi.mock("@/lib/api/rbac-role-page", () => ({ getRolePage: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toastError: vi.fn() }));
 vi.mock("@/components/projects/remote-project-picker", () => ({
   RemoteProjectPicker: ({ onChange }: { onChange: (id: string) => void }) => (
+    // eslint-disable-next-line no-restricted-syntax -- test double
     <button onClick={() => onChange("project-1")}>Choose project</button>
   ),
 }));
 vi.mock("@/components/clusters/remote-cluster-picker", () => ({
   RemoteClusterPicker: ({ onChange }: { onChange: (id: string) => void }) => (
+    // eslint-disable-next-line no-restricted-syntax -- test double
     <button onClick={() => onChange("cluster-1")}>Choose cluster</button>
   ),
 }));

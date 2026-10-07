@@ -1,18 +1,17 @@
-import { Loader2, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useGeneralSettings } from "@/lib/hooks/user-settings";
 import { ActionButton } from "@/components/ui/action-button";
 import { SettingRow } from "./-shared";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
 export function GeneralTab({ onEdit }: { onEdit: () => void }) {
   const { data: generalSettings, isLoading: generalLoading } =
     useGeneralSettings();
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-(--gap-section)">
       {generalLoading ? (
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
+        <LoadingSkeleton label="Loading" heading />
       ) : (
         <div className="rounded-xl border border-border bg-card p-6 space-y-4">
           <div className="flex items-start justify-between gap-4">

@@ -46,6 +46,7 @@ func (c *productionComposition) composeManagementRouterDependencies(cfg *config.
 		return h
 	}()
 	deps.CoreAuth.SCIMTokenAdmin = handler.NewSCIMTokenAdminHandler(queries)
+	deps.CoreAuth.TableViews = handler.NewTableViewsHandler(queries, sqlcMutationTxRunner[handler.TableViewsMutationTx](database))
 	deps.AdminPlatform.SupportBundle = func() *handler.SupportBundleHandler {
 		h := handler.NewSupportBundleHandler(queries, queries, c.localK8s, c.localNamespace)
 		h.SetAsynqInspector(asynq.NewInspector(c.redisOpt))

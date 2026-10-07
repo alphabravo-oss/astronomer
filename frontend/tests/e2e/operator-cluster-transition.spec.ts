@@ -87,7 +87,8 @@ test("latest rapid cluster selection wins and drops source resource identity", a
   );
   await page
     .locator("header")
-    .getByTitle("Switch cluster (Ctrl/Cmd+J)")
+    .locator('button[aria-haspopup="listbox"]')
+    .first()
     .click();
   await page.getByRole("option", { name: /Target B/ }).click();
   await expect(page.getByText("Resolving target cluster scope…")).toBeVisible();
@@ -100,7 +101,7 @@ test("latest rapid cluster selection wins and drops source resource identity", a
   await (await lateResponse).finished();
   await expect(page).toHaveURL(/\/clusters\/cluster-c\/pods(?:\?|$)/);
   await expect(
-    page.locator("header").getByTitle("Switch cluster (Ctrl/Cmd+J)"),
+    page.locator("header").locator('button[aria-haspopup="listbox"]').first(),
   ).toContainText("Target C");
   expect(new URL(page.url()).searchParams.has("container")).toBe(false);
   expect(new URL(page.url()).searchParams.has("tab")).toBe(false);
@@ -135,7 +136,8 @@ test("clearing an invalid remembered project recovers the target scope", async (
   await page.goto(`/dashboard/clusters/${SMOKE_CLUSTER_ID}/deployments`);
   await page
     .locator("header")
-    .getByTitle("Switch cluster (Ctrl/Cmd+J)")
+    .locator('button[aria-haspopup="listbox"]')
+    .first()
     .click();
   await page.getByRole("option", { name: /Target B/ }).click();
   await page

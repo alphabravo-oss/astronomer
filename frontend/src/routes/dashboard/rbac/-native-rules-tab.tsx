@@ -18,6 +18,7 @@ import { usePermissionDecision } from "@/lib/permission-hooks";
 import { pageTableCount } from "@/lib/api/pagination";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
+import { CappedChips } from "@/components/admin/table-cells";
 
 export default function NativeRulesTab() {
   const read = usePermissionDecision("rbac", "read");
@@ -57,26 +58,54 @@ export default function NativeRulesTab() {
     onError: (error) => toastApiError("Could not remove grant", error),
   });
   const columns: Column<NativeRule>[] = [
-    { key: "user", header: "User UUID", accessor: (row) => row.userId },
+    {
+      key: "user",
+      header: "User UUID",
+      kind: "id",
+      size: 176,
+      minSize: 140,
+      accessor: (row) => row.userId,
+    },
     {
       key: "cluster",
       header: "Cluster scope",
+      kind: "text",
+      size: 136,
+      minSize: 120,
       accessor: (row) => row.clusterId || "All clusters",
     },
     {
       key: "namespace",
       header: "Namespace scope",
+      kind: "text",
+      size: 136,
+      minSize: 120,
       accessor: (row) => row.namespace || "All namespaces",
     },
     {
       key: "resource",
       header: "API group / resource",
+      kind: "text",
+      grow: true,
+      minSize: 160,
       accessor: (row) => `${row.apiGroup || "core"} / ${row.resource}`,
     },
-    { key: "verbs", header: "Verbs", accessor: (row) => row.verbs.join(", ") },
+    {
+      key: "verbs",
+      header: "Verbs",
+      kind: "badge",
+      size: 168,
+      minSize: 140,
+      maxSize: 240,
+      accessor: (row) => <CappedChips items={row.verbs} mono />,
+      searchAccessor: (row) => row.verbs.join(", "),
+    },
     {
       key: "actions",
       header: "Actions",
+      kind: "actions",
+      size: 128,
+      maxSize: 128,
       sortable: false,
       accessor: (row) => (
         <ActionButton

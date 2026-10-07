@@ -10,9 +10,11 @@
 package catalog
 
 import (
+	"context"
 	"strings"
 
 	semver "github.com/Masterminds/semver/v3"
+	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -30,6 +32,54 @@ const OCIPrefix = "oci://"
 // outside its own top-3 — the operator clicked Sync, saw 40 versions, and six
 // hours later had 3, with nothing to explain it.
 const MaxIndexVersionsPerChart = 3
+
+type applicationCatalogPinLister interface {
+	ListApplicationCatalogPinsByRepository(context.Context, uuid.UUID) ([]sqlc.ListApplicationCatalogPinsByRepositoryRow, error)
+}
+
+// ApplicationCatalogPinsByRepository returns the verified versions that must
+// survive the rolling recent-version window. Stores without the v1 catalog
+// query are supported so isolated ingest tests and legacy deployments keep the
+// existing recent-only behavior.
+func ApplicationCatalogPinsByRepository(ctx context.Context, store any, repositoryID uuid.UUID) (map[string]map[string]struct{}, error) {
+	lister, ok := store.(applicationCatalogPinLister)
+	if !ok {
+		return map[string]map[string]struct{}{}, nil
+	}
+	rows, err := lister.ListApplicationCatalogPinsByRepository(ctx, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	pins := make(map[string]map[string]struct{}, len(rows))
+	for _, row := range rows {
+		chartName, version := strings.TrimSpace(row.ChartName), strings.TrimSpace(row.Version)
+		if chartName == "" || version == "" {
+			continue
+		}
+		if pins[chartName] == nil {
+			pins[chartName] = map[string]struct{}{}
+		}
+		pins[chartName][version] = struct{}{}
+	}
+	return pins, nil
+}
+
+// RetainRecentOrPinnedVersions preserves the normal newest-N browse window and
+// appends any verified catalog pin found farther back in the upstream index.
+// The input must already be ordered newest first.
+func RetainRecentOrPinnedVersions[T any](versions []T, versionOf func(T) string, pinned map[string]struct{}) []T {
+	if len(versions) <= MaxIndexVersionsPerChart && len(pinned) == 0 {
+		return versions
+	}
+	retained := make([]T, 0, min(len(versions), MaxIndexVersionsPerChart+len(pinned)))
+	for index, version := range versions {
+		_, isPinned := pinned[strings.TrimSpace(versionOf(version))]
+		if index < MaxIndexVersionsPerChart || isPinned {
+			retained = append(retained, version)
+		}
+	}
+	return retained
+}
 
 // MaxIndexBytes bounds Helm repository metadata before YAML expansion/parsing.
 // Eight MiB is well above normal public indexes while protecting shared

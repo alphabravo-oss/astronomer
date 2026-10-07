@@ -51,6 +51,7 @@ import {
   type NotificationTemplateDetailView,
   type NotificationTemplatePreviewResultView,
 } from "@/lib/api/settings";
+import { BareButton } from "@/components/form/bare-button";
 
 function NotificationTemplateEditorPage() {
   return (
@@ -320,8 +321,7 @@ function NotificationTemplateEditor() {
             </label>
           </div>
           <div className="flex items-center gap-2 pt-1">
-            <button
-              type="button"
+            <BareButton
               onClick={() => void form.handleSubmit()}
               disabled={saving}
               className="inline-flex items-center gap-1 rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
@@ -332,15 +332,14 @@ function NotificationTemplateEditor() {
                 <Save className="h-3.5 w-3.5" />
               )}
               Save override
-            </button>
-            <button
-              type="button"
+            </BareButton>
+            <BareButton
               onClick={() => setResetOpen(true)}
               disabled={saving || !detail.hasOverride}
               className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
             >
               <RotateCcw className="h-3.5 w-3.5" /> Reset to default
-            </button>
+            </BareButton>
           </div>
         </div>
       </div>
@@ -414,8 +413,7 @@ function NotificationTemplateEditor() {
               />
             )}
           </form.Field>
-          <button
-            type="button"
+          <BareButton
             onClick={handlePreview}
             disabled={previewing}
             className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
@@ -426,7 +424,7 @@ function NotificationTemplateEditor() {
               <Eye className="h-3.5 w-3.5" />
             )}
             Preview
-          </button>
+          </BareButton>
           {previewMissing && previewMissing.length > 0 && (
             <div className="rounded-md border border-status-warning/40 bg-status-warning/10 p-3 text-xs">
               Missing required variables:{" "}

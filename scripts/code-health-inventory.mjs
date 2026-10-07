@@ -361,11 +361,11 @@ function rawTableTagCallSites(files) {
 }
 
 function rawOverlayCallSites(files) {
-  const allowed = new Set([
-    'frontend/src/components/ui/overlay-shell.tsx',
-    'frontend/src/components/ui/modal-shell.tsx',
-    'frontend/src/components/ui/drawer-shell.tsx',
-  ]);
+  const allowed = new Set(
+    ['overlay-shell', 'modal-shell', 'drawer-shell', 'dialog', 'sheet'].map(
+      (name) => `frontend/src/components/ui/${name}.tsx`,
+    ),
+  );
   return lineFindings(files, (line, file) => {
     if (allowed.has(rel(file))) return null;
     if (/\bfixed\s+inset-0\b/.test(line)) {

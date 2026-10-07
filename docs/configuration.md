@@ -68,7 +68,7 @@ Production-specific invariants are enforced at startup by
 | `DELIVERY_LOCAL_FLUX_BOOTSTRAP` | `DeliveryLocalFluxBootstrap` | boolean | `true` | No |
 | `DELIVERY_KUBERNETES_MIN_MINOR` | `DeliveryKubernetesMinMinor` | string | `1.33` | No |
 | `DELIVERY_KUBERNETES_MAX_MINOR` | `DeliveryKubernetesMaxMinor` | string | `1.35` | No |
-| `DELIVERY_FLUX_VERSION` | `DeliveryFluxVersion` | string | `v2.9.3` | No |
+| `DELIVERY_FLUX_VERSION` | `DeliveryFluxVersion` | string | `v2.9.6` | No |
 | `DELIVERY_FLUX_DISTRIBUTION_REPOSITORY` | `DeliveryFluxDistributionRepository` | string | Go zero value | No |
 | `DELIVERY_FLUX_DISTRIBUTION_DIGEST` | `DeliveryFluxDistributionDigest` | string | Go zero value | No |
 | `DELIVERY_FLUX_DISTRIBUTION_ASSET_PATH` | `DeliveryFluxDistributionAssetPath` | string | Go zero value | No |

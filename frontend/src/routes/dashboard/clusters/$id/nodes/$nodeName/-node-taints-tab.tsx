@@ -2,11 +2,14 @@ import { Plus, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { cn } from "@/lib/utils";
 import type { NodeTaint } from "@/types";
+import { BareButton } from "@/components/form/bare-button";
 
 const taintColumns: Column<NodeTaint>[] = [
   {
     key: "key",
     header: "Key",
+    kind: "name",
+    minSize: 240,
     accessor: (row) => (
       <span className="font-medium text-foreground font-mono text-xs">
         {row.key}
@@ -16,6 +19,9 @@ const taintColumns: Column<NodeTaint>[] = [
   {
     key: "value",
     header: "Value",
+    kind: "text",
+    size: 160,
+    minSize: 120,
     accessor: (row) => (
       <span className="text-xs text-muted-foreground font-mono">
         {row.value || "-"}
@@ -25,6 +31,8 @@ const taintColumns: Column<NodeTaint>[] = [
   {
     key: "effect",
     header: "Effect",
+    kind: "badge",
+    size: 150,
     accessor: (row) => (
       <span
         className={cn(
@@ -62,15 +70,15 @@ export function TaintsTab({
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <button
+        <BareButton
           onClick={onOpenAddTaint}
           disabled={addTaintPending || !canUpdate}
-          title={blockedReason}
+          disabledReason={blockedReason}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
             bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus className="h-3.5 w-3.5" /> Add Taint
-        </button>
+        </BareButton>
       </div>
       <DataTable
         data={taints}
@@ -80,17 +88,17 @@ export function TaintsTab({
             key: "actions",
             header: "",
             accessor: (row) => (
-              <button
+              <BareButton
                 onClick={() => onRemoveTaint(row)}
                 disabled={removeTaintPending || !canUpdate}
-                title={blockedReason}
+                disabledReason={blockedReason}
                 className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              </BareButton>
             ),
+            kind: "actions" as const,
             sortable: false,
-            align: "center" as const,
           },
         ]}
         keyExtractor={(r) => `${r.key}-${r.effect}`}

@@ -10,16 +10,13 @@ import { OverlayShell } from "@/components/ui/overlay-shell";
  * "View diff" drawer + Apply / Revert action. Active card is badged.
  */
 import { useState } from "react";
-import { useComplianceBaselines, useComplianceBaselineDiff } from "@/lib/hooks/policy-queries";
-import { QueryStates } from "@/components/ui/query-states";
-import { ResourceMasthead } from "@/components/ui/page";
 import {
-  CheckCircle2,
-  History,
-  Loader2,
-  Shield,
-  Undo2,
-} from "lucide-react";
+  useComplianceBaselines,
+  useComplianceBaselineDiff,
+} from "@/lib/hooks/policy-queries";
+import { QueryStates } from "@/components/ui/query-states";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
+import { CheckCircle2, History, Loader2, Shield, Undo2 } from "lucide-react";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -28,6 +25,8 @@ import {
   revertComplianceBaselineApplication,
   type ComplianceBaselineView,
 } from "@/lib/api/settings";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function ActiveBadge() {
   return (
@@ -51,7 +50,7 @@ function BaselineCard({
   latestApplicationId: string | null;
 }) {
   return (
-    <div className="rounded-lg border bg-card p-5 flex flex-col gap-4">
+    <div className="rounded-lg border bg-card p-(--card-p) flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -94,28 +93,25 @@ function BaselineCard({
       </dl>
 
       <div className="flex gap-2 mt-auto pt-2">
-        <button
-          type="button"
+        <BareButton
           onClick={() => onViewDiff(b)}
           className="text-sm px-3 py-1.5 rounded-sm border bg-background hover:bg-muted"
         >
           View diff
-        </button>
-        <button
-          type="button"
+        </BareButton>
+        <BareButton
           onClick={() => onApply(b)}
           className="text-sm px-3 py-1.5 rounded-sm bg-primary text-primary-foreground hover:opacity-90"
         >
           Apply baseline
-        </button>
+        </BareButton>
         {b.active && latestApplicationId ? (
-          <button
-            type="button"
+          <BareButton
             onClick={() => onRevert(latestApplicationId)}
             className="text-sm px-3 py-1.5 rounded-sm border bg-background hover:bg-muted flex items-center gap-1"
           >
             <Undo2 className="w-3.5 h-3.5" /> Revert
-          </button>
+          </BareButton>
         ) : null}
       </div>
     </div>
@@ -132,6 +128,10 @@ const diffColumns: Column<DiffRow>[] = [
   {
     key: "field",
     header: "Field",
+    kind: "name",
+    grow: false,
+    size: 148,
+    minSize: 120,
     accessor: (r) => <span className="font-mono text-xs">{r.field}</span>,
     searchAccessor: (r) => r.field,
     sortAccessor: (r) => r.field,
@@ -139,6 +139,10 @@ const diffColumns: Column<DiffRow>[] = [
   {
     key: "current",
     header: "Current",
+    kind: "text",
+    wrap: true,
+    size: 140,
+    minSize: 120,
     accessor: (r) => (
       <span className="font-mono text-xs text-muted-foreground break-all">
         {r.current}
@@ -149,6 +153,10 @@ const diffColumns: Column<DiffRow>[] = [
   {
     key: "target",
     header: "Target",
+    kind: "text",
+    wrap: true,
+    grow: true,
+    minSize: 120,
     accessor: (r) => (
       <span className="font-mono text-xs break-all">{r.target}</span>
     ),
@@ -184,8 +192,7 @@ function DiffDrawer({
             searchable={false}
             emptyState={{
               title: "No changes",
-              description:
-                "Baseline already matches current state.",
+              description: "Baseline already matches current state.",
             }}
           />
         )}
@@ -198,7 +205,8 @@ function ComplianceBaselinesPage() {
   const baselinesQuery = useComplianceBaselines();
   const baselines = baselinesQuery.data?.baselines ?? [];
   const history = baselinesQuery.data?.history ?? [];
-  const [diffBaseline, setDiffBaseline] = useState<ComplianceBaselineView | null>(null);
+  const [diffBaseline, setDiffBaseline] =
+    useState<ComplianceBaselineView | null>(null);
   const loading = baselinesQuery.isLoading;
   const [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState<
@@ -209,7 +217,9 @@ function ComplianceBaselinesPage() {
 
   const latestApplicationId = history[0]?.id ?? null;
 
-  const reload = async () => { await baselinesQuery.refetch(); };
+  const reload = async () => {
+    await baselinesQuery.refetch();
+  };
 
   const handleApply = async (b: ComplianceBaselineView) => {
     setBusy(true);
@@ -259,11 +269,12 @@ function ComplianceBaselinesPage() {
     }
   };
 
-  if (baselinesQuery.isError) return <QueryStates query={baselinesQuery}>{null}</QueryStates>;
+  if (baselinesQuery.isError)
+    return <QueryStates query={baselinesQuery}>{null}</QueryStates>;
 
   return (
     <SettingsAuthGate>
-      <div className="space-y-6">
+      <PageShell>
         <ResourceMasthead
           backTo="/dashboard/settings/compliance"
           backLabel="Compliance"
@@ -272,9 +283,7 @@ function ComplianceBaselinesPage() {
         />
 
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" /> Loading
-          </div>
+          <LoadingSkeleton label="Loading baselines" cards={2} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {baselines.map((b) => (
@@ -324,7 +333,12 @@ function ComplianceBaselinesPage() {
           )}
         </section>
 
-        {diffBaseline ? <DiffDrawer baseline={diffBaseline} onClose={() => setDiffBaseline(null)} /> : null}
+        {diffBaseline ? (
+          <DiffDrawer
+            baseline={diffBaseline}
+            onClose={() => setDiffBaseline(null)}
+          />
+        ) : null}
         <ConfirmDialog
           open={confirmation !== null}
           onClose={() => setConfirmation(null)}
@@ -374,7 +388,7 @@ function ComplianceBaselinesPage() {
             <Loader2 className="w-6 h-6 animate-spin text-white" />
           </OverlayShell>
         ) : null}
-      </div>
+      </PageShell>
     </SettingsAuthGate>
   );
 }

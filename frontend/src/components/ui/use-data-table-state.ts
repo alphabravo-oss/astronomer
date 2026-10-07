@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import type {
   ColumnFiltersState,
+  ExpandedState,
   ColumnSizingState,
   PaginationState,
   RowSelectionState,
@@ -14,11 +15,16 @@ import {
 } from "@/components/ui/data-table-empty-state";
 import { buildSearchIndex } from "@/components/ui/data-table-search";
 import {
+  orderStorageKey,
+  parsePersistedOrder,
+  parsePersistedPinning,
   parsePersistedSizing,
   parsePersistedVisibility,
+  pinningStorageKey,
   sizingStorageKey,
   visibilityStorageKey,
 } from "@/components/ui/data-table-state";
+import type { ColumnPinningState } from "@/components/ui/data-table-layout";
 import { useDraft } from "@/lib/hooks/use-draft";
 import { useStorageSnapshot } from "@/lib/hooks/use-storage-snapshot";
 import { useUserPreferences } from "@/lib/user-preferences";
@@ -97,6 +103,44 @@ export function useDataTableState<T>({
     }),
     [columns, storedVisibility],
   );
+  const [storedOrder, persistOrder] = useStorageSnapshot(
+    persistKey ? orderStorageKey(persistKey) : undefined,
+  );
+  const [storedPinning, persistPinning] = useStorageSnapshot(
+    persistKey ? pinningStorageKey(persistKey) : undefined,
+  );
+  const orderSource = useMemo(
+    () => parsePersistedOrder(storedOrder),
+    [storedOrder],
+  );
+  const pinningSource = useMemo(
+    () => parsePersistedPinning(storedPinning),
+    [storedPinning],
+  );
+  const [columnOrder, setColumnOrderState] = useDraft<string[]>(
+    orderSource,
+    `${persistKey ?? ""}:${storedOrder ?? ""}`,
+  );
+  const [userPinning, setUserPinningState] =
+    useDraft<ColumnPinningState | null>(
+      pinningSource,
+      `${persistKey ?? ""}:${storedPinning ?? ""}`,
+    );
+  const setColumnOrder = useCallback(
+    (next: string[]) => {
+      setColumnOrderState(next);
+      persistOrder(next);
+    },
+    [setColumnOrderState, persistOrder],
+  );
+  const setUserPinning = useCallback(
+    (next: ColumnPinningState | null) => {
+      setUserPinningState(next);
+      persistPinning(next);
+    },
+    [setUserPinningState, persistPinning],
+  );
+  const [expanded, setExpanded] = useState<ExpandedState>({});
   const sizingSource = useMemo(
     () => parsePersistedSizing(storedSizing),
     [storedSizing],
@@ -149,6 +193,12 @@ export function useDataTableState<T>({
     setColumnSizing,
     persistSizing,
     persistVisibility,
+    columnOrder,
+    setColumnOrder,
+    userPinning,
+    setUserPinning,
+    expanded,
+    setExpanded,
     filteredEmptyState,
     searchIndex,
   };

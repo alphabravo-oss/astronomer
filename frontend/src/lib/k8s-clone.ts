@@ -73,3 +73,33 @@ export function prepareCloneManifest(
 
   return clone;
 }
+
+/**
+ * Live YAML text -> create-ready clone YAML. Rejects anything that is not a
+ * single Kubernetes object so callers surface one error path.
+ */
+export async function cloneYamlFromSource(source: string): Promise<string> {
+  const yaml = await import("js-yaml");
+  const parsed = yaml.load(source);
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    Array.isArray(parsed) ||
+    !("apiVersion" in parsed) ||
+    !("kind" in parsed)
+  )
+    throw new Error("The live response is not a Kubernetes object.");
+  return yaml.dump(prepareCloneManifest(parsed as KubernetesManifest), {
+    lineWidth: -1,
+    noRefs: true,
+  });
+}
+
+/** Resource types whose objects must not be cloned (infrastructure / controller-owned). */
+export const NON_CLONABLE_RESOURCE_TYPES = new Set([
+  "nodes",
+  "events",
+  "persistentvolumes",
+  "customresourcedefinitions",
+  "crds",
+]);

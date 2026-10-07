@@ -13,7 +13,7 @@ Re-render and apply the agent installation manifest to upgrade an older Viewer,
 Operator, namespace-scoped, or custom installation to full management:
 
 ```bash
-kubectl apply --server-side --field-manager=astronomer-bootstrap -f agent-install.yaml
+kubectl apply --server-side --force-conflicts --field-manager=astronomer-bootstrap -f agent-install.yaml
 ```
 
 Use the current manifest downloaded through the cluster's registration workflow.

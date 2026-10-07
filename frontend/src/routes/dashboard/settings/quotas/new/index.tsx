@@ -8,7 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useId, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Gauge, Save } from "lucide-react";
+import { ArrowLeft, Save } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
@@ -84,7 +84,7 @@ function NewQuotaPlanForm() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <div className="rounded-xl border border-border bg-card p-6 space-y-4">
         <h2 className="text-base font-semibold text-foreground">
           Identification
@@ -227,15 +227,7 @@ function NewQuotaPlanPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
         </RouterLink>
-        <PageHeader
-          eyebrow="Settings · Quotas · New"
-          title={
-            <span className="flex items-center gap-2">
-              <Gauge className="h-5 w-5 text-muted-foreground" />
-              New quota plan
-            </span>
-          }
-        />
+        <PageHeader eyebrow="Settings · Quotas · New" title="New quota plan" />
         <NewQuotaPlanForm />
       </PageShell>
     </SettingsAuthGate>

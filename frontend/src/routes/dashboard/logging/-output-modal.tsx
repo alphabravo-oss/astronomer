@@ -325,9 +325,10 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
         <div className="flex flex-wrap gap-1.5">
           {(Object.keys(outputTypeFields) as LoggingOutputType[]).map(
             (type) => (
-              <button
+              <ActionButton
+                intent="bare"
+                size="none"
                 key={type}
-                type="button"
                 onClick={() => {
                   form.setFieldValue("type", type);
                   form.setFieldValue("config", {});
@@ -340,7 +341,7 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
                 )}
               >
                 {outputTypeFields[type].label}
-              </button>
+              </ActionButton>
             ),
           )}
         </div>

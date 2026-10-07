@@ -23,6 +23,7 @@ import {
   deleteReadAuditPolicy,
   type ReadAuditPolicyView,
 } from "@/lib/api/settings";
+import { BareButton } from "@/components/form/bare-button";
 
 function ReadAuditPoliciesPage() {
   return (
@@ -98,6 +99,10 @@ function ReadAuditPoliciesList() {
       {
         key: "name",
         header: "Name",
+        kind: "name",
+        grow: false,
+        size: 150,
+        minSize: 130,
         accessor: (p) => <span className="font-mono text-xs">{p.name}</span>,
         searchAccessor: (p) => p.name,
         sortAccessor: (p) => p.name,
@@ -105,6 +110,10 @@ function ReadAuditPoliciesList() {
       {
         key: "path_pattern",
         header: "Path pattern",
+        kind: "text",
+        grow: true,
+        minSize: 180,
+        maxSize: 720,
         accessor: (p) => (
           <span className="font-mono text-xs">{p.path_pattern}</span>
         ),
@@ -114,6 +123,7 @@ function ReadAuditPoliciesList() {
       {
         key: "verbs",
         header: "Verbs",
+        kind: "text",
         accessor: (p) => <span className="text-xs">{p.verbs}</span>,
         searchAccessor: (p) => p.verbs,
         sortAccessor: (p) => p.verbs,
@@ -122,18 +132,19 @@ function ReadAuditPoliciesList() {
       {
         key: "sample_rate",
         header: "Sample",
+        kind: "percent",
         accessor: (p) => (
           <span className="text-xs">{Math.round(p.sample_rate * 100)}%</span>
         ),
         sortAccessor: (p) => p.sample_rate,
-        align: "right",
-        width: "6rem",
       },
       {
         key: "enabled",
         header: "Enabled",
+        kind: "status",
+        size: 104,
         accessor: (p) => (
-          <button
+          <BareButton
             disabled={busyId === p.id}
             onClick={() => toggleEnabled(p)}
             className={`text-xs px-2 py-0.5 rounded-md ${
@@ -143,29 +154,28 @@ function ReadAuditPoliciesList() {
             }`}
           >
             {p.enabled ? "enabled" : "disabled"}
-          </button>
+          </BareButton>
         ),
         searchAccessor: (p) => (p.enabled ? "enabled" : "disabled"),
         sortAccessor: (p) => (p.enabled ? 1 : 0),
         filter: { label: "Enabled" },
-        width: "8rem",
       },
       {
         key: "actions",
         header: "",
+        kind: "actions",
         hideable: false,
         accessor: (p) => (
-          <button
+          <BareButton
+            aria-label="Delete policy"
             disabled={busyId === p.id}
             onClick={() => setDeleteTarget(p)}
             className="text-muted-foreground hover:text-destructive"
-            title="Delete policy"
+            tooltip="Delete policy"
           >
             <Trash2 className="h-4 w-4" />
-          </button>
+          </BareButton>
         ),
-        align: "right",
-        width: "4rem",
       },
     ],
     [busyId, toggleEnabled],

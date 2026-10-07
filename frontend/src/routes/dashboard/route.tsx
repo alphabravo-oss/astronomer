@@ -122,7 +122,7 @@ function DashboardError({ error, reset }: ErrorComponentProps) {
       />
       <RouterLink
         to="/dashboard"
-        className="-mt-6 inline-flex h-9 items-center gap-2 rounded-lg border border-border px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="-mt-6 inline-flex h-(--control-h) items-center gap-2 rounded-lg border border-border px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <LayoutDashboard className="h-4 w-4" />
         Back to dashboard
@@ -254,7 +254,7 @@ function DashboardAuthorizedShell() {
     >
       <a
         href="#main"
-        className="sr-only fixed left-3 top-3 z-[var(--z-toast)] rounded-md bg-background px-3 py-2 text-sm font-medium text-foreground shadow-lg focus:not-sr-only"
+        className="sr-only fixed left-3 top-3 z-toast rounded-md bg-background px-3 py-2 text-sm font-medium text-foreground shadow-lg focus:not-sr-only"
       >
         Skip to main content
       </a>
@@ -282,7 +282,7 @@ function DashboardAuthorizedShell() {
             data-content-layout={contentLayout}
             className={cn(
               "mx-auto w-full animate-fade-in px-4 py-6 sm:px-6 xl:px-8",
-              contentLayout === "contained" && "max-w-[1800px]",
+              contentLayout === "contained" && "max-w-450",
             )}
           >
             {requiredFeature && featureFlagsQuery.isPending ? (

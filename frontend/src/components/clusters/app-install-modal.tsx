@@ -1,9 +1,11 @@
-import { useOperationIntent } from "@/lib/use-operation-intent";
-import { useUpgradeValues } from "./app-upgrade-values";
 import {
   CatalogVersionSelect,
   useCatalogVersionSelection,
 } from "@/components/catalog/version-selection";
+import { useOperationIntent } from "@/lib/use-operation-intent";
+import { AppInstallValuesEditor } from "./app-install-values-editor";
+import { useUpgradeValues } from "./app-upgrade-values";
+import { useAppInstallPreview } from "./use-app-install-preview";
 /**
  * App install / upgrade modal — sprint 082+.
  *
@@ -12,42 +14,49 @@ import {
  * "Upgrade" action). Two key differences between the modes:
  *
  *   • mode='install' → POST /catalog/installed/, release_name + ns are
- *     editable, defaults to chart name / 'default'.
+ *     editable, defaults to the chart name and its supported system namespace.
  *   • mode='upgrade' → PUT /catalog/installed/{id}/upgrade/, release_name
  *     + ns are read-only (those are the release identity), version
  *     dropdown is the user's actual control.
  *
- * YAML editor:
+ * Values editor:
  *   • Pre-filled from GET /catalog/charts/{chart_id}/values/?version=
  *     which lazy-hydrates the chart's defaults on first call (~1-2s)
  *     then caches.
  *   • On upgrade mode it's pre-filled with the release's current
  *     values_override so the user sees what they currently have, not
  *     a wall of fresh defaults to wade through.
- *   • Plain <textarea> for v1 — Monaco / CodeMirror would be nice but
- *     out of scope. YAML correctness isn't validated client-side;
- *     helm install will fail clearly on bad YAML.
+ *   • Curated Settings and full YAML round-trip through the same override.
+ *     Review is backed by the public server preview and blocks mutation when
+ *     validation or preflight finds an unsafe configuration.
  *
  * Submission returns a durable catalog operation receipt. The caller tracks
  * that operation and its Flux rollout; acceptance is not workload readiness.
  */
 
-import { useState, useEffect, useRef } from "react";
 import { QueryStates } from "@/components/ui/query-states";
 import { useAppForm, useStore } from "@/lib/form";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
-import { Loader2, AlertTriangle, Info } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
-  getChartDefaultValues,
   installChartOnCluster,
   upgradeClusterApp,
 } from "@/lib/api/cluster-apps";
-import { queryKeys } from "@/lib/query-keys";
+import { recommendedCatalogNamespace } from "@/lib/catalog-chart-fields";
+import { catalogInstallDefaultValues } from "@/lib/catalog-install-defaults";
+import { parseHelmValuesYAML } from "@/lib/helm-values-schema";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
+import { queryKeys } from "@/lib/query-keys";
+import {
+  AppInstallFooter,
+  ChartInstallationNotes,
+  HAS_CRDS,
+} from "./app-install-parts";
+export { AppUninstallModal } from "./app-uninstall-modal";
 
 type Mode =
   | { kind: "install"; chartId: string; chartName: string }
@@ -85,19 +94,6 @@ const SLOW_INSTALL_CHARTS = new Set([
   "loki-distributed",
 ]);
 
-// Charts that ship CRDs by default — the operator should know that
-// uninstall will not remove the CRDs unless they take extra steps.
-// Surfaced on install too so the operator picks a stable namespace
-// from the start.
-const HAS_CRDS = new Set([
-  "kube-prometheus-stack",
-  "cert-manager",
-  "trivy-operator",
-  "istio-base",
-  "gatekeeper",
-  "opa-gatekeeper",
-]);
-
 export function AppInstallModal({
   projectId,
   clusterId,
@@ -117,7 +113,10 @@ export function AppInstallModal({
     defaultValues: {
       selectedVersionId: mode.kind === "upgrade" ? mode.currentVersionId : "",
       releaseName: mode.kind === "upgrade" ? mode.releaseName : mode.chartName,
-      namespace: mode.kind === "upgrade" ? mode.namespace : "default",
+      namespace:
+        mode.kind === "upgrade"
+          ? mode.namespace
+          : recommendedCatalogNamespace(mode.chartName),
       valuesYaml: mode.kind === "upgrade" ? mode.currentValues : "",
     },
     onSubmit: () => install.mutate(),
@@ -132,10 +131,12 @@ export function AppInstallModal({
   );
   const releaseName = useStore(form.store, (s) => s.values.releaseName);
   const namespace = useStore(form.store, (s) => s.values.namespace);
-  // Tracks whether we've already pre-filled defaults for the chosen
-  // version — used so that switching versions in install mode
-  // refreshes the YAML, but typing into the editor doesn't get
-  // clobbered by a re-render of the same version.
+  const valuesYaml = useStore(form.store, (s) => s.values.valuesYaml);
+  const [editorMode, setEditorMode] = useState<"form" | "yaml" | "review">(
+    "form",
+  );
+  const [yamlError, setYamlError] = useState<string | null>(null);
+  // Hydrate each selected version once so background renders preserve edits.
   const hydratedForVersion = useRef("");
 
   const versions = useCatalogVersionSelection(
@@ -146,37 +147,41 @@ export function AppInstallModal({
   );
   const selectedVersion = versions.selected;
 
-  // Hydrate values.yaml when the version changes. In upgrade mode we
-  // intentionally DON'T overwrite the user's current values with the
-  // new version's defaults — that would silently revert their
-  // customisation. Show a "Reset to chart defaults" button instead.
-  const defaultValues = useQuery({
-    queryKey: queryKeys.catalog.installChartValues(
-      projectId,
-      mode.chartId,
-      selectedVersion?.version,
-    ),
-    queryFn: ({ signal }) =>
-      getChartDefaultValues(
-        projectId,
-        mode.chartId,
-        selectedVersion?.version,
-        signal,
-      ),
-    enabled: !!projectId && !!selectedVersion?.version,
-    throwOnError: false,
+  const {
+    defaultValues,
+    valuesSchema,
+    schemaValues,
+    preview,
+    blockingPreview,
+  } = useAppInstallPreview({
+    projectId,
+    chartId: mode.chartId,
+    chartName: mode.chartName,
+    version: selectedVersion?.version,
+    clusterId,
+    selectedVersionId,
+    namespace,
+    valuesYaml,
+    isUpgrade,
+    editorMode,
   });
 
   useEffect(() => {
     if (isUpgrade) return; // don't auto-clobber on upgrade
     if (defaultValues.isError || !defaultValues.data) return;
-    const key = selectedVersionId;
-    if (hydratedForVersion.current === key) return;
-    form.setFieldValue("valuesYaml", defaultValues.data.defaultValues);
-    hydratedForVersion.current = key;
+    if (hydratedForVersion.current === selectedVersionId) return;
+    form.setFieldValue(
+      "valuesYaml",
+      catalogInstallDefaultValues(
+        mode.chartName,
+        defaultValues.data.defaultValues,
+      ),
+    );
+    hydratedForVersion.current = selectedVersionId;
   }, [
     defaultValues.data,
     defaultValues.isError,
+    mode.chartName,
     form,
     selectedVersionId,
     isUpgrade,
@@ -188,6 +193,12 @@ export function AppInstallModal({
       if (isUpgrade && (!upgradeValues.isSuccess || upgradeValues.isError))
         throw new Error("Load the saved release values before upgrading");
       const value = form.state.values;
+      if (
+        value.valuesYaml.trim() &&
+        parseHelmValuesYAML(value.valuesYaml) == null
+      ) {
+        throw new Error("Values must be valid YAML containing an object");
+      }
       const idempotencyKey = intent.keyFor({
         mode,
         clusterId,
@@ -250,6 +261,9 @@ export function AppInstallModal({
     releaseName.trim() !== "" &&
     namespace.trim() !== "" &&
     !install.isPending &&
+    !yamlError &&
+    !blockingPreview &&
+    !(editorMode === "review" && (preview.isLoading || preview.isError)) &&
     !submitBlockedReason &&
     (!isUpgrade || (upgradeValues.isSuccess && !upgradeValues.isError));
 
@@ -258,7 +272,21 @@ export function AppInstallModal({
       toastWarning(submitBlockedReason);
       return;
     }
+    if (valuesYaml.trim() && parseHelmValuesYAML(valuesYaml) == null) {
+      setYamlError("Values must be valid YAML containing an object.");
+      return;
+    }
+    setYamlError(null);
     void form.handleSubmit();
+  };
+
+  const switchEditorMode = (next: "form" | "yaml" | "review") => {
+    if (next === "form" && schemaValues == null) {
+      setYamlError("Fix the YAML before returning to the form.");
+      return;
+    }
+    setYamlError(null);
+    setEditorMode(next);
   };
 
   const slowInstall = SLOW_INSTALL_CHARTS.has(mode.chartName);
@@ -283,7 +311,12 @@ export function AppInstallModal({
           pending={install.isPending}
           onSubmit={handleSubmit}
           submittable={submittable}
-          reason={submitBlockedReason}
+          reason={
+            submitBlockedReason ??
+            blockingPreview?.description ??
+            yamlError ??
+            undefined
+          }
           upgrade={isUpgrade}
         />
       }
@@ -335,7 +368,7 @@ export function AppInstallModal({
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   disabled={isUpgrade}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
+                  className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
                 />
               )}
             </form.Field>
@@ -357,269 +390,31 @@ export function AppInstallModal({
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   disabled={isUpgrade}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
+                  className="w-full h-(--control-h) px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
                 />
               )}
             </form.Field>
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-muted-foreground">
-              Values (YAML)
-              {defaultValues.isLoading && (
-                <span className="ml-2 inline-flex items-center text-[10px] text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin mr-1" /> hydrating
-                  defaults…
-                </span>
-              )}
-            </label>
-            {defaultValues.isError && (
-              <QueryStates
-                query={defaultValues}
-                permission="catalog:read"
-                errorTitle="Could not load chart defaults"
-              >
-                {null}
-              </QueryStates>
-            )}
-            {isUpgrade && !defaultValues.isError && defaultValues.data && (
-              <button
-                onClick={() =>
-                  form.setFieldValue(
-                    "valuesYaml",
-                    defaultValues.data!.defaultValues,
-                  )
-                }
-                className="text-[11px] text-muted-foreground hover:text-foreground underline"
-                title="Replace with the upstream chart's default values for the selected version"
-              >
-                Reset to chart defaults
-              </button>
-            )}
-          </div>
-          <form.Field name="valuesYaml">
-            {(field) => (
-              <textarea
-                value={field.state.value}
-                onChange={(e) => field.handleChange(e.target.value)}
-                onBlur={field.handleBlur}
-                rows={16}
-                spellCheck={false}
-                className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono focus:outline-hidden focus:ring-1 focus:ring-ring resize-y"
-                placeholder="# values.yaml — overrides applied on top of chart defaults"
-              />
-            )}
-          </form.Field>
-          <p className="text-[11px] text-muted-foreground">
-            Vault references like{" "}
-            <code className="font-mono">${`{vault://secret/path#key}`}</code>{" "}
-            are resolved at install time. Sensitive values stay in Vault rather
-            than this row.
-          </p>
-        </div>
-      </div>
-    </ModalShell>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Uninstall confirmation
-// ---------------------------------------------------------------------
-
-interface AppUninstallModalProps {
-  clusterId: string;
-  installedChartId: string;
-  releaseName: string;
-  chartName: string;
-  namespace: string;
-  onClose: () => void;
-  onConfirm: () => Promise<void> | void;
-  pending?: boolean;
-  confirmDecision?: PermissionDecision;
-}
-
-export function AppUninstallModal({
-  releaseName,
-  chartName,
-  namespace,
-  onClose,
-  onConfirm,
-  pending,
-  confirmDecision,
-}: AppUninstallModalProps) {
-  const [typed, setTyped] = useState("");
-  const confirmBlockedReason =
-    confirmDecision && !confirmDecision.allowed
-      ? permissionDeniedReason(confirmDecision)
-      : undefined;
-  const confirmable =
-    typed === releaseName && !pending && !confirmBlockedReason;
-  const crdsWillSurvive = HAS_CRDS.has(chartName);
-  const handleConfirm = () => {
-    if (confirmBlockedReason) {
-      toastWarning(confirmBlockedReason);
-      return;
-    }
-    onConfirm();
-  };
-
-  return (
-    <ModalShell
-      title="Uninstall release"
-      onClose={onClose}
-      size="sm"
-      panelClassName="bg-popover"
-      bodyClassName="p-5 space-y-3 text-sm"
-      footerClassName="bg-muted/30"
-      titleIcon={<AlertTriangle className="h-5 w-5 text-status-error" />}
-      footer={
-        <div className="flex items-center justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
-            disabled={pending}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={!confirmable}
-            title={confirmBlockedReason}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-status-error text-background hover:bg-status-error disabled:opacity-50"
-          >
-            {pending ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Uninstalling…
-              </>
-            ) : (
-              <>Uninstall</>
-            )}
-          </button>
-        </div>
-      }
-    >
-      <p>
-        This will run{" "}
-        <code className="font-mono text-xs">
-          helm uninstall {releaseName} -n {namespace}
-        </code>{" "}
-        on the cluster. Workload pods + Services + ConfigMaps owned by the
-        release will be deleted.
-      </p>
-      {crdsWillSurvive && (
-        <div className="rounded-md border border-status-warning/40 bg-status-warning/5 px-3 py-2 text-xs">
-          <div className="font-medium text-status-warning flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" /> CRDs will not be removed
-          </div>
-          <p className="text-muted-foreground mt-1">
-            <span className="font-mono">{chartName}</span> ships CRDs. Helm
-            leaves them in place on uninstall to protect data; remove manually
-            with <code className="font-mono">kubectl delete crd …</code> if you
-            need a clean re-install.
-          </p>
-        </div>
-      )}
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground">
-          Type{" "}
-          <code className="font-mono text-xs bg-muted px-1 rounded-sm">
-            {releaseName}
-          </code>{" "}
-          to confirm
-        </label>
-        <input
-          type="text"
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono focus:outline-hidden focus:ring-1 focus:ring-ring"
-          data-initial-focus
+        <AppInstallValuesEditor
+          defaultValues={defaultValues}
+          isUpgrade={isUpgrade}
+          valuesSchema={valuesSchema}
+          editorMode={editorMode}
+          switchEditorMode={switchEditorMode}
+          preview={preview}
+          chartName={mode.chartName}
+          version={selectedVersion?.version ?? ""}
+          namespace={namespace}
+          releaseName={releaseName}
+          schemaValues={schemaValues}
+          valuesYaml={valuesYaml}
+          onValuesChange={(value) => form.setFieldValue("valuesYaml", value)}
+          setYamlError={setYamlError}
+          yamlError={yamlError}
         />
       </div>
     </ModalShell>
-  );
-}
-
-function AppInstallFooter({
-  onClose,
-  pending,
-  onSubmit,
-  submittable,
-  reason,
-  upgrade,
-}: {
-  onClose: () => void;
-  pending: boolean;
-  onSubmit: () => void;
-  submittable: boolean;
-  reason?: string;
-  upgrade: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-end gap-2">
-      <button
-        onClick={onClose}
-        className="px-3 py-1.5 text-sm rounded-md border border-border bg-background hover:bg-muted"
-        disabled={pending}
-      >
-        Cancel
-      </button>
-      <button
-        onClick={onSubmit}
-        disabled={!submittable}
-        title={reason}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
-      >
-        {pending ? (
-          <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />{" "}
-            {upgrade ? "Upgrading" : "Installing"}…
-          </>
-        ) : (
-          <>{upgrade ? "Upgrade" : "Install"}</>
-        )}
-      </button>
-    </div>
-  );
-}
-
-function ChartInstallationNotes({
-  slowInstall,
-  hasCRDs,
-  isUpgrade,
-  chartName,
-}: {
-  slowInstall: boolean;
-  hasCRDs: boolean;
-  isUpgrade: boolean;
-  chartName: string;
-}) {
-  return (
-    <>
-      {" "}
-      {(slowInstall || hasCRDs) && (
-        <div className="rounded-md border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
-          <Info className="h-4 w-4 text-status-warning mt-0.5 shrink-0" />
-          <div className="space-y-0.5 text-foreground">
-            {slowInstall && (
-              <div>
-                First install of{" "}
-                <span className="font-medium">{chartName}</span> typically takes
-                3–10 minutes — sub-charts and CRDs land before the workloads
-                come up.
-              </div>
-            )}
-            {hasCRDs && !isUpgrade && (
-              <div>
-                This chart ships CRDs. The CRDs will <em>not</em> be removed
-                automatically on uninstall (helm leaves them to protect data) —
-                pick a stable namespace from the start.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </>
   );
 }

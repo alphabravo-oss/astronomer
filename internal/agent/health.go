@@ -682,7 +682,7 @@ func connectCapabilities(profile string) []string {
 	// grant the agent only its TokenRequest subresource. This capability is
 	// profile-independent: it never mints the agent's own credential and never
 	// inherits the selected agent privilege profile.
-	heartbeat.EnabledFeatures = append(heartbeat.EnabledFeatures, protocol.FeatureDirectKubeconfig)
+	heartbeat.EnabledFeatures = append(heartbeat.EnabledFeatures, protocol.FeatureDirectKubeconfig, protocol.FeatureDeliveryObservation)
 	seen := make(map[string]struct{}, len(heartbeat.EnabledFeatures))
 	capabilities := make([]string, 0, len(heartbeat.EnabledFeatures))
 	for _, capability := range heartbeat.EnabledFeatures {

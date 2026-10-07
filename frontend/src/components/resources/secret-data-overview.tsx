@@ -16,6 +16,7 @@ import {
 } from "@/components/resources/resource-overview-primitives";
 import { useClusterResourcePermission } from "@/lib/permission-hooks";
 import { cn, copyToClipboard, formatBytes } from "@/lib/utils";
+import { BareButton } from "@/components/form/bare-button";
 
 interface SecretDataOverviewProps {
   obj: K8sObject;
@@ -221,8 +222,7 @@ function SecretValuePanel({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
+          <BareButton
             onClick={() => setRevealed((value) => !value)}
             aria-label={revealed ? `Hide ${name}` : `Show ${name}`}
             aria-pressed={revealed}
@@ -239,13 +239,12 @@ function SecretValuePanel({
               <Eye className="h-3.5 w-3.5" />
             )}
             {revealed ? "Hide" : "Show"}
-          </button>
-          <button
-            type="button"
+          </BareButton>
+          <BareButton
             onClick={() => void copy()}
             disabled={!revealed || !decoded.text}
             aria-label={`Copy ${name}`}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 font-normal"
           >
             {copied ? (
               <Check className="h-3.5 w-3.5 text-status-success" />
@@ -253,23 +252,22 @@ function SecretValuePanel({
               <Copy className="h-3.5 w-3.5" />
             )}
             {copied ? "Copied" : "Copy"}
-          </button>
-          <button
-            type="button"
+          </BareButton>
+          <BareButton
             onClick={() => downloadValue(secretName, name, decoded)}
             disabled={!revealed}
             aria-label={`Download ${name}`}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 font-normal"
           >
             <Download className="h-3.5 w-3.5" /> Download
-          </button>
+          </BareButton>
         </div>
       </header>
       <div className="relative min-h-40 bg-muted/15">
         {revealed ? (
           decoded.display !== undefined ? (
             <pre
-              className="max-h-[32rem] min-h-40 overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-5 text-foreground"
+              className="max-h-128 min-h-40 overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-5 text-foreground"
               aria-live="polite"
             >
               {decoded.display}
@@ -331,7 +329,7 @@ export function SecretDataOverview({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <Section title="Secret">
         <KeyValueTable
           entries={[

@@ -20,7 +20,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useNavigate, useLocation } from "@tanstack/react-router";
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 
@@ -98,33 +99,46 @@ export function RolloutsPage() {
     {
       key: "id",
       header: "Rollout",
+      kind: "name",
+      minSize: 280,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Rocket className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-mono text-xs">{row.id}</p>
-            <p className="text-xs text-muted-foreground">
-              target generation {row.targetGeneration}
-            </p>
-          </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <Rocket className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <StackedCell
+            primary={row.id}
+            primaryClassName="font-mono text-xs font-normal"
+            secondary={`target generation ${row.targetGeneration}`}
+          />
         </div>
       ),
+      sortAccessor: (row) => row.id,
     },
     {
       key: "state",
       header: "State",
+      kind: "status",
       accessor: (row) => <DeliveryPhaseBadge value={row.state} />,
     },
     {
       key: "strategy",
       header: "Strategy",
+      kind: "text",
+      size: 140,
+      minSize: 112,
       accessor: (row) => row.strategy.type.replaceAll("_", " "),
     },
     {
       key: "progress",
       header: "Progress",
+      kind: "percent",
+      size: 176,
+      minSize: 160,
+      maxSize: 220,
+      align: "left",
+      sortAccessor: (row) =>
+        row.totalClusters ? row.readyClusters / row.totalClusters : 0,
       accessor: (row) => (
-        <div className="min-w-36">
+        <div className="w-full">
           <p className="text-sm tabular-nums">
             {row.readyClusters}/{row.totalClusters} ready
           </p>
@@ -144,15 +158,20 @@ export function RolloutsPage() {
     },
     {
       key: "revision",
-      header: "Desired version",
-      accessor: (row) => (
-        <code className="text-xs">{row.toBundleVersionId}</code>
-      ),
+      header: "Version",
+      ariaLabel: "Desired version",
+      kind: "id",
+      size: 160,
+      minSize: 140,
+      accessor: (row) => row.toBundleVersionId,
+      sortAccessor: (row) => row.toBundleVersionId,
     },
     {
       key: "updated",
       header: "Updated",
-      accessor: (row) => formatRelativeTime(row.updatedAt),
+      kind: "age",
+      accessor: (row) => <AgeCell value={row.updatedAt} />,
+      sortAccessor: (row) => row.updatedAt,
     },
   ];
   return (

@@ -583,7 +583,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "delivery_local_flux_bootstrap", Value: true},
 		envconfig.Default{Key: "delivery_kubernetes_min_minor", Value: "1.33"},
 		envconfig.Default{Key: "delivery_kubernetes_max_minor", Value: "1.35"},
-		envconfig.Default{Key: "delivery_flux_version", Value: "v2.9.3"},
+		envconfig.Default{Key: "delivery_flux_version", Value: "v2.9.6"},
 		envconfig.Default{Key: "delivery_source_allowed_private_hosts", Value: "[]"},
 		envconfig.Default{Key: "delivery_source_egress_cidrs", Value: "[]"},
 		envconfig.Default{Key: "delivery_source_allow_ssh", Value: false},

@@ -50,10 +50,7 @@ function NewClusterTemplatePage() {
           title="Write permission required"
           permission="cluster_templates:write"
           description={
-            <>
-              Saving requires the{" "}
-              <span className="font-mono">cluster_templates:write</span> role.
-            </>
+            <>Saving requires permission to manage cluster templates.</>
           }
           className="rounded-lg border border-border bg-muted/30 p-6"
         />

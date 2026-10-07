@@ -25,7 +25,7 @@ func observedObjects(assignment protocol.DeliveryAssignmentV2) (*unstructured.Un
 	reconciler := managedObject(assignment, kustomizationGVK, names.ControlNamespace, names.Base, nil)
 	reconciler.SetGeneration(9)
 	reconciler.Object["status"] = map[string]any{
-		"inventory":  map[string]any{"entries": []any{"apps_v1_Deployment_workload_app", "_v1_Service_workload_app"}},
+		"inventory":  map[string]any{"entries": []any{map[string]any{"id": "workload_app_apps_Deployment", "v": "v1"}, map[string]any{"id": "workload_app__Service", "v": "v1"}}},
 		"conditions": []any{map[string]any{"type": "Ready", "status": "True", "reason": "ReconciliationSucceeded", "observedGeneration": int64(9)}},
 	}
 	return source, reconciler
@@ -69,9 +69,9 @@ func TestNormalizeObservationPhasesAndBoundary(t *testing.T) {
 		t.Fatalf("generation lag status = %#v, %v", status, err)
 	}
 	reconciler.SetGeneration(9)
-	reconciler.Object["status"].(map[string]any)["conditions"] = []any{map[string]any{"type": "Stalled", "status": "True", "observedGeneration": int64(9)}}
+	reconciler.Object["status"].(map[string]any)["conditions"] = []any{map[string]any{"type": "Stalled", "status": "True", "observedGeneration": int64(9), "message": "Helm install failed because host port 9100 is occupied"}}
 	status, err = NormalizeObservation(Observation{Assignment: assignment, Source: source, Reconciler: reconciler, ObservedAt: time.Now()})
-	if err != nil || status.Phase != "failed" || status.Inventory.Failed != 2 || status.ErrorCode != "reconciler_stalled" {
+	if err != nil || status.Phase != "failed" || status.Inventory.Failed != 2 || status.ErrorCode != "reconciler_stalled" || !strings.Contains(status.Message, "9100") {
 		t.Fatalf("stalled status = %#v, %v", status, err)
 	}
 	assignment.Action = protocol.DeliveryActionSuspend

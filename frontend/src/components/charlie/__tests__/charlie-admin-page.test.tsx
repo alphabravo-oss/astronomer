@@ -437,7 +437,9 @@ describe("Charlie administration acceptance", () => {
 
     feature.value = { data: undefined, isError: false, refetch: vi.fn() };
     const loading = renderWithClient(<CharlieAdminPage />);
-    expect(screen.getByText("Loading Charlie settings")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading Charlie settings" }),
+    ).toBeInTheDocument();
     loading.unmount();
 
     feature.value = {

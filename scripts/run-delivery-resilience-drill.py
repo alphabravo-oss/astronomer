@@ -19,9 +19,12 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
+from resilience_ledger import Ledger, LedgerError, private_read
+from resilience_observer import observe, validate_config
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 
 SCHEMA = "astronomer-delivery-resilience-drill/v1"
@@ -80,6 +83,11 @@ def validate_step(step: Any, where: str) -> dict[str, Any]:
         bounded_name(step["name"], f"{where}.name")
         if action == "scale_workload" and (not isinstance(step.get("replicas"), int) or isinstance(step.get("replicas"), bool) or not 0 <= step["replicas"] <= 100):
             raise DrillError(f"{where}.replicas must be an integer in 0..100")
+    elif action == "observe_annotation":
+        require_keys(step, {"action", "kind", "name", "repetitions"}, common | {"kind", "name", "repetitions"}, where)
+        if step['kind'] != 'deployment' or type(step['repetitions']) is not int or not 1 <= step['repetitions'] <= 100:
+            raise DrillError("observation requires deployment and 1..100 repetitions")
+        bounded_name(step['name'], "observation deployment name")
     elif action == "delete_pod":
         require_keys(step, {"action", "selector"}, common | {"selector"}, where)
         if not isinstance(step["selector"], str) or len(step["selector"]) > 512 or not SELECTOR_RE.fullmatch(step["selector"]):
@@ -112,9 +120,12 @@ def validate_manifest(document: Any) -> dict[str, Any]:
     if not isinstance(document, dict):
         raise DrillError("manifest must be an object")
     require_keys(document, {"schema_version", "run_id", "context", "namespace", "scenarios"},
-                 {"schema_version", "run_id", "context", "namespace", "scenarios"}, "manifest")
+                 {"schema_version", "run_id", "context", "namespace", "scenarios", "observer"}, "manifest")
     if document["schema_version"] != SCHEMA:
         raise DrillError(f"schema_version must be {SCHEMA}")
+    if "observer" in document:
+        validate_config(document["observer"])
+    operation_count = 1
     run_id = document["run_id"]
     if not isinstance(run_id, str) or not RUN_RE.fullmatch(run_id):
         raise DrillError("run_id must be a bounded lowercase DNS label")
@@ -141,6 +152,12 @@ def validate_manifest(document: Any) -> dict[str, Any]:
             raise DrillError(f"{where}.steps must contain 1..100 entries")
         for step_index, step in enumerate(scenario["steps"]):
             validate_step(step, f"{where}.steps[{step_index}]")
+            if step['action'] == 'observe_annotation' and 'observer' not in document:
+                raise DrillError("observation action requires observer configuration")
+            if step['action'] not in ('assert_resource', 'wait_rollout'):
+                operation_count += step.get('repetitions', 1)
+            if operation_count > 10001:
+                raise DrillError("manifest exceeds ledger operation limit")
     return document
 
 
@@ -153,21 +170,61 @@ def canonical_digest(document: dict[str, Any]) -> str:
 class Kubectl:
     context: str
     namespace: str
+    deadline: float | None = None
 
     def run(self, arguments: list[str], *, stdin: dict[str, Any] | None = None, timeout: int = 60) -> str:
+        if self.deadline is not None:
+            timeout = min(timeout, self.deadline - time.monotonic())
+            if timeout <= 0:
+                raise DrillError("kubectl deadline exceeded")
         command = ["kubectl", "--context", self.context, "--namespace", self.namespace, *arguments]
         payload = None if stdin is None else json.dumps(stdin, sort_keys=True).encode()
+        if payload is not None and len(payload) > 4 << 20:
+            raise DrillError("kubectl input limit exceeded")
+        output = bytearray()
+        overflow = []
         try:
-            completed = subprocess.run(command, input=payload, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       check=False, timeout=timeout)
-        except (OSError, subprocess.TimeoutExpired) as error:
-            raise DrillError(f"kubectl invocation failed: {error}") from error
-        if completed.returncode != 0:
-            # Kubernetes error text can echo sensitive values. Evidence retains
-            # only a bounded classification; raw stderr stays in the terminal.
-            sys.stderr.buffer.write(completed.stderr[:4096])
-            raise DrillError(f"kubectl exited {completed.returncode}")
-        return completed.stdout.decode(errors="strict")
+            process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            def read():
+                while True:
+                    chunk = process.stdout.read(65536)
+                    if not chunk:
+                        break
+                    if len(output) + len(chunk) > 4 << 20:
+                        overflow.append(True)
+                        process.kill()
+                        break
+                    output.extend(chunk)
+            def write():
+                try:
+                    if payload:
+                        process.stdin.write(payload)
+                    process.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass
+            reader = threading.Thread(target=read, daemon=True)
+            writer = threading.Thread(target=write, daemon=True)
+            reader.start()
+            writer.start()
+            try:
+                process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                raise DrillError("kubectl invocation timed out") from None
+            finally:
+                reader.join(5)
+                writer.join(5)
+                process.stdout.close()
+            if process.returncode or overflow:
+                raise DrillError("kubectl invocation failed or output limit exceeded")
+            return output.decode(errors="strict")
+        except OSError:
+            raise DrillError("kubectl invocation unavailable") from None
+
+    def get_optional(self, kind, name):
+        raw = self.run(["get", kind, name, "--ignore-not-found=true", "-o", "json"])
+        return json.loads(raw) if raw.strip() else None
 
     def get(self, kind: str, name: str) -> dict[str, Any]:
         raw = self.run(["get", kind, name, "-o", "json"])
@@ -208,16 +265,21 @@ class Runner:
         self.run_id = manifest["run_id"]
         self.kubectl = Kubectl(manifest["context"], manifest["namespace"])
         self.evidence_path = evidence_path
-        self.cleanup: list[tuple[str, Callable[[], None]]] = []
+        self.ledger = None
         self.report: dict[str, Any] = {
             "schema_version": REPORT_SCHEMA, "run_id": self.run_id,
             "manifest_digest": canonical_digest(manifest), "context": manifest["context"],
             "namespace": manifest["namespace"], "status": "running", "started_at": utc_now(),
             "ownership_verified": False, "scenarios": [], "cleanup": [], "errors": [],
             "release_eligible": False,
+            "source_digest": canonical_digest({
+                name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
+                for name in ("run-delivery-resilience-drill.py", "resilience_ledger.py", "resilience_observer.py")}),
         }
 
     def checkpoint(self) -> None:
+        if self.ledger is not None and self.ledger.path.exists():
+            self.report['ledger_digest'] = 'sha256:' + hashlib.sha256(self.ledger.path.read_bytes()).hexdigest()
         write_json_atomic(self.evidence_path, self.report)
 
     def verify_namespace(self) -> None:
@@ -230,7 +292,33 @@ class Runner:
         require_owned(resource, self.run_id, f"{kind}/{name}")
         return resource
 
-    def run(self) -> dict[str, Any]:
+    write_atomic = staticmethod(lambda path, data: write_json_atomic(path, data))
+    bounded_name = staticmethod(lambda name: bounded_name(name, "ledger resource name", 253))
+
+    def require_owned(self, resource):
+        require_owned(resource, self.run_id, "ledger resource")
+
+    def run(self, resume=False) -> dict[str, Any]:
+        with Ledger(self, resume=resume) as ledger:
+            self.ledger = ledger
+            ledger.lock()
+            if resume:
+                if self.evidence_path.exists():
+                    previous = private_read(self.evidence_path)
+                    for key in ("schema_version", "run_id", "manifest_digest", "context", "namespace"):
+                        if previous.get(key) != self.report[key]:
+                            raise LedgerError("original report identity mismatch")
+                    self.report = previous
+                if self.report["status"] == "running":
+                    self.report["status"] = "interrupted"
+                self.report["cleanup_status"] = "passed" if ledger.cleanup() else "unresolved"
+                self.report["resume_cleanup_only"] = True
+                self.report["release_eligible"] = False
+                self.checkpoint()
+                return self.report
+            return self.run_scenarios()
+
+    def run_scenarios(self) -> dict[str, Any]:
         try:
             self.verify_namespace()
             self.checkpoint()
@@ -261,21 +349,16 @@ class Runner:
     def execute_step(self, scenario_id: str, index: int, step: dict[str, Any]) -> None:
         timeout = step.get("timeout_seconds", 600)
         action = step["action"]
-        if action == "restart_workload":
-            self.owned(step["kind"], step["name"])
-            self.kubectl.run(["rollout", "restart", f"{step['kind']}/{step['name']}", "--field-manager=astronomer-qualification"], timeout=timeout)
+        if action == "observe_annotation":
+            observe(self, step)
+        elif action == "restart_workload":
+            self.ledger.change(step["kind"], step["name"], "restart", utc_now())
             self.kubectl.run(["rollout", "status", f"{step['kind']}/{step['name']}", f"--timeout={timeout}s"], timeout=timeout + 5)
         elif action == "wait_rollout":
             self.owned(step["kind"], step["name"])
             self.kubectl.run(["rollout", "status", f"{step['kind']}/{step['name']}", f"--timeout={timeout}s"], timeout=timeout + 5)
         elif action == "scale_workload":
-            resource = self.owned(step["kind"], step["name"])
-            original = resource.get("spec", {}).get("replicas")
-            if not isinstance(original, int) or isinstance(original, bool) or not 0 <= original <= 100:
-                raise DrillError("owned workload has an invalid original replica count")
-            self.cleanup.append((f"restore {step['kind']}/{step['name']} replicas={original}",
-                                 lambda s=step, r=original: self.kubectl.run(["scale", f"{s['kind']}/{s['name']}", f"--replicas={r}"], timeout=timeout)))
-            self.kubectl.run(["scale", f"{step['kind']}/{step['name']}", f"--replicas={step['replicas']}"], timeout=timeout)
+            self.ledger.change(step["kind"], step["name"], "replicas", step["replicas"])
         elif action == "delete_pod":
             raw = self.kubectl.run(["get", "pods", "-l", step["selector"], "-o", "json"], timeout=timeout)
             items = json.loads(raw).get("items", [])
@@ -285,7 +368,7 @@ class Runner:
             pod = items[0]
             name = bounded_name(pod.get("metadata", {}).get("name"), "selected pod name", 63)
             require_owned(pod, self.run_id, f"pod/{name}")
-            self.kubectl.run(["delete", "pod", name, "--wait=false"], timeout=timeout)
+            self.ledger.delete_pod(pod)
         elif action == "network_partition":
             name = bounded_name(f"qualification-deny-{scenario_id}-{index}", "network policy name", 63)
             policy = {"apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy",
@@ -293,11 +376,9 @@ class Runner:
                                    "labels": {OWNER_KEY: self.run_id, DISPOSABLE_KEY: "true"}},
                       "spec": {"podSelector": {"matchLabels": {OWNER_KEY: self.run_id, DISPOSABLE_KEY: "true"}},
                                "policyTypes": ["Ingress", "Egress"]}}
-            self.kubectl.run(["apply", "--server-side", "--field-manager=astronomer-qualification", "-f", "-"], stdin=policy, timeout=timeout)
-            self.cleanup.append((f"delete networkpolicy/{name}", lambda n=name: self.kubectl.run(["delete", "networkpolicy", n, "--ignore-not-found=true"], timeout=timeout)))
+            operation = self.ledger.create("networkpolicy", name, policy)
             time.sleep(step["duration_seconds"])
-            _, callback = self.cleanup.pop()
-            callback()
+            self.ledger.cleanup_one(operation)
         elif action == "run_cronjob":
             cronjob = self.owned("cronjob", step["name"])
             job_name = bounded_name(f"q-{self.run_id[:20]}-{scenario_id[:20]}-{index}", "generated job name", 63)
@@ -308,8 +389,7 @@ class Runner:
                    "metadata": {"name": job_name, "namespace": self.manifest["namespace"],
                                 "labels": {OWNER_KEY: self.run_id, DISPOSABLE_KEY: "true"}},
                    "spec": copy.deepcopy(template)}
-            self.kubectl.run(["create", "-f", "-"], stdin=job, timeout=timeout)
-            self.cleanup.append((f"delete job/{job_name}", lambda n=job_name: self.kubectl.run(["delete", "job", n, "--ignore-not-found=true"], timeout=timeout)))
+            self.ledger.create("job", job_name, job)
             self.kubectl.run(["wait", "--for=condition=complete", f"job/{job_name}", f"--timeout={timeout}s"], timeout=timeout + 5)
         elif action == "assert_resource":
             resource = self.owned(step["kind"], step["name"])
@@ -319,21 +399,16 @@ class Runner:
             raise DrillError(f"unsupported action {action}")
 
     def run_cleanup(self) -> None:
-        while self.cleanup:
-            description, callback = self.cleanup.pop()
-            outcome = {"action": description, "status": "running", "started_at": utc_now()}
-            self.report["cleanup"].append(outcome)
-            try:
-                callback()
-                outcome["status"] = "passed"
-            except Exception:
-                outcome["status"] = "failed"
-                self.report["status"] = "failed"
-                self.report["errors"].append("CleanupError")
-            outcome["completed_at"] = utc_now()
+        success = self.ledger.cleanup()
+        self.report["cleanup"].append({"action": "ledger cleanup", "status": "passed" if success else "failed"})
+        if not success:
+            self.report["status"] = "failed"
+            self.report["errors"].append("CleanupUnresolved")
 
 
 def write_json_atomic(path: Path, value: dict[str, Any]) -> None:
+    if len(json.dumps(value, indent=2).encode()) > 4 << 20:
+        raise DrillError("checkpoint size limit exceeded")
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise DrillError("evidence path must be a regular file, not a symlink")
     if not path.parent.is_dir():
@@ -347,6 +422,11 @@ def write_json_atomic(path: Path, value: dict[str, Any]) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     finally:
         try:
             os.unlink(temporary)
@@ -360,6 +440,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--evidence", type=Path)
     parser.add_argument("--confirm")
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--resume-cleanup", action="store_true")
     return parser.parse_args()
 
 
@@ -368,6 +449,8 @@ def main() -> int:
     try:
         if arguments.manifest.is_symlink() or not arguments.manifest.is_file():
             raise DrillError("manifest must be a regular file, not a symlink")
+        if arguments.manifest.stat().st_size > 1 << 20:
+            raise DrillError("manifest size limit exceeded")
         document = validate_manifest(json.loads(arguments.manifest.read_text(encoding="utf-8")))
         if arguments.validate_only:
             print(f"delivery-resilience-drill: valid manifest {canonical_digest(document)}")
@@ -377,11 +460,12 @@ def main() -> int:
         confirmation = f"delete-only-owned:{document['context']}:{document['namespace']}:{document['run_id']}"
         if arguments.confirm != confirmation:
             raise DrillError(f"--confirm must exactly equal {confirmation}")
-        report = Runner(document, arguments.evidence).run()
+        report = Runner(document, arguments.evidence).run(resume=arguments.resume_cleanup)
         print(f"delivery-resilience-drill: {report['status']} evidence={arguments.evidence}")
-        return 0 if report["status"] == "passed" else 1
-    except (DrillError, json.JSONDecodeError, OSError) as error:
-        print(f"delivery-resilience-drill: {error}", file=sys.stderr)
+        outcome = report.get("cleanup_status") if arguments.resume_cleanup else report["status"]
+        return 0 if outcome == "passed" else 1
+    except Exception as error:
+        print(f"delivery-resilience-drill: refused or unresolved ({type(error).__name__}); inspect private ledger", file=sys.stderr)
         return 2
 
 

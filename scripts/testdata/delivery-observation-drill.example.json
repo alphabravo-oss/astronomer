@@ -1,0 +1,25 @@
+{
+  "schema_version": "astronomer-delivery-resilience-drill/v1",
+  "run_id": "example-001",
+  "context": "k3d-astronomer-qualification-example-001",
+  "namespace": "astronomer-qualification-example-001",
+  "observer": {
+    "base_url": "https://astronomer.example.invalid",
+    "cluster_id": "00000000-0000-4000-8000-000000000001",
+    "bearer_token_file": "/private/astronomer-observer-token"
+  },
+  "scenarios": [
+    {
+      "id": "annotation-to-sse",
+      "steps": [
+        {
+          "action": "observe_annotation",
+          "kind": "deployment",
+          "name": "qualification-observation-fixture",
+          "repetitions": 20,
+          "timeout_seconds": 600
+        }
+      ]
+    }
+  ]
+}

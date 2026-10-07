@@ -14,6 +14,7 @@ import { detailHref } from "@/lib/k8s-paths";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { Pod } from "@/types";
+import { BareButton } from "@/components/form/bare-button";
 
 export type WorkloadResourceTabId =
   "workload-pods" | "workload-logs" | "workload-metrics";
@@ -58,6 +59,8 @@ function WorkloadPodsTab({
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 240,
       accessor: (pod) => (
         <RouterLink
           to={podHref(pod)}
@@ -71,6 +74,8 @@ function WorkloadPodsTab({
     {
       key: "status",
       header: "Status",
+      kind: "status",
+      size: 168,
       accessor: (pod) => (
         <StatusBadge status={pod.status?.trim() || pod.phase || "Unknown"} />
       ),
@@ -78,6 +83,7 @@ function WorkloadPodsTab({
     {
       key: "ready",
       header: "Ready",
+      kind: "count",
       accessor: (pod) => (
         <span className="font-mono text-xs tabular-nums">{pod.ready}</span>
       ),
@@ -85,6 +91,7 @@ function WorkloadPodsTab({
     {
       key: "restarts",
       header: "Restarts",
+      kind: "count",
       accessor: (pod) => (
         <span
           className={cn(
@@ -96,11 +103,14 @@ function WorkloadPodsTab({
         </span>
       ),
       sortAccessor: (pod) => pod.restarts,
-      align: "center",
     },
     {
       key: "node",
       header: "Node",
+      kind: "name",
+      grow: false,
+      size: 150,
+      minSize: 130,
       accessor: (pod) => (
         <span className="font-mono text-xs text-muted-foreground">
           {pod.node || "—"}
@@ -110,6 +120,8 @@ function WorkloadPodsTab({
     {
       key: "age",
       header: "Age",
+      kind: "age",
+      size: 80,
       accessor: (pod) => (
         <span className="text-xs text-muted-foreground">
           {pod.age || formatRelativeTime(pod.createdAt)}
@@ -207,11 +219,11 @@ export function ResourceMetricsTab(props: WorkloadTabProps) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">Time range:</span>
         {["1h", "6h", "24h", "7d"].map((value) => (
-          <button
+          <BareButton
             key={value}
             type="button"
             onClick={() => setRange(value)}
@@ -223,7 +235,7 @@ export function ResourceMetricsTab(props: WorkloadTabProps) {
             )}
           >
             {value}
-          </button>
+          </BareButton>
         ))}
       </div>
       <QueryStates
@@ -241,7 +253,7 @@ export function ResourceMetricsTab(props: WorkloadTabProps) {
                 charts.
               </div>
             ) : null}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-(--gap-section) lg:grid-cols-2">
               <MetricsChart
                 title="CPU usage and limit"
                 series={[metrics.cpuUsage, metrics.cpuCapacity]}

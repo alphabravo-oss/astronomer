@@ -45,11 +45,25 @@ func validateToolFormValues(slug, raw string) error {
 			_, valid = value.(bool)
 		case toolFieldNumber:
 			n, ok := value.(float64)
-			valid = ok && n >= 1 && n <= 10000 && math.Trunc(n) == n
+			valid = ok
+			if valid && field.Minimum != nil {
+				valid = n >= *field.Minimum
+			}
+			if valid && field.Maximum != nil {
+				valid = n <= *field.Maximum
+			}
+			if valid && field.Step != nil && *field.Step > 0 {
+				origin := 0.0
+				if field.Minimum != nil {
+					origin = *field.Minimum
+				}
+				steps := (n - origin) / *field.Step
+				valid = math.Abs(steps-math.Round(steps)) < 1e-9
+			}
 		case toolFieldSelect:
 			s, ok := value.(string)
 			valid = ok && slices.Contains(field.Options, s)
-		case toolFieldString, toolFieldStorage:
+		case toolFieldString, toolFieldMultiline, toolFieldStorage:
 			_, valid = value.(string)
 		}
 		if !valid {

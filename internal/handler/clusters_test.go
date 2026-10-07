@@ -53,6 +53,24 @@ func TestRenderAgentInstallManifestUsesTemplate(t *testing.T) {
 	}
 }
 
+func TestRenderAgentOnlyManifestExcludesFluxControllers(t *testing.T) {
+	h := NewClusterHandler(nil)
+	h.SetAgentImage("example.com/astronomer-agent", "v1.2.3")
+	cluster := sqlc.Cluster{ID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"), Name: "demo"}
+	manifest, err := h.renderAgentInstallManifest(cluster, "reg-token", "https://astro.example.com", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(manifest, "name: astronomer-agent") {
+		t.Fatal("agent-only manifest omitted the agent")
+	}
+	for _, forbidden := range []string{"name: source-controller", "name: kustomize-controller", "name: helm-controller"} {
+		if strings.Contains(manifest, forbidden) {
+			t.Fatalf("agent-only manifest contains Flux-owned resource %q", forbidden)
+		}
+	}
+}
+
 func TestRenderAgentInstallManifestPreservesReleaseDigest(t *testing.T) {
 	digestRef := "example.com/astronomer-agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	h := NewClusterHandler(nil)

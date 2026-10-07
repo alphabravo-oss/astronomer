@@ -1,9 +1,10 @@
-import { Command, ExternalLink, Loader2, Send } from "lucide-react";
+import { Command, ExternalLink, Send } from "lucide-react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { commandInsertion } from "./commands";
 import type { CharlieComposerModel } from "./use-charlie-composer";
 import type { CharlieConversation } from "./use-charlie-conversation";
+import { ActionButton } from "@/components/ui/action-button";
 
 function charlieErrorStatus(error: unknown): number | undefined {
   if (!error || typeof error !== "object") return undefined;
@@ -48,22 +49,24 @@ export function CharlieComposerFeedback({
           </p>
           <div className="mt-2 flex gap-2">
             {history.isError && (
-              <button
-                type="button"
+              <ActionButton
+                intent="bare"
+                size="none"
                 onClick={() => void history.refetch()}
                 className="rounded-sm border px-2 py-1 text-xs"
               >
                 Reconnect and retry history
-              </button>
+              </ActionButton>
             )}
             {(send.isError || turnFailed) && send.variables && (
-              <button
-                type="button"
+              <ActionButton
+                intent="bare"
+                size="none"
                 onClick={() => send.mutate(send.variables!)}
                 className="rounded-sm border px-2 py-1 text-xs"
               >
                 Retry message
-              </button>
+              </ActionButton>
             )}
           </div>
         </div>
@@ -126,13 +129,14 @@ export function CharlieComposer({
             Previous conversations are read-only. Return to the current
             conversation to message Charlie.
           </p>
-          <button
-            type="button"
+          <ActionButton
+            intent="bare"
+            size="none"
             onClick={onReturn}
             className="shrink-0 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground"
           >
             Return to current
-          </button>
+          </ActionButton>
         </div>
       ) : (
         <form
@@ -148,14 +152,15 @@ export function CharlieComposer({
               aria-label="Suggested Charlie commands"
             >
               {suggestedCommands.map((command) => (
-                <button
-                  type="button"
+                <ActionButton
+                  intent="bare"
+                  size="none"
                   key={command.id}
                   onClick={() => setText(commandInsertion(command))}
-                  className="rounded-full border px-2 py-1 font-mono text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="rounded-full border px-2 py-1 font-mono text-11 text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   /{command.name}
-                </button>
+                </ActionButton>
               ))}
             </div>
           ) : null}
@@ -167,15 +172,16 @@ export function CharlieComposer({
               className="max-h-56 overflow-y-auto rounded-md border bg-popover p-1 shadow-md"
             >
               {slashSuggestions.map((command, index) => (
-                <button
-                  type="button"
+                <ActionButton
+                  intent="bare"
+                  size="none"
                   role="option"
                   aria-selected={index === selectedCommandIndex}
                   key={command.id}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => setText(commandInsertion(command))}
                   className={cn(
-                    "flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left",
+                    "flex w-full items-start justify-start gap-2 whitespace-normal rounded-sm px-2 py-2 text-left font-normal",
                     index === selectedCommandIndex
                       ? "bg-accent"
                       : "hover:bg-accent",
@@ -189,11 +195,11 @@ export function CharlieComposer({
                         ? ` <${command.argument.placeholder}>`
                         : ""}
                     </span>
-                    <span className="block text-[11px] text-muted-foreground">
+                    <span className="block text-11 text-muted-foreground">
                       {command.description}
                     </span>
                   </span>
-                </button>
+                </ActionButton>
               ))}
             </div>
           ) : null}
@@ -227,20 +233,19 @@ export function CharlieComposer({
               Open Charlie hub
               <ExternalLink className="h-3 w-3" />
             </RouterLink>
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               type="submit"
               disabled={
                 !text.trim() || !historyReady || send.isPending || awaitingReply
               }
+              loading={send.isPending || awaitingReply}
+              icon={<Send className="h-4 w-4" />}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground transition-colors motion-reduce:transition-none disabled:opacity-50"
             >
-              {send.isPending || awaitingReply ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
               {send.isPending ? "Sending" : awaitingReply ? "Working" : "Send"}
-            </button>
+            </ActionButton>
           </div>
         </form>
       )}

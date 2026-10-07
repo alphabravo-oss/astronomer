@@ -25,15 +25,7 @@ import { useState } from "react";
 import { useNetworkPolicyTemplates } from "@/lib/hooks/policy-queries";
 import { QueryStates } from "@/components/ui/query-states";
 import { Link as RouterLink } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  Plus,
-  Trash2,
-  Save,
-  Copy,
-  Loader2,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Save, Copy, Loader2 } from "lucide-react";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm, useStore } from "@/lib/form";
@@ -48,6 +40,8 @@ import {
   type NetworkPolicyTemplate,
   type NetworkPolicyTemplateWriteRequest,
 } from "@/lib/api/settings";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function KindBadge({ kind }: { kind: "builtin" | "custom" }) {
   const palette =
@@ -76,19 +70,19 @@ function TemplateRow({
 }) {
   return (
     <TableRow className="border-b border-border last:border-0">
-      <TableCell className="px-3 py-3 align-top">
+      <TableCell className="px-3 py-(--row-py) align-top">
         <div className="font-medium text-foreground">{tmpl.name}</div>
         <div className="text-xs text-muted-foreground font-mono">
           {tmpl.slug}
         </div>
       </TableCell>
-      <TableCell className="px-3 py-3 align-top">
+      <TableCell className="px-3 py-(--row-py) align-top">
         <KindBadge kind={tmpl.kind} />
       </TableCell>
-      <TableCell className="px-3 py-3 align-top text-sm text-muted-foreground max-w-md">
+      <TableCell className="px-3 py-(--row-py) align-top text-sm text-muted-foreground max-w-md">
         {tmpl.description}
       </TableCell>
-      <TableCell className="px-3 py-3 align-top">
+      <TableCell className="px-3 py-(--row-py) align-top">
         <span
           className={`text-xs px-2 py-0.5 rounded-sm border font-medium ${
             tmpl.enabled
@@ -99,33 +93,30 @@ function TemplateRow({
           {tmpl.enabled ? "enabled" : "disabled"}
         </span>
       </TableCell>
-      <TableCell className="px-3 py-3 align-top text-right">
+      <TableCell className="px-3 py-(--row-py) align-top text-right">
         <div className="flex items-center justify-end gap-1">
-          <button
-            type="button"
+          <BareButton
             className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-border hover:bg-muted"
             onClick={onClone}
-            title="Create an editable copy"
+            tooltip="Create an editable copy"
           >
             <Copy className="h-3 w-3" /> Clone
-          </button>
+          </BareButton>
           {tmpl.kind === "custom" && (
             <>
-              <button
-                type="button"
+              <BareButton
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-border hover:bg-muted"
                 onClick={onEdit}
               >
                 Edit
-              </button>
-              <button
-                type="button"
+              </BareButton>
+              <BareButton
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-status-error/30 text-status-error hover:bg-status-error/10"
                 onClick={onDelete}
                 aria-label={`Delete ${tmpl.name}`}
               >
                 <Trash2 className="h-3 w-3" />
-              </button>
+              </BareButton>
             </>
           )}
         </div>
@@ -209,15 +200,10 @@ function NetworkPoliciesPanel() {
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to settings
       </RouterLink>
       <PageHeader
-        title={
-          <span className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5" /> Network policy templates
-          </span>
-        }
+        title="Network policy templates"
         description="Pre-built Kubernetes NetworkPolicy bundles. Built-in rows are read-only — clone to create an editable custom row. Apply templates to namespaces from the cluster detail page's Network policies tab."
         actions={
-          <button
-            type="button"
+          <BareButton
             onClick={() =>
               openDraft({
                 slug: "",
@@ -231,14 +217,15 @@ function NetworkPoliciesPanel() {
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-card hover:bg-muted"
           >
             <Plus className="h-4 w-4" /> New custom template
-          </button>
+          </BareButton>
         }
       />
 
       {loading ? (
-        <div className="flex items-center text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading templates...
-        </div>
+        <LoadingSkeleton
+          label="Loading templates"
+          className="rounded-lg border border-border p-4"
+        />
       ) : (
         <div
           className="overflow-x-auto rounded-lg border border-border"
@@ -378,13 +365,12 @@ function TemplateDraftForm({
         <h2 className="text-base font-semibold">
           {draft.id ? "Edit template" : "New template"}
         </h2>
-        <button
-          type="button"
+        <BareButton
           className="text-xs text-muted-foreground hover:text-foreground"
           onClick={onCancel}
         >
           Cancel
-        </button>
+        </BareButton>
       </div>
       <form.AppForm>
         <form.FormErrorSummary
@@ -472,8 +458,7 @@ function TemplateDraftForm({
         Enabled
       </label>
       <div>
-        <button
-          type="button"
+        <BareButton
           onClick={() => void form.handleSubmit()}
           disabled={saving}
           className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-foreground text-background hover:opacity-90 disabled:opacity-50"
@@ -484,7 +469,7 @@ function TemplateDraftForm({
             <Save className="h-4 w-4" />
           )}
           Save
-        </button>
+        </BareButton>
       </div>
     </div>
   );

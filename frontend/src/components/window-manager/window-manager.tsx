@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import {
   useWindowManagerStore,
@@ -20,6 +21,8 @@ import {
   Terminal as TerminalIcon,
   X,
 } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 // Console transports and the terminal runtime are loaded only when a tab opens.
 const LogsTab = lazy(() =>
   import("./logs-tab").then((module) => ({ default: module.LogsTab })),
@@ -132,24 +135,24 @@ export function WindowManager() {
         className="fixed left-0 right-0 bottom-0 z-40 flex items-center gap-1 px-2 py-1
           border-t border-border bg-card/95 backdrop-blur-xs"
       >
-        <button
+        <BareButton
+          tooltip="Restore"
           onClick={() => toggleMinimize()}
           className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-2xs
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title="Restore"
+            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
         >
           <ChevronUp className="h-3 w-3" />
           <span>Console</span>
-        </button>
+        </BareButton>
         <div className="flex items-center gap-1 overflow-x-auto">
           {tabs.map((t) => (
-            <button
+            <BareButton
               key={t.id}
               onClick={() => {
                 setActive(t.id);
               }}
               className={cn(
-                "inline-flex items-center gap-1.5 h-6 px-2 rounded-sm text-2xs whitespace-nowrap transition-colors",
+                "inline-flex items-center gap-1.5 h-6 px-2 rounded-sm text-2xs whitespace-nowrap transition-colors font-normal",
                 t.id === activeTabId
                   ? "bg-accent text-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
@@ -157,24 +160,18 @@ export function WindowManager() {
             >
               <TabStatusDot status={tabStatuses[t.id] ?? "idle"} />
               <TabIcon kind={t.kind} />
-              <span
-                className="font-mono truncate max-w-[160px]"
-                title={tabDescription(t)}
-              >
-                {shortLabel(t)}
-              </span>
-            </button>
+              <Tooltip content={tabDescription(t)}>
+                <span className="font-mono truncate max-w-40">
+                  {shortLabel(t)}
+                </span>
+              </Tooltip>
+            </BareButton>
           ))}
         </div>
         <div className="ml-auto" />
-        <button
-          onClick={() => closeAll()}
-          className="inline-flex items-center justify-center h-6 w-6 rounded-sm
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title="Close all"
-        >
+        <ConsoleIconButton label="Close all" onClick={closeAll}>
           <X className="h-3 w-3" />
-        </button>
+        </ConsoleIconButton>
       </div>
     );
   }
@@ -186,8 +183,7 @@ export function WindowManager() {
       style={{ height: `${height}px` }}
     >
       {/* Resize handle */}
-      <button
-        type="button"
+      <BareButton
         aria-label={`Resize console, currently ${height} pixels. Use up and down arrow keys.`}
         onMouseDown={onDragStart}
         onKeyDown={(event) => {
@@ -195,7 +191,7 @@ export function WindowManager() {
           event.preventDefault();
           setHeight(height + (event.key === "ArrowUp" ? 24 : -24));
         }}
-        className="h-1 w-full border-0 p-0 -mt-px cursor-row-resize hover:bg-primary/40 transition-colors shrink-0 focus:bg-primary/40 focus:outline-hidden"
+        className="h-1 w-full border-0 p-0 -mt-px cursor-row-resize hover:bg-primary/40 transition-colors shrink-0 focus:bg-primary/40 focus:outline-hidden inline-block font-normal whitespace-normal"
         style={{ marginBottom: "-1px" }}
       />
 
@@ -205,71 +201,57 @@ export function WindowManager() {
           {tabs.map((t) => {
             const isActive = t.id === activeTabId;
             return (
-              <div
-                key={t.id}
-                className={cn(
-                  "group inline-flex items-center gap-1.5 h-8 px-3 text-2xs whitespace-nowrap",
-                  "border-r border-border transition-colors",
-                  isActive
-                    ? "bg-background text-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
-                )}
-                title={tabDescription(t)}
-              >
-                <button
-                  type="button"
-                  onClick={() => setActive(t.id)}
-                  aria-pressed={isActive}
-                  className="inline-flex min-w-0 items-center gap-1.5 focus:outline-hidden focus:ring-2 focus:ring-ring"
+              <Tooltip key={t.id} content={tabDescription(t)}>
+                <div
+                  className={cn(
+                    "group inline-flex items-center gap-1.5 h-8 px-3 text-2xs whitespace-nowrap",
+                    "border-r border-border transition-colors",
+                    isActive
+                      ? "bg-background text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
+                  )}
                 >
-                  <TabStatusDot status={tabStatuses[t.id] ?? "idle"} />
-                  <TabIcon kind={t.kind} />
-                  <span className="font-mono">{tabLabel(t)}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => closeTab(t.id)}
-                  aria-label={`Close ${tabLabel(t)} tab`}
-                  className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-sm
-                    text-muted-foreground/70 hover:text-foreground hover:bg-accent/80"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
+                  <BareButton
+                    onClick={() => setActive(t.id)}
+                    aria-pressed={isActive}
+                    className="inline-flex min-w-0 items-center gap-1.5 focus:outline-hidden focus:ring-2 focus:ring-ring font-normal whitespace-normal shrink"
+                  >
+                    <TabStatusDot status={tabStatuses[t.id] ?? "idle"} />
+                    <TabIcon kind={t.kind} />
+                    <span className="font-mono">{tabLabel(t)}</span>
+                  </BareButton>
+                  <BareButton
+                    onClick={() => closeTab(t.id)}
+                    aria-label={`Close ${tabLabel(t)} tab`}
+                    className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-sm
+                    text-muted-foreground/70 hover:text-foreground hover:bg-accent/80 font-normal"
+                  >
+                    <X className="h-3 w-3" />
+                  </BareButton>
+                </div>
+              </Tooltip>
             );
           })}
         </div>
 
         {/* Right-end controls */}
         <div className="flex items-center gap-0.5 px-2 border-l border-border">
-          <button
+          <ConsoleIconButton
+            label={maximized ? "Restore size" : "Maximize"}
             onClick={handleMaximizeToggle}
-            className="inline-flex items-center justify-center h-6 w-6 rounded-sm
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title={maximized ? "Restore size" : "Maximize"}
           >
             {maximized ? (
               <Minimize2 className="h-3 w-3" />
             ) : (
               <Maximize2 className="h-3 w-3" />
             )}
-          </button>
-          <button
-            onClick={() => toggleMinimize()}
-            className="inline-flex items-center justify-center h-6 w-6 rounded-sm
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Minimize"
-          >
+          </ConsoleIconButton>
+          <ConsoleIconButton label="Minimize" onClick={toggleMinimize}>
             <ChevronUp className="h-3 w-3 rotate-180" />
-          </button>
-          <button
-            onClick={() => closeAll()}
-            className="inline-flex items-center justify-center h-6 w-6 rounded-sm
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Close all"
-          >
+          </ConsoleIconButton>
+          <ConsoleIconButton label="Close all" onClick={closeAll}>
             <X className="h-3.5 w-3.5" />
-          </button>
+          </ConsoleIconButton>
         </div>
       </div>
 
@@ -320,6 +302,27 @@ export function WindowManager() {
         ))}
       </div>
     </div>
+  );
+}
+
+function ConsoleIconButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <BareButton
+      tooltip={label}
+      aria-label={label}
+      onClick={() => onClick()}
+      className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground font-normal"
+    >
+      {children}
+    </BareButton>
   );
 }
 

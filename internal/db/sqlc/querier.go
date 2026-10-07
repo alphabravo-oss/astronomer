@@ -138,6 +138,7 @@ type Querier interface {
 	// Called on the first CONNECT that authenticates with the NEW current token:
 	// the old token is no longer needed, so retire it (revoke the previous hash).
 	ClearPreviousClusterAgentTokenHash(ctx context.Context, id uuid.UUID) error
+	ClearUserTableViewDefault(ctx context.Context, arg ClearUserTableViewDefaultParams) error
 	// Sprint 086 — closes orphan "running" step rows on a given
 	// (cluster_id, step_name). The orchestrator's auto-retry path was
 	// writing a fresh `template_applying` row on every retry without
@@ -327,6 +328,7 @@ type Querier interface {
 	// Lightweight count for the /status endpoint — avoids hauling the
 	// whole list back when we only need the integer.
 	CountUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountUserTableViews(ctx context.Context, arg CountUserTableViewsParams) (int64, error)
 	// Pairs with ListUsers: the same is_service exclusion, so seat counts
 	// (telemetry) and the "is this a fresh database?" bootstrap check don't count
 	// machine principals as users.
@@ -525,6 +527,7 @@ type Querier interface {
 	CreateToolOperation(ctx context.Context, arg CreateToolOperationParams) (ToolOperation, error)
 	CreateToolOperationEvent(ctx context.Context, arg CreateToolOperationEventParams) (ToolOperationEvent, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateUserTableView(ctx context.Context, arg CreateUserTableViewParams) (UserTableView, error)
 	CreateVaultConnection(ctx context.Context, arg CreateVaultConnectionParams) (VaultConnection, error)
 	CreateWebhookSubscription(ctx context.Context, arg CreateWebhookSubscriptionParams) (WebhookSubscription, error)
 	CreateWorkloadOperation(ctx context.Context, arg CreateWorkloadOperationParams) (WorkloadOperation, error)
@@ -724,6 +727,7 @@ type Querier interface {
 	// recovery codes so a lost-device admin force-disable doesn't leave
 	// exploitable codes behind.
 	DeleteUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) error
+	DeleteUserTableView(ctx context.Context, arg DeleteUserTableViewParams) (UserTableView, error)
 	DeleteVaultConnection(ctx context.Context, id uuid.UUID) error
 	// Retention sweep, runs daily. Returns the row count so the task can
 	// emit an operator-visible "rows deleted" log line.
@@ -1138,6 +1142,7 @@ type Querier interface {
 	// Read the (encrypted) enrollment row for a user. Returns ErrNoRows
 	// when the user has not enrolled.
 	GetUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) (UserTotpEnrollment, error)
+	GetUserTableView(ctx context.Context, arg GetUserTableViewParams) (UserTableView, error)
 	GetVaultConnectionByID(ctx context.Context, id uuid.UUID) (VaultConnection, error)
 	GetVaultConnectionByName(ctx context.Context, name string) (VaultConnection, error)
 	GetWebhookDelivery(ctx context.Context, id uuid.UUID) (WebhookDelivery, error)
@@ -1273,6 +1278,11 @@ type Querier interface {
 	ListAnomalyBaselinesForScopes(ctx context.Context, arg ListAnomalyBaselinesForScopesParams) ([]AnomalyBaseline, error)
 	ListApiserverAllowlistSnapshots(ctx context.Context, arg ListApiserverAllowlistSnapshotsParams) ([]ApiserverAllowlistSnapshot, error)
 	ListApiserverAuditEventsByCluster(ctx context.Context, arg ListApiserverAuditEventsByClusterParams) ([]ApiserverAuditEvent, error)
+	// Repository browsing intentionally keeps only a small rolling window of
+	// recent releases.  A verified application pin is part of the product's
+	// install contract, so retain it even after newer upstream releases push it
+	// outside that window.
+	ListApplicationCatalogPinsByRepository(ctx context.Context, repositoryID uuid.UUID) ([]ListApplicationCatalogPinsByRepositoryRow, error)
 	ListApplicationCatalogPresentations(ctx context.Context) ([]ListApplicationCatalogPresentationsRow, error)
 	ListApplicationCatalogSources(ctx context.Context) ([]DeliveryCatalog, error)
 	ListApplicationsForCluster(ctx context.Context, clusterID uuid.UUID) ([]NetworkPolicyApplication, error)
@@ -1893,6 +1903,7 @@ type Querier interface {
 	// are meaningful for each row; unused columns are returned as NULL.
 	ListUserBindingsWithRoles(ctx context.Context, userID pgtype.UUID) ([]ListUserBindingsWithRolesRow, error)
 	ListUserQuotaSnapshots(ctx context.Context, arg ListUserQuotaSnapshotsParams) ([]ListUserQuotaSnapshotsRow, error)
+	ListUserTableViews(ctx context.Context, arg ListUserTableViewsParams) ([]UserTableView, error)
 	// Human-user enumeration only. Service principals (is_service, migration 116 —
 	// e.g. the per-cluster agent-ingest identities) exist solely to own tokens and
 	// carry RBAC bindings; surfacing them on the admin user list, SCIM /Users, or a
@@ -1939,6 +1950,8 @@ type Querier interface {
 	// canonical provider key a stable lock before the transaction re-reads it.
 	LockSSOProviderKey(ctx context.Context, providerKey string) error
 	LockUser(ctx context.Context, arg LockUserParams) error
+	// Serializes the per-table view cap for one user and table.
+	LockUserTableViewScope(ctx context.Context, dollar_1 string) error
 	// This durable phase is written before Redis mutation. A retry target that is
 	// absent before this phase never existed; absence after this phase is a
 	// converged outcome because RunTask may have succeeded and been consumed.
@@ -2247,6 +2260,7 @@ type Querier interface {
 	SetPlatformDefaultClusterTemplate(ctx context.Context, defaultClusterTemplateID pgtype.UUID) (PlatformConfiguration, error)
 	SetProjectDefaultVaultConnection(ctx context.Context, arg SetProjectDefaultVaultConnectionParams) error
 	SetProjectOwnership(ctx context.Context, arg SetProjectOwnershipParams) (SetProjectOwnershipRow, error)
+	SetUserTableViewDefault(ctx context.Context, arg SetUserTableViewDefaultParams) (UserTableView, error)
 	// All logical connector mutations stage a new runtime generation and disable
 	// SSO under the same transaction-scoped advisory lock used by activation.
 	StageCreateDexConnector(ctx context.Context, arg StageCreateDexConnectorParams) (StageCreateDexConnectorRow, error)
@@ -2426,6 +2440,7 @@ type Querier interface {
 	// Convenience alias used by the login flow when an inherited Django
 	// PBKDF2/argon2 hash is upgraded to bcrypt on first successful match.
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
+	UpdateUserTableView(ctx context.Context, arg UpdateUserTableViewParams) (UserTableView, error)
 	UpdateVaultConnection(ctx context.Context, arg UpdateVaultConnectionParams) (VaultConnection, error)
 	UpdateVaultConnectionHealth(ctx context.Context, arg UpdateVaultConnectionHealthParams) error
 	// Full replacement update (PUT semantics). Caller computes the merged

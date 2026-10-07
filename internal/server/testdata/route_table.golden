@@ -22,6 +22,7 @@ DELETE /api/v1/alerting/channels/{id}
 DELETE /api/v1/alerting/rules/{id}
 DELETE /api/v1/alerting/silences/{id}
 DELETE /api/v1/auth/dex/connectors/{id}
+DELETE /api/v1/auth/me/table-views/{id}
 DELETE /api/v1/auth/tokens/{id}
 DELETE /api/v1/backups/schedules/{id}
 DELETE /api/v1/backups/storage/{id}
@@ -184,6 +185,7 @@ GET /api/v1/auth/logout-done
 GET /api/v1/auth/me
 GET /api/v1/auth/me/preferences
 GET /api/v1/auth/me/quota
+GET /api/v1/auth/me/table-views
 GET /api/v1/auth/tokens
 GET /api/v1/auth/totp/status
 GET /api/v1/backups
@@ -449,6 +451,7 @@ GET /api/v1/tools/operations/{id}
 GET /api/v1/tools/slug/{slug}
 GET /api/v1/tools/{id}
 GET /api/v1/tools/{slug}
+GET /api/v1/tools/{slug}/configuration
 GET /api/v1/users
 GET /api/v1/users/{id}
 GET /api/v1/workloads/controller/status
@@ -484,6 +487,7 @@ OPTIONS /api/v1/observability/grafana/*
 PATCH /api/v1/admin/charlie/mode
 PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}
 PATCH /api/v1/auth/dex/connectors/{id}
+PATCH /api/v1/auth/me/table-views/{id}
 PATCH /api/v1/cluster-groups/{id}
 PATCH /api/v1/cluster-templates/{id}
 PATCH /api/v1/clusters/{cluster_id}/k8s/*
@@ -561,6 +565,7 @@ POST /api/v1/auth/dex/connectors
 POST /api/v1/auth/dex/register-as-sso
 POST /api/v1/auth/login
 POST /api/v1/auth/logout
+POST /api/v1/auth/me/table-views
 POST /api/v1/auth/password-reset/complete
 POST /api/v1/auth/password-reset/request
 POST /api/v1/auth/refresh

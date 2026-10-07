@@ -1,6 +1,6 @@
-
 import { Link as RouterLink } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn, gaugeColor, gaugeTextColor } from "@/lib/utils";
 import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 
@@ -34,6 +34,8 @@ interface MetricCardProps {
   tone?: MetricCardTone;
   /** Tighter padding/type-scale for compact grids. */
   dense?: boolean;
+  /** Shows skeleton placeholders for value/subtitle instead of the data. */
+  loading?: boolean;
 }
 
 export function MetricCard({
@@ -51,30 +53,54 @@ export function MetricCard({
   href,
   tone,
   dense = false,
+  loading = false,
 }: MetricCardProps) {
   const heading = label ?? title;
   const Wrapper = href ? RouterLink : "div";
   const wrapperProps = href ? { to: href } : {};
+  if (loading) {
+    return (
+      <div
+        aria-busy="true"
+        className={cn(
+          "block rounded-lg border border-border bg-card",
+          dense ? "p-3" : "p-5",
+          className,
+        )}
+      >
+        {heading && (
+          <p className="text-sm font-medium text-muted-foreground">{heading}</p>
+        )}
+        <span className="sr-only" role="status">
+          Loading {heading ?? "metric"}
+        </span>
+        <Skeleton className={cn("mt-2", dense ? "h-6 w-16" : "h-8 w-20")} />
+        {subtitle && <Skeleton className="mt-2 h-3 w-28" />}
+      </div>
+    );
+  }
   return (
     <Wrapper
       {...wrapperProps}
       className={cn(
         "block rounded-lg border border-border bg-card transition-colors hover:bg-card/80",
-        dense ? "p-3" : "p-5",
+        dense ? "p-3" : "p-(--card-p)",
         className,
       )}
     >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           {heading && (
-            <p className="text-sm font-medium text-muted-foreground">
+            <p className="text-body font-medium text-muted-foreground">
               {heading}
             </p>
           )}
           <div className="flex items-baseline gap-1.5">
             <span
               className={cn(
-                dense ? "text-lg font-semibold tracking-tight" : "text-2xl font-semibold tracking-tight",
+                dense
+                  ? "text-lg font-semibold tracking-tight"
+                  : "text-2xl font-semibold tracking-tight",
                 tone
                   ? toneTextClasses[tone]
                   : percentage !== undefined
@@ -89,7 +115,7 @@ export function MetricCard({
             )}
           </div>
           {subtitle && (
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
+            <p className="text-meta text-muted-foreground">{subtitle}</p>
           )}
         </div>
 

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 type inventoryQueryFake struct {
@@ -61,13 +62,13 @@ func TestFleetIncludesLocalAsFirstClassTargetAndSurfacesAttention(t *testing.T) 
 				{
 					ID: localID, Name: "local", DisplayName: "Management", IsLocal: true,
 					Connected: true, CompatibilityStatus: "compatible", InventoryReady: true,
-					FluxVersion: "v2.9.3", LastHeartbeat: ts(now.Add(-time.Minute)),
+					FluxVersion: "v2.9.6", LastHeartbeat: ts(now.Add(-time.Minute)),
 					Annotations: json.RawMessage(`{"astronomer.io/agent-privilege-profile":"viewer"}`),
 				},
 				{
 					ID: readyID, Name: "adopt-a", DisplayName: "Adopt A", Environment: "production",
 					Connected: true, CompatibilityStatus: "compatible", InventoryReady: true,
-					FluxVersion: "v2.9.3", AgentVersion: "v1.0.0", KubernetesVersion: "v1.35.7+k3s1",
+					FluxVersion: "v2.9.6", AgentVersion: "v1.0.0", KubernetesVersion: "v1.35.7+k3s1",
 					AssignmentCount: 2, ReadyCount: 2,
 					LastHeartbeat:       ts(now.Add(-30 * time.Second)),
 					InventoryObservedAt: ts(now.Add(-time.Minute)),
@@ -156,4 +157,66 @@ func hasFleetCount(items []DeliveryFleetCount, key string, count int64) bool {
 		}
 	}
 	return false
+}
+
+// The inventory endpoint forwards persisted protocol JSON unchanged; frontend
+// mapClusterDeployment camelizes api_version to apiVersion for the detail view.
+func TestClusterInventoryPreservesFluxResourceIdentities(t *testing.T) {
+	projectID, clusterID := uuid.New(), uuid.New()
+	inventory := protocol.DeliveryInventory{Entries: 3, Resources: []protocol.DeliveryResourceIdentity{
+		{APIVersion: "apps/v1", Kind: "Deployment", Namespace: "workload", Name: "app"},
+		{APIVersion: "v1", Kind: "Service", Namespace: "workload", Name: "app"},
+		{APIVersion: "v1", Kind: "Namespace", Name: "workload"},
+	}}
+	payload, err := json.Marshal(inventory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewInventoryHandler(&resourceInventoryQueryFake{projectID: projectID, clusterID: clusterID, inventory: payload, t: t})
+	request := requestWithPathParams(http.MethodGet, "/api/v1/delivery/clusters/"+clusterID.String()+"/inventory?project_id="+projectID.String(), nil, map[string]string{"clusterId": clusterID.String()})
+	recorder := httptest.NewRecorder()
+	handler.Cluster(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var envelope struct {
+		Data struct {
+			Deployments []struct {
+				Inventory json.RawMessage `json:"inventory"`
+			} `json:"deployments"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"entries":3,"ready":0,"failed":0,"resources":[{"api_version":"apps/v1","kind":"Deployment","namespace":"workload","name":"app"},{"api_version":"v1","kind":"Service","namespace":"workload","name":"app"},{"api_version":"v1","kind":"Namespace","name":"workload"}]}`
+	if len(envelope.Data.Deployments) != 1 || string(envelope.Data.Deployments[0].Inventory) != want {
+		t.Fatalf("API inventory contract = %s", recorder.Body.String())
+	}
+}
+
+type resourceInventoryQueryFake struct {
+	inventoryQueryFake
+	projectID, clusterID uuid.UUID
+	inventory            json.RawMessage
+	t                    *testing.T
+}
+
+func (f *resourceInventoryQueryFake) GetDeliveryControllerInventory(_ context.Context, params sqlc.GetDeliveryControllerInventoryParams) (sqlc.GetDeliveryControllerInventoryRow, error) {
+	if params.ProjectID != f.projectID || params.ClusterID != f.clusterID {
+		f.t.Fatal("inventory query lost project/cluster scope")
+	}
+	return sqlc.GetDeliveryControllerInventoryRow{}, nil
+}
+func (f *resourceInventoryQueryFake) ListClusterDeployments(_ context.Context, params sqlc.ListClusterDeploymentsParams) ([]sqlc.ClusterDeployment, error) {
+	if params.ProjectID != f.projectID || params.ClusterID.Bytes != f.clusterID || !params.ClusterID.Valid {
+		f.t.Fatal("deployment query lost project/cluster scope")
+	}
+	return []sqlc.ClusterDeployment{{Inventory: f.inventory}}, nil
+}
+func (f *resourceInventoryQueryFake) CountClusterDeployments(_ context.Context, params sqlc.CountClusterDeploymentsParams) (int64, error) {
+	if params.ProjectID != f.projectID || params.ClusterID.Bytes != f.clusterID || !params.ClusterID.Valid {
+		f.t.Fatal("count query lost project/cluster scope")
+	}
+	return 1, nil
 }

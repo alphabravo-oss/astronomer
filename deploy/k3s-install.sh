@@ -148,6 +148,7 @@ helm upgrade --install astronomer "${REPO_DIR}/deploy/chart" \
   --set frontend.image.tag="${IMG_FRONTEND}" \
   --set migrate.enabled=true \
   --set ingress.enabled=true --set ingress.className=nginx --set ingress.host="${HOST}" \
+  --set-string "config.trustedProxyCIDRs[0]=${POD_CIDR}" \
   --set tls.source=secret --set tls.secretName=astronomer-tls \
   --wait --timeout 10m
 

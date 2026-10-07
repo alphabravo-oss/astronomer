@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Cloud, Loader2, Lock, Plus, Server } from "lucide-react";
+import { BookOpen, Cloud, Lock, Plus, Server } from "lucide-react";
 
 import {
   createControlPlaneSnapshot,
@@ -11,7 +11,6 @@ import {
   type ControlPlaneSnapshotStatus,
 } from "@/lib/api/cluster-snapshots";
 import { useCluster } from "@/lib/hooks/clusters";
-import { liveFallback } from "@/lib/live/status-store";
 import { pageTableCount } from "@/lib/api/pagination";
 import { queryKeys } from "@/lib/query-keys";
 import { useClustersUpdate } from "@/lib/permission-hooks";
@@ -28,6 +27,9 @@ import {
   formatSnapshotDate,
   isManagedControlPlane,
 } from "./control-plane-snapshot-utils";
+import { EntityCell, TimestampCell } from "@/components/tables/cells";
+import { SkeletonText } from "@/components/ui/skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function ControlPlaneSnapshotStatusPill({
   status,
@@ -61,23 +63,25 @@ function controlPlaneSnapshotColumns(
     {
       key: "name",
       header: "Snapshot",
+      kind: "name",
+      minSize: 260,
       accessor: (snapshot) => (
-        <div className="min-w-0">
-          <div className="font-mono text-xs text-foreground break-all">
-            {snapshot.name || snapshot.id}
-          </div>
-          {snapshot.error ? (
-            <div className="text-xs text-status-error mt-1">
-              {snapshot.error}
-            </div>
-          ) : null}
-        </div>
+        <EntityCell
+          mono
+          primary={snapshot.name || snapshot.id}
+          secondary={
+            snapshot.error ? (
+              <span className="text-status-error">{snapshot.error}</span>
+            ) : null
+          }
+        />
       ),
       sortAccessor: (snapshot) => snapshot.name || snapshot.id,
     },
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (snapshot) => (
         <ControlPlaneSnapshotStatusPill status={snapshot.status} />
       ),
@@ -86,29 +90,34 @@ function controlPlaneSnapshotColumns(
     },
     {
       key: "etcdRevision",
-      header: "etcd revision",
+      header: "etcd rev",
+      ariaLabel: "etcd revision",
+      kind: "count",
+      size: 120,
       accessor: (snapshot) => (
         <span className="font-mono text-xs text-muted-foreground">
           {snapshot.etcdRevision?.toLocaleString() ?? "—"}
         </span>
       ),
       sortAccessor: (snapshot) => snapshot.etcdRevision ?? 0,
-      align: "right",
     },
     {
       key: "size",
       header: "Size",
+      kind: "bytes",
       accessor: (snapshot) => (
         <span className="text-xs text-muted-foreground">
           {formatSnapshotBytes(snapshot.sizeBytes)}
         </span>
       ),
       sortAccessor: (snapshot) => snapshot.sizeBytes ?? 0,
-      align: "right",
     },
     {
       key: "createdBy",
       header: "Taken by",
+      kind: "text",
+      size: 150,
+      minSize: 130,
       accessor: (snapshot) => (
         <span className="text-xs text-muted-foreground">
           {snapshot.createdBy || "—"}
@@ -119,37 +128,52 @@ function controlPlaneSnapshotColumns(
     {
       key: "createdAt",
       header: "Created",
+      kind: "date",
+      size: 119,
+      minSize: 105,
       accessor: (snapshot) => (
-        <span className="text-xs text-muted-foreground">
-          {formatSnapshotDate(snapshot.createdAt)}
-        </span>
+        <TimestampCell
+          value={snapshot.createdAt}
+          fallback="—"
+          suffix
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (snapshot) => snapshot.createdAt ?? "",
     },
     {
       key: "completedAt",
       header: "Completed",
+      kind: "date",
+      size: 119,
+      minSize: 105,
       accessor: (snapshot) => (
-        <span className="text-xs text-muted-foreground">
-          {formatSnapshotDate(snapshot.completedAt)}
-        </span>
+        <TimestampCell
+          value={snapshot.completedAt}
+          fallback="—"
+          suffix
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (snapshot) => snapshot.completedAt ?? "",
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 100,
+      minSize: 100,
+      maxSize: 140,
       sortable: false,
-      align: "right",
       accessor: (snapshot) => (
-        <button
+        <BareButton
+          tooltip="View restore runbook"
           onClick={() => onRestoreGuidance(snapshot)}
-          className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title="View restore runbook"
+          className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
         >
           <BookOpen className="h-3.5 w-3.5" />
           Restore guidance
-        </button>
+        </BareButton>
       ),
     },
   ];
@@ -203,18 +227,19 @@ function RestoreGuidanceModal({
         </span>
       </div>
       {guidanceQuery.isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading runbook…
+        <div className="py-8" aria-busy="true">
+          <span className="sr-only">Loading runbook…</span>
+          <SkeletonText lines={4} />
         </div>
       ) : guidanceQuery.isError ? (
         <div className="text-sm text-status-error py-8 text-center">
           Failed to load restore guidance.{" "}
-          <button
+          <BareButton
             onClick={() => void guidanceQuery.refetch()}
-            className="underline hover:text-foreground"
+            className="underline hover:text-foreground inline-block font-normal"
           >
             Retry
-          </button>
+          </BareButton>
         </div>
       ) : (
         <div className="space-y-4">
@@ -262,7 +287,9 @@ export function ClusterControlPlaneSnapshotsPage() {
         signal,
       ),
     enabled: !!cluster && !managed,
-    refetchInterval: liveFallback(15_000),
+    // No stream event is routed to control-plane snapshots (`snapshot.changed`
+    // covers Velero snapshots only), so poll regardless of stream state.
+    refetchInterval: 15_000,
     refetchIntervalInBackground: false,
   });
   const takeSnapshot = useMutation({
@@ -278,8 +305,9 @@ export function ClusterControlPlaneSnapshotsPage() {
 
   if (clusterLoading)
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="h-64 p-6" aria-busy="true">
+        <span className="sr-only">Loading cluster…</span>
+        <SkeletonText lines={6} />
       </div>
     );
   if (!cluster)
@@ -312,7 +340,7 @@ export function ClusterControlPlaneSnapshotsPage() {
   );
   if (managed)
     return (
-      <div className="space-y-6">
+      <div className="space-y-(--gap-section)">
         {header}
         <EmptyState
           icon={Cloud}
@@ -334,7 +362,7 @@ export function ClusterControlPlaneSnapshotsPage() {
     );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       {header}
       <DataTable
         data={snapshotsQuery.data?.data ?? []}

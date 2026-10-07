@@ -128,7 +128,7 @@ function RegisterAsSSOPage() {
       )}
 
       {success ? (
-        <div className="rounded-xl border border-status-success/40 bg-status-success/5 p-5 space-y-3">
+        <div className="rounded-xl border border-status-success/40 bg-status-success/5 p-(--card-p) space-y-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-status-success" />
             <p className="text-sm font-semibold text-foreground">
@@ -137,9 +137,7 @@ function RegisterAsSSOPage() {
           </div>
           <p className="text-sm text-muted-foreground">
             The <span className="font-mono text-xs">{success.provider}</span>{" "}
-            row in
-            <span className="font-mono text-xs"> sso_configurations</span> is
-            enabled and pointed at{" "}
+            single sign-on configuration is enabled and pointed at{" "}
             <span className="font-mono text-xs">{success.issuerUrl}</span>.
           </p>
           <p className="text-sm text-muted-foreground">
@@ -158,7 +156,7 @@ function RegisterAsSSOPage() {
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div className="rounded-xl border border-border bg-card p-(--card-p) space-y-4">
           <FieldRow
             label="Dex client ID"
             required

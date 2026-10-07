@@ -15,6 +15,29 @@ type catalogRolloutStatusReader interface {
 	RolloutStatus(context.Context, uuid.UUID, uuid.UUID) (catalogapp.Status, error)
 }
 
+// catalogOperationResponseWithDelivery keeps list and detail projections
+// consistent. Catalog work is journaled as complete once its durable Delivery
+// rollout has been queued, but users care about the workload outcome. Loading
+// the receipt events here lets both endpoints project that later state instead
+// of showing a misleading completed row while Flux is still reconciling.
+func (h *CatalogHandler) catalogOperationResponseWithDelivery(ctx context.Context, op sqlc.CatalogOperation, includeEvents bool) map[string]any {
+	resp := catalogOperationResponse(op)
+	needsDeliveryProjection := op.TargetType == "installed_chart" && op.Status == "completed"
+	if includeEvents || needsDeliveryProjection {
+		events, err := h.queries.ListCatalogOperationEvents(ctx, op.ID)
+		if err == nil {
+			resp["events"] = catalogOperationEventsResponse(events)
+		}
+	}
+	if needsDeliveryProjection {
+		h.enrichCatalogOperationDeliveryStatus(ctx, op, resp)
+		if !includeEvents {
+			delete(resp, "events")
+		}
+	}
+	return resp
+}
+
 func catalogOperationRollout(events []map[string]any) (uuid.UUID, uuid.UUID, bool) {
 	for i := len(events) - 1; i >= 0; i-- {
 		if events[i]["stage"] != "rollout" {
@@ -47,6 +70,10 @@ func (h *CatalogHandler) enrichCatalogOperationDeliveryStatus(ctx context.Contex
 	resp["deliveryObservationError"] = "No durable workload outcome is available for this receipt"
 	status, targetID, rolloutID, err := h.catalogOperationDeliveryObservation(ctx, op, resp)
 	if err != nil {
+		// An asynchronous workload result that cannot yet be observed is not a
+		// successful operation. Keep clients polling and preserve the completed
+		// journal state separately for diagnostics.
+		resp["status"] = "running"
 		resp["deliveryObservationError"] = err.Error()
 		return
 	}
@@ -58,6 +85,7 @@ func (h *CatalogHandler) enrichCatalogOperationDeliveryStatus(ctx context.Contex
 		phase = "pending"
 	}
 	resp["deliveryPhase"] = phase
+	resp["deliveryMessage"] = status.LastMessage
 	level, message, terminal := "info", "Flux is reconciling the application", false
 	switch phase {
 	case "ready":
@@ -71,9 +99,12 @@ func (h *CatalogHandler) enrichCatalogOperationDeliveryStatus(ctx context.Contex
 	default:
 		resp["status"] = "running"
 	}
+	if terminal && status.LastMessage != "" {
+		message += ": " + status.LastMessage
+	}
 	events = append(events, map[string]any{
 		"id": "delivery-" + phase, "level": level, "stage": "workloads", "message": message,
-		"detail":    map[string]any{"phase": phase, "errorCode": status.LastErrorCode, "terminal": terminal, "targetId": targetID.String(), "rolloutId": rolloutID.String()},
+		"detail":    map[string]any{"phase": phase, "errorCode": status.LastErrorCode, "message": status.LastMessage, "terminal": terminal, "targetId": targetID.String(), "rolloutId": rolloutID.String()},
 		"createdAt": time.Now().UTC().Format(time.RFC3339),
 	})
 	resp["events"] = events

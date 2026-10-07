@@ -128,7 +128,7 @@ func validManifest() Manifest {
 	manifest.Compatibility.PostgreSQL.MinimumUpgradeSchema = 1
 	manifest.Compatibility.PostgreSQL.TargetSchema = 14
 	manifest.Compatibility.PostgreSQL.ReversibleThroughSchema = 5
-	manifest.Flux.Version = "v2.9.3"
+	manifest.Flux.Version = "v2.9.6"
 	manifest.Flux.APIs = []string{"a", "b", "c"}
 	manifest.BuiltInBundles.CatalogDigest = digest('a')
 	manifest.Charlie.CapabilityDisclosureDigest = digest('b')

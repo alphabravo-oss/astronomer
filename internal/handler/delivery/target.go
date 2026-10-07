@@ -9,6 +9,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
@@ -28,20 +29,16 @@ import (
 type TargetQueries interface {
 	CountDeliveryTargets(context.Context, uuid.UUID) (int64, error)
 	ListDeliveryTargets(context.Context, sqlc.ListDeliveryTargetsParams) ([]sqlc.DeliveryTarget, error)
-	CreateDeliveryTarget(context.Context, sqlc.CreateDeliveryTargetParams) (sqlc.DeliveryTarget, error)
 	GetDeliveryTarget(context.Context, sqlc.GetDeliveryTargetParams) (sqlc.DeliveryTarget, error)
 	GetDeliveryTargetByName(context.Context, sqlc.GetDeliveryTargetByNameParams) (sqlc.DeliveryTarget, error)
-	UpdateDeliveryTargetCAS(context.Context, sqlc.UpdateDeliveryTargetCASParams) (sqlc.DeliveryTarget, error)
-	RequestDeliveryTargetDeletionCAS(context.Context, sqlc.RequestDeliveryTargetDeletionCASParams) (sqlc.RequestDeliveryTargetDeletionCASRow, error)
-	MarkDeliveryTargetOrphaned(context.Context, sqlc.MarkDeliveryTargetOrphanedParams) (sqlc.MarkDeliveryTargetOrphanedRow, error)
 	GetComponentBundleVersion(context.Context, sqlc.GetComponentBundleVersionParams) (sqlc.ComponentBundleVersion, error)
 }
 
 type TargetMutationTx interface {
 	audit.OutboxQuerier
+	deployment.TargetDeletionQueries
 	CreateDeliveryTarget(context.Context, sqlc.CreateDeliveryTargetParams) (sqlc.DeliveryTarget, error)
 	UpdateDeliveryTargetCAS(context.Context, sqlc.UpdateDeliveryTargetCASParams) (sqlc.DeliveryTarget, error)
-	RequestDeliveryTargetDeletionCAS(context.Context, sqlc.RequestDeliveryTargetDeletionCASParams) (sqlc.RequestDeliveryTargetDeletionCASRow, error)
 	MarkDeliveryTargetOrphaned(context.Context, sqlc.MarkDeliveryTargetOrphanedParams) (sqlc.MarkDeliveryTargetOrphanedRow, error)
 }
 
@@ -276,7 +273,7 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 		BundleVersionID: request.BundleVersionID, Placement: placementJSON,
 		RolloutPolicy: rolloutJSON, ReconciliationPolicy: reconcileJSON,
 		MaintenanceWindowPolicy: maintenanceJSON, ConfigurationTemplateID: nullableUUID(request.ConfigurationTemplateID),
-		OverrideSetIds: request.OverrideSetIDs, Overrides: overridesJSON, Suspended: request.Suspended,
+		OverrideSetIds: append([]uuid.UUID{}, request.OverrideSetIDs...), Overrides: overridesJSON, Suspended: request.Suspended,
 		CreatedBy: actor, UpdatedBy: actor,
 	}
 	row, err := executeMutation(r, h.runTx,
@@ -480,7 +477,7 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 		var mutationErr error
-		row, mutationErr = q.RequestDeliveryTargetDeletionCAS(r.Context(), params)
+		row, mutationErr = deployment.RequestTargetDeletion(r.Context(), q, params)
 		if mutationErr != nil {
 			return mutationErr
 		}
@@ -745,7 +742,7 @@ func (h *TargetHandler) requireReadyBundle(ctx context.Context, projectID, versi
 	if err != nil {
 		return err
 	}
-	if row.State != "ready" || row.VerificationStatus != "verified" {
+	if !bundleReadyForDelivery(row) {
 		return errBundleNotReady
 	}
 	if row.Scope == string(model.ScopePlatform) {
@@ -784,7 +781,7 @@ func (h *TargetHandler) validateConfigurationRefs(ctx context.Context, projectID
 }
 
 var (
-	errBundleNotReady         = errors.New("bundle version must be ready and verified")
+	errBundleNotReady         = errors.New("bundle version must be ready and satisfy its source trust policy")
 	errPlatformScopeForbidden = errors.New("platform-scoped bundle targets require a superuser")
 )
 
@@ -838,7 +835,7 @@ func targetFromRow(row sqlc.DeliveryTarget) (targetResponse, error) {
 		BundleVersionID: row.BundleVersionID, Placement: placementValue, RolloutPolicy: rolloutValue,
 		ReconciliationPolicy: reconciliation, MaintenanceWindowPolicy: maintenance,
 		Overrides: overrides, OverrideDigest: overrideDigest,
-		ConfigurationTemplateID: nullableUUIDPointer(row.ConfigurationTemplateID), OverrideSetIDs: append([]uuid.UUID(nil), row.OverrideSetIds...),
+		ConfigurationTemplateID: nullableUUIDPointer(row.ConfigurationTemplateID), OverrideSetIDs: append([]uuid.UUID{}, row.OverrideSetIds...),
 		Suspended: row.Suspended, Generation: row.Generation, ResourceVersion: row.ResourceVersion,
 		DeletionState: row.DeletionState, LastActorID: lastActorID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}, nil
@@ -877,7 +874,7 @@ func mergeTargetUpdate(current sqlc.DeliveryTarget, request updateTargetRequest)
 		merged.ConfigurationTemplateID = request.ConfigurationTemplateID.Value
 	}
 	if request.OverrideSetIDs != nil {
-		merged.OverrideSetIDs = append([]uuid.UUID(nil), (*request.OverrideSetIDs)...)
+		merged.OverrideSetIDs = append([]uuid.UUID{}, (*request.OverrideSetIDs)...)
 	}
 	if request.Suspended != nil {
 		merged.Suspended = *request.Suspended

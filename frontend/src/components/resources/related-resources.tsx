@@ -135,7 +135,7 @@ export function RelatedResources({
   const owners = obj?.metadata?.ownerReferences ?? [];
   const children = CHILD_RESOURCE_TYPES[kind];
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <Section title="Owned By">
         {!owners.length ? (
           <p className="text-xs text-muted-foreground">No owner references.</p>

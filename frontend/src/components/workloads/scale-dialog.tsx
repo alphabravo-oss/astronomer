@@ -1,6 +1,7 @@
 import { useDraft } from "@/lib/hooks/use-draft";
 import { Loader2, Minus, Plus } from "lucide-react";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { BareButton } from "@/components/form/bare-button";
 
 interface ScaleDialogProps {
   open: boolean;
@@ -35,15 +36,15 @@ function ScaleDialogContent({
       bodyClassName="space-y-0"
       footer={
         <div className="flex items-center justify-end gap-2">
-          <button
+          <BareButton
             onClick={onClose}
             disabled={loading}
             className="inline-flex items-center h-8 px-3 rounded-sm text-sm
-              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
           >
             Cancel
-          </button>
-          <button
+          </BareButton>
+          <BareButton
             onClick={() => onScale(replicas)}
             disabled={loading || replicas === currentReplicas}
             className="inline-flex items-center gap-1.5 h-8 px-4 rounded-sm text-sm font-medium
@@ -52,7 +53,7 @@ function ScaleDialogContent({
           >
             {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Scale
-          </button>
+          </BareButton>
         </div>
       }
     >
@@ -62,15 +63,14 @@ function ScaleDialogContent({
       </p>
 
       <div className="mt-5 flex items-center justify-center gap-4">
-        <button
-          type="button"
+        <BareButton
           aria-label="Decrease desired replicas"
           onClick={() => setReplicas(Math.max(0, replicas - 1))}
           className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
         >
           <Minus className="h-4 w-4" />
-        </button>
+        </BareButton>
 
         <input
           type="number"
@@ -85,15 +85,14 @@ function ScaleDialogContent({
             bg-background focus:outline-hidden focus:ring-1 focus:ring-ring"
         />
 
-        <button
-          type="button"
+        <BareButton
           aria-label="Increase desired replicas"
           onClick={() => setReplicas(Math.min(100, replicas + 1))}
           className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
         >
           <Plus className="h-4 w-4" />
-        </button>
+        </BareButton>
       </div>
 
       <p className="mt-2 text-center text-xs text-muted-foreground">

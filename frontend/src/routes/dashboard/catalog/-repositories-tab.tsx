@@ -23,7 +23,7 @@ export function RepositoriesTab({
 }) {
   const applicationSources = useApplicationCatalogSources();
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <PageSection title="Verified application catalogs">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {(applicationSources.data || []).map((source) => (
@@ -63,7 +63,7 @@ export function RepositoriesTab({
           ))}
           {!applicationSources.isLoading &&
             (applicationSources.data?.length ?? 0) === 0 && (
-              <div className="rounded-lg border border-dashed border-border p-5 text-sm text-table-secondary">
+              <div className="rounded-lg border border-dashed border-border p-(--card-p) text-sm text-table-secondary">
                 No verified application catalog is configured. Repository charts
                 and installed applications remain available.
               </div>

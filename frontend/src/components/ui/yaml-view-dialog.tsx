@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   useK8sGetYaml,
   useK8sApplyYaml,
@@ -17,6 +17,7 @@ import type { ResourceType } from "@/lib/api/resources";
 import type { PermissionDecision } from "@/lib/permissions";
 import { toastWarning } from "@/lib/toast";
 import { ErrorState } from "@/components/ui/empty-state";
+import { YamlEditorModeTabs } from "@/components/ui/yaml-editor-mode-tabs";
 import {
   buildYamlDiff,
   classifyResourceApplyFailure,
@@ -131,6 +132,8 @@ interface YamlPanelProps {
   allowEdit?: boolean;
   /** Start in edit mode */
   editMode?: boolean;
+  /** Open the guided form (instead of YAML) once the live object loads; needs `editMode`. */
+  initialEditorMode?: "guided" | "yaml";
   /** Exact cluster-scoped manage decision required for forced ownership. */
   forceConflictPermission?: ForceConflictPermission;
   /** When false, fetching is paused (used by the dialog when closed). Defaults true. */
@@ -174,7 +177,7 @@ export function resourceTypeFromK8sPath(
 export function YamlPanel(props: YamlPanelProps) {
   return props.active === false ? null : (
     <ActiveYamlPanel
-      key={`${props.clusterId}:${props.k8sPath}:${!!props.editMode}`}
+      key={`${props.clusterId}:${props.k8sPath}:${!!props.editMode}:${props.initialEditorMode ?? "yaml"}`}
       {...props}
     />
   );
@@ -185,6 +188,7 @@ function ActiveYamlPanel({
   k8sPath,
   allowEdit = true,
   editMode: initialEditMode = false,
+  initialEditorMode = "yaml",
   forceConflictPermission,
   active = true,
   onDirtyChange,
@@ -287,6 +291,14 @@ function ActiveYamlPanel({
     setEditorMode(next);
   };
 
+  const seededGuided = useRef(false);
+  useEffect(() => {
+    if (seededGuided.current || !yaml || !initialEditMode) return;
+    if (initialEditorMode !== "guided") return;
+    seededGuided.current = true;
+    void Promise.resolve().then(() => changeEditorMode("guided"));
+  });
+
   const dryRunGuided = async () => {
     const next = await manifestYaml();
     await handleDryRun(next);
@@ -346,36 +358,17 @@ function ActiveYamlPanel({
         </div>
       )}
       {editMode && resourceType && (
-        <div
-          className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-1.5"
-          role="tablist"
-          aria-label="Resource edit mode"
-        >
-          {(["guided", "yaml"] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              role="tab"
-              aria-selected={editorMode === item}
-              onClick={() => void changeEditorMode(item)}
-              className={cn(
-                "rounded-sm px-2.5 py-1 text-xs font-medium capitalize",
-                editorMode === item
-                  ? "bg-muted text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {item}
-            </button>
-          ))}
-          <span className="ml-auto text-xs text-muted-foreground">
-            {schemaQuery.isLoading
+        <YamlEditorModeTabs
+          mode={editorMode}
+          onChange={(next) => void changeEditorMode(next)}
+          status={
+            schemaQuery.isLoading
               ? "Loading live schema…"
               : schemaQuery.data?.schemaAvailable
                 ? `Schema: ${schemaQuery.data.schemaName || schemaQuery.data.resource.kind}`
-                : "Template validation active"}
-          </span>
-        </div>
+                : "Template validation active"
+          }
+        />
       )}
       <div className="flex-1 min-h-0">
         {isLoading ? (

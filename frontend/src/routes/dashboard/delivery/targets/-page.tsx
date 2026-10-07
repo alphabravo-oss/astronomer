@@ -1,3 +1,4 @@
+import { SkeletonText } from "@/components/ui/skeleton";
 import { pageTableCount } from "@/lib/api/pagination";
 import { lazy, Suspense, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -19,7 +20,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useNavigate } from "@tanstack/react-router";
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 
@@ -56,26 +58,35 @@ export function TargetsPage() {
     {
       key: "name",
       header: "Target",
+      kind: "name",
+      minSize: 220,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Crosshair className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-medium">{row.name}</p>
-            <p className="text-xs text-muted-foreground">
-              generation {row.generation}
-            </p>
-          </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <Crosshair className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <StackedCell
+            primary={row.name}
+            secondary={`generation ${row.generation}`}
+          />
         </div>
       ),
+      sortAccessor: (row) => row.name,
     },
     {
       key: "bundle",
-      header: "Bundle version",
-      accessor: (row) => <code className="text-xs">{row.bundleVersionId}</code>,
+      header: "Version",
+      ariaLabel: "Bundle version",
+      kind: "id",
+      size: 160,
+      minSize: 140,
+      accessor: (row) => row.bundleVersionId,
+      sortAccessor: (row) => row.bundleVersionId,
     },
     {
       key: "placement",
       header: "Placement",
+      kind: "text",
+      size: 220,
+      minSize: 140,
       accessor: (row) =>
         row.placement.allClusters ? (
           <span className="text-status-warning">All project clusters</span>
@@ -86,12 +97,16 @@ export function TargetsPage() {
     {
       key: "approval",
       header: "Approval",
+      kind: "text",
+      size: 142,
+      minSize: 112,
       accessor: (row) =>
         row.rolloutPolicy.approvalRequired ? "Required" : "Policy controlled",
     },
     {
       key: "state",
       header: "State",
+      kind: "status",
       accessor: (row) => (
         <DeliveryPhaseBadge
           value={
@@ -107,7 +122,9 @@ export function TargetsPage() {
     {
       key: "updated",
       header: "Updated",
-      accessor: (row) => formatRelativeTime(row.updatedAt),
+      kind: "age",
+      accessor: (row) => <AgeCell value={row.updatedAt} />,
+      sortAccessor: (row) => row.updatedAt,
     },
   ];
   return (
@@ -164,7 +181,14 @@ export function TargetsPage() {
         </PageShell>
       </DeliveryProjectGate>
       {creating && (
-        <Suspense fallback={<div role="status">Loading target form…</div>}>
+        <Suspense
+          fallback={
+            <div role="status" aria-busy="true">
+              <span className="sr-only">Loading target form…</span>
+              <SkeletonText lines={3} />
+            </div>
+          }
+        >
           <CreateTargetDialog
             key={projectId}
             projectId={projectId}

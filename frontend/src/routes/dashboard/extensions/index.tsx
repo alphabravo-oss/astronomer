@@ -36,6 +36,8 @@ import {
   type ExtensionValidationResponse,
 } from "@/lib/api/extensions";
 import { queryKeys } from "@/lib/query-keys";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function statusClass(status: string, enabled?: boolean) {
   if (enabled) return "bg-status-success/10 text-status-success";
@@ -126,7 +128,7 @@ function ExtensionTable({
             <TableBody>
               {items.map((item) => (
                 <TableRow key={item.id} className="border-t border-border">
-                  <TableCell className="px-5 py-3">
+                  <TableCell className="px-5 py-(--row-py)">
                     <div className="font-medium text-foreground">
                       {item.displayName || item.name}
                     </div>
@@ -134,10 +136,10 @@ function ExtensionTable({
                       {item.name}
                     </div>
                   </TableCell>
-                  <TableCell className="px-5 py-3 text-muted-foreground whitespace-nowrap">
+                  <TableCell className="px-5 py-(--row-py) text-muted-foreground whitespace-nowrap">
                     {item.version}
                   </TableCell>
-                  <TableCell className="px-5 py-3">
+                  <TableCell className="px-5 py-(--row-py)">
                     <div className="flex flex-wrap gap-1.5">
                       {(item.manifest.permissions ?? [])
                         .slice(0, 4)
@@ -156,16 +158,15 @@ function ExtensionTable({
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="px-5 py-3">
+                  <TableCell className="px-5 py-(--row-py)">
                     <span
                       className={`inline-flex rounded-sm px-2 py-1 text-xs ${statusClass(item.compatibilityStatus, item.enabled)}`}
                     >
                       {item.enabled ? "enabled" : item.compatibilityStatus}
                     </span>
                   </TableCell>
-                  <TableCell className="px-5 py-3 text-right">
-                    <button
-                      type="button"
+                  <TableCell className="px-5 py-(--row-py) text-right">
+                    <BareButton
                       disabled={
                         toggling ||
                         (item.compatibilityStatus !== "compatible" &&
@@ -177,7 +178,7 @@ function ExtensionTable({
                         disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {item.enabled ? "Disable" : "Enable"}
-                    </button>
+                    </BareButton>
                   </TableCell>
                 </TableRow>
               ))}
@@ -275,9 +276,7 @@ function ExtensionsPage() {
       />
 
       {isLoading ? (
-        <div className="flex items-center justify-center h-40">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
+        <LoadingSkeleton label="Loading" heading />
       ) : (
         <ExtensionTable
           data={data}
@@ -286,7 +285,7 @@ function ExtensionsPage() {
         />
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid gap-(--gap-section) xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="rounded-lg border border-border bg-card overflow-hidden">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4">
             <div>
@@ -298,8 +297,7 @@ function ExtensionsPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
+              <BareButton
                 onClick={() => validate.mutate()}
                 disabled={validate.isPending || !parsedManifest}
                 className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
@@ -312,9 +310,8 @@ function ExtensionsPage() {
                   <CheckCircle2 className="h-3.5 w-3.5" />
                 )}
                 Validate
-              </button>
-              <button
-                type="button"
+              </BareButton>
+              <BareButton
                 onClick={() => install.mutate()}
                 disabled={
                   install.isPending ||
@@ -331,7 +328,7 @@ function ExtensionsPage() {
                   <PackagePlus className="h-3.5 w-3.5" />
                 )}
                 Install
-              </button>
+              </BareButton>
             </div>
           </div>
           <Textarea
@@ -342,7 +339,7 @@ function ExtensionsPage() {
               setValidation(undefined);
             }}
             spellCheck={false}
-            className="min-h-[520px] w-full resize-y bg-background p-4 font-mono text-xs text-foreground outline-hidden"
+            className="min-h-130 w-full resize-y bg-background p-4 font-mono text-xs text-foreground outline-hidden"
           />
         </div>
 

@@ -4,8 +4,9 @@ import {
   type Column,
   type DataTableProps,
 } from "@/components/ui/data-table";
+import { TimestampCell } from "@/components/ui/cell-primitives";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { formatRelativeTime, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { ClusterSecurityPolicy, PodSecurityLevel } from "@/types";
 import { psaLevelColors } from "./-psa-constants";
 import { usePermissionDecision } from "@/lib/permission-hooks";
@@ -30,6 +31,8 @@ function policyColumns(
     {
       key: "cluster",
       header: "Cluster",
+      kind: "name",
+      minSize: 170,
       accessor: (row) => (
         <span className="font-medium text-foreground text-sm">
           {row.clusterName}
@@ -39,6 +42,9 @@ function policyColumns(
     {
       key: "template",
       header: "Template",
+      kind: "text",
+      size: 128,
+      minSize: 112,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.templateName}
@@ -48,6 +54,8 @@ function policyColumns(
     {
       key: "enforce",
       header: "Enforce",
+      kind: "badge",
+      size: 105,
       accessor: (row) => (
         <span
           className={cn(
@@ -62,6 +70,8 @@ function policyColumns(
     {
       key: "audit",
       header: "Audit",
+      kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span
           className={cn(
@@ -76,6 +86,8 @@ function policyColumns(
     {
       key: "warn",
       header: "Warn",
+      kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span
           className={cn(
@@ -89,17 +101,23 @@ function policyColumns(
     },
     {
       key: "syncStatus",
-      header: "Sync Status",
+      header: "Sync",
+      ariaLabel: "Sync status",
+      kind: "status",
       accessor: (row) => <StatusBadge status={row.syncStatus} />,
     },
     {
       key: "appliedAt",
       header: "Applied",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.appliedAt ? formatRelativeTime(row.appliedAt) : "Not applied"}
-        </span>
-      ),
+      kind: "age",
+      size: 120,
+      maxSize: 160,
+      accessor: (row) =>
+        row.appliedAt ? (
+          <TimestampCell value={row.appliedAt} />
+        ) : (
+          <span className="text-xs text-muted-foreground">Not applied</span>
+        ),
     },
     {
       key: "actions",
@@ -112,7 +130,7 @@ function policyColumns(
             disabledReason={!canUpdate ? "Requires security:update" : undefined}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground
               hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            title="Apply to cluster"
+            tooltip="Apply to cluster"
           >
             <Play className="h-3 w-3" />
             Apply
@@ -122,13 +140,17 @@ function policyColumns(
             disabled={!canDelete}
             disabledReason={!canDelete ? "Requires security:delete" : undefined}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Remove policy"
+            tooltip="Remove policy"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </ActionButton>
         </div>
       ),
       sortable: false,
+      kind: "actions",
+      size: 120,
+      minSize: 120,
+      maxSize: 120,
     },
   ];
 }

@@ -50,7 +50,7 @@ distribution_dir="$repo_root/deploy/flux"
 [[ -f "$distribution_dir/VERSION" ]] || die "missing deploy/flux/VERSION"
 current_version=$(tr -d '[:space:]' < "$distribution_dir/VERSION")
 version=${requested_version:-$current_version}
-[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "version must be an exact stable tag such as v2.9.3"
+[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "version must be an exact stable tag such as v2.9.6"
 if $check_mode && [[ "$version" != "$current_version" ]]; then
   die "--check version $version does not match committed version $current_version"
 fi

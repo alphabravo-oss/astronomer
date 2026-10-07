@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,9 +17,53 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type longhornUninstallRequester struct {
+	method, path string
+	body         []byte
+	headers      map[string]string
+	status       int
+	statuses     []int
+	requests     []longhornUninstallRequest
+}
+
+type longhornUninstallRequest struct {
+	method, path string
+	body         []byte
+	headers      map[string]string
+}
+
+type cisUninstallRequester struct {
+	responses map[string]*protocol.K8sResponsePayload
+	requests  []longhornUninstallRequest
+}
+
+func (r *cisUninstallRequester) Do(_ context.Context, _ string, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error) {
+	r.requests = append(r.requests, longhornUninstallRequest{method: method, path: path, body: body, headers: headers})
+	if response, ok := r.responses[method+" "+path]; ok {
+		return response, nil
+	}
+	return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
+}
+
+func jsonK8sResponse(status int, body string) *protocol.K8sResponsePayload {
+	return &protocol.K8sResponsePayload{StatusCode: status, Body: base64.StdEncoding.EncodeToString([]byte(body))}
+}
+
+func (r *longhornUninstallRequester) Do(_ context.Context, _ string, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error) {
+	r.method, r.path, r.body, r.headers = method, path, body, headers
+	r.requests = append(r.requests, longhornUninstallRequest{method: method, path: path, body: body, headers: headers})
+	status := r.status
+	if len(r.statuses) > 0 {
+		status = r.statuses[0]
+		r.statuses = r.statuses[1:]
+	}
+	return &protocol.K8sResponsePayload{StatusCode: status}, nil
+}
+
 type plannedHelm struct {
 	releases    map[string]protocol.HelmResultPayload
 	markers     map[string]string
+	charts      map[string]string
 	calls       []string
 	failRelease string
 }
@@ -33,7 +80,8 @@ func (h *plannedHelm) History(ctx context.Context, cluster, release, namespace s
 	if err != nil {
 		return nil, err
 	}
-	return &protocol.HelmResultPayload{Success: true, Revisions: []protocol.HelmRevision{{Revision: status.Revision, Status: status.Status, Description: h.markers[namespace+"/"+release]}}}, nil
+	key := namespace + "/" + release
+	return &protocol.HelmResultPayload{Success: true, Revisions: []protocol.HelmRevision{{Revision: status.Revision, Status: status.Status, Chart: h.charts[key], Description: h.markers[key]}}}, nil
 }
 func (h *plannedHelm) Do(_ context.Context, _ string, message protocol.MessageType, request protocol.HelmRequestPayload) (*protocol.HelmResultPayload, error) {
 	h.calls = append(h.calls, string(message)+":"+request.ReleaseName)
@@ -84,7 +132,7 @@ func newPlanFixture(t *testing.T, count int) (*ToolHandler, *planQueries, *plann
 	t.Helper()
 	id := uuid.New()
 	queries := &planQueries{toolQueryRecorder: newToolQueryRecorder(id)}
-	helm := &plannedHelm{releases: map[string]protocol.HelmResultPayload{}, markers: map[string]string{}}
+	helm := &plannedHelm{releases: map[string]protocol.HelmResultPayload{}, markers: map[string]string{}, charts: map[string]string{}}
 	env := toolOperationEnvelope{ClusterID: id.String(), ToolSlug: "istio", Preset: "default", Releases: []toolRelease{
 		{ReleaseName: "istio-base", Namespace: "istio-system", ChartName: "base", RepoURL: "https://blob.istio.io/istio-release/charts", Version: "1.31.0", State: "pending"},
 		{ReleaseName: "istiod", Namespace: "istio-system", ChartName: "istiod", RepoURL: "https://blob.istio.io/istio-release/charts", Version: "1.31.0", State: "pending"},
@@ -182,6 +230,139 @@ func TestToolPlanUninstallReversesOrderAndResumes(t *testing.T) {
 	}
 }
 
+func TestLonghornUninstallPreparesDeletionThroughClusterAgent(t *testing.T) {
+	h, q, _, op := newPlanFixture(t, 1)
+	req := &longhornUninstallRequester{status: http.StatusOK}
+	h.k8s = req
+	env := toolOperationEnvelope{
+		ClusterID:           q.clusterID.String(),
+		ToolSlug:            "longhorn",
+		ConfirmDataDeletion: true,
+	}
+	if err := h.prepareLonghornUninstall(context.Background(), op, env); err != nil {
+		t.Fatal(err)
+	}
+	if req.method != http.MethodPatch || req.path != "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings/deleting-confirmation-flag" {
+		t.Fatalf("request = %s %s", req.method, req.path)
+	}
+	if !bytes.Equal(req.body, []byte(`{"value":"true"}`)) || req.headers["Content-Type"] != "application/merge-patch+json" {
+		t.Fatalf("body=%s headers=%v", req.body, req.headers)
+	}
+	if len(q.events) != 1 || q.events[0].Stage != "uninstall.prepared" {
+		t.Fatalf("events=%+v", q.events)
+	}
+}
+
+func TestCISUninstallRemovesManagedScansAndOwnedRunnerService(t *testing.T) {
+	h, q, _, op := newPlanFixture(t, 1)
+	req := &cisUninstallRequester{responses: map[string]*protocol.K8sResponsePayload{
+		"GET /apis/cis.cattle.io/v1/clusterscans":                                                     jsonK8sResponse(http.StatusOK, `{"items":[{"metadata":{"name":"astronomer-cis-one","labels":{"app.kubernetes.io/managed-by":"astronomer-go"}}},{"metadata":{"name":"other","labels":{"app.kubernetes.io/managed-by":"someone-else"}}}]}`),
+		"DELETE /apis/cis.cattle.io/v1/clusterscans/astronomer-cis-one":                               {StatusCode: http.StatusOK},
+		"GET /api/v1/namespaces/cis-operator-system/services":                                         jsonK8sResponse(http.StatusOK, `{"items":[{"metadata":{"name":"service-rancher-cis-benchmark","labels":{"app.kubernetes.io/name":"rancher-cis-benchmark","app.kubernetes.io/instance":"security-scan-runner-astronomer-cis-one"}}}]}`),
+		"DELETE /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark":        {StatusCode: http.StatusOK},
+		"GET /api/v1/namespaces/cis-operator-system/configmaps":                                       jsonK8sResponse(http.StatusOK, `{"items":[{"metadata":{"name":"cis-s-config-cm-astronomer-cis-one","labels":{"app.kubernetes.io/name":"rancher-cis-benchmark","app.kubernetes.io/instance":"security-scan-runner-astronomer-cis-one"}}}]}`),
+		"DELETE /api/v1/namespaces/cis-operator-system/configmaps/cis-s-config-cm-astronomer-cis-one": {StatusCode: http.StatusOK},
+	}}
+	h.k8s = req
+	env := toolOperationEnvelope{ClusterID: q.clusterID.String(), ToolSlug: "cis-operator"}
+	if err := h.prepareCISUninstall(context.Background(), op, env); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"DELETE /apis/cis.cattle.io/v1/clusterscans/astronomer-cis-one",
+		"DELETE /api/v1/namespaces/cis-operator-system/services/service-rancher-cis-benchmark",
+		"DELETE /api/v1/namespaces/cis-operator-system/configmaps/cis-s-config-cm-astronomer-cis-one",
+	}
+	got := make([]string, 0, len(want))
+	for _, request := range req.requests {
+		if request.method == http.MethodDelete {
+			got = append(got, request.method+" "+request.path)
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("requests=%v, want %v", got, want)
+	}
+	if len(q.events) != 2 || q.events[0].Stage != "uninstall.prepared" || q.events[1].Stage != "uninstall.prepared" {
+		t.Fatalf("events=%+v", q.events)
+	}
+}
+
+func TestCISUninstallRefusesUnownedRunnerService(t *testing.T) {
+	h, q, _, op := newPlanFixture(t, 1)
+	req := &cisUninstallRequester{responses: map[string]*protocol.K8sResponsePayload{
+		"GET /apis/cis.cattle.io/v1/clusterscans":             {StatusCode: http.StatusNotFound},
+		"GET /api/v1/namespaces/cis-operator-system/services": jsonK8sResponse(http.StatusOK, `{"items":[{"metadata":{"name":"service-rancher-cis-benchmark","labels":{"app.kubernetes.io/name":"rancher-cis-benchmark","app.kubernetes.io/instance":"manually-owned"}}}]}`),
+	}}
+	h.k8s = req
+	err := h.prepareCISUninstall(context.Background(), op, toolOperationEnvelope{ClusterID: q.clusterID.String(), ToolSlug: "cis-operator"})
+	if err == nil || !strings.Contains(err.Error(), "without Astronomer scan ownership") {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestLonghornUninstallRefusesMissingDeletionConfirmation(t *testing.T) {
+	h, _, _, op := newPlanFixture(t, 1)
+	h.k8s = &longhornUninstallRequester{status: http.StatusOK}
+	err := h.prepareLonghornUninstall(context.Background(), op, toolOperationEnvelope{ToolSlug: "longhorn"})
+	if err == nil || !strings.Contains(err.Error(), "explicit") {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestLonghornFailedReleaseCleanupRecreatesMissingDeletionSetting(t *testing.T) {
+	h, q, _, op := newPlanFixture(t, 1)
+	req := &longhornUninstallRequester{statuses: []int{http.StatusNotFound, http.StatusCreated}}
+	h.k8s = req
+	env := toolOperationEnvelope{
+		ClusterID:                   q.clusterID.String(),
+		ToolSlug:                    "longhorn",
+		ConfirmDataDeletion:         true,
+		ConfirmFailedReleaseCleanup: true,
+	}
+	if err := h.prepareLonghornUninstall(context.Background(), op, env); err != nil {
+		t.Fatal(err)
+	}
+	if len(req.requests) != 2 || req.requests[1].method != http.MethodPost || req.requests[1].path != "/apis/longhorn.io/v1beta2/namespaces/longhorn-system/settings" {
+		t.Fatalf("requests=%+v", req.requests)
+	}
+	if !bytes.Contains(req.requests[1].body, []byte(`"value":"true"`)) || req.requests[1].headers["Content-Type"] != "application/json" {
+		t.Fatalf("create request=%+v", req.requests[1])
+	}
+	if len(q.events) != 1 || q.events[0].Stage != "uninstall.prepared" || !strings.Contains(q.events[0].Message, "recreated") {
+		t.Fatalf("events=%+v", q.events)
+	}
+}
+
+func TestLonghornFailedReleaseCleanupToleratesMissingDeletionCRD(t *testing.T) {
+	h, q, _, op := newPlanFixture(t, 1)
+	h.k8s = &longhornUninstallRequester{statuses: []int{http.StatusNotFound, http.StatusNotFound}}
+	env := toolOperationEnvelope{
+		ClusterID:                   q.clusterID.String(),
+		ToolSlug:                    "longhorn",
+		ConfirmDataDeletion:         true,
+		ConfirmFailedReleaseCleanup: true,
+	}
+	if err := h.prepareLonghornUninstall(context.Background(), op, env); err != nil {
+		t.Fatal(err)
+	}
+	if len(q.events) != 1 || q.events[0].Stage != "uninstall.prepared" || !strings.Contains(q.events[0].Message, "CRD was absent") {
+		t.Fatalf("events=%+v", q.events)
+	}
+}
+
+func TestFailedHelmReleaseStatusesIncludeInterruptedUninstall(t *testing.T) {
+	for _, status := range []string{"failed", "uninstalling", "pending-install", "pending-upgrade", "pending-rollback", "pending-uninstall"} {
+		if !isFailedHelmReleaseStatus(status) {
+			t.Errorf("status %q was not recognized as failed cleanup state", status)
+		}
+	}
+	for _, status := range []string{"deployed", "superseded", "uninstalled", "unknown"} {
+		if isFailedHelmReleaseStatus(status) {
+			t.Errorf("status %q was recognized as failed cleanup state", status)
+		}
+	}
+}
+
 func TestToolPlanRollbackReversesOrder(t *testing.T) {
 	h, q, helm, op := newPlanFixture(t, 2)
 	if err := h.executeOperation(context.Background(), op); err != nil {
@@ -250,6 +431,17 @@ func TestBuildToolPlanOrdersChartsAndIsolatesValues(t *testing.T) {
 	}
 }
 
+func TestBuildToolReleasePlanRejectsMemberClusterDex(t *testing.T) {
+	tool := sqlc.ClusterTool{
+		Slug:              DexToolSlug,
+		VersionConstraint: "0.24.0",
+		Charts:            json.RawMessage(`[{"order":0,"repo_url":"https://charts.dexidp.io","namespace":"dex","chart_name":"dex"}]`),
+	}
+	if _, err := buildToolReleasePlan(tool, "", ""); err == nil || !strings.Contains(err.Error(), "management chart") {
+		t.Fatalf("member-cluster Dex release plan was not rejected: %v", err)
+	}
+}
+
 func TestToolPlanRejectsExternalRevisionAfterCrash(t *testing.T) {
 	h, q, helm, op := newPlanFixture(t, 1)
 	q.failCheckpoint = "release.completed"
@@ -288,6 +480,97 @@ func TestToolPlanRollbackOwnsCrashWindowReleaseWithoutInstalledRow(t *testing.T)
 	}
 	if len(helm.releases) != 0 {
 		t.Fatalf("orphaned release survived rollback: %v", helm.releases)
+	}
+}
+
+func TestToolPlanConfirmedFailedReleaseCleanupRequiresExactChartAndRevision(t *testing.T) {
+	h, q, helm, op := newPlanFixture(t, 1)
+	key := "istio-system/istio-base"
+	helm.releases[key] = protocol.HelmResultPayload{Success: true, Status: "failed", Revision: 1}
+	helm.markers[key] = "Helm install failed after post-install timeout"
+	helm.charts[key] = "base-1.31.0"
+	var env toolOperationEnvelope
+	if err := json.Unmarshal(op.Payload, &env); err != nil {
+		t.Fatal(err)
+	}
+	env.ConfirmFailedReleaseCleanup = true
+	env.Releases[0].ExpectedRevision = 1
+	env.Releases[0].OperationMarker = "astronomer tool operation original release 0"
+	op.OperationType = "uninstall"
+	op.Payload, _ = json.Marshal(env)
+	if err := h.executeOperation(context.Background(), op); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := helm.releases[key]; exists {
+		t.Fatal("confirmed failed release remained installed")
+	}
+	if len(q.installedByRef) != 0 {
+		t.Fatalf("unexpected installed rows: %v", q.installedByRef)
+	}
+}
+
+func TestToolPlanConfirmedFailedReleaseCleanupAcceptsRetryRevision(t *testing.T) {
+	h, q, helm, op := newPlanFixture(t, 1)
+	key := "istio-system/istio-base"
+	helm.releases[key] = protocol.HelmResultPayload{Success: true, Status: "failed", Revision: 2}
+	helm.markers[key] = "Helm upgrade failed after post-upgrade timeout"
+	helm.charts[key] = "base-1.31.0"
+	var env toolOperationEnvelope
+	if err := json.Unmarshal(op.Payload, &env); err != nil {
+		t.Fatal(err)
+	}
+	env.ConfirmFailedReleaseCleanup = true
+	env.Releases[0].ExpectedRevision = 1
+	env.Releases[0].OperationMarker = "astronomer tool operation original release 0"
+	op.OperationType = "uninstall"
+	op.Payload, _ = json.Marshal(env)
+	if err := h.executeOperation(context.Background(), op); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := helm.releases[key]; exists {
+		t.Fatal("confirmed failed retry revision remained installed")
+	}
+	if len(q.installedByRef) != 0 {
+		t.Fatalf("unexpected installed rows: %v", q.installedByRef)
+	}
+}
+
+func TestToolPlanFailedReleaseCleanupRejectsMissingConfirmationOrMismatch(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		confirm  bool
+		chart    string
+		revision int
+		status   string
+	}{
+		{name: "missing confirmation", chart: "base-1.31.0", revision: 1, status: "failed"},
+		{name: "wrong chart", confirm: true, chart: "external-1.31.0", revision: 1, status: "failed"},
+		{name: "older revision", confirm: true, chart: "base-1.31.0", revision: 1, status: "failed"},
+		{name: "ready external release", confirm: true, chart: "base-1.31.0", revision: 1, status: "deployed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h, _, helm, op := newPlanFixture(t, 1)
+			key := "istio-system/istio-base"
+			helm.releases[key] = protocol.HelmResultPayload{Success: true, Status: test.status, Revision: test.revision}
+			helm.markers[key] = "external operation"
+			helm.charts[key] = test.chart
+			var env toolOperationEnvelope
+			if err := json.Unmarshal(op.Payload, &env); err != nil {
+				t.Fatal(err)
+			}
+			env.ConfirmFailedReleaseCleanup = test.confirm
+			env.Releases[0].ExpectedRevision = 2
+			env.Releases[0].OperationMarker = "astronomer tool operation original release 0"
+			op.OperationType = "uninstall"
+			op.Payload, _ = json.Marshal(env)
+			err := h.executeOperation(context.Background(), op)
+			if err == nil || !strings.Contains(err.Error(), "unowned") {
+				t.Fatalf("error=%v", err)
+			}
+			if _, exists := helm.releases[key]; !exists {
+				t.Fatal("unmatched release was removed")
+			}
+		})
 	}
 }
 

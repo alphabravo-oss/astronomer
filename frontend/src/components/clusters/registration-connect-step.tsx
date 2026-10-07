@@ -10,7 +10,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTabParam } from "@/lib/use-tab-param";
 import { queryKeys } from "@/lib/query-keys";
 import { toastError } from "@/lib/toast";
-import { Copy, Check, Download, Server } from "lucide-react";
+import { Copy, Check, Download } from "lucide-react";
 import {
   confirmRegistration,
   getClusterManifestWithToken,
@@ -32,8 +32,31 @@ import {
   type CurlVariant,
 } from "@/components/clusters/registration-install-commands";
 import { registrationWizardStep } from "@/components/clusters/registration-stage";
+import { cn } from "@/lib/utils";
+import { BareButton } from "@/components/form/bare-button";
 
 const TAB_KEYS = ["curl", "quick", "yaml", "airgapped"] as const;
+
+function CopyCommandButton({
+  copied,
+  disabled,
+  onClick,
+}: {
+  copied: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <BareButton
+      onClick={onClick}
+      disabled={disabled}
+      className="absolute top-2 right-2 inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-border bg-background text-xs hover:bg-accent disabled:opacity-50 font-normal"
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? "Copied" : "Copy"}
+    </BareButton>
+  );
+}
 
 export function RegistrationConnectStep({
   clusterId,
@@ -201,14 +224,7 @@ export function RegistrationConnectStep({
     <div>
       <div className="mb-6">
         <PageHeader
-          title={
-            <span className="inline-flex items-center gap-3">
-              <span className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                <Server className="h-5 w-5 text-muted-foreground" />
-              </span>
-              {showProgress ? "Adoption progress" : "Install the agent"}
-            </span>
-          }
+          title={showProgress ? "Adoption progress" : "Install the agent"}
           description={
             showProgress
               ? "Watch the existing cluster connect and apply its baseline"
@@ -262,24 +278,23 @@ export function RegistrationConnectStep({
                   const active = curlVariant === v;
                   const isPlatformDefault = v === tlsMode;
                   return (
-                    <button
+                    <BareButton
                       key={v}
-                      type="button"
                       onClick={() => setCurlVariant(v)}
-                      className={
-                        "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs transition-colors " +
-                        (active
+                      className={cn(
+                        "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border text-xs font-normal transition-colors",
+                        active
                           ? "border-primary bg-primary/10 text-foreground"
-                          : "border-border bg-background text-muted-foreground hover:bg-accent")
-                      }
+                          : "border-border bg-background text-muted-foreground hover:bg-accent",
+                      )}
                     >
                       {curlVariants[v].label}
                       {isPlatformDefault && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-10 text-muted-foreground">
                           (platform default)
                         </span>
                       )}
-                    </button>
+                    </BareButton>
                   );
                 })}
               </div>
@@ -290,24 +305,17 @@ export function RegistrationConnectStep({
                 <pre className="text-xs bg-muted/30 border border-border rounded-lg p-4 overflow-x-auto font-mono whitespace-pre">
                   {curlVariants[curlVariant].cmd || "# loading..."}
                 </pre>
-                <button
+                <CopyCommandButton
+                  copied={copied === curlVariant}
+                  disabled={!curlVariants[curlVariant].cmd}
                   onClick={() =>
                     onCopy(curlVariant, curlVariants[curlVariant].cmd)
                   }
-                  disabled={!curlVariants[curlVariant].cmd}
-                  className="absolute top-2 right-2 inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-border bg-background text-xs hover:bg-accent disabled:opacity-50"
-                >
-                  {copied === curlVariant ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                  {copied === curlVariant ? "Copied" : "Copy"}
-                </button>
+                />
               </div>
               <p className="text-xs text-muted-foreground">
                 The URL pulls a freshly-rendered manifest signed with a
-                single-use registration token (24h TTL). The agent host must be
+                single-use registration token (1h TTL). The agent host must be
                 able to reach{" "}
                 <code className="font-mono">{curlOrigin || "this server"}</code>
                 .
@@ -329,17 +337,10 @@ export function RegistrationConnectStep({
                 <pre className="text-xs bg-muted/30 border border-border rounded-lg p-4 overflow-x-auto font-mono whitespace-pre">
                   {oneLiner || (manifest ? "" : "# loading...")}
                 </pre>
-                <button
+                <CopyCommandButton
+                  copied={copied === "quick"}
                   onClick={() => onCopy("quick", oneLiner)}
-                  className="absolute top-2 right-2 inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-border bg-background text-xs hover:bg-accent"
-                >
-                  {copied === "quick" ? (
-                    <Check className="h-3 w-3" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                  {copied === "quick" ? "Copied" : "Copy"}
-                </button>
+                />
               </div>
             </div>
           )}
@@ -355,13 +356,13 @@ export function RegistrationConnectStep({
                   {manifest || "# loading..."}
                 </pre>
               </div>
-              <button
+              <BareButton
                 onClick={onDownload}
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent"
+                className="inline-flex items-center gap-1.5 h-(--control-h) px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent"
               >
                 <Download className="h-3.5 w-3.5" />
                 Download YAML
-              </button>
+              </BareButton>
             </div>
           )}
 
@@ -410,9 +411,7 @@ export function RegistrationConnectStep({
             )}
 
             <div className="flex items-center justify-end gap-2">
-              <ActionButton type="button" onClick={onBack}>
-                ← Back
-              </ActionButton>
+              <ActionButton onClick={onBack}>← Back</ActionButton>
               <ActionButton
                 intent="primary"
                 onClick={advance}
@@ -426,7 +425,7 @@ export function RegistrationConnectStep({
           </div>
         </>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-(--gap-section)">
           <RegistrationTimeline
             clusterId={clusterId}
             onReady={() => setIsReady(true)}
@@ -463,15 +462,18 @@ function TabButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
+    <BareButton
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-        active
-          ? "border-primary text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground"
-      }`}
+      className={cn(
+        `px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+          active
+            ? "border-primary text-foreground"
+            : "border-transparent text-muted-foreground hover:text-foreground"
+        }`,
+        "inline-block",
+      )}
     >
       {children}
-    </button>
+    </BareButton>
   );
 }

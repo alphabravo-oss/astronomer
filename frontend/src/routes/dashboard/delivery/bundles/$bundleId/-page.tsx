@@ -27,8 +27,6 @@ import {
   DetailGrid,
   ErrorMessage,
   inputClass,
-  primaryButton,
-  secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
@@ -48,8 +46,10 @@ import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can, isSuperuser } from "@/lib/permissions";
 
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
+import { StackedCell } from "@/components/ui/stacked-cell";
 import { toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function BundleDetailPage() {
   const { bundleId } = useParams({ strict: false }) as { bundleId: string };
@@ -95,63 +95,88 @@ export function BundleDetailPage() {
     {
       key: "version",
       header: "Version",
+      kind: "version",
+      grow: true,
+      minSize: 200,
+      maxSize: 640,
       accessor: (row) => (
-        <div>
-          <RouterLink
-            to={withProjectQuery(
-              `/dashboard/delivery/bundles/${bundleId}/versions/${row.id}`,
-              projectId,
-            )}
-            className="font-medium text-link hover:underline"
-          >
-            {row.version}
-          </RouterLink>
-          <p className="font-mono text-xs text-muted-foreground">{row.id}</p>
-        </div>
+        <StackedCell
+          primary={
+            <RouterLink
+              to={withProjectQuery(
+                `/dashboard/delivery/bundles/${bundleId}/versions/${row.id}`,
+                projectId,
+              )}
+              className="text-link hover:underline"
+            >
+              {row.version}
+            </RouterLink>
+          }
+          secondary={row.id}
+          secondaryMono
+        />
       ),
+      sortAccessor: (row) => row.version,
     },
     {
       key: "renderer",
       header: "Renderer / scope",
+      kind: "text",
+      size: 168,
+      minSize: 120,
       accessor: (row) => `${row.renderer} · ${row.scope}`,
     },
     {
       key: "revision",
       header: "Immutable revision",
+      size: 220,
+      minSize: 200,
+      maxSize: 360,
       accessor: (row) => (
-        <div>
-          <p className="max-w-56 truncate font-mono text-xs">
-            {row.resolvedRevision || row.requestedRevision}
-          </p>
-          <p className="max-w-56 truncate font-mono text-[10px] text-muted-foreground">
-            {row.artifactDigest || "resolution pending"}
-          </p>
-        </div>
+        <StackedCell
+          primary={row.resolvedRevision || row.requestedRevision}
+          primaryClassName="font-mono text-xs font-normal"
+          secondary={row.artifactDigest || "resolution pending"}
+          secondaryMono
+        />
       ),
+      sortAccessor: (row) => row.resolvedRevision || row.requestedRevision,
     },
     {
       key: "verification",
       header: "Verification",
+      kind: "status",
+      size: 150,
+      minSize: 140,
+      maxSize: 240,
       accessor: (row) => (
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <DeliveryPhaseBadge value={row.verificationStatus} />
           {row.verificationIdentity && (
-            <p className="max-w-48 truncate text-xs text-muted-foreground">
-              {row.verificationIdentity}
-            </p>
+            <StackedCell
+              primary={row.verificationIdentity}
+              primaryClassName="text-xs font-normal text-muted-foreground"
+            />
           )}
         </div>
       ),
+      sortAccessor: (row) => row.verificationStatus,
     },
     {
       key: "state",
       header: "State",
+      kind: "status",
+      size: 104,
       accessor: (row) => <DeliveryPhaseBadge value={row.state} />,
     },
     {
       key: "created",
       header: "Created",
-      accessor: (row) => formatRelativeTime(row.createdAt),
+      kind: "age",
+      size: 128,
+      minSize: 112,
+      accessor: (row) => <AgeCell value={row.createdAt} />,
+      sortAccessor: (row) => row.createdAt,
     },
   ];
   return (
@@ -184,13 +209,13 @@ export function BundleDetailPage() {
             }
             actions={
               canCreate ? (
-                <button
+                <ActionButton
+                  intent="primary"
                   type="button"
-                  className={primaryButton}
                   onClick={() => setCreating(true)}
                 >
                   <Plus className="h-4 w-4" /> Add version
-                </button>
+                </ActionButton>
               ) : undefined
             }
           />
@@ -549,16 +574,16 @@ function CreateVersionDialog({
           <ErrorMessage error={formError ?? mutation.error} />
         )}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
+          <ActionButton intent="default" type="button" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="primary"
             type="submit"
-            className={primaryButton}
             disabled={mutation.isPending}
           >
             {mutation.isPending ? "Creating…" : "Create immutable version"}
-          </button>
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>

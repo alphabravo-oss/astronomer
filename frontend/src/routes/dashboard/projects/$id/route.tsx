@@ -16,17 +16,16 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import { useLocation } from "@tanstack/react-router";
 import {
   ArrowLeft,
-  FolderKanban,
   Shield,
   KeyRound,
   Gauge,
-  Loader2,
   LayoutDashboard,
   Package,
 } from "lucide-react";
 import { useProject } from "@/lib/hooks/projects";
 import { PageHeader } from "@/components/ui/page";
 import { tabLinkClassName } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const tabs = [
   { key: "overview", label: "Overview", icon: LayoutDashboard, segment: "" },
@@ -67,7 +66,7 @@ function ProjectDetailLayout() {
   })();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <RouterLink
         to="/dashboard/projects"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -79,38 +78,37 @@ function ProjectDetailLayout() {
       <PageHeader
         eyebrow="Project"
         title={
-          <span className="inline-flex items-center gap-2">
-            <FolderKanban className="h-5 w-5 shrink-0 text-muted-foreground" />
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            ) : (
-              project?.displayName || project?.name || "Project"
-            )}
-          </span>
+          isLoading ? (
+            <Skeleton className="h-5 w-32" />
+          ) : (
+            project?.displayName || project?.name || "Project"
+          )
         }
         description={project?.description}
+        tabs={
+          <nav
+            aria-label="Project sections"
+            className="flex gap-(--gap-section)"
+          >
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const href = `${base}${tab.segment}`;
+              const active = activeKey === tab.key;
+              return (
+                <RouterLink
+                  key={tab.key}
+                  to={href}
+                  aria-current={active ? "page" : undefined}
+                  className={tabLinkClassName(active)}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </RouterLink>
+              );
+            })}
+          </nav>
+        }
       />
-
-      <div className="border-b border-border">
-        <nav aria-label="Project sections" className="flex gap-6">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const href = `${base}${tab.segment}`;
-            const active = activeKey === tab.key;
-            return (
-              <RouterLink
-                key={tab.key}
-                to={href}
-                aria-current={active ? "page" : undefined}
-                className={tabLinkClassName(active)}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </RouterLink>
-            );
-          })}
-        </nav>
-      </div>
 
       <div className="animate-fade-in">
         <Outlet />

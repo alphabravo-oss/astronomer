@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import {
   PodTerminal,
@@ -7,6 +6,8 @@ import {
 } from "@/components/workloads/pod-terminal";
 import { Eraser, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 
 interface ExecTabProps {
   clusterId: string;
@@ -58,12 +59,11 @@ export function ExecTab({
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-muted/40 border-b border-border">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span
-            className="font-mono truncate max-w-[280px]"
-            title={`${namespace}/${pod}`}
-          >
-            {namespace}/{pod}
-          </span>
+          <Tooltip content={`${namespace}/${pod}`}>
+            <span className="font-mono truncate max-w-70">
+              {namespace}/{pod}
+            </span>
+          </Tooltip>
           {container && (
             <span className="font-mono text-foreground/80">· {container}</span>
           )}
@@ -76,7 +76,8 @@ export function ExecTab({
         </div>
 
         <div className="flex items-center gap-1">
-          <button
+          <BareButton
+            tooltip="Clear terminal"
             onClick={() => {
               termActionsRef.current?.clear();
               // Hand focus back to xterm so the user can keep typing — the
@@ -87,22 +88,21 @@ export function ExecTab({
             disabled={status !== "connected"}
             className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-2xs
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors
-              disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Clear terminal"
+              disabled:opacity-40 disabled:cursor-not-allowed font-normal"
           >
             <Eraser className="h-3 w-3" />
             <span className="hidden sm:inline">Clear</span>
-          </button>
+          </BareButton>
           {(status === "disconnected" || status === "error") && (
-            <button
+            <BareButton
+              tooltip="Reconnect"
               onClick={() => setReconnectNonce((n) => n + 1)}
               className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-2xs
-                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              title="Reconnect"
+                text-muted-foreground hover:text-foreground hover:bg-accent transition-colors font-normal"
             >
               <RefreshCw className="h-3 w-3" />
               Reconnect
-            </button>
+            </BareButton>
           )}
         </div>
       </div>

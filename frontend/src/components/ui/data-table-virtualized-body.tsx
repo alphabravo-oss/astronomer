@@ -7,7 +7,21 @@ import type {
   RowData,
 } from "@tanstack/react-table";
 import type { DataTableFeatures } from "./data-table-features";
-import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  ChevronsUpDown,
+} from "lucide-react";
+import { DataTableCellContent } from "@/components/ui/data-table-cell";
+import { columnText } from "@/components/ui/data-table-csv";
+import {
+  flexCellStyle,
+  SELECT_COLUMN_WIDTH,
+  type PinnedPlacement,
+  type ResolvedColumnLayout,
+} from "@/components/ui/data-table-layout";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DataTableQueryError } from "@/components/ui/data-table-query-error";
 import {
   TableEmptyPanel,
@@ -23,6 +37,10 @@ import { tableGroupPositions } from "./data-table-grouping";
 export function VirtualizedGrid<T extends RowData>({
   groupBy,
   activeColumns,
+  layouts,
+  placements,
+  expandable = false,
+  renderSubRow,
   table,
   rows,
   rowVirtualizer,
@@ -49,6 +67,10 @@ export function VirtualizedGrid<T extends RowData>({
 }: {
   groupBy?: (row: T) => string;
   activeColumns: Column<T>[];
+  layouts: Map<string, ResolvedColumnLayout>;
+  placements: Map<string, PinnedPlacement>;
+  expandable?: boolean;
+  renderSubRow?: (row: T) => React.ReactNode;
   table: RtTable<DataTableFeatures, T>;
   rows: RtRow<DataTableFeatures, T>[];
   rowVirtualizer: VirtualRows;
@@ -75,30 +97,50 @@ export function VirtualizedGrid<T extends RowData>({
   focusRowAt: (i: number) => void;
 }) {
   // Per-column width style shared by header + body cells so they line up.
+  const scrolls = layout === "scroll";
+  const stickyBg = scrolls ? "bg-background" : undefined;
   const colStyle = (col: Column<T>): React.CSSProperties => {
-    if (col.rowActions === true) {
-      const width = col.width ?? "2.5rem";
-      return { width, flex: `0 0 ${width}`, minWidth: width };
-    }
-    const width = resizable
-      ? `${table.getColumn(col.key)?.getSize()}px`
-      : col.width;
-    return width
-      ? layout === "scroll"
-        ? { width, flex: `0 0 ${width}`, minWidth: width }
-        : { width, flex: `0 1 ${width}`, minWidth: 0 }
-      : { flex: "1 1 0", minWidth: 0 };
+    const resolved = layouts.get(col.key);
+    if (!resolved) return { flex: "1 1 0", minWidth: 0 };
+    const stored = (
+      table.options.state as { columnSizing?: Record<string, number> }
+    ).columnSizing?.[col.key];
+    const resizedWidth = resizable
+      ? resolved.sized
+        ? stored
+        : (stored ?? table.getColumn(col.key)?.getSize())
+      : undefined;
+    return flexCellStyle(resolved, {
+      resizedWidth,
+      pinned: placements.get(col.key),
+      scroll: scrolls,
+    });
   };
   const selectColStyle: React.CSSProperties = {
     flex: "0 0 2.5rem",
     width: "2.5rem",
+    position: "sticky",
+    left: 0,
+    zIndex: "var(--z-sticky)" as unknown as number,
   };
+  const expandColStyle: React.CSSProperties = {
+    flex: "0 0 2.5rem",
+    width: "2.5rem",
+    position: "sticky",
+    left: selectable ? SELECT_COLUMN_WIDTH : 0,
+    zIndex: "var(--z-sticky)" as unknown as number,
+  };
+  const leadCount = (selectable ? 1 : 0) + (expandable ? 1 : 0);
+  const pinnedClass = (col: Column<T>) =>
+    placements.has(col.key) ? stickyBg : undefined;
 
-  const alignClass = (col: Column<T>) =>
-    cn(
-      col.align === "center" && "text-center justify-center",
-      col.align === "right" && "text-right justify-end",
+  const alignClass = (col: Column<T>) => {
+    const align = layouts.get(col.key)?.align;
+    return cn(
+      align === "center" && "text-center justify-center",
+      align === "right" && "text-right justify-end",
     );
+  };
 
   const virtualItems = rowVirtualizer.items;
   const groups = tableGroupPositions(
@@ -112,7 +154,7 @@ export function VirtualizedGrid<T extends RowData>({
         ref={scrollRef}
         role="grid"
         aria-rowcount={groups.rowCount}
-        aria-colcount={activeColumns.length + (selectable ? 1 : 0)}
+        aria-colcount={activeColumns.length + leadCount}
         aria-multiselectable={selectable ? true : undefined}
         // The grid container is the single Tab entry point. Rows are focused
         // programmatically (arrow keys / click) and stay out of the Tab order,
@@ -127,7 +169,7 @@ export function VirtualizedGrid<T extends RowData>({
           }
         }}
         className={cn(
-          "relative max-h-[28rem] overflow-y-auto text-sm outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
+          "relative max-h-112 overflow-y-auto text-sm outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
           layout === "scroll" ? "overflow-x-auto" : "overflow-x-hidden",
         )}
       >
@@ -140,7 +182,11 @@ export function VirtualizedGrid<T extends RowData>({
           {selectable && (
             <div
               role="columnheader"
-              className={cn("flex items-center", selectPadding)}
+              className={cn(
+                "flex items-center",
+                scrolls && "bg-muted",
+                selectPadding,
+              )}
               style={selectColStyle}
             >
               <Checkbox
@@ -148,6 +194,19 @@ export function VirtualizedGrid<T extends RowData>({
                 checked={table.getIsAllPageRowsSelected()}
                 onChange={table.getToggleAllPageRowsSelectedHandler()}
               />
+            </div>
+          )}
+          {expandable && (
+            <div
+              role="columnheader"
+              className={cn(
+                "flex items-center",
+                scrolls && "bg-muted",
+                selectPadding,
+              )}
+              style={expandColStyle}
+            >
+              <span className="sr-only">Expand row</span>
             </div>
           )}
           {activeColumns.map((col) => {
@@ -175,6 +234,7 @@ export function VirtualizedGrid<T extends RowData>({
                   sortable &&
                     "cursor-pointer select-none hover:text-foreground",
                   alignClass(col),
+                  placements.has(col.key) && scrolls && "bg-muted",
                 )}
                 style={colStyle(col)}
                 tabIndex={sortable ? 0 : undefined}
@@ -187,12 +247,17 @@ export function VirtualizedGrid<T extends RowData>({
                 }}
               >
                 <span
-                  className={cn("min-w-0 truncate", rowActions && "sr-only")}
+                  className={cn(
+                    layouts.get(col.key)?.sized
+                      ? "whitespace-nowrap"
+                      : "min-w-0 truncate",
+                    rowActions && "sr-only",
+                  )}
                 >
                   {col.header || (rowActions ? "Actions" : "")}
                 </span>
                 {sortable && (
-                  <span className="text-muted-foreground/50">
+                  <span className="shrink-0 text-muted-foreground/50">
                     {sorted === "asc" ? (
                       <ChevronUp className="h-3.5 w-3.5" />
                     ) : sorted === "desc" ? (
@@ -236,7 +301,16 @@ export function VirtualizedGrid<T extends RowData>({
                     className={cn("flex items-center", selectPadding)}
                     style={selectColStyle}
                   >
-                    <div className="h-4 w-4 rounded-sm bg-muted animate-pulse" />
+                    <Skeleton className="h-4 w-4 rounded-sm" />
+                  </div>
+                )}
+                {expandable && (
+                  <div
+                    role="gridcell"
+                    className={cn("flex items-center", selectPadding)}
+                    style={expandColStyle}
+                  >
+                    <Skeleton className="h-4 w-4 rounded-sm" />
                   </div>
                 )}
                 {activeColumns.map((col) => {
@@ -252,8 +326,8 @@ export function VirtualizedGrid<T extends RowData>({
                       )}
                       style={colStyle(col)}
                     >
-                      <div
-                        className="h-4 w-24 max-w-full rounded-sm bg-muted animate-pulse"
+                      <Skeleton
+                        className="h-4 w-24 max-w-full rounded-sm"
                         style={{
                           width: col.width
                             ? `min(100%, ${col.width})`
@@ -309,9 +383,7 @@ export function VirtualizedGrid<T extends RowData>({
                     >
                       <div
                         role="rowheader"
-                        aria-colspan={
-                          activeColumns.length + (selectable ? 1 : 0)
-                        }
+                        aria-colspan={activeColumns.length + leadCount}
                       >
                         {group.label}
                       </div>
@@ -330,6 +402,7 @@ export function VirtualizedGrid<T extends RowData>({
                     // the Tab stop, so a virtualized-out focused row can't strand
                     // keyboard users outside the grid.
                     tabIndex={-1}
+                    aria-expanded={expandable ? row.getIsExpanded() : undefined}
                     onFocus={() => setFocusedRowIndex(virtualRow.index)}
                     onKeyDown={(e) => {
                       if (e.target !== e.currentTarget) return;
@@ -362,7 +435,11 @@ export function VirtualizedGrid<T extends RowData>({
                     {selectable && (
                       <div
                         role="gridcell"
-                        className={cn("flex items-center", selectPadding)}
+                        className={cn(
+                          "flex items-center",
+                          selectPadding,
+                          stickyBg,
+                        )}
                         style={selectColStyle}
                       >
                         <Checkbox
@@ -373,38 +450,87 @@ export function VirtualizedGrid<T extends RowData>({
                         />
                       </div>
                     )}
+                    {expandable && (
+                      <div
+                        role="gridcell"
+                        className={cn(
+                          "flex items-center px-1.5",
+                          selectPadding,
+                          stickyBg,
+                        )}
+                        style={expandColStyle}
+                      >
+                        <button
+                          type="button"
+                          aria-label={`${row.getIsExpanded() ? "Collapse" : "Expand"} row ${key}`}
+                          aria-expanded={row.getIsExpanded()}
+                          aria-controls={`subrow-${key}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            row.toggleExpanded();
+                          }}
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <ChevronRight
+                            className={cn(
+                              "h-4 w-4 transition-transform",
+                              row.getIsExpanded() && "rotate-90",
+                            )}
+                          />
+                        </button>
+                      </div>
+                    )}
                     {activeColumns.map((col) => {
                       const rowActions = col.rowActions === true;
+                      const resolved = layouts.get(col.key);
+                      const overflow = resolved?.overflow ?? "legacy";
                       return (
                         <div
                           key={col.key}
                           role="gridcell"
                           className={cn(
                             "flex min-w-0 items-center overflow-hidden",
+                            pinnedClass(col),
                             cellPadding,
                             rowActions && "px-1.5",
                             alignClass(col),
                           )}
                           style={colStyle(col)}
                         >
-                          <div
-                            className={cn(
-                              "min-w-0",
-                              rowActions
-                                ? "overflow-visible"
-                                : "overflow-hidden text-ellipsis",
-                              !rowActions &&
-                                (col.wrap
-                                  ? "whitespace-normal break-words"
-                                  : "whitespace-nowrap"),
-                            )}
+                          <DataTableCellContent
+                            overflow={rowActions ? "fixed" : overflow}
+                            mono={resolved?.mono === true}
+                            numeric={resolved?.numeric === true}
+                            label={col.header}
+                            text={
+                              overflow === "middle"
+                                ? columnText(col, row.original)
+                                : ""
+                            }
+                            width={resolved?.size}
                           >
                             {col.accessor(row.original)}
-                          </div>
+                          </DataTableCellContent>
                         </div>
                       );
                     })}
                   </div>
+                  {expandable && row.getIsExpanded() ? (
+                    <div
+                      role="row"
+                      id={`subrow-${key}`}
+                      data-subrow=""
+                      className="border-b border-border bg-muted/20"
+                    >
+                      <div
+                        role="gridcell"
+                        aria-colspan={activeColumns.length + leadCount}
+                        className="px-4 py-3 text-sm"
+                      >
+                        {renderSubRow?.(row.original)}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

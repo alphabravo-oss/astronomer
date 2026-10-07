@@ -1,4 +1,3 @@
-
 /**
  * Rendered-Helm-values preview for a monitoring stack.
  *
@@ -11,7 +10,7 @@
  * strips credentials), so rendering it verbatim is safe.
  */
 import { dump } from "js-yaml";
-import { AlertTriangle, FileCode2 } from "lucide-react";
+import { AlertTriangle, FileCode2, Info } from "lucide-react";
 
 import { ActionButton } from "@/components/ui/action-button";
 import { CodeBlock } from "@/components/ui/code-block";
@@ -66,13 +65,13 @@ export function StackPreviewDialog({
       size="xl"
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-10 text-muted-foreground">
             {preview?.desiredSpecHash
               ? `spec ${preview.desiredSpecHash.slice(0, 12)}`
               : ""}
           </span>
           <div className="flex items-center gap-2">
-            {actions}
+            {!preview?.blocked && actions}
             <ActionButton size="sm" intent="ghost" onClick={onClose}>
               Close
             </ActionButton>
@@ -107,6 +106,56 @@ export function StackPreviewDialog({
           </div>
         </div>
       )}
+
+      {preview?.blocked && !!preview.operatorConflicts?.length && (
+        <div className="flex items-start gap-2 rounded-md border border-status-error/30 bg-status-error/10 px-3 py-2 text-xs text-status-error">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="font-medium">
+              Another Prometheus operator watches this namespace
+            </p>
+            <p className="mt-0.5">
+              Applying this stack would let multiple operators rewrite the same
+              Prometheus resources. Remove it through its owning application, or
+              scope it away from this namespace, then preview again.
+            </p>
+            <ul className="mt-1 space-y-0.5 font-mono text-[10px]">
+              {preview.operatorConflicts?.map((conflict) => (
+                <li key={`${conflict.namespace}/${conflict.name}`}>
+                  {conflict.namespace}/{conflict.name}
+                  {conflict.releaseName ? ` (${conflict.releaseName})` : ""}
+                  {conflict.watchesAllNamespaces
+                    ? " — watches all namespaces"
+                    : conflict.watchedNamespaces?.length
+                      ? ` — watches ${conflict.watchedNamespaces.join(", ")}`
+                      : conflict.excludedNamespaces?.length
+                        ? ` — watches all except ${conflict.excludedNamespaces.join(", ")}`
+                        : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {preview?.baselineOwnership?.detected &&
+        preview.baselineOwnership.mode === "reuse" && (
+          <div className="flex items-start gap-2 rounded-md border border-status-info/30 bg-status-info/10 px-3 py-2 text-xs text-status-info">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <div className="min-w-0">
+              <p className="font-medium">Quick Start baseline will be reused</p>
+              <p className="mt-0.5">
+                {preview.baselineOwnership.message ||
+                  "The full stack will scrape the existing baseline exporters instead of creating duplicate owners."}
+              </p>
+              {preview.baselineOwnership.components.length > 0 && (
+                <p className="mt-1 font-mono text-[10px]">
+                  {preview.baselineOwnership.components.join(", ")}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
       {/*
         no-release-history-or-revision-rollback-ui (separate, still-open audit

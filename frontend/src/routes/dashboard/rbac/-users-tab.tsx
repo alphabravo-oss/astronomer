@@ -3,7 +3,6 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useNavigate } from "@tanstack/react-router";
-import { formatRelativeTime } from "@/lib/utils";
 import type { User } from "@/types";
 import { adminUserHref, isUserLocked } from "@/components/rbac/binding-utils";
 import { useState } from "react";
@@ -11,11 +10,21 @@ import { useUsers } from "@/lib/hooks/user-settings";
 import { pageTableCount } from "@/lib/api/pagination";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { PermissionState } from "@/components/ui/empty-state";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
+import { CappedChips, RelativeTime } from "@/components/admin/table-cells";
 
 interface UsersTabProps {
   onEdit: (user: User) => void;
   onResetPassword: (user: User) => void;
   onDelete: (user: User) => void;
+}
+
+function userRoleLabels(row: User): string[] {
+  return [
+    ...(row.isSuperuser ? ["Superuser"] : []),
+    ...(row.globalRoles ?? []),
+  ];
 }
 
 export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
@@ -32,18 +41,21 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
     {
       key: "name",
       header: "User",
+      kind: "name",
       accessor: (row) => (
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-linear-to-br from-zinc-600 to-zinc-800 flex items-center justify-center shrink-0">
             <span className="text-xs font-medium text-primary-foreground">
               {(row.displayName || row.username || "?").charAt(0).toUpperCase()}
             </span>
           </div>
-          <div>
-            <p className="font-medium text-foreground">
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground">
               {row.displayName || row.username}
             </p>
-            <p className="text-xs text-muted-foreground">{row.username}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {row.username}
+            </p>
           </div>
         </div>
       ),
@@ -51,6 +63,9 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
     {
       key: "email",
       header: "Email",
+      kind: "text",
+      size: 176,
+      minSize: 150,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">{row.email}</span>
       ),
@@ -58,6 +73,8 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
     {
       key: "provider",
       header: "Provider",
+      kind: "badge",
+      size: 112,
       accessor: (row) => (
         <Badge variant="secondary" className="capitalize">
           {row.provider}
@@ -67,23 +84,27 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
     {
       key: "roles",
       header: "Global Roles",
+      kind: "badge",
+      size: 136,
+      minSize: 110,
       accessor: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {row.isSuperuser && <Badge variant="warning">Superuser</Badge>}
-          {(row.globalRoles ?? []).map((role) => (
-            <Badge key={role} variant="secondary">
+        <CappedChips
+          items={userRoleLabels(row)}
+          renderChip={(role) => (
+            <Badge variant={role === "Superuser" ? "warning" : "secondary"}>
               {role}
             </Badge>
-          ))}
-          {!row.isSuperuser && (row.globalRoles ?? []).length === 0 && (
-            <span className="text-xs text-muted-foreground">—</span>
           )}
-        </div>
+        />
       ),
     },
     {
       key: "enabled",
       header: "Status",
+      kind: "status",
+      size: 140,
+      minSize: 120,
+      maxSize: 220,
       accessor: (row) => (
         <div className="flex items-center gap-1.5">
           <StatusBadge
@@ -91,13 +112,17 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
             label={row.enabled ? "Enabled" : "Disabled"}
           />
           {isUserLocked(row) && (
-            <span title="Account is locked out — open the user to unlock">
-              <StatusBadge
-                status="error"
-                label="Locked"
-                icon={<Lock className="h-3 w-3" />}
-              />
-            </span>
+            <Tooltip
+              content={"Account is locked out — open the user to unlock"}
+            >
+              <span>
+                <StatusBadge
+                  status="error"
+                  label="Locked"
+                  icon={<Lock className="h-3 w-3" />}
+                />
+              </span>
+            </Tooltip>
           )}
         </div>
       ),
@@ -105,38 +130,46 @@ export function UsersTab({ onEdit, onResetPassword, onDelete }: UsersTabProps) {
     {
       key: "lastLogin",
       header: "Last Login",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.lastLogin)}
+          <RelativeTime value={row.lastLogin} />
         </span>
       ),
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 120,
+      maxSize: 120,
       accessor: (row) => (
         <div className="flex items-center gap-1">
-          <button
+          <BareButton
+            aria-label="Edit user"
             onClick={() => onEdit(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Edit user"
+            tooltip="Edit user"
           >
             <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </BareButton>
+          <BareButton
+            aria-label="Reset password"
             onClick={() => onResetPassword(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Reset password"
+            tooltip="Reset password"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </BareButton>
+          <BareButton
+            aria-label="Delete user"
             onClick={() => onDelete(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete user"
+            tooltip="Delete user"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </BareButton>
         </div>
       ),
       sortable: false,

@@ -12,13 +12,25 @@ import {
 import type { K8sObject } from "@/components/resources/resource-detail-model";
 import { supportsRolloutHistory } from "@/components/resources/rollout-history";
 import { PermissionState } from "@/components/ui/empty-state";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
+import {
+  KindBadge,
+  MastheadDetails,
+  mastheadMeta,
+} from "@/components/resources/resource-masthead-details";
+import {
+  ResourceDetailEditActions,
+  type DetailEditMode,
+} from "@/components/resources/resource-detail-edit-actions";
+import { effectivePodStatus } from "@/components/resources/resource-masthead-model";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TabStrip } from "@/components/ui/tabs";
 import { ResourceActions } from "@/components/workloads/resource-actions";
-import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
+import {
+  useK8sResource,
+  useResourceDiscovery,
+} from "@/lib/hooks/kubernetes-proxy";
 import { useClusterResourcePermission } from "@/lib/permission-hooks";
-import { formatRelativeTime } from "@/lib/utils";
 
 export { ResourceOverview } from "@/components/resources/resource-overview";
 
@@ -67,6 +79,7 @@ export function ResourceDetail({
   );
   const resourceIdentity = `${clusterId}/${k8sPath}`;
   const [execOpen, setExecOpen] = useState<string | null>(null);
+  const [yamlEdit, setYamlEdit] = useState<DetailEditMode>();
 
   // These decisions intentionally use the same canonical/override resource as
   // list rows. The backend remains the final authorization boundary.
@@ -119,6 +132,7 @@ export function ResourceDetail({
       ));
   const isPod = resourceType === "pods";
   const resourceQuery = useK8sResource(clusterId, k8sPath, canRead);
+  const discovery = useResourceDiscovery(clusterId);
   const { data, isLoading, error } = resourceQuery;
   const obj = data as K8sObject | undefined;
   const conditions = obj?.status?.conditions ?? [];
@@ -170,6 +184,13 @@ export function ResourceDetail({
   const setTab = (next: ResourceDetailTabId) => {
     setExecOpen(next === "exec" ? resourceIdentity : null);
     if (next !== "exec") setUrlTab(next);
+    if (next !== "yaml") setYamlEdit(undefined);
+  };
+  // Hand off to the YAML tab's existing dry-run + apply editor. A running edit
+  // keeps its mode so switching never remounts over an unsaved draft.
+  const startEdit = (mode: DetailEditMode) => {
+    setYamlEdit((current) => current ?? mode);
+    setUrlTab("yaml");
   };
   if (!canRead) {
     return (
@@ -182,14 +203,13 @@ export function ResourceDetail({
   }
 
   const kind = obj?.kind || resourceType;
-  const created = obj?.metadata?.creationTimestamp;
-  const detailStatus = isPod ? podStatus(obj) : obj?.status?.phase;
+  const detailStatus = isPod ? effectivePodStatus(obj) : obj?.status?.phase;
 
   const backTo =
     collectionHref ?? `/dashboard/clusters/${clusterId}/${resourceType}`;
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       {isPod && origin && (
         <Link to={origin} className="text-sm text-primary hover:underline">
           Back to workload
@@ -199,41 +219,54 @@ export function ResourceDetail({
         backTo={backTo}
         title={name}
         mono
+        eyebrow={<KindBadge kind={kind} />}
+        loading={isLoading}
         status={detailStatus && <StatusBadge status={detailStatus} />}
-        meta={[
-          { label: "Kind", value: kind },
-          ...(namespace ? [{ label: "Namespace", value: namespace }] : []),
-          ...(created
-            ? [{ label: "Age", value: formatRelativeTime(created) }]
-            : []),
-        ]}
+        meta={mastheadMeta(obj, clusterId, namespace, discovery.data)}
+        details={<MastheadDetails obj={obj} isPod={isPod} />}
         actions={
           obj?.kind && (
-            <ResourceActions
-              clusterId={clusterId}
-              kind={obj.kind}
-              namespace={namespace}
-              name={name}
-              replicas={obj.spec?.replicas}
-              paused={
-                obj.kind === "Deployment"
-                  ? (obj.spec?.paused ?? false)
-                  : undefined
-              }
-              suspended={
-                obj.kind === "CronJob"
-                  ? (obj.spec?.suspend ?? false)
-                  : undefined
-              }
-              jobTemplate={
-                obj.kind === "CronJob"
-                  ? (asObject(obj.spec).jobTemplate as Record<string, unknown>)
-                  : undefined
-              }
-              k8sPath={k8sPath}
-              permissionResource={permissionResource}
-              onDeleted={() => void navigate({ to: backTo })}
-            />
+            <>
+              <ResourceDetailEditActions
+                clusterId={clusterId}
+                resourceType={resourceType}
+                kind={obj.kind}
+                name={name}
+                k8sPath={k8sPath}
+                permissionResource={permissionResource}
+                updateAllowed={update.allowed}
+                updateReason={update.disabledReason || update.reason}
+                onEdit={startEdit}
+              />
+              <ResourceActions
+                clusterId={clusterId}
+                kind={obj.kind}
+                namespace={namespace}
+                name={name}
+                replicas={obj.spec?.replicas}
+                paused={
+                  obj.kind === "Deployment"
+                    ? (obj.spec?.paused ?? false)
+                    : undefined
+                }
+                suspended={
+                  obj.kind === "CronJob"
+                    ? (obj.spec?.suspend ?? false)
+                    : undefined
+                }
+                jobTemplate={
+                  obj.kind === "CronJob"
+                    ? (asObject(obj.spec).jobTemplate as Record<
+                        string,
+                        unknown
+                      >)
+                    : undefined
+                }
+                k8sPath={k8sPath}
+                permissionResource={permissionResource}
+                onDeleted={() => void navigate({ to: backTo })}
+              />
+            </>
           )
         }
       />
@@ -257,25 +290,11 @@ export function ResourceDetail({
         error={error}
         updateAllowed={update.allowed}
         forceConflictPermission={manage}
+        yamlEdit={yamlEdit}
         onRetry={() => void resourceQuery.refetch()}
       />
-    </div>
+    </PageShell>
   );
-}
-
-function podStatus(obj?: K8sObject): string | undefined {
-  for (const status of [
-    ...(obj?.status?.initContainerStatuses ?? []),
-    ...(obj?.status?.containerStatuses ?? []),
-  ]) {
-    const waiting = status.state?.waiting;
-    if (waiting?.reason) return waiting.reason;
-    const terminated = status.state?.terminated;
-    if (terminated?.reason && (terminated.exitCode ?? 0) !== 0) {
-      return terminated.reason;
-    }
-  }
-  return obj?.status?.reason ?? obj?.status?.phase;
 }
 
 function asObject(value: unknown): Record<string, unknown> {

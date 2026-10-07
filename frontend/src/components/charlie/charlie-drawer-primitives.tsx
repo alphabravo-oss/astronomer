@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Check, Copy, Loader2 } from "lucide-react";
 
 import type { CharlieTurnProgress } from "./turn-progress";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
 
 export function CharlieProgressIndicator({
   progress,
@@ -58,9 +60,9 @@ export function CharlieProgressIndicator({
           <p className="text-xs font-medium text-muted-foreground">
             Charlie is working
           </p>
-          <p className="truncate text-sm" title={activity}>
-            {activity}
-          </p>
+          <Tooltip content={activity}>
+            <p className="truncate text-sm">{activity}</p>
+          </Tooltip>
         </div>
       </div>
       <div
@@ -76,7 +78,7 @@ export function CharlieProgressIndicator({
           }}
         />
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-11 text-muted-foreground">
         <span>{elapsedSeconds}s elapsed</span>
         {toolCalls > 0 && (
           <span>
@@ -126,14 +128,15 @@ export function CopyMessageButton({ text }: { text: string }) {
     window.setTimeout(() => setCopied(false), 1500);
   };
   return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+    <ActionButton
+      intent="bare"
+      size="none"
+      className="inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-11 text-muted-foreground hover:bg-accent hover:text-foreground"
       aria-label={copied ? "Copied" : "Copy message"}
       onClick={() => void copy()}
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
       {copied ? "Copied" : "Copy"}
-    </button>
+    </ActionButton>
   );
 }

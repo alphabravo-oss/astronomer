@@ -1,11 +1,14 @@
 import type { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
+import { CatalogIcon } from "@/components/catalog/catalog-icon";
 import { QueryStates } from "@/components/ui/query-states";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import type { PaginatedResponse } from "@/types";
-import { Box, ExternalLink, Loader2, Search } from "lucide-react";
+import { ExternalLink, Search } from "lucide-react";
 import type { ClusterAppRow } from "@/lib/api/cluster-apps";
+import { SkeletonCard } from "@/components/ui/skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 export function BrowseView({
   q,
@@ -48,15 +51,21 @@ export function BrowseView({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Filter charts on this page (kube-prometheus, loki, …)"
-          className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm
+          className="w-full h-(--control-h) pl-8 pr-3 rounded-md border border-border bg-background text-sm
             placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
         />
       </div>
       {q.isError ? (
         <QueryStates query={q}>{null}</QueryStates>
       ) : q.isLoading ? (
-        <div className="flex items-center justify-center h-32 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading catalog…
+        <div
+          aria-busy="true"
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          <span className="sr-only">Loading catalog…</span>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       ) : charts.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-6 text-center">
@@ -77,24 +86,19 @@ export function BrowseView({
                 key={c.id}
                 className="border border-border rounded-lg p-3 flex gap-3 bg-card hover:border-muted-foreground/40 transition-colors"
               >
-                <div className="h-10 w-10 shrink-0 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-                  {c.iconUrl ? (
-                    <img
-                      src={c.iconUrl}
-                      alt=""
-                      className="h-10 w-10 object-contain"
-                    />
-                  ) : (
-                    <Box className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
+                <CatalogIcon
+                  src={c.iconUrl}
+                  label={c.displayName || c.name}
+                  className="h-10 w-10 rounded-md"
+                  imageClassName="h-10 w-10"
+                />
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-medium text-sm text-foreground truncate">
                       {c.displayName || c.name}
                     </div>
                     {c.deprecated && (
-                      <span className="text-[10px] text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded-sm">
+                      <span className="text-10 text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded-sm">
                         deprecated
                       </span>
                     )}
@@ -106,7 +110,7 @@ export function BrowseView({
                   )}
                   <div className="flex items-center justify-between gap-2 pt-1">
                     {existing ? (
-                      <span className="text-[11px] text-status-success font-medium inline-flex items-center gap-1">
+                      <span className="text-11 text-status-success font-medium inline-flex items-center gap-1">
                         Installed
                         {existing.sourceKind === "tool" && (
                           <span className="text-muted-foreground font-normal">
@@ -115,25 +119,28 @@ export function BrowseView({
                         )}
                       </span>
                     ) : (
-                      <button
-                        className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
-                        disabled={!installDecision.allowed}
-                        title={
+                      <BareButton
+                        tooltip={
+                          !installDecision.allowed ? undefined : "Install chart"
+                        }
+                        disabledReason={
                           !installDecision.allowed
                             ? permissionDeniedReason(installDecision)
-                            : "Install chart"
+                            : undefined
                         }
+                        className="text-11 inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline font-normal"
+                        disabled={!installDecision.allowed}
                         onClick={() => onInstall(c.id, c.name)}
                       >
                         Install →
-                      </button>
+                      </BareButton>
                     )}
                     {c.homeUrl && (
                       <a
                         href={c.homeUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                        className="text-11 text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
                       >
                         Docs <ExternalLink className="h-2.5 w-2.5" />
                       </a>

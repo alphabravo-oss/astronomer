@@ -210,6 +210,7 @@ export interface OpenAPIComponents {
           "target_version": string;
           "current_image"?: string;
           "target_image": string;
+          "target_pull_policy": "Always" | "IfNotPresent" | "Never";
           "rollback_image"?: string;
           "privilege_profile": string;
           "agent_overrides": OpenAPIComponents['schemas']['AgentOverrides'];
@@ -230,6 +231,7 @@ export interface OpenAPIComponents {
     AgentUpgradePlanRequest: {
           "target_version"?: string;
           "target_image"?: string;
+          "target_pull_policy"?: "Always" | "IfNotPresent" | "Never";
           "strategy"?: string;
           "canary_cluster_ids"?: string[];
           "batch_size"?: number;
@@ -800,6 +802,10 @@ export interface OpenAPIComponents {
         };
     CatalogRepositorySyncReceiptEnvelope: {
           "data": OpenAPIComponents['schemas']['CatalogRepositorySyncReceipt'];
+        };
+    CatalogUninstallRequest: {
+          "confirm_data_deletion"?: boolean;
+          "confirm_failed_release_cleanup"?: boolean;
         };
     CatalogUserDiscovery: {
           "chart_id": string;
@@ -2359,6 +2365,10 @@ export interface OpenAPIComponents {
           "operator": "In" | "NotIn" | "Exists" | "DoesNotExist";
           "values"?: string[];
         };
+    DeliveryObservation: {
+          "state": "current" | "stale" | "unsynced" | "denied" | "absent" | "disconnected" | "unavailable";
+          "observed_at"?: string;
+        };
     DeliveryOverrideSet: OpenAPIComponents['schemas']['DeliveryOverrideSetWrite'] & {
           "id": string;
           "project_id": string;
@@ -2461,6 +2471,7 @@ export interface OpenAPIComponents {
           "name": string;
         };
     DeliveryResourceInventory: {
+          "observation"?: OpenAPIComponents['schemas']['DeliveryObservation'];
           "entries": number;
           "ready": number;
           "failed": number;
@@ -2716,6 +2727,7 @@ export interface OpenAPIComponents {
           "data": OpenAPIComponents['schemas']['DeliverySystemCompatibility'];
         };
     DeliverySystemComponent: {
+          "observation"?: OpenAPIComponents['schemas']['DeliveryObservation'];
           "id": string;
           "name": string;
           "category": string;
@@ -4093,6 +4105,21 @@ export interface OpenAPIComponents {
           "desiredSpecHash": string;
           "requiresReplace": boolean;
           "replaceReasons": string[] | null;
+          "blocked"?: boolean;
+          "operatorConflicts"?: Array<{
+            "namespace": string;
+            "name": string;
+            "releaseName"?: string;
+            "watchedNamespaces"?: string[];
+            "excludedNamespaces"?: string[];
+            "watchesAllNamespaces": boolean;
+          }>;
+          "baselineOwnership"?: {
+            "detected": boolean;
+            "mode": "full_stack" | "reuse";
+            "components": string[];
+            "message"?: string;
+          };
         };
     MonitoringStackPreviewEnvelope: {
           "data": OpenAPIComponents['schemas']['MonitoringStackPreview'];
@@ -5524,6 +5551,40 @@ export interface OpenAPIComponents {
           "status_url": string;
           "download_url"?: string;
         };
+    TableView: {
+          "id": string;
+          "table_key": string;
+          "name": string;
+          "state": OpenAPIComponents['schemas']['TableViewState'];
+          "is_default": boolean;
+          "created_at": string;
+          "updated_at": string;
+        };
+    TableViewCreateRequest: {
+          "table_key": string;
+          "name": string;
+          "state": OpenAPIComponents['schemas']['TableViewState'];
+        };
+    TableViewState: {
+          "v"?: number;
+          "search"?: string;
+          "filters"?: Record<string, string[]>;
+          "sort"?: Array<{
+            "id": string;
+            "desc": boolean;
+          }>;
+          "hidden"?: string[];
+          "order"?: string[];
+          "pinning"?: {
+            "start"?: string[];
+            "end"?: string[];
+          };
+        };
+    TableViewUpdateRequest: {
+          "name"?: string;
+          "state"?: OpenAPIComponents['schemas']['TableViewState'];
+          "is_default"?: boolean;
+        };
     TaskOutboxEntryEnvelope: {
           "data": OpenAPIComponents['schemas']['TaskOutboxEntryWire'];
         };
@@ -5561,6 +5622,16 @@ export interface OpenAPIComponents {
           "version"?: string;
           "values_key"?: string;
         };
+    ToolConfiguration: {
+          "preset": string;
+          "values_yaml": string;
+          "releases": Array<{
+            "id": string;
+            "release_name": string;
+            "namespace": string;
+            "revision": number;
+          }>;
+        };
     ToolControllerStatus: {
           "reconciler": OpenAPIComponents['schemas']['ControllerReconcilerStatus'];
           "tools": {
@@ -5575,16 +5646,24 @@ export interface OpenAPIComponents {
     ToolControllerStatusEnvelope: {
           "data": OpenAPIComponents['schemas']['ToolControllerStatus'];
         };
+    ToolFormCondition: {
+          "path": string;
+          "equals": string;
+        };
     ToolFormField: {
           "path": string;
           "label": string;
-          "type": "string" | "number" | "boolean" | "select" | "storage";
+          "type": "string" | "number" | "boolean" | "select" | "multiline" | "storage";
           "group": string;
           "default"?: string;
           "options"?: string[];
           "help"?: string;
           "placeholder"?: string;
           "storage_class_path"?: string;
+          "minimum"?: number;
+          "maximum"?: number;
+          "step"?: number;
+          "show_when"?: OpenAPIComponents['schemas']['ToolFormCondition'];
         };
     ToolFormSchema: {
           "fields": OpenAPIComponents['schemas']['ToolFormField'][];
@@ -5611,6 +5690,11 @@ export interface OpenAPIComponents {
           "detail"?: Record<string, unknown> | null;
           "createdAt": string;
         };
+    ToolPreflightCheck: {
+          "code": string;
+          "status": "pass" | "warn" | "block";
+          "message": string;
+        };
     ToolPreview: {
           "charts": Array<{
             "chart_name": string;
@@ -5620,9 +5704,12 @@ export interface OpenAPIComponents {
             "values_yaml": string;
           }>;
           "preset": string;
+          "checks": OpenAPIComponents['schemas']['ToolPreflightCheck'][];
         };
     ToolUninstallRequest: {
           "cluster_id": string;
+          "confirm_data_deletion"?: boolean;
+          "confirm_failed_release_cleanup"?: boolean;
         };
     UpdateClusterGroupRequest: {
           "name": string;
@@ -9163,6 +9250,21 @@ export interface OpenAPIOperations {
         "data"?: OpenAPIComponents['schemas']['ToolOperation'];
       };
   };
+  "getToolsBySlugConfiguration": {
+    method: "GET";
+    path: "/api/v1/tools/{slug}/configuration";
+    arguments: {
+        "path": {
+          "slug": string;
+        };
+        "query": {
+          "cluster_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['ToolConfiguration'];
+      };
+  };
   "postToolsBySlugInstall": {
     method: "POST";
     path: "/api/v1/tools/{slug}/install";
@@ -10194,6 +10296,51 @@ export interface OpenAPIOperations {
         "data": OpenAPIComponents['schemas']['UserPreferences'];
       };
   };
+  "getAuthMeTableViews": {
+    method: "GET";
+    path: "/api/v1/auth/me/table-views/";
+    arguments: {
+        "query": {
+          "table_key": string;
+        };
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['TableView'][];
+      };
+  };
+  "postAuthMeTableViews": {
+    method: "POST";
+    path: "/api/v1/auth/me/table-views/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['TableViewCreateRequest'];
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['TableView'];
+      };
+  };
+  "patchAuthMeTableViewsById": {
+    method: "PATCH";
+    path: "/api/v1/auth/me/table-views/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": OpenAPIComponents['schemas']['TableViewUpdateRequest'];
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['TableView'];
+      };
+  };
+  "deleteAuthMeTableViewsById": {
+    method: "DELETE";
+    path: "/api/v1/auth/me/table-views/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
   "postAuthLogout": {
     method: "POST";
     path: "/api/v1/auth/logout/";
@@ -10815,6 +10962,9 @@ export interface OpenAPIOperations {
     arguments: {
         "path": {
           "id": string;
+        };
+        "query"?: {
+          "scope"?: "full" | "agent";
         };
       };
     response: string;
@@ -12453,9 +12603,12 @@ export interface OpenAPIOperations {
           "chart_version_id": string;
           "namespace": string;
           "values_override"?: string;
+          "operation"?: "install" | "upgrade";
         };
       };
-    response: OpenAPIComponents['schemas']['CatalogInstallationPreview'];
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CatalogInstallationPreview'];
+      };
   };
   "getCatalogCharts": {
     method: "GET";
@@ -12522,10 +12675,12 @@ export interface OpenAPIOperations {
           "version"?: string;
         };
       };
-    response: {
-        "chart"?: string;
-        "version"?: string;
-        "readme"?: string;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "chart"?: string;
+          "version"?: string;
+          "readme"?: string;
+        };
       };
   };
   "getCatalogChartsByIdValues": {
@@ -12541,11 +12696,13 @@ export interface OpenAPIOperations {
           "version"?: string;
         };
       };
-    response: {
-        "chart"?: string;
-        "version"?: string;
-        "default_values"?: string;
-        "values_schema"?: Record<string, unknown>;
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: {
+          "chart"?: string;
+          "version"?: string;
+          "default_values"?: string;
+          "values_schema"?: Record<string, unknown>;
+        };
       };
   };
   "getCatalogChartsByIdVersions": {
@@ -12666,6 +12823,7 @@ export interface OpenAPIOperations {
         "headerParams": {
           "Idempotency-Key": string;
         };
+        "body"?: OpenAPIComponents['schemas']['CatalogUninstallRequest'];
       };
     response: OpenAPIComponents['schemas']['CatalogOperationEnvelope'];
   };
@@ -16587,6 +16745,7 @@ export type CatalogOperationEvent = OpenAPIComponents['schemas']['CatalogOperati
 export type CatalogPrerequisiteCheck = OpenAPIComponents['schemas']['CatalogPrerequisiteCheck'];
 export type CatalogRepositorySyncReceipt = OpenAPIComponents['schemas']['CatalogRepositorySyncReceipt'];
 export type CatalogRepositorySyncReceiptEnvelope = OpenAPIComponents['schemas']['CatalogRepositorySyncReceiptEnvelope'];
+export type CatalogUninstallRequest = OpenAPIComponents['schemas']['CatalogUninstallRequest'];
 export type CatalogUserDiscovery = OpenAPIComponents['schemas']['CatalogUserDiscovery'];
 export type CharlieAbortRequest = OpenAPIComponents['schemas']['CharlieAbortRequest'];
 export type CharlieAccessRequest = OpenAPIComponents['schemas']['CharlieAccessRequest'];
@@ -16772,6 +16931,7 @@ export type DeliveryHelmRenderer = OpenAPIComponents['schemas']['DeliveryHelmRen
 export type DeliveryImmutableRevision = OpenAPIComponents['schemas']['DeliveryImmutableRevision'];
 export type DeliveryKustomizeRenderer = OpenAPIComponents['schemas']['DeliveryKustomizeRenderer'];
 export type DeliveryLabelExpression = OpenAPIComponents['schemas']['DeliveryLabelExpression'];
+export type DeliveryObservation = OpenAPIComponents['schemas']['DeliveryObservation'];
 export type DeliveryOverrideSet = OpenAPIComponents['schemas']['DeliveryOverrideSet'];
 export type DeliveryOverrideSetEnvelope = OpenAPIComponents['schemas']['DeliveryOverrideSetEnvelope'];
 export type DeliveryOverrideSetPage = OpenAPIComponents['schemas']['DeliveryOverrideSetPage'];
@@ -17169,16 +17329,23 @@ export type StorageTestResult = OpenAPIComponents['schemas']['StorageTestResult'
 export type StreamTicketRequest = OpenAPIComponents['schemas']['StreamTicketRequest'];
 export type StreamTicketResponse = OpenAPIComponents['schemas']['StreamTicketResponse'];
 export type SupportBundleOperation = OpenAPIComponents['schemas']['SupportBundleOperation'];
+export type TableView = OpenAPIComponents['schemas']['TableView'];
+export type TableViewCreateRequest = OpenAPIComponents['schemas']['TableViewCreateRequest'];
+export type TableViewState = OpenAPIComponents['schemas']['TableViewState'];
+export type TableViewUpdateRequest = OpenAPIComponents['schemas']['TableViewUpdateRequest'];
 export type TaskOutboxEntryEnvelope = OpenAPIComponents['schemas']['TaskOutboxEntryEnvelope'];
 export type TaskOutboxEntryWire = OpenAPIComponents['schemas']['TaskOutboxEntryWire'];
 export type ToolActionRequest = OpenAPIComponents['schemas']['ToolActionRequest'];
 export type ToolChart = OpenAPIComponents['schemas']['ToolChart'];
+export type ToolConfiguration = OpenAPIComponents['schemas']['ToolConfiguration'];
 export type ToolControllerStatus = OpenAPIComponents['schemas']['ToolControllerStatus'];
 export type ToolControllerStatusEnvelope = OpenAPIComponents['schemas']['ToolControllerStatusEnvelope'];
+export type ToolFormCondition = OpenAPIComponents['schemas']['ToolFormCondition'];
 export type ToolFormField = OpenAPIComponents['schemas']['ToolFormField'];
 export type ToolFormSchema = OpenAPIComponents['schemas']['ToolFormSchema'];
 export type ToolOperation = OpenAPIComponents['schemas']['ToolOperation'];
 export type ToolOperationEvent = OpenAPIComponents['schemas']['ToolOperationEvent'];
+export type ToolPreflightCheck = OpenAPIComponents['schemas']['ToolPreflightCheck'];
 export type ToolPreview = OpenAPIComponents['schemas']['ToolPreview'];
 export type ToolUninstallRequest = OpenAPIComponents['schemas']['ToolUninstallRequest'];
 export type UpdateClusterGroupRequest = OpenAPIComponents['schemas']['UpdateClusterGroupRequest'];

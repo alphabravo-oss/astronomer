@@ -72,7 +72,7 @@ export function CodeBlock({
 
       {/* Code */}
       <div className="overflow-x-auto bg-terminal text-terminal-foreground">
-        <pre className="p-4 text-[13px] leading-6 font-mono">
+        <pre className="p-4 text-13 leading-6 font-mono">
           <code>
             {lines.map((line, i) => (
               <div key={i} className="flex">

@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   AlertTriangle,
 } from "lucide-react";
+import { BareButton } from "@/components/form/bare-button";
 
 /**
  * Phase B5 — CIS scan wizard.
@@ -187,9 +188,8 @@ function NewScanWizardPage() {
                 {(profilesData?.items ?? []).map((p) => {
                   const recommended = p.name === recommendedName;
                   return (
-                    <button
+                    <BareButton
                       key={p.name}
-                      type="button"
                       onClick={() => setProfile(p.name)}
                       className={cn(
                         "w-full flex items-center justify-between rounded-md border px-4 py-3 text-left transition-colors",
@@ -219,7 +219,7 @@ function NewScanWizardPage() {
                       {profile === p.name && (
                         <CheckCircle2 className="h-4 w-4 text-primary" />
                       )}
-                    </button>
+                    </BareButton>
                   );
                 })}
               </div>

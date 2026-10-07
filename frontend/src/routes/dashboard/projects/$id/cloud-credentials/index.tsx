@@ -45,6 +45,9 @@ import type {
   CloudCredentialTestResult,
 } from "@/lib/api/project-detail";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/tooltip";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function CloudCredentialsListPage() {
   const params = Route.useParams();
@@ -103,9 +106,7 @@ function CloudCredentialsListPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
+        <LoadingSkeleton label="Loading" heading />
       ) : credentials.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-8 text-center space-y-2">
           <p className="text-sm text-foreground">No cloud credentials yet.</p>
@@ -153,7 +154,7 @@ function CloudCredentialsListPage() {
                           {cred.name}
                         </p>
                         {cred.description && (
-                          <p className="text-xs text-muted-foreground truncate max-w-[260px]">
+                          <p className="text-xs text-muted-foreground truncate max-w-65">
                             {cred.description}
                           </p>
                         )}
@@ -178,8 +179,7 @@ function CloudCredentialsListPage() {
                       </span>
                     </TableCell>
                     <TableCell className="py-2 px-3">
-                      <button
-                        type="button"
+                      <BareButton
                         onClick={() => handleTest(cred)}
                         disabled={testing}
                         className="inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border border-border text-xs hover:bg-accent transition-colors disabled:opacity-50"
@@ -194,46 +194,47 @@ function CloudCredentialsListPage() {
                           <AlertCircle className="h-3 w-3 text-muted-foreground" />
                         )}
                         Test
-                      </button>
+                      </BareButton>
                       {result && (
-                        <p
-                          className={cn(
-                            "text-2xs mt-0.5 max-w-[200px] truncate",
-                            result.ok
-                              ? "text-status-success"
-                              : "text-status-error",
-                          )}
-                          title={result.message || result.detail}
-                        >
-                          {result.ok
-                            ? result.message || "Credential valid"
-                            : result.message || "Test failed"}
-                        </p>
+                        <Tooltip content={result.message || result.detail}>
+                          <p
+                            className={cn(
+                              "text-2xs mt-0.5 max-w-50 truncate",
+                              result.ok
+                                ? "text-status-success"
+                                : "text-status-error",
+                            )}
+                          >
+                            {result.ok
+                              ? result.message || "Credential valid"
+                              : result.message || "Test failed"}
+                          </p>
+                        </Tooltip>
                       )}
                     </TableCell>
                     <TableCell className="py-2 px-3 pr-4">
                       <div className="flex items-center justify-end gap-1">
                         {canEdit && (
-                          <button
-                            type="button"
+                          <BareButton
+                            aria-label="Edit credential"
                             onClick={() =>
                               void navigate({ to: `/dashboard/projects/${projectId}/cloud-credentials/${cred.id}/edit` })
                             }
                             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                            title="Edit credential"
+                            tooltip="Edit credential"
                           >
                             <PencilLine className="h-3.5 w-3.5" />
-                          </button>
+                          </BareButton>
                         )}
                         {canEdit && (
-                          <button
-                            type="button"
+                          <BareButton
+                            aria-label="Delete credential"
                             onClick={() => setDeleteTarget(cred)}
                             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-                            title="Delete credential"
+                            tooltip="Delete credential"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          </BareButton>
                         )}
                       </div>
                     </TableCell>

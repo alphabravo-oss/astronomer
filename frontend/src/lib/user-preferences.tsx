@@ -15,6 +15,7 @@ import {
   putUserPreferences,
   type UserPreferences,
 } from "@/lib/api/user-preferences";
+import { applyDensity } from "@/lib/density";
 import { setDateFormatPreference, setTimeFormatPreference } from "@/lib/utils";
 
 interface UserPreferencesContextValue {
@@ -58,6 +59,14 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
     setDateFormatPreference(preferences.date_format ?? "locale");
   }, [preferences.date_format]);
 
+  const isServerOwned = isAuthenticated && !!userID && query.isSuccess;
+  useEffect(() => {
+    // Only the server-owned value may touch the cache: the default shown while
+    // loading must not clear the pre-paint hint and flash comfortable rows.
+    if (isServerOwned) applyDensity(preferences.table_density);
+    else if (!isAuthenticated) applyDensity(null);
+  }, [isAuthenticated, isServerOwned, preferences.table_density]);
+
   const mutation = useMutation({
     // Full-document PUTs are serialized so rapid control changes cannot reach
     // the server out of order and resurrect an older preference document.
@@ -95,10 +104,19 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
       isLoading: isAuthenticated && !!userID && query.isLoading,
       isSaving: isPending,
       saveError,
-      isServerOwned: isAuthenticated && !!userID && query.isSuccess,
+      isServerOwned,
       updatePreferences,
     }),
-    [isAuthenticated, isPending, preferences, query.isLoading, query.isSuccess, saveError, updatePreferences, userID],
+    [
+      isAuthenticated,
+      isPending,
+      preferences,
+      query.isLoading,
+      isServerOwned,
+      saveError,
+      updatePreferences,
+      userID,
+    ],
   );
   return (
     <UserPreferencesContext.Provider value={value}>

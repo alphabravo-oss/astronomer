@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
@@ -107,6 +108,21 @@ func TestHydrateChartVersionEnforcesEndToEndDeadline(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
 		t.Fatalf("hydration exceeded strict deadline: %s", elapsed)
+	}
+}
+
+func TestHydrateChartVersionRefreshesLegacySchemaCache(t *testing.T) {
+	current := sqlc.HelmChartVersion{
+		ValuesSchema:      []byte(`{"type":"object","x-astronomer-hydration-version":5}`),
+		ContentHydratedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+	if _, err := (*CatalogHandler)(nil).hydrateChartVersion(context.Background(), current); err != nil {
+		t.Fatalf("current cache should be returned without a handler: %v", err)
+	}
+	legacy := current
+	legacy.ValuesSchema = []byte(`{"type":"object","x-astronomer-hydration-version":4}`)
+	if _, err := (*CatalogHandler)(nil).hydrateChartVersion(context.Background(), legacy); err == nil {
+		t.Fatal("legacy schema cache should require rehydration")
 	}
 }
 

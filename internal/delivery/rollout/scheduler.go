@@ -274,11 +274,7 @@ func evaluateProgressing(input EvaluateInput, clusters []ClusterRuntime, decisio
 	}
 	maxUnavailable := amountLimit(plan.Strategy.MaxUnavailable, len(clusters))
 	availabilitySlots := maxUnavailable - atRisk
-	if availabilitySlots <= 0 {
-		decision.Blocked = BlockUnavailable
-		return nil
-	}
-	concurrencySlots = min(concurrencySlots, availabilitySlots)
+	availabilityBlocked := false
 	for _, planned := range plan.Clusters {
 		if concurrencySlots == 0 {
 			break
@@ -288,6 +284,13 @@ func evaluateProgressing(input EvaluateInput, clusters []ClusterRuntime, decisio
 		}
 		cluster := clusters[planned.Order]
 		if cluster.State != model.RolloutClusterPending || !cluster.Connected {
+			continue
+		}
+		// Releasing an already-unavailable target is a repair and cannot make
+		// the fleet less available. Requiring another unavailable slot here
+		// deadlocks retries after a failed deployment has consumed the budget.
+		if cluster.Available && availabilitySlots <= 0 {
+			availabilityBlocked = true
 			continue
 		}
 		desired := plan.Desired
@@ -300,8 +303,15 @@ func evaluateProgressing(input EvaluateInput, clusters []ClusterRuntime, decisio
 		}
 		decision.Releases = append(decision.Releases, release)
 		concurrencySlots--
+		if cluster.Available {
+			availabilitySlots--
+		}
 	}
 	if len(decision.Releases) == 0 && decision.Blocked == BlockNone {
+		if availabilityBlocked {
+			decision.Blocked = BlockUnavailable
+			return nil
+		}
 		for _, planned := range plan.Clusters {
 			cluster := clusters[planned.Order]
 			if planned.Cohort == cohortIndex && (cluster.State == model.RolloutClusterBlocked || !cluster.Connected) {

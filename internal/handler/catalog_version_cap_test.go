@@ -56,6 +56,10 @@ type capHandlerQuerier struct {
 	versions []string
 }
 
+func (q *capHandlerQuerier) ListApplicationCatalogPinsByRepository(context.Context, uuid.UUID) ([]sqlc.ListApplicationCatalogPinsByRepositoryRow, error) {
+	return []sqlc.ListApplicationCatalogPinsByRepositoryRow{{ChartName: "app", Version: "0.9.0"}}, nil
+}
+
 func (q *capHandlerQuerier) GetHelmChartByRepoAndName(context.Context, sqlc.GetHelmChartByRepoAndNameParams) (sqlc.HelmChart, error) {
 	return sqlc.HelmChart{}, pgx.ErrNoRows
 }
@@ -89,6 +93,10 @@ type capWorkerQuerier struct {
 	tasks.RuntimeQuerier
 	repos    []sqlc.HelmRepository
 	versions []string
+}
+
+func (q *capWorkerQuerier) ListApplicationCatalogPinsByRepository(context.Context, uuid.UUID) ([]sqlc.ListApplicationCatalogPinsByRepositoryRow, error) {
+	return []sqlc.ListApplicationCatalogPinsByRepositoryRow{{ChartName: "app", Version: "0.9.0"}}, nil
 }
 
 func (q *capWorkerQuerier) ListEnabledHelmRepositories(context.Context) ([]sqlc.HelmRepository, error) {
@@ -152,10 +160,11 @@ func TestHandlerAndWorkerIngestTheSameVersionSet(t *testing.T) {
 			t.Fatalf("version sets differ: handler=%v worker=%v", hq.versions, wq.versions)
 		}
 	}
-	// And both must be the NEWEST N, not the first N in file order.
-	want := []string{"1.4.2", "2.0.0", "2.1.0"}
-	if len(hq.versions) != catalog.MaxIndexVersionsPerChart {
-		t.Fatalf("expected the cap (%d) to apply, got %v", catalog.MaxIndexVersionsPerChart, hq.versions)
+	// Both retain the newest N plus the verified application pin that has
+	// already fallen outside the browse window.
+	want := []string{"0.9.0", "1.4.2", "2.0.0", "2.1.0"}
+	if len(hq.versions) != catalog.MaxIndexVersionsPerChart+1 {
+		t.Fatalf("expected the cap (%d) plus one catalog pin, got %v", catalog.MaxIndexVersionsPerChart, hq.versions)
 	}
 	for i := range want {
 		if hq.versions[i] != want[i] {

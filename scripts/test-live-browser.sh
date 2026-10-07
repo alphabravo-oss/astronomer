@@ -22,12 +22,11 @@ if [[ "$trivy_enabled" != 0 && "$trivy_enabled" != 1 ]]; then
 	echo "test-live-browser: LIVE_BROWSER_TRIVY_ENABLED must be 0 or 1" >&2
 	exit 2
 fi
-trivy_chart_version="0.36.0"
-trivy_chart_digest="sha256:bb0c44bc70e3158cc63ea49d7458ede6db5b6c932f6585a2d787eb9712fd4288"
+trivy_chart_version="0.37.0"
+trivy_chart_digest="sha256:6d23f16d950496d17253258ca2e52bd068959041298e66c0652bf0841ccedf69"
 trivy_rollout_id=""
 trivy_target_id=""
-minio_server_commit="0d7408fc9969caf07de6a8c3a84f9fbb10a6739e"
-minio_client_commit="b00526b153a31b36767991a4f5ce2cced435ee8e"
+rustfs_image="rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c"
 
 for tool in base64 curl docker git go helm k3d kubectl npm openssl python3 setsid sha256sum; do
   command -v "$tool" >/dev/null 2>&1 || {
@@ -44,13 +43,18 @@ suffix="$$-$(date +%s)-$(openssl rand -hex 4)"
 artifact_dir="${LIVE_BROWSER_ARTIFACT_DIR:-${TMPDIR:-/tmp}/astronomer-live-browser-$suffix}"
 mkdir -p "$artifact_dir/bin" "$artifact_dir/playwright-report" "$artifact_dir/test-results"
 artifact_dir="$(cd "$artifact_dir" && pwd)"
-minio_build_dir="$(mktemp -d)"
+if [[ "${LIVE_BROWSER_ENGINEERING:-0}" != "1" ]]; then
+  cat >"$artifact_dir/engineering-not-run.json" <<'JSON'
+{"schema_version":"astronomer-browser-engineering/v1","scope":"engineering_browser_measurement","qualification":"not_evaluated","collection_status":"not_run","reason":"engineering_mode_disabled"}
+JSON
+fi
 
 postgres_container="astronomer-live-browser-pg-$suffix"
 redis_container="astronomer-live-browser-redis-$suffix"
 flux_fixture_container="astronomer-live-browser-flux-$suffix"
 flux_fixture_runtime_image="astronomer-flux-fixture-runtime:alpine-3.22-git-2.49.1"
-minio_fixture_image="astronomer-minio-fixture:$suffix"
+rustfs_fixture_image="astronomer-rustfs-fixture:$suffix"
+s3_client_image="astronomer-s3-client-fixture:$suffix"
 postgres_user="live_browser"
 postgres_database="live_browser"
 postgres_credential="$(openssl rand -hex 24)"
@@ -80,8 +84,8 @@ flux_created=0
 backup_namespace="live-backup-source"
 backup_configmap="live-backup-payload"
 backup_message="before-backup-round-trip-$suffix"
-minio_user="live-browser"
-minio_password="$(openssl rand -hex 24)"
+s3_user="live-browser"
+s3_password="$(openssl rand -hex 24)"
 
 port_is_free() {
   python3 - "$1" <<'PY'
@@ -127,37 +131,50 @@ process_alive() {
   [[ -n "$1" ]] && kill -0 "$1" >/dev/null 2>&1
 }
 
-run_minio_client() {
+run_s3_client() {
 	local pod_name="$1"
 	local log_file="$2"
 	local client_command="$3"
 	local phase=""
 
-	KUBECONFIG="$flux_kubeconfig" kubectl -n minio delete pod "$pod_name" \
+	KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs delete pod "$pod_name" \
 		--ignore-not-found --wait=true >/dev/null
-	KUBECONFIG="$flux_kubeconfig" kubectl -n minio run "$pod_name" \
-		--image="$minio_fixture_image" --image-pull-policy=Never \
-		--restart=Never --command -- sh -c "$client_command" >/dev/null
+	# Client variables expand inside the pod shell.
+	# shellcheck disable=SC2016
+	KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs run "$pod_name" \
+		--image="$s3_client_image" --image-pull-policy=Never \
+		--restart=Never --command -- sh -ec '
+      # Pod readiness can precede Service endpoint/kube-proxy convergence.
+      # Probe from the actual client network before running the operation once.
+      for attempt in $(seq 1 30); do
+        if wget -q -T 2 -O /dev/null http://rustfs.rustfs.svc.cluster.local:9000/health/ready; then
+          exec sh -ec "$1"
+        fi
+        sleep 1
+      done
+      echo "RustFS Service did not become ready from the client pod" >&2
+      exit 1
+    ' sh "$client_command" >/dev/null
 	for _ in $(seq 1 120); do
-		phase="$(KUBECONFIG="$flux_kubeconfig" kubectl -n minio get pod "$pod_name" \
+		phase="$(KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs get pod "$pod_name" \
 			-o jsonpath='{.status.phase}' 2>/dev/null || true)"
 		case "$phase" in
 		Succeeded)
-			KUBECONFIG="$flux_kubeconfig" kubectl -n minio logs "$pod_name" >"$log_file"
-			KUBECONFIG="$flux_kubeconfig" kubectl -n minio delete pod "$pod_name" --wait=true >/dev/null
+			KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs logs "$pod_name" >"$log_file"
+			KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs delete pod "$pod_name" --wait=true >/dev/null
 			return 0
 			;;
 		Failed)
-			KUBECONFIG="$flux_kubeconfig" kubectl -n minio logs "$pod_name" >"$log_file" 2>&1 || true
-			KUBECONFIG="$flux_kubeconfig" kubectl -n minio delete pod "$pod_name" --wait=true >/dev/null
+			KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs logs "$pod_name" >"$log_file" 2>&1 || true
+			KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs delete pod "$pod_name" --wait=true >/dev/null
 			return 1
 			;;
 		esac
 		sleep 1
 	done
-	KUBECONFIG="$flux_kubeconfig" kubectl -n minio logs "$pod_name" >"$log_file" 2>&1 || true
-	KUBECONFIG="$flux_kubeconfig" kubectl -n minio delete pod "$pod_name" --wait=true >/dev/null
-	echo "test-live-browser: MinIO client pod timed out: $pod_name" >&2
+	KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs logs "$pod_name" >"$log_file" 2>&1 || true
+	KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs delete pod "$pod_name" --wait=true >/dev/null
+	echo "test-live-browser: S3 client pod timed out: $pod_name" >&2
 	return 1
 }
 
@@ -242,8 +259,7 @@ cleanup() {
 		k3d cluster delete "$flux_cluster" >/dev/null 2>&1 || true
 	fi
   docker rm -f "$postgres_container" "$redis_container" "$flux_fixture_container" >/dev/null 2>&1 || true
-	docker image rm "$minio_fixture_image" >/dev/null 2>&1 || true
-	rm -rf -- "$minio_build_dir"
+	docker image rm "$s3_client_image" "$rustfs_fixture_image" >/dev/null 2>&1 || true
   printf 'exit_status=%d\n' "$status" >"$artifact_dir/result.txt"
   echo "test-live-browser: artifacts: $artifact_dir"
   exit "$status"
@@ -400,13 +416,11 @@ git -C "$artifact_dir/flux-worktree" commit -m "live browser Flux fixture" >/dev
 git_revision="$(git -C "$artifact_dir/flux-worktree" rev-parse HEAD)"
 git clone --bare "$artifact_dir/flux-worktree" "$flux_fixture_root/git/repository.git" >/dev/null
 git_digest="sha256:$(git -C "$artifact_dir/flux-worktree" archive HEAD | sha256sum | awk '{print $1}')"
-CGO_ENABLED=0 GOBIN="$minio_build_dir" go install \
-	"github.com/minio/minio@$minio_server_commit" >"$artifact_dir/build-minio-server.log" 2>&1
-CGO_ENABLED=0 GOBIN="$minio_build_dir" go install \
-	"github.com/minio/mc@$minio_client_commit" >"$artifact_dir/build-minio-client.log" 2>&1
-docker build --pull=false -t "$minio_fixture_image" \
-	-f scripts/testdata/live-browser-fixture/Dockerfile.minio-source "$minio_build_dir" \
-	>"$artifact_dir/build-minio-image.log"
+docker pull "$rustfs_image" >"$artifact_dir/pull-rustfs.log" 2>&1
+# k3d imports local image tags; the source bytes remain pinned above.
+docker tag "$rustfs_image" "$rustfs_fixture_image"
+docker build --pull=false -t "$s3_client_image" -f deploy/docker/Dockerfile.dr . \
+	>"$artifact_dir/build-s3-client.log" 2>&1
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
 	-subj '/CN=host.k3d.internal' \
 	-addext 'subjectAltName=DNS:host.k3d.internal,DNS:host.docker.internal,DNS:localhost,IP:127.0.0.1' \
@@ -449,7 +463,12 @@ k3d cluster create "$flux_cluster" --servers 1 --agents 0 --no-lb \
 flux_created=1
 k3d kubeconfig get "$flux_cluster" >"$flux_kubeconfig"
 chmod 0600 "$flux_kubeconfig"
-k3d image import "$minio_fixture_image" -c "$flux_cluster" >"$artifact_dir/import-minio-image.log"
+# Export only this host platform: a pulled multi-platform index may reference
+# architectures Docker has not downloaded, which containerd cannot import.
+rustfs_platform="$(docker image inspect "$rustfs_fixture_image" --format '{{.Os}}/{{.Architecture}}')"
+docker save --platform "$rustfs_platform" -o "$artifact_dir/s3-fixture-images.tar" "$rustfs_fixture_image" "$s3_client_image"
+k3d image import "$artifact_dir/s3-fixture-images.tar" -c "$flux_cluster" >"$artifact_dir/import-s3-images.log"
+rm -f "$artifact_dir/s3-fixture-images.tar"
 KUBECONFIG="$flux_kubeconfig" kubectl config view --raw \
 	-o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d >"$direct_api_ca"
 chmod 0600 "$direct_api_ca"
@@ -474,17 +493,17 @@ KUBECONFIG="$flux_kubeconfig" kubectl create configmap live-config -n default \
 	KUBECONFIG="$flux_kubeconfig" kubectl label --local -f - fixture-stage=initial -o yaml | \
 	KUBECONFIG="$flux_kubeconfig" kubectl apply --server-side --field-manager=astronomer -f - >/dev/null
 
-echo "test-live-browser: installing disposable MinIO and Velero backup stack"
-KUBECONFIG="$flux_kubeconfig" kubectl create namespace minio >/dev/null
-KUBECONFIG="$flux_kubeconfig" kubectl -n minio create secret generic minio-root \
-	--from-literal=username="$minio_user" --from-literal=password="$minio_password" >/dev/null
-sed "s|__MINIO_FIXTURE_IMAGE__|$minio_fixture_image|g" \
-	scripts/testdata/live-browser-fixture/velero-minio.yaml.tmpl >"$artifact_dir/velero-minio.yaml"
+echo "test-live-browser: installing disposable RustFS and Velero backup stack"
+KUBECONFIG="$flux_kubeconfig" kubectl create namespace rustfs >/dev/null
+KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs create secret generic rustfs-root \
+	--from-literal=username="$s3_user" --from-literal=password="$s3_password" >/dev/null
+sed "s|__RUSTFS_FIXTURE_IMAGE__|$rustfs_fixture_image|g" \
+	scripts/testdata/live-browser-fixture/velero-rustfs.yaml.tmpl >"$artifact_dir/velero-rustfs.yaml"
 KUBECONFIG="$flux_kubeconfig" kubectl apply \
-	-f "$artifact_dir/velero-minio.yaml" >"$artifact_dir/minio-install.log"
-KUBECONFIG="$flux_kubeconfig" kubectl -n minio rollout status deployment/minio --timeout=3m
-run_minio_client minio-mc-bootstrap "$artifact_dir/minio-bootstrap.log" \
-	"mc alias set local http://minio.minio.svc.cluster.local:9000 '$minio_user' '$minio_password' >/dev/null && mc mb --ignore-existing local/velero"
+	-f "$artifact_dir/velero-rustfs.yaml" >"$artifact_dir/rustfs-install.log"
+KUBECONFIG="$flux_kubeconfig" kubectl -n rustfs rollout status deployment/rustfs --timeout=3m
+run_s3_client rustfs-s3-bootstrap "$artifact_dir/rustfs-bootstrap.log" \
+	"AWS_ACCESS_KEY_ID='$s3_user' AWS_SECRET_ACCESS_KEY='$s3_password' AWS_DEFAULT_REGION=us-east-1 AWS_EC2_METADATA_DISABLED=true aws --endpoint-url http://rustfs.rustfs.svc.cluster.local:9000 s3api create-bucket --bucket velero"
 helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts >/dev/null 2>&1 || true
 helm repo update vmware-tanzu >"$artifact_dir/helm-repo-update.log"
 KUBECONFIG="$flux_kubeconfig" helm upgrade --install velero vmware-tanzu/velero \
@@ -501,7 +520,7 @@ KUBECONFIG="$flux_kubeconfig" helm upgrade --install velero vmware-tanzu/velero 
 	--set 'initContainers[0].volumeMounts[0].name=plugins' \
 	>"$artifact_dir/velero-install.log"
 KUBECONFIG="$flux_kubeconfig" kubectl -n velero rollout status deployment/velero --timeout=5m
-velero_cloud_credentials=$'[default]\naws_access_key_id='"$minio_user"$'\naws_secret_access_key='"$minio_password"
+velero_cloud_credentials=$'[default]\naws_access_key_id='"$s3_user"$'\naws_secret_access_key='"$s3_password"
 KUBECONFIG="$flux_kubeconfig" kubectl -n velero create secret generic live-browser-credentials \
 	--from-literal=cloud="$velero_cloud_credentials" >/dev/null
 KUBECONFIG="$flux_kubeconfig" kubectl apply \
@@ -849,9 +868,9 @@ if [[ ! "$velero_bucket" =~ ^[a-z0-9][a-z0-9.-]*$ || ! "$velero_prefix" =~ ^[a-z
 	exit 1
 fi
 velero_object="${velero_prefix:+$velero_prefix/}backups/$velero_backup_name/$velero_backup_name.tar.gz"
-run_minio_client minio-mc-verify "$artifact_dir/minio-backup-artifacts.log" \
-	"mc alias set local http://minio.minio.svc.cluster.local:9000 '$minio_user' '$minio_password' >/dev/null && mc stat --json 'local/$velero_bucket/$velero_object'"
-grep -Fq -- "$velero_backup_name.tar.gz" "$artifact_dir/minio-backup-artifacts.log" || {
+run_s3_client rustfs-s3-verify "$artifact_dir/rustfs-backup-artifacts.log" \
+	"AWS_ACCESS_KEY_ID='$s3_user' AWS_SECRET_ACCESS_KEY='$s3_password' AWS_DEFAULT_REGION=us-east-1 AWS_EC2_METADATA_DISABLED=true aws --endpoint-url http://rustfs.rustfs.svc.cluster.local:9000 s3api head-object --bucket '$velero_bucket' --key '$velero_object'"
+python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["ContentLength"] > 0' "$artifact_dir/rustfs-backup-artifacts.log" || {
 	echo "test-live-browser: Velero backup artifact is missing from object storage" >&2
 	exit 1
 }

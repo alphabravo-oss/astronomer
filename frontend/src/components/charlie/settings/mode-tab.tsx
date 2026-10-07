@@ -1,7 +1,7 @@
+import { LoadingPanel } from "@/components/charlie/loading-panel";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
-import { StatePanel } from "@/components/ui/empty-state";
+import { AlertTriangle } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { queryKeys } from "@/lib/query-keys";
@@ -17,96 +17,17 @@ import {
   type CharlieMode,
 } from "@/lib/api/charlie-admin";
 import { Meta, Section, Unavailable, button } from "./shared";
+import { ActionButton } from "@/components/ui/action-button";
+import {
+  charlieModeWorkReady,
+  modeAllowedSummary,
+  modeHelp,
+  productModeLabel,
+  type ModeTransitionState,
+} from "./mode-tab-model";
+import { ModeTransitionIndicator } from "./mode-transition-indicator";
 
-const modeHelp: Record<CharlieMode, string> = {
-  disabled:
-    "No new sessions, triggers, findings, claims, approvals, actions, or MCP calls. Health and audit remain available.",
-  read_only:
-    "Charlie can investigate and explain through authorized reads, but cannot propose executable approvals.",
-  approval:
-    "Includes Read only. Charlie may propose bounded actions; an eligible authorized user must approve each exact action.",
-  auto: "Includes Read only and Approval required. Charlie may additionally execute only capabilities explicitly allowed by current product policy and disclosure.",
-};
-const productModeLabel: Record<CharlieMode, string> = {
-  disabled: "Disabled",
-  read_only: "Read only",
-  approval: "Approval required",
-  auto: "Automation",
-};
-/** What operators should expect after a successful transition into each mode. */
-const modeAllowedSummary: Record<CharlieMode, string[]> = {
-  disabled: [
-    "No new Charlie sessions, triggers, findings, or MCP tool calls",
-    "Health, configuration, and audit remain available",
-  ],
-  read_only: [
-    "Chat, investigation, and authorized product reads",
-    "No product writes — write requests stay guidance-only",
-  ],
-  approval: [
-    "All read-only investigation capabilities",
-    "Bounded writes only after an exact human approval of the proposed action",
-  ],
-  auto: [
-    "All read-only investigation capabilities",
-    "Human-approved writes still available",
-    "Only centrally allowlisted, auto-eligible writes may run without a click",
-    "Live RBAC, disclosure, and policy are rechecked on every write",
-  ],
-};
-
-type ModeTransitionPhase =
-  | "idle"
-  | "applying"
-  | "verifying"
-  | "ready"
-  | "failed";
-
-type ModeTransitionState = {
-  phase: ModeTransitionPhase;
-  target?: CharlieMode;
-  from?: CharlieMode;
-  message?: string;
-  startedAt?: number;
-};
-
-/** Agent ceiling verified and live mode matches — safe for product work. */
-export function charlieModeWorkReady(
-  mode: {
-    requested: CharlieMode;
-    authoritative: CharlieMode;
-    workloadCeilingReady: boolean;
-    disablePending?: boolean;
-    emergencyDisabled: boolean;
-  },
-  agent?: {
-    desiredReplicas: number;
-    readyReplicas: number;
-    replicas?: Array<{ state: string }>;
-  } | null,
-): boolean {
-  if (mode.requested !== mode.authoritative) return false;
-  if (!mode.workloadCeilingReady) return false;
-  if (mode.disablePending) return false;
-  if (mode.emergencyDisabled && mode.authoritative !== "disabled") return false;
-  if (agent) {
-    if (
-      agent.desiredReplicas > 0 &&
-      agent.readyReplicas < agent.desiredReplicas
-    ) {
-      return false;
-    }
-    if (
-      agent.replicas?.some(
-        (replica) =>
-          replica.state === "degraded" || replica.state === "unavailable",
-      )
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
+export { charlieModeWorkReady };
 
 export function ModeTab() {
   const qc = useQueryClient();
@@ -286,14 +207,7 @@ export function ModeTab() {
     },
     onError: (e) => toastApiError("Disclosure acknowledgement failed", e),
   });
-  if (q.isLoading)
-    return (
-      <StatePanel
-        icon={Loader2}
-        iconClassName="animate-spin motion-reduce:animate-none"
-        title="Loading Charlie mode"
-      />
-    );
+  if (q.isLoading) return <LoadingPanel title="Loading Charlie mode" />;
   if (q.isError || !q.data)
     return <Unavailable name="Mode control" retry={() => void q.refetch()} />;
   const m = q.data;
@@ -328,135 +242,16 @@ export function ModeTab() {
         description="Charlie is authoritative after readback. Drift can only reduce authority; the UI never assumes a requested mode took effect."
       >
         {/* End-to-end transition indicator: confirm → apply → verify → ready */}
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="charlie-mode-transition"
-          data-phase={transition.phase}
-          className={cn(
-            "rounded-lg border p-4",
-            transition.phase === "ready" &&
-              "border-status-success/40 bg-status-success/5",
-            (transition.phase === "applying" ||
-              transition.phase === "verifying") &&
-              "border-status-info/40 bg-status-info/5",
-            transition.phase === "failed" &&
-              "border-status-error/40 bg-status-error/5",
-            transition.phase === "idle" &&
-              workReady &&
-              "border-border bg-muted/20",
-            transition.phase === "idle" &&
-              !workReady &&
-              "border-status-warning/40 bg-status-warning/5",
-          )}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium">
-                {transition.phase === "applying" && "Changing mode"}
-                {transition.phase === "verifying" &&
-                  "Validating product agents"}
-                {transition.phase === "ready" && "Mode ready for work"}
-                {transition.phase === "failed" && "Mode change incomplete"}
-                {transition.phase === "idle" &&
-                  (disabledConfirmed
-                    ? "Charlie is confirmed disabled"
-                    : workReady
-                      ? "Current mode is ready for work"
-                      : confirmationPending
-                        ? "Mode change is not yet confirmed"
-                        : "Agent ceiling not fully verified")}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {transition.message ||
-                  (disabledConfirmed
-                    ? "Fail-closed is verified on both product-agent replicas. Raise mode after any pending catalog review."
-                    : workReady
-                      ? `${productModeLabel[m.authoritative]} is authoritative and both product-agent replicas match the ceiling.`
-                      : confirmationPending
-                        ? `Both product-agent replicas already report ${productModeLabel[m.requested]}. Charlie has not confirmed that as the live authority yet.`
-                        : "Charlie stays fail-closed for elevated work until both replicas report the requested ceiling.")}
-              </p>
-            </div>
-            <StatusBadge
-              status={
-                transition.phase === "idle" && disabledConfirmed
-                  ? "disabled"
-                  : transition.phase === "ready" ||
-                      (transition.phase === "idle" && workReady)
-                    ? "healthy"
-                    : transition.phase === "failed"
-                      ? "unavailable"
-                      : "degraded"
-              }
-              label={
-                transition.phase === "applying"
-                  ? "Changing"
-                  : transition.phase === "verifying"
-                    ? "Validating"
-                    : transition.phase === "idle" && disabledConfirmed
-                      ? "Disabled"
-                      : transition.phase === "ready" ||
-                          (transition.phase === "idle" && workReady)
-                        ? "Ready"
-                        : transition.phase === "failed"
-                          ? "Failed"
-                          : "Not ready"
-              }
-              pulse={settling}
-              icon={
-                settling ? (
-                  <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
-                ) : transition.phase === "ready" ||
-                  (transition.phase === "idle" && workReady) ? (
-                  <CheckCircle2 className="h-3 w-3" />
-                ) : undefined
-              }
-            />
-          </div>
-          {(settling || transition.phase === "ready") && transition.target && (
-            <ol className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
-              {(
-                [
-                  ["Confirm", true],
-                  [
-                    "Apply ceiling",
-                    transition.phase === "verifying" ||
-                      transition.phase === "ready",
-                  ],
-                  ["Agents ready", transition.phase === "ready"],
-                ] as const
-              ).map(([label, done], index) => (
-                <li
-                  key={label}
-                  className={cn(
-                    "rounded-md border px-3 py-2",
-                    done
-                      ? "border-status-success/30 bg-status-success/5 text-foreground"
-                      : "border-border text-muted-foreground",
-                  )}
-                >
-                  <span className="font-medium">
-                    {index + 1}. {label}
-                  </span>
-                  {index === 1 && transition.phase === "applying" && (
-                    <span className="mt-0.5 block text-muted-foreground">
-                      Rolling CHARLIE_MODE on both agent replicas
-                    </span>
-                  )}
-                  {index === 2 && transition.phase === "verifying" && (
-                    <span className="mt-0.5 block text-muted-foreground">
-                      Waiting for workload_ceiling_ready and ready replicas
-                      {agentQ.data
-                        ? ` (${agentQ.data.readyReplicas}/${agentQ.data.desiredReplicas})`
-                        : ""}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
+        <ModeTransitionIndicator
+          transition={transition}
+          workReady={workReady}
+          disabledConfirmed={disabledConfirmed}
+          confirmationPending={confirmationPending}
+          settling={settling}
+          authoritative={m.authoritative}
+          requested={m.requested}
+          agent={agentQ.data}
+        />
 
         <div
           className="grid gap-3 md:grid-cols-2"
@@ -465,9 +260,10 @@ export function ModeTab() {
         >
           {(["disabled", "read_only", "approval", "auto"] as CharlieMode[]).map(
             (mode) => (
-              <button
+              <ActionButton
+                intent="bare"
+                size="none"
                 key={mode}
-                type="button"
                 aria-pressed={m.authoritative === mode}
                 disabled={
                   m.authoritative === mode ||
@@ -477,7 +273,7 @@ export function ModeTab() {
                 }
                 onClick={() => setNext(mode)}
                 className={cn(
-                  "rounded-lg border p-4 text-left",
+                  "block whitespace-normal rounded-lg border p-4 text-left font-normal",
                   m.authoritative === mode
                     ? "border-primary bg-primary/5"
                     : "border-border hover:bg-accent",
@@ -490,7 +286,7 @@ export function ModeTab() {
                 <span className="mt-1 block text-xs text-muted-foreground">
                   {modeHelp[mode]}
                 </span>
-              </button>
+              </ActionButton>
             ),
           )}
         </div>
@@ -600,13 +396,15 @@ export function ModeTab() {
             <p className="mt-2 break-all text-xs text-muted-foreground">
               Digest: {acceptDigest}
             </p>
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               onClick={() => acknowledge.mutate(acceptDigest)}
               className={`${button} mt-3`}
               disabled={acknowledge.isPending}
             >
               Accept rediscovered catalog
-            </button>
+            </ActionButton>
           </div>
         )}
       </Section>
@@ -614,7 +412,9 @@ export function ModeTab() {
         title="Emergency control"
         description="Immediately fail closed for Charlie activity while preserving health, configuration, and audit access."
       >
-        <button
+        <ActionButton
+          intent="bare"
+          size="none"
           disabled={
             m.emergencyDisabled ||
             m.disablePending ||
@@ -626,7 +426,7 @@ export function ModeTab() {
         >
           <AlertTriangle className="h-4 w-4" />
           Emergency Disable
-        </button>
+        </ActionButton>
       </Section>
       <ConfirmDialog
         open={!!next}

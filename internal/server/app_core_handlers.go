@@ -114,10 +114,12 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	// a document it could not read.
 	alertingHandler.SetEncryptor(encryptor)
 	toolHandler := handler.NewToolHandlerWithHelm(queries, helmRequester)
+	toolHandler.SetK8sRequester(requester)
 	toolHandler.SetRunTx(sqlcMutationTxRunner[handler.ToolMutationTx](database))
 	toolHandler.SetLogger(logger)
 	toolHandler.SetEventBus(bus)
 	catalogHandler := handler.NewCatalogHandlerWithHelm(queries, helmRequester)
+	catalogHandler.SetK8sRequester(requester)
 	catalogHandler.SetRunTx(sqlcMutationTxRunner[handler.CatalogMutationTx](database))
 	catalogHandler.SetLogger(logger)
 	// Migration 145: chart-repository credentials are Fernet-sealed at rest.

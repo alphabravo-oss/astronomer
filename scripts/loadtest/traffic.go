@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -269,24 +270,50 @@ func workloadTarget(rps int, slotEnd time.Duration, maximum int) int {
 // done. Requests retain requestCtx so the declared window does not cancel
 // already-started work; all in-flight work is joined before returning.
 func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token string, rec *recorder, log *slog.Logger) {
-	if cfg.rps <= 0 {
+	rate := float64(cfg.rps)
+	if cfg.workloadRequest != nil {
+		rate = cfg.workloadRPS
+	}
+	if rate <= 0 {
 		return
+	}
+	targetAt := func(elapsed time.Duration, maximum int) int {
+		if cfg.workloadRequest == nil {
+			return workloadTarget(cfg.rps, elapsed, maximum)
+		}
+		return min(maximum, int(math.Ceil(elapsed.Seconds()*rate)))
 	}
 	scs := defaultScenarios()
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := cfg.workloadClient
+	if client == nil {
+		client = &http.Client{Timeout: 30 * time.Second}
+	}
 	var sequence atomic.Uint64
 	var inflight sync.WaitGroup
 	defer inflight.Wait()
 	ticksPerSecond := minInt(cfg.rps, workloadTicksPerSecond)
+	if cfg.workloadRequest != nil {
+		ticksPerSecond = minInt(maxInt(1, int(math.Ceil(rate))), workloadTicksPerSecond)
+	}
 	tickInterval := time.Second / time.Duration(ticksPerSecond)
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 	startedAt := time.Now()
-	maximum := workloadTarget(cfg.rps, cfg.duration, int(^uint(0)>>1))
+	maximum := targetAt(cfg.duration, int(^uint(0)>>1))
 	scheduled := 0
 	launchThrough := func(target int) {
 		for scheduled < target {
+			if cfg.workloadRequest != nil {
+				if scheduleCtx.Err() != nil {
+					return
+				}
+				index := uint64(scheduled)
+				scheduled++
+				inflight.Add(1)
+				go func() { defer inflight.Done(); cfg.workloadRequest(requestCtx, index) }()
+				continue
+			}
 			sc := pickScenario(scs, rng.Float64())
 			clusterID := ""
 			if len(cfg.fixtureClusterIDs) > 0 {
@@ -303,7 +330,7 @@ func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token s
 
 	// Open the measured window at the declared rate, bounded to at most one
 	// scheduler micro-batch instead of a full second of traffic.
-	launchThrough(workloadTarget(cfg.rps, tickInterval, maximum))
+	launchThrough(targetAt(tickInterval, maximum))
 	for {
 		select {
 		case <-scheduleCtx.Done():
@@ -313,7 +340,7 @@ func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token s
 				return
 			}
 			slotEnd := tick.Sub(startedAt) + tickInterval
-			launchThrough(workloadTarget(cfg.rps, slotEnd, maximum))
+			launchThrough(targetAt(slotEnd, maximum))
 		}
 	}
 }

@@ -53,7 +53,7 @@ function UtilizationBar({ pct }: { pct: number }) {
         : "bg-status-success";
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[120px]">
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-30">
         <div
           className={cn("h-full transition-all", color)}
           style={{ width: `${clamped}%` }}
@@ -84,12 +84,15 @@ function QuotaPlansTable() {
     {
       key: "name",
       header: "Plan",
+      kind: "name",
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Gauge className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-medium text-foreground font-mono">{row.name}</p>
-            <p className="text-2xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2">
+          <Gauge className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground font-mono">
+              {row.name}
+            </p>
+            <p className="truncate text-2xs text-muted-foreground">
               {row.description || "No description"}
             </p>
           </div>
@@ -99,21 +102,29 @@ function QuotaPlansTable() {
     {
       key: "enforcement",
       header: "Enforcement",
+      kind: "badge",
       accessor: (row) => enforcementBadge(row.enforcement),
     },
     {
       key: "flaggedLimits",
-      header: "Flagged limits",
+      header: "Flagged",
+      ariaLabel: "Flagged limits",
+      kind: "count",
+      size: 105,
       accessor: (row) => {
         const rows = usageByPlan.get(row.name) ?? [];
-        return <span className="tabular-nums text-sm">{rows.length}</span>;
+        return <span className="text-sm">{rows.length}</span>;
       },
       sortAccessor: (row) => (usageByPlan.get(row.name) ?? []).length,
-      align: "right",
     },
     {
       key: "worst",
-      header: "Worst utilization",
+      header: "Worst",
+      ariaLabel: "Worst utilization",
+      kind: "percent",
+      size: 144,
+      minSize: 140,
+      maxSize: 200,
       sortable: false,
       accessor: (row) => {
         const rows = usageByPlan.get(row.name) ?? [];
@@ -125,7 +136,12 @@ function QuotaPlansTable() {
     },
     {
       key: "projectCaps",
-      header: "Project caps",
+      header: "Caps",
+      ariaLabel: "Project caps",
+      kind: "count",
+      size: 188,
+      minSize: 170,
+      maxSize: 260,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground tabular-nums">
           {row.maxClustersPerProject || "∞"} clusters ·{" "}

@@ -161,7 +161,7 @@ delivery:
       minimum: 2
       maximum: 2
     flux:
-      version: v2.9.3
+      version: v2.9.6
 ```
 
 Enrollment must refuse clusters outside those bounds before installing any

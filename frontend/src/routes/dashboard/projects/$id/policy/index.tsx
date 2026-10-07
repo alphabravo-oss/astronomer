@@ -25,7 +25,7 @@ import {
 import { useEffect, useMemo } from "react";
 
 import { useAppForm, useStore } from "@/lib/form";
-import { Loader2, Save, AlertCircle, ExternalLink } from "lucide-react";
+import { Save, AlertCircle, ExternalLink } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { useCurrentUser } from "@/lib/hooks/auth";
@@ -42,6 +42,8 @@ import type {
   ProjectPolicyPatch,
 } from "@/lib/api/project-detail";
 import { cn } from "@/lib/utils";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 const psaOptions: {
   value: PodSecurityProfile;
@@ -77,13 +79,13 @@ const netpolOptions: {
     value: "isolated",
     label: "Isolated",
     description:
-      "Default-deny ingress to project namespaces; only explicit NetworkPolicies allow traffic.",
+      "Allow platform controllers; block workload ingress unless another NetworkPolicy allows it.",
   },
   {
     value: "allow-same-project",
     label: "Allow same project",
     description:
-      "Allow pods within the project to talk freely; deny ingress from other namespaces.",
+      "Allow platform controllers and pods in this project; block ingress from other projects.",
   },
   {
     value: "none",
@@ -154,29 +156,23 @@ function PolicyPage() {
   // Aggregate cluster-level usage to render in the resource-quota section
   // preview. One project may span multiple namespaces; we sum and present a
   // single "X/Y" alongside the input so the operator has a sanity check.
-  const usageSummary = useMemo(() => {
-    if (!usage) return null;
-    const rows = usage.rows ?? [];
-    return {
-      cpuUsed: rows.reduce((a, r) => a + parseCpu(r.cpuUsed), 0),
-      cpuLimit: rows.reduce((a, r) => a + parseCpu(r.cpuLimit), 0),
-      memoryUsed: rows.reduce((a, r) => a + parseMemMiB(r.memoryUsed), 0),
-      memoryLimit: rows.reduce((a, r) => a + parseMemMiB(r.memoryLimit), 0),
-      podsUsed: rows.reduce((a, r) => a + (r.podsUsed || 0), 0),
-      podsLimit: rows.reduce((a, r) => a + (r.podsLimit || 0), 0),
-    };
-  }, [usage]);
+  const usageSummary = useMemo(() => summarizeQuotaUsage(usage), [usage]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingSkeleton label="Loading" heading />;
   }
 
   return (
-    <div className="space-y-6"><form.AppForm><form.FormErrorSummary serverError={updateMutation.error ? extractApiErrorMessage(updateMutation.error) : null} /></form.AppForm>
+    <div className="space-y-(--gap-section)">
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={
+            updateMutation.error
+              ? extractApiErrorMessage(updateMutation.error)
+              : null
+          }
+        />
+      </form.AppForm>
       {!canEdit && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -189,7 +185,7 @@ function PolicyPage() {
       )}
 
       {/* --- Pod Security --- */}
-      <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+      <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-4">
         <header>
           <h2 className="text-sm font-medium text-foreground">Pod Security</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -208,8 +204,7 @@ function PolicyPage() {
         </header>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           {psaOptions.map((opt) => (
-            <button
-              type="button"
+            <BareButton
               key={opt.value}
               disabled={!canEdit}
               onClick={() => form.setFieldValue("psa", opt.value)}
@@ -237,13 +232,13 @@ function PolicyPage() {
               <p className="text-xs text-muted-foreground mt-1.5">
                 {opt.description}
               </p>
-            </button>
+            </BareButton>
           ))}
         </div>
       </section>
 
       {/* --- Resource Quota --- */}
-      <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+      <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-4">
         <header>
           <h2 className="text-sm font-medium text-foreground">
             Resource Quota
@@ -306,7 +301,7 @@ function PolicyPage() {
       </section>
 
       {/* --- Network Policy --- */}
-      <section className="rounded-xl border border-border bg-card p-5 space-y-4">
+      <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-4">
         <header>
           <h2 className="text-sm font-medium text-foreground">
             Network Policy
@@ -364,7 +359,7 @@ function PolicyPage() {
       )}
 
       {/* --- Live quota usage table --- */}
-      <section className="rounded-xl border border-border bg-card p-5 space-y-3">
+      <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-3">
         <header>
           <h2 className="text-sm font-medium text-foreground">Quota usage</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -579,3 +574,18 @@ function formatMiB(mib: number): string {
 export const Route = createFileRoute("/dashboard/projects/$id/policy/")({
   component: PolicyPage,
 });
+
+function summarizeQuotaUsage(
+  usage: ReturnType<typeof useProjectQuotaUsage>["data"],
+) {
+  if (!usage) return null;
+  const rows = usage.rows ?? [];
+  return {
+    cpuUsed: rows.reduce((a, r) => a + parseCpu(r.cpuUsed), 0),
+    cpuLimit: rows.reduce((a, r) => a + parseCpu(r.cpuLimit), 0),
+    memoryUsed: rows.reduce((a, r) => a + parseMemMiB(r.memoryUsed), 0),
+    memoryLimit: rows.reduce((a, r) => a + parseMemMiB(r.memoryLimit), 0),
+    podsUsed: rows.reduce((a, r) => a + (r.podsUsed || 0), 0),
+    podsLimit: rows.reduce((a, r) => a + (r.podsLimit || 0), 0),
+  };
+}

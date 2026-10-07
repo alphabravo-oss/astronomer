@@ -13,7 +13,7 @@ func TestFluxNativeDeliveryDefaultsOnWithLocalBootstrap(t *testing.T) {
 	for _, want := range []string{
 		`DELIVERY_ENABLED: "true"`,
 		`DELIVERY_LOCAL_FLUX_BOOTSTRAP: "true"`,
-		`DELIVERY_FLUX_VERSION: "v2.9.3"`,
+		`DELIVERY_FLUX_VERSION: "v2.9.6"`,
 		`DELIVERY_PUBLIC_REGISTRY: "ghcr.io"`,
 		"DELIVERY_PRIVATE_REGISTRY:",
 		"DELIVERY_FLUX_DISTRIBUTION_CERTIFICATE_IDENTITY:",

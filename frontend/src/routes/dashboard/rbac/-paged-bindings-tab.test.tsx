@@ -64,7 +64,7 @@ it("reaches bindings beyond 200, revokes the exact row and resets pages across s
     );
   }
   expect(await screen.findByText("user-225")).toBeVisible();
-  fireEvent.click(screen.getByTitle("Revoke binding"));
+  fireEvent.click(screen.getByRole("button", { name: "Revoke binding" }));
   expect(revoke).toHaveBeenCalledWith(binding);
   fireEvent.change(screen.getByLabelText("Binding scope"), {
     target: { value: "project" },

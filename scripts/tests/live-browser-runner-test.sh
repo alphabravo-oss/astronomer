@@ -48,12 +48,10 @@ required_patterns=(
 	'--set upgradeCRDs=false'
 	'LIVE_FIXTURE_BACKUP_NAMESPACE="$backup_namespace"'
 	'app.kubernetes.io/managed-by=astronomer-go'
-	'mc stat --json'
-	'minio_server_commit="0d7408fc9969caf07de6a8c3a84f9fbb10a6739e"'
-	'minio_client_commit="b00526b153a31b36767991a4f5ce2cced435ee8e"'
-	'github.com/minio/minio@$minio_server_commit'
-	'github.com/minio/mc@$minio_client_commit'
-	'k3d image import "$minio_fixture_image"'
+	's3api head-object'
+	'rustfs_image="rustfs/rustfs:1.0.1@sha256:'
+	'docker save --platform "$rustfs_platform"'
+	'k3d image import "$artifact_dir/s3-fixture-images.tar"'
 	'--image-pull-policy=Never'
 	'backups/$velero_backup_name/$velero_backup_name.tar.gz'
 	'velero-durable-state.log'
@@ -107,12 +105,10 @@ grep -Fq 'agent.NewMirrorSubscriber(proxy.Client(), deliveryDynamic, client, log
 grep -Fq 'FeatureDeliveryRendererHelm' "$ROOT/scripts/testdata/live-browser-fixture/main.go"
 grep -Fq 'mirror.gcr.io/library/alpine:3.18.0@sha256:' \
 	"$ROOT/scripts/testdata/live-browser-fixture/trivy-scan-target.yaml"
-grep -Fq 'FROM alpine@sha256:' \
-	"$ROOT/scripts/testdata/live-browser-fixture/Dockerfile.minio-source"
-grep -Fq 'image: __MINIO_FIXTURE_IMAGE__' \
-	"$ROOT/scripts/testdata/live-browser-fixture/velero-minio.yaml.tmpl"
-if grep -Rq 'quay.io/minio/' "$ROOT/scripts/test-live-browser.sh" "$ROOT/scripts/testdata/live-browser-fixture"; then
-	echo "live-browser runner must build its pinned MinIO fixture from source" >&2
+grep -Fq 'image: __RUSTFS_FIXTURE_IMAGE__' \
+	"$ROOT/scripts/testdata/live-browser-fixture/velero-rustfs.yaml.tmpl"
+if grep -Rq -i 'minio' "$ROOT/scripts/test-live-browser.sh" "$ROOT/scripts/testdata/live-browser-fixture"; then
+	echo "live-browser runner must use RustFS and the first-party S3 client" >&2
 	exit 1
 fi
 
@@ -124,8 +120,10 @@ grep -Fq 'video: "retain-on-failure"' "$ROOT/frontend/playwright.config.ts"
 
 # Count declarations at any TypeScript indentation level. The retained Trivy
 # journey is intentionally nested under `if (trivyEnabled)` and CI enables it
-# through the runner environment handoff asserted above.
-live_test_count="$(grep -RhE '^[[:space:]]*test\(' "$ROOT/frontend/tests/e2e-live" --include='*.spec.ts' | wc -l | tr -d ' ')"
+# through the runner environment handoff asserted above. Optional engineering
+# measurements are excluded from the default live project during discovery;
+# their parameterized declarations are not part of these 16 release journeys.
+live_test_count="$(grep -RhE '^[[:space:]]*test\(' "$ROOT/frontend/tests/e2e-live" --include='*.spec.ts' --exclude='efficiency.live.spec.ts' | wc -l | tr -d ' ')"
 [[ "$live_test_count" == "16" ]] || {
   echo "live-browser runner expects 16 explicit retry-free journeys, found $live_test_count" >&2
   exit 1

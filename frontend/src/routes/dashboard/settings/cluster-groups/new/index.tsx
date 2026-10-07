@@ -6,7 +6,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useMemo, useState } from "react";
 import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Folder } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,11 +17,8 @@ import {
   CLUSTER_GROUP_COLORS,
   CLUSTER_GROUP_ICONS,
 } from "@/lib/api/cluster-groups";
-import {
-  MAX_DEPTH,
-  useClusterGroups,
-  useCreateClusterGroup,
-} from "../index";
+import { MAX_DEPTH, useClusterGroups, useCreateClusterGroup } from "../index";
+import { BareButton } from "@/components/form/bare-button";
 
 function NewClusterGroupForm() {
   const navigate = useNavigate();
@@ -74,7 +71,7 @@ function NewClusterGroupForm() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <Card radius="xl" padding="lg" className="space-y-3">
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">
@@ -91,9 +88,7 @@ function NewClusterGroupForm() {
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">
             Slug{" "}
-            <span className="text-muted-foreground">
-              (URL-safe identifier)
-            </span>
+            <span className="text-muted-foreground">(URL-safe identifier)</span>
           </span>
           <Input
             type="text"
@@ -141,8 +136,7 @@ function NewClusterGroupForm() {
             </span>
             <div className="mt-1 flex flex-wrap gap-1">
               {CLUSTER_GROUP_COLORS.map((c) => (
-                <button
-                  type="button"
+                <BareButton
                   key={c}
                   onClick={() => setColor(c)}
                   className="h-7 w-7 rounded-sm border-2"
@@ -210,18 +204,15 @@ function NewClusterGroupPage() {
       </RouterLink>
       <PageHeader
         eyebrow="Settings · Cluster groups · New"
-        title={
-          <span className="flex items-center gap-2">
-            <Folder className="h-5 w-5 text-muted-foreground" />
-            New cluster group
-          </span>
-        }
+        title="New cluster group"
       />
       <NewClusterGroupForm />
     </PageShell>
   );
 }
 
-export const Route = createFileRoute("/dashboard/settings/cluster-groups/new/")({
-  component: NewClusterGroupPage,
-});
+export const Route = createFileRoute("/dashboard/settings/cluster-groups/new/")(
+  {
+    component: NewClusterGroupPage,
+  },
+);

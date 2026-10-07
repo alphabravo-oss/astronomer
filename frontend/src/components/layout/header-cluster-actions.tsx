@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { ChevronDown, Download, Upload } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 
 import { ActionButton } from "@/components/ui/action-button";
 import { useDismissable } from "@/components/layout/cluster-scope-controls";
@@ -9,6 +9,7 @@ import {
 } from "@/lib/hooks/kubernetes-proxy";
 import { cn } from "@/lib/utils";
 import type { Cluster } from "@/types";
+import { BareButton } from "@/components/form/bare-button";
 
 const CreateResourceDialog = lazy(() =>
   import("@/components/resources/create-resource-dialog").then((module) => ({
@@ -67,51 +68,48 @@ export function HeaderClusterActions({
     <>
       <div ref={menuRef} className="relative">
         <ActionButton
-          size="sm"
+          size="icon"
           icon={<Download className="h-3.5 w-3.5" />}
           onClick={() => setMenuOpen((value) => !value)}
+          aria-label="Kubeconfig"
+          tooltip="Kubeconfig"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-        >
-          Kubeconfig
-          <ChevronDown className="h-3 w-3" />
-        </ActionButton>
+        />
         {menuOpen && (
           <div
             role="menu"
             className="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
           >
             {items.map((item) => (
-              <button
+              <BareButton
+                disabledReason={item.disabledReason}
                 key={item.label}
-                type="button"
                 role="menuitem"
                 disabled={item.disabled}
-                title={item.disabledReason}
                 onClick={() => {
                   if (item.disabled) return;
                   item.onClick();
                   closeMenu();
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-xs text-popover-foreground transition-colors hover:bg-accent",
+                  "flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-left text-xs text-popover-foreground transition-colors hover:bg-accent font-normal whitespace-normal shrink",
                   item.disabled && "cursor-not-allowed opacity-50",
                 )}
               >
                 {item.label}
-              </button>
+              </BareButton>
             ))}
           </div>
         )}
       </div>
       <ActionButton
-        size="sm"
+        size="icon"
         icon={<Upload className="h-3.5 w-3.5" />}
         onClick={() => setImportOpen(true)}
-        title="Apply one or more Kubernetes manifests to this cluster"
-      >
-        Import
-      </ActionButton>
+        aria-label="Import"
+        tooltip="Import YAML: apply manifests to this cluster"
+      />
       {importOpen && (
         <Suspense fallback={<span role="status">Loading YAML importer…</span>}>
           <CreateResourceDialog

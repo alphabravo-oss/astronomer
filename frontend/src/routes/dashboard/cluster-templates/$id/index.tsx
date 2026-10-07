@@ -65,12 +65,7 @@ function ClusterTemplateDetailPage() {
         </RouterLink>
         <PermissionState
           permission="cluster_templates:read"
-          description={
-            <>
-              You need <span className="font-mono">cluster_templates:read</span>{" "}
-              to view this bundle.
-            </>
-          }
+          description={<>You need permission to view cluster templates.</>}
           className="rounded-lg border border-border bg-muted/30 p-6"
         />
       </div>
@@ -116,13 +111,10 @@ function ClusterTemplateDetailPage() {
 
       <PageHeader
         eyebrow="Onboarding Bundle"
-        title={
-          <span className="flex items-center gap-2">
-            <Layers className="h-5 w-5 text-muted-foreground" />
-            {template.displayName}
-            <span className="text-xs text-muted-foreground font-mono font-normal">
-              {template.name}
-            </span>
+        title={template.displayName}
+        status={
+          <span className="text-xs text-muted-foreground font-mono font-normal">
+            {template.name}
           </span>
         }
         description={template.description || undefined}
@@ -131,7 +123,9 @@ function ClusterTemplateDetailPage() {
             <ActionButton
               icon={<PencilLine className="h-3.5 w-3.5" />}
               onClick={() =>
-                void navigate({ to: `/dashboard/cluster-templates/${template.id}/edit` })
+                void navigate({
+                  to: `/dashboard/cluster-templates/${template.id}/edit`,
+                })
               }
             >
               Edit
@@ -141,7 +135,7 @@ function ClusterTemplateDetailPage() {
       />
 
       {/* Summary */}
-      <section className="rounded-xl border border-border bg-card p-5 space-y-3">
+      <section className="rounded-xl border border-border bg-card p-(--card-p) space-y-3">
         <h2 className="text-sm font-medium text-foreground">Spec</h2>
         <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
           <DetailRow label="Environment" value={template.spec.environment} />
@@ -227,10 +221,12 @@ function ClusterTemplateDetailPage() {
           isEmpty={(clusters) => clusters.length === 0}
           empty={
             <EmptyState
-              icon={Layers} title="No clusters bound"
+              icon={Layers}
+              title="No clusters bound"
               description="Apply this bundle during cluster registration to track its rollout here."
               className="py-10"
-              actionLabel="Register cluster" actionHref="/dashboard/clusters/register"
+              actionLabel="Register cluster"
+              actionHref="/dashboard/clusters/register"
             />
           }
         >
@@ -260,7 +256,8 @@ function ClusterTemplateDetailPage() {
                   >
                     <TableCell className="py-2 px-4">
                       <RouterLink
-                        to="/dashboard/clusters/$id" params={{ id: row.clusterId }}
+                        to="/dashboard/clusters/$id"
+                        params={{ id: row.clusterId }}
                         className="text-foreground hover:underline underline-offset-2"
                       >
                         {row.clusterName}
@@ -282,7 +279,7 @@ function ClusterTemplateDetailPage() {
                         ? formatRelativeTime(row.lastAppliedAt)
                         : "—"}
                     </TableCell>
-                    <TableCell className="py-2 px-4 text-xs text-muted-foreground truncate max-w-[260px]">
+                    <TableCell className="py-2 px-4 text-xs text-muted-foreground truncate max-w-65">
                       {row.message || "—"}
                     </TableCell>
                   </TableRow>

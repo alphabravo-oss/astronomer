@@ -138,7 +138,7 @@ func TestDeliveryStateRequestValidate(t *testing.T) {
 		AckedSnapshotGeneration: 1,
 		AckedETag:               "sha256:" + strings.Repeat("a", 64),
 		ControllerInventory: DeliveryControllerInventory{
-			FluxVersion:        "v2.9.3",
+			FluxVersion:        "v2.9.6",
 			Components:         map[string]string{"source-controller": "v1.9.3"},
 			APIVersions:        []string{"source.toolkit.fluxcd.io/v1"},
 			DistributionDigest: "sha256:" + strings.Repeat("b", 64),

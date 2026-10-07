@@ -500,7 +500,7 @@ func simulateReconnectStorm(ctx context.Context, agents, replicas int) (reconnec
 		request := protocol.DeliveryStateRequestV2{
 			ClusterID: fixedUUID(2, uint64(index+1)).String(), ProtocolVersion: protocol.DeliveryProtocolVersion,
 			AckedSnapshotGeneration: 1, AckedETag: "sha256:" + strings.Repeat("f", 64),
-			ControllerInventory: protocol.DeliveryControllerInventory{AgentVersion: "v1.0.0", FluxVersion: "v2.9.3", Ready: true,
+			ControllerInventory: protocol.DeliveryControllerInventory{AgentVersion: "v1.0.0", FluxVersion: "v2.9.6", Ready: true,
 				Components: map[string]string{"source-controller": "v1", "kustomize-controller": "v1", "helm-controller": "v2"}},
 		}
 		if err := request.Validate(); err != nil {

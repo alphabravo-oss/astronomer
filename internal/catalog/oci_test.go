@@ -53,7 +53,7 @@ func TestOCIMetadataFromPull(t *testing.T) {
 			Meta: &chart.Metadata{
 				Name:        "cert-manager",
 				Version:     "5.51.0",
-				AppVersion:  "v2.9.3",
+				AppVersion:  "v2.9.6",
 				Description: "A GitOps continuous delivery tool.",
 				Icon:        "https://cert-manager.example/icon.png",
 				Home:        "https://cert-manager.example",

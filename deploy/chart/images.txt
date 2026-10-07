@@ -14,7 +14,7 @@
 busybox:1.36
 dexidp/dex:v2.41.1
 fluent/fluent-bit:3.2.4
-ghcr.io/alphabravo-oss/astronomer-dr:v1.1.0
+ghcr.io/alphabravo-oss/astronomer-dr:v1.2.0
 ghcr.io/alphabravo-oss/astronomer-frontend:v1.2.0
 ghcr.io/alphabravo-oss/astronomer-go-agent:v1.2.0
 ghcr.io/alphabravo-oss/astronomer-go-migrate:v1.2.0
@@ -22,11 +22,11 @@ ghcr.io/alphabravo-oss/astronomer-go-server:v1.2.0
 ghcr.io/alphabravo-oss/astronomer-go-worker:v1.2.0
 ghcr.io/alphabravo-oss/astronomer-shell:v1.2.0
 ghcr.io/cloudnative-pg/postgresql:17.6
-ghcr.io/fluxcd/helm-controller@sha256:16ada99456385100698a5d7adf90aba8a2089d987ab541c9566b6d7b0e897038
-ghcr.io/fluxcd/kustomize-controller@sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f
-ghcr.io/fluxcd/source-controller@sha256:ff8f3c92f1bcb433e858c948040c3a3393fe73f5dd72048a4502bfaf0a4c26cd
-mirror.gcr.io/aquasec/trivy-operator@sha256:0e4f11e9632f34097f259f3a59d34bab4eea8cee9aef510d15cdfc7481d5e49c
-mirror.gcr.io/aquasec/trivy@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+ghcr.io/fluxcd/helm-controller@sha256:0d52fff5c4d476277b8fcb6beb9041e269adb5db943fe69f5a806ea0c92b1511
+ghcr.io/fluxcd/kustomize-controller@sha256:2ebeaa341da77d52b6abbbba5efcee0450d47f8b42f0e6f33b08f9020262d606
+ghcr.io/fluxcd/source-controller@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3
+mirror.gcr.io/aquasec/trivy-operator@sha256:4cdb11af98ff409cfa7af980098203a841a5fe957cc6a0bbb0df7668065eb5fa
+mirror.gcr.io/aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
 postgres:16-alpine
 quay.io/prometheus/node-exporter@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
 registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:85108987d044b18a098126732f98602df408888c0f7d456241f5abefb9744bc1

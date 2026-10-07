@@ -30,6 +30,7 @@ import {
 import { k8sTemplates } from "@/lib/k8s-templates";
 import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { BareButton } from "@/components/form/bare-button";
 
 interface CreateResourceDialogProps {
   open: boolean;
@@ -354,15 +355,13 @@ function CreateResourceEditor({
               : "YAML mode preserves exact keys and accepts up to 50 ordered documents."}
           </p>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <BareButton
               onClick={onClose}
-              className="h-8 rounded-sm px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="h-8 rounded-sm px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground inline-block font-normal"
             >
               Cancel
-            </button>
-            <button
-              type="button"
+            </BareButton>
+            <BareButton
               onClick={allApplied ? onClose : handleCreate}
               disabled={createDisabled}
               className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
@@ -375,7 +374,7 @@ function CreateResourceEditor({
                 : applyResults.some((result) => !result.ok)
                   ? "Retry failed"
                   : "Create"}
-            </button>
+            </BareButton>
           </div>
         </div>
       }
@@ -387,10 +386,9 @@ function CreateResourceEditor({
       >
         {templateKey &&
           EDITOR_MODES.map((item, index) => (
-            <button
+            <BareButton
               key={item}
               id={`resource-editor-tab-${item}`}
-              type="button"
               role="tab"
               disabled={!templateReady}
               aria-selected={mode === item}
@@ -406,7 +404,7 @@ function CreateResourceEditor({
               )}
             >
               {item}
-            </button>
+            </BareButton>
           ))}
         <div className="ml-auto self-center pb-2 text-xs text-muted-foreground">
           {schemaQuery.isLoading

@@ -487,41 +487,66 @@ func (p *Provisioner) observeTargets(ctx context.Context, clusterID uuid.UUID, t
 		if rolloutErr != nil && !errors.Is(rolloutErr, pgx.ErrNoRows) {
 			return false, "", false, rolloutErr
 		}
-		if rolloutErr == nil {
-			switch rolloutState {
-			case "failed", "rejected", "aborted", "rolled_back", "rollback_failed":
-				// A retry request newer than this terminal rollout deliberately
-				// suppresses its stale failure while ensureRollout creates the
-				// next immutable attempt.
-				if retryAfter(retryRequestedAt, rolloutCreatedAt) {
-					continue
-				}
-				return false, "built_in_rollout_" + rolloutState, true, nil
-			case "draft", "resolving", "awaiting_approval", "queued", "progressing", "paused", "rolling_back":
-				continue
-			}
-		}
 		var phase, errorCode string
-		err := p.pool.QueryRow(ctx, `
+		deploymentErr := p.pool.QueryRow(ctx, `
 			SELECT phase,last_error_code FROM cluster_deployments
 			WHERE target_id=$1 AND cluster_id=$2`, target.id, clusterID).Scan(&phase, &errorCode)
-		if errors.Is(err, pgx.ErrNoRows) {
+		if deploymentErr != nil && !errors.Is(deploymentErr, pgx.ErrNoRows) {
+			return false, "", false, deploymentErr
+		}
+		observation := evaluateTargetObservation(
+			rolloutState,
+			rolloutErr == nil,
+			retryAfter(retryRequestedAt, rolloutCreatedAt),
+			phase,
+			errorCode,
+			deploymentErr == nil,
+		)
+		if observation.ready {
+			ready++
 			continue
 		}
-		if err != nil {
-			return false, "", false, err
-		}
-		if phase == "ready" {
-			ready++
-		}
-		if phase == "failed" || phase == "timed_out" || phase == "rollback_failed" {
-			if errorCode == "" {
-				errorCode = "built_in_delivery_failed"
-			}
-			return false, errorCode, true, nil
+		if observation.failed {
+			return false, observation.code, true, nil
 		}
 	}
 	return ready == len(targets), "", false, nil
+}
+
+type targetObservation struct {
+	ready  bool
+	failed bool
+	code   string
+}
+
+func evaluateTargetObservation(rolloutState string, rolloutFound, retryRequested bool, deploymentPhase, deploymentError string, deploymentFound bool) targetObservation {
+	// The agent's observed deployment state is the current state of the exact
+	// desired generation. Flux can recover after a rollout has crossed its
+	// deadline, so Ready must override the rollout's stale terminal result.
+	if deploymentFound && deploymentPhase == "ready" {
+		return targetObservation{ready: true}
+	}
+	if rolloutFound {
+		switch rolloutState {
+		case "failed", "rejected", "aborted", "rolled_back", "rollback_failed":
+			// A retry request newer than this terminal rollout deliberately
+			// suppresses its stale failure while ensureRollout creates the
+			// next immutable attempt.
+			if retryRequested {
+				return targetObservation{}
+			}
+			return targetObservation{failed: true, code: "built_in_rollout_" + rolloutState}
+		case "draft", "resolving", "awaiting_approval", "queued", "progressing", "paused", "rolling_back":
+			return targetObservation{}
+		}
+	}
+	if deploymentFound && (deploymentPhase == "failed" || deploymentPhase == "timed_out" || deploymentPhase == "rollback_failed") {
+		if deploymentError == "" {
+			deploymentError = "built_in_delivery_failed"
+		}
+		return targetObservation{failed: true, code: deploymentError}
+	}
+	return targetObservation{}
 }
 
 func (p *Provisioner) ensureRollout(ctx context.Context, target targetIdentity, retryRequestedAt *time.Time) error {

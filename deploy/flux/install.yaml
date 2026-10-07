@@ -4,7 +4,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/audit-version: v1.33
     pod-security.kubernetes.io/enforce: restricted
@@ -23,7 +23,7 @@ metadata:
     app.kubernetes.io/component: source-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: buckets.source.toolkit.fluxcd.io
 spec:
   group: source.toolkit.fluxcd.io
@@ -415,7 +415,7 @@ metadata:
     app.kubernetes.io/component: source-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: externalartifacts.source.toolkit.fluxcd.io
 spec:
   group: source.toolkit.fluxcd.io
@@ -618,7 +618,7 @@ metadata:
     app.kubernetes.io/component: source-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: gitrepositories.source.toolkit.fluxcd.io
 spec:
   group: source.toolkit.fluxcd.io
@@ -1113,7 +1113,7 @@ metadata:
     app.kubernetes.io/component: source-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: helmcharts.source.toolkit.fluxcd.io
 spec:
   group: source.toolkit.fluxcd.io
@@ -1477,7 +1477,7 @@ metadata:
     app.kubernetes.io/component: helm-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: helmreleases.helm.toolkit.fluxcd.io
 spec:
   group: helm.toolkit.fluxcd.io
@@ -2969,7 +2969,7 @@ metadata:
     app.kubernetes.io/component: source-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: helmrepositories.source.toolkit.fluxcd.io
 spec:
   group: source.toolkit.fluxcd.io
@@ -3300,7 +3300,7 @@ metadata:
     app.kubernetes.io/component: kustomize-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: kustomizations.kustomize.toolkit.fluxcd.io
 spec:
   group: kustomize.toolkit.fluxcd.io
@@ -4115,7 +4115,7 @@ metadata:
     app.kubernetes.io/component: source-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: ocirepositories.source.toolkit.fluxcd.io
 spec:
   group: source.toolkit.fluxcd.io
@@ -4566,7 +4566,7 @@ metadata:
     app.kubernetes.io/component: helm-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: helm-controller
   namespace: astronomer-delivery-system
 ---
@@ -4577,7 +4577,7 @@ metadata:
     app.kubernetes.io/component: kustomize-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: kustomize-controller
   namespace: astronomer-delivery-system
 ---
@@ -4588,7 +4588,7 @@ metadata:
     app.kubernetes.io/component: source-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: source-controller
   namespace: astronomer-delivery-system
 ---
@@ -4636,7 +4636,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: crd-controller-astronomer-delivery-system
 rules:
 - apiGroups:
@@ -4727,7 +4727,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: cluster-reconciler-astronomer-delivery-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -4747,7 +4747,7 @@ metadata:
   labels:
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
   name: crd-controller-astronomer-delivery-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -4792,7 +4792,7 @@ metadata:
     app.kubernetes.io/component: source-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
     control-plane: controller
   name: source-controller
   namespace: astronomer-delivery-system
@@ -4825,7 +4825,7 @@ metadata:
     app.kubernetes.io/component: helm-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
     control-plane: controller
   name: helm-controller
   namespace: astronomer-delivery-system
@@ -4844,7 +4844,7 @@ spec:
         app.kubernetes.io/component: helm-controller
         app.kubernetes.io/instance: astronomer-delivery-system
         app.kubernetes.io/part-of: flux
-        app.kubernetes.io/version: v2.9.3
+        app.kubernetes.io/version: v2.9.6
     spec:
       containers:
       - args:
@@ -4868,7 +4868,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: ghcr.io/fluxcd/helm-controller@sha256:16ada99456385100698a5d7adf90aba8a2089d987ab541c9566b6d7b0e897038
+        image: ghcr.io/fluxcd/helm-controller@sha256:0d52fff5c4d476277b8fcb6beb9041e269adb5db943fe69f5a806ea0c92b1511
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -4930,7 +4930,7 @@ metadata:
     app.kubernetes.io/component: kustomize-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
     control-plane: controller
   name: kustomize-controller
   namespace: astronomer-delivery-system
@@ -4949,7 +4949,7 @@ spec:
         app.kubernetes.io/component: kustomize-controller
         app.kubernetes.io/instance: astronomer-delivery-system
         app.kubernetes.io/part-of: flux
-        app.kubernetes.io/version: v2.9.3
+        app.kubernetes.io/version: v2.9.6
     spec:
       containers:
       - args:
@@ -4975,7 +4975,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: ghcr.io/fluxcd/kustomize-controller@sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f
+        image: ghcr.io/fluxcd/kustomize-controller@sha256:2ebeaa341da77d52b6abbbba5efcee0450d47f8b42f0e6f33b08f9020262d606
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -5037,7 +5037,7 @@ metadata:
     app.kubernetes.io/component: source-controller
     app.kubernetes.io/instance: astronomer-delivery-system
     app.kubernetes.io/part-of: flux
-    app.kubernetes.io/version: v2.9.3
+    app.kubernetes.io/version: v2.9.6
     control-plane: controller
   name: source-controller
   namespace: astronomer-delivery-system
@@ -5058,7 +5058,7 @@ spec:
         app.kubernetes.io/component: source-controller
         app.kubernetes.io/instance: astronomer-delivery-system
         app.kubernetes.io/part-of: flux
-        app.kubernetes.io/version: v2.9.3
+        app.kubernetes.io/version: v2.9.6
     spec:
       containers:
       - args:
@@ -5084,7 +5084,7 @@ spec:
             resourceFieldRef:
               containerName: manager
               resource: limits.memory
-        image: ghcr.io/fluxcd/source-controller@sha256:ff8f3c92f1bcb433e858c948040c3a3393fe73f5dd72048a4502bfaf0a4c26cd
+        image: ghcr.io/fluxcd/source-controller@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -5208,12 +5208,12 @@ spec:
         matchLabels:
           kubernetes.io/metadata.name: kube-system
       podSelector:
-        matchExpressions:
-        - key: k8s-app
-          operator: In
-          values:
-          - kube-dns
-          - coredns
+        matchLabels:
+          k8s-app: kube-dns
+    - ipBlock:
+        cidr: 0.0.0.0/0
+    - ipBlock:
+        cidr: ::/0
   podSelector:
     matchLabels:
       app.kubernetes.io/part-of: flux

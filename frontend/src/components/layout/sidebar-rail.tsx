@@ -6,6 +6,8 @@ import type { NavGroup, NavItem } from "@/components/layout/sidebar-navigation";
 import { cn } from "@/lib/utils";
 import { navGroupItems } from "./nav-group-items";
 import { SidebarNavItems, type StarredNavControls } from "./sidebar-nav-items";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 
 function isItemActive(item: NavItem, pathname: string): boolean {
   return item.exact
@@ -37,27 +39,28 @@ export function CollapsedNavItems({
               isItemActive(other, pathname),
           );
         return (
-          <RouterLink
-            key={item.href}
-            to={item.href}
-            activeOptions={{ exact: true }}
-            activeProps={{ "aria-current": active ? "page" : undefined }}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "nav-item group justify-center px-0",
-              active && "active",
-            )}
-            title={item.label}
-          >
-            <Icon
+          <Tooltip key={item.href} content={item.label}>
+            <RouterLink
+              aria-label={item.label}
+              to={item.href}
+              activeOptions={{ exact: true }}
+              activeProps={{ "aria-current": active ? "page" : undefined }}
+              aria-current={active ? "page" : undefined}
               className={cn(
-                "h-4 w-4 shrink-0",
-                active
-                  ? "text-foreground"
-                  : "text-muted-foreground group-hover:text-foreground",
+                "nav-item group justify-center px-0",
+                active && "active",
               )}
-            />
-          </RouterLink>
+            >
+              <Icon
+                className={cn(
+                  "h-4 w-4 shrink-0",
+                  active
+                    ? "text-foreground"
+                    : "text-muted-foreground group-hover:text-foreground",
+                )}
+              />
+            </RouterLink>
+          </Tooltip>
         );
       })}
     </div>
@@ -139,16 +142,15 @@ export function SidebarRailGroup({
 
   return (
     <div className="relative">
-      <button
+      <BareButton
+        tooltip={group.label}
         ref={triggerRef}
-        type="button"
         onClick={() => setOpen((value) => !value)}
-        title={group.label}
         aria-label={group.label}
         aria-controls={open ? contentId : undefined}
         aria-expanded={open}
         className={cn(
-          "nav-item group w-full justify-center px-0",
+          "nav-item group w-full justify-center px-0 inline-block font-normal whitespace-normal shrink",
           isActiveGroup && "active",
         )}
       >
@@ -160,7 +162,7 @@ export function SidebarRailGroup({
               : "text-muted-foreground group-hover:text-foreground",
           )}
         />
-      </button>
+      </BareButton>
       {open &&
         createPortal(
           <nav

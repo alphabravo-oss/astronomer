@@ -1,25 +1,23 @@
-import { useMemo, useState } from "react";
-import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
 import { HelmValuesForm } from "@/components/catalog/helm-values-form";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { Textarea } from "@/components/ui/textarea";
+import { resolveCatalogValuesSchema } from "@/lib/catalog-chart-fields";
 import { useAppForm, useStore } from "@/lib/form";
-import { useInstallHelmChart } from "@/lib/hooks/catalog";
-import { useLocation } from "@tanstack/react-router";
 import {
   dumpHelmValuesYAML,
-  hasRenderableSchema,
-  resolveSchemaRefs,
   mergeSchemaDefaults,
   parseHelmValuesYAML,
   type HelmValuesObject,
-  type HelmValuesSchemaNode,
 } from "@/lib/helm-values-schema";
+import { useInstallHelmChart } from "@/lib/hooks/catalog";
 import { cn } from "@/lib/utils";
 import type { HelmChart, HelmChartVersion } from "@/types";
+import { useLocation } from "@tanstack/react-router";
 import { AlertTriangle, Braces, FileCode2 } from "lucide-react";
+import { useMemo, useState } from "react";
 
 interface InstallChartModalProps {
   projectId: string;
@@ -48,13 +46,10 @@ function InstallChartForm({
   onOperationStarted,
 }: InstallChartModalProps) {
   const installChart = useInstallHelmChart();
-  const schema = useMemo(() => {
-    // Inline $ref/$defs first so generator-style schemas (cert-manager etc.) render.
-    const resolved = resolveSchemaRefs(version.valuesSchema);
-    return hasRenderableSchema(resolved)
-      ? (resolved as HelmValuesSchemaNode)
-      : null;
-  }, [version.valuesSchema]);
+  const schema = useMemo(
+    () => resolveCatalogValuesSchema(chart.name, version.valuesSchema),
+    [chart.name, version.valuesSchema],
+  );
 
   // Sprint 23: when arriving from an empty-state CTA on a cluster
   // detail page (e.g. "Install trivy-operator from Image Scans"), the
@@ -258,34 +253,29 @@ function InstallChartForm({
           </div>
           {schema && (
             <div className="inline-flex rounded-md border border-border bg-muted/30 p-1">
-              <button
-                type="button"
-                aria-pressed={editorMode === "form"}
-                onClick={() => setEditorMode("form")}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
-                  editorMode === "form"
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Braces className="h-3.5 w-3.5" />
-                Form
-              </button>
-              <button
-                type="button"
-                aria-pressed={editorMode === "yaml"}
-                onClick={() => setEditorMode("yaml")}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
-                  editorMode === "yaml"
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <FileCode2 className="h-3.5 w-3.5" />
-                YAML
-              </button>
+              {(
+                [
+                  ["form", Braces, "Form"],
+                  ["yaml", FileCode2, "YAML"],
+                ] as const
+              ).map(([mode, Icon, label]) => (
+                <ActionButton
+                  key={mode}
+                  intent="bare"
+                  size="none"
+                  aria-pressed={editorMode === mode}
+                  onClick={() => setEditorMode(mode)}
+                  icon={<Icon className="h-3.5 w-3.5" />}
+                  className={cn(
+                    "gap-1 rounded-sm px-2.5 py-1 text-xs transition-colors",
+                    editorMode === mode
+                      ? "bg-background text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </ActionButton>
+              ))}
             </div>
           )}
         </div>

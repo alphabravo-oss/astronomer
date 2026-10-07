@@ -520,7 +520,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		h.writeConnectRejection(ctx, conn, compatibility)
 		return
 	}
-	ackPayload := protocol.ConnectAckPayload{Accepted: true}
+	ackPayload := protocol.ConnectAckPayload{Accepted: true, Capabilities: protocol.NegotiatedCapabilities(payload.Capabilities)}
 	// tokenKind ("registration"/"agent") is threaded out of the validator block
 	// so the success-audit site below can record which credential authenticated.
 	var connectTokenKind string

@@ -1,5 +1,5 @@
 import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
 import type {
   DateFormatPreference,
@@ -17,6 +17,30 @@ export function setDateFormatPreference(preference: DateFormatPreference) {
   activeDateFormat = preference;
 }
 
+// Semantic type tokens (globals.css @theme) are font sizes, not text colors.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [
+        {
+          text: [
+            "2xs",
+            "body",
+            "meta",
+            "micro",
+            "page-title",
+            "section-title",
+            "9",
+            "10",
+            "11",
+            "13",
+          ],
+        },
+      ],
+    },
+  },
+});
+
 /**
  * Merge Tailwind CSS classes with proper precedence
  */
@@ -31,10 +55,7 @@ export function cn(...inputs: ClassValue[]) {
  * entirely, since neither has a 12h/24h axis), and `time_format` only
  * matters for the default "locale" style's hour rendering.
  */
-export function formatDate(
-  dateStr: string,
-  fmt?: string,
-): string {
+export function formatDate(dateStr: string, fmt?: string): string {
   try {
     const date = parseISO(dateStr);
     if (fmt) return format(date, fmt);
@@ -57,9 +78,7 @@ export function formatDate(
 /**
  * Format a date string to a relative time (e.g., "2 hours ago")
  */
-export function formatRelativeTime(
-  dateStr: string | null | undefined,
-): string {
+export function formatRelativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return "Never";
   try {
     const date = parseISO(dateStr);

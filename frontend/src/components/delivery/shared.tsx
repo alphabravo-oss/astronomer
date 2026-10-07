@@ -187,7 +187,7 @@ export function DeliveryShell({
   // Workspace layouts own project selection; detail pages retain a fleet link.
   if (clusterId) return children;
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
         <RouterLink
           to="/dashboard/delivery"
@@ -347,12 +347,12 @@ export function ErrorMessage({ error }: { error: unknown }) {
 }
 
 export const primaryButton =
-  "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-(--control-h) items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 export const secondaryButton =
-  "inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-(--control-h) items-center justify-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50";
 export const dangerButton =
-  "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-status-error px-4 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-(--control-h) items-center justify-center gap-2 rounded-md bg-status-error px-4 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 export const inputClass =
-  "h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring";
+  "h-(--control-h) w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring";
 export const textareaClass =
   "min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring";

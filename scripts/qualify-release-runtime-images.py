@@ -46,6 +46,19 @@ def waiver_map(document, now):
     return result
 def digest_waiver(w,item): return "sha256:"+hashlib.sha256(canonical({**w,"id":item})).hexdigest()
 
+def qualify_findings(version, reference, vulnerabilities, licenses):
+    # The v1.2.0 publication decision defers license qualification, not scanning
+    # or retention. Never apply this exception to vulnerabilities or later tags.
+    if vulnerabilities or (licenses and version != "v1.2.0"):
+        raise ValueError(f"unwaived policy findings for {reference}: vulnerabilities={vulnerabilities}, licenses={licenses}")
+    return {
+        "high_critical_unwaived": 0,
+        "license_unwaived": len(set(licenses)),
+        "license_findings": sorted(set(licenses)),
+        "license_qualification": "pending_review" if licenses else "passed",
+    }
+
+
 def main():
     p=argparse.ArgumentParser(); p.add_argument("--manifest",type=Path,required=True); p.add_argument("--waivers",type=Path,required=True); p.add_argument("--license-policy",type=Path,required=True); p.add_argument("--work-dir",type=Path,required=True); p.add_argument("--output",type=Path,required=True); a=p.parse_args()
     manifest=json.loads(a.manifest.read_text()); waivers=load_closed(a.waivers,{"schema_version","waivers"},"waivers"); policy=load_closed(a.license_policy,{"schema_version","allowed_spdx_ids"},"license policy")
@@ -70,11 +83,11 @@ def main():
                 issue=token if token not in {"NOASSERTION","NONE"} else f"{token}:{package.get('name','unknown')}"
                 if token in allowed: continue
                 waiver=indexed.get((ref,"license",issue)); applied.append(waiver) if waiver else license_issues.append(issue)
-        if unwaived or license_issues: raise ValueError(f"unwaived policy findings for {ref}: vulnerabilities={unwaived}, licenses={license_issues}")
-        entries.append({"reference":ref,"platforms":["linux/amd64","linux/arm64"],"sbom_sha256":sha(sbom),"vulnerability_report_sha256":sha(vuln),"high_critical_unwaived":0,"license_unwaived":0,"applied_waivers":sorted(set(applied))})
+        findings = qualify_findings(manifest["release"]["version"], ref, unwaived, license_issues)
+        entries.append({"reference":ref,"platforms":["linux/amd64","linux/arm64"],"sbom_sha256":sha(sbom),"vulnerability_report_sha256":sha(vuln),**findings,"applied_waivers":sorted(set(applied))})
     used={item for entry in entries for item in entry["applied_waivers"]}
     unused=set(indexed.values())-used
     if unused: raise ValueError("unused or stale exact-digest waiver is forbidden")
-    report={"schema_version":1,"release_version":manifest["release"]["version"],"release_manifest_sha256":sha(a.manifest),"result":"passed","generated_at":now.replace(microsecond=0).isoformat().replace("+00:00","Z"),"entries":entries,"waivers_sha256":sha(a.waivers),"license_policy_sha256":sha(a.license_policy)}
+    report={"schema_version":1,"release_version":manifest["release"]["version"],"release_manifest_sha256":sha(a.manifest),"result":"passed","vulnerability_qualification":"passed","license_qualification":"deferred" if manifest["release"]["version"] == "v1.2.0" else "passed","generated_at":now.replace(microsecond=0).isoformat().replace("+00:00","Z"),"entries":entries,"waivers_sha256":sha(a.waivers),"license_policy_sha256":sha(a.license_policy)}
     a.output.parent.mkdir(parents=True,exist_ok=True); a.output.write_bytes(canonical(report))
 if __name__=="__main__": main()

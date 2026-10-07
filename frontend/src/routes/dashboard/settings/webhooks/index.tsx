@@ -15,28 +15,32 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { Switch } from "@/components/ui/switch";
-import { formatRelativeTime } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
   useDeleteWebhook,
   useUpdateWebhook,
   useWebhooks,
 } from "@/components/settings/hooks";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { WebhookSubscriptionView } from "@/lib/api/settings";
+import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 function EnabledToggle({ row }: { row: WebhookSubscriptionView }) {
   const update = useUpdateWebhook();
   return (
     <span onClickCapture={(e) => e.stopPropagation()}>
-      <Switch
-        size="sm"
-        checked={row.enabled}
-        onCheckedChange={(enabled) =>
-          update.mutate({ id: row.id, body: { enabled } })
-        }
-        disabled={update.isPending}
-        title={row.enabled ? "Disable" : "Enable"}
-      />
+      <Tooltip content={row.enabled ? "Disable" : "Enable"}>
+        <Switch
+          size="sm"
+          checked={row.enabled}
+          onCheckedChange={(enabled) =>
+            update.mutate({ id: row.id, body: { enabled } })
+          }
+          disabled={update.isPending}
+          aria-label={row.enabled ? "Disable" : "Enable"}
+        />
+      </Tooltip>
     </span>
   );
 }
@@ -52,12 +56,16 @@ function WebhooksList() {
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      grow: false,
+      size: 180,
+      minSize: 150,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Webhook className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-medium text-foreground">{row.name}</p>
-            <p className="text-2xs font-mono text-muted-foreground uppercase">
+        <div className="flex min-w-0 items-center gap-2">
+          <Webhook className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground">{row.name}</p>
+            <p className="truncate font-mono text-2xs uppercase text-muted-foreground">
               {row.template}
             </p>
           </div>
@@ -67,8 +75,12 @@ function WebhooksList() {
     {
       key: "url",
       header: "URL",
+      kind: "text",
+      grow: true,
+      minSize: 200,
+      maxSize: 720,
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground font-mono truncate max-w-[360px] block">
+        <span className="text-xs text-muted-foreground font-mono">
           {row.url}
         </span>
       ),
@@ -77,6 +89,9 @@ function WebhooksList() {
     {
       key: "enabled",
       header: "Enabled",
+      kind: "status",
+      size: 96,
+      maxSize: 96,
       align: "center",
       sortable: false,
       accessor: (row) => <EnabledToggle row={row} />,
@@ -84,28 +99,31 @@ function WebhooksList() {
     {
       key: "updatedAt",
       header: "Updated",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.updatedAt)}
+          <RelativeTime value={row.updatedAt} />
         </span>
       ),
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
       sortable: false,
       accessor: (row) => (
-        <button
-          type="button"
+        <BareButton
+          aria-label="Delete webhook"
           onClick={(e) => {
             e.stopPropagation();
             setConfirmDelete(row);
           }}
           className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-          title="Delete webhook"
+          tooltip="Delete webhook"
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </BareButton>
       ),
     },
   ];

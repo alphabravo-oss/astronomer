@@ -369,6 +369,40 @@ func TestUpgradeRejectsImageThatCannotBePulled(t *testing.T) {
 	fixture.assertNoRollout(t)
 }
 
+func TestUpgradeSupportsExplicitlyPrestagedImmutableImage(t *testing.T) {
+	fixture := newUpgradeFixture(t, upgradeFixtureOptions{pullSucceeds: true, watchdogStarts: true, operationID: "op-prestaged"})
+	target := "example.com/astronomer-agent@sha256:" + strings.Repeat("a", 64)
+	result := fixture.upgrade(t, protocol.AgentUpgradePayload{
+		OperationID:      "op-prestaged",
+		TargetImage:      target,
+		TargetPullPolicy: string(corev1.PullNever),
+	})
+	if !result.Success {
+		t.Fatalf("prestaged upgrade rejected: %+v", result)
+	}
+	deploy, err := fixture.client.AppsV1().Deployments(DefaultAgentNamespace).Get(context.Background(), DefaultAgentDeploymentName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	container := deploy.Spec.Template.Spec.Containers[0]
+	if container.Image != target || container.ImagePullPolicy != corev1.PullNever {
+		t.Fatalf("deployment image contract = %q/%q", container.Image, container.ImagePullPolicy)
+	}
+}
+
+func TestUpgradeRejectsNeverPullForMutableTag(t *testing.T) {
+	fixture := newUpgradeFixture(t, upgradeFixtureOptions{pullSucceeds: true, watchdogStarts: true, operationID: "op-never-tag"})
+	result := fixture.upgrade(t, protocol.AgentUpgradePayload{
+		OperationID:      "op-never-tag",
+		TargetImage:      testTargetImage,
+		TargetPullPolicy: string(corev1.PullNever),
+	})
+	if result.Success || !strings.Contains(result.Error, "immutable sha256 digest") {
+		t.Fatalf("result = %+v, want immutable-digest rejection", result)
+	}
+	fixture.assertNoRollout(t)
+}
+
 // The rollback image is the only way back from a bad rollout. If IT cannot be
 // pulled, committing the upgrade would be a one-way door.
 func TestUpgradeRejectsWhenRollbackImageIsNotPullable(t *testing.T) {

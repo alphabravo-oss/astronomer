@@ -1,8 +1,16 @@
 import { Stethoscope } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import {
+  ChipsCell,
+  EntityCell,
+  StatusReasonCell,
+  TimestampCell,
+} from "@/components/tables/cells";
 import type { ClusterAgentItem } from "@/types";
 import type { Column } from "@/components/ui/data-table";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
 
 export function agentColumns(
   setSelectedClusterId: (id: string) => void,
@@ -12,39 +20,41 @@ export function agentColumns(
     {
       key: "cluster",
       header: "Cluster",
+      kind: "name",
+      minSize: 220,
+      pin: "start",
       accessor: (row) => (
-        <div>
-          <p className="font-medium text-foreground">
-            {row.clusterDisplayName || row.clusterName}
-          </p>
-          <p className="text-xs text-muted-foreground font-mono">
-            {row.clusterId}
-          </p>
-        </div>
+        <EntityCell
+          primary={row.clusterDisplayName || row.clusterName}
+          secondary={<span className="font-mono">{row.clusterId}</span>}
+        />
       ),
       sortAccessor: (row) => row.clusterDisplayName || row.clusterName,
     },
     {
       key: "agentStatus",
       header: "Agent",
+      kind: "status",
+      size: 160,
+      minSize: 140,
+      maxSize: 240,
       accessor: (row) => (
-        <div className="space-y-1">
-          <StatusBadge
-            status={row.agentStatus}
-            label={capitalize(row.agentStatus)}
-          />
-          {row.degradedReasons?.length ? (
-            <p className="text-xs text-status-warning">
-              {row.degradedReasons[0]}
-            </p>
-          ) : null}
-        </div>
+        <StatusReasonCell
+          status={
+            <StatusBadge
+              status={row.agentStatus}
+              label={capitalize(row.agentStatus)}
+            />
+          }
+          reason={row.degradedReasons?.[0]}
+        />
       ),
       sortAccessor: (row) => row.agentStatus,
     },
     {
       key: "version",
       header: "Version",
+      kind: "version",
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.agentVersion || "-"}
@@ -55,42 +65,43 @@ export function agentColumns(
     {
       key: "compatibility",
       header: "Compatibility",
+      kind: "badge",
+      size: 150,
       accessor: (row) => (
-        <span
-          title={row.compatibilityMessage}
-          className={cn(
-            "inline-flex items-center rounded-sm border px-1.5 py-0.5 text-xs font-medium",
-            compatibilityTone(row.compatibilityStatus),
-          )}
-        >
-          {compatibilityLabel(row.compatibilityStatus)}
-        </span>
+        <Tooltip content={row.compatibilityMessage}>
+          <span
+            className={cn(
+              "inline-flex items-center rounded-sm border px-1.5 py-0.5 text-xs font-medium",
+              compatibilityTone(row.compatibilityStatus),
+            )}
+          >
+            {compatibilityLabel(row.compatibilityStatus)}
+          </span>
+        </Tooltip>
       ),
       sortAccessor: (row) => row.compatibilityStatus,
     },
     {
       key: "capabilities",
       header: "Capabilities",
+      kind: "badge",
+      size: 220,
+      minSize: 180,
+      maxSize: 280,
       accessor: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {Object.entries(row.capabilities)
+        <ChipsCell
+          items={Object.entries(row.capabilities)
             .filter(([, enabled]) => enabled)
-            .slice(0, 4)
-            .map(([name]) => (
-              <span
-                key={name}
-                className="rounded-sm bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
-              >
-                {name.replace("_", " ")}
-              </span>
-            ))}
-        </div>
+            .map(([name]) => name.replaceAll("_", " "))}
+        />
       ),
       sortable: false,
     },
     {
       key: "kubernetes",
       header: "Kubernetes",
+      kind: "version",
+      size: 130,
       accessor: (row) => (
         <div className="text-xs text-muted-foreground">
           <p className="font-mono">{row.kubernetesVersion || "-"}</p>
@@ -101,30 +112,44 @@ export function agentColumns(
     },
     {
       key: "lastHeartbeat",
-      header: "Last Heartbeat",
+      header: "Heartbeat",
+      ariaLabel: "Last heartbeat",
+      kind: "age",
+      size: 130,
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.lastHeartbeat ? formatRelativeTime(row.lastHeartbeat) : "-"}
-        </span>
+        <TimestampCell
+          value={row.lastHeartbeat}
+          fallback="-"
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (row) => row.lastHeartbeat || "",
     },
     {
       key: "session",
       header: "Session",
+      kind: "text",
+      size: 200,
+      minSize: 160,
       accessor: (row) => (
-        <div className="text-xs text-muted-foreground">
-          <p className="font-mono">{row.agentId || "-"}</p>
-          {row.podName ? <p>{row.podName}</p> : null}
-        </div>
+        <EntityCell
+          mono
+          primaryClassName="font-normal text-muted-foreground"
+          primary={row.agentId || "-"}
+          secondary={row.podName}
+        />
       ),
       sortAccessor: (row) => row.agentId || "",
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 130,
+      minSize: 130,
+      maxSize: 140,
       accessor: (row) => (
-        <button
+        <BareButton
           onClick={(event) => {
             event.stopPropagation();
             setSelectedClusterId(row.clusterId);
@@ -134,7 +159,7 @@ export function agentColumns(
         >
           <Stethoscope className="h-3.5 w-3.5" />
           Diagnostics
-        </button>
+        </BareButton>
       ),
       sortable: false,
     },

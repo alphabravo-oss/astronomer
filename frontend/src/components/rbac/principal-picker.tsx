@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useMaterializePrincipal, usePrincipalSearch } from "@/lib/hooks/rbac";
 import type { PrincipalSearchItem } from "@/lib/api/rbac";
 import { cn } from "@/lib/utils";
+import { BareButton } from "@/components/form/bare-button";
 
 interface PrincipalPickerProps {
   value: string;
@@ -136,8 +137,7 @@ export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
               );
               return (
                 <li key={key}>
-                  <button
-                    type="button"
+                  <BareButton
                     disabled={materialize.isPending}
                     onClick={() => void choose(principal)}
                     className={cn(
@@ -178,7 +178,7 @@ export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
                     >
                       {kindLabel(principal.kind)}
                     </Badge>
-                  </button>
+                  </BareButton>
                 </li>
               );
             })}

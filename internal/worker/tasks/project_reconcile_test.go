@@ -111,20 +111,31 @@ func TestRenderLimitRange_AcceptsSnakeCaseDefaultRequest(t *testing.T) {
 }
 
 // TestRenderNetworkPolicy_Modes covers the three documented modes:
-// none (handled outside this fn), isolated (deny-all), allow-same-project.
+// none (handled outside this fn), isolated (deny ingress), allow-same-project.
 func TestRenderNetworkPolicy_Modes(t *testing.T) {
-	t.Run("isolated_is_deny_all", func(t *testing.T) {
+	t.Run("isolated_denies_ingress_without_managing_egress", func(t *testing.T) {
 		got := renderNetworkPolicy("team-a", "00000000-0000-0000-0000-000000000001", "isolated")
 		spec := got["spec"].(map[string]any)
-		if _, ok := spec["ingress"]; ok {
-			t.Errorf("isolated mode should omit ingress array; got %+v", spec)
+		ingress := spec["ingress"].([]any)
+		from := ingress[0].(map[string]any)["from"].([]any)
+		if len(from) != 2 {
+			t.Fatalf("isolated mode platform peers = %v, want unassigned namespaces and kube-system", from)
+		}
+		unassigned := from[0].(map[string]any)["namespaceSelector"].(map[string]any)["matchExpressions"].([]any)
+		expression := unassigned[0].(map[string]any)
+		if expression["key"] != projectNamespaceLabelKey || expression["operator"] != "DoesNotExist" {
+			t.Errorf("unassigned platform namespace selector = %v", expression)
+		}
+		kubeSystem := from[1].(map[string]any)["namespaceSelector"].(map[string]any)["matchLabels"].(map[string]any)
+		if kubeSystem["kubernetes.io/metadata.name"] != "kube-system" {
+			t.Errorf("kube-system namespace selector = %v", kubeSystem)
 		}
 		if _, ok := spec["egress"]; ok {
 			t.Errorf("isolated mode should omit egress array; got %+v", spec)
 		}
 		pt := spec["policyTypes"].([]any)
-		if len(pt) != 2 {
-			t.Errorf("expected both Ingress and Egress in policyTypes, got %v", pt)
+		if len(pt) != 1 || pt[0] != "Ingress" {
+			t.Errorf("expected only Ingress in policyTypes, got %v", pt)
 		}
 	})
 
@@ -136,10 +147,20 @@ func TestRenderNetworkPolicy_Modes(t *testing.T) {
 			t.Fatalf("expected 1 ingress rule, got %d", len(ing))
 		}
 		from := ing[0].(map[string]any)["from"].([]any)
-		nsSel := from[0].(map[string]any)["namespaceSelector"].(map[string]any)
+		if len(from) != 3 {
+			t.Fatalf("expected two platform peers and one same-project peer, got %v", from)
+		}
+		nsSel := from[2].(map[string]any)["namespaceSelector"].(map[string]any)
 		labels := nsSel["matchLabels"].(map[string]any)
 		if labels[projectNamespaceLabelKey] != "abc123" {
 			t.Errorf("expected match label %s=abc123, got %v", projectNamespaceLabelKey, labels)
+		}
+		if _, ok := spec["egress"]; ok {
+			t.Errorf("allow-same-project mode must not manage egress; got %+v", spec)
+		}
+		pt := spec["policyTypes"].([]any)
+		if len(pt) != 1 || pt[0] != "Ingress" {
+			t.Errorf("expected only Ingress in policyTypes, got %v", pt)
 		}
 	})
 }

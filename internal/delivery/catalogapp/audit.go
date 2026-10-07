@@ -3,6 +3,7 @@ package catalogapp
 import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // The catalog operation already records its accepted request. The rollout is
@@ -25,4 +26,15 @@ func catalogRolloutAuditIntent(request InstallRequest, targetID uuid.UUID) audit
 		},
 		DedupeKey: audit.MutationDedupeKey(key, action, resourceType, targetID.String()),
 	}
+}
+
+func catalogRollbackAuditIntent(installationID, projectID, clusterID, targetID uuid.UUID, actorID pgtype.UUID, idempotencyKey, releaseName string) audit.Intent {
+	return catalogRolloutAuditIntent(InstallRequest{
+		InstallationID: installationID,
+		ProjectID:      projectID,
+		ClusterID:      clusterID,
+		ActorID:        actorID,
+		IdempotencyKey: idempotencyKey,
+		ReleaseName:    releaseName,
+	}, targetID)
 }

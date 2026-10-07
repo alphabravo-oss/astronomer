@@ -17,18 +17,17 @@ import { useParams } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
-  Trash2,
-  Loader2,
   CheckCircle2,
   XCircle,
   Play,
   Upload,
   Server,
 } from "lucide-react";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import { DataTable } from "@/components/ui/data-table";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useCluster } from "@/lib/hooks/clusters";
+import { gatekeeperColumns } from "./-columns";
 import { useClustersUpdate } from "@/lib/permission-hooks";
 import { cn } from "@/lib/utils";
 import type { GatekeeperConstraint, ConstraintValidateResult } from "@/types";
@@ -38,6 +37,7 @@ import {
   useApplyConstraint,
   useDeleteConstraint,
 } from "./-hooks";
+import { ActionButton } from "@/components/ui/action-button";
 
 const STARTER_YAML = `apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredLabels
@@ -97,118 +97,11 @@ export function ClusterGatekeeperPage() {
     }
   };
 
-  const columns: Column<GatekeeperConstraint>[] = [
-    {
-      key: "name",
-      header: "Name",
-      accessor: (row) => (
-        <div>
-          <p className="font-medium text-foreground">{row.name}</p>
-          <p className="text-2xs font-mono text-muted-foreground">{row.kind}</p>
-        </div>
-      ),
-    },
-    {
-      key: "source",
-      header: "Source",
-      accessor: (row) => (
-        <span
-          className={cn(
-            "text-xs px-2 py-0.5 rounded-sm capitalize font-medium",
-            row.source === "custom"
-              ? "bg-status-info/10 text-status-info"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {row.source}
-        </span>
-      ),
-      sortAccessor: (row) => row.source,
-    },
-    {
-      key: "enforcement",
-      header: "Enforcement",
-      accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
-          {row.enforcementAction || "—"}
-        </span>
-      ),
-      sortAccessor: (row) => row.enforcementAction,
-    },
-    {
-      key: "violations",
-      header: "Violations",
-      align: "center",
-      accessor: (row) => (
-        <span
-          className={cn(
-            "tabular-nums text-sm font-medium",
-            row.violationCount > 0
-              ? "text-status-error"
-              : "text-muted-foreground",
-          )}
-        >
-          {row.violationCount}
-        </span>
-      ),
-      sortAccessor: (row) => row.violationCount,
-    },
-    {
-      key: "status",
-      header: "Status",
-      accessor: (row) =>
-        row.source === "custom" ? (
-          <div className="space-y-0.5">
-            <span
-              className={cn(
-                "inline-flex rounded-sm px-2 py-0.5 text-xs font-medium capitalize",
-                row.syncStatus === "synced"
-                  ? "bg-status-success/10 text-status-success"
-                  : row.syncStatus === "failed"
-                    ? "bg-status-error/10 text-status-error"
-                    : "bg-status-warning/10 text-status-warning",
-              )}
-            >
-              {row.desiredState === "absent"
-                ? row.syncStatus === "synced"
-                  ? "deleted"
-                  : "deleting"
-                : row.syncStatus}
-            </span>
-            {row.lastError ? (
-              <p
-                className="max-w-56 truncate text-2xs text-status-error"
-                title={row.lastError}
-              >
-                {row.lastError}
-              </p>
-            ) : null}
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">managed</span>
-        ),
-      sortAccessor: (row) => row.syncStatus ?? "",
-    },
-    {
-      key: "actions",
-      header: "",
-      sortable: false,
-      accessor: (row) =>
-        row.source === "custom" && row.desiredState !== "absent" ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (canWrite) setDeleteTarget(row);
-            }}
-            disabled={!canWrite}
-            title={canWrite ? "Delete constraint" : reason}
-            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        ) : null,
-    },
-  ];
+  const columns = gatekeeperColumns({
+    canWrite,
+    reason,
+    onDelete: setDeleteTarget,
+  });
 
   if (clusterLoading || clusterQuery.isError) {
     return (
@@ -240,7 +133,8 @@ export function ClusterGatekeeperPage() {
   return (
     <PageShell>
       <RouterLink
-        to="/dashboard/clusters/$id" params={{ id: clusterId }}
+        to="/dashboard/clusters/$id"
+        params={{ id: clusterId }}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
@@ -259,31 +153,24 @@ export function ClusterGatekeeperPage() {
             Author constraint
           </h2>
           <div className="flex items-center gap-2">
-            <button
+            <ActionButton
+              icon={<Play className="h-3.5 w-3.5" />}
+              loading={validate.isPending}
               onClick={handleValidate}
               disabled={busy || !yaml.trim()}
-              className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
             >
-              {validate.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
               Validate
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
+              intent="primary"
+              icon={<Upload className="h-3.5 w-3.5" />}
+              loading={apply.isPending}
+              disabledReason={canWrite ? undefined : reason}
               onClick={handleApply}
               disabled={busy || !yaml.trim() || !canWrite}
-              title={canWrite ? undefined : reason}
-              className="inline-flex items-center gap-2 h-9 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              {apply.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Upload className="h-3.5 w-3.5" />
-              )}
               Apply
-            </button>
+            </ActionButton>
           </div>
         </div>
 

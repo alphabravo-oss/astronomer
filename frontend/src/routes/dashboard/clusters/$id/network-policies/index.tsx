@@ -25,7 +25,7 @@ import { QueryStates } from "@/components/ui/query-states";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 import { Plus, Trash2, RefreshCw, Loader2 } from "lucide-react";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -35,6 +35,35 @@ import {
   reapplyNetworkPolicyApplication,
   type NetworkPolicyApplication,
 } from "@/lib/api/settings";
+import { SkeletonText } from "@/components/ui/skeleton";
+import { BareButton } from "@/components/form/bare-button";
+
+function PolicyRowActions({
+  onReapply,
+  onRevoke,
+}: {
+  onReapply: () => void;
+  onRevoke: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <BareButton
+        onClick={onReapply}
+        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-border hover:bg-muted font-normal"
+      >
+        <RefreshCw className="h-3 w-3" /> Reapply
+      </BareButton>
+      <BareButton
+        tooltip="Revoke"
+        aria-label="Revoke"
+        onClick={onRevoke}
+        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-status-error/30 text-status-error hover:bg-status-error/10 font-normal"
+      >
+        <Trash2 className="h-3 w-3" />
+      </BareButton>
+    </div>
+  );
+}
 
 function ClusterNetworkPoliciesPage() {
   const params = Route.useParams();
@@ -119,20 +148,19 @@ function ClusterNetworkPoliciesPage() {
     return <QueryStates query={templatesQuery}>{null}</QueryStates>;
 
   return (
-    <div className="space-y-4">
+    <PageShell>
       <ResourceMasthead
         backTo={`/dashboard/clusters/${clusterID}`}
         backLabel="Back to cluster"
         title="Network policies"
         description="NetworkPolicy templates applied to namespaces in this cluster. The reconciler keeps each application server-side-applied; drifting rows are re-stamped on the next 5m tick."
         actions={
-          <button
-            type="button"
+          <BareButton
             onClick={() => setOpenApply((v) => !v)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-card hover:bg-muted"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-card hover:bg-muted font-normal"
           >
             <Plus className="h-4 w-4" /> Apply template
-          </button>
+          </BareButton>
         }
       />
 
@@ -170,11 +198,10 @@ function ClusterNetworkPoliciesPage() {
               </span>
             </label>
           </div>
-          <button
-            type="button"
+          <BareButton
             onClick={handleApply}
             disabled={submitting}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-foreground text-background hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-foreground text-background hover:opacity-90 disabled:opacity-50 font-normal"
           >
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -182,13 +209,14 @@ function ClusterNetworkPoliciesPage() {
               <Plus className="h-4 w-4" />
             )}
             Apply
-          </button>
+          </BareButton>
         </div>
       )}
 
       {loading ? (
-        <div className="flex items-center text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading...
+        <div aria-busy="true">
+          <span className="sr-only">Loading...</span>
+          <SkeletonText lines={3} />
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
@@ -238,22 +266,10 @@ function ClusterNetworkPoliciesPage() {
                     {a.last_applied_at ?? "—"}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleReapply(a)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-border hover:bg-muted"
-                      >
-                        <RefreshCw className="h-3 w-3" /> Reapply
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRevokeTarget(a)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-status-error/30 text-status-error hover:bg-status-error/10"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
+                    <PolicyRowActions
+                      onReapply={() => handleReapply(a)}
+                      onRevoke={() => setRevokeTarget(a)}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -305,7 +321,7 @@ function ClusterNetworkPoliciesPage() {
             : undefined
         }
       />
-    </div>
+    </PageShell>
   );
 }
 

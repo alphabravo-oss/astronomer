@@ -2210,7 +2210,7 @@ Use "astro cluster [command] --help" for more information about a command.
 create posts to /api/v1/clusters/ and prints the new cluster's
 ID + registration phase. The next steps for the operator:
 
-  astro cluster manifest <id> | kubectl --context=<target> apply --server-side --field-manager=astronomer-bootstrap -f -
+  astro cluster manifest <id> | kubectl --context=<target> apply --server-side --force-conflicts --field-manager=astronomer-bootstrap -f -
 
 That installs the agent into the target cluster, which then connects
 back. Run "astro cluster get <id>" to watch the registration phase
@@ -2299,7 +2299,7 @@ Global Flags:
 Prints the cluster-specific agent install manifest to stdout.
 Pipe directly into kubectl:
 
-  astro cluster manifest <id> | kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
+  astro cluster manifest <id> | kubectl apply --server-side --force-conflicts --field-manager=astronomer-bootstrap -f -
 
 Each call mints a fresh short-lived registration token; safe to re-run.
 

@@ -51,6 +51,98 @@ func TestInventoryRegistryFollowsEveryCanonicalPage(t *testing.T) {
 	}
 }
 
+func TestResumeRetriesLocallyBlockedCasesButPreservesExternalBlocks(t *testing.T) {
+	local := caseDefinition{ID: "TOOL-01"}
+	external := caseDefinition{ID: "CLOUD-01"}
+	blocked := caseResult{State: "BLOCKED"}
+	if shouldSkipResumedCase(local, blocked) {
+		t.Fatal("resume skipped a locally blocked case after its executor may have been added")
+	}
+	if !shouldSkipResumedCase(external, blocked) {
+		t.Fatal("resume retried a case whose declared external fixture is still unavailable")
+	}
+	if !shouldSkipResumedCase(local, caseResult{State: "PASS"}) {
+		t.Fatal("resume retried a passing case")
+	}
+}
+
+func TestBeginCaseAttemptDropsPriorTerminalDimensions(t *testing.T) {
+	completed := time.Now().UTC().Add(-time.Minute)
+	started := time.Now().UTC()
+	result := beginCaseAttempt(caseResult{
+		ID: "APP-05", State: "BLOCKED", Reason: "old blocker", Attempts: 1,
+		CompletedAt: &completed,
+		Dimensions:  []dimensionResult{{Name: "inventory", State: "BLOCKED", Reason: "old footprint"}},
+	}, started)
+	if result.State != "RUNNING" || result.Reason != "case executor started" || result.Attempts != 2 {
+		t.Fatalf("resumed attempt metadata = %#v", result)
+	}
+	if result.StartedAt == nil || !result.StartedAt.Equal(started) || result.CompletedAt != nil {
+		t.Fatalf("resumed attempt timestamps = %#v", result)
+	}
+	if len(result.Dimensions) != 0 {
+		t.Fatalf("resumed attempt retained terminal dimensions: %#v", result.Dimensions)
+	}
+}
+
+func TestDexToolExecutorPassesOnlyOnExplicitManagementOnlyRejection(t *testing.T) {
+	clusterID := "00000000-0000-0000-0000-000000000001"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/tools/status/"):
+			_, _ = w.Write([]byte(`{"data":[{"slug":"dex","status":"not_installed"}]}`))
+		case strings.Contains(r.URL.Path, "/tools/dex/"):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"Dex is bundled with the Astronomer management chart; use the Auth settings workflow"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now().UTC()
+	result := caseResult{ID: "TOOL-02", State: "RUNNING", Attempts: 1, StartedAt: &started}
+	result = toolLifecycleExecutor{slug: "dex"}.Run(context.Background(), executionContext{
+		Base: base, Token: "token", RunID: "test-run",
+		Config: qualificationConfig{MemberTargets: []memberTarget{{ClusterID: clusterID, ExpectedPrivilegeProfile: "admin"}}},
+	}, caseDefinition{ID: "TOOL-02", Category: "tool"}, result, func(caseResult) error { return nil })
+	if result.State != "PASS" {
+		t.Fatalf("Dex rejection case state=%s reason=%s dimensions=%+v", result.State, result.Reason, result.Dimensions)
+	}
+	if err := verifyPassingCase(caseDefinition{ID: "TOOL-02", Category: "tool"}, result); err != nil {
+		t.Fatalf("Dex rejection evidence did not satisfy the formal verifier: %v", err)
+	}
+}
+
+func TestToolUninstallBodyRequiresExplicitLonghornDeletionConfirmation(t *testing.T) {
+	longhorn := toolUninstallBody("longhorn", "cluster-1")
+	if longhorn["cluster_id"] != "cluster-1" || longhorn["confirm_data_deletion"] != true || longhorn["confirm_failed_release_cleanup"] != true {
+		t.Fatalf("longhorn uninstall body = %#v", longhorn)
+	}
+	standard := toolUninstallBody("cert-manager", "cluster-1")
+	if _, present := standard["confirm_data_deletion"]; present {
+		t.Fatalf("standard uninstall unexpectedly confirms data deletion: %#v", standard)
+	}
+	if standard["confirm_failed_release_cleanup"] != true {
+		t.Fatalf("standard uninstall does not acknowledge run-owned failed cleanup: %#v", standard)
+	}
+}
+
+func TestQualificationCleanupFailsOnUnprovenExecutorCleanup(t *testing.T) {
+	evidence := report{Cases: []caseResult{{ID: "TOOL-05", Dimensions: []dimensionResult{{Name: "uninstall_cleanup", State: "FAIL"}}}}}
+	if cleanup := qualificationCleanup(evidence); cleanup.State != "FAIL" {
+		t.Fatalf("cleanup state=%s, want FAIL", cleanup.State)
+	}
+	evidence.Cases[0].Dimensions[0].State = "PASS"
+	if cleanup := qualificationCleanup(evidence); cleanup.State != "PASS" {
+		t.Fatalf("cleanup state=%s, want PASS", cleanup.State)
+	}
+}
+
 func TestInventoryRegistryFailsClosedOnUnknownOffering(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -96,6 +188,54 @@ func TestInventoryClientDoesNotFollowRedirects(t *testing.T) {
 	}, nil, nil)
 	if result.Status != "FAIL" || result.HTTPStatuses[0] != http.StatusFound || redirected {
 		t.Fatalf("redirect was not rejected before follow: result=%#v redirected=%t", result, redirected)
+	}
+}
+
+func TestQualificationAPIRejectsHTTP200FalseBody(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":false,"error":"not actually accepted"}`))
+	}))
+	t.Cleanup(server.Close)
+	base, _ := url.Parse(server.URL)
+	if _, err := requestAPI(context.Background(), server.Client(), base, "token", http.MethodGet, "/api/v1/test", nil, "", http.StatusOK); err == nil || !strings.Contains(err.Error(), "ok:false") {
+		t.Fatalf("HTTP 200 ok:false was accepted: %v", err)
+	}
+}
+
+func TestPollOperationRejectsPerpetualPending(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"id":"op-1","status":"pending"}}`))
+	}))
+	t.Cleanup(server.Close)
+	base, _ := url.Parse(server.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	if _, err := pollOperation(ctx, server.Client(), base, "token", "/api/v1/operations/op-1", "op-1", time.Millisecond); err == nil || !strings.Contains(err.Error(), "did not complete") {
+		t.Fatalf("perpetual pending operation was accepted: %v", err)
+	}
+}
+
+func TestPollOperationRejectsWrongOperation(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"id":"other","status":"completed"}}`))
+	}))
+	t.Cleanup(server.Close)
+	base, _ := url.Parse(server.URL)
+	if _, err := pollOperation(context.Background(), server.Client(), base, "token", "/api/v1/operations/op-1", "op-1", time.Millisecond); err == nil || !strings.Contains(err.Error(), "instead of") {
+		t.Fatalf("wrong operation was accepted: %v", err)
+	}
+}
+
+func TestOperationFailureDetailUsesDeliveryMessage(t *testing.T) {
+	body := map[string]any{"data": map[string]any{"deliveryMessage": "Helm install failed because host port 9100 is occupied", "errorMessage": "generic"}}
+	if got := operationFailureDetail(body); !strings.Contains(got, "9100") {
+		t.Fatalf("operation failure detail = %q", got)
 	}
 }
 
@@ -214,12 +354,20 @@ func TestVerifyRejectsEveryFalseGreenState(t *testing.T) {
 		"unmatched offering": func(value *report) {
 			value.Inventory[0].AdditionalIdentities = []string{"surprise"}
 		},
-		"false summary": func(value *report) { value.Summary.Total++ },
+		"false summary":      func(value *report) { value.Summary.Total++ },
+		"missing dimensions": func(value *report) { value.Cases[0].Dimensions = nil },
+		"failed dimension":   func(value *report) { value.Cases[0].Dimensions[0].State = "FAIL" },
+		"duplicate dimension": func(value *report) {
+			value.Cases[0].Dimensions = append(value.Cases[0].Dimensions, value.Cases[0].Dimensions[0])
+		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
 			value := base
 			value.Cases = append([]caseResult(nil), base.Cases...)
+			for index := range value.Cases {
+				value.Cases[index].Dimensions = append([]dimensionResult(nil), base.Cases[index].Dimensions...)
+			}
 			value.Inventory = append([]registryResult(nil), base.Inventory...)
 			value.Summary = resultSummary{Total: base.Summary.Total, InventoryOK: base.Summary.InventoryOK, InventoryBad: base.Summary.InventoryBad, ByState: cloneIntMap(base.Summary.ByState)}
 			mutate(&value)
@@ -348,7 +496,31 @@ func passingReport(manifest caseManifest) report {
 		Cleanup: cleanupResult{State: "PASS", Reason: "removed run-owned resources"},
 	}
 	for _, definition := range manifest.Cases {
-		value.Cases = append(value.Cases, caseResult{ID: definition.ID, State: "PASS"})
+		started := time.Now().UTC().Add(-time.Minute)
+		completed := time.Now().UTC()
+		dimensions := make([]dimensionResult, 0, len(requiredDimensions(definition.Category)))
+		for _, name := range requiredDimensions(definition.Category) {
+			dimension := dimensionResult{Name: name, State: "PASS", Reason: "synthetic test evidence", ObservedAt: completed}
+			if name == "functional_canary" {
+				dimension.ArtifactSHA = digest([]byte(definition.ID))
+				dimension.SampleAt = &completed
+			}
+			if name == "reconciliation" {
+				generation := int64(1)
+				dimension.OperationID = "operation-1"
+				dimension.DesiredGeneration = &generation
+				dimension.ObservedGeneration = &generation
+			}
+			if (definition.Category == "app" || definition.Category == "tool") && (name == "install" || name == "upgrade" || name == "rollback" || name == "uninstall_cleanup") {
+				dimension.HTTPStatus = http.StatusAccepted
+				dimension.OperationID = "operation-1"
+				dimension.IdempotencyKey = "idempotency-1"
+			}
+			dimensions = append(dimensions, dimension)
+		}
+		value.Cases = append(value.Cases, caseResult{
+			ID: definition.ID, State: "PASS", Attempts: 1, StartedAt: &started, CompletedAt: &completed, Dimensions: dimensions,
+		})
 	}
 	value.Summary = summarize(value)
 	return value

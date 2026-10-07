@@ -17,6 +17,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { ActionButton } from "@/components/ui/action-button";
+import { BareButton } from "@/components/form/bare-button";
 
 const SECRET_PLACEHOLDER = "••••••••";
 
@@ -27,7 +28,7 @@ interface CommonFieldProps {
   disabled?: boolean;
   placeholder?: string;
   /** Extra input classes merged over the shared base (twMerge — later wins),
-   *  for forms whose inputs deviate from the default sizing (e.g. h-9/rounded-md). */
+   *  for forms whose inputs deviate from the default sizing (e.g. h-(--control-h)/rounded-md). */
   className?: string;
 }
 
@@ -329,19 +330,18 @@ export function SecretField({
       {revealable ? (
         <div className="relative">
           {input}
-          <button
-            type="button"
+          <BareButton
             onClick={() => setReveal((prev) => !prev)}
             className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
             aria-label={reveal ? "Hide secret" : "Show secret"}
-            title={reveal ? "Hide" : "Show"}
+            tooltip={reveal ? "Hide" : "Show"}
           >
             {reveal ? (
               <EyeOff className="h-3.5 w-3.5" />
             ) : (
               <Eye className="h-3.5 w-3.5" />
             )}
-          </button>
+          </BareButton>
         </div>
       ) : (
         input

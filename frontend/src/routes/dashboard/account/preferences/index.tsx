@@ -10,6 +10,8 @@ import {
   landingRouteOptions,
   type FavoriteRoute,
 } from "@/lib/api/user-preferences";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function AccountPreferencesPage() {
   const { preferences, isLoading, isSaving, saveError, updatePreferences } =
@@ -50,14 +52,12 @@ function AccountPreferencesPage() {
       />
 
       {isLoading ? (
-        <div className="flex h-40 items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
+        <LoadingSkeleton label="Loading" heading />
       ) : (
         <>
           <PageSection
             title="Appearance and behavior"
-            description="Choose how dense, visual, and time-aware the console should be."
+            description="Choose how dense (tables, forms, cards), visual, and time-aware the console should be."
           >
             <Card>
               <CardContent className="grid gap-5 p-5 md:grid-cols-2">
@@ -78,7 +78,7 @@ function AccountPreferencesPage() {
                 />
                 <PreferenceSelect
                   id="preference-density"
-                  label="Table density"
+                  label="Interface density"
                   value={preferences.table_density}
                   onChange={(table_density) =>
                     updatePreferences({
@@ -168,9 +168,8 @@ function AccountPreferencesPage() {
               {favoriteNavigationOptions.map((option) => {
                 const selected = preferences.favorites.includes(option.href);
                 return (
-                  <button
+                  <BareButton
                     key={option.href}
-                    type="button"
                     aria-pressed={selected}
                     onClick={() => toggleFavorite(option.href)}
                     className={cn(
@@ -187,7 +186,7 @@ function AccountPreferencesPage() {
                       )}
                     />
                     {option.label}
-                  </button>
+                  </BareButton>
                 );
               })}
             </div>

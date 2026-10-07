@@ -28,7 +28,7 @@ export function ExtStat({ row, spec, emptyText }: ExtStatProps) {
 
   if (rawValue === null || rawValue === undefined) {
     return (
-      <div className="rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground">
+      <div className="rounded-lg border border-border bg-card p-(--card-p) text-sm text-muted-foreground">
         {emptyText || "No data"}
       </div>
     );

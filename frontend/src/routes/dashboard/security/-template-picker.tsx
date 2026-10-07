@@ -28,12 +28,18 @@ export function TemplatePicker({
         {
           key: "name",
           header: "Template",
+          kind: "name",
+          minSize: 200,
           accessor: (row) => row.name,
           sortable: false,
         },
         {
           key: "select",
           header: "Selection",
+          kind: "actions",
+          size: 280,
+          minSize: 160,
+          maxSize: 400,
           accessor: (row) => (
             <ActionButton
               aria-pressed={value === row.id}

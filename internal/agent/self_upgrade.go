@@ -227,6 +227,16 @@ func (h *SelfUpgradeHandler) startAgentUpgrade(ctx context.Context, payload prot
 	if targetImage == "" {
 		return out, fmt.Errorf("target_image is required")
 	}
+	targetPullPolicy := corev1.PullPolicy(strings.TrimSpace(payload.TargetPullPolicy))
+	if targetPullPolicy == "" {
+		targetPullPolicy = corev1.PullAlways
+	}
+	if targetPullPolicy != corev1.PullAlways && targetPullPolicy != corev1.PullIfNotPresent && targetPullPolicy != corev1.PullNever {
+		return out, fmt.Errorf("target_pull_policy must be Always, IfNotPresent, or Never")
+	}
+	if targetPullPolicy == corev1.PullNever && !strings.Contains(targetImage, "@sha256:") {
+		return out, fmt.Errorf("target_pull_policy Never requires an immutable sha256 digest reference")
+	}
 	namespace := cmp.Or(strings.TrimSpace(payload.AgentNamespace), DefaultAgentNamespace)
 	deploymentName := cmp.Or(strings.TrimSpace(payload.AgentDeployment), DefaultAgentDeploymentName)
 
@@ -296,11 +306,11 @@ func (h *SelfUpgradeHandler) startAgentUpgrade(ctx context.Context, payload prot
 	if err := overrides.ApplyToPodSpec(&template, agentContainerIndex(deploy)); err != nil {
 		return out, fmt.Errorf("apply agent_overrides to preflight: %w", err)
 	}
-	if err := h.verifyImagePullable(ctx, namespace, targetImage, payload.OperationID, "target", template); err != nil {
+	if err := h.verifyImagePullable(ctx, namespace, targetImage, payload.OperationID, "target", targetPullPolicy, template); err != nil {
 		return out, err
 	}
 	if rollbackImage != currentImage {
-		if err := h.verifyImagePullable(ctx, namespace, rollbackImage, payload.OperationID, "rollback", template); err != nil {
+		if err := h.verifyImagePullable(ctx, namespace, rollbackImage, payload.OperationID, "rollback", corev1.PullAlways, template); err != nil {
 			return out, fmt.Errorf("rollback image is not usable: %w", err)
 		}
 	}
@@ -320,7 +330,7 @@ func (h *SelfUpgradeHandler) startAgentUpgrade(ctx context.Context, payload prot
 	}
 
 	// Step 4 — commit.
-	if err := h.patchAgentDeployment(ctx, namespace, deploymentName, targetImage, payload.OperationID, overrides, configurationDigest); err != nil {
+	if err := h.patchAgentDeployment(ctx, namespace, deploymentName, targetImage, targetPullPolicy, payload.OperationID, overrides, configurationDigest); err != nil {
 		return out, err
 	}
 	h.log.Info("agent self-upgrade rollout started",
@@ -437,7 +447,7 @@ func (h *SelfUpgradeHandler) replaceFinishedWatchdogJob(ctx context.Context, nam
 	}
 }
 
-func (h *SelfUpgradeHandler) patchAgentDeployment(ctx context.Context, namespace, deploymentName, targetImage, operationID string, overrides agenttemplate.AgentOverrides, configurationDigest string) error {
+func (h *SelfUpgradeHandler) patchAgentDeployment(ctx context.Context, namespace, deploymentName, targetImage string, targetPullPolicy corev1.PullPolicy, operationID string, overrides agenttemplate.AgentOverrides, configurationDigest string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		deploy, err := h.client.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 		if err != nil {
@@ -449,6 +459,7 @@ func (h *SelfUpgradeHandler) patchAgentDeployment(ctx context.Context, namespace
 			return fmt.Errorf("deployment %s/%s has no containers", namespace, deploymentName)
 		}
 		next.Spec.Template.Spec.Containers[containerIndex].Image = targetImage
+		next.Spec.Template.Spec.Containers[containerIndex].ImagePullPolicy = targetPullPolicy
 		if err := overrides.ApplyToPodSpec(&next.Spec.Template.Spec, containerIndex); err != nil {
 			return err
 		}

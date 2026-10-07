@@ -12,10 +12,10 @@ import {
   useNotificationChannels,
   useTestNotificationChannel,
 } from "@/lib/hooks/alerting";
+import { NameSubCell, TimestampCell } from "@/components/ui/cell-primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
-import { formatRelativeTime } from "@/lib/utils";
 import type { NotificationChannel } from "@/types";
 
 const channelTypeIcons: Record<string, ElementType> = {
@@ -39,19 +39,23 @@ export function ChannelsTab() {
     {
       key: "name",
       header: "Channel",
+      kind: "name",
+      minSize: 200,
       accessor: (row) => {
         const TypeIcon = channelTypeIcons[row.type] || Bell;
         return (
-          <div className="flex items-center gap-2">
-            <TypeIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium text-foreground">{row.name}</span>
-          </div>
+          <NameSubCell
+            title={row.name}
+            icon={<TypeIcon className="h-4 w-4 text-muted-foreground" />}
+          />
         );
       },
+      sortAccessor: (row) => row.name,
     },
     {
       key: "type",
       header: "Type",
+      kind: "badge",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.type === "msteams"
@@ -65,6 +69,7 @@ export function ChannelsTab() {
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (row) => (
         <StatusBadge
           status={row.enabled ? "active" : "disconnected"}
@@ -75,11 +80,10 @@ export function ChannelsTab() {
     {
       key: "created",
       header: "Created",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.createdAt)}
-        </span>
-      ),
+      kind: "age",
+      size: 120,
+      maxSize: 160,
+      accessor: (row) => <TimestampCell value={row.createdAt} />,
     },
     {
       key: "actions",
@@ -89,7 +93,7 @@ export function ChannelsTab() {
           <ActionButton
             size="sm"
             intent="ghost"
-            title="Test Channel"
+            tooltip="Test Channel"
             onClick={() => testChannel.mutate(row.id)}
             disabled={testChannel.isPending}
             icon={<Send className="h-3 w-3" />}
@@ -100,6 +104,10 @@ export function ChannelsTab() {
         </div>
       ),
       sortable: false,
+      kind: "actions",
+      size: 96,
+      minSize: 96,
+      maxSize: 96,
     },
   ];
 

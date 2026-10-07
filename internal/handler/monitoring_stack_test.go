@@ -17,7 +17,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -53,7 +55,8 @@ type stackLifecycleQuerier struct {
 	aclAdmins     []sqlc.ListLokiQueryACLAdminCandidatesRow
 	aclUsers      []sqlc.ListLokiQueryACLUserCandidatesRow
 
-	audits []sqlc.CreateAuditLogV1Params
+	audits                 []sqlc.CreateAuditLogV1Params
+	clusterInstallBaseline bool
 }
 
 func (q *stackLifecycleQuerier) GetDefaultMonitoringBackend(context.Context) (sqlc.MonitoringBackend, error) {
@@ -194,6 +197,7 @@ func (q *stackLifecycleQuerier) ListClusters(context.Context, sqlc.ListClustersP
 		ClusterUid:        "kube-system-uid",
 		IsLocal:           true,
 		KubernetesVersion: "v1.31.4",
+		InstallBaseline:   pgtype.Bool{Bool: q.clusterInstallBaseline, Valid: true},
 	}}
 	return append(rows, q.extraClusters...), nil
 }
@@ -679,6 +683,177 @@ func TestClusterStackPreviewPinsFleetProvenanceAndKubernetesLabelInventory(t *te
 	allowlist := kubeState["metricLabelsAllowlist"].([]any)
 	if len(allowlist) < 3 {
 		t.Fatalf("metricLabelsAllowlist = %#v, want namespace/node/pod and workload entries", allowlist)
+	}
+	if _, exists := body.Data.Values["kubeStateMetrics"]; exists {
+		t.Fatal("full-stack-owned kubeStateMetrics was disabled without a Quick Start baseline")
+	}
+	if _, exists := body.Data.Values["nodeExporter"]; exists {
+		t.Fatal("full-stack-owned nodeExporter was disabled without a Quick Start baseline")
+	}
+}
+
+func TestClusterStackPreviewReusesFluxOwnedMetricsBaseline(t *testing.T) {
+	h, q := newStackLifecycleHandler(t)
+	q.clusterInstallBaseline = true
+	rec := httptest.NewRecorder()
+	request := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+		body:   `{}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.PreviewStack(rec, request)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data struct {
+			Values            map[string]any `json:"values"`
+			BaselineOwnership struct {
+				Detected   bool     `json:"detected"`
+				Mode       string   `json:"mode"`
+				Components []string `json:"components"`
+			} `json:"baselineOwnership"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if !body.Data.BaselineOwnership.Detected || body.Data.BaselineOwnership.Mode != "reuse" || len(body.Data.BaselineOwnership.Components) != 2 {
+		t.Fatalf("baselineOwnership = %#v, want detected reuse of two exporters", body.Data.BaselineOwnership)
+	}
+	if enabled := body.Data.Values["kubeStateMetrics"].(map[string]any)["enabled"]; enabled != false {
+		t.Fatalf("kubeStateMetrics.enabled = %#v, want false", enabled)
+	}
+	if enabled := body.Data.Values["nodeExporter"].(map[string]any)["enabled"]; enabled != false {
+		t.Fatalf("nodeExporter.enabled = %#v, want false", enabled)
+	}
+	prometheus := body.Data.Values["prometheus"].(map[string]any)
+	monitors := prometheus["additionalServiceMonitors"].([]any)
+	if len(monitors) != 2 {
+		t.Fatalf("additionalServiceMonitors = %#v, want two baseline monitors", monitors)
+	}
+	for _, raw := range monitors {
+		monitor := raw.(map[string]any)
+		namespaces := monitor["namespaceSelector"].(map[string]any)["matchNames"].([]any)
+		if len(namespaces) != 1 || namespaces[0] != "astronomer-monitoring" {
+			t.Fatalf("namespace selector = %#v, want astronomer-monitoring", namespaces)
+		}
+	}
+}
+
+func TestClusterStackLifecycleBlocksCompetingPrometheusOperator(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	k8s := h.requester.(*sizerK8sFake)
+	k8s.deployments = []appsv1.Deployment{{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "other-monitoring",
+			Name:      "other-kube-prometheus-operator",
+			Labels:    map[string]string{"app.kubernetes.io/instance": "other-prometheus"},
+		},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+			Name: "prometheus-operator", Image: "quay.io/prometheus-operator/prometheus-operator:v0.93.1",
+		}}}}},
+	}}
+
+	preview := httptest.NewRecorder()
+	previewRequest := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+		body:   `{}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.PreviewStack(preview, previewRequest)
+	if preview.Code != http.StatusOK {
+		t.Fatalf("preview status = %d: %s", preview.Code, preview.Body.String())
+	}
+	var previewBody struct {
+		Data struct {
+			Blocked   bool                         `json:"blocked"`
+			Conflicts []MonitoringOperatorConflict `json:"operatorConflicts"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(preview.Body.Bytes(), &previewBody); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if !previewBody.Data.Blocked || len(previewBody.Data.Conflicts) != 1 {
+		t.Fatalf("preview conflict result = %#v, want one blocking operator", previewBody.Data)
+	}
+	conflict := previewBody.Data.Conflicts[0]
+	if conflict.Namespace != "other-monitoring" || conflict.Name != "other-kube-prometheus-operator" || !conflict.WatchesAll {
+		t.Fatalf("operator conflict = %#v", conflict)
+	}
+
+	install := httptest.NewRecorder()
+	installRequest := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/install/",
+		body:   `{}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.InstallStack(install, installRequest)
+	if install.Code != http.StatusConflict || !strings.Contains(install.Body.String(), "monitoring_operator_conflict") {
+		t.Fatalf("install status = %d, body = %s", install.Code, install.Body.String())
+	}
+}
+
+func TestClusterStackPreviewIgnoresItsOwnNamespaceScopedOperator(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	k8s := h.requester.(*sizerK8sFake)
+	k8s.deployments = []appsv1.Deployment{{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "monitoring",
+			Name:      "prometheus-kube-prometheus-operator",
+			Labels:    map[string]string{"app.kubernetes.io/instance": "prometheus"},
+		},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+			Name: "prometheus-operator", Image: "quay.io/prometheus-operator/prometheus-operator:v0.75.1",
+			Args: []string{"--namespaces=monitoring"},
+		}}}}},
+	}}
+	rec := httptest.NewRecorder()
+	req := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+		body:   `{}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.PreviewStack(rec, req)
+	if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"blocked":true`) {
+		t.Fatalf("own operator preview status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestClusterStackPreviewHonorsCompetingOperatorNamespaceScope(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "different allow list", args: []string{"--namespaces", "other-monitoring"}},
+		{name: "target excluded", args: []string{"--deny-namespaces=monitoring,other"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h, _ := newStackLifecycleHandler(t)
+			k8s := h.requester.(*sizerK8sFake)
+			k8s.deployments = []appsv1.Deployment{{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "operators", Name: "scoped-prometheus-operator"},
+				Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{
+					Image: "quay.io/prometheus-operator/prometheus-operator:v0.93.1", Args: tt.args,
+				}}}}},
+			}}
+			rec := httptest.NewRecorder()
+			req := (stackLifecycleCase{
+				method: http.MethodPost,
+				target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+				body:   `{}`,
+				params: map[string]string{"id": stackTestClusterID},
+			}).request()
+			h.PreviewStack(rec, req)
+			if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"blocked":true`) {
+				t.Fatalf("scoped operator preview status = %d, body = %s", rec.Code, rec.Body.String())
+			}
+		})
 	}
 }
 

@@ -68,6 +68,7 @@ export interface K8sObject {
       kind: string;
       name: string;
       uid?: string;
+      controller?: boolean;
     }>;
   };
   spec?: {

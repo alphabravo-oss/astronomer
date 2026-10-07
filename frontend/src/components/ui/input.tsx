@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 /** Shared control chrome — inputs, selects, and textareas use this string. */
 export const controlClassName =
-  "flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
+  "flex h-(--control-h) w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
 
 export type InputProps = InputHTMLAttributes<HTMLInputElement>;
 

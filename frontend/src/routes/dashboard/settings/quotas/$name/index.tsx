@@ -11,7 +11,7 @@ import { useId, useState } from "react";
 import { useDraft } from "@/lib/hooks/use-draft";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Gauge, Loader2, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Gauge, Save, Trash2 } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -31,6 +31,7 @@ import type {
   QuotaPlanView,
   QuotaPlanWriteRequest,
 } from "@/lib/api/quotas";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
 function toWrite(form: QuotaPlanView): QuotaPlanWriteRequest {
   return {
@@ -95,7 +96,7 @@ function QuotaPlanForm({ initial }: { initial: QuotaPlanView }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <div className="rounded-xl border border-border bg-card p-6 space-y-4">
         <h2 className="text-base font-semibold text-foreground">
           Identification
@@ -253,11 +254,7 @@ function QuotaPlanInner() {
   const { data, isLoading, error } = useQuotaPlan(name);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingSkeleton label="Loading" heading />;
   }
   if (error || !data) {
     toastError("Failed to load quota plan");
@@ -285,15 +282,7 @@ function QuotaPlanDetailPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
         </RouterLink>
-        <PageHeader
-          eyebrow="Settings · Quota plan"
-          title={
-            <span className="flex items-center gap-2">
-              <Gauge className="h-5 w-5 text-muted-foreground" />
-              Edit plan
-            </span>
-          }
-        />
+        <PageHeader eyebrow="Settings · Quota plan" title="Edit plan" />
         <QuotaPlanInner />
       </PageShell>
     </SettingsAuthGate>

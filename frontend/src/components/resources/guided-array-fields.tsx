@@ -42,7 +42,6 @@ export function ArrayRows({
           </legend>
           {children([...path, index], index)}
           <ActionButton
-            type="button"
             size="sm"
             onClick={() =>
               form.set(
@@ -59,7 +58,6 @@ export function ArrayRows({
         </fieldset>
       ))}
       <ActionButton
-        type="button"
         size="sm"
         onClick={() => form.set(path, [...items, create()])}
       >

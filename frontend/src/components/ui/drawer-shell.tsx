@@ -1,9 +1,8 @@
-import { useId } from "react";
-import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OverlayShell } from "@/components/ui/overlay-shell";
+import { DialogTitle } from "@/components/ui/dialog";
 
 interface DrawerShellProps {
   title: string;
@@ -24,20 +23,16 @@ export function DrawerShell({
   panelClassName,
   bodyClassName,
 }: DrawerShellProps) {
-  const titleId = useId();
-
-  // Page animations and sticky toolbars create stacking contexts. Mount at
-  // the document root so the drawer always covers the surrounding chrome.
-  return createPortal(
+  // OverlayShell portals to the document root, so page animations and sticky
+  // toolbars cannot trap the drawer in a stacking context.
+  return (
     <OverlayShell
       onClose={onClose}
+      dialog
       placement="right"
       backdropClassName="bg-black/40 backdrop-blur-0"
     >
-      <aside
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
+      <div
         className={cn(
           "relative flex h-full w-full max-w-2xl flex-col border-l border-border bg-background shadow-xl",
           panelClassName,
@@ -45,12 +40,9 @@ export function DrawerShell({
       >
         <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
           <div className="min-w-0">
-            <h2
-              id={titleId}
-              className="truncate text-base font-semibold text-foreground"
-            >
+            <DialogTitle className="truncate text-base font-semibold text-foreground">
               {title}
-            </h2>
+            </DialogTitle>
             {subtitle && (
               <div className="mt-1 text-xs text-muted-foreground">
                 {subtitle}
@@ -74,8 +66,7 @@ export function DrawerShell({
         >
           {children}
         </div>
-      </aside>
-    </OverlayShell>,
-    document.body,
+      </div>
+    </OverlayShell>
   );
 }

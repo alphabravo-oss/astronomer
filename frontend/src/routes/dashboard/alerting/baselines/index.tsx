@@ -18,9 +18,11 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { formatRelativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { NumberCell, TimestampCell } from "@/components/ui/cell-primitives";
 import type { AnomalyBaseline } from "@/types";
-import { ArrowLeft, Activity, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
 
 function AnomalyBaselinesPage() {
   const [clusterFilter, setClusterFilter] = useSearchParam("cluster");
@@ -36,30 +38,37 @@ function AnomalyBaselinesPage() {
     {
       key: "metric",
       header: "Metric",
+      kind: "name",
+      minSize: 180,
       accessor: (b: AnomalyBaseline) => (
         <span className="font-mono text-xs">{b.metric}</span>
       ),
+      sortAccessor: (b: AnomalyBaseline) => b.metric,
     },
     {
       key: "clusterId",
       header: "Cluster",
+      kind: "text",
+      size: 105,
+      minSize: 104,
       accessor: (b: AnomalyBaseline) => (
-        <span
-          className="font-mono text-xs text-muted-foreground"
-          title={b.clusterId}
-        >
-          {b.clusterId.slice(0, 8)}
-        </span>
+        <Tooltip content={b.clusterId}>
+          <span className="font-mono text-xs text-muted-foreground">
+            {b.clusterId.slice(0, 8)}
+          </span>
+        </Tooltip>
       ),
     },
     {
       key: "sampleCount",
       header: "Samples",
+      kind: "count",
       accessor: (b: AnomalyBaseline) => (
         <span
-          className={
-            b.sampleCount < 50 ? "text-status-warning" : "text-foreground"
-          }
+          className={cn(
+            "font-mono text-xs tabular-nums",
+            b.sampleCount < 50 ? "text-status-warning" : "text-foreground",
+          )}
         >
           {b.sampleCount}
         </span>
@@ -68,34 +77,39 @@ function AnomalyBaselinesPage() {
     {
       key: "mean",
       header: "Mean",
-      accessor: (b: AnomalyBaseline) => (
-        <span className="font-mono text-xs">{b.mean.toFixed(2)}</span>
-      ),
+      kind: "count",
+      accessor: (b: AnomalyBaseline) => <NumberCell value={b.mean} />,
+      sortAccessor: (b: AnomalyBaseline) => b.mean,
     },
     {
       key: "stddev",
       header: "Stddev",
-      accessor: (b: AnomalyBaseline) => (
-        <span className="font-mono text-xs">{b.stddev.toFixed(2)}</span>
-      ),
+      kind: "count",
+      accessor: (b: AnomalyBaseline) => <NumberCell value={b.stddev} />,
+      sortAccessor: (b: AnomalyBaseline) => b.stddev,
     },
     {
       key: "lastValue",
-      header: "Last Value",
-      accessor: (b: AnomalyBaseline) => (
-        <span className="font-mono text-xs">{b.lastValue.toFixed(2)}</span>
-      ),
+      header: "Last",
+      ariaLabel: "Last value",
+      kind: "count",
+      size: 84,
+      accessor: (b: AnomalyBaseline) => <NumberCell value={b.lastValue} />,
+      sortAccessor: (b: AnomalyBaseline) => b.lastValue,
     },
     {
       key: "p95",
       header: "P95",
-      accessor: (b: AnomalyBaseline) => (
-        <span className="font-mono text-xs">{b.p95.toFixed(2)}</span>
-      ),
+      kind: "count",
+      accessor: (b: AnomalyBaseline) => <NumberCell value={b.p95} />,
+      sortAccessor: (b: AnomalyBaseline) => b.p95,
     },
     {
       key: "windowSeconds",
       header: "Window",
+      kind: "text",
+      size: 98,
+      minSize: 96,
       accessor: (b: AnomalyBaseline) => (
         <span className="text-xs text-muted-foreground">
           {formatWindow(b.windowSeconds)}
@@ -105,11 +119,10 @@ function AnomalyBaselinesPage() {
     {
       key: "updatedAt",
       header: "Updated",
-      accessor: (b: AnomalyBaseline) => (
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(b.updatedAt)}
-        </span>
-      ),
+      kind: "age",
+      size: 120,
+      maxSize: 160,
+      accessor: (b: AnomalyBaseline) => <TimestampCell value={b.updatedAt} />,
     },
   ];
 
@@ -125,12 +138,7 @@ function AnomalyBaselinesPage() {
             Back to Alerting
           </RouterLink>
         }
-        title={
-          <span className="inline-flex items-center gap-2">
-            <Activity className="h-6 w-6" />
-            Anomaly Baselines
-          </span>
-        }
+        title="Anomaly Baselines"
         description="Rolling-window statistics per (cluster, metric, window) tuple. Maintained by the anomaly:baseline_recompute worker every 5 minutes."
         actions={
           <ActionButton

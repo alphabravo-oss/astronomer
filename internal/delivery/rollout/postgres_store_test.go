@@ -61,7 +61,7 @@ func TestPostgresStoreStrictMetadataDecoding(t *testing.T) {
 		t.Fatalf("valid metadata decoded as %+v: %v", decoded, err)
 	}
 
-	capabilities, err := deliveryCapabilities("v2.9.3", []byte(`{"source-controller":"v1.7.4","helm-controller":"v1.4.5"}`))
+	capabilities, err := deliveryCapabilities("v2.9.6", []byte(`{"source-controller":"v1.7.4","helm-controller":"v1.4.5"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestPostgresStoreStrictMetadataDecoding(t *testing.T) {
 		capabilities[protocol.FeatureDeliveryPlatformScope] != "" {
 		t.Fatalf("capabilities = %#v", capabilities)
 	}
-	if _, err := deliveryCapabilities("v2.9.3", []byte(`{"source-controller":7}`)); err == nil {
+	if _, err := deliveryCapabilities("v2.9.6", []byte(`{"source-controller":7}`)); err == nil {
 		t.Fatal("non-string controller version was accepted")
 	}
 }

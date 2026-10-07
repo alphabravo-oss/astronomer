@@ -95,7 +95,7 @@ export function SuggestedCatalogs({
                       {catalog.repoType}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 min-h-[2rem]">
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 min-h-8">
                     {catalog.description}
                   </p>
                 </div>
@@ -109,7 +109,7 @@ export function SuggestedCatalogs({
               )}
 
               <div className="mt-auto pt-1 flex items-center justify-between">
-                <span className="font-mono text-2xs text-muted-foreground truncate max-w-[60%]">
+                <span className="font-mono text-2xs text-muted-foreground truncate max-w-3/5">
                   {catalog.url}
                 </span>
                 {isAdded ? (
@@ -121,7 +121,7 @@ export function SuggestedCatalogs({
                       existingRepo && onJumpToExisting?.(existingRepo)
                     }
                     className="bg-status-success/10 text-status-success hover:bg-status-success/20 hover:text-status-success"
-                    title="View in Your repositories"
+                    tooltip="View in Your repositories"
                   >
                     Added
                   </ActionButton>

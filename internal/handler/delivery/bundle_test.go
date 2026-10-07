@@ -464,3 +464,60 @@ func componentVersionRow(id uuid.UUID, arg sqlc.CreateComponentBundleVersionPara
 		SpecDigest: arg.SpecDigest, VerificationStatus: "pending", State: "resolving", CreatedAt: now,
 	}
 }
+
+func TestCreateBundleVersionPersistsEmptyArrays(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		name := "omitted"
+		if explicit {
+			name = "empty"
+		}
+		t.Run(name, func(t *testing.T) {
+			projectID, bundleID, sourceID := uuid.New(), uuid.New(), uuid.New()
+			value := validCreateBundleVersionRequest(projectID, sourceID)
+			value.Spec.RequiredCapabilities = nil
+			if explicit {
+				value.DependencyBundleID = []uuid.UUID{}
+				value.Spec.RequiredCapabilities = []model.CapabilityRequirement{}
+			}
+			fake := &bundleQueryFake{
+				getFn: func(context.Context, sqlc.GetComponentBundleParams) (sqlc.ComponentBundle, error) {
+					return sqlc.ComponentBundle{ID: bundleID, ProjectID: projectID}, nil
+				},
+				getSourceFn: func(context.Context, sqlc.GetDeliverySourceParams) (sqlc.GetDeliverySourceRow, error) {
+					return validPublicSourceRow(projectID, sourceID), nil
+				},
+				createVersionFn: func(_ context.Context, arg sqlc.CreateComponentBundleVersionParams) (sqlc.ComponentBundleVersion, error) {
+					if string(arg.DependencyBundleIds) != "[]" || string(arg.Requirements) != "[]" {
+						t.Fatalf("durable JSON arrays must not be null: dependencies=%s requirements=%s", arg.DependencyBundleIds, arg.Requirements)
+					}
+					return componentVersionRow(uuid.New(), arg, time.Now().UTC()), nil
+				},
+				createResolutionFn: func(context.Context, sqlc.CreateDeliverySourceResolutionAndOutboxParams) (sqlc.CreateDeliverySourceResolutionAndOutboxRow, error) {
+					return sqlc.CreateDeliverySourceResolutionAndOutboxRow{ID: uuid.New()}, nil
+				},
+			}
+			body, err := json.Marshal(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if explicit {
+				var payload map[string]any
+				if err := json.Unmarshal(body, &payload); err != nil {
+					t.Fatal(err)
+				}
+				payload["dependency_bundle_ids"] = []string{}
+				payload["spec"].(map[string]any)["required_capabilities"] = []string{}
+				body, err = json.Marshal(payload)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			request := requestWithPathParams(http.MethodPost, "/api/v1/delivery/bundles/"+bundleID.String()+"/versions", strings.NewReader(string(body)), map[string]string{"id": bundleID.String()})
+			recorder := httptest.NewRecorder()
+			newBundleHandlerWithTestTransaction(fake).CreateVersion(recorder, request)
+			if recorder.Code != http.StatusCreated {
+				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}

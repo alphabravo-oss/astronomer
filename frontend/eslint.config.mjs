@@ -5,6 +5,16 @@ import reactHooks from "eslint-plugin-react-hooks";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import pluginQuery from "@tanstack/eslint-plugin-query";
 
+// Radix is an implementation detail of the design system: product code
+// composes src/components/ui primitives and never imports it directly. Flat
+// config does not merge rule options, so every no-restricted-imports block
+// below repeats this pattern; src/components/ui/** gets its own block last.
+const radixRestriction = {
+  group: ["radix-ui", "radix-ui/*", "@radix-ui/*"],
+  message:
+    "Import Radix only inside src/components/ui; use the ui/ primitive (Tooltip, Popover, DropdownMenu, Dialog, Sheet).",
+};
+
 const config = [
   {
     ignores: [
@@ -111,6 +121,7 @@ const config = [
               message:
                 "Next.js was removed in the Vite/TanStack migration. Use TanStack Router and native equivalents instead.",
             },
+            radixRestriction,
           ],
         },
       ],
@@ -193,6 +204,22 @@ const config = [
           message: "Use PageHeader or ResourceMasthead.",
         },
         {
+          selector: "JSXOpeningElement[name.name='button']",
+          message:
+            'Use ActionButton (intent="bare" size="none" for custom clickable surfaces).',
+        },
+        {
+          selector:
+            "JSXOpeningElement[name.name=/^(div|span|a|li|td|th|p|section|article|label|input|select|textarea|img|h[1-6])$/] > JSXAttribute[name.name='title']",
+          message:
+            "Use <Tooltip> (or ActionButton's tooltip prop); the native title attribute is not allowed.",
+        },
+        {
+          selector:
+            "JSXOpeningElement[name.name='ActionButton'] > JSXAttribute[name.name='title']",
+          message: "Use ActionButton's tooltip prop instead of title.",
+        },
+        {
           selector: "JSXOpeningElement[name.name='table']",
           message: "Use DataTable / operator-table.",
         },
@@ -216,6 +243,7 @@ const config = [
               message:
                 "Next.js was removed in the Vite/TanStack migration. Use TanStack Router and native equivalents instead.",
             },
+            radixRestriction,
             {
               group: ["@/components/ui/table"],
               message:
@@ -256,6 +284,22 @@ const config = [
           message: "Use PageHeader or ResourceMasthead.",
         },
         {
+          selector: "JSXOpeningElement[name.name='button']",
+          message:
+            'Use ActionButton (intent="bare" size="none" for custom clickable surfaces).',
+        },
+        {
+          selector:
+            "JSXOpeningElement[name.name=/^(div|span|a|li|td|th|p|section|article|label|input|select|textarea|img|h[1-6])$/] > JSXAttribute[name.name='title']",
+          message:
+            "Use <Tooltip> (or ActionButton's tooltip prop); the native title attribute is not allowed.",
+        },
+        {
+          selector:
+            "JSXOpeningElement[name.name='ActionButton'] > JSXAttribute[name.name='title']",
+          message: "Use ActionButton's tooltip prop instead of title.",
+        },
+        {
           selector: "JSXOpeningElement[name.name='table']",
           message: "Use DataTable / operator-table.",
         },
@@ -279,6 +323,7 @@ const config = [
               message:
                 "Next.js was removed in the Vite/TanStack migration. Use TanStack Router and native equivalents instead.",
             },
+            radixRestriction,
             {
               group: ["@/components/ui/table"],
               message:
@@ -311,6 +356,24 @@ const config = [
           selector: "Property[key.name='queryKey'] > ArrayExpression",
           message:
             "Do not inline queryKey arrays. Add/use a factory entry in src/lib/query-keys.ts instead.",
+        },
+      ],
+    },
+  },
+  {
+    // The only place Radix may be imported. Keeps the base `next` ban.
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["next", "next/*", "next-themes"],
+              message:
+                "Next.js was removed in the Vite/TanStack migration. Use TanStack Router and native equivalents instead.",
+            },
+          ],
         },
       ],
     },

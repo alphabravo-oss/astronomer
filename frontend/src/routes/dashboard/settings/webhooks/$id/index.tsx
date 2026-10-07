@@ -11,7 +11,6 @@ import { useTabParam } from "@/lib/use-tab-param";
 import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
-  Loader2,
   Play,
   RotateCcw,
   Save,
@@ -20,7 +19,7 @@ import {
 import { toastSuccess } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm } from "@/lib/form";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { pageCount, pageNumber } from "@/lib/api/pagination";
 import { ActionButton } from "@/components/ui/action-button";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -45,6 +44,9 @@ import type {
   WebhookSubscriptionView,
   WebhookTestReceiptView,
 } from "@/lib/api/settings";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 const TAB_KEYS = ["config", "deliveries", "test"] as const;
 
@@ -190,9 +192,8 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscriptionView }) {
               {AVAILABLE_EVENTS.map((ev) => {
                 const checked = field.state.value.includes(ev);
                 return (
-                  <button
+                  <BareButton
                     key={ev}
-                    type="button"
                     onClick={() =>
                       field.handleChange(
                         field.state.value.includes(ev)
@@ -208,7 +209,7 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscriptionView }) {
                     )}
                   >
                     {ev}
-                  </button>
+                  </BareButton>
                 );
               })}
             </div>
@@ -262,15 +263,20 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
     {
       key: "createdAt",
       header: "Time",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {formatRelativeTime(row.createdAt)}
+          <RelativeTime value={row.createdAt} />
         </span>
       ),
     },
     {
       key: "eventType",
       header: "Event",
+      kind: "text",
+      grow: true,
+      minSize: 160,
       accessor: (row) => (
         <span className="text-xs font-mono px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {row.eventType}
@@ -280,6 +286,8 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
     {
       key: "status",
       header: "Status",
+      kind: "status",
+      size: 104,
       accessor: (row) => (
         <StatusBadge
           status={
@@ -297,8 +305,10 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
     {
       key: "responseCode",
       header: "HTTP",
+      kind: "count",
+      size: 84,
       accessor: (row) => (
-        <span className="text-xs font-mono tabular-nums text-muted-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           {row.responseCode ?? "--"}
         </span>
       ),
@@ -306,29 +316,32 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
     {
       key: "attempts",
       header: "Attempts",
-      align: "right",
+      kind: "count",
+      size: 112,
       accessor: (row) => (
-        <span className="tabular-nums text-sm">{row.attempts}</span>
+        <span className="text-sm">{row.attempts}</span>
       ),
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 96,
+      maxSize: 96,
       sortable: false,
       accessor: (row) => (
-        <button
-          type="button"
+        <BareButton
           onClick={(e) => {
             e.stopPropagation();
             retry.mutate(row.id);
           }}
           disabled={retry.isPending || row.status === "delivered"}
           className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-30 transition-colors"
-          title="Retry delivery"
+          tooltip="Retry delivery"
         >
           <RotateCcw className="h-3 w-3" />
           Retry
-        </button>
+        </BareButton>
       ),
     },
   ];
@@ -349,26 +362,24 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
       />
       {data && (data.pagination.offset > 0 || data.pagination.has_more) && (
         <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
+          <BareButton
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
             className="h-8 px-3 rounded-lg border border-border text-xs font-medium disabled:opacity-50"
           >
             Previous
-          </button>
+          </BareButton>
           <p className="text-xs text-muted-foreground">
             Page {currentPage}
             {totalPages === undefined ? "" : ` of ${totalPages}`}
           </p>
-          <button
-            type="button"
+          <BareButton
             onClick={() => setPage((p) => p + 1)}
             disabled={!data.pagination.has_more}
             className="h-8 px-3 rounded-lg border border-border text-xs font-medium disabled:opacity-50"
           >
             Next
-          </button>
+          </BareButton>
         </div>
       )}
     </div>
@@ -435,11 +446,7 @@ function WebhookDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingSkeleton label="Loading" heading />;
   }
   if (error || !data) {
     return (

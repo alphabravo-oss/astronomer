@@ -2,9 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   adoptTool,
   getClusterToolsStatus,
+  getToolConfiguration,
   getToolOperation,
   getTools,
   installTool,
+  upgradeTool,
   uninstallTool,
   rollbackTool,
   retryToolOperation,
@@ -30,6 +32,15 @@ export function useClusterToolsStatus(clusterId: string) {
     throwOnError: false,
     enabled: !!clusterId,
     refetchInterval: liveFallback(30_000),
+  });
+}
+
+export function useToolConfiguration(slug: string, clusterId: string) {
+  return useQuery({
+    queryKey: queryKeys.tools.configuration(slug, clusterId),
+    queryFn: () => getToolConfiguration(slug, clusterId),
+    enabled: !!slug && !!clusterId,
+    throwOnError: false,
   });
 }
 
@@ -67,11 +78,54 @@ export function useInstallTool() {
   });
 }
 
+export function useUpgradeTool() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      slug,
+      ...data
+    }: {
+      slug: string;
+      cluster_id: string;
+      preset: string;
+      values_override?: string;
+    }) => upgradeTool(slug, data),
+    onSuccess: (_, { cluster_id, slug }) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.tools.clusterStatus(cluster_id),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.tools.configuration(slug, cluster_id),
+      });
+      toastSuccess("Tool upgrade initiated");
+    },
+    onError: (error: Error) => toastApiError("Failed to upgrade tool", error),
+  });
+}
+
 export function useUninstallTool() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ slug, cluster_id }: { slug: string; cluster_id: string }) =>
-      uninstallTool(slug, { cluster_id }),
+    mutationFn: ({
+      slug,
+      cluster_id,
+      confirm_data_deletion,
+      confirm_failed_release_cleanup,
+    }: {
+      slug: string;
+      cluster_id: string;
+      confirm_data_deletion?: boolean;
+      confirm_failed_release_cleanup?: boolean;
+    }) =>
+      uninstallTool(slug, {
+        cluster_id,
+        ...(confirm_data_deletion === undefined
+          ? {}
+          : { confirm_data_deletion }),
+        ...(confirm_failed_release_cleanup === undefined
+          ? {}
+          : { confirm_failed_release_cleanup }),
+      }),
     onSuccess: (_, { cluster_id }) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.tools.clusterStatus(cluster_id),

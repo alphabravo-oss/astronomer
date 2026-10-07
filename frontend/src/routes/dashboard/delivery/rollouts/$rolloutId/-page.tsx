@@ -16,8 +16,6 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
-  primaryButton,
-  secondaryButton,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
   withProjectQuery,
@@ -34,12 +32,62 @@ import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 
-import { formatRelativeTime } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
 import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { toastSuccess } from "@/lib/toast";
+import { ActionButton } from "@/components/ui/action-button";
 
 type RolloutAction = "pause" | "resume" | "abort" | "retry" | "rollback";
+
+const clusterColumns: Column<DeliveryRolloutCluster>[] = [
+  {
+    key: "cluster",
+    header: "Cluster",
+    kind: "id",
+    grow: true,
+    size: 300,
+    minSize: 240,
+    maxSize: 480,
+    accessor: (row) => row.clusterId,
+    sortAccessor: (row) => row.clusterId,
+  },
+  {
+    key: "cohort",
+    header: "Cohort / order",
+    kind: "text",
+    size: 154,
+    minSize: 154,
+    accessor: (row) => `${row.cohort} / ${row.releaseOrder}`,
+  },
+  {
+    key: "state",
+    header: "State",
+    kind: "status",
+    accessor: (row) => <DeliveryPhaseBadge value={row.state} />,
+  },
+  {
+    key: "action",
+    header: "Assignment",
+    kind: "text",
+    size: 140,
+    minSize: 126,
+    accessor: (row) => row.assignmentAction,
+  },
+  {
+    key: "attempt",
+    header: "Attempt",
+    kind: "count",
+    accessor: (row) => row.attempt,
+  },
+  {
+    key: "updated",
+    header: "Updated",
+    kind: "age",
+    accessor: (row) => <AgeCell value={row.updatedAt} />,
+    sortAccessor: (row) => row.updatedAt,
+  },
+];
 
 export function RolloutDetailPage() {
   const { rolloutId } = useParams({ strict: false }) as { rolloutId: string };
@@ -126,34 +174,6 @@ export function RolloutDetailPage() {
           ),
       )
     : [];
-  const clusterColumns: Column<DeliveryRolloutCluster>[] = [
-    {
-      key: "cluster",
-      header: "Cluster",
-      accessor: (row) => <code className="text-xs">{row.clusterId}</code>,
-    },
-    {
-      key: "cohort",
-      header: "Cohort / order",
-      accessor: (row) => `${row.cohort} / ${row.releaseOrder}`,
-    },
-    {
-      key: "state",
-      header: "State",
-      accessor: (row) => <DeliveryPhaseBadge value={row.state} />,
-    },
-    {
-      key: "action",
-      header: "Assignment",
-      accessor: (row) => row.assignmentAction,
-    },
-    { key: "attempt", header: "Attempt", accessor: (row) => row.attempt },
-    {
-      key: "updated",
-      header: "Updated",
-      accessor: (row) => formatRelativeTime(row.updatedAt),
-    },
-  ];
   return (
     <DeliveryShell
       projectId={projectId}
@@ -188,10 +208,10 @@ export function RolloutDetailPage() {
               rollout ? (
                 <>
                   {availableActions.map((value) => (
-                    <button
+                    <ActionButton
+                      intent="default"
                       key={value}
                       type="button"
-                      className={secondaryButton}
                       disabled={
                         value === "rollback" ? !canRollback : !canUpdate
                       }
@@ -199,7 +219,7 @@ export function RolloutDetailPage() {
                     >
                       {actionIcon(value)}
                       {value}
-                    </button>
+                    </ActionButton>
                   ))}
                 </>
               ) : undefined
@@ -265,9 +285,9 @@ export function RolloutDetailPage() {
                         {gate.digest}
                       </p>
                     </div>
-                    <button
+                    <ActionButton
+                      intent="primary"
                       type="button"
-                      className={primaryButton}
                       disabled={!canApprove}
                       onClick={() =>
                         setApproval({
@@ -277,7 +297,7 @@ export function RolloutDetailPage() {
                       }
                     >
                       Review approval
-                    </button>
+                    </ActionButton>
                   </div>
                 ))}
               </div>
@@ -448,22 +468,22 @@ function ApprovalDialog({
         </p>
         {mutation.isError && <ErrorMessage error={mutation.error} />}
         <div className="flex justify-end gap-2">
-          <button
+          <ActionButton
+            intent="default"
             type="button"
-            className={secondaryButton}
             disabled={mutation.isPending}
             onClick={() => mutation.mutate("rejected")}
           >
             <X className="h-4 w-4" /> Reject
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="primary"
             type="button"
-            className={primaryButton}
             disabled={mutation.isPending}
             onClick={() => mutation.mutate("approved")}
           >
             <Check className="h-4 w-4" /> Approve exact digest
-          </button>
+          </ActionButton>
         </div>
       </div>
     </ModalShell>

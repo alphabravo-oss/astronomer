@@ -140,6 +140,7 @@ func NormalizeAcceptedObservation(observation AcceptedObservation) (protocol.Del
 	inventory := observedInventory(observation.Reconciler)
 	phase := acceptedObservationPhase(observation, sourceConditions, reconcilerConditions)
 	errorCode, warnings := acceptedObservationDiagnostics(observation, sourceConditions, reconcilerConditions)
+	message := acceptedObservationMessage(phase, conditions)
 	names := Names(observation.Assignment.ProjectID, observation.Assignment.DeploymentID)
 	if phase == "ready" {
 		inventory.Ready = inventory.Entries
@@ -160,10 +161,38 @@ func NormalizeAcceptedObservation(observation AcceptedObservation) (protocol.Del
 		ReconcilerName:   names.Base,
 		ErrorCode:        errorCode,
 		WarningCodes:     warnings,
+		Message:          message,
 		Conditions:       conditions,
 		Inventory:        inventory,
 		ObservedAt:       observation.ObservedAt.UTC(),
 	}, nil
+}
+
+func acceptedObservationMessage(phase string, conditions []protocol.DeliveryCondition) string {
+	priorities := []struct {
+		typeSuffix string
+		status     string
+	}{
+		{"Stalled", "True"},
+		{"Ready", "False"},
+		{"Ready", "Unknown"},
+		{"Reconciling", "True"},
+	}
+	if phase == "ready" {
+		priorities = []struct {
+			typeSuffix string
+			status     string
+		}{{"Ready", "True"}}
+	}
+	for _, priority := range priorities {
+		for index := len(conditions) - 1; index >= 0; index-- {
+			condition := conditions[index]
+			if strings.HasSuffix(condition.Type, priority.typeSuffix) && condition.Status == priority.status && condition.Message != "" {
+				return condition.Message
+			}
+		}
+	}
+	return ""
 }
 
 func validateAcceptedAssignment(assignment AcceptedAssignment) error {
@@ -379,24 +408,11 @@ func observedInventory(reconciler *unstructured.Unstructured) protocol.DeliveryI
 	}
 	inventory := protocol.DeliveryInventory{Entries: len(entries)}
 	for _, raw := range entries {
-		id, ok := raw.(string)
+		resource, ok := fluxResourceIdentity(raw)
 		if !ok {
 			continue
 		}
-		parts := strings.Split(id, "_")
-		if len(parts) != 5 || parts[1] == "" || parts[2] == "" || parts[4] == "" {
-			continue
-		}
-		apiVersion := parts[1]
-		if parts[0] != "" {
-			apiVersion = parts[0] + "/" + parts[1]
-		}
-		inventory.Resources = append(inventory.Resources, protocol.DeliveryResourceIdentity{
-			APIVersion: apiVersion,
-			Kind:       parts[2],
-			Namespace:  parts[3],
-			Name:       parts[4],
-		})
+		inventory.Resources = append(inventory.Resources, resource)
 		if len(inventory.Resources) == protocol.MaxDeliveryInventoryEntries {
 			break
 		}

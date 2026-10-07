@@ -1,32 +1,51 @@
 #!/usr/bin/env node
+// Lints docs/openapi.yaml with the repo's .spectral.yaml ruleset.
+//
+// This drives @stoplight/spectral-core directly instead of the spectral CLI:
+// the CLI pulls fast-glob -> micromatch -> braces, which has an unpatched
+// stack-exhaustion advisory and failed the frontend dependency audit. The
+// library has no glob dependency and is all this lint needs.
 
+import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const spectral = path.join(root, "frontend", "node_modules", ".bin", "spectral");
-const spec = path.join(root, "docs", "openapi.yaml");
-const ruleset = path.join(root, ".spectral.yaml");
+const require = createRequire(path.join(root, "frontend", "package.json"));
+const { Spectral, Document } = require("@stoplight/spectral-core");
+const { oas } = require("@stoplight/spectral-rulesets");
+const Parsers = require("@stoplight/spectral-parsers");
+const yaml = require("js-yaml");
 
-const result = spawnSync(
-  spectral,
-  ["lint", spec, "--ruleset", ruleset, "--format", "json", "--fail-severity", "error"],
-  { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-);
-if (result.error) {
-  console.error(`OpenAPI Spectral execution failed: ${result.error.message}`);
+const spec = path.join(root, "docs", "openapi.yaml");
+const rulesetFile = path.join(root, ".spectral.yaml");
+
+// Only the built-in OpenAPI ruleset is supported as a base, which is all
+// .spectral.yaml extends. Fail loudly if someone adds another.
+const config = yaml.load(fs.readFileSync(rulesetFile, "utf8")) ?? {};
+const extendsList = [config.extends ?? []].flat();
+const unsupported = extendsList.filter((name) => name !== "spectral:oas");
+if (unsupported.length > 0) {
+  console.error(`OpenAPI Spectral: unsupported ruleset extends: ${unsupported.join(", ")}`);
   process.exit(2);
 }
 
 let diagnostics;
 try {
-  diagnostics = JSON.parse(result.stdout || "[]");
+  const spectral = new Spectral();
+  spectral.setRuleset({
+    extends: extendsList.length > 0 ? [oas] : [],
+    rules: config.rules ?? {},
+  });
+  diagnostics = await spectral.run(
+    new Document(fs.readFileSync(spec, "utf8"), Parsers.Yaml, spec),
+  );
 } catch (error) {
-  console.error("OpenAPI Spectral returned invalid JSON.");
-  console.error(result.stderr.trim());
+  console.error(`OpenAPI Spectral execution failed: ${error.message}`);
   process.exit(2);
 }
+
 const errors = diagnostics.filter((diagnostic) => diagnostic.severity === 0);
 if (errors.length > 0) {
   console.error(`OpenAPI Spectral schema lint failed with ${errors.length} error(s):`);
@@ -37,9 +56,5 @@ if (errors.length > 0) {
     console.error(`  - ${location} ${error.code}: ${error.message}`);
   }
   process.exit(1);
-}
-if (result.status !== 0 && !Array.isArray(diagnostics)) {
-  console.error(result.stderr.trim());
-  process.exit(result.status || 2);
 }
 console.log(`OpenAPI Spectral schema lint passed (${diagnostics.length} advisory warning(s) suppressed).`);

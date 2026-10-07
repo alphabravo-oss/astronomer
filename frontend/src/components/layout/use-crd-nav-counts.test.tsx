@@ -66,6 +66,7 @@ function Harness({
   );
   return (
     <>
+      {/* eslint-disable-next-line no-restricted-syntax -- test double */}
       <button onClick={() => setCollapsed(!collapsed)}>Toggle sidebar</button>
       <SidebarGroup
         group={groups.find((group) => group.label === label)!}

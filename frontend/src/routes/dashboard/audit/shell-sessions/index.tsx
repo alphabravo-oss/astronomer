@@ -22,7 +22,8 @@ import {
 } from "@/lib/api/admin-security";
 import type { ShellSession } from "@/lib/api/admin-security";
 import { queryKeys } from "@/lib/query-keys";
-import { formatDate, formatRelativeTime } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 function ShellSessionsPage() {
   const [selected, setSelected] = useState<ShellSession | null>(null);
@@ -42,6 +43,8 @@ function ShellSessionsPage() {
     {
       key: "cluster",
       header: "Cluster",
+      kind: "id",
+      size: 160,
       accessor: (row) => (
         <span className="font-mono text-xs text-foreground">
           {row.clusterId}
@@ -52,6 +55,8 @@ function ShellSessionsPage() {
     {
       key: "user",
       header: "User",
+      kind: "id",
+      size: 160,
       accessor: (row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.userId}
@@ -62,6 +67,8 @@ function ShellSessionsPage() {
     {
       key: "pod",
       header: "Pod",
+      kind: "name",
+      sortAccessor: (row) => `${row.podNamespace}/${row.podName}`,
       accessor: (row) => (
         <span className="text-sm text-foreground">
           {row.podNamespace}/{row.podName}
@@ -74,6 +81,7 @@ function ShellSessionsPage() {
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.status}
@@ -83,18 +91,21 @@ function ShellSessionsPage() {
     {
       key: "commands",
       header: "Commands",
+      kind: "count",
+      size: 112,
       accessor: (row) => (
-        <span className="tabular-nums text-sm">{row.commandCount ?? 0}</span>
+        <span className="text-sm">{row.commandCount ?? 0}</span>
       ),
       sortAccessor: (row) => row.commandCount ?? 0,
-      align: "center",
     },
     {
       key: "started",
       header: "Started",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.startedAt)}
+          <RelativeTime value={row.startedAt} />
         </span>
       ),
       sortAccessor: (row) => row.startedAt,
@@ -113,12 +124,7 @@ function ShellSessionsPage() {
         </RouterLink>
         <PageHeader
           className="mt-2"
-          title={
-            <span className="inline-flex items-center gap-2">
-              <TerminalSquare className="h-6 w-6" />
-              Shell Sessions
-            </span>
-          }
+          title="Shell Sessions"
           description="Active kubectl shell sessions across every cluster. Click a session to see its command trail."
         />
       </div>
@@ -187,7 +193,10 @@ function SessionCommandsDrawer({
         {(commands) => (
           <ol className="space-y-1.5 font-mono text-xs">
             {commands.map((cmd, i) => (
-              <li key={i} className="flex gap-3 rounded-md bg-muted/40 px-3 py-2">
+              <li
+                key={i}
+                className="flex gap-3 rounded-md bg-muted/40 px-3 py-2"
+              >
                 <span className="text-muted-foreground whitespace-nowrap">
                   {formatDate(cmd.commandAt)}
                 </span>

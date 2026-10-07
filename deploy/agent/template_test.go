@@ -5,7 +5,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
 	"io"
 	"strings"
@@ -908,7 +907,7 @@ func TestRenderInstallYAMLIsValidYAMLForEveryProfile(t *testing.T) {
 	}
 }
 
-func TestRenderInstallYAMLBootstrapsSuspendedSignedSystemAfterAgent(t *testing.T) {
+func TestRenderInstallYAMLDefersSystemCustomResourcesUntilAgentConnects(t *testing.T) {
 	manifest := RenderInstallYAML(InstallTemplateData{
 		ServerURL: "https://astro.example.test", ClusterID: "c1", RegistrationToken: "tok",
 		AgentImage: "registry.example.test/agent@sha256:" + strings.Repeat("a", 64), PrivilegeProfile: PrivilegeProfileAdmin,
@@ -918,27 +917,28 @@ func TestRenderInstallYAMLBootstrapsSuspendedSignedSystemAfterAgent(t *testing.T
 		SystemOIDCIdentity:   "https://github.com/example/release/.github/workflows/release.yaml@refs/tags/v1.0.0",
 	})
 	for _, required := range []string{
-		"kind: OCIRepository", "kind: Kustomization", "url: \"oci://registry.example.test/astronomer/system\"",
-		"digest: \"sha256:" + strings.Repeat("b", 64) + "\"", "provider: cosign", "suspend: true",
-		"serviceAccountName: astronomer-delivery-system-applier", "delivery.astronomer.io/system: \"true\"",
+		"name: ocirepositories.source.toolkit.fluxcd.io",
+		"name: kustomizations.kustomize.toolkit.fluxcd.io",
+		"kind: Deployment\nmetadata:\n  name: astronomer-agent",
+		"ASTRONOMER_SYSTEM_OIDC_ISSUER",
+		"value: \"https://token.actions.githubusercontent.com\"",
 	} {
 		if !strings.Contains(manifest, required) {
 			t.Fatalf("registration manifest missing %q", required)
 		}
 	}
-	agent := strings.Index(manifest, "kind: Deployment\nmetadata:\n  name: astronomer-agent")
-	system := strings.LastIndex(manifest, "kind: OCIRepository")
-	if agent < 0 || system < agent {
-		t.Fatalf("system bootstrap must follow the agent Deployment: agent=%d system=%d", agent, system)
-	}
-
-	invalid := RenderInstallYAML(InstallTemplateData{ServerURL: "https://astro.example.test", ClusterID: "c1", RegistrationToken: "tok", AgentImage: "agent:v1", SystemArtifactURL: "oci://user:secret@example.test/system"})
-	if strings.Contains(invalid, "name: astronomer-system-release") {
-		t.Fatal("invalid or credential-bearing system source was rendered")
+	for _, forbidden := range []string{
+		"apiVersion: source.toolkit.fluxcd.io/v1\nkind: OCIRepository",
+		"apiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization",
+		"name: astronomer-system-release\n",
+	} {
+		if strings.Contains(manifest, forbidden) {
+			t.Fatalf("fresh-cluster manifest rendered pre-discovery custom resource %q", forbidden)
+		}
 	}
 }
 
-func TestRenderInstallYAMLBootstrapsOfflinePinnedCosignKey(t *testing.T) {
+func TestRenderInstallYAMLCarriesOfflineCosignTrustForAgentReconciliation(t *testing.T) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -957,35 +957,15 @@ func TestRenderInstallYAMLBootstrapsOfflinePinnedCosignKey(t *testing.T) {
 	})
 	fingerprint := protocol.DeliverySystemKeyFingerprint(publicKey)
 	for _, required := range []string{
-		"name: astronomer-system-release-trust", "cosign.pub: " + base64.StdEncoding.EncodeToString(publicKey),
-		"secretRef:\n      name: astronomer-system-release-trust", "ASTRONOMER_SYSTEM_KEY_FINGERPRINT",
-		"value: \"" + fingerprint + "\"", "kind: OCIRepository", "kind: Kustomization",
+		"ASTRONOMER_SYSTEM_KEY_FINGERPRINTS",
+		"value: \"" + fingerprint + "\"",
 	} {
 		if !strings.Contains(manifest, required) {
 			t.Fatalf("offline enrollment manifest missing %q", required)
 		}
 	}
-	systemSource := strings.LastIndex(manifest, "kind: OCIRepository\nmetadata:\n  name: astronomer-system-release")
-	if systemSource < 0 {
-		t.Fatal("offline system OCIRepository was not rendered")
-	}
-	if strings.Contains(manifest[systemSource:], "matchOIDCIdentity") {
-		t.Fatal("offline key policy also rendered a keyless OIDC verifier")
-	}
-	decoder := yaml.NewDecoder(strings.NewReader(manifest))
-	documents := 0
-	for {
-		var doc any
-		if err := decoder.Decode(&doc); err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Fatalf("offline enrollment manifest is invalid YAML at document %d: %v", documents, err)
-		}
-		documents++
-	}
-	if documents < 7 {
-		t.Fatalf("offline enrollment rendered only %d YAML documents", documents)
+	if strings.Contains(manifest, "name: astronomer-system-release\n") {
+		t.Fatal("offline enrollment rendered system custom resources before API discovery")
 	}
 
 	nextKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -1005,8 +985,6 @@ func TestRenderInstallYAMLBootstrapsOfflinePinnedCosignKey(t *testing.T) {
 	})
 	keyringFingerprint := protocol.DeliverySystemKeyFingerprint(nextPublicKey)
 	for _, required := range []string{
-		"cosign.pub: " + base64.StdEncoding.EncodeToString(publicKey),
-		"cosign-" + strings.TrimPrefix(keyringFingerprint, "sha256:") + ".pub: " + base64.StdEncoding.EncodeToString(nextPublicKey),
 		"ASTRONOMER_SYSTEM_KEY_FINGERPRINTS", fingerprint + "," + keyringFingerprint,
 	} {
 		if !strings.Contains(keyringManifest, required) {

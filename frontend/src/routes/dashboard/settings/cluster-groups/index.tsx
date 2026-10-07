@@ -31,7 +31,6 @@ import { useAppForm, useStore } from "@/lib/form";
 import { QueryStates } from "@/components/ui/query-states";
 import {
   Plus,
-  Loader2,
   Trash2,
   Pencil,
   AlertCircle,
@@ -57,6 +56,8 @@ import {
   type ClusterGroupTreeNode,
   type ClusterGroupWriteRequest,
 } from "@/lib/api/cluster-groups";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 export const MAX_DEPTH = 2;
 
@@ -177,9 +178,7 @@ function ClusterGroupsPage() {
       />
 
       {isLoading ? (
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
+        <LoadingSkeleton label="Loading" heading />
       ) : flattened.length === 0 ? (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -251,28 +250,28 @@ function ClusterGroupsPage() {
                   </TableCell>
                   <TableCell className="px-4 py-2">
                     <div className="flex items-center gap-1 justify-end">
-                      <button
-                        type="button"
+                      <BareButton
+                        aria-label="Edit"
                         onClick={(event) => {
                           event.stopPropagation();
                           setEditing(g);
                         }}
                         className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                        title="Edit"
+                        tooltip="Edit"
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
+                      </BareButton>
+                      <BareButton
+                        aria-label="Delete"
                         onClick={(event) => {
                           event.stopPropagation();
                           setDeleteTarget(g);
                         }}
                         className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-                        title="Delete"
+                        tooltip="Delete"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      </BareButton>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -527,8 +526,7 @@ function ClusterGroupForm({
               {(field) => (
                 <div className="mt-1 flex flex-wrap gap-1">
                   {CLUSTER_GROUP_COLORS.map((c) => (
-                    <button
-                      type="button"
+                    <BareButton
                       key={c}
                       onClick={() => field.handleChange(c)}
                       className="h-7 w-7 rounded-sm border-2"

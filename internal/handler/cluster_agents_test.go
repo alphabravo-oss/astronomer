@@ -8,11 +8,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
+	"github.com/alphabravocompany/astronomer-go/internal/agentlifecycle"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
@@ -25,17 +27,18 @@ import (
 
 type fakeClusterAgentQuerier struct {
 	fakeOperationIdempotencyStore
-	clusters    []sqlc.Cluster
-	active      []sqlc.AgentConnection
-	history     map[uuid.UUID][]sqlc.AgentConnection
-	conditions  map[uuid.UUID][]sqlc.ClusterCondition
-	operations  map[uuid.UUID][]sqlc.AgentLifecycleOperation
-	created     []sqlc.AgentLifecycleOperation
-	idempotent  []sqlc.CreateAgentLifecycleOperationIdempotentParams
-	users       map[uuid.UUID]sqlc.User
-	audits      []sqlc.UpsertAuditOutboxParams
-	outboxErr   error
-	cursorCalls []sqlc.ListClustersAfterParams
+	operationsMu sync.RWMutex
+	clusters     []sqlc.Cluster
+	active       []sqlc.AgentConnection
+	history      map[uuid.UUID][]sqlc.AgentConnection
+	conditions   map[uuid.UUID][]sqlc.ClusterCondition
+	operations   map[uuid.UUID][]sqlc.AgentLifecycleOperation
+	created      []sqlc.AgentLifecycleOperation
+	idempotent   []sqlc.CreateAgentLifecycleOperationIdempotentParams
+	users        map[uuid.UUID]sqlc.User
+	audits       []sqlc.UpsertAuditOutboxParams
+	outboxErr    error
+	cursorCalls  []sqlc.ListClustersAfterParams
 }
 
 func (f *fakeClusterAgentQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
@@ -142,7 +145,9 @@ func (f *fakeClusterAgentQuerier) CreateAgentLifecycleOperation(_ context.Contex
 }
 
 func (f *fakeClusterAgentQuerier) CreateAgentLifecycleOperationIdempotent(_ context.Context, arg sqlc.CreateAgentLifecycleOperationIdempotentParams) (sqlc.AgentLifecycleOperation, error) {
+	f.operationsMu.Lock()
 	f.idempotent = append(f.idempotent, arg)
+	f.operationsMu.Unlock()
 	return f.recordAgentLifecycleOperation(sqlc.AgentLifecycleOperation{
 		ClusterID:      arg.ClusterID,
 		OperationType:  arg.OperationType,
@@ -157,6 +162,8 @@ func (f *fakeClusterAgentQuerier) CreateAgentLifecycleOperationIdempotent(_ cont
 }
 
 func (f *fakeClusterAgentQuerier) recordAgentLifecycleOperation(op sqlc.AgentLifecycleOperation) (sqlc.AgentLifecycleOperation, error) {
+	f.operationsMu.Lock()
+	defer f.operationsMu.Unlock()
 	now := time.Date(2026, 6, 13, 12, 1, 0, 0, time.UTC)
 	op.ID = uuid.New()
 	op.CreatedAt = now
@@ -170,6 +177,8 @@ func (f *fakeClusterAgentQuerier) recordAgentLifecycleOperation(op sqlc.AgentLif
 }
 
 func (f *fakeClusterAgentQuerier) ListAgentLifecycleOperationsByCluster(_ context.Context, arg sqlc.ListAgentLifecycleOperationsByClusterParams) ([]sqlc.AgentLifecycleOperation, error) {
+	f.operationsMu.RLock()
+	defer f.operationsMu.RUnlock()
 	items := f.operations[arg.ClusterID]
 	if arg.Offset >= int32(len(items)) {
 		return []sqlc.AgentLifecycleOperation{}, nil
@@ -178,7 +187,7 @@ func (f *fakeClusterAgentQuerier) ListAgentLifecycleOperationsByCluster(_ contex
 	if end > len(items) {
 		end = len(items)
 	}
-	return items[arg.Offset:end], nil
+	return append([]sqlc.AgentLifecycleOperation(nil), items[arg.Offset:end]...), nil
 }
 
 func (f *fakeClusterAgentQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
@@ -932,6 +941,45 @@ func TestClusterAgentUpgradePlanReadyForConnectedRemoteAgent(t *testing.T) {
 	}
 }
 
+func TestClusterAgentUpgradePlanUsesLastSucceededImageForRollback(t *testing.T) {
+	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+	clusterID := uuid.New()
+	actualImage := "registry.example/astronomer-agent@sha256:" + strings.Repeat("a", 64)
+	q := &fakeClusterAgentQuerier{
+		clusters: []sqlc.Cluster{{ID: clusterID, Name: "prod", DisplayName: "Production", Status: "active"}},
+		history: map[uuid.UUID][]sqlc.AgentConnection{clusterID: {{
+			ID: uuid.New(), ClusterID: clusterID, AgentID: "agent-prod", SessionID: "sess-prod", Status: "connected",
+			ConnectedAt: now.Add(-20 * time.Minute), LastPing: ts(now.Add(-20 * time.Second)), AgentVersion: "v1.1.0",
+		}}},
+		operations: map[uuid.UUID][]sqlc.AgentLifecycleOperation{clusterID: {{
+			ID: uuid.New(), ClusterID: clusterID, OperationType: agentlifecycle.OperationTypeUpgrade,
+			Status: agentlifecycle.StatusSucceeded, TargetVersion: "v1.1.0", TargetImage: actualImage,
+		}}},
+	}
+	h := NewClusterAgentHandler(q)
+	h.now = func() time.Time { return now }
+	h.SetAgentUpgradeTarget("registry.example/new-agent", "v1.2.0")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("cluster_id", clusterID.String())
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/cluster-agents/"+clusterID.String()+"/upgrade-plan/", nil)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+	h.UpgradePlan(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var envelope struct {
+		Data agentUpgradePlanResponse `json:"data"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Data.CurrentImage != actualImage || envelope.Data.RollbackImage != actualImage {
+		t.Fatalf("plan images current=%q rollback=%q, want %q", envelope.Data.CurrentImage, envelope.Data.RollbackImage, actualImage)
+	}
+}
+
 func TestClusterAgentUpgradePlanAcceptsRolloutControls(t *testing.T) {
 	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
 	clusterID := uuid.New()
@@ -965,6 +1013,7 @@ func TestClusterAgentUpgradePlanAcceptsRolloutControls(t *testing.T) {
 	body := `{
 		"target_version":"v1.3.0",
 		"target_image":"registry.example/astronomer-agent:v1.3.0",
+		"target_pull_policy":"IfNotPresent",
 		"strategy":"canary_batches",
 		"canary_cluster_ids":["` + clusterID.String() + `","` + clusterID.String() + `","canary-b"],
 		"batch_size":5,
@@ -987,7 +1036,7 @@ func TestClusterAgentUpgradePlanAcceptsRolloutControls(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	got := envelope.Data
-	if !got.Ready || got.BatchSize != 5 || got.MaxUnavailable != 2 || got.Strategy != "canary_batches" {
+	if !got.Ready || got.BatchSize != 5 || got.MaxUnavailable != 2 || got.Strategy != "canary_batches" || got.TargetPullPolicy != "IfNotPresent" {
 		t.Fatalf("rollout controls = %+v", got)
 	}
 	if got.RollbackImage != "registry.example/astronomer-agent:v1.0.0" {

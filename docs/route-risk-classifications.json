@@ -26,6 +26,20 @@
       "reason": "A user can replace only the typed preferences row identified by the authenticated JWT subject. The handler rejects unknown keys and invalid enum/routes, caps the body, and commits the owner-scoped update with its audit outbox intent."
     },
     {
+      "id": "user-table-views-owner-scoped",
+      "methods": [
+        "POST",
+        "PATCH",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/auth/me/table-views",
+        "/api/v1/auth/me/table-views/{id}"
+      ],
+      "classification": "covered-owner-scoped",
+      "reason": "A user can create, update or delete only saved table views whose user_id equals the authenticated JWT subject; every query is keyed by that subject, bodies are size-capped with unknown keys rejected, the per-table cap is enforced under an advisory lock, and each mutation commits together with its audit outbox intent."
+    },
+    {
       "id": "apiserver-audit-ingest",
       "methods": [
         "POST"

@@ -52,6 +52,8 @@ export function useCISScan(
     queryKey: cisQueryKeys.scan(id ?? ""),
     queryFn: ({ signal }) => getCISScan(id!, signal),
     enabled: !!id && options.enabled !== false,
+    // This management query has an explicit retry action; show failures promptly.
+    retry: false,
     throwOnError: false,
     refetchInterval: (query) => {
       if (query.state.status === "error") return false;

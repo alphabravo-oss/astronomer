@@ -21,10 +21,14 @@ function templateColumns(
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 260,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Shield className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-foreground">{row.name}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <Shield className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate font-medium text-foreground">
+            {row.name}
+          </span>
           {row.isDefault && (
             <span className="text-2xs px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary font-medium">
               Default
@@ -42,6 +46,8 @@ function templateColumns(
     {
       key: "enforce",
       header: "Enforce",
+      kind: "badge",
+      size: 108,
       accessor: (row) => (
         <span
           className={cn(
@@ -56,6 +62,8 @@ function templateColumns(
     {
       key: "audit",
       header: "Audit",
+      kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span
           className={cn(
@@ -70,6 +78,8 @@ function templateColumns(
     {
       key: "warn",
       header: "Warn",
+      kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span
           className={cn(
@@ -84,8 +94,12 @@ function templateColumns(
     {
       key: "description",
       header: "Description",
+      kind: "text",
+      size: 240,
+      minSize: 200,
+      maxSize: 480,
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground truncate max-w-[200px] block">
+        <span className="text-xs text-muted-foreground">
           {row.description || "--"}
         </span>
       ),
@@ -102,7 +116,7 @@ function templateColumns(
             disabledReason={!canUpdate ? "Requires security:update" : undefined}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
-            title={
+            tooltip={
               row.isBuiltin
                 ? "Built-in templates cannot be edited"
                 : "Edit template"
@@ -116,7 +130,7 @@ function templateColumns(
             disabledReason={!canDelete ? "Requires security:delete" : undefined}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
-            title={
+            tooltip={
               row.isBuiltin
                 ? "Built-in templates cannot be deleted"
                 : "Delete template"
@@ -127,6 +141,10 @@ function templateColumns(
         </div>
       ),
       sortable: false,
+      kind: "actions",
+      size: 88,
+      minSize: 88,
+      maxSize: 88,
     },
   ];
 }

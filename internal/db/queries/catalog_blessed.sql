@@ -144,6 +144,21 @@ FROM catalog_blessed_charts
 WHERE source='catalog-v1'
 ORDER BY featured DESC, display_name ASC;
 
+-- name: ListApplicationCatalogPinsByRepository :many
+-- Repository browsing intentionally keeps only a small rolling window of
+-- recent releases.  A verified application pin is part of the product's
+-- install contract, so retain it even after newer upstream releases push it
+-- outside that window.
+SELECT b.chart_name, COALESCE(b.artifact->>'version', '')::text AS version
+FROM catalog_blessed_charts b
+JOIN helm_repositories r
+  ON r.id = sqlc.arg(repository_id)
+ AND rtrim(b.repo_url, '/') = rtrim(r.url, '/')
+WHERE b.source = 'catalog-v1'
+  AND NOT b.revoked
+  AND COALESCE(b.artifact->>'version', '') <> ''
+ORDER BY b.chart_name, version;
+
 -- name: ListApplicationCatalogSources :many
 SELECT id, name, display_name, description, channel, source_url,
        source_revision, index_digest, verification_status,

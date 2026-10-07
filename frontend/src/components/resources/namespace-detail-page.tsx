@@ -13,7 +13,8 @@ import {
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TabStrip } from "@/components/ui/tabs";
-import { ResourceMasthead } from "@/components/ui/page";
+import { ageMetaItem } from "@/components/resources/resource-masthead-details";
+import { ResourceMasthead, PageShell } from "@/components/ui/page";
 import { MetricCard } from "@/components/ui/metric-card";
 import {
   useNamespaceQueries,
@@ -21,11 +22,12 @@ import {
 } from "./namespace-queries";
 import { QueryStates } from "@/components/ui/query-states";
 import { Link } from "@tanstack/react-router";
-import { cn, formatBytes, formatCPU, formatRelativeTime } from "@/lib/utils";
+import { cn, formatBytes, formatCPU } from "@/lib/utils";
 import {
   useNamespaceResourceRows,
   type NamespaceResourceRow,
 } from "./namespace-resource-rows";
+import { BareButton } from "@/components/form/bare-button";
 
 type TabId =
   | "overview"
@@ -51,10 +53,19 @@ const tabs: Array<{ id: TabId; label: string }> = [
 ];
 
 const resourceColumns: Column<NamespaceResourceRow>[] = [
-  { key: "kind", header: "Kind", accessor: (row) => row.kind },
+  {
+    key: "kind",
+    header: "Kind",
+    kind: "badge",
+    size: 150,
+    minSize: 120,
+    accessor: (row) => row.kind,
+  },
   {
     key: "name",
     header: "Name",
+    kind: "name",
+    minSize: 240,
     accessor: (row) =>
       row.href ? (
         <Link
@@ -70,12 +81,24 @@ const resourceColumns: Column<NamespaceResourceRow>[] = [
   {
     key: "status",
     header: "Status",
+    kind: "status",
+    size: 168,
     accessor: (row) => <StatusBadge status={row.status} />,
   },
-  { key: "detail", header: "Details", accessor: (row) => row.detail },
+  {
+    key: "detail",
+    header: "Details",
+    kind: "text",
+    size: 300,
+    minSize: 200,
+    maxSize: 520,
+    accessor: (row) => row.detail,
+  },
   {
     key: "age",
     header: "Age",
+    kind: "age",
+    size: 80,
     accessor: (row) => row.age,
     sortAccessor: (row) => Date.parse(row.createdAt) || 0,
   },
@@ -139,7 +162,7 @@ export function NamespaceDetailPage({
   const activeError = activeQueries.find((query) => query.isError);
 
   return (
-    <div className="space-y-6">
+    <PageShell>
       <section className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border bg-gradient-to-r from-primary/10 via-card to-card px-6 py-5">
           <ResourceMasthead
@@ -157,11 +180,7 @@ export function NamespaceDetailPage({
                 }
               />
             }
-            description={
-              ns
-                ? `Created ${formatRelativeTime(ns.createdAt)}`
-                : "Namespace-scoped operations and resources"
-            }
+            meta={[ageMetaItem(ns.createdAt)].filter((item) => !!item)}
           />
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
@@ -334,7 +353,7 @@ export function NamespaceDetailPage({
           persistKey={`namespace:${tab}`}
         />
       ) : null}
-    </div>
+    </PageShell>
   );
 }
 
@@ -443,7 +462,7 @@ function ResourceGroup({
   onOpen: () => void;
 }) {
   return (
-    <button
+    <BareButton
       type="button"
       onClick={onOpen}
       className="rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40"
@@ -460,7 +479,7 @@ function ResourceGroup({
       <p className="mt-2 text-xs text-muted-foreground">
         Open the namespace-scoped {title.toLowerCase()} inventory
       </p>
-    </button>
+    </BareButton>
   );
 }
 

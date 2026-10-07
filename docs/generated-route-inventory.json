@@ -10390,6 +10390,67 @@
     ]
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/auth/me/table-views/",
+    "handler_owner": "handler.AuthHandler / handler.SSOHandler",
+    "surface": "authentication and account security API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/auth/me/table-views/",
+    "handler_owner": "handler.AuthHandler / handler.SSOHandler",
+    "surface": "authentication and account security API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-owner-scoped",
+    "risk_reason": "A user can create, update or delete only saved table views whose user_id equals the authenticated JWT subject; every query is keyed by that subject, bodies are size-capped with unknown keys rejected, the per-table cap is enforced under an advisory lock, and each mutation commits together with its audit outbox intent."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/auth/me/table-views/{id}/",
+    "handler_owner": "handler.AuthHandler / handler.SSOHandler",
+    "surface": "authentication and account security API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-owner-scoped",
+    "risk_reason": "A user can create, update or delete only saved table views whose user_id equals the authenticated JWT subject; every query is keyed by that subject, bodies are size-capped with unknown keys rejected, the per-table cap is enforced under an advisory lock, and each mutation commits together with its audit outbox intent."
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/auth/me/table-views/{id}/",
+    "handler_owner": "handler.AuthHandler / handler.SSOHandler",
+    "surface": "authentication and account security API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-owner-scoped",
+    "risk_reason": "A user can create, update or delete only saved table views whose user_id equals the authenticated JWT subject; every query is keyed by that subject, bodies are size-capped with unknown keys rejected, the per-table cap is enforced under an advisory lock, and each mutation commits together with its audit outbox intent."
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/auth/password-reset/complete/",
     "handler_owner": "handler.AuthHandler / handler.SSOHandler",

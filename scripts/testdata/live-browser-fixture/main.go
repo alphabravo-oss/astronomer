@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/tools/clientcmd"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
@@ -147,42 +148,42 @@ func runAgent() error {
 	client.RegisterHandler(protocol.MsgK8sRequest, fixture.handle)
 	client.RegisterHandler(protocol.MsgDecommission, fixture.decommission)
 
+	restConfig = proxy.RESTConfig()
 	deliveryDynamic, err := dynamic.NewForConfig(restConfig)
 	if err != nil {
 		return fmt.Errorf("initialize delivery dynamic client: %w", err)
 	}
-	deliveryExecutor, err := agentdelivery.NewExecutor(deliveryDynamic)
+	metadataClient, err := metadata.NewForConfig(restConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("initialize observation metadata client: %w", err)
 	}
+	subscriber := agent.NewStateSubscriber(proxy.Client(), client, log)
+	subscriber.SetMetadataClient(metadataClient)
+	subscriber.SetConnectionWatcher(client)
 	deliveryStore, err := agentdelivery.NewKubernetesCheckpointStore(proxy.Client(), agent.DefaultAgentNamespace)
 	if err != nil {
 		return err
 	}
-	deliveryProbe, err := agentdelivery.NewClusterProbe(proxy.Client(), proxy.Client().Discovery(), true)
+	deliveryProbe, err := agentdelivery.NewClusterProbeForConfig(proxy.Client(), restConfig, true)
 	if err != nil {
 		return err
 	}
-	deliveryRuntime, err := agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
+	deliveryProbe.WithDynamicClient(deliveryDynamic).WithObservationSource(subscriber)
+	deliveryRuntime, err := agent.NewObservedDeliveryRuntime(agentdelivery.RuntimeConfig{
 		ClusterID: clusterID, AgentVersion: version.Version,
 		PollInterval: time.Second, StatusInterval: time.Second,
 		ValidationPolicy: agentdelivery.ValidationPolicy{AllowPlatformScope: true},
 		Connected:        client.IsConnected, Logger: log,
-	}, deliveryExecutor, deliveryStore, deliveryProbe)
+		ObservationFreshness: client.ObservationFreshnessEnabled,
+	}, deliveryDynamic, deliveryStore, deliveryProbe)
 	if err != nil {
 		return err
 	}
+	client.SetObservationRetry(deliveryRuntime.RetryObservation)
 	client.RegisterHandler(protocol.MsgDeliveryStateResponse, deliveryRuntime.HandleStateResponse)
 	client.RegisterHandler(protocol.MsgDeliveryReconcile, deliveryRuntime.HandleReconcile)
 	mirror := agent.NewMirrorSubscriber(proxy.Client(), deliveryDynamic, client, log)
 	mirror.SetConnectionWatcher(client)
-	go mirror.Run(ctx)
-	go func() {
-		if err := deliveryRuntime.Run(ctx, client.SendFunc(ctx)); err != nil && ctx.Err() == nil {
-			log.Error("live delivery runtime stopped", "error", err)
-			stop()
-		}
-	}()
 	client.SetConnectionListener(func(connected bool) {
 		if connected {
 			log.Info("live browser fixture ready", "cluster_id", clusterID)
@@ -190,7 +191,9 @@ func runAgent() error {
 			log.Warn("live browser fixture disconnected", "cluster_id", clusterID)
 		}
 	})
-	return client.Connect(ctx)
+	return runFixtureObservers(ctx, client.Connect, subscriber.Run, mirror.Run, func(runCtx context.Context) error {
+		return deliveryRuntime.Run(runCtx, client.SendFunc(runCtx))
+	})
 }
 
 type k8sFixture struct {
@@ -481,15 +484,15 @@ func seedTrivyTarget(ctx context.Context, pool *pgxpool.Pool, projectID, cluster
 	chartDigest := requiredEnv("LIVE_FIXTURE_TRIVY_CHART_DIGEST")
 	values, err := json.Marshal(map[string]any{
 		"targetNamespaces": "live-delivery",
-		"image":            map[string]any{"tag": "0.34.0@sha256:0e4f11e9632f34097f259f3a59d34bab4eea8cee9aef510d15cdfc7481d5e49c"},
+		"image":            map[string]any{"tag": "0.35.0@sha256:4cdb11af98ff409cfa7af980098203a841a5fe957cc6a0bbb0df7668065eb5fa"},
 		"operator": map[string]any{
 			"vulnerabilityScannerEnabled": true, "sbomGenerationEnabled": false,
 			"configAuditScannerEnabled": false, "rbacAssessmentScannerEnabled": false,
 			"infraAssessmentScannerEnabled": false, "clusterComplianceEnabled": false,
-			"scanJobsConcurrentLimit": 1, "scanJobTimeout": "5m", "scannerReportTTL": "24h",
+			"scanJobsConcurrentLimit": 1, "scanJobTimeout": "5m", "scannerReportTTL": "6h",
 		},
 		"trivy": map[string]any{
-			"image":            map[string]any{"tag": "0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969"},
+			"image":            map[string]any{"tag": "0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa"},
 			"dbRegistry":       "ghcr.io",
 			"dbRepository":     "aquasecurity/trivy-db",
 			"javaDbRegistry":   "ghcr.io",

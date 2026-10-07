@@ -12,15 +12,19 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Plus, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { formatRelativeTime } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
-import { useDeleteGroupMapping, useGroupMappings } from "@/components/settings/hooks";
+import {
+  useDeleteGroupMapping,
+  useGroupMappings,
+} from "@/components/settings/hooks";
 import type { GroupMappingView } from "@/lib/api/settings";
+import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 function GroupMappingsTable() {
   const navigate = useNavigate();
@@ -34,6 +38,9 @@ function GroupMappingsTable() {
     {
       key: "connector",
       header: "Connector",
+      kind: "badge",
+      size: 112,
+      minSize: 100,
       accessor: (row) => (
         <span className="text-xs font-mono px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {row.connector || "(any)"}
@@ -43,6 +50,7 @@ function GroupMappingsTable() {
     {
       key: "groupName",
       header: "Group",
+      kind: "name",
       accessor: (row) => (
         <span className="text-sm font-mono text-foreground">
           {row.groupName}
@@ -52,6 +60,8 @@ function GroupMappingsTable() {
     {
       key: "scope",
       header: "Scope",
+      kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm border border-border text-foreground capitalize">
           {row.scope}
@@ -61,6 +71,9 @@ function GroupMappingsTable() {
     {
       key: "role",
       header: "Role",
+      kind: "text",
+      size: 100,
+      minSize: 90,
       accessor: (row) => (
         <span className="text-sm text-foreground">{row.role}</span>
       ),
@@ -68,6 +81,9 @@ function GroupMappingsTable() {
     {
       key: "target",
       header: "Target",
+      kind: "text",
+      size: 100,
+      minSize: 90,
       accessor: (row) =>
         row.scope === "global" ? (
           <span className="text-xs text-muted-foreground italic">global</span>
@@ -80,28 +96,31 @@ function GroupMappingsTable() {
     {
       key: "createdAt",
       header: "Created",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.createdAt)}
+          <RelativeTime value={row.createdAt} />
         </span>
       ),
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
       sortable: false,
       accessor: (row) => (
-        <button
-          type="button"
+        <BareButton
+          aria-label="Delete mapping"
           onClick={(e) => {
             e.stopPropagation();
             setConfirmDelete(row);
           }}
           className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-          title="Delete mapping"
+          tooltip="Delete mapping"
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </BareButton>
       ),
     },
   ];
@@ -160,12 +179,7 @@ function GroupMappingsPage() {
           Back to Settings
         </RouterLink>
         <PageHeader
-          title={
-            <span className="inline-flex items-center gap-2">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              SSO group mappings
-            </span>
-          }
+          title="SSO group mappings"
           description="Bind an SSO group to a platform role, optionally scoped to one cluster or project."
         />
         <GroupMappingsTable />

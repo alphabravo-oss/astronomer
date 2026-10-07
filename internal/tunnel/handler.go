@@ -296,10 +296,11 @@ func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.Age
 	switch op.OperationType {
 	case agentlifecycle.OperationTypeUpgrade:
 		payload := protocol.AgentUpgradePayload{
-			OperationID:   op.ID.String(),
-			ClusterID:     conn.ClusterID,
-			TargetVersion: op.TargetVersion,
-			TargetImage:   op.TargetImage,
+			OperationID:      op.ID.String(),
+			ClusterID:        conn.ClusterID,
+			TargetVersion:    op.TargetVersion,
+			TargetImage:      op.TargetImage,
+			TargetPullPolicy: agentUpgradeTargetPullPolicy(op.OperationSpec),
 			// The plan's rollback image, persisted in operation_spec when the
 			// operation was queued. Empty is fine and common: the agent then
 			// falls back to the image it is currently running, which is the
@@ -367,6 +368,21 @@ func agentUpgradeRollbackImage(spec json.RawMessage) string {
 		return ""
 	}
 	return strings.TrimSpace(envelope.Plan.RollbackImage)
+}
+
+func agentUpgradeTargetPullPolicy(spec json.RawMessage) string {
+	if len(spec) == 0 {
+		return ""
+	}
+	var envelope struct {
+		Plan struct {
+			TargetPullPolicy string `json:"target_pull_policy"`
+		} `json:"plan"`
+	}
+	if err := json.Unmarshal(spec, &envelope); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(envelope.Plan.TargetPullPolicy)
 }
 
 func (h *Hub) handleAgentUpgradeResult(conn *AgentConnection, msg *protocol.Message) {
@@ -901,40 +917,6 @@ func (h *Hub) handleApiserverAudit(conn *AgentConnection, msg *protocol.Message)
 		Accepted: accepted,
 		Skipped:  skipped,
 	})
-}
-
-// sendApiserverAuditAck sends a MsgApiserverAuditAck back to the SAME agent
-// connection that sent the batch. A missing BatchID means the batch came over
-// the legacy fire-and-forget path (or the HTTP sender, which acks via status
-// code), so there is no agent waiter to satisfy and we skip the frame.
-func (h *Hub) sendApiserverAuditAck(conn *AgentConnection, ack protocol.ApiserverAuditAckPayload) {
-	if ack.BatchID == "" {
-		return
-	}
-	body, err := json.Marshal(ack)
-	if err != nil {
-		h.log.Warn("marshal APISERVER_AUDIT_ACK failed",
-			slog.String("cluster_id", conn.ClusterID),
-			slog.String("error", err.Error()),
-		)
-		return
-	}
-	msg := &protocol.Message{
-		Type:      protocol.MsgApiserverAuditAck,
-		Timestamp: time.Now().UTC(),
-		Payload:   body,
-	}
-	// Send directly on the originating connection's channel so the ack races
-	// back to the same agent that is blocked waiting on this BatchID. A full
-	// buffer drops the ack; the agent's bounded wait times out and re-forwards.
-	select {
-	case conn.sendCh <- msg:
-	default:
-		h.log.Warn("APISERVER_AUDIT_ACK dropped: send buffer full",
-			slog.String("cluster_id", conn.ClusterID),
-			slog.String("batch_id", ack.BatchID),
-		)
-	}
 }
 
 // handleError processes ERROR messages from agents.

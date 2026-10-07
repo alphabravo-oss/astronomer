@@ -17,12 +17,9 @@ import type {
   SnapshotSchedule,
 } from "@/lib/api/cluster-velero";
 import { cn } from "@/lib/utils";
-
-function formatDate(iso?: string) {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
-}
+import { Tooltip } from "@/components/ui/tooltip";
+import { ChipsCell, TimestampCell } from "@/components/tables/cells";
+import { BareButton } from "@/components/form/bare-button";
 
 function SnapshotPhasePill({ phase }: { phase: SnapshotPhase }) {
   const tone =
@@ -95,12 +92,17 @@ export function SnapshotSchedulesTable({
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 200,
       accessor: (schedule) => schedule.name,
       sortAccessor: (schedule) => schedule.name,
     },
     {
       key: "cron",
       header: "Cron",
+      kind: "text",
+      size: 130,
+      minSize: 120,
       accessor: (schedule) => (
         <span className="font-mono text-xs">{schedule.cron}</span>
       ),
@@ -109,20 +111,18 @@ export function SnapshotSchedulesTable({
     {
       key: "namespaces",
       header: "Namespaces",
+      kind: "badge",
+      size: 190,
+      minSize: 160,
+      maxSize: 280,
       accessor: (schedule) => (
-        <div className="flex flex-wrap gap-1">
-          {(schedule.spec.includedNamespaces?.length
-            ? schedule.spec.includedNamespaces
-            : ["(all)"]
-          ).map((namespace) => (
-            <span
-              key={namespace}
-              className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-xs bg-muted text-muted-foreground border border-border"
-            >
-              {namespace}
-            </span>
-          ))}
-        </div>
+        <ChipsCell
+          items={
+            schedule.spec.includedNamespaces?.length
+              ? schedule.spec.includedNamespaces
+              : ["(all)"]
+          }
+        />
       ),
       sortAccessor: (schedule) =>
         schedule.spec.includedNamespaces?.join(",") ?? "",
@@ -130,53 +130,71 @@ export function SnapshotSchedulesTable({
     {
       key: "enabled",
       header: "Enabled",
+      kind: "status",
+      size: 96,
       accessor: (schedule) => (
-        <Switch
-          size="sm"
-          checked={schedule.enabled}
-          disabled={!canWrite}
-          title={canWrite ? undefined : disabledReason}
-          onCheckedChange={() => onToggle(schedule)}
-          className={schedule.enabled ? "bg-primary" : undefined}
-        />
+        <Tooltip
+          content={canWrite ? undefined : disabledReason}
+          wrap={!canWrite}
+        >
+          <Switch
+            size="sm"
+            checked={schedule.enabled}
+            disabled={!canWrite}
+            onCheckedChange={() => onToggle(schedule)}
+            className={schedule.enabled ? "bg-primary" : undefined}
+          />
+        </Tooltip>
       ),
       sortAccessor: (schedule) => String(schedule.enabled),
     },
     {
       key: "lastRun",
       header: "Last run",
+      kind: "date",
+      size: 112,
+      minSize: 105,
       accessor: (schedule) => (
-        <span className="text-xs text-muted-foreground">
-          {formatDate(schedule.lastRun)}
-        </span>
+        <TimestampCell
+          value={schedule.lastRun}
+          fallback="—"
+          suffix
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (schedule) => schedule.lastRun ?? "",
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 80,
+      minSize: 80,
+      maxSize: 80,
       sortable: false,
       rowActions: true,
-      width: "4.5rem",
-      align: "right",
       accessor: (schedule) => (
         <div className="flex items-center justify-end gap-1.5">
-          <button
+          <BareButton
+            tooltip={canWrite ? "Edit" : undefined}
+            disabledReason={canWrite ? undefined : disabledReason}
+            aria-label="Edit"
             onClick={() => onEdit(schedule)}
             disabled={!canWrite}
-            title={canWrite ? "Edit" : disabledReason}
-            className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
           >
             <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
+          </BareButton>
+          <BareButton
+            tooltip={canWrite ? "Delete" : undefined}
+            disabledReason={canWrite ? undefined : disabledReason}
+            aria-label="Delete"
             onClick={() => onDelete(schedule)}
             disabled={!canWrite}
-            title={canWrite ? "Delete" : disabledReason}
-            className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </BareButton>
         </div>
       ),
     },
@@ -221,22 +239,29 @@ export function SnapshotsTable({
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      minSize: 260,
       accessor: (snapshot) => snapshot.name,
       sortAccessor: (snapshot) => snapshot.name,
     },
     {
       key: "source",
       header: "Source",
+      kind: "text",
+      size: 150,
+      minSize: 130,
       accessor: (snapshot) =>
         snapshot.source === "schedule" ? (
-          <span title={snapshot.scheduleName}>
-            schedule
-            {snapshot.scheduleName ? (
-              <span className="ml-1 text-foreground">
-                / {snapshot.scheduleName}
-              </span>
-            ) : null}
-          </span>
+          <Tooltip content={snapshot.scheduleName}>
+            <span>
+              schedule
+              {snapshot.scheduleName ? (
+                <span className="ml-1 text-foreground">
+                  / {snapshot.scheduleName}
+                </span>
+              ) : null}
+            </span>
+          </Tooltip>
         ) : (
           "ad-hoc"
         ),
@@ -245,6 +270,7 @@ export function SnapshotsTable({
     {
       key: "phase",
       header: "Phase",
+      kind: "status",
       accessor: (snapshot) => <SnapshotPhasePill phase={snapshot.phase} />,
       sortAccessor: (snapshot) => snapshot.phase,
       filter: { label: "Phase" },
@@ -252,26 +278,41 @@ export function SnapshotsTable({
     {
       key: "started",
       header: "Started",
+      kind: "date",
+      size: 112,
+      minSize: 105,
       accessor: (snapshot) => (
-        <span className="text-xs text-muted-foreground">
-          {formatDate(snapshot.startTimestamp)}
-        </span>
+        <TimestampCell
+          value={snapshot.startTimestamp}
+          fallback="—"
+          suffix
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (snapshot) => snapshot.startTimestamp ?? "",
     },
     {
       key: "completed",
       header: "Completed",
+      kind: "date",
+      size: 112,
+      minSize: 105,
       accessor: (snapshot) => (
-        <span className="text-xs text-muted-foreground">
-          {formatDate(snapshot.completionTimestamp)}
-        </span>
+        <TimestampCell
+          value={snapshot.completionTimestamp}
+          fallback="—"
+          suffix
+          className="text-xs text-muted-foreground"
+        />
       ),
       sortAccessor: (snapshot) => snapshot.completionTimestamp ?? "",
     },
     {
       key: "warningsErrors",
-      header: "W / E",
+      header: "Warn / Err",
+      ariaLabel: "Warnings / errors",
+      kind: "count",
+      size: 90,
       accessor: (snapshot) => (
         <span className="text-muted-foreground text-xs">
           {snapshot.warnings ?? 0} /{" "}
@@ -286,39 +327,44 @@ export function SnapshotsTable({
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 120,
+      minSize: 120,
+      maxSize: 120,
       sortable: false,
       rowActions: true,
-      width: "7.5rem",
-      align: "right",
       accessor: (snapshot) => {
         const restorable =
           snapshot.phase === "Completed" ||
           snapshot.phase === "PartiallyFailed";
         return (
           <div className="flex items-center justify-end gap-1.5">
-            <button
-              onClick={() => onRestore(snapshot)}
-              disabled={!canWrite || !restorable}
-              title={
+            <BareButton
+              tooltip={
                 !canWrite
-                  ? disabledReason
+                  ? undefined
                   : !restorable
                     ? "Snapshot is not in a restorable state"
                     : "Restore"
               }
-              className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabledReason={!canWrite ? disabledReason : undefined}
+              onClick={() => onRestore(snapshot)}
+              disabled={!canWrite || !restorable}
+              className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Restore
-            </button>
-            <button
+            </BareButton>
+            <BareButton
+              tooltip={canWrite ? "Delete" : undefined}
+              disabledReason={canWrite ? undefined : disabledReason}
+              aria-label="Delete"
               onClick={() => onDelete(snapshot)}
               disabled={!canWrite}
-              title={canWrite ? "Delete" : disabledReason}
-              className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-normal"
             >
               <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            </BareButton>
           </div>
         );
       },

@@ -30,6 +30,7 @@ import {
 import type { SSOProvider, User } from "@/types";
 import { toastApiError, toastError } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
+import { BareButton } from "@/components/form/bare-button";
 
 export const Route = createFileRoute("/auth/login/")({
   // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
@@ -125,9 +126,9 @@ function LoginPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left panel - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-linear-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex-col justify-between p-12 overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 relative bg-linear-to-br from-hero-from via-hero-via to-hero-from flex-col justify-between p-12 overflow-hidden">
         {/* Background pattern */}
-        <div className="absolute inset-0 opacity-[0.03]">
+        <div className="absolute inset-0 opacity-3">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <pattern
@@ -149,8 +150,8 @@ function LoginPage() {
         </div>
 
         {/* Accent glow */}
-        {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-1/4 left-1/3 w-64 h-64 bg-violet-500/10 rounded-full blur-[100px]" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-status-info/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-1/4 left-1/3 w-64 h-64 bg-status-pending/10 rounded-full blur-[100px]" />
 
         <div className="relative">
           <div className="flex items-center gap-3">
@@ -159,7 +160,7 @@ function LoginPage() {
               <span className="text-xl font-semibold text-white tracking-tight leading-tight">
                 {productName}
               </span>
-              {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<span className="text-[11px] text-zinc-500 leading-tight">
+              <span className="text-11 text-hero-subtle leading-tight">
                 by AlphaBravo
               </span>
             </div>
@@ -167,19 +168,19 @@ function LoginPage() {
         </div>
 
         <div className="relative space-y-4">
-          {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<h1 className="text-4xl font-bold text-white leading-tight">
+          {/* eslint-disable-line no-restricted-syntax -- brand hero heading */}<h1 className="text-4xl font-bold text-white leading-tight">
             Kubernetes Multi-Cluster
             <br />
             <span className="text-gradient">Management Platform</span>
           </h1>
-          {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<p className="text-lg text-zinc-400 max-w-md leading-relaxed">
+          <p className="text-lg text-hero-muted max-w-md leading-relaxed">
             Manage, monitor, and secure your entire Kubernetes infrastructure
             from a single control plane. Built for enterprise scale.
           </p>
         </div>
 
         <div className="relative space-y-4">
-          {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<div className="flex items-center gap-8 text-sm text-zinc-500">
+          <div className="flex items-center gap-8 text-sm text-hero-subtle">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-status-success" />
               Multi-cluster management
@@ -189,17 +190,17 @@ function LoginPage() {
               Flux-native continuous delivery
             </div>
             <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-violet-400" />
+              <div className="h-2 w-2 rounded-full bg-status-pending" />
               Enterprise RBAC
             </div>
           </div>
-          {/* eslint-disable-line no-restricted-syntax -- marketing hero */}<p className="text-xs text-zinc-600">
+          <p className="text-xs text-hero-faint">
             Developed by{" "}
             <a
               href="https://alphabravo.io"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-zinc-500 hover:text-zinc-300 transition-colors" /* eslint-disable-line no-restricted-syntax -- marketing hero */
+              className="text-hero-subtle hover:text-hero-hover transition-colors"
             >
               AlphaBravo
             </a>
@@ -217,7 +218,7 @@ function LoginPage() {
               <span className="text-xl font-semibold text-foreground tracking-tight leading-tight">
                 {productName}
               </span>
-              <span className="text-[11px] text-muted-foreground leading-tight">
+              <span className="text-11 text-muted-foreground leading-tight">
                 by AlphaBravo
               </span>
             </div>
@@ -245,7 +246,7 @@ function LoginPage() {
           {!challenge && ssoProviders.length > 0 && (
             <div className="space-y-2.5">
               {ssoProviders.map((provider) => (
-                <button
+                <BareButton
                   key={provider.id}
                   onClick={() => handleSSO(provider.provider)}
                   disabled={!!ssoLoading}
@@ -259,7 +260,7 @@ function LoginPage() {
                     providerIcon(provider.type)
                   )}
                   Continue with {provider.name}
-                </button>
+                </BareButton>
               ))}
             </div>
           )}
@@ -344,8 +345,7 @@ function LoginPage() {
                         transition-colors"
                         autoComplete="current-password"
                       />
-                      <button
-                        type="button"
+                      <BareButton
                         onClick={() => setShowPassword(!showPassword)}
                         aria-label={
                           showPassword ? "Hide password" : "Show password"
@@ -357,7 +357,7 @@ function LoginPage() {
                         ) : (
                           <Eye className="h-4 w-4" />
                         )}
-                      </button>
+                      </BareButton>
                     </div>
                   </div>
                 )}
@@ -467,14 +467,14 @@ function TotpChallengeForm({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <BareButton
             onClick={onCancel}
             className="inline-flex items-center gap-1 h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
-          </button>
-          <button
+          </BareButton>
+          <BareButton
             onClick={() => {
               window.location.href = `/dashboard/account/security#enroll=${encodeURIComponent(challenge.challengeToken)}`;
             }}
@@ -482,7 +482,7 @@ function TotpChallengeForm({
           >
             Set up 2FA now
             <ArrowRight className="h-4 w-4" />
-          </button>
+          </BareButton>
         </div>
       </div>
     );
@@ -560,15 +560,13 @@ function TotpChallengeForm({
         <ArrowRight className="h-4 w-4" />
       </ActionButton>
       <div className="flex items-center justify-between text-xs">
-        <button
-          type="button"
+        <BareButton
           onClick={onCancel}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           ← Use a different account
-        </button>
-        <button
-          type="button"
+        </BareButton>
+        <BareButton
           onClick={() => {
             setUseRecovery((v) => !v);
             form.setFieldValue("code", "");
@@ -576,7 +574,7 @@ function TotpChallengeForm({
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           {useRecovery ? "Use authenticator code" : "Use recovery code instead"}
-        </button>
+        </BareButton>
       </div>
     </FormShell>
   );

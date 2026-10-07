@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/proxyhdr"
 )
@@ -139,6 +140,7 @@ func NewK8sProxy(log *slog.Logger) (*K8sProxy, error) {
 		return nil, fmt.Errorf("get in-cluster config: %w", err)
 	}
 
+	cfg = kuberequests.Config(cfg)
 	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create kubernetes clientset: %w", err)
@@ -177,6 +179,7 @@ func (p *K8sProxy) RESTConfig() *rest.Config {
 // NewK8sProxyWithConfig creates a K8sProxy with an explicit rest.Config.
 // Useful for testing or running outside the cluster.
 func NewK8sProxyWithConfig(cfg *rest.Config, log *slog.Logger) (*K8sProxy, error) {
+	cfg = kuberequests.Config(cfg)
 	clientset, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create kubernetes clientset: %w", err)

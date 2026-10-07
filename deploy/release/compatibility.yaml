@@ -33,13 +33,13 @@
     ]
   },
   "flux": {
-    "distribution_version": "v2.9.3",
+    "distribution_version": "v2.9.6",
     "components": [
       {
         "name": "source-controller",
         "repository": "ghcr.io/fluxcd/source-controller",
-        "tag": "v1.9.3",
-        "digest": "sha256:ff8f3c92f1bcb433e858c948040c3a3393fe73f5dd72048a4502bfaf0a4c26cd",
+        "tag": "v1.9.6",
+        "digest": "sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
         "digest_pin_required": true,
         "apis": [
           "source.toolkit.fluxcd.io/v1/GitRepository",
@@ -50,16 +50,16 @@
       {
         "name": "kustomize-controller",
         "repository": "ghcr.io/fluxcd/kustomize-controller",
-        "tag": "v1.9.4",
-        "digest": "sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f",
+        "tag": "v1.9.6",
+        "digest": "sha256:2ebeaa341da77d52b6abbbba5efcee0450d47f8b42f0e6f33b08f9020262d606",
         "digest_pin_required": true,
         "apis": ["kustomize.toolkit.fluxcd.io/v1/Kustomization"]
       },
       {
         "name": "helm-controller",
         "repository": "ghcr.io/fluxcd/helm-controller",
-        "tag": "v1.6.3",
-        "digest": "sha256:16ada99456385100698a5d7adf90aba8a2089d987ab541c9566b6d7b0e897038",
+        "tag": "v1.6.5",
+        "digest": "sha256:0d52fff5c4d476277b8fcb6beb9041e269adb5db943fe69f5a806ea0c92b1511",
         "digest_pin_required": true,
         "apis": ["helm.toolkit.fluxcd.io/v2/HelmRelease"]
       }
@@ -106,7 +106,7 @@
     "tls_required_in_production": true,
     "migration_mode": "versioned_incremental",
     "minimum_upgrade_schema": 1,
-    "target_schema": 66,
+    "target_schema": 71,
     "reversible_through_schema": 66,
     "supported_upgrade_release_lines": ["1.1.x", "1.2.x"]
   },

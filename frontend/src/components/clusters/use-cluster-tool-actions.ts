@@ -3,7 +3,9 @@ import {
   useAdoptTool,
   useInstallTool,
   useRecoverTool,
+  useToolConfiguration,
   useUninstallTool,
+  useUpgradeTool,
 } from "@/lib/hooks/tools";
 import {
   permissionDeniedReason,
@@ -17,7 +19,7 @@ import type { ToolInstallModal } from "./tool-install-modal";
 import type { ToolInstallProgress } from "./tool-install-progress";
 import type { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
-type DialogKind = "install" | "uninstall" | "rollback";
+type DialogKind = "install" | "upgrade" | "uninstall" | "rollback";
 type ToolDialog = { kind: DialogKind; tool: ClusterTool };
 
 function authorize(decision: PermissionDecision): boolean {
@@ -47,6 +49,7 @@ export function useClusterToolActions({
   const remove = usePermissionDecision("catalog", "delete", scope);
   const update = usePermissionDecision("catalog", "update", scope);
   const install = useInstallTool();
+  const upgrade = useUpgradeTool();
   const uninstall = useUninstallTool();
   const adopt = useAdoptTool();
   const recovery = useRecoverTool();
@@ -55,6 +58,10 @@ export function useClusterToolActions({
     id: string;
     name: string;
   } | null>(null);
+  const configuration = useToolConfiguration(
+    dialog?.kind === "upgrade" ? dialog.tool.slug : "",
+    clusterId,
+  );
   const statusMap = new Map(statuses.map((status) => [status.slug, status]));
   const defaultPreset = ["production", "staging", "development"].includes(
     clusterEnvironment,
@@ -90,8 +97,11 @@ export function useClusterToolActions({
   }
 
   function confirmInstall(valuesOverride: string | undefined, preset: string) {
-    if (dialog?.kind !== "install" || !authorize(create)) return;
-    install.mutate(
+    if (!dialog || !["install", "upgrade"].includes(dialog.kind)) return;
+    const mutation = dialog.kind === "install" ? install : upgrade;
+    const decision = dialog.kind === "install" ? create : update;
+    if (!authorize(decision)) return;
+    mutation.mutate(
       {
         slug: dialog.tool.slug,
         cluster_id: clusterId,
@@ -104,8 +114,16 @@ export function useClusterToolActions({
 
   function confirmRemoval() {
     if (dialog?.kind !== "uninstall" || !authorize(remove)) return;
+    const failedRelease = statusMap.get(dialog.tool.slug)?.status === "failed";
     uninstall.mutate(
-      { slug: dialog.tool.slug, cluster_id: clusterId },
+      {
+        slug: dialog.tool.slug,
+        cluster_id: clusterId,
+        ...(dialog.tool.slug === "longhorn"
+          ? { confirm_data_deletion: true }
+          : {}),
+        ...(failedRelease ? { confirm_failed_release_cleanup: true } : {}),
+      },
       { onSuccess: trackOperation(dialog.tool) },
     );
   }
@@ -116,15 +134,25 @@ export function useClusterToolActions({
   }
 
   const installDialog: ComponentProps<typeof ToolInstallModal> | null =
-    dialog?.kind === "install"
+    dialog && ["install", "upgrade"].includes(dialog.kind)
       ? {
           tool: dialog.tool,
           clusterId,
           preset: defaultPreset,
+          action: dialog.kind as "install" | "upgrade",
+          ...(dialog.kind === "upgrade"
+            ? {
+                initialValuesYaml: configuration.data?.valuesYaml,
+                initialPreset: configuration.data?.preset,
+                loadingInitialValues: configuration.isLoading,
+                initialValuesError: configuration.error,
+              }
+            : {}),
           onConfirm: confirmInstall,
           onClose: closeDialog,
-          installing: install.isPending,
-          confirmDecision: create,
+          installing:
+            dialog.kind === "install" ? install.isPending : upgrade.isPending,
+          confirmDecision: dialog.kind === "install" ? create : update,
         }
       : null;
   const confirmation: ComponentProps<typeof ConfirmDialog> | null =
@@ -144,9 +172,28 @@ export function useClusterToolActions({
                 confirmDisabledReason: disabledReason(update),
               }
             : {
-                title: "Disable Tool",
-                description: `This will uninstall ${dialog.tool.name} from the cluster. All related resources will be removed.`,
-                confirmText: "Disable",
+                title: `Uninstall ${dialog.tool.name}`,
+                description:
+                  statusMap.get(dialog.tool.slug)?.status === "failed"
+                    ? `Astronomer will verify and remove the incomplete ${dialog.tool.name} release created by the failed operation.`
+                    : `Astronomer will uninstall each managed ${dialog.tool.name} release in reverse installation order.`,
+                confirmText: "Uninstall",
+                confirmValue: dialog.tool.name,
+                impact: {
+                  scope: `${clusterId} / ${dialog.tool.name}`,
+                  consequences:
+                    dialog.tool.slug === "longhorn"
+                      ? [
+                          "Astronomer will enable Longhorn's deletion-confirmation setting before uninstalling the release.",
+                          "Longhorn volumes and their stored data may be permanently deleted by the chart's uninstall job.",
+                        ]
+                      : [
+                          "Managed Helm releases and their chart-owned resources will be removed.",
+                          "Persistent data and custom resources follow the chart's own deletion policy.",
+                        ],
+                  recovery:
+                    "The operation remains visible with per-release progress and errors. Reinstalling does not guarantee recovery of deleted data.",
+                },
                 onConfirm: confirmRemoval,
                 loading: uninstall.isPending,
                 confirmDisabledReason: disabledReason(remove),
@@ -169,6 +216,7 @@ export function useClusterToolActions({
       tool,
       toolStatus: statusMap.get(tool.slug),
       onInstall: (slug) => openDialog("install", slug),
+      onUpgrade: (slug) => openDialog("upgrade", slug),
       onUninstall: (slug) => openDialog("uninstall", slug),
       onAdopt: adoptRelease,
       onRecover: (slug, action) =>

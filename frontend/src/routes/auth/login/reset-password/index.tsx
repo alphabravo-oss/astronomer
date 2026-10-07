@@ -29,6 +29,7 @@ import { toastApiError, toastSuccess } from "@/lib/toast";
 import { completePasswordReset } from "@/lib/api/account-security";
 import { useAppForm, useStore } from "@/lib/form";
 import { ActionButton } from "@/components/ui/action-button";
+import { BareButton } from "@/components/form/bare-button";
 
 function ResetPasswordPage() {
   const navigate = useNavigate();
@@ -267,8 +268,7 @@ function PasswordField({
           data-initial-focus={autoFocus}
           className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
         />
-        <button
-          type="button"
+        <BareButton
           onClick={onToggleVisible}
           className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
           tabIndex={-1}
@@ -279,7 +279,7 @@ function PasswordField({
           ) : (
             <Eye className="h-4 w-4" />
           )}
-        </button>
+        </BareButton>
       </div>
       {hint && (
         <p

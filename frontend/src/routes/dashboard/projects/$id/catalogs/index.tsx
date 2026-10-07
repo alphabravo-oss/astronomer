@@ -26,7 +26,7 @@ import {
  */
 import { useState } from "react";
 
-import { Plus, Loader2, Trash2, Link2 } from "lucide-react";
+import { Plus, Trash2, Link2 } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { FormShell } from "@/components/ui/form-shell";
@@ -43,6 +43,8 @@ import { useCurrentUser } from "@/lib/hooks/auth";
 
 import type { ProjectCatalog } from "@/lib/api/project-detail";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function ProjectCatalogsPage() {
   const params = Route.useParams();
@@ -97,9 +99,7 @@ function ProjectCatalogsPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
+        <LoadingSkeleton label="Loading" heading />
       ) : catalogs.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-8 text-center space-y-2">
           <p className="text-sm text-foreground">No catalogs available.</p>
@@ -158,22 +158,22 @@ function ProjectCatalogsPage() {
                   </TableCell>
                   <TableCell className="py-2 px-3 text-right">
                     {canEdit && cat.visibility === "public" && (
-                      <button
+                      <BareButton
                         onClick={() => handleSubscribe(cat)}
                         className="inline-flex items-center gap-1 text-xs text-foreground hover:opacity-80"
                       >
                         <Link2 className="h-3.5 w-3.5" />
                         Subscribe
-                      </button>
+                      </BareButton>
                     )}
                     {canEdit && cat.visibility !== "public" && (
-                      <button
+                      <BareButton
                         onClick={() => setRemoveTarget(cat)}
                         className="inline-flex items-center gap-1 text-xs text-destructive hover:opacity-80"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         {cat.visibility === "own" ? "Delete" : "Unsubscribe"}
-                      </button>
+                      </BareButton>
                     )}
                   </TableCell>
                 </TableRow>
@@ -339,7 +339,7 @@ function VisibilityBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium",
+        "inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-medium",
         tone,
       )}
     >

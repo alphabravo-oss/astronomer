@@ -23,6 +23,15 @@ const routes = [
   { name: "rbac", url: "/dashboard/rbac" },
   { name: "management-backup", url: "/dashboard/settings/backup" },
   { name: "settings", url: "/dashboard/settings" },
+  // Plan 031 phase 8: the remaining reference pages.
+  { name: "clusters-list", url: "/dashboard/clusters" },
+  { name: "workloads", url: "/dashboard/clusters/c-smoke-1/workloads" },
+  {
+    name: "deployment-detail",
+    url: "/dashboard/clusters/c-smoke-1/deployments/default/smoke-app",
+  },
+  { name: "apps", url: "/dashboard/clusters/c-smoke-1/apps" },
+  { name: "webhooks-new", url: "/dashboard/settings/webhooks/new" },
 ];
 
 for (const theme of ["dark", "light"] as const) {
@@ -41,6 +50,14 @@ for (const theme of ["dark", "light"] as const) {
       }, theme);
       await page.goto(route.url);
       await expect(page.getByTestId("app-shell")).toBeVisible();
+      if (
+        route.name === "resource-explorer" &&
+        test.info().project.name === "tablet-chromium"
+      ) {
+        // Scope filters must not squeeze the action controls into a tall column.
+        const header = await page.locator("header").first().boundingBox();
+        expect(header?.height).toBeLessThanOrEqual(112);
+      }
       await expect(page).toHaveScreenshot(`${route.name}-${theme}.png`, {
         animations: "disabled",
         fullPage: true,

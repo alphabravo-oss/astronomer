@@ -68,7 +68,8 @@ vi.mock("@/components/settings/backup-drill-hooks", () => ({
   }),
 }));
 
-import { DestinationsSection, DestinationModal } from "./-page";
+import { DestinationsSection } from "./-destinations-section";
+import { DestinationModal } from "./-destination-modal";
 
 const existingDestination = {
   id: "destination-1",

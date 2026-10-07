@@ -22,6 +22,7 @@ import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { liveFallback } from "@/lib/live/status-store";
 import { formatRelativeTime } from "@/lib/utils";
+import { componentHealthSummary } from "@/lib/system-component-freshness";
 import { useClock } from "@/lib/hooks/use-clock";
 import { systemComponentColumns } from "./-columns";
 
@@ -49,10 +50,7 @@ function SystemComponentsPage() {
   );
   const summary = useMemo(
     () => ({
-      healthy: components.filter((item) => item.health === "healthy").length,
-      attention: components.filter((item) =>
-        ["degraded", "unavailable"].includes(item.health),
-      ).length,
+      ...componentHealthSummary(components, now),
       astronomer: components.filter((item) => item.owner === "astronomer")
         .length,
       flux: components.filter((item) => item.owner === "flux").length,
@@ -60,14 +58,14 @@ function SystemComponentsPage() {
         ["cluster", "external"].includes(item.owner),
       ).length,
     }),
-    [components],
+    [components, now],
   );
   const observedAt = inventory?.observedAt
     ? new Date(inventory.observedAt)
     : undefined;
   const stale = observedAt ? now - observedAt.getTime() > 5 * 60 * 1000 : true;
 
-  const columns = systemComponentColumns(clusterId);
+  const columns = systemComponentColumns(clusterId, now);
 
   return (
     <PageShell>
@@ -141,6 +139,7 @@ function SystemComponentsPage() {
           <DataTable
             data={components}
             columns={columns}
+            layout="scroll"
             keyExtractor={(row) => row.id}
             searchable
             searchPlaceholder="Search components, owners, namespaces, or versions…"

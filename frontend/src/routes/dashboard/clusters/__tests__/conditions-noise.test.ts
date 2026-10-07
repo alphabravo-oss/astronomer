@@ -1,4 +1,7 @@
-import { isNoisyCapabilityCondition } from "@/routes/dashboard/clusters/$id/-page";
+import {
+  isNoisyCapabilityCondition,
+  isRedundantHealthyConnectivityCondition,
+} from "@/routes/dashboard/clusters/$id/-page";
 import type { ClusterCondition } from "@/types";
 
 const cond = (type: string, status: string): ClusterCondition =>
@@ -39,5 +42,43 @@ describe("cluster condition noise filter", () => {
         expect(isNoisyCapabilityCondition(cond(type, status))).toBe(false);
       }
     }
+  });
+});
+
+describe("cluster connectivity condition filter", () => {
+  it("collapses the diagnostic probe when the connectivity rollup is healthy", () => {
+    const conditions = [
+      cond("AgentReachable", "True"),
+      cond("Connected", "True"),
+    ];
+
+    expect(
+      isRedundantHealthyConnectivityCondition(conditions[0], conditions),
+    ).toBe(true);
+    expect(
+      isRedundantHealthyConnectivityCondition(conditions[1], conditions),
+    ).toBe(false);
+  });
+
+  it.each(["False", "Unknown"])(
+    "keeps Agent Reachable when its status is %s",
+    (status) => {
+      const conditions = [
+        cond("AgentReachable", status),
+        cond("Connected", "True"),
+      ];
+
+      expect(
+        isRedundantHealthyConnectivityCondition(conditions[0], conditions),
+      ).toBe(false);
+    },
+  );
+
+  it("keeps Agent Reachable when the connectivity rollup is absent", () => {
+    const conditions = [cond("AgentReachable", "True")];
+
+    expect(
+      isRedundantHealthyConnectivityCondition(conditions[0], conditions),
+    ).toBe(false);
   });
 });

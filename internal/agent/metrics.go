@@ -32,7 +32,7 @@ var (
 			Namespace: "astronomer",
 			Subsystem: "agent",
 			Name:      "tunnel_send_dropped_total",
-			Help:      "Outbound tunnel frames the agent could not queue, by send-path class and reason. A non-zero control-class count means the tunnel was force-closed.",
+			Help:      "Outbound tunnel frames dropped by class and bounded reason. Control channel_full closes the tunnel; observation_contract_changed retries direct observation on the negotiated session.",
 		},
 		observability.MetricLabels("class", "reason"),
 	)

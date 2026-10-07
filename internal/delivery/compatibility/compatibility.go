@@ -37,6 +37,9 @@ func Evaluate(inventory protocol.DeliveryControllerInventory) Result {
 	if err := inventory.Validate(); err != nil {
 		return Result{Status: Incompatible, Code: "invalid_inventory"}
 	}
+	if inventory.Observation != nil && inventory.Observation.State != protocol.ObservationCurrent {
+		return evaluateNoncurrentObservation(inventory)
+	}
 	if !inventory.Ready {
 		return Result{Status: Degraded, Code: "controllers_not_ready"}
 	}

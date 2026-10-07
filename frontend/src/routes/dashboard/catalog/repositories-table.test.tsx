@@ -94,7 +94,7 @@ describe("catalog Repositories table", () => {
   it('renders a relative last-synced time instead of "Never" for a synced repo', () => {
     renderTable();
     const row = rowFor("bitnami");
-    expect(within(row).getByText(/about 2 hours ago/)).toBeInTheDocument();
+    expect(within(row).getByText(/^2h ago$/)).toBeInTheDocument();
     expect(within(row).queryByText("Never")).not.toBeInTheDocument();
   });
 
@@ -126,7 +126,11 @@ describe("catalog Repositories table", () => {
       <RepositoriesTable repos={repos} onSync={vi.fn()} onDelete={onDelete} />,
     );
 
-    fireEvent.click(within(rowFor("bitnami")).getByTitle("Delete repository"));
+    fireEvent.click(
+      within(rowFor("bitnami")).getByRole("button", {
+        name: "Delete repository",
+      }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Delete repository" });
     expect(dialog).toHaveTextContent(

@@ -25,7 +25,7 @@ export function RemoteProjectPicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
-  const selected = useProject(value, { throwOnError: false });
+  const selected = useProject(value, { throwOnError: false, retry: false });
   const params = { page: pageIndex + 1, pageSize: 25, search };
   const query = useQuery({
     queryKey: queryKeys.projects.picker(clusterId, params),
@@ -65,21 +65,26 @@ export function RemoteProjectPicker({
               {
                 key: "name",
                 header: "Project",
+                kind: "name",
                 accessor: (row) => row.displayName || row.name,
                 sortable: false,
               },
               {
                 key: "select",
                 header: "Select",
+                kind: "actions",
+                size: 96,
+                maxSize: 96,
                 sortable: false,
                 accessor: (row) => (
                   <ActionButton
+                    aria-label={`Select ${row.displayName || row.name}`}
                     onClick={() => {
                       onChange(row.id);
                       setOpen(false);
                     }}
                   >
-                    Select {row.displayName || row.name}
+                    Select
                   </ActionButton>
                 ),
               },

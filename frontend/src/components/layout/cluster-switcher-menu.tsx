@@ -20,6 +20,7 @@ import {
 import { useUserPreferences } from "@/lib/user-preferences";
 import { cn } from "@/lib/utils";
 import type { Cluster } from "@/types";
+import { BareButton } from "@/components/form/bare-button";
 
 const MAX_PINNED_CLUSTERS = 20;
 
@@ -55,8 +56,7 @@ function ClusterRow({
       className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 data-[selected=true]:bg-accent"
     >
       <ClusterOption cluster={cluster} />
-      <button
-        type="button"
+      <BareButton
         aria-pressed={pinned}
         aria-label={
           pinned
@@ -67,12 +67,12 @@ function ClusterRow({
           event.stopPropagation();
           onTogglePin(cluster.id);
         }}
-        className="shrink-0 rounded-sm p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="shrink-0 rounded-sm p-1 text-muted-foreground hover:bg-accent hover:text-foreground inline-block font-normal"
       >
         <Star
           className={cn("h-3.5 w-3.5", pinned && "fill-current text-primary")}
         />
-      </button>
+      </BareButton>
     </Command.Item>
   );
 }
@@ -103,15 +103,14 @@ function ClusterSwitcherTrigger({
     : "Clusters";
 
   return (
-    <button
+    <BareButton
+      tooltip="Switch cluster (Ctrl/Cmd+J)"
       ref={triggerRef}
-      type="button"
       onClick={onToggle}
       aria-haspopup="listbox"
       aria-expanded={open}
       aria-label={label}
-      title="Switch cluster (Ctrl/Cmd+J)"
-      className="flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-sm text-foreground hover:bg-accent sm:max-w-52"
+      className="flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-sm text-foreground hover:bg-accent sm:max-w-52 font-normal whitespace-normal"
     >
       <Server className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       {currentDotClass && (
@@ -127,7 +126,7 @@ function ClusterSwitcherTrigger({
         {label}
       </span>
       <ChevronsUpDown className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
-    </button>
+    </BareButton>
   );
 }
 
@@ -294,12 +293,12 @@ export function ClusterSwitcherMenu({
               <p role="status" className="p-3 text-sm">
                 {transitionState}
                 {failedTarget && (
-                  <button
-                    className="underline"
+                  <BareButton
+                    className="underline inline-block font-normal"
                     onClick={() => void select(failedTarget, true)}
                   >
                     Clear remembered scope and switch
-                  </button>
+                  </BareButton>
                 )}
               </p>
             )}
@@ -320,13 +319,12 @@ export function ClusterSwitcherMenu({
             ) : searchQuery.isError ? (
               <div role="alert" className="px-3 py-4 text-sm">
                 Could not load clusters.
-                <button
-                  type="button"
+                <BareButton
                   onClick={() => void searchQuery.refetch()}
-                  className="ml-2 underline"
+                  className="ml-2 underline inline-block font-normal"
                 >
                   Retry
-                </button>
+                </BareButton>
               </div>
             ) : resultClusters.length === 0 &&
               pinnedClusters.length === 0 &&

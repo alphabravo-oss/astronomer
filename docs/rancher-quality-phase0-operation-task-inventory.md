@@ -8,9 +8,9 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 
 ## Scan Scope
 
-- Worker Go files scanned: 103
-- Handler Go files scanned: 344
-- Production source files scanned: 482
+- Worker Go files scanned: 104
+- Handler Go files scanned: 354
+- Production source files scanned: 494
 - Task constants resolved: 160
 - Worker handler registrations: 91
 - Periodic schedules: 62
@@ -234,10 +234,10 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `admin_task_outbox_retry` |1 |[`internal/handler/admin_task_outbox.go:176`](internal/handler/admin_task_outbox.go:176) |
 | `admin-webhook-delivery-retry` |1 |[`internal/handler/webhooks_deliveries.go:141`](internal/handler/webhooks_deliveries.go:141) |
 | `admin-webhook-test` |1 |[`internal/handler/webhooks_test_delivery.go:62`](internal/handler/webhooks_test_delivery.go:62) |
-| `agent_lifecycle` |1 |[`internal/handler/cluster_agents_upgrade.go:90`](internal/handler/cluster_agents_upgrade.go:90) |
+| `agent_lifecycle` |1 |[`internal/handler/cluster_agents_upgrade.go:91`](internal/handler/cluster_agents_upgrade.go:91) |
 | `agent_token_rotation` |1 |[`internal/handler/clusters_registration.go:264`](internal/handler/clusters_registration.go:264) |
 | `apiserver_allowlist_reconcile` |1 |[`internal/handler/apiserver_allowlist.go:391`](internal/handler/apiserver_allowlist.go:391) |
-| `catalog` |4 |[`internal/handler/catalog_installations.go:239`](internal/handler/catalog_installations.go:239)<br>[`internal/handler/catalog_installations.go:300`](internal/handler/catalog_installations.go:300)<br>[`internal/handler/catalog_installations.go:548`](internal/handler/catalog_installations.go:548)<br>[`internal/handler/catalog_installations.go:626`](internal/handler/catalog_installations.go:626) |
+| `catalog` |4 |[`internal/handler/catalog_installations.go:248`](internal/handler/catalog_installations.go:248)<br>[`internal/handler/catalog_installations.go:328`](internal/handler/catalog_installations.go:328)<br>[`internal/handler/catalog_installations.go:602`](internal/handler/catalog_installations.go:602)<br>[`internal/handler/catalog_installations.go:680`](internal/handler/catalog_installations.go:680) |
 | `catalog_repository_sync` |1 |[`internal/handler/catalog_repositories.go:359`](internal/handler/catalog_repositories.go:359) |
 | `cluster_template_apply` |1 |[`internal/handler/cluster_templates_applications.go:103`](internal/handler/cluster_templates_applications.go:103) |
 | `cluster_template_reapply` |1 |[`internal/handler/cluster_templates_applications.go:226`](internal/handler/cluster_templates_applications.go:226) |
@@ -250,7 +250,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `image-vulnerability-rescans` |1 |[`internal/handler/image_vulns.go:234`](internal/handler/image_vulns.go:234) |
 | `logging` |11 |[`internal/handler/logging_attach.go:161`](internal/handler/logging_attach.go:161)<br>[`internal/handler/logging_loki_token.go:80`](internal/handler/logging_loki_token.go:80)<br>[`internal/handler/logging_outputs.go:98`](internal/handler/logging_outputs.go:98)<br>[`internal/handler/logging_outputs.go:158`](internal/handler/logging_outputs.go:158) |
 | `management_backup` |1 |[`internal/handler/admin_management_backup_operations.go:105`](internal/handler/admin_management_backup_operations.go:105) |
-| `monitoring` |3 |[`internal/handler/monitoring_stack_cluster.go:193`](internal/handler/monitoring_stack_cluster.go:193)<br>[`internal/handler/monitoring_stack_cluster.go:316`](internal/handler/monitoring_stack_cluster.go:316)<br>[`internal/handler/monitoring_stack_shared.go:342`](internal/handler/monitoring_stack_shared.go:342) |
+| `monitoring` |3 |[`internal/handler/monitoring_stack_cluster.go:203`](internal/handler/monitoring_stack_cluster.go:203)<br>[`internal/handler/monitoring_stack_cluster.go:335`](internal/handler/monitoring_stack_cluster.go:335)<br>[`internal/handler/monitoring_stack_shared.go:342`](internal/handler/monitoring_stack_shared.go:342) |
 | `monitoring_operation_retry` |1 |[`internal/handler/monitoring_operations.go:166`](internal/handler/monitoring_operations.go:166) |
 | `network_policy_apply` |1 |[`internal/handler/network_policies.go:557`](internal/handler/network_policies.go:557) |
 | `network_policy_reapply` |1 |[`internal/handler/network_policies.go:757`](internal/handler/network_policies.go:757) |

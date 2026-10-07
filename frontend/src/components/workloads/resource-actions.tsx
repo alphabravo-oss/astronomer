@@ -27,6 +27,7 @@ import {
   WORKLOAD_RESTARTABLE_KINDS,
 } from "@/lib/k8s-paths";
 import { cn } from "@/lib/utils";
+import { BareButton } from "@/components/form/bare-button";
 
 interface ResourceActionsProps {
   clusterId: string;
@@ -153,22 +154,20 @@ export function ResourceActions({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {WORKLOAD_SCALABLE_KINDS.includes(kind) && (
-        <button
-          type="button"
-          className={BTN}
+        <BareButton
+          tooltip={denied(scalePerm)}
+          className={cn(BTN, "inline-block font-normal")}
           disabled={!scalePerm.allowed}
-          title={denied(scalePerm)}
           onClick={() => setShowScale(true)}
         >
           <Scaling className="h-3.5 w-3.5" /> Scale
-        </button>
+        </BareButton>
       )}
       {WORKLOAD_RESTARTABLE_KINDS.includes(kind) && (
-        <button
-          type="button"
-          className={BTN}
+        <BareButton
+          tooltip={denied(restartPerm)}
+          className={cn(BTN, "inline-block font-normal")}
           disabled={!restartPerm.allowed || restartWorkload.isPending}
-          title={denied(restartPerm)}
           onClick={() =>
             restartWorkload.mutate({
               clusterId,
@@ -185,14 +184,13 @@ export function ResourceActions({
             )}
           />{" "}
           Restart
-        </button>
+        </BareButton>
       )}
       {kind === "Deployment" && paused !== undefined && (
-        <button
-          type="button"
-          className={BTN}
+        <BareButton
+          tooltip={denied(updatePerm)}
+          className={cn(BTN, "inline-block font-normal")}
           disabled={!updatePerm.allowed || patch.isPending}
-          title={denied(updatePerm)}
           onClick={() =>
             patch.mutate({
               clusterId,
@@ -207,25 +205,23 @@ export function ResourceActions({
             <Pause className="h-3.5 w-3.5" />
           )}
           {paused ? "Resume" : "Pause"}
-        </button>
+        </BareButton>
       )}
       {kind === "CronJob" && jobTemplate && (
-        <button
-          type="button"
-          className={BTN}
+        <BareButton
+          tooltip={denied(triggerPerm)}
+          className={cn(BTN, "inline-block font-normal")}
           disabled={!triggerPerm.allowed || k8sCreate.isPending}
-          title={denied(triggerPerm)}
           onClick={runNow}
         >
           <Zap className="h-3.5 w-3.5" /> Run Now
-        </button>
+        </BareButton>
       )}
       {kind === "CronJob" && suspended !== undefined && (
-        <button
-          type="button"
-          className={BTN}
+        <BareButton
+          tooltip={denied(updatePerm)}
+          className={cn(BTN, "inline-block font-normal")}
           disabled={!updatePerm.allowed || patch.isPending}
-          title={denied(updatePerm)}
           onClick={() =>
             patch.mutate({
               clusterId,
@@ -240,28 +236,26 @@ export function ResourceActions({
             <Pause className="h-3.5 w-3.5" />
           )}
           {suspended ? "Resume" : "Suspend"}
-        </button>
+        </BareButton>
       )}
-      <button
-        type="button"
-        className={BTN}
+      <BareButton
+        tooltip="Download YAML"
+        className={cn(BTN, "inline-block font-normal")}
         onClick={downloadYaml}
-        title="Download YAML"
       >
         <Download className="h-3.5 w-3.5" /> YAML
-      </button>
-      <button
-        type="button"
+      </BareButton>
+      <BareButton
+        tooltip={denied(deletePerm)}
         className={cn(
           BTN,
-          "border-status-error/30 text-status-error hover:bg-status-error/10",
+          "border-status-error/30 text-status-error hover:bg-status-error/10 inline-block font-normal",
         )}
         disabled={!deletePerm.allowed}
-        title={denied(deletePerm)}
         onClick={() => setShowDelete(true)}
       >
         <Trash2 className="h-3.5 w-3.5" /> Delete
-      </button>
+      </BareButton>
 
       <ScaleDialog
         open={showScale}

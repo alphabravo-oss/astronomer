@@ -365,6 +365,8 @@ export function useClusterMetricsSummary(clusterId: string) {
     queryFn: ({ signal }) => getClusterMetricsSummary(clusterId, signal),
     enabled: !!clusterId,
     refetchInterval: liveFallback(30000),
+    // The overview already renders an explicit metrics-unavailable state.
+    throwOnError: false,
   });
 }
 

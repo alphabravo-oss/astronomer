@@ -17,7 +17,7 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
-import { formatRelativeTime, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { Project } from "@/types";
 import { FolderKanban, Plus, Trash2, Users } from "lucide-react";
 import { toastError } from "@/lib/toast";
@@ -25,8 +25,17 @@ import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm, useStore } from "@/lib/form";
 import { useSearchParam } from "@/lib/use-search-param";
 import { pageTableCount } from "@/lib/api/pagination";
+import { Tooltip } from "@/components/ui/tooltip";
+import { BareButton } from "@/components/form/bare-button";
+import { CappedChips, RelativeTime } from "@/components/admin/table-cells";
+import { QuotaCell } from "./-quota-cell";
 
 const PROJECTS_PAGE_SIZE = 50;
+
+type ProjectWithQuotaLimits = Project & {
+  resourceQuotaCpuLimit?: string;
+  resourceQuotaMemoryLimit?: string;
+};
 
 function ProjectsPage() {
   const navigate = useNavigate();
@@ -71,12 +80,15 @@ function ProjectsPage() {
     {
       key: "name",
       header: "Project",
+      kind: "name",
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <FolderKanban className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-medium text-foreground">{row.displayName}</p>
-            <p className="text-xs text-muted-foreground font-mono">
+        <div className="flex min-w-0 items-center gap-2">
+          <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="truncate font-medium text-foreground">
+              {row.displayName}
+            </p>
+            <p className="truncate font-mono text-xs text-muted-foreground">
               {row.name}
             </p>
           </div>
@@ -86,8 +98,11 @@ function ProjectsPage() {
     {
       key: "description",
       header: "Description",
+      kind: "text",
+      size: 148,
+      minSize: 120,
       accessor: (row) => (
-        <span className="text-sm text-muted-foreground truncate max-w-[300px] block">
+        <span className="text-sm text-muted-foreground">
           {row.description || "--"}
         </span>
       ),
@@ -96,6 +111,8 @@ function ProjectsPage() {
     {
       key: "cluster",
       header: "Cluster",
+      kind: "badge",
+      size: 105,
       accessor: (row) => {
         // The Go backend returns cluster_id (singular). The legacy
         // TypeScript type carries an optional clusterIds[] array from
@@ -109,22 +126,16 @@ function ProjectsPage() {
           return <span className="text-xs text-muted-foreground">—</span>;
         }
         return (
-          <div className="flex flex-wrap gap-1">
-            {ids.slice(0, 2).map((cid) => (
-              <span
-                key={cid}
-                className="text-xs px-2 py-0.5 rounded-sm bg-primary/10 text-primary font-medium"
-                title={cid}
-              >
-                {clusterById.get(cid) || cid.slice(0, 8)}
-              </span>
-            ))}
-            {ids.length > 2 && (
-              <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
-                +{ids.length - 2}
-              </span>
+          <CappedChips
+            items={ids}
+            renderChip={(cid) => (
+              <Tooltip content={cid}>
+                <span className="inline-block max-w-full truncate rounded-sm bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                  {clusterById.get(cid) || cid.slice(0, 8)}
+                </span>
+              </Tooltip>
             )}
-          </div>
+          />
         );
       },
       sortAccessor: (row) => {
@@ -139,59 +150,40 @@ function ProjectsPage() {
     {
       key: "namespaces",
       header: "Namespaces",
-      accessor: (row) => {
-        const namespaces = row.namespaces ?? [];
-        return (
-          <div className="flex flex-wrap gap-1">
-            {namespaces.length === 0 ? (
-              <span className="text-xs text-muted-foreground">None</span>
-            ) : (
-              <>
-                {namespaces.slice(0, 3).map((ns) => (
-                  <span
-                    key={ns}
-                    className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
-                  >
-                    {ns}
-                  </span>
-                ))}
-                {namespaces.length > 3 && (
-                  <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
-                    +{namespaces.length - 3}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-        );
-      },
+      kind: "badge",
+      size: 136,
+      minSize: 120,
+      accessor: (row) => (
+        <CappedChips items={row.namespaces ?? []} max={1} empty="None" mono />
+      ),
       sortable: false,
     },
     {
       key: "members",
       header: "Members",
+      kind: "count",
+      size: 105,
       accessor: (row) => {
         const count = row.members?.length;
         return (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center justify-end gap-1.5">
             <Users className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="tabular-nums text-sm">
-              {count == null ? "—" : count}
-            </span>
+            <span className="text-sm">{count == null ? "—" : count}</span>
           </div>
         );
       },
       sortAccessor: (row) => row.members?.length ?? -1,
-      align: "center",
     },
     {
       key: "resourceQuota",
-      header: "Resource Quota",
+      header: "Quota",
+      ariaLabel: "Resource quota",
+      kind: "text",
+      size: 168,
+      minSize: 150,
+      align: "right",
       accessor: (row) => {
-        const extra = row as Project & {
-          resourceQuotaCpuLimit?: string;
-          resourceQuotaMemoryLimit?: string;
-        };
+        const extra = row as ProjectWithQuotaLimits;
         const cpu = row.resourceQuota?.cpuLimit || extra.resourceQuotaCpuLimit;
         const mem =
           row.resourceQuota?.memoryLimit || extra.resourceQuotaMemoryLimit;
@@ -200,44 +192,35 @@ function ProjectsPage() {
             <span className="text-xs text-muted-foreground">No quota</span>
           );
         }
-        return (
-          <div className="flex flex-wrap gap-1">
-            {cpu ? (
-              <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
-                CPU: {cpu}
-              </span>
-            ) : null}
-            {mem ? (
-              <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
-                Mem: {mem}
-              </span>
-            ) : null}
-          </div>
-        );
+        return <QuotaCell cpu={cpu} mem={mem} />;
       },
       sortable: false,
     },
     {
       key: "created",
       header: "Created",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.createdAt)}
+          <RelativeTime value={row.createdAt} />
         </span>
       ),
     },
     {
       key: "actions",
       header: "",
+      kind: "actions",
       accessor: (row) => (
         <div className="flex items-center gap-1">
-          <button
+          <BareButton
+            aria-label="Delete project"
             onClick={() => setDeleteTarget(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete project"
+            tooltip="Delete project"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </BareButton>
         </div>
       ),
       sortable: false,
@@ -541,7 +524,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
               </span>
             ) : (
               namespaces.map((ns) => (
-                <button
+                <BareButton
                   key={ns.name}
                   onClick={() => toggleNamespace(ns.name)}
                   className={cn(
@@ -552,7 +535,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
                   )}
                 >
                   {ns.name}
-                </button>
+                </BareButton>
               ))
             )}
           </div>

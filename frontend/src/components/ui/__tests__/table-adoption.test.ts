@@ -6,10 +6,10 @@ const operationalGrids = [
   "src/routes/dashboard/clusters/$id/workloads/index.tsx",
   "src/components/extensions/ExtTable.tsx",
   "src/components/resources/namespace-detail-page.tsx",
-  "src/routes/dashboard/settings/operations/index.tsx",
-  "src/routes/dashboard/clusters/$id/resources/index.tsx",
+  "src/routes/dashboard/settings/operations/-tables.tsx",
+  "src/routes/dashboard/clusters/$id/resources/-tables.tsx",
   "src/routes/dashboard/settings/read-audit/index.tsx",
-  "src/routes/dashboard/clusters/$id/network-access/index.tsx",
+  "src/routes/dashboard/clusters/$id/network-access/-parts.tsx",
   "src/routes/dashboard/settings/compliance/baselines/index.tsx",
 ];
 

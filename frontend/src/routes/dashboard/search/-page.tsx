@@ -2,15 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
-import {
-  Search,
-  Server,
-  AlertTriangle,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-  X,
-} from "lucide-react";
+import { Search, X } from "lucide-react";
 import { searchResources } from "@/lib/api/resource-search";
 import type {
   SearchableResourceType,
@@ -18,12 +10,15 @@ import type {
 } from "@/lib/api/resource-search";
 import { detailHref } from "@/lib/k8s-paths";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import { DataTable } from "@/components/ui/data-table";
 import { DataTableQueryError } from "@/components/ui/data-table-query-error";
 import { Input } from "@/components/ui/input";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { Select } from "@/components/ui/select";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { BareButton } from "@/components/form/bare-button";
+import { groupResultsByCluster } from "./-search-grouping";
+import { SearchStatus } from "./-search-status";
+import { searchColumns } from "./-columns";
 
 // SEARCHABLE_TYPES is the user-facing list shown in the type dropdown.
 // Keeping it in declaration order rather than alphabetical means the most
@@ -119,7 +114,7 @@ export function SearchPage({
     searchParams.get("label") || "",
   );
   const [nameFilter, setNameFilter] = useState(searchParams.get("name") || "");
-  const [errorsExpanded, setErrorsExpanded] = useState(false);
+  const [groupByCluster, setGroupByCluster] = useState(true);
 
   // Debounced (250ms) copies of the free-text inputs — avoids hammering
   // the search endpoint on every keystroke (Pacer's useDebouncedValue).
@@ -188,68 +183,9 @@ export function SearchPage({
   const errors = data?.errors || [];
   const clustersQueried = data?.clustersQueried ?? 0;
   const clustersFailed = data?.clustersFailed ?? 0;
+  const clusterGroups = groupResultsByCluster(results, errors);
 
-  const columns: Column<SearchResultRow>[] = [
-    {
-      key: "cluster",
-      header: "Cluster",
-      accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Server className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span className="font-medium text-foreground truncate">
-            {row.clusterName}
-          </span>
-        </div>
-      ),
-      sortAccessor: (row) => row.clusterName,
-    },
-    {
-      key: "namespace",
-      header: "Namespace",
-      accessor: (row) => (
-        <span className="font-mono text-xs text-muted-foreground">
-          {row.namespace || "—"}
-        </span>
-      ),
-      sortAccessor: (row) => row.namespace || "",
-    },
-    {
-      key: "name",
-      header: "Name",
-      accessor: (row) => (
-        <span className="font-medium text-foreground">{row.name || "—"}</span>
-      ),
-      sortAccessor: (row) => row.name || "",
-    },
-    {
-      key: "type",
-      header: "Type",
-      accessor: (row) => (
-        <span className="px-2 py-0.5 rounded-sm text-xs font-medium bg-muted text-muted-foreground">
-          {row.type || resourceType}
-        </span>
-      ),
-    },
-    {
-      key: "age",
-      header: "Age",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {row.age || "—"}
-        </span>
-      ),
-    },
-    {
-      key: "status",
-      header: "Status",
-      accessor: (row) =>
-        row.status ? (
-          <StatusBadge status={String(row.status)} />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
-    },
-  ];
+  const columns = useMemo(() => searchColumns(resourceType), [resourceType]);
 
   const handleRowClick = (row: SearchResultRow) => {
     // Click → per-cluster detail page. See `searchResultHref` for the
@@ -316,70 +252,28 @@ export function SearchPage({
               className="pl-8 pr-8"
             />
             {nameFilter && (
-              <button
+              <BareButton
                 onClick={() => setNameFilter("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 aria-label="Clear search"
               >
                 <X className="h-3.5 w-3.5" />
-              </button>
+              </BareButton>
             )}
           </div>
         </div>
 
-        {/* Status line */}
-        <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-          {query.isFetching && (
-            <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Searching...
-            </span>
-          )}
-          {!query.isFetching && data && (
-            <span>
-              {results.length} {results.length === 1 ? "result" : "results"}{" "}
-              from {clustersQueried}{" "}
-              {clustersQueried === 1 ? "cluster" : "clusters"}
-            </span>
-          )}
-          {clustersFailed > 0 && (
-            <button
-              onClick={() => setErrorsExpanded((v) => !v)}
-              className="inline-flex items-center gap-1.5 text-status-warning hover:underline"
-            >
-              <AlertTriangle className="h-3 w-3" />
-              {clustersFailed} {clustersFailed === 1 ? "cluster" : "clusters"}{" "}
-              failed
-              {errorsExpanded ? (
-                <ChevronDown className="h-3 w-3" />
-              ) : (
-                <ChevronRight className="h-3 w-3" />
-              )}
-            </button>
-          )}
-        </div>
-
-        {/* Per-cluster errors (collapsible) */}
-        {errorsExpanded && errors.length > 0 && (
-          <div className="mt-2 rounded-md border border-status-warning/30 bg-status-warning/5 p-3 space-y-1.5">
-            {errors.map((err) => (
-              <div
-                key={err.cluster_id}
-                className="flex items-start gap-2 text-xs"
-              >
-                <AlertTriangle className="h-3.5 w-3.5 text-status-warning shrink-0 mt-0.5" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-foreground">
-                    {err.cluster_name}
-                  </p>
-                  <p className="text-muted-foreground truncate font-mono">
-                    {err.error}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <SearchStatus
+          isFetching={query.isFetching}
+          loaded={!!data}
+          resultCount={results.length}
+          clustersQueried={clustersQueried}
+          clustersFailed={clustersFailed}
+          clusterGroups={clusterGroups}
+          errors={errors}
+          groupByCluster={groupByCluster}
+          onToggleGroup={() => setGroupByCluster((v) => !v)}
+        />
       </div>
 
       {/* Results */}
@@ -410,6 +304,7 @@ export function SearchPage({
               `${row.clusterId}/${row.namespace || ""}/${row.name || ""}`
             }
             onRowClick={handleRowClick}
+            groupBy={groupByCluster ? (row) => row.clusterName : undefined}
             searchPlaceholder="Filter results..."
             loading={query.isLoading}
             emptyState={{

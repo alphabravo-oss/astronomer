@@ -9,13 +9,14 @@ import {
   SHARED_LOGGING_PARAM_KEYS,
   parseSharedLoggingFilters,
 } from "@/lib/logging-share";
+import { TimestampCell } from "@/components/ui/cell-primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Switch } from "@/components/ui/switch";
-import { formatRelativeTime } from "@/lib/utils";
 import type { LoggingOutput } from "@/types";
 import {
   FileText,
@@ -173,6 +174,38 @@ export function OutputsTab() {
   );
 }
 
+/** Two-line output cell: name (+ System badge) over capability badges. */
+function OutputNameCell({ row }: { row: LoggingOutput }) {
+  const TypeIcon = outputTypeIcons[outputTypeOf(row)] || Database;
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <TypeIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate font-medium text-foreground">{row.name}</p>
+          {row.isSystem ? (
+            <Badge
+              variant="info"
+              className="shrink-0"
+              data-testid="system-output-badge"
+            >
+              System
+            </Badge>
+          ) : null}
+        </div>
+        <div className="mt-0.5 flex gap-1 overflow-hidden whitespace-nowrap">
+          <Badge variant={row.capabilities?.query ? "success" : "secondary"}>
+            {row.capabilities?.query ? "Queryable" : "Shipping only"}
+          </Badge>
+          {row.capabilities?.tail ? (
+            <Badge variant="info">Live tail</Badge>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function outputColumns(
   setQueryTarget: (row: LoggingOutput) => void,
   setDeleteTarget: (row: LoggingOutput) => void,
@@ -183,40 +216,16 @@ function outputColumns(
     {
       key: "name",
       header: "Output",
-      accessor: (row) => {
-        const type = outputTypeOf(row);
-        const TypeIcon = outputTypeIcons[type] || Database;
-        return (
-          <div className="flex items-center gap-2">
-            <TypeIcon className="h-4 w-4 text-muted-foreground" />
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="font-medium text-foreground">{row.name}</p>
-                {row.isSystem ? (
-                  <Badge variant="info" data-testid="system-output-badge">
-                    System
-                  </Badge>
-                ) : null}
-              </div>
-              <p className="text-xs text-muted-foreground capitalize">{type}</p>
-              <div className="mt-1 flex flex-wrap gap-1">
-                <Badge
-                  variant={row.capabilities?.query ? "success" : "secondary"}
-                >
-                  {row.capabilities?.query ? "Queryable" : "Shipping only"}
-                </Badge>
-                {row.capabilities?.tail ? (
-                  <Badge variant="info">Live tail</Badge>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      },
+      kind: "name",
+      minSize: 184,
+      accessor: (row) => <OutputNameCell row={row} />,
+      sortAccessor: (row) => row.name,
     },
     {
       key: "type",
       header: "Type",
+      kind: "badge",
+      size: 96,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {outputTypeOf(row)}
@@ -226,6 +235,9 @@ function outputColumns(
     {
       key: "cluster",
       header: "Cluster",
+      kind: "text",
+      size: 112,
+      minSize: 105,
       accessor: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.clusterName || "All"}
@@ -235,40 +247,47 @@ function outputColumns(
     {
       key: "status",
       header: "Connection",
+      kind: "status",
       accessor: (row) => <StatusBadge status={row.status || "disconnected"} />,
     },
     {
       key: "enabled",
       header: "Enabled",
+      kind: "badge",
+      size: 80,
+      minSize: 80,
+      maxSize: 96,
       accessor: (row) => (
-        <span onClickCapture={(e) => e.stopPropagation()}>
-          <Switch
-            size="sm"
-            checked={row.enabled}
-            onCheckedChange={() => {
-              if (row.isSystem) return;
-              handleToggle(row);
-            }}
-            disabled={row.isSystem}
-            title={
-              row.isSystem
-                ? "System destinations are managed with Astronomer Loki"
-                : undefined
-            }
-            className={row.enabled ? "bg-primary" : undefined}
-          />
-        </span>
+        <Tooltip
+          content={
+            row.isSystem
+              ? "System destinations are managed with Astronomer Loki"
+              : undefined
+          }
+        >
+          <span onClickCapture={(e) => e.stopPropagation()}>
+            <Switch
+              size="sm"
+              checked={row.enabled}
+              onCheckedChange={() => {
+                if (row.isSystem) return;
+                handleToggle(row);
+              }}
+              disabled={row.isSystem}
+              className={row.enabled ? "bg-primary" : undefined}
+            />
+          </span>
+        </Tooltip>
       ),
       sortable: false,
     },
     {
       key: "created",
       header: "Created",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {formatRelativeTime(row.createdAt)}
-        </span>
-      ),
+      kind: "age",
+      size: 120,
+      maxSize: 160,
+      accessor: (row) => <TimestampCell value={row.createdAt} />,
     },
     {
       key: "actions",
@@ -276,14 +295,16 @@ function outputColumns(
       accessor: (row) => (
         <div className="flex items-center gap-1">
           {row.capabilities?.query ? (
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               onClick={() => setQueryTarget(row)}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               aria-label={`Query ${row.name}`}
             >
               <Search className="h-3 w-3" />
               Query
-            </button>
+            </ActionButton>
           ) : null}
           {row.capabilities?.linkOutUrl ? (
             <a
@@ -297,27 +318,36 @@ function outputColumns(
               Explore
             </a>
           ) : null}
-          <button
+          <ActionButton
+            intent="bare"
+            size="none"
             onClick={() => testOutput.mutate(row.id)}
             disabled={testOutput.isPending}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            title="Test Output"
+            tooltip="Test Output"
           >
             <Send className="h-3 w-3" />
             Test
-          </button>
+          </ActionButton>
           {row.isSystem ? null : (
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               onClick={() => setDeleteTarget(row)}
               className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-              title="Delete output"
+              tooltip="Delete output"
+              aria-label="Delete output"
             >
               <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            </ActionButton>
           )}
         </div>
       ),
       sortable: false,
+      kind: "actions",
+      size: 240,
+      minSize: 200,
+      maxSize: 320,
     },
   ];
 }

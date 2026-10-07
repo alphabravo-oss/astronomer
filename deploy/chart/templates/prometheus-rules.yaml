@@ -42,6 +42,25 @@ spec:
 
     - name: astronomer.alerts
       rules:
+        # A missing target is unknown demand, never zero application load.
+        # max aggregates replicas; vector(0) covers an entirely absent target.
+        # Scope each rule to this release's namespace and metrics Service.
+        {{- range $component := list "server" "worker" }}
+        - alert: AstronomerApplicationMetricsUnavailable
+          expr: |
+            (max(up{namespace={{ $.Release.Namespace | quote }},service={{ printf "%s-%s-metrics" (include "astronomer.fullname" $) $component | quote }}}) or vector(0)) == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: {{ $component }}
+            namespace: {{ $.Release.Namespace | quote }}
+            service: {{ printf "%s-%s-metrics" (include "astronomer.fullname" $) $component | quote }}
+          annotations:
+            summary: "Astronomer {{ $component }} metrics unavailable"
+            description: "No healthy scrape target for {{ $.Release.Namespace }}/{{ include "astronomer.fullname" $ }}-{{ $component }}-metrics for 5 minutes. Application demand and health metrics are unknown."
+            runbook_url: {{ $.Values.metrics.prometheusRule.runbookBaseURL }}/application-metrics-unavailable.md
+        {{- end }}
+
         # ── Server HTTP error rate ──────────────────────────────────────
         - alert: AstronomerHighHTTPErrorRate
           expr: astronomer:http_5xx_ratio:5m > 0.01

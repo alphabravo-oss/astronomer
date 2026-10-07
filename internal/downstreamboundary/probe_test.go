@@ -64,11 +64,11 @@ func TestBoundaryEnumsAreCompleteBoundedAndInstrumented(t *testing.T) {
 	}
 
 	// Pin every direct legacy send-channel write. Downstream requests must pass
-	// through instrumented SendToAgent/BroadcastToAll; the sole handler.go
+	// through instrumented SendToAgent/BroadcastToAll; the sole handler_audit_ack.go
 	// exception is the response-only APISERVER_AUDIT_ACK to its originating
 	// connection. A new bypass makes this contract fail until it is classified
 	// and instrumented explicitly.
-	allowedDirectSends := map[string]int{"handler.go": 1, "server.go": 2}
+	allowedDirectSends := map[string]int{"handler_audit_ack.go": 1, "server.go": 2}
 	tunnelFiles, err := filepath.Glob(filepath.Join(internal, "tunnel", "*.go"))
 	if err != nil {
 		t.Fatal(err)

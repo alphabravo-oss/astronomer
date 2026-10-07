@@ -2,9 +2,12 @@ import { useState } from "react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { formatRelativeTime, cn } from "@/lib/utils";
+import { AgeCell } from "@/components/ui/age-cell";
+import { cn } from "@/lib/utils";
 import type { HelmRepository } from "@/types";
 import { Globe, RefreshCw, Trash2 } from "lucide-react";
+import { ActionButton } from "@/components/ui/action-button";
+import { Tooltip } from "@/components/ui/tooltip";
 
 /**
  * The catalog Repositories table.
@@ -38,10 +41,18 @@ export function RepositoriesTable({
     {
       key: "name",
       header: "Name",
+      kind: "name",
+      grow: false,
+      size: 180,
+      minSize: 160,
+      maxSize: 360,
+      sortAccessor: (row) => row.name,
       accessor: (row) => (
         <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-foreground">{row.name}</span>
+          <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate font-medium text-foreground">
+            {row.name}
+          </span>
           {row.isDefault && (
             <span className="text-2xs px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary font-medium">
               Default
@@ -53,15 +64,19 @@ export function RepositoriesTable({
     {
       key: "url",
       header: "URL",
-      accessor: (row) => (
-        <span className="font-mono text-xs text-muted-foreground truncate max-w-[300px] block">
-          {row.url}
-        </span>
-      ),
+      kind: "id",
+      grow: true,
+      size: 240,
+      minSize: 220,
+      maxSize: 640,
+      accessor: (row) => row.url,
+      sortAccessor: (row) => row.url,
     },
     {
       key: "type",
       header: "Type",
+      kind: "badge",
+      size: 100,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground uppercase">
           {row.repoType}
@@ -71,6 +86,8 @@ export function RepositoriesTable({
     {
       key: "charts",
       header: "Charts",
+      kind: "count",
+      size: 98,
       // chart_count is enrichment the server computes per response; if it is
       // ever absent, render an explicit 0 rather than an empty cell. React
       // renders `undefined` as nothing at all, which is how this column
@@ -81,28 +98,32 @@ export function RepositoriesTable({
         </span>
       ),
       sortAccessor: (row) => row.chartCount ?? 0,
-      align: "center",
     },
     {
       key: "lastSynced",
-      header: "Last Synced",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.lastSyncedAt ? formatRelativeTime(row.lastSyncedAt) : "Never"}
-        </span>
-      ),
+      header: "Synced",
+      ariaLabel: "Last synced",
+      kind: "age",
+      size: 98,
+      accessor: (row) => <AgeCell value={row.lastSyncedAt} empty="Never" />,
+      sortAccessor: (row) => row.lastSyncedAt ?? "",
     },
     {
       key: "status",
       header: "Status",
+      kind: "status",
+      size: 124,
+      maxSize: 180,
       // The scheduled sweep isolates failures per repository, so a repo can be
       // Enabled and silently not refreshing. Surface last_sync_error here or
       // the only trace is a worker log line.
       accessor: (row) =>
         row.enabled && row.lastSyncError ? (
-          <span title={row.lastSyncError}>
-            <StatusBadge status="failed" label="Sync failed" />
-          </span>
+          <Tooltip content={row.lastSyncError}>
+            <span>
+              <StatusBadge status="failed" label="Sync failed" />
+            </span>
+          </Tooltip>
         ) : (
           <StatusBadge
             status={row.enabled ? "active" : "disconnected"}
@@ -113,27 +134,36 @@ export function RepositoriesTable({
     {
       key: "actions",
       header: "",
+      kind: "actions",
+      size: 120,
+      minSize: 120,
+      maxSize: 120,
       accessor: (row) => (
         <div className="flex items-center gap-1">
-          <button
+          <ActionButton
+            intent="bare"
+            size="none"
             onClick={() => onSync(row.id)}
             disabled={syncPending}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground
               hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            title="Sync repository"
+            tooltip="Sync repository"
           >
             <RefreshCw
               className={cn("h-3 w-3", syncPending && "animate-spin")}
             />
             Sync
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
+            intent="bare"
+            size="none"
             onClick={() => setDeleteTarget(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete repository"
+            tooltip="Delete repository"
+            aria-label="Delete repository"
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          </ActionButton>
         </div>
       ),
       sortable: false,

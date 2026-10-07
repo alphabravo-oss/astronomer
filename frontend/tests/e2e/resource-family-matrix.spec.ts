@@ -315,8 +315,12 @@ for (const family of families) {
       return;
     }
 
-    await expect(page.getByText(`Kind: ${family.kind}`)).toBeVisible();
-    await expect(page.getByText("astronomer-e2e")).toBeVisible();
+    await expect(
+      page.getByText(family.kind, { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText("astronomer-e2e", { exact: true }),
+    ).toBeVisible();
 
     const overviewTab = page.getByRole("tab", { name: "Overview" });
     await overviewTab.focus();
@@ -325,7 +329,9 @@ for (const family of families) {
       "aria-selected",
       "true",
     );
-    await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Edit", exact: true }),
+    ).toBeVisible();
 
     await page.keyboard.press("ArrowRight");
     await expect(page.getByRole("tab", { name: "Conditions" })).toHaveAttribute(

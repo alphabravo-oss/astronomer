@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Clock,
   FileSearch,
-  Loader2,
   ShieldCheck,
   Wrench,
 } from "lucide-react";
@@ -19,6 +18,7 @@ import {
   type CharlieMessage,
   type CharlieToolRun,
 } from "@/lib/api/charlie";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function CharlieLifecycleNotice({ state }: { state?: string }) {
   const states: Record<
@@ -232,7 +232,7 @@ function ToolCard({ tool }: { tool: CharlieToolRun }) {
         </div>
       </dl>
       <p className="mt-2 text-muted-foreground">Argument fields</p>
-      <p className="mt-1 rounded-sm bg-muted p-2 text-[11px]">
+      <p className="mt-1 rounded-sm bg-muted p-2 text-11">
         {tool.argumentSummary?.length
           ? tool.argumentSummary.slice(0, 20).join(", ")
           : "No display-safe argument fields were provided."}
@@ -335,30 +335,28 @@ function ApprovalCard({
             />
           </label>
           <div className="flex gap-2">
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               disabled={!!pending}
+              loading={pending === "approve"}
+              icon={<CheckCircle2 className="h-4 w-4" />}
               onClick={() => setConfirm("approve")}
               className="rounded-sm bg-primary px-3 py-2 text-primary-foreground"
             >
-              {pending === "approve" ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" />
-              )}
               <span>Review approval</span>
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
+              intent="bare"
+              size="none"
               disabled={!!pending}
+              loading={pending === "deny"}
+              icon={<Clock className="h-4 w-4" />}
               onClick={() => setConfirm("deny")}
               className="rounded-sm border px-3 py-2"
             >
-              {pending === "deny" ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <Clock className="h-4 w-4" />
-              )}
               <span>Review denial</span>
-            </button>
+            </ActionButton>
           </div>
         </div>
       ) : (
@@ -371,7 +369,7 @@ function ApprovalCard({
                 : "This approval is no longer pending.")}
         </p>
       )}
-      {error && (
+      {error && !confirm && (
         <p role="alert" className="mt-2 text-status-error">
           {error}
         </p>
@@ -391,7 +389,15 @@ function ApprovalCard({
         }
         loading={!!pending}
         variant={confirm === "deny" ? "destructive" : undefined}
-      />
+      >
+        {/* The open modal hides the page behind it, so a failure raised while
+            it is open must be announced from inside it. */}
+        {error && (
+          <p role="alert" className="text-xs text-status-error">
+            {error}
+          </p>
+        )}
+      </ConfirmDialog>
     </section>
   );
 }

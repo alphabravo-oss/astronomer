@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/operator-table";
-import { Loader2 } from "lucide-react";
+import { SkeletonText } from "@/components/ui/skeleton";
 
 interface RolloutOwner {
   kind: string;
@@ -89,9 +89,7 @@ export function rolloutSourceForKind(
 }
 
 export function supportsRolloutHistory(kind: string): boolean {
-  return ["Deployment", "StatefulSet", "DaemonSet", "CronJob"].includes(
-    kind,
-  );
+  return ["Deployment", "StatefulSet", "DaemonSet", "CronJob"].includes(kind);
 }
 
 function belongsToOwner(
@@ -179,8 +177,9 @@ export function RolloutHistory({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="py-12" aria-busy="true">
+        <span className="sr-only">Loading rollout history…</span>
+        <SkeletonText lines={5} />
       </div>
     );
   }
@@ -203,8 +202,8 @@ export function RolloutHistory({
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
         History is derived from Kubernetes-owned revision objects. The newest
-        retained revision appears first; retention is controlled by the
-        workload and its controller.
+        retained revision appears first; retention is controlled by the workload
+        and its controller.
       </p>
       <Table>
         <TableHeader>
@@ -222,7 +221,7 @@ export function RolloutHistory({
               <TableCell className="text-xs tabular-nums">
                 {entry.revision ?? "-"}
                 {index === 0 && (
-                  <span className="ml-2 rounded-sm bg-status-info/10 px-1.5 py-0.5 text-[10px] font-medium text-status-info">
+                  <span className="ml-2 rounded-sm bg-status-info/10 px-1.5 py-0.5 text-10 font-medium text-status-info">
                     Latest
                   </span>
                 )}

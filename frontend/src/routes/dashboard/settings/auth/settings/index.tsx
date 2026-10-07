@@ -15,7 +15,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useAppForm, useStore, isValidUrlWithScheme } from "@/lib/form";
-import { ArrowLeft, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Trash2 } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -30,6 +30,8 @@ import {
 } from "@/components/auth/hooks";
 import type { DexPublicClient } from "@/types";
 import { Switch } from "@/components/ui/switch";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
 
 function DexSettingsPage() {
   const { data: settings, isLoading } = useDexSettings();
@@ -115,9 +117,7 @@ function DexSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <LoadingSkeleton label="Loading" heading />
     );
   }
 
@@ -274,20 +274,19 @@ function DexSettingsPage() {
                       />
                     ))
                   )}
-                  <button
-                    type="button"
+                  <BareButton
                     onClick={() =>
                       field.handleChange([
                         ...field.state.value,
                         { id: "", name: "", redirectURIs: [], public: false },
                       ])
                     }
-                    className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-dashed border-border text-sm
+                    className="inline-flex items-center gap-2 h-(--control-h) px-3 rounded-lg border border-dashed border-border text-sm
                   text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Add client
-                  </button>
+                  </BareButton>
                 </div>
               )}
             </form.Field>
@@ -352,7 +351,7 @@ function DexSummary({
 }) {
   const configured = !!values.issuer.trim();
   return (
-    <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+    <div className="rounded-xl border border-border bg-card p-(--card-p) space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-foreground">
@@ -362,10 +361,9 @@ function DexSummary({
             Issuer, target cluster, public clients, token expiry.
           </p>
         </div>
-        <button
-          type="button"
+        <BareButton
           onClick={onEdit}
-          className="inline-flex shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+          className="inline-flex shrink-0 items-center gap-1.5 h-(--control-h) px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
         >
           {configured ? (
             <Pencil className="h-3.5 w-3.5" />
@@ -373,7 +371,7 @@ function DexSummary({
             <Plus className="h-3.5 w-3.5" />
           )}
           {configured ? "Edit settings" : "Configure Dex"}
-        </button>
+        </BareButton>
       </div>
       {configured ? (
         <div className="divide-y divide-border/60">
@@ -404,7 +402,7 @@ function DexRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 py-1.5">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm text-foreground font-mono truncate max-w-[60%] text-right">
+      <span className="text-sm text-foreground font-mono truncate max-w-3/5 text-right">
         {value || "—"}
       </span>
     </div>
@@ -459,14 +457,14 @@ function PublicClientEditor({
             </span>
           )}
         </p>
-        <button
-          type="button"
+        <BareButton
+          aria-label="Remove client"
           onClick={onRemove}
           className="text-muted-foreground hover:text-status-error transition-colors"
-          title="Remove client"
+          tooltip="Remove client"
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        </BareButton>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <FieldRow label="Client ID" required>

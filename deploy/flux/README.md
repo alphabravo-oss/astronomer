@@ -12,7 +12,7 @@ the generator, then regenerate the distribution.
 
 ## Qualified release
 
-Astronomer pins [Flux v2.9.3](https://github.com/fluxcd/flux2/releases/tag/v2.9.3),
+Astronomer pins [Flux v2.9.6](https://github.com/fluxcd/flux2/releases/tag/v2.9.6),
 published 2026-07-23 from commit
 `16602fa989daa99762f1c6d1186ae2ad1c735815`. The release was selected on
 2026-08-17 after checking the upstream release, installation prerequisites,
@@ -21,7 +21,7 @@ checksums, release provenance, SPDX SBOM, and controller image signatures.
 
 Only these components are installed:
 
-| Component | Version from Flux v2.9.3 | Multi-architecture index digest |
+| Component | Version from Flux v2.9.6 | Multi-architecture index digest |
 | --- | --- | --- |
 | source-controller | v1.9.3 | `sha256:ff8f3c92f1bcb433e858c948040c3a3393fe73f5dd72048a4502bfaf0a4c26cd` |
 | kustomize-controller | v1.9.4 | `sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f` |
@@ -133,7 +133,7 @@ Kustomize), `sha256sum`, `tar`, and standard POSIX utilities.
 
 ```bash
 # Regenerate after reviewing trust-policy.json and upstream support/docs.
-./scripts/update-flux-distribution.sh v2.9.3
+./scripts/update-flux-distribution.sh v2.9.6
 
 # Online deterministic regeneration, signature, registry, and drift check.
 ./scripts/update-flux-distribution.sh --check

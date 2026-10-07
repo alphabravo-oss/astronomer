@@ -14,13 +14,14 @@ import (
 	"github.com/google/uuid"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/alphabravocompany/astronomer-go/internal/agent/kuberequests"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 const (
 	defaultDeliveryPollInterval   = 30 * time.Second
 	defaultDeliveryStatusInterval = 15 * time.Second
-	deliveryStatusHeartbeatFloor  = 5 * time.Minute
+	deliveryStatusHeartbeatFloor  = time.Minute
 	deliveryResponseTimeout       = 30 * time.Second
 )
 
@@ -31,13 +32,15 @@ type CapabilityProbe interface {
 }
 
 type RuntimeConfig struct {
-	ClusterID        string
-	AgentVersion     string
-	PollInterval     time.Duration
-	StatusInterval   time.Duration
-	ValidationPolicy ValidationPolicy
-	Connected        func() bool
-	Logger           *slog.Logger
+	ClusterID              string
+	AgentVersion           string
+	PollInterval           time.Duration
+	StatusInterval         time.Duration
+	ValidationPolicy       ValidationPolicy
+	Connected              func() bool
+	ObservationFreshness   func() bool
+	AssignmentObservations ManagedAssignmentObservationSource
+	Logger                 *slog.Logger
 }
 
 type stateReply struct {
@@ -61,10 +64,15 @@ type Runtime struct {
 	wake    chan struct{}
 	paused  *atomic.Bool
 
-	checkpoint checkpoint
-	transient  map[string]protocol.DeliveryDeploymentStatusV2
-	sequence   int64
-	now        func() time.Time
+	checkpoint       checkpoint
+	transient        map[string]protocol.DeliveryDeploymentStatusV2
+	sequence         int64
+	resetObservation atomic.Bool
+	now              func() time.Time
+
+	statusTicks           <-chan time.Time
+	assignmentStatusTimer *time.Timer
+	lastStatusAttempt     time.Time
 
 	lastStatusDigest string
 	lastStatusSentAt time.Time
@@ -154,9 +162,16 @@ func (r *Runtime) Run(ctx context.Context, send Sender) error {
 		return fmt.Errorf("load delivery checkpoint: %w", err)
 	}
 	r.checkpoint = loaded
+	stopObservations, err := r.startAssignmentObservations(ctx)
+	if err != nil {
+		return err
+	}
+	defer stopObservations()
 
 	poll := time.NewTicker(r.config.PollInterval)
 	status := time.NewTicker(r.config.StatusInterval)
+	r.statusTicks = status.C
+	defer func() { r.statusTicks = nil; r.stopAssignmentStatusTimer() }()
 	disconnected := time.NewTicker(time.Second)
 	defer poll.Stop()
 	defer status.Stop()
@@ -166,6 +181,7 @@ func (r *Runtime) Run(ctx context.Context, send Sender) error {
 	wasConnected := r.config.Connected()
 	for {
 		if request && r.config.Connected() {
+			r.resetObservationSuppression()
 			if err := r.requestAndReconcile(ctx, send); err != nil && ctx.Err() == nil {
 				r.config.Logger.Warn("delivery reconciliation did not complete", "error_code", stableRuntimeError(err), "error", err)
 			}
@@ -186,12 +202,12 @@ func (r *Runtime) Run(ctx context.Context, send Sender) error {
 				request = true
 			}
 			wasConnected = connected
-		case <-status.C:
-			if r.config.Connected() {
-				if err := r.sendStatus(ctx, send); err != nil && ctx.Err() == nil {
-					r.config.Logger.Warn("delivery status send failed", "error_code", stableRuntimeError(err))
-				}
-			}
+		case <-r.assignmentWake():
+			r.noticeAssignmentChanges()
+		case <-r.assignmentStatusDue():
+			r.attemptScheduledStatus(ctx, send)
+		case <-r.statusTicks:
+			r.attemptScheduledStatus(ctx, send)
 		}
 	}
 }
@@ -200,7 +216,7 @@ func (r *Runtime) requestAndReconcile(ctx context.Context, send Sender) error {
 	if r.paused != nil && r.paused.Load() {
 		return nil
 	}
-	inventory, capabilities, err := r.probe.Inspect(ctx)
+	inventory, capabilities, err := r.inspectInventory(ctx)
 	if err != nil {
 		return fmt.Errorf("inspect delivery capabilities: %w", err)
 	}
@@ -233,14 +249,23 @@ func (r *Runtime) requestAndReconcile(ctx context.Context, send Sender) error {
 		return fmt.Errorf("send delivery state request: %w", err)
 	}
 
-	timer := time.NewTimer(deliveryResponseTimeout)
-	defer timer.Stop()
+	waitCtx, cancelWait := context.WithTimeout(ctx, deliveryResponseTimeout)
+	defer cancelWait()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-timer.C:
+		case <-waitCtx.Done():
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return errors.New("delivery state response timed out")
+		case <-r.assignmentWake():
+			r.noticeAssignmentChanges()
+		case <-r.assignmentStatusDue():
+			r.attemptScheduledStatus(waitCtx, send)
+		case <-r.statusTicks:
+			r.attemptScheduledStatus(waitCtx, send)
 		case reply := <-r.replies:
 			if reply.requestID != "" && reply.requestID != requestID {
 				continue
@@ -256,7 +281,12 @@ func (r *Runtime) requestAndReconcile(ctx context.Context, send Sender) error {
 	}
 }
 
-func (r *Runtime) processSnapshot(ctx context.Context, snapshot protocol.DeliveryStateResponseV2, capabilities Capabilities) error {
+func (r *Runtime) processSnapshot(ctx context.Context, snapshot protocol.DeliveryStateResponseV2, capabilities Capabilities) (resultErr error) {
+	defer func() {
+		if err := r.syncAssignmentSubscriptions(); err != nil {
+			resultErr = errors.Join(resultErr, err)
+		}
+	}()
 	defer zeroSnapshotCredentials(&snapshot)
 	if err := ValidateSnapshot(snapshot, capabilities, r.config.ValidationPolicy); err != nil {
 		return fmt.Errorf("validate delivery snapshot: %w", err)
@@ -355,14 +385,18 @@ func (r *Runtime) processSnapshot(ctx context.Context, snapshot protocol.Deliver
 			delete(r.transient, deploymentID)
 		}
 	}
+	// Applied identities remain in memory for safe retries, but acknowledgment
+	// headers advance only after the store commits its durable summary.
+	candidate := r.checkpoint
 	if complete {
-		r.checkpoint.SnapshotGeneration = snapshot.SnapshotGeneration
-		r.checkpoint.SnapshotETag = snapshot.ETag
-		r.checkpoint.CredentialEpoch = snapshot.CredentialEpoch
+		candidate.SnapshotGeneration = snapshot.SnapshotGeneration
+		candidate.SnapshotETag = snapshot.ETag
+		candidate.CredentialEpoch = snapshot.CredentialEpoch
 	}
-	if err := r.store.Save(ctx, r.checkpoint); err != nil {
+	if err := r.store.Save(ctx, candidate); err != nil {
 		return fmt.Errorf("persist delivery checkpoint: %w", err)
 	}
+	r.checkpoint = candidate
 	if !complete {
 		return errors.New("delivery snapshot remains in progress")
 	}
@@ -370,7 +404,7 @@ func (r *Runtime) processSnapshot(ctx context.Context, snapshot protocol.Deliver
 }
 
 func (r *Runtime) sendStatus(ctx context.Context, send Sender) error {
-	inventory, _, err := r.probe.Inspect(ctx)
+	inventory, _, err := r.inspectInventory(ctx)
 	if err != nil {
 		return fmt.Errorf("inspect delivery status inventory: %w", err)
 	}
@@ -380,31 +414,9 @@ func (r *Runtime) sendStatus(ctx context.Context, send Sender) error {
 
 func (r *Runtime) sendStatusWithInventory(ctx context.Context, send Sender, inventory protocol.DeliveryControllerInventory) error {
 	now := r.now().UTC()
-	statuses := make([]protocol.DeliveryDeploymentStatusV2, 0, len(r.checkpoint.Assignments)+len(r.transient))
-	for _, deploymentID := range sortedAssignmentIDs(r.checkpoint.Assignments) {
-		accepted := r.checkpoint.Assignments[deploymentID]
-		source, reconciler, err := r.observe(ctx, accepted)
-		if err != nil {
-			statuses = append(statuses, protocol.DeliveryDeploymentStatusV2{
-				DeploymentID: accepted.DeploymentID, Generation: accepted.Generation, SpecDigest: accepted.SpecDigest,
-				Phase: "unknown", ErrorCode: "local_observation_failed", Message: "Flux state could not be read",
-				ObservedAt: now,
-			})
-			continue
-		}
-		normalized, err := NormalizeAcceptedObservation(AcceptedObservation{
-			Assignment: accepted, Source: source, Reconciler: reconciler, ObservedAt: now,
-		})
-		if err != nil {
-			statuses = append(statuses, protocol.DeliveryDeploymentStatusV2{
-				DeploymentID: accepted.DeploymentID, Generation: accepted.Generation, SpecDigest: accepted.SpecDigest,
-				Phase: "unknown", ErrorCode: "local_observation_refused", Message: "Flux state failed its ownership fence",
-				ObservedAt: now,
-			})
-			continue
-		}
-		statuses = append(statuses, normalized)
-	}
+	r.lastStatusAttempt = now
+	r.stopAssignmentStatusTimer()
+	statuses := r.assignmentStatuses(ctx, inventory.Observation != nil, now)
 	for deploymentID, status := range r.transient {
 		if _, accepted := r.checkpoint.Assignments[deploymentID]; accepted {
 			for index := range statuses {
@@ -452,6 +464,7 @@ func (r *Runtime) sendStatusPayload(send Sender, payload protocol.DeliveryStatus
 }
 
 func (r *Runtime) observe(ctx context.Context, accepted AcceptedAssignment) (*unstructured.Unstructured, *unstructured.Unstructured, error) {
+	ctx = kuberequests.WithConsumer(ctx, kuberequests.DeliveryAssignmentObservation)
 	var sourceIdentity, reconcilerIdentity *ObjectIdentity
 	for index := range accepted.Objects {
 		identity := accepted.Objects[index]

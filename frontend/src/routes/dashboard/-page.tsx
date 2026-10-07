@@ -1,3 +1,4 @@
+import { SkeletonText } from "@/components/ui/skeleton";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { useClusterEstateSummary, useClusters } from "@/lib/hooks/clusters";
@@ -18,7 +19,6 @@ import {
   Activity,
   AlertTriangle,
   WifiOff,
-  Loader2,
   ArrowRight,
   PackagePlus,
   TerminalSquare,
@@ -204,15 +204,15 @@ export function DashboardPage() {
       </section>
 
       {/* Two-column: Recent Activity (wider) + Platform health (signals) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-(--gap-section)">
         <section className="lg:col-span-2 space-y-3">
           <h2 className="text-lg font-medium text-foreground">
             Recent Activity
           </h2>
           <div className="rounded-lg border border-border overflow-hidden">
             {activityLoading ? (
-              <div className="flex items-center justify-center h-48">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <div role="status" aria-busy aria-label="Loading activity">
+                <SkeletonText lines={5} className="h-48 p-4" />
               </div>
             ) : activity.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
@@ -220,7 +220,7 @@ export function DashboardPage() {
                 <p className="text-sm">No recent activity</p>
               </div>
             ) : (
-              <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
+              <div className="divide-y divide-border max-h-105 overflow-y-auto">
                 {activity.map((event) => (
                   <div
                     key={event.id}

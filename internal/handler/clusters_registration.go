@@ -383,6 +383,11 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
 		return
 	}
+	scope := strings.TrimSpace(r.URL.Query().Get("scope"))
+	if scope != "" && scope != "full" && scope != "agent" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "Manifest scope must be full or agent")
+		return
+	}
 
 	// Generate a fresh registration token. T6.078 — short TTL: the
 	// manifest is consumed by a single `kubectl apply` shortly after
@@ -421,7 +426,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 	}
 	token.Token = tokenStr
 
-	manifest, err := h.renderAgentInstallManifest(cluster, tokenStr, agentServerURLFor(r.Context(), h.queries, r))
+	manifest, err := h.renderAgentInstallManifest(cluster, tokenStr, agentServerURLFor(r.Context(), h.queries, r), scope == "agent")
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to render agent configuration")
 		return
@@ -447,7 +452,7 @@ func (h *ClusterHandler) GetManifest(w http.ResponseWriter, r *http.Request) {
 // the token in plaintext. This exists so operators can run the
 // Rancher-style one-liner:
 //
-//	curl -sfL https://<server>/api/v1/register/<token>.yaml | kubectl apply --server-side --field-manager=astronomer-bootstrap -f -
+//	curl -sfL https://<server>/api/v1/register/<token>.yaml | kubectl apply --server-side --force-conflicts --field-manager=astronomer-bootstrap -f -
 //
 // rather than copy-paste a multi-kilobyte heredoc.
 func (h *ClusterHandler) GetManifestByToken(w http.ResponseWriter, r *http.Request) {
@@ -594,7 +599,7 @@ type registrationCAQuerier interface {
 	GetPlatformSetting(ctx context.Context, key string) (sqlc.PlatformSetting, error)
 }
 
-func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token, serverURL string) (string, error) {
+func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token, serverURL string, agentOnly ...bool) (string, error) {
 	annotations := clusterAnnotations(cluster.Annotations)
 	agentImage := "ghcr.io/alphabravo-oss/astronomer-go-agent:latest"
 	if h != nil && h.agentImage != "" {
@@ -611,7 +616,7 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 	if err != nil {
 		return "", err
 	}
-	return agenttemplate.RenderInstallYAML(agenttemplate.InstallTemplateData{
+	data := agenttemplate.InstallTemplateData{
 		ServerURL:            serverURL,
 		ClusterID:            cluster.ID.String(),
 		RegistrationToken:    token,
@@ -632,7 +637,11 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 		OTELInsecure:         h.agentOTELInsecure,
 		OTELSamplerRatio:     h.agentOTELSampler,
 		Environment:          h.agentEnvironment,
-	}), nil
+	}
+	if len(agentOnly) > 0 && agentOnly[0] {
+		return agenttemplate.RenderAgentYAML(data), nil
+	}
+	return agenttemplate.RenderInstallYAML(data), nil
 }
 
 func clusterAgentPrivilegeProfile(raw json.RawMessage) string {

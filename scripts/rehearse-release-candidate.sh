@@ -82,20 +82,28 @@ fi
 bootstrap_password="$(kubectl --context "$context" -n astronomer get secret astronomer-bootstrap -o jsonpath='{.data.password}' | base64 -d)"; [[ -n "$bootstrap_password" ]] || die "bootstrap credential unavailable"
 login_payload="$(jq -cn --arg email admin@astronomer.local --arg password "$bootstrap_password" '{email:$email,password:$password}')"
 auth_token="$(curl -fsS -H 'Content-Type: application/json' --data-binary "$login_payload" http://127.0.0.1:18080/api/v1/auth/login/ | jq -er '.data.token')"; unset bootstrap_password login_payload
+# A one-day disposable API token survives both the browser-session migration
+# and a rehearsal longer than the short-lived login JWT. It is destroyed with
+# this owned cluster and is never included in retained evidence.
+auth_token="$(curl -fsS -H 'Content-Type: application/json' -H "Authorization: Bearer $auth_token" \
+  --data-binary '{"name":"rc-upgrade-proof","expires_in_days":1,"scopes":["admin"]}' \
+  http://127.0.0.1:18080/api/v1/auth/tokens/ | jq -er '.data.token')"
 openssl rand -hex 32 >"$work/webhook-secret"; chmod 0600 "$work/webhook-secret"
 webhook_sink="${RC_WEBHOOK_SINK:-scripts/rc-webhook-sink.py}"
 "$webhook_sink" --secret-file "$work/webhook-secret" --out "$work/webhook-proof.json" --port 18081 >"$work/webhook-sink.log" 2>&1 & sink_pid=$!
 webhook_payload="$(jq -cn --arg secret "$(<"$work/webhook-secret")" '{name:"rc-upgrade-decrypt-proof",url:"http://host.k3d.internal:18081/",secret:$secret,event_filters:["webhook.test_ping"],enabled:true,max_retries:0,timeout_seconds:10}')"
-webhook_id="$(curl -fsS -H 'Content-Type: application/json' -H "Authorization: Bearer $auth_token" --data-binary "$webhook_payload" http://127.0.0.1:18080/api/v1/admin/webhooks | jq -er '.data.id')"; unset webhook_payload
+webhook_id="$(curl -fsS -H 'Content-Type: application/json' -H "Authorization: Bearer $auth_token" --data-binary "$webhook_payload" http://127.0.0.1:18080/api/v1/admin/webhooks/ | jq -er '.data.id')"; unset webhook_payload
 
-KUBE_CONTEXT="$context" EXPECTED_KUBE_API_SERVER="$actual_api" RELEASE_ARTIFACT_DIR="$work/target" BACKUP_ROOT="$work/backups" SANITIZED_EVIDENCE_DIR="$work/evidence" RC_DECRYPT_PROOF_WEBHOOK_ID="$webhook_id" RC_REPLACE_DATABASE_FROM_BACKUP=1 scripts/upgrade-release.sh --yes "$target"
+# Release the port before upgrade-release starts its own readiness forward.
 kill "$port_forward_pid" >/dev/null 2>&1 || true; wait "$port_forward_pid" 2>/dev/null || true
+port_forward_pid=""
+KUBE_CONTEXT="$context" EXPECTED_KUBE_API_SERVER="$actual_api" RELEASE_ARTIFACT_DIR="$work/target" BACKUP_ROOT="$work/backups" SANITIZED_EVIDENCE_DIR="$work/evidence" RC_DECRYPT_PROOF_WEBHOOK_ID="$webhook_id" RC_REPLACE_DATABASE_FROM_BACKUP=1 scripts/upgrade-release.sh --yes "$target"
 kubectl --context "$context" -n astronomer port-forward svc/astronomer-server 18080:8000 >"$work/port-forward-upgraded.log" 2>&1 & port_forward_pid=$!
 for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:18080/health/ >/dev/null 2>&1 && break; sleep 1; done
 if ! kill -0 "$port_forward_pid" 2>/dev/null || ! curl -fsS http://127.0.0.1:18080/health/ >/dev/null; then
   die "upgraded RC API port-forward did not become ready"
 fi
-curl -fsS -X POST -H "Authorization: Bearer $auth_token" -H 'Idempotency-Key: rc-upgrade-decrypt-proof' "http://127.0.0.1:18080/api/v1/admin/webhooks/${webhook_id}/test" >/dev/null
+curl -fsS -X POST -H "Authorization: Bearer $auth_token" -H 'Idempotency-Key: rc-upgrade-decrypt-proof' "http://127.0.0.1:18080/api/v1/admin/webhooks/${webhook_id}/test/" >/dev/null
 for _ in $(seq 1 120); do [[ -f "$work/webhook-proof.json" ]] && break; sleep 1; done
 jq -e '.verified == true and (.body_sha256|test("^sha256:[a-f0-9]{64}$"))' "$work/webhook-proof.json" >/dev/null || die "upgraded product did not decrypt and sign the restored proof subscription"
 unset auth_token

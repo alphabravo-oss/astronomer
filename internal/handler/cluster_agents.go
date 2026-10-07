@@ -257,6 +257,7 @@ type agentUpgradeRecommendation struct {
 type agentUpgradePlanRequest struct {
 	TargetVersion    string   `json:"target_version"`
 	TargetImage      string   `json:"target_image"`
+	TargetPullPolicy string   `json:"target_pull_policy"`
 	Strategy         string   `json:"strategy"`
 	CanaryClusterIDs []string `json:"canary_cluster_ids"`
 	BatchSize        int32    `json:"batch_size"`
@@ -271,6 +272,7 @@ type agentUpgradePlanResponse struct {
 	TargetVersion           string                       `json:"target_version"`
 	CurrentImage            string                       `json:"current_image,omitempty"`
 	TargetImage             string                       `json:"target_image"`
+	TargetPullPolicy        string                       `json:"target_pull_policy"`
 	RollbackImage           string                       `json:"rollback_image,omitempty"`
 	PrivilegeProfile        string                       `json:"privilege_profile"`
 	AgentOverrides          agenttemplate.AgentOverrides `json:"agent_overrides"`

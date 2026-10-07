@@ -1,7 +1,16 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { UserPreferencesProvider, useUserPreferences } from "./user-preferences";
+import {
+  UserPreferencesProvider,
+  useUserPreferences,
+} from "./user-preferences";
 import { ThemeProvider, THEME_STORAGE_KEY, useTheme } from "./theme";
 import { useAuthStore } from "./store";
 import type { User } from "@/types";
@@ -12,9 +21,8 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/user-preferences", async (importOriginal) => {
-  const original = await importOriginal<
-    typeof import("@/lib/api/user-preferences")
-  >();
+  const original =
+    await importOriginal<typeof import("@/lib/api/user-preferences")>();
   return { ...original, ...api };
 });
 
@@ -35,9 +43,13 @@ function Probe() {
       <span data-testid="density">{preferences.table_density}</span>
       <button
         type="button"
-        onClick={() =>
-          updatePreferences({ favorites: ["/dashboard/audit"] })
-        }
+        onClick={() => updatePreferences({ table_density: "comfortable" })}
+      >
+        Comfortable
+      </button>
+      <button
+        type="button"
+        onClick={() => updatePreferences({ favorites: ["/dashboard/audit"] })}
       >
         Update
       </button>
@@ -77,9 +89,25 @@ describe("UserPreferencesProvider", () => {
   it("uses authenticated server preferences instead of local theme state", async () => {
     localStorage.setItem(THEME_STORAGE_KEY, "dark");
     renderPreferences();
-    await waitFor(() => expect(screen.getByTestId("theme")).toHaveTextContent("light"));
+    await waitFor(() =>
+      expect(screen.getByTestId("theme")).toHaveTextContent("light"),
+    );
     expect(screen.getByTestId("density")).toHaveTextContent("compact");
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
+  });
+
+  it("applies data-density from the preference and follows changes", async () => {
+    document.documentElement.removeAttribute("data-density");
+    renderPreferences();
+    await waitFor(() =>
+      expect(document.documentElement.dataset.density).toBe("compact"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Comfortable" }));
+    await waitFor(() =>
+      expect(document.documentElement.hasAttribute("data-density")).toBe(false),
+    );
+    act(() => useAuthStore.setState({ isAuthenticated: false, user: null }));
+    expect(localStorage.getItem("astronomer-density")).toBeNull();
   });
 
   it("updates the complete typed document", async () => {

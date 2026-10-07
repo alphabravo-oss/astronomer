@@ -347,7 +347,7 @@ func TestPlanDeletionFencesAndOrphans(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tombstone := protocol.DeliveryDeletionV2{DeploymentID: assignment.DeploymentID, Generation: assignment.Generation, SpecDigest: assignment.SpecDigest}
+	tombstone := protocol.DeliveryDeletionV2{DeploymentID: assignment.DeploymentID, Generation: assignment.Generation + 1, SpecDigest: assignment.SpecDigest}
 	got, err := PlanDeletion(assignment, tombstone, materialization)
 	if err != nil {
 		t.Fatal(err)
@@ -361,7 +361,17 @@ func TestPlanDeletionFencesAndOrphans(t *testing.T) {
 	}
 	tombstone.Orphan = false
 	tombstone.Generation++
+	tombstone.SpecDigest = "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	if _, err = PlanDeletion(assignment, tombstone, materialization); err != nil {
+		t.Fatalf("later deletion after an unaccepted update was refused: %v", err)
+	}
+	tombstone.Generation = assignment.Generation
 	if _, err = PlanDeletion(assignment, tombstone, materialization); err == nil {
-		t.Fatal("stale tombstone unexpectedly passed fence")
+		t.Fatal("non-advancing tombstone unexpectedly passed fence")
+	}
+	tombstone.Generation = assignment.Generation + 1
+	tombstone.DeploymentID = "99999999-9999-4999-8999-999999999999"
+	if _, err = PlanDeletion(assignment, tombstone, materialization); err == nil {
+		t.Fatal("foreign tombstone unexpectedly passed fence")
 	}
 }

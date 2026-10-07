@@ -11,18 +11,9 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useEffect, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  Loader2,
-  Mail,
-  Pencil,
-  Plus,
-  Save,
-  Send,
-} from "lucide-react";
+import { ArrowLeft, Mail, Pencil, Plus, Save, Send } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
-import { formatRelativeTime } from "@/lib/utils";
 import { pageCount, pageNumber } from "@/lib/api/pagination";
 import { useAppForm, useStore } from "@/lib/form";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -43,6 +34,9 @@ import {
   type SentEmail,
   type SmtpConfig,
 } from "@/lib/api/settings";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
+import { BareButton } from "@/components/form/bare-button";
+import { RelativeTime } from "@/components/admin/table-cells";
 
 const DEFAULT_CONFIG: SmtpConfig = {
   host: "",
@@ -227,7 +221,7 @@ function SmtpForm({
           />
           <ActionButton
             type="button"
-            title="Tests the saved server configuration. Save any changes first."
+            tooltip="Tests the saved server configuration. Save any changes first."
             onClick={handleTest}
             disabled={
               dirty || update.isPending || testSend.isPending || !testTo
@@ -275,15 +269,21 @@ function EmailsTable() {
     {
       key: "createdAt",
       header: "Time",
+      kind: "age",
+      size: 105,
       accessor: (row) => (
         <span className="text-xs text-muted-foreground font-mono">
-          {formatRelativeTime(row.createdAt)}
+          <RelativeTime value={row.createdAt} />
         </span>
       ),
     },
     {
       key: "to",
       header: "To",
+      kind: "text",
+      grow: true,
+      minSize: 200,
+      maxSize: 640,
       accessor: (row) => (
         <span className="text-sm text-foreground">{row.to}</span>
       ),
@@ -291,6 +291,10 @@ function EmailsTable() {
     {
       key: "template",
       header: "Template",
+      kind: "badge",
+      size: 128,
+      minSize: 100,
+      maxSize: 220,
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
           {row.template}
@@ -300,6 +304,8 @@ function EmailsTable() {
     {
       key: "status",
       header: "Status",
+      kind: "status",
+      size: 104,
       accessor: (row) => (
         <StatusBadge
           status={
@@ -317,10 +323,9 @@ function EmailsTable() {
     {
       key: "attempts",
       header: "Attempts",
-      align: "right",
-      accessor: (row) => (
-        <span className="tabular-nums text-sm">{row.attempts}</span>
-      ),
+      kind: "count",
+      size: 112,
+      accessor: (row) => <span className="text-sm">{row.attempts}</span>,
     },
   ];
 
@@ -354,22 +359,20 @@ function EmailsTable() {
       />
       {data && (data.pagination.offset > 0 || data.pagination.has_more) && (
         <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
+          <BareButton
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page === 1}
             className="h-8 px-3 rounded-lg border border-border text-xs font-medium disabled:opacity-50"
           >
             Previous
-          </button>
-          <button
-            type="button"
+          </BareButton>
+          <BareButton
             onClick={() => setPage((p) => p + 1)}
             disabled={!data.pagination.has_more}
             className="h-8 px-3 rounded-lg border border-border text-xs font-medium disabled:opacity-50"
           >
             Next
-          </button>
+          </BareButton>
         </div>
       )}
     </div>
@@ -404,10 +407,9 @@ function SmtpSummary({
             Connection + authentication for outbound mail.
           </p>
         </div>
-        <button
-          type="button"
+        <BareButton
           onClick={onEdit}
-          className="inline-flex shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+          className="inline-flex shrink-0 items-center gap-1.5 h-(--control-h) px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
         >
           {configured ? (
             <Pencil className="h-3.5 w-3.5" />
@@ -415,7 +417,7 @@ function SmtpSummary({
             <Plus className="h-3.5 w-3.5" />
           )}
           {configured ? "Edit configuration" : "Configure SMTP"}
-        </button>
+        </BareButton>
       </div>
       {configured ? (
         <div className="divide-y divide-border/60">
@@ -455,11 +457,7 @@ function SmtpPageInner() {
   const initial = data ?? DEFAULT_CONFIG;
   const [editing, setEditing] = useState(false);
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingSkeleton label="Loading" heading />;
   }
   if (query.isError)
     return (
@@ -472,7 +470,7 @@ function SmtpPageInner() {
       </QueryStates>
     );
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <SmtpSummary config={initial} onEdit={() => setEditing(true)} />
       <EmailsTable />
       {editing && (
@@ -503,12 +501,7 @@ function SmtpSettingsPage() {
         </RouterLink>
         <PageHeader
           eyebrow="Settings · Email"
-          title={
-            <span className="inline-flex items-center gap-2">
-              <Mail className="h-5 w-5 text-muted-foreground" />
-              Email & SMTP
-            </span>
-          }
+          title="Email & SMTP"
           description="Outbound mail server, test-send, and audit log of recent emails."
         />
         <SmtpPageInner />

@@ -14,7 +14,6 @@
 // fail-closed posture the real renderers must keep.
 
 import { lazy, Suspense, type ReactNode } from "react";
-import { Loader2 } from "lucide-react";
 import { useExtensionRuntime, useExtensionMounts } from "./ExtensionProvider";
 import { ExtensionErrorBoundary } from "./ExtensionErrorBoundary";
 import type {
@@ -22,6 +21,7 @@ import type {
   ExtensionMount,
   ExtensionPointKind,
 } from "@/lib/api/extensions";
+import { LoadingSkeleton } from "@/components/form/loading-skeleton";
 
 const DeclarativeWidget = lazy(() =>
   import("./DeclarativeWidget").then((module) => ({
@@ -103,14 +103,11 @@ function MountPlaceholder({ mount }: { mount: ExtensionMount }) {
         <span className="text-sm font-medium text-foreground">
           {mount.label || mount.displayName || mount.extension}
         </span>
-        <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span className="rounded-sm border border-border px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
           {tier === 2 ? "iframe" : "widget"}
         </span>
       </div>
-      <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        <span>Loading extension…</span>
-      </div>
+      <LoadingSkeleton label="Loading extension" lines={2} className="mt-3" />
     </div>
   );
 }

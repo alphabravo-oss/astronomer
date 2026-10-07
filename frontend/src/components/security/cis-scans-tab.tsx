@@ -7,6 +7,7 @@ import { useEntityNames } from "@/lib/hooks/entity-names";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { PermissionState } from "@/components/ui/empty-state";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
+import { TimestampCell } from "@/components/ui/cell-primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
@@ -44,6 +45,143 @@ function recentFailedScans(scans: CISScanListItem[], now: number) {
     .slice(0, 3);
 }
 
+function cisScanColumns(
+  clusterById: ReadonlyMap<string, string>,
+): Column<CISScanListItem>[] {
+  return [
+    {
+      key: "cluster",
+      header: "Cluster",
+      kind: "name",
+      minSize: 180,
+      accessor: (row) => (
+        <span className="font-medium text-foreground text-sm">
+          {clusterById.get(row.clusterId) ?? row.clusterId.slice(0, 8)}
+        </span>
+      ),
+      sortAccessor: (row) => clusterById.get(row.clusterId) ?? row.clusterId,
+    },
+    {
+      key: "profile",
+      header: "Profile",
+      kind: "text",
+      size: 144,
+      minSize: 128,
+      accessor: (row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.scanType}
+        </span>
+      ),
+      sortAccessor: (row) => row.scanType,
+    },
+    {
+      key: "runAt",
+      header: "Run At",
+      kind: "age",
+      size: 120,
+      maxSize: 160,
+      accessor: (row) =>
+        row.completedAt ? (
+          <TimestampCell value={row.completedAt} />
+        ) : row.startedAt ? (
+          <TimestampCell value={row.startedAt} prefix="Started" />
+        ) : (
+          <TimestampCell value={row.createdAt} />
+        ),
+      sortAccessor: (row) => row.completedAt ?? row.startedAt ?? row.createdAt,
+    },
+    {
+      key: "status",
+      header: "Status",
+      kind: "status",
+      size: 120,
+      accessor: (row) => <StatusBadge status={row.status} />,
+      sortAccessor: (row) => row.status,
+    },
+    {
+      key: "pass",
+      header: "Pass",
+      kind: "count",
+      size: 84,
+      accessor: (row) => (
+        <span className="tabular-nums text-status-success text-sm">
+          {row.passed ?? 0}
+        </span>
+      ),
+      sortAccessor: (row) => row.passed ?? 0,
+    },
+    {
+      key: "fail",
+      header: "Fail",
+      kind: "count",
+      size: 84,
+      accessor: (row) => (
+        <span
+          className={cn(
+            "tabular-nums text-sm",
+            (row.failed ?? 0) > 0
+              ? "text-status-error font-medium"
+              : "text-muted-foreground",
+          )}
+        >
+          {row.failed ?? 0}
+        </span>
+      ),
+      sortAccessor: (row) => row.failed ?? 0,
+    },
+    {
+      key: "warn",
+      header: "Warn",
+      kind: "count",
+      size: 84,
+      accessor: (row) => (
+        <span
+          className={cn(
+            "tabular-nums text-sm",
+            (row.warned ?? 0) > 0
+              ? "text-status-warning"
+              : "text-muted-foreground",
+          )}
+        >
+          {row.warned ?? 0}
+        </span>
+      ),
+      sortAccessor: (row) => row.warned ?? 0,
+    },
+    {
+      key: "skip",
+      header: "Skip",
+      kind: "count",
+      size: 84,
+      accessor: (row) => (
+        <span className="tabular-nums text-sm text-muted-foreground">
+          {row.skipped ?? 0}
+        </span>
+      ),
+      sortAccessor: (row) => row.skipped ?? 0,
+    },
+    {
+      key: "actions",
+      header: "",
+      sortable: false,
+      kind: "actions",
+      size: 64,
+      minSize: 64,
+      maxSize: 64,
+      accessor: (row) => (
+        <RouterLink
+          to="/dashboard/security/scans/$scanId"
+          params={{ scanId: row.id }}
+          onClick={(e) => e.stopPropagation()}
+          className="text-xs text-primary hover:underline"
+        >
+          View
+        </RouterLink>
+      ),
+    },
+  ];
+}
+
 export function CISScansTab() {
   const now = useClock();
   const navigate = useNavigate();
@@ -77,121 +215,7 @@ export function CISScansTab() {
     [scans, now],
   );
 
-  const columns: Column<CISScanListItem>[] = [
-    {
-      key: "cluster",
-      header: "Cluster",
-      accessor: (row) => (
-        <span className="font-medium text-foreground text-sm">
-          {clusterById.get(row.clusterId) ?? row.clusterId.slice(0, 8)}
-        </span>
-      ),
-      sortAccessor: (row) => clusterById.get(row.clusterId) ?? row.clusterId,
-    },
-    {
-      key: "profile",
-      header: "Profile",
-      accessor: (row) => (
-        <span className="font-mono text-xs text-muted-foreground">
-          {row.scanType}
-        </span>
-      ),
-      sortAccessor: (row) => row.scanType,
-    },
-    {
-      key: "runAt",
-      header: "Run At",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.completedAt
-            ? formatRelativeTime(row.completedAt)
-            : row.startedAt
-              ? `Started ${formatRelativeTime(row.startedAt)}`
-              : formatRelativeTime(row.createdAt)}
-        </span>
-      ),
-      sortAccessor: (row) => row.completedAt ?? row.startedAt ?? row.createdAt,
-    },
-    {
-      key: "status",
-      header: "Status",
-      accessor: (row) => <StatusBadge status={row.status} />,
-      sortAccessor: (row) => row.status,
-    },
-    {
-      key: "pass",
-      header: "Pass",
-      align: "right",
-      accessor: (row) => (
-        <span className="tabular-nums text-status-success text-sm">
-          {row.passed ?? 0}
-        </span>
-      ),
-      sortAccessor: (row) => row.passed ?? 0,
-    },
-    {
-      key: "fail",
-      header: "Fail",
-      align: "right",
-      accessor: (row) => (
-        <span
-          className={cn(
-            "tabular-nums text-sm",
-            (row.failed ?? 0) > 0
-              ? "text-status-error font-medium"
-              : "text-muted-foreground",
-          )}
-        >
-          {row.failed ?? 0}
-        </span>
-      ),
-      sortAccessor: (row) => row.failed ?? 0,
-    },
-    {
-      key: "warn",
-      header: "Warn",
-      align: "right",
-      accessor: (row) => (
-        <span
-          className={cn(
-            "tabular-nums text-sm",
-            (row.warned ?? 0) > 0
-              ? "text-status-warning"
-              : "text-muted-foreground",
-          )}
-        >
-          {row.warned ?? 0}
-        </span>
-      ),
-      sortAccessor: (row) => row.warned ?? 0,
-    },
-    {
-      key: "skip",
-      header: "Skip",
-      align: "right",
-      accessor: (row) => (
-        <span className="tabular-nums text-sm text-muted-foreground">
-          {row.skipped ?? 0}
-        </span>
-      ),
-      sortAccessor: (row) => row.skipped ?? 0,
-    },
-    {
-      key: "actions",
-      header: "",
-      sortable: false,
-      accessor: (row) => (
-        <RouterLink
-          to="/dashboard/security/scans/$scanId"
-          params={{ scanId: row.id }}
-          onClick={(e) => e.stopPropagation()}
-          className="text-xs text-primary hover:underline"
-        >
-          View
-        </RouterLink>
-      ),
-    },
-  ];
+  const columns = cisScanColumns(clusterById);
 
   if (!read.allowed) return <PermissionState permission="security:read" />;
 

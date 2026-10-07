@@ -11,7 +11,7 @@ import { createFileRoute } from "@tanstack/react-router";
  *     for capacity planning.
  */
 import { Link as RouterLink } from "@tanstack/react-router";
-import { ArrowLeft, Gauge } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ErrorState, LoadingState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,7 @@ function UtilizationBar({ pct }: { pct: number }) {
         : "bg-status-success";
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-[160px]">
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden max-w-40">
         <div
           className={cn("h-full transition-all", color)}
           style={{ width: `${clamped}%` }}
@@ -93,12 +93,13 @@ function UsageInner() {
     {
       key: "scope",
       header: "Scope",
+      kind: "name",
       accessor: (row) => (
-        <div>
-          <p className="text-sm font-medium text-foreground capitalize">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-foreground capitalize">
             {row.scope}
           </p>
-          <p className="text-2xs text-muted-foreground font-mono">
+          <p className="truncate text-2xs text-muted-foreground font-mono">
             {row.scopeName ?? row.scopeId ?? "--"}
           </p>
         </div>
@@ -107,9 +108,12 @@ function UsageInner() {
     {
       key: "planName",
       header: "Plan",
+      kind: "text",
+      minSize: 136,
       accessor: (row) => (
         <RouterLink
-          to="/dashboard/settings/quotas/$name" params={{ name: row.planName }}
+          to="/dashboard/settings/quotas/$name"
+          params={{ name: row.planName }}
           className="text-sm text-foreground hover:underline font-mono"
         >
           {row.planName}
@@ -119,13 +123,17 @@ function UsageInner() {
     {
       key: "worst",
       header: "Worst cap",
+      kind: "percent",
+      size: 208,
+      minSize: 160,
+      maxSize: 260,
       sortable: false,
       accessor: (row) => {
         const worst = worstField(row);
         if (!worst)
           return <span className="text-xs text-muted-foreground">--</span>;
         return (
-          <div className="space-y-1 max-w-[260px]">
+          <div className="space-y-1">
             <p className="text-xs text-muted-foreground">
               {fieldLabel(worst.field)}
             </p>
@@ -137,7 +145,7 @@ function UsageInner() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-(--gap-section)">
       <div className="rounded-xl border border-border bg-card p-6 space-y-4">
         <div>
           <h2 className="text-base font-semibold text-foreground">
@@ -217,12 +225,7 @@ function QuotaUsagePage() {
         </RouterLink>
         <PageHeader
           eyebrow="Settings · Quota usage"
-          title={
-            <span className="flex items-center gap-2">
-              <Gauge className="h-5 w-5 text-muted-foreground" />
-              Deployment-wide quota usage
-            </span>
-          }
+          title="Deployment-wide quota usage"
         />
         <UsageInner />
       </PageShell>

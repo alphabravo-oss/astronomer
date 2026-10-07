@@ -180,9 +180,10 @@ export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
         >
           {(Object.keys(channelTypeFields) as NotificationChannelType[]).map(
             (type) => (
-              <button
+              <ActionButton
+                intent="bare"
+                size="none"
                 key={type}
-                type="button"
                 onClick={() => {
                   form.setFieldValue("type", type);
                   form.setFieldValue("config", {});
@@ -195,7 +196,7 @@ export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
                 )}
               >
                 {channelTypeFields[type].label}
-              </button>
+              </ActionButton>
             ),
           )}
         </div>

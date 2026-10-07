@@ -134,6 +134,7 @@ export const operationMetadata = {
   "deleteAlertingRulesById": { method: "DELETE", path: "/api/v1/alerting/rules/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteAlertingSilencesById": { method: "DELETE", path: "/api/v1/alerting/silences/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteAuthDexConnectorsById": { method: "DELETE", path: "/api/v1/auth/dex/connectors/{id}/", pathParameters: ["id"], responseType: "json" },
+  "deleteAuthMeTableViewsById": { method: "DELETE", path: "/api/v1/auth/me/table-views/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteAuthTokensById": { method: "DELETE", path: "/api/v1/auth/tokens/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteBackupsById": { method: "DELETE", path: "/api/v1/backups/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteBackupsSchedulesById": { method: "DELETE", path: "/api/v1/backups/schedules/{id}", pathParameters: ["id"], responseType: "json" },
@@ -266,6 +267,7 @@ export const operationMetadata = {
   "getAuthMe": { method: "GET", path: "/api/v1/auth/me/", pathParameters: [], responseType: "json" },
   "getAuthMePreferences": { method: "GET", path: "/api/v1/auth/me/preferences/", pathParameters: [], responseType: "json" },
   "getAuthMeQuota": { method: "GET", path: "/api/v1/auth/me/quota", pathParameters: [], responseType: "json" },
+  "getAuthMeTableViews": { method: "GET", path: "/api/v1/auth/me/table-views/", pathParameters: [], responseType: "json" },
   "getAuthTokens": { method: "GET", path: "/api/v1/auth/tokens/", pathParameters: [], responseType: "json" },
   "getAuthTotpStatus": { method: "GET", path: "/api/v1/auth/totp/status/", pathParameters: [], responseType: "json" },
   "getBackups": { method: "GET", path: "/api/v1/backups", pathParameters: [], responseType: "json" },
@@ -518,6 +520,7 @@ export const operationMetadata = {
   "getSupportBundleOperation": { method: "GET", path: "/api/v1/support-bundles/{id}", pathParameters: ["id"], responseType: "json" },
   "getTools": { method: "GET", path: "/api/v1/tools/", pathParameters: [], responseType: "json" },
   "getToolsBySlug": { method: "GET", path: "/api/v1/tools/{slug}", pathParameters: ["slug"], responseType: "json" },
+  "getToolsBySlugConfiguration": { method: "GET", path: "/api/v1/tools/{slug}/configuration", pathParameters: ["slug"], responseType: "json" },
   "getToolsControllerStatus": { method: "GET", path: "/api/v1/tools/controller/status", pathParameters: [], responseType: "json" },
   "getToolsOperations": { method: "GET", path: "/api/v1/tools/operations", pathParameters: [], responseType: "json" },
   "getToolsOperationsById": { method: "GET", path: "/api/v1/tools/operations/{id}", pathParameters: ["id"], responseType: "json" },
@@ -562,6 +565,7 @@ export const operationMetadata = {
   "optionsObservabilityGrafana": { method: "OPTIONS", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
   "optionsObservabilityGrafanaProxy": { method: "OPTIONS", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "patchAuthDexConnectorsById": { method: "PATCH", path: "/api/v1/auth/dex/connectors/{id}/", pathParameters: ["id"], responseType: "json" },
+  "patchAuthMeTableViewsById": { method: "PATCH", path: "/api/v1/auth/me/table-views/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchClusterGroupsById": { method: "PATCH", path: "/api/v1/cluster-groups/{id}", pathParameters: ["id"], responseType: "json" },
   "patchClustersByClusterIdK8sProxy": { method: "PATCH", path: "/api/v1/clusters/{cluster_id}/k8s/*", pathParameters: ["cluster_id"], responseType: "json" },
   "patchClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { method: "PATCH", path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", pathParameters: ["cluster_id","namespace","service_port"], responseType: "blob" },
@@ -620,6 +624,7 @@ export const operationMetadata = {
   "postAuthDexRegisterAsSso": { method: "POST", path: "/api/v1/auth/dex/register-as-sso/", pathParameters: [], responseType: "json" },
   "postAuthLogin": { method: "POST", path: "/api/v1/auth/login/", pathParameters: [], responseType: "json" },
   "postAuthLogout": { method: "POST", path: "/api/v1/auth/logout/", pathParameters: [], responseType: "json" },
+  "postAuthMeTableViews": { method: "POST", path: "/api/v1/auth/me/table-views/", pathParameters: [], responseType: "json" },
   "postAuthPasswordResetComplete": { method: "POST", path: "/api/v1/auth/password-reset/complete/", pathParameters: [], responseType: "json" },
   "postAuthPasswordResetRequest": { method: "POST", path: "/api/v1/auth/password-reset/request/", pathParameters: [], responseType: "json" },
   "postAuthRefresh": { method: "POST", path: "/api/v1/auth/refresh/", pathParameters: [], responseType: "json" },
@@ -1420,6 +1425,11 @@ export function deleteAuthDexConnectorsById(args: OpenAPIArguments<"deleteAuthDe
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function deleteAuthMeTableViewsById(args: OpenAPIArguments<"deleteAuthMeTableViewsById">) {
+  const operationId = "deleteAuthMeTableViewsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function deleteAuthTokensById(args: OpenAPIArguments<"deleteAuthTokensById">) {
   const operationId = "deleteAuthTokensById" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -2078,6 +2088,11 @@ export function getAuthMePreferences(args?: OpenAPIArguments<"getAuthMePreferenc
 export function getAuthMeQuota(args?: OpenAPIArguments<"getAuthMeQuota">) {
   const operationId = "getAuthMeQuota" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getAuthMeTableViews(args: OpenAPIArguments<"getAuthMeTableViews">) {
+  const operationId = "getAuthMeTableViews" as const;
+  return executeOpenAPIOperation(operationId, args);
 }
 
 export function getAuthTokens(args?: OpenAPIArguments<"getAuthTokens">) {
@@ -3340,6 +3355,11 @@ export function getToolsBySlug(args: OpenAPIArguments<"getToolsBySlug">) {
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getToolsBySlugConfiguration(args: OpenAPIArguments<"getToolsBySlugConfiguration">) {
+  const operationId = "getToolsBySlugConfiguration" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function getToolsControllerStatus(args?: OpenAPIArguments<"getToolsControllerStatus">) {
   const operationId = "getToolsControllerStatus" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -3557,6 +3577,11 @@ export function optionsObservabilityGrafanaProxy(args?: OpenAPIArguments<"option
 
 export function patchAuthDexConnectorsById(args: OpenAPIArguments<"patchAuthDexConnectorsById">) {
   const operationId = "patchAuthDexConnectorsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function patchAuthMeTableViewsById(args: OpenAPIArguments<"patchAuthMeTableViewsById">) {
+  const operationId = "patchAuthMeTableViewsById" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -3848,6 +3873,11 @@ export function postAuthLogin(args: OpenAPIArguments<"postAuthLogin">) {
 export function postAuthLogout(args?: OpenAPIArguments<"postAuthLogout">) {
   const operationId = "postAuthLogout" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function postAuthMeTableViews(args: OpenAPIArguments<"postAuthMeTableViews">) {
+  const operationId = "postAuthMeTableViews" as const;
+  return executeOpenAPIOperation(operationId, args);
 }
 
 export function postAuthPasswordResetComplete(args: OpenAPIArguments<"postAuthPasswordResetComplete">) {

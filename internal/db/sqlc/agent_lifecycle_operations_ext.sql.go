@@ -113,8 +113,8 @@ WITH claimed AS (
     INSERT INTO operation_idempotency_keys (scope, idempotency_key, operation_table, operation_id)
     VALUES ($1, $2, 'agent_lifecycle_operations', gen_random_uuid())
     ON CONFLICT (scope, idempotency_key) DO UPDATE
-    SET operation_table = CASE WHEN operation_table = '' THEN 'agent_lifecycle_operations' ELSE operation_table END,
-        operation_id = COALESCE(operation_id, gen_random_uuid()),
+    SET operation_table = CASE WHEN operation_idempotency_keys.operation_table = '' THEN 'agent_lifecycle_operations' ELSE operation_idempotency_keys.operation_table END,
+        operation_id = COALESCE(operation_idempotency_keys.operation_id, gen_random_uuid()),
         updated_at = now()
     RETURNING operation_table, operation_id
 ),

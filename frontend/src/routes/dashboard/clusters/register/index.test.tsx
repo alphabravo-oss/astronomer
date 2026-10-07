@@ -64,6 +64,7 @@ vi.mock("@/components/clusters/registration-connect-step", () => ({
   }) => (
     <div>
       <p>connect-step for {clusterId}</p>
+      {/* eslint-disable-next-line no-restricted-syntax -- test double */}
       <button type="button" onClick={onBack}>
         Back
       </button>

@@ -91,7 +91,7 @@ export function MetricsChart({
         >
           {title}
         </h3>
-        <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
+        <div className="flex items-center justify-center h-50 text-sm text-muted-foreground">
           No data available
         </div>
       </div>

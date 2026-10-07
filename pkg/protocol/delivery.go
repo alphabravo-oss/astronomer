@@ -95,15 +95,16 @@ type DeliveryStateResponseV2 struct {
 }
 
 type DeliveryControllerInventory struct {
-	AgentVersion         string            `json:"agent_version,omitempty"`
-	FluxVersion          string            `json:"flux_version,omitempty"`
-	Components           map[string]string `json:"components,omitempty"`
-	SystemComponents     []SystemComponent `json:"system_components,omitempty"`
-	APIVersions          []string          `json:"api_versions,omitempty"`
-	KubernetesVersion    string            `json:"kubernetes_version,omitempty"`
-	DistributionDigest   string            `json:"distribution_digest,omitempty"`
-	Ready                bool              `json:"ready"`
-	CompatibilityMessage string            `json:"compatibility_message,omitempty"`
+	Observation          *DeliveryObservation `json:"observation,omitempty"`
+	AgentVersion         string               `json:"agent_version,omitempty"`
+	FluxVersion          string               `json:"flux_version,omitempty"`
+	Components           map[string]string    `json:"components,omitempty"`
+	SystemComponents     []SystemComponent    `json:"system_components,omitempty"`
+	APIVersions          []string             `json:"api_versions,omitempty"`
+	KubernetesVersion    string               `json:"kubernetes_version,omitempty"`
+	DistributionDigest   string               `json:"distribution_digest,omitempty"`
+	Ready                bool                 `json:"ready"`
+	CompatibilityMessage string               `json:"compatibility_message,omitempty"`
 }
 
 // SystemComponent is a bounded, secret-free observation of software that is
@@ -111,6 +112,7 @@ type DeliveryControllerInventory struct {
 // separate so the control plane never implies that Flux owns infrastructure
 // installed by the Kubernetes distribution or an external operator.
 type SystemComponent struct {
+	Observation             *DeliveryObservation        `json:"observation,omitempty"`
 	ID                      string                      `json:"id"`
 	Name                    string                      `json:"name"`
 	Category                string                      `json:"category"`
@@ -298,6 +300,7 @@ type DeliveryStatusV2 struct {
 // weakening session or desired-generation fences.
 func (s DeliveryStatusV2) SemanticDigest() string {
 	canonical := s
+	canonical.ControllerInventory = s.ControllerInventory.WithoutObservationTimes()
 	canonical.SessionSequence = 0
 	canonical.StatusDigest = ""
 	canonical.Deployments = append([]DeliveryDeploymentStatusV2(nil), s.Deployments...)
@@ -306,6 +309,7 @@ func (s DeliveryStatusV2) SemanticDigest() string {
 	})
 	for index := range canonical.Deployments {
 		canonical.Deployments[index].ObservedAt = time.Time{}
+		canonical.Deployments[index].Observation = withoutObservationTime(canonical.Deployments[index].Observation)
 		canonical.Deployments[index].WarningCodes = append([]string(nil), canonical.Deployments[index].WarningCodes...)
 		sort.Strings(canonical.Deployments[index].WarningCodes)
 	}
@@ -317,22 +321,23 @@ func (s DeliveryStatusV2) SemanticDigest() string {
 }
 
 type DeliveryDeploymentStatusV2 struct {
-	DeploymentID     string              `json:"deployment_id"`
-	Generation       int64               `json:"generation"`
-	SpecDigest       string              `json:"spec_digest"`
-	Phase            string              `json:"phase"`
-	ObservedRevision string              `json:"observed_revision,omitempty"`
-	ObservedDigest   string              `json:"observed_digest,omitempty"`
-	SourceKind       string              `json:"source_kind,omitempty"`
-	SourceName       string              `json:"source_name,omitempty"`
-	ReconcilerKind   string              `json:"reconciler_kind,omitempty"`
-	ReconcilerName   string              `json:"reconciler_name,omitempty"`
-	ErrorCode        string              `json:"error_code,omitempty"`
-	WarningCodes     []string            `json:"warning_codes,omitempty"`
-	Message          string              `json:"message,omitempty"`
-	Conditions       []DeliveryCondition `json:"conditions,omitempty"`
-	Inventory        DeliveryInventory   `json:"inventory"`
-	ObservedAt       time.Time           `json:"observed_at"`
+	Observation      *DeliveryObservation `json:"observation,omitempty"`
+	DeploymentID     string               `json:"deployment_id"`
+	Generation       int64                `json:"generation"`
+	SpecDigest       string               `json:"spec_digest"`
+	Phase            string               `json:"phase"`
+	ObservedRevision string               `json:"observed_revision,omitempty"`
+	ObservedDigest   string               `json:"observed_digest,omitempty"`
+	SourceKind       string               `json:"source_kind,omitempty"`
+	SourceName       string               `json:"source_name,omitempty"`
+	ReconcilerKind   string               `json:"reconciler_kind,omitempty"`
+	ReconcilerName   string               `json:"reconciler_name,omitempty"`
+	ErrorCode        string               `json:"error_code,omitempty"`
+	WarningCodes     []string             `json:"warning_codes,omitempty"`
+	Message          string               `json:"message,omitempty"`
+	Conditions       []DeliveryCondition  `json:"conditions,omitempty"`
+	Inventory        DeliveryInventory    `json:"inventory"`
+	ObservedAt       time.Time            `json:"observed_at"`
 }
 
 type DeliveryCondition struct {
@@ -388,6 +393,9 @@ func (r DeliveryStateRequestV2) Validate() error {
 }
 
 func (i DeliveryControllerInventory) Validate() error {
+	if err := i.validateObservations(); err != nil {
+		return err
+	}
 	if len(i.AgentVersion) > 64 || len(i.FluxVersion) > 64 || len(i.KubernetesVersion) > 64 || len(i.CompatibilityMessage) > MaxDeliveryStatusMessageBytes {
 		return errors.New("controller inventory contains an oversized field")
 	}
@@ -459,6 +467,9 @@ func (s DeliveryStatusV2) Validate() error {
 	seen := make(map[string]struct{}, len(s.Deployments))
 	for index := range s.Deployments {
 		deployment := s.Deployments[index]
+		if err := deployment.validateObservation(s.ControllerInventory.Observation != nil, time.Now().UTC()); err != nil {
+			return fmt.Errorf("deployment status %d: %w", index, err)
+		}
 		if !validUUID(deployment.DeploymentID) || deployment.Generation < 1 || !validDigest(deployment.SpecDigest) {
 			return fmt.Errorf("deployment status %d has invalid identity", index)
 		}

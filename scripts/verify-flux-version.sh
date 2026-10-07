@@ -19,7 +19,7 @@ for required_file in VERSION checksums.txt install.yaml kustomization.yaml prove
 done
 
 version=$(tr -d '[:space:]' < "$distribution_dir/VERSION")
-[[ "$version" == "v2.9.3" ]] || die "this release line is qualified only for Flux v2.9.3, found $version"
+[[ "$version" == "v2.9.6" ]] || die "this release line is qualified only for Flux v2.9.6, found $version"
 version_label="app.kubernetes.io/version: $version"
 
 (

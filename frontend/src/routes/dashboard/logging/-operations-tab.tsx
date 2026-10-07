@@ -3,14 +3,15 @@ import {
   useRetryLoggingOperation,
 } from "@/lib/hooks/logging";
 import { useSearchParam } from "@/lib/use-search-param";
+import { TimestampCell } from "@/components/ui/cell-primitives";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
 import { Select } from "@/components/ui/select";
-import { capitalize, formatRelativeTime, cn } from "@/lib/utils";
+import { capitalize, cn } from "@/lib/utils";
 import type { LoggingOperation } from "@/types";
 import { X, RotateCcw } from "lucide-react";
-import { mapLoggingOperationStatus, truncate } from "./-utils";
+import { mapLoggingOperationStatus } from "./-utils";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
   OffsetPagination,
@@ -34,6 +35,7 @@ export function OperationsTab() {
     {
       key: "targetType",
       header: "Target Type",
+      kind: "badge",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.targetType}
@@ -44,6 +46,7 @@ export function OperationsTab() {
     {
       key: "operation",
       header: "Operation",
+      kind: "badge",
       accessor: (row) => (
         <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.operation}
@@ -54,6 +57,7 @@ export function OperationsTab() {
     {
       key: "status",
       header: "Status",
+      kind: "status",
       accessor: (row) => (
         <StatusBadge
           status={mapLoggingOperationStatus(row.status)}
@@ -66,33 +70,33 @@ export function OperationsTab() {
     {
       key: "created",
       header: "Created",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground" title={row.createdAt}>
-          {formatRelativeTime(row.createdAt)}
-        </span>
-      ),
+      kind: "age",
+      size: 120,
+      maxSize: 160,
+      accessor: (row) => <TimestampCell value={row.createdAt} />,
       sortAccessor: (row) => row.createdAt,
     },
     {
       key: "updated",
-      header: "Age / Updated",
-      accessor: (row) => (
-        <span className="text-xs text-muted-foreground" title={row.updatedAt}>
-          {formatRelativeTime(row.updatedAt)}
-        </span>
-      ),
+      header: "Updated",
+      ariaLabel: "Age / updated",
+      kind: "age",
+      size: 120,
+      maxSize: 160,
+      accessor: (row) => <TimestampCell value={row.updatedAt} />,
       sortAccessor: (row) => row.updatedAt,
     },
     {
       key: "error",
       header: "Error",
+      kind: "text",
+      grow: true,
+      minSize: 240,
+      maxSize: 640,
       accessor: (row) =>
         row.errorMessage ? (
-          <span
-            className="text-xs text-status-error/80 line-clamp-1 max-w-[260px] block"
-            title={row.errorMessage}
-          >
-            {truncate(row.errorMessage, 80)}
+          <span className="text-xs text-status-error/80">
+            {row.errorMessage}
           </span>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
@@ -109,12 +113,14 @@ export function OperationsTab() {
         }
         return (
           <div className="flex items-center gap-1">
-            <button
+            <ActionButton
+              intent="bare"
+              size="none"
               onClick={() => retryOperation.mutate(row.id)}
               disabled={retryOperation.isPending}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground
                 hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-              title="Retry operation"
+              tooltip="Retry operation"
             >
               <RotateCcw
                 className={cn(
@@ -123,11 +129,15 @@ export function OperationsTab() {
                 )}
               />
               Retry
-            </button>
+            </ActionButton>
           </div>
         );
       },
       sortable: false,
+      kind: "actions",
+      size: 96,
+      minSize: 96,
+      maxSize: 96,
     },
   ];
 

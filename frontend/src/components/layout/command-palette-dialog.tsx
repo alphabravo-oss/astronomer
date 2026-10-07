@@ -171,7 +171,7 @@ export function CommandPaletteDialog() {
 
   return (
     <OverlayShell onClose={() => setCommandPaletteOpen(false)}>
-      <div className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-lg">
+      <div className="fixed top-1/5 left-1/2 -translate-x-1/2 w-full max-w-lg">
         <Command
           className="rounded-xl border border-border bg-popover shadow-2xl overflow-hidden"
           shouldFilter={true}
@@ -187,7 +187,7 @@ export function CommandPaletteDialog() {
             />
             <kbd
               className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-sm border
-              border-border bg-muted text-[10px] font-mono text-muted-foreground"
+              border-border bg-muted text-10 font-mono text-muted-foreground"
             >
               ESC
             </kbd>

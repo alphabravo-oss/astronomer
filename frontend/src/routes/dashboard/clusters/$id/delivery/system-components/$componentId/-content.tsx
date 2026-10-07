@@ -9,19 +9,38 @@ import {
 } from "@/components/delivery/shared";
 import type { DeliverySystemComponent } from "@/lib/api/delivery-system";
 import { formatBytes, formatRelativeTime } from "@/lib/utils";
+import { useClock } from "@/lib/hooks/use-clock";
+import {
+  componentFreshness,
+  type ComponentFreshness,
+} from "@/lib/system-component-freshness";
 import { replicaRedundancy } from "@/lib/system-component-availability";
 import { systemResourceColumns, systemVolumeColumns } from "./-columns";
 
 function ComponentSummary({
   component,
+  freshness,
 }: {
   component: DeliverySystemComponent;
+  freshness: ComponentFreshness;
 }) {
   return (
     <DetailGrid>
       <Detail
         label="Health"
-        value={<DeliveryPhaseBadge value={component.health} />}
+        value={<DeliveryPhaseBadge value={freshness.health} />}
+      />
+      <Detail
+        label="Source observation"
+        value={
+          freshness.state === "legacy"
+            ? "Source observation time unavailable (legacy agent)"
+            : freshness.observedAt
+              ? freshness.state +
+                " · " +
+                formatRelativeTime(freshness.observedAt)
+              : freshness.state + " · source observation time unavailable"
+        }
       />
       <Detail label="Owner" value={component.owner} />
       <Detail label="Management method" value={component.managementMethod} />
@@ -110,7 +129,7 @@ function ComponentOperations({
   workloadHref: string;
 }) {
   return (
-    <div className="grid gap-6 xl:grid-cols-2">
+    <div className="grid gap-(--gap-section) xl:grid-cols-2">
       <PageSection
         title="Resource posture"
         description="Aggregate requests and limits across desired workload replicas."
@@ -205,22 +224,25 @@ function ComponentOperations({
 function ComponentEvidence({
   component,
   clusterId,
+  freshness,
 }: {
   component: DeliverySystemComponent;
   clusterId: string;
+  freshness: ComponentFreshness;
 }) {
-  const volumeColumns = systemVolumeColumns(clusterId);
-  const resourceColumns = systemResourceColumns(clusterId);
+  const volumeColumns = systemVolumeColumns(clusterId, freshness);
+  const resourceColumns = systemResourceColumns(clusterId, freshness);
   return (
     <>
       {(component.volumes ?? []).length ? (
         <PageSection
           title="Persistent volume claims"
-          description="Live Kubernetes claim capacity, binding, expansion, and VolumeSnapshot evidence. Capacity is not filesystem utilization."
+          description="Observed Kubernetes claim capacity, binding, expansion, and VolumeSnapshot evidence. Capacity is not filesystem utilization."
         >
           <DataTable
             data={component.volumes ?? []}
             columns={volumeColumns}
+            layout="scroll"
             keyExtractor={(row) => row.namespace + "/" + row.name}
             searchable
             searchPlaceholder="Search claims, namespaces, classes, or drivers…"
@@ -299,15 +321,21 @@ export function SystemComponentContent({
   clusterId: string;
   workloadHref: string;
 }) {
+  const now = useClock();
+  const freshness = componentFreshness(component, now);
   return (
     <>
-      <ComponentSummary component={component} />
+      <ComponentSummary component={component} freshness={freshness} />
       <ComponentOperations
         component={component}
         clusterId={clusterId}
         workloadHref={workloadHref}
       />
-      <ComponentEvidence component={component} clusterId={clusterId} />
+      <ComponentEvidence
+        component={component}
+        clusterId={clusterId}
+        freshness={freshness}
+      />
     </>
   );
 }

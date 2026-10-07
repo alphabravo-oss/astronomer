@@ -1,3 +1,4 @@
+export { getPopularCharts, getSimilarCharts } from "./catalog-recommendations";
 import {
   deleteCatalogInstalledById,
   deleteCatalogRepositoriesById,
@@ -14,21 +15,19 @@ import {
   getCatalogInstalledByIdUpgradeVersions,
   getCatalogOperations,
   getCatalogOperationsById,
-  getCatalogRecommendationsPopular,
-  getCatalogRecommendationsSimilarByChartId,
   getCatalogRepositories,
   getChartsByChartIdRatings,
   getChartsByChartIdRatingsAggregate,
   getChartsByChartIdRatingsMine,
+  postCatalogApplicationsPreview,
   postCatalogInstalled,
   postCatalogInstalledByIdRollback,
-  postCatalogApplicationsPreview,
   postCatalogOperationsByIdRetry,
   postCatalogRepositories,
   postCatalogRepositoriesByIdSync,
   postChartsByChartIdRatings,
-  putCatalogInstalledByIdUpgrade,
   putCatalogChartsByIdFavorite,
+  putCatalogInstalledByIdUpgrade,
   putChartsByChartIdRatingsByRatingId,
 } from "@/lib/api/generated/client";
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
@@ -159,7 +158,8 @@ export async function previewCatalogInstallation(data: {
   namespace: string;
   values_override?: string;
 }): Promise<CatalogInstallationPreview> {
-  return postCatalogApplicationsPreview({ body: data });
+  const response = await postCatalogApplicationsPreview({ body: data });
+  return requireData(response, "previewCatalogInstallation");
 }
 
 function requiredString(value: string | undefined, field: string): string {
@@ -306,16 +306,6 @@ function mapChartRatingAggregate(
   };
 }
 
-function mapChartScore(wire: ChartRecommendationWire): ChartScore {
-  return {
-    chartId: wire.chart_id,
-    ratingCount: wire.rating_count,
-    avgStars: wire.avg_stars,
-    bayesianScore: wire.bayesian_score,
-    weight: wire.weight,
-  };
-}
-
 export async function getHelmRepositories(
   clusterId?: string,
   signal?: AbortSignal,
@@ -447,7 +437,7 @@ export async function getHelmChartReadme(
     },
     signal,
   });
-  return response.readme ?? "";
+  return response.data?.readme ?? "";
 }
 
 export async function getHelmChartValues(
@@ -472,10 +462,10 @@ export async function getHelmChartValues(
     signal,
   });
   return {
-    chart: response.chart ?? "",
-    version: response.version ?? "",
-    defaultValues: response.default_values ?? "",
-    valuesSchema: response.values_schema ?? {},
+    chart: response.data?.chart ?? "",
+    version: response.data?.version ?? "",
+    defaultValues: response.data?.default_values ?? "",
+    valuesSchema: response.data?.values_schema ?? {},
   };
 }
 
@@ -582,10 +572,24 @@ export async function upgradeInstalledChart(
   return mapInstalledChart(payload.installation);
 }
 
-export async function uninstallChart(id: string): Promise<void> {
+export async function uninstallChart({
+  id,
+  confirmDataDeletion,
+}: {
+  id: string;
+  confirmDataDeletion?: boolean;
+}): Promise<void> {
   await deleteCatalogInstalledById({
     path: { id },
     headerParams: idempotencyHeaderParams(),
+    ...(confirmDataDeletion
+      ? {
+          body: {
+            confirm_data_deletion: true,
+            confirm_failed_release_cleanup: true,
+          },
+        }
+      : {}),
   });
 }
 
@@ -666,20 +670,4 @@ export async function deleteChartRating(
   await deleteChartsByChartIdRatingsByRatingId({
     path: { chart_id: chartId, rating_id: ratingId },
   });
-}
-
-export async function getPopularCharts(limit = 6): Promise<ChartScore[]> {
-  const response = await getCatalogRecommendationsPopular({ query: { limit } });
-  return (response.data ?? []).map(mapChartScore);
-}
-
-export async function getSimilarCharts(
-  chartId: string,
-  limit = 5,
-): Promise<ChartScore[]> {
-  const response = await getCatalogRecommendationsSimilarByChartId({
-    path: { chart_id: chartId },
-    query: { limit },
-  });
-  return (response.data ?? []).map(mapChartScore);
 }

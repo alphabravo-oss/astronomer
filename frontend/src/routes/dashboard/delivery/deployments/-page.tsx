@@ -6,7 +6,6 @@ import { Layers } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import {
-  DeliveryPhaseBadge,
   DeliveryProjectGate,
   inputClass,
   useDeliveryWorkspace,
@@ -20,7 +19,13 @@ import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useNavigate, useLocation } from "@tanstack/react-router";
-import { formatRelativeTime } from "@/lib/utils";
+import { StackedCell } from "@/components/ui/stacked-cell";
+import { useClock } from "@/lib/hooks/use-clock";
+import {
+  deploymentFreshness,
+  deploymentDrift,
+} from "@/lib/deployment-freshness";
+import { DeploymentStatus, DeploymentObservationTime } from "./-freshness";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 
@@ -38,6 +43,7 @@ const phases: DeploymentPhase[] = [
 ];
 
 export function DeploymentsPage() {
+  const now = useClock();
   const {
     projectId,
     projects,
@@ -103,60 +109,69 @@ export function DeploymentsPage() {
     {
       key: "deployment",
       header: "Deployment",
+      kind: "name",
+      minSize: 280,
       accessor: (row) => (
-        <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-muted-foreground" />
-          <div>
-            <p className="font-mono text-xs">{row.id}</p>
-            <p className="text-xs text-muted-foreground">
-              target {row.targetId.slice(0, 8)}
-            </p>
-          </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <Layers className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <StackedCell
+            primary={row.id}
+            primaryClassName="font-mono text-xs font-normal"
+            secondary={`target ${row.targetId.slice(0, 8)}`}
+          />
         </div>
       ),
+      sortAccessor: (row) => row.id,
     },
     {
       key: "cluster",
       header: "Cluster",
-      accessor: (row) => <code className="text-xs">{row.clusterId}</code>,
+      kind: "id",
+      minSize: 160,
+      accessor: (row) => row.clusterId,
+      sortAccessor: (row) => row.clusterId,
     },
     {
       key: "phase",
-      header: "Phase",
-      accessor: (row) => <DeliveryPhaseBadge value={row.phase} />,
+      header: "Status",
+      kind: "status",
+      accessor: (row) => <DeploymentStatus deployment={row} now={now} />,
     },
     {
       key: "revision",
       header: "Revision",
+      size: 200,
+      minSize: 180,
+      maxSize: 320,
       accessor: (row) => (
-        <div>
-          <p className="max-w-48 truncate font-mono text-xs">
-            {row.observedRevision || row.desiredRevision || "Not observed"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            gen {row.observedGeneration}/{row.desiredGeneration}
-          </p>
-        </div>
+        <StackedCell
+          primary={
+            row.observedRevision || row.desiredRevision || "Not observed"
+          }
+          primaryClassName="font-mono text-xs font-normal"
+          secondary={`gen ${row.observedGeneration}/${row.desiredGeneration}`}
+        />
       ),
+      sortAccessor: (row) => row.observedRevision || row.desiredRevision || "",
     },
     {
       key: "drift",
       header: "Drift",
+      kind: "status",
+      size: 150,
+      maxSize: 200,
       accessor: (row) =>
-        row.conditions.some(
-          (condition) =>
-            condition.type === "Drifted" && condition.status === "True",
-        ) ? (
-          <DeliveryPhaseBadge value="drifted" />
-        ) : (
-          "No drift reported"
-        ),
+        deploymentDrift(deploymentFreshness(row, now), row.conditions),
     },
     {
       key: "observed",
-      header: "Last observed",
-      accessor: (row) =>
-        row.lastObservedAt ? formatRelativeTime(row.lastObservedAt) : "Never",
+      header: "Observed",
+      ariaLabel: "Source observation time",
+      kind: "age",
+      size: 180,
+      accessor: (row) => (
+        <DeploymentObservationTime deployment={row} now={now} />
+      ),
     },
   ];
   return (
@@ -178,6 +193,10 @@ export function DeploymentsPage() {
               : "Current desired and normalized observed state for every target and cluster pair."
           }
         />
+        <p className="text-sm text-muted-foreground">
+          Filters and totals use reported phase. Status reflects source
+          freshness.
+        </p>
         <DataTable
           data={query.data?.data ?? []}
           columns={columns}
@@ -200,14 +219,14 @@ export function DeploymentsPage() {
           toolbar={
             <div className="flex flex-wrap gap-2">
               <Select
-                aria-label="Deployment phase"
+                aria-label="Reported phase"
                 value={phase ?? ""}
                 onChange={(e) =>
                   updateSearch({ phase: e.target.value, page: 0 })
                 }
                 className={inputClass}
               >
-                <option value="">All phases</option>
+                <option value="">All reported phases</option>
                 {phases.map((value) => (
                   <option key={value} value={value}>
                     {value}

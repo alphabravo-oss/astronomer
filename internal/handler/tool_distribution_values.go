@@ -50,6 +50,63 @@ func distributionInstallValues(slug, distribution string) string {
 	return ""
 }
 
+// catalogInstallValues layers Astronomer's platform integration defaults under
+// distribution-specific adaptations and operator input. The final layer stays
+// operator-controlled, matching Helm's normal values precedence.
+func catalogInstallValues(slug, distribution, operatorValues string) string {
+	return mergeValueLayers(platformCatalogInstallValues(slug), distributionInstallValues(slug, distribution), operatorValues)
+}
+
+func platformCatalogInstallValues(slug string) string {
+	if slug != "constellation" {
+		return ""
+	}
+	return constellationSystemNamespaceExemptions
+}
+
+// Constellation's default admission policies intentionally reject privileged,
+// host-networked, and host-PID workloads. Astronomer's supported system tools
+// need some of those capabilities. Rancher solves the same interaction with a
+// maintained feature-application namespace exemption list (including CIS,
+// Longhorn, NeuVector, monitoring, Gatekeeper, Istio, and logging). Keep the
+// exemption at the webhook namespace selector so tenant namespaces still pass
+// through every Constellation policy and operators can replace this list in
+// their explicit values override.
+const constellationSystemNamespaceExemptions = `# astronomer: trusted namespaces used by supported platform applications and tools
+admission:
+  webhook:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - astronomer-cert-manager
+            - astronomer-external-dns
+            - astronomer-external-secrets
+            - astronomer-fluent-bit
+            - astronomer-gatekeeper-system
+            - astronomer-grafana
+            - astronomer-ingress-nginx
+            - astronomer-keda
+            - astronomer-kube-prometheus
+            - astronomer-kyverno
+            - astronomer-logging
+            - astronomer-loki
+            - astronomer-metrics-server
+            - astronomer-monitoring
+            - astronomer-opentelemetry
+            - astronomer-tempo
+            - astronomer-trivy-system
+            - cattle-neuvector-system
+            - cert-manager
+            - cis-operator-system
+            - cnpg-system
+            - ingress-nginx
+            - istio-system
+            - longhorn-system
+            - velero
+`
+
 // fluentBitCRINodeVolumes drops the chart's default /etc/machine-id hostPath
 // (absent on k3s/k3d/RKE2 containerized nodes) and points the tail input at the
 // CRI pod-log directory.

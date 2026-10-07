@@ -2,8 +2,10 @@ import { Link } from "@tanstack/react-router";
 import { DeliveryPhaseBadge } from "@/components/delivery/shared";
 import type { Column } from "@/components/ui/data-table";
 import type { DeliverySystemComponent } from "@/lib/api/delivery-system";
-import { formatBytes, formatRelativeTime } from "@/lib/utils";
+import { formatBytes } from "@/lib/utils";
+import { componentFreshness } from "@/lib/system-component-freshness";
 import { replicaRedundancy } from "@/lib/system-component-availability";
+import { EntityCell, TimestampCell } from "@/components/tables/cells";
 
 function ownerLabel(owner: string) {
   if (owner === "flux") return "Flux";
@@ -14,11 +16,15 @@ function ownerLabel(owner: string) {
 
 export function systemComponentColumns(
   clusterId: string,
+  now: number,
 ): Column<DeliverySystemComponent>[] {
   return [
     {
       key: "name",
       header: "Component",
+      kind: "name",
+      minSize: 240,
+      pin: "start",
       accessor: (row) => {
         const href =
           "/dashboard/clusters/" +
@@ -26,14 +32,14 @@ export function systemComponentColumns(
           "/delivery/system-components/" +
           encodeURIComponent(row.id);
         return (
-          <div className="min-w-48">
-            <Link to={href} className="font-medium text-link hover:underline">
-              {row.name}
-            </Link>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {row.kind} · {row.managementMethod}
-            </p>
-          </div>
+          <EntityCell
+            primary={
+              <Link to={href} className="text-link hover:underline">
+                {row.name}
+              </Link>
+            }
+            secondary={`${row.kind} · ${row.managementMethod}`}
+          />
         );
       },
       sortAccessor: (row) => row.name,
@@ -41,6 +47,10 @@ export function systemComponentColumns(
     {
       key: "category",
       header: "Category",
+      kind: "text",
+      size: 120,
+      minSize: 100,
+      maxSize: 160,
       accessor: (row) => <span className="capitalize">{row.category}</span>,
       sortAccessor: (row) => row.category,
       filter: { label: "Categories" },
@@ -48,6 +58,8 @@ export function systemComponentColumns(
     {
       key: "owner",
       header: "Owner",
+      kind: "badge",
+      size: 110,
       accessor: (row) => (
         <span className="rounded-full border border-border px-2 py-1 text-xs font-medium">
           {ownerLabel(row.owner)}
@@ -59,6 +71,10 @@ export function systemComponentColumns(
     {
       key: "managementMethod",
       header: "Managed by",
+      kind: "text",
+      size: 130,
+      minSize: 100,
+      maxSize: 160,
       accessor: (row) => (
         <span className="capitalize">{row.managementMethod}</span>
       ),
@@ -68,13 +84,18 @@ export function systemComponentColumns(
     {
       key: "health",
       header: "Health",
-      accessor: (row) => <DeliveryPhaseBadge value={row.health} />,
-      sortAccessor: (row) => row.health,
+      kind: "status",
+      accessor: (row) => (
+        <DeliveryPhaseBadge value={componentFreshness(row, now).health} />
+      ),
+      sortAccessor: (row) => componentFreshness(row, now).health,
       filter: { label: "Health" },
     },
     {
       key: "compatibility",
       header: "Compatibility",
+      kind: "status",
+      size: 150,
       accessor: (row) => (
         <DeliveryPhaseBadge value={row.compatibility || "unknown"} />
       ),
@@ -84,6 +105,7 @@ export function systemComponentColumns(
     {
       key: "updateState",
       header: "Update",
+      kind: "status",
       accessor: (row) => (
         <DeliveryPhaseBadge value={row.updateState || "unknown"} />
       ),
@@ -92,7 +114,10 @@ export function systemComponentColumns(
     },
     {
       key: "replicas",
-      header: "Ready / desired",
+      header: "Ready",
+      ariaLabel: "Ready / desired",
+      kind: "count",
+      size: 110,
       accessor: (row) =>
         row.desiredReplicas ? (
           <div>
@@ -107,11 +132,14 @@ export function systemComponentColumns(
           "—"
         ),
       sortAccessor: (row) => row.readyReplicas ?? 0,
-      align: "right",
     },
     {
       key: "resources",
       header: "Requests / limits",
+      kind: "text",
+      size: 200,
+      minSize: 190,
+      maxSize: 240,
       accessor: (row) => (
         <div className="whitespace-nowrap text-xs">
           <p>
@@ -127,6 +155,11 @@ export function systemComponentColumns(
     {
       key: "storage",
       header: "Storage",
+      kind: "text",
+      wrap: true,
+      size: 220,
+      minSize: 190,
+      maxSize: 280,
       accessor: (row) =>
         row.storageClass ? (
           <div className="text-xs">
@@ -153,6 +186,9 @@ export function systemComponentColumns(
     {
       key: "namespace",
       header: "Namespace",
+      kind: "text",
+      size: 170,
+      minSize: 140,
       accessor: (row) =>
         row.namespace ? (
           <Link
@@ -174,21 +210,21 @@ export function systemComponentColumns(
     {
       key: "version",
       header: "Version",
+      kind: "version",
+      maxSize: 220,
       accessor: (row) => (
-        <span
-          className="block max-w-40 truncate font-mono text-xs"
-          title={row.version}
-        >
-          {row.version || "—"}
-        </span>
+        <span className="font-mono text-xs">{row.version || "—"}</span>
       ),
       sortAccessor: (row) => row.version || "",
     },
     {
       key: "age",
       header: "Age",
-      accessor: (row) =>
-        row.createdAt ? formatRelativeTime(row.createdAt) : "Unknown",
+      kind: "age",
+      size: 80,
+      accessor: (row) => (
+        <TimestampCell value={row.createdAt} fallback="Unknown" />
+      ),
       sortAccessor: (row) => row.createdAt || "",
     },
   ];

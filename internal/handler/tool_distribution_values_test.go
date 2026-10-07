@@ -3,6 +3,8 @@ package handler
 import (
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestDistributionFamily(t *testing.T) {
@@ -46,5 +48,63 @@ func TestDistributionInstallValues(t *testing.T) {
 	// A tool with no distribution quirks yields nothing.
 	if got := distributionInstallValues("trivy-operator", "k3s"); got != "" {
 		t.Errorf("tool without overrides should yield nothing, got:\n%s", got)
+	}
+}
+
+func TestCatalogValuesMergeDistributionDefaultsBeforeOperatorValues(t *testing.T) {
+	values := mergeValueLayers(
+		distributionInstallValues("fluent-bit", "K3s"),
+		"config:\n  outputs: |\n    [OUTPUT]\n        Name stdout\n        Match *\n",
+	)
+	if !strings.Contains(values, "path: /var/log/pods") || !strings.Contains(values, "Name stdout") {
+		t.Fatalf("catalog values should preserve the K3s volume adaptation and operator output:\n%s", values)
+	}
+	if strings.Contains(values, "machine-id") {
+		t.Fatalf("catalog K3s values must not restore the unsupported machine-id mount:\n%s", values)
+	}
+
+	overridden := mergeValueLayers(
+		distributionInstallValues("fluent-bit", "K3s"),
+		"daemonSetVolumes:\n  - name: custom\n    emptyDir: {}\n",
+	)
+	var decoded map[string]any
+	if err := yaml.Unmarshal([]byte(overridden), &decoded); err != nil {
+		t.Fatalf("decode merged catalog values: %v", err)
+	}
+	volumes, _ := decoded["daemonSetVolumes"].([]any)
+	volume, _ := volumes[0].(map[string]any)
+	if len(volumes) != 1 || volume["name"] != "custom" {
+		t.Fatalf("operator catalog values should override a distribution-provided list:\n%s", overridden)
+	}
+}
+
+func TestConstellationCatalogDefaultsExemptSupportedSystemNamespaces(t *testing.T) {
+	values := catalogInstallValues("constellation", "K3s", "image:\n  tag: v0.2.0\n")
+	var decoded map[string]any
+	if err := yaml.Unmarshal([]byte(values), &decoded); err != nil {
+		t.Fatalf("decode Constellation integration values: %v", err)
+	}
+	for _, namespace := range []string{"cis-operator-system", "longhorn-system", "cattle-neuvector-system", "istio-system", "astronomer-monitoring", "astronomer-gatekeeper-system"} {
+		if !strings.Contains(values, "- "+namespace+"\n") {
+			t.Errorf("Constellation integration values do not exempt supported namespace %q:\n%s", namespace, values)
+		}
+	}
+	image, _ := decoded["image"].(map[string]any)
+	if image["tag"] != "v0.2.0" {
+		t.Fatalf("operator values were not preserved: %+v", decoded)
+	}
+}
+
+func TestConstellationOperatorCanReplaceSystemNamespaceExemptions(t *testing.T) {
+	values := catalogInstallValues("constellation", "K3s", `admission:
+  webhook:
+    namespaceSelector:
+      matchExpressions:
+        - key: team
+          operator: In
+          values: [platform]
+`)
+	if strings.Contains(values, "cis-operator-system") || !strings.Contains(values, "key: team") {
+		t.Fatalf("operator namespace selector did not replace the platform default:\n%s", values)
 	}
 }

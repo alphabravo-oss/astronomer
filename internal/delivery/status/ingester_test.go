@@ -286,7 +286,7 @@ func validStatus() protocol.DeliveryStatusV2 {
 		ProtocolVersion: protocol.DeliveryProtocolVersion, ClusterID: clusterID.String(),
 		SessionSequence: 9, SnapshotGeneration: 4, SnapshotETag: "sha256:" + strings.Repeat("c", 64),
 		ControllerInventory: protocol.DeliveryControllerInventory{
-			AgentVersion: "v1.0.0", FluxVersion: "v2.9.3", KubernetesVersion: "v1.34.2", Ready: true,
+			AgentVersion: "v1.0.0", FluxVersion: "v2.9.6", KubernetesVersion: "v1.34.2", Ready: true,
 			DistributionDigest: distributionDigest,
 			Components:         compatibility.RequiredComponentVersions(),
 			APIVersions:        []string{"source.toolkit.fluxcd.io/v1", "kustomize.toolkit.fluxcd.io/v1", "helm.toolkit.fluxcd.io/v2"},
