@@ -438,6 +438,9 @@ func (h *BundleHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "internal_error", "delivery bundle serialization failed")
 		return
 	}
+	if request.Spec.RequiredCapabilities == nil {
+		request.Spec.RequiredCapabilities = []model.CapabilityRequirement{}
+	}
 	rendererJSON, _ := json.Marshal(request.Spec.Renderer)
 	reconciliationJSON, _ := json.Marshal(request.Spec.Reconciliation)
 	requirementsJSON, _ := json.Marshal(request.Spec.RequiredCapabilities)
@@ -555,7 +558,7 @@ func (h *BundleHandler) validateDependencies(ctx context.Context, projectID, bun
 	if len(values) > maxBundleDependencies {
 		return nil, errors.Join(errInvalidDependencies, errors.New("dependency_bundle_ids must contain at most 128 entries"))
 	}
-	result := append([]uuid.UUID(nil), values...)
+	result := append([]uuid.UUID{}, values...)
 	sort.Slice(result, func(i, j int) bool { return result[i].String() < result[j].String() })
 	for index, dependencyID := range result {
 		if dependencyID == uuid.Nil {
