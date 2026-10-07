@@ -1,6 +1,8 @@
 # Changelog
 
-## 1.2.0 - Unreleased
+## Unreleased
+
+Target release: **1.2.0**.
 
 ### Added
 
