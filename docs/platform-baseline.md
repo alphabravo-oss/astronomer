@@ -10,7 +10,7 @@ The current v1.2 baseline contains three components:
 
 | Component                  | Chart version | Namespace                 | Release name               |
 | -------------------------- | ------------- | ------------------------- | -------------------------- |
-| `trivy-operator`           | `0.36.0`      | `astronomer-trivy-system` | `trivy-operator`           |
+| `trivy-operator`           | `0.37.0`      | `astronomer-trivy-system` | `trivy-operator`           |
 | `kube-state-metrics`       | `8.0.0`       | `astronomer-monitoring`   | `kube-state-metrics`       |
 | `prometheus-node-exporter` | `4.56.1`      | `astronomer-monitoring`   | `prometheus-node-exporter` |
 
@@ -101,3 +101,17 @@ namespaces from `deploy/bundles/catalog.json`. Component-specific checks, such
 as waiting for Trivy vulnerability reports, are valid only when that component
 is default-enabled in the signed catalog or when the test explicitly installs
 it as an optional tool.
+
+## Image scan freshness
+
+The Trivy scanner and operator images are pinned for reproducible deployment,
+while vulnerability databases refresh independently from upstream. Automatic
+database updates remain enabled, including the Java index. Vulnerability
+reports expire after six hours; the operator then rescans the workload. This
+report interval is not a guarantee of database availability: registry access
+and successful scan jobs are required. Inspect scan errors and report timestamps
+when checking freshness.
+
+Upgrade scanner software through a reviewed delivery bundle and Flux rollout;
+changing it does not require replacing the cluster. Do not patch Flux-owned
+Deployments directly because reconciliation restores the accepted assignment.

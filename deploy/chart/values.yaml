@@ -646,7 +646,7 @@ delivery:
       minimum: 2
       maximum: 2
     flux:
-      version: "v2.9.3"
+      version: "v2.9.6"
 
   artifacts:
     # Optional registry mirror. Rewrites are exact registry-host mappings;
@@ -660,7 +660,7 @@ delivery:
       disconnectedAssetPath: ""
       trustPolicy:
         requireSignature: true
-        certificateIdentity: "https://github.com/fluxcd/flux2/.github/workflows/release.yaml@refs/tags/v2.9.3"
+        certificateIdentity: "https://github.com/fluxcd/flux2/.github/workflows/release.yaml@refs/tags/v2.9.6"
         oidcIssuer: "https://token.actions.githubusercontent.com"
         # Set either one PEM publicKey for compatibility, or an overlapping
         # publicKeys keyring for staged offline signer rotation. New installs
@@ -1200,7 +1200,7 @@ managementBackup:
   # air-gapped.
   image:
     repository: ghcr.io/alphabravo-oss/astronomer-dr
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry
@@ -1309,7 +1309,7 @@ managementRestoreDrill:
   # as managementBackup so the drill can run wherever the backup runs.
   image:
     repository: ghcr.io/alphabravo-oss/astronomer-dr
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry

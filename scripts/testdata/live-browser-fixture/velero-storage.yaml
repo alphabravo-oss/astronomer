@@ -17,4 +17,4 @@ spec:
   config:
     region: us-east-1
     s3ForcePathStyle: "true"
-    s3Url: http://minio.minio.svc.cluster.local:9000
+    s3Url: http://rustfs.rustfs.svc.cluster.local:9000

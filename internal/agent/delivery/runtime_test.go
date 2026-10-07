@@ -95,7 +95,7 @@ func newRuntimeFixture(t *testing.T) (*Runtime, *memoryCheckpointStore) {
 	store := &memoryCheckpointStore{value: emptyCheckpoint()}
 	runtime, err := NewRuntime(RuntimeConfig{ClusterID: "44444444-4444-4444-8444-444444444444"}, executor, store, staticCapabilityProbe{
 		inventory: protocol.DeliveryControllerInventory{
-			FluxVersion: "v2.9.3", Components: map[string]string{},
+			FluxVersion: "v2.9.6", Components: map[string]string{},
 			APIVersions:       []string{"source.toolkit.fluxcd.io/v1", "kustomize.toolkit.fluxcd.io/v1", "helm.toolkit.fluxcd.io/v2"},
 			KubernetesVersion: "v1.35.0", DistributionDigest: testDigest, Ready: true,
 		},

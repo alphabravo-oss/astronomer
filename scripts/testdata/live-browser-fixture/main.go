@@ -484,15 +484,15 @@ func seedTrivyTarget(ctx context.Context, pool *pgxpool.Pool, projectID, cluster
 	chartDigest := requiredEnv("LIVE_FIXTURE_TRIVY_CHART_DIGEST")
 	values, err := json.Marshal(map[string]any{
 		"targetNamespaces": "live-delivery",
-		"image":            map[string]any{"tag": "0.34.0@sha256:0e4f11e9632f34097f259f3a59d34bab4eea8cee9aef510d15cdfc7481d5e49c"},
+		"image":            map[string]any{"tag": "0.35.0@sha256:4cdb11af98ff409cfa7af980098203a841a5fe957cc6a0bbb0df7668065eb5fa"},
 		"operator": map[string]any{
 			"vulnerabilityScannerEnabled": true, "sbomGenerationEnabled": false,
 			"configAuditScannerEnabled": false, "rbacAssessmentScannerEnabled": false,
 			"infraAssessmentScannerEnabled": false, "clusterComplianceEnabled": false,
-			"scanJobsConcurrentLimit": 1, "scanJobTimeout": "5m", "scannerReportTTL": "24h",
+			"scanJobsConcurrentLimit": 1, "scanJobTimeout": "5m", "scannerReportTTL": "6h",
 		},
 		"trivy": map[string]any{
-			"image":            map[string]any{"tag": "0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969"},
+			"image":            map[string]any{"tag": "0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa"},
 			"dbRegistry":       "ghcr.io",
 			"dbRepository":     "aquasecurity/trivy-db",
 			"javaDbRegistry":   "ghcr.io",

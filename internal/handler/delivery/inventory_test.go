@@ -62,13 +62,13 @@ func TestFleetIncludesLocalAsFirstClassTargetAndSurfacesAttention(t *testing.T) 
 				{
 					ID: localID, Name: "local", DisplayName: "Management", IsLocal: true,
 					Connected: true, CompatibilityStatus: "compatible", InventoryReady: true,
-					FluxVersion: "v2.9.3", LastHeartbeat: ts(now.Add(-time.Minute)),
+					FluxVersion: "v2.9.6", LastHeartbeat: ts(now.Add(-time.Minute)),
 					Annotations: json.RawMessage(`{"astronomer.io/agent-privilege-profile":"viewer"}`),
 				},
 				{
 					ID: readyID, Name: "adopt-a", DisplayName: "Adopt A", Environment: "production",
 					Connected: true, CompatibilityStatus: "compatible", InventoryReady: true,
-					FluxVersion: "v2.9.3", AgentVersion: "v1.0.0", KubernetesVersion: "v1.35.7+k3s1",
+					FluxVersion: "v2.9.6", AgentVersion: "v1.0.0", KubernetesVersion: "v1.35.7+k3s1",
 					AssignmentCount: 2, ReadyCount: 2,
 					LastHeartbeat:       ts(now.Add(-30 * time.Second)),
 					InventoryObservedAt: ts(now.Add(-time.Minute)),

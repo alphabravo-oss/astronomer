@@ -211,7 +211,7 @@ only the differentiated placement, policy, rollout, protocol, and UX layers.
 - [Flux security best practices](https://fluxcd.io/flux/security/best-practices/)
 - [Flux multi-tenancy lockdown](https://fluxcd.io/flux/installation/configuration/multitenancy/)
 - [Flux release and Kubernetes support policy](https://fluxcd.io/flux/releases/)
-- [Flux v2.9.3 release](https://github.com/fluxcd/flux2/releases/tag/v2.9.3)
+- [Flux v2.9.6 release](https://github.com/fluxcd/flux2/releases/tag/v2.9.6)
 - [Rancher Fleet architecture (comparative input only)](https://fleet.rancher.io/explanations/architecture)
 
 ## Enforcement

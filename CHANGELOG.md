@@ -19,6 +19,16 @@ Target release: **1.2.0**.
   validation, wrapped private-catalog CA backup, and a static HTTPS
   application-catalog air-gap export/import workflow.
 
+### Release preparation fixes
+
+- Refresh the authenticated Flux distribution to v2.9.6 and Trivy Operator to
+  0.35.0 with scanner 0.75.0. Vulnerability database updates remain automatic;
+  scanner reports refresh every six hours independently of software version pins.
+- Use RustFS for disposable Velero backup/restore validation and the first-party
+  S3 client for bucket creation and backup object verification.
+- Accept delivery bundles with no dependencies or capability requirements by
+  persisting empty JSON arrays, matching the database contract.
+
 ### Release qualification
 
 Publication of v1.2.0 requires automated builds, vulnerability scans, retained license findings,

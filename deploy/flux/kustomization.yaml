@@ -48,8 +48,8 @@ patches:
   - path: patches/delete-critical-pods-quota.yaml
 images:
   - name: ghcr.io/fluxcd/source-controller
-    digest: sha256:ff8f3c92f1bcb433e858c948040c3a3393fe73f5dd72048a4502bfaf0a4c26cd
+    digest: sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3
   - name: ghcr.io/fluxcd/kustomize-controller
-    digest: sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f
+    digest: sha256:2ebeaa341da77d52b6abbbba5efcee0450d47f8b42f0e6f33b08f9020262d606
   - name: ghcr.io/fluxcd/helm-controller
-    digest: sha256:16ada99456385100698a5d7adf90aba8a2089d987ab541c9566b6d7b0e897038
+    digest: sha256:0d52fff5c4d476277b8fcb6beb9041e269adb5db943fe69f5a806ea0c92b1511

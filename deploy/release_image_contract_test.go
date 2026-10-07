@@ -78,6 +78,32 @@ func TestReleaseIdentityIsConsistent(t *testing.T) {
 	}
 }
 
+func TestReleaseDRJobDefaultsMatchChartVersion(t *testing.T) {
+	raw, err := os.ReadFile("chart/values.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type drJob struct {
+		Image struct {
+			Repository string `yaml:"repository"`
+			Tag        string `yaml:"tag"`
+		} `yaml:"image"`
+	}
+	var values struct {
+		ManagementBackup       drJob `yaml:"managementBackup"`
+		ManagementRestoreDrill drJob `yaml:"managementRestoreDrill"`
+	}
+	if err := yaml.Unmarshal(raw, &values); err != nil {
+		t.Fatal(err)
+	}
+	for job, config := range map[string]drJob{"managementBackup": values.ManagementBackup, "managementRestoreDrill": values.ManagementRestoreDrill} {
+		image := config.Image
+		if image.Repository != "ghcr.io/alphabravo-oss/astronomer-dr" || image.Tag != "v"+chartReleaseVersion {
+			t.Errorf("%s default image = %s:%s, want first-party DR at v%s", job, image.Repository, image.Tag, chartReleaseVersion)
+		}
+	}
+}
+
 func TestReleasePublishesAllTrueMultiPlatformImages(t *testing.T) {
 	workflow := readReleaseWorkflow(t)
 	job, ok := workflow.Jobs["build-sign"]

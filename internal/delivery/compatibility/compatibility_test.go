@@ -18,7 +18,7 @@ func TestEvaluate(t *testing.T) {
 		t.Fatal(err)
 	}
 	valid := protocol.DeliveryControllerInventory{
-		FluxVersion: "v2.9.3", KubernetesVersion: "v1.34.2", Ready: true,
+		FluxVersion: "v2.9.6", KubernetesVersion: "v1.34.2", Ready: true,
 		DistributionDigest: expectedDigest,
 		Components:         RequiredComponentVersions(),
 		APIVersions: []string{

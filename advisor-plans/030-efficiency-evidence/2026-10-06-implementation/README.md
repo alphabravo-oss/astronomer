@@ -680,3 +680,46 @@ merge, tagged release qualification and publication are still pending at this
 record's creation. Private raw logs, SBOM preflight output and test evidence are
 retained under `/var/tmp/astronomer-release-20261007`; no private credentials or
 backup archives are committed.
+
+### Follow-up: RustFS, scanner freshness, and runtime-image preflight
+
+The owner requested RustFS in place of the disposable MinIO fixture and clarified
+that vulnerability database freshness matters independently of scanner version.
+The live fixture now uses RustFS 1.0.1 pinned by digest, plus Astronomer's DR
+image as an AWS S3 client. Its readiness probe runs from the client Pod before
+mutations; backup verification checks that the actual S3 object is nonempty.
+Platform-specific Docker export avoids importing references to undownloaded
+architectures into k3d. An initial complete live run passed all 16 journeys with
+RustFS, Flux and Trivy, including Velero backup and restore; that diagnostic run
+needed a manual image import. The corrected automatic runner is being verified
+separately before push.
+
+The built-in catalog now uses chart 0.37.0, Trivy Operator 0.35.0 and scanner
+0.75.0. The operator and scanner images passed the local HIGH/CRITICAL scan with
+fixed vulnerabilities selected. Database updates remain automatic, including
+the Java database, while reports expire after six hours. Software images remain
+pinned; database content is not frozen to those software versions. The signed
+upstream Flux distribution was regenerated and verified at v2.9.6.
+
+Local backend and Helm enterprise gates passed with stable source trees after
+these dependency changes. The Charlie lifecycle tests now wait for the watcher
+to complete shutdown before asserting final counters; 100 race-enabled repeats
+passed. The previous PR revision `f016e145` passed all 30 GitHub checks. That is
+not qualification of these subsequent changes.
+
+Installing Trivy through the actual local delivery API exposed an empty-array
+bug: the bundle handler encoded an empty dependency list as JSON null, rejected
+by the durable JSON database contract. The handler now preserves empty arrays
+for dependencies and capability requirements. Focused handler race tests cover
+both omitted and explicitly empty request fields; local API verification follows
+the updated deployment. No database constraint was weakened.
+
+Publication remains blocked by third-party vulnerability findings. The
+checksum-verified Trivy 0.75.0 preflight used the 2026-10-07 database and found
+remaining findings even in current upstream Flux, Dex and Node Exporter images.
+PostgreSQL 16-alpine findings were in its bundled gosu helper, requiring separate
+reachability review. These are scanner findings, not assertions that every CVE
+is reachable. No vulnerability waivers were added. The owner's v1.2.0 license
+qualification deferral remains unchanged and does not waive this vulnerability
+gate. Private raw reports and the candidate-image summary are retained under
+`/var/tmp/astronomer-release-20261007/trivy-preflight/`.

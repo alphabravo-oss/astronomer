@@ -189,6 +189,9 @@ func TestRuntimeLifecycleDynamicEnableAndModeFallQuiesceGeneration(t *testing.T)
 		t.Fatal("mode reconciler did not start with the runnable generation")
 	}
 
+	lifecycle.mu.Lock()
+	watchDone := lifecycle.watchDone
+	lifecycle.mu.Unlock()
 	connection.setModes(ModeDisabled, ModeDisabled)
 	ticks <- time.Now()
 	select {
@@ -200,6 +203,11 @@ func TestRuntimeLifecycleDynamicEnableAndModeFallQuiesceGeneration(t *testing.T)
 	case <-controlExited:
 	case <-time.After(time.Second):
 		t.Fatal("mode fall did not cancel the mode reconciler context")
+	}
+	select {
+	case <-watchDone:
+	case <-time.After(time.Second):
+		t.Fatal("lifecycle watcher did not complete shutdown")
 	}
 	if work.stops.Load() != 1 || closes.Load() < 2 {
 		t.Fatalf("stops=%d transport_closes=%d", work.stops.Load(), closes.Load())
@@ -234,6 +242,9 @@ func TestConfigurationRuntimeLifecycleServesOperationalDisabledButStopsForEmerge
 	if factories.Load() != 1 || work.runs.Load() != 1 {
 		t.Fatalf("configuration factory=%d runs=%d", factories.Load(), work.runs.Load())
 	}
+	lifecycle.mu.Lock()
+	watchDone := lifecycle.watchDone
+	lifecycle.mu.Unlock()
 	connection.mu.Lock()
 	connection.row.EmergencyDisabled = true
 	connection.mu.Unlock()
@@ -242,6 +253,11 @@ func TestConfigurationRuntimeLifecycleServesOperationalDisabledButStopsForEmerge
 	case <-work.runExited:
 	case <-time.After(time.Second):
 		t.Fatal("emergency stop did not close configuration discovery")
+	}
+	select {
+	case <-watchDone:
+	case <-time.After(time.Second):
+		t.Fatal("lifecycle watcher did not complete shutdown")
 	}
 	if work.stops.Load() != 1 {
 		t.Fatalf("configuration stops=%d", work.stops.Load())

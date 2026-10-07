@@ -9,7 +9,7 @@ This table describes the `1.2.x` release line. Install mode is **fresh and upgra
 | Surface | Supported contract |
 | --- | --- |
 | Kubernetes | v1.33, v1.34, v1.35; latest patch of each minor |
-| Flux distribution | `v2.9.3` |
+| Flux distribution | `v2.9.6` |
 | Agent application | supported `v1.1.0` to `<v2.0.0`; deprecated-but-compatible from `v1.0.0` |
 | Tunnel protocol | versions 1-1 |
 | Heartbeat schema | versions 2-2 |
@@ -27,9 +27,9 @@ Images are resolved to immutable digests by the release distribution; tags below
 
 | Component | Upstream image | APIs consumed by Astronomer |
 | --- | --- | --- |
-| `source-controller` | `ghcr.io/fluxcd/source-controller@sha256:ff8f3c92f1bcb433e858c948040c3a3393fe73f5dd72048a4502bfaf0a4c26cd` (upstream `v1.9.3`) | `source.toolkit.fluxcd.io/v1/GitRepository`<br>`source.toolkit.fluxcd.io/v1/HelmRepository`<br>`source.toolkit.fluxcd.io/v1/OCIRepository` |
-| `kustomize-controller` | `ghcr.io/fluxcd/kustomize-controller@sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f` (upstream `v1.9.4`) | `kustomize.toolkit.fluxcd.io/v1/Kustomization` |
-| `helm-controller` | `ghcr.io/fluxcd/helm-controller@sha256:16ada99456385100698a5d7adf90aba8a2089d987ab541c9566b6d7b0e897038` (upstream `v1.6.3`) | `helm.toolkit.fluxcd.io/v2/HelmRelease` |
+| `source-controller` | `ghcr.io/fluxcd/source-controller@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3` (upstream `v1.9.6`) | `source.toolkit.fluxcd.io/v1/GitRepository`<br>`source.toolkit.fluxcd.io/v1/HelmRepository`<br>`source.toolkit.fluxcd.io/v1/OCIRepository` |
+| `kustomize-controller` | `ghcr.io/fluxcd/kustomize-controller@sha256:2ebeaa341da77d52b6abbbba5efcee0450d47f8b42f0e6f33b08f9020262d606` (upstream `v1.9.6`) | `kustomize.toolkit.fluxcd.io/v1/Kustomization` |
+| `helm-controller` | `ghcr.io/fluxcd/helm-controller@sha256:0d52fff5c4d476277b8fcb6beb9041e269adb5db943fe69f5a806ea0c92b1511` (upstream `v1.6.5`) | `helm.toolkit.fluxcd.io/v2/HelmRelease` |
 
 Excluded components: `notification-controller`, `image-reflector-controller`, `image-automation-controller`, `source-watcher`.
 

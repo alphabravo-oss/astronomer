@@ -609,7 +609,7 @@ jobs:
 
       - name: Install checksum-verified Trivy
         env:
-          TRIVY_VERSION: 0.58.2
+          TRIVY_VERSION: 0.75.0
         run: |
           set -euo pipefail
           curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
