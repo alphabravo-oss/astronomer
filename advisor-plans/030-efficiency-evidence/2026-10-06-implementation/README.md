@@ -535,3 +535,49 @@ Private evidence directory: `/var/tmp/astro-consolidation-20261007` (contains cr
 - Helm gate: `gates/helm-final/20261007T144808Z-1572105-b341ac35e633/evidence.json`.
 
 Rollback must account for schema 71. The migration is additive, but the older image's schema guard must not be bypassed casually. Keep the tested database backup and old release values/images; no rollback or data deletion is part of this handoff.
+
+
+## 2026-10-07 consolidated PR preparation
+
+The user subsequently authorized PR publication. The integration extends the entire
+head of existing draft [PR #46](https://github.com/alphabravo-oss/astronomer/pull/46),
+so that PR is used for the combined offering, efficiency and UI scope. No overlapping
+PR, main-branch push or merge is required. The local rollout above remains at
+`1322c98e`; subsequent PR-preparation changes affect tests, scanning and documentation.
+
+The lockfile-pinned full `make local-ci-pr` matrix was run with two jobs against
+`ff5302b40e5f`: **20 jobs passed and 5 failed** in 76m 30s. This run is **not green** and must not be represented as same-commit
+qualification of the final PR head. Private logs and retained runner workspaces are
+under `/var/tmp/astronomer-pr-20261007` and Local CI run 64 in
+`/root/.local/state/local-ci/logs/`.
+
+| Matrix check | Result |
+| --- | --- |
+| Backend enterprise gate | PASS, including the complete Go/race, migration and generated-contract gates in one invocation. |
+| PostgreSQL integrations | PASS, 21/21 tests both normally and under the race detector. |
+| Worker runtime, process restart, Redis outage | PASS in both ordinary and race lanes. |
+| Tunnel owner HA | PASS. |
+| PostgreSQL streaming failover | PASS. |
+| Frontend enterprise gate | PASS, 2,307 tests, type/lint/build/budgets and zero npm audit vulnerabilities. |
+| Helm enterprise gate | PASS. |
+| Offering static qualification | FAIL during Go setup, before tests: `/bin/sh: 1: version: not found`. Direct host Go qualification tests and all six Python harness tests pass. A clean runner result remains required. |
+| PostgreSQL outage, both modes | FAIL because the production transaction inventory omitted `handler.TableViewsMutationTx`. Fixed by `b56175fa`; direct dedicated-container reruns pass in both modes, including real outage/recovery. Original matrix results remain failed. |
+| Playwright E2E | FAIL: 23 failed test IDs from 414 scheduled cases. Nine functional/assertion failures and fourteen mobile visual baselines; no retries or baseline acceptance applied. Subsequent route-smoke and blocking visual-matrix steps did not run. |
+| Disposable live browser | FAIL before stack launch: the static inventory counted optional engineering declarations as core journeys. Fixed by `88327ea9`; static contract, ShellCheck and actual Playwright discovery pass with 16 core journeys including Trivy. The actual stack still requires a rerun. |
+| Image builds, scans and SBOMs | PASS for all seven components: server, worker, agent, migrator, shell, DR and frontend. |
+| Qualification aggregate | Not executed by Local CI after first-wave failures; no same-commit aggregate qualification claimed. |
+
+The nine functional/assertion E2E failures cover catalog-project 503, CIS-detail
+503 and logging-operation error states on desktop/mobile; app-install default
+YAML on desktop/mobile; and a mobile resource action bar extending beyond the
+viewport. The fourteen visual failures cover both themes for clusters, cluster
+overview, resource explorer, logging, delivery, RBAC and management backup on mobile.
+These require diagnosis/review; passing unit tests and the focused live walkthrough
+do not supersede them.
+
+Commit `466b11e5` adds an exact path-and-line Gitleaks exception for the synthetic
+offering-report idempotency fixture assignment. Pinned Gitleaks
+v8.27.2 passes across all local Git refs; it does not exempt arbitrary credentials.
+PR readiness also requires the outstanding program/provider/performance work to be
+explicitly scoped, and appropriate review of the combined change. The PR remains
+a draft while required checks are outstanding.
