@@ -220,6 +220,7 @@ func postgresOutageFamilies(database *db.DB) []postgresOutageFamily {
 		postgresOutageTypedFamily[handler.SMTPMutationTx](database, "smtp"),
 		postgresOutageTypedFamily[handler.SSOCallbackTx](database, "sso_callback"),
 		postgresOutageTypedFamily[handler.SupportBundleMutationTx](database, "support_bundle"),
+		postgresOutageTypedFamily[handler.TableViewsMutationTx](database, "table_views"),
 		postgresOutageTypedFamily[handler.ToolMutationTx](database, "tool"),
 		postgresOutageTypedFamily[handler.TOTPMutationTx](database, "totp"),
 		postgresOutageTypedFamily[handler.UserMutationTx](database, "user"),
