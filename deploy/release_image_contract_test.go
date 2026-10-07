@@ -428,7 +428,7 @@ func TestRCLiveRestorePrecedesTargetMigration(t *testing.T) {
 	}
 	script := string(raw)
 	quiesce := strings.Index(script, `scale --namespace "$namespace" "deployment/$deployment" --replicas=0`)
-	replace := strings.Index(script, `ALTER DATABASE :\"restored\" RENAME TO :\"live\";`)
+	replace := strings.Index(script, `ALTER DATABASE :"restored" RENAME TO :"live";`)
 	upgrade := strings.LastIndex(script, `upgrade "${release_args[@]}" --atomic`)
 	postMigration := strings.Index(script, `post_migration_state=`)
 	if quiesce < 0 || replace < 0 || upgrade < 0 || postMigration < 0 {
