@@ -276,7 +276,7 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 		BundleVersionID: request.BundleVersionID, Placement: placementJSON,
 		RolloutPolicy: rolloutJSON, ReconciliationPolicy: reconcileJSON,
 		MaintenanceWindowPolicy: maintenanceJSON, ConfigurationTemplateID: nullableUUID(request.ConfigurationTemplateID),
-		OverrideSetIds: request.OverrideSetIDs, Overrides: overridesJSON, Suspended: request.Suspended,
+		OverrideSetIds: append([]uuid.UUID{}, request.OverrideSetIDs...), Overrides: overridesJSON, Suspended: request.Suspended,
 		CreatedBy: actor, UpdatedBy: actor,
 	}
 	row, err := executeMutation(r, h.runTx,
@@ -838,7 +838,7 @@ func targetFromRow(row sqlc.DeliveryTarget) (targetResponse, error) {
 		BundleVersionID: row.BundleVersionID, Placement: placementValue, RolloutPolicy: rolloutValue,
 		ReconciliationPolicy: reconciliation, MaintenanceWindowPolicy: maintenance,
 		Overrides: overrides, OverrideDigest: overrideDigest,
-		ConfigurationTemplateID: nullableUUIDPointer(row.ConfigurationTemplateID), OverrideSetIDs: append([]uuid.UUID(nil), row.OverrideSetIds...),
+		ConfigurationTemplateID: nullableUUIDPointer(row.ConfigurationTemplateID), OverrideSetIDs: append([]uuid.UUID{}, row.OverrideSetIds...),
 		Suspended: row.Suspended, Generation: row.Generation, ResourceVersion: row.ResourceVersion,
 		DeletionState: row.DeletionState, LastActorID: lastActorID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}, nil
@@ -877,7 +877,7 @@ func mergeTargetUpdate(current sqlc.DeliveryTarget, request updateTargetRequest)
 		merged.ConfigurationTemplateID = request.ConfigurationTemplateID.Value
 	}
 	if request.OverrideSetIDs != nil {
-		merged.OverrideSetIDs = append([]uuid.UUID(nil), (*request.OverrideSetIDs)...)
+		merged.OverrideSetIDs = append([]uuid.UUID{}, (*request.OverrideSetIDs)...)
 	}
 	if request.Suspended != nil {
 		merged.Suspended = *request.Suspended
