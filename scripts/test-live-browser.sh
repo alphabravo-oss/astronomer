@@ -140,9 +140,22 @@ run_minio_client() {
 
 	KUBECONFIG="$flux_kubeconfig" kubectl -n minio delete pod "$pod_name" \
 		--ignore-not-found --wait=true >/dev/null
+	# Client variables expand inside the pod shell.
+	# shellcheck disable=SC2016
 	KUBECONFIG="$flux_kubeconfig" kubectl -n minio run "$pod_name" \
 		--image="$minio_fixture_image" --image-pull-policy=Never \
-		--restart=Never --command -- sh -c "$client_command" >/dev/null
+		--restart=Never --command -- sh -ec '
+      # Pod readiness can precede Service endpoint/kube-proxy convergence.
+      # Probe from the actual client network before running the operation once.
+      for attempt in $(seq 1 30); do
+        if wget -q -T 2 -O /dev/null http://minio.minio.svc.cluster.local:9000/minio/health/ready; then
+          exec sh -ec "$1"
+        fi
+        sleep 1
+      done
+      echo "MinIO Service did not become ready from the client pod" >&2
+      exit 1
+    ' sh "$client_command" >/dev/null
 	for _ in $(seq 1 120); do
 		phase="$(KUBECONFIG="$flux_kubeconfig" kubectl -n minio get pod "$pod_name" \
 			-o jsonpath='{.status.phase}' 2>/dev/null || true)"
