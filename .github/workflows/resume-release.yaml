@@ -33,6 +33,10 @@ env:
 jobs:
   preflight:
     name: verify interrupted release identity and artifacts
+    permissions:
+      actions: read
+      contents: read
+      attestations: read
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.identity.outputs.image_tag }}
@@ -181,6 +185,7 @@ jobs:
       - name: Verify exact published chart
         if: steps.identity.outputs.metadata_required != 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           CHART_VERSION: ${{ steps.identity.outputs.chart_version }}
           IMAGE_TAG: ${{ steps.identity.outputs.image_tag }}
         run: |
