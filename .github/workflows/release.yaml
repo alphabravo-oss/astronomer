@@ -856,7 +856,7 @@ jobs:
     name: qualify v1.2.0/v1.2.1 upgrade, backup and clean restore
     if: contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
     needs: [preflight, qualify]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 75
     permissions:
       actions: read
@@ -878,7 +878,9 @@ jobs:
           curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/checksums.txt"
           grep ' _dist/k3d-linux-amd64$' checksums.txt | sed 's#_dist/##' | sha256sum --check
           sudo install -m 0755 k3d-linux-amd64 /usr/local/bin/k3d
-          sudo apt-get update && sudo apt-get install -y postgresql-client
+          sudo apt-get update && sudo apt-get install -y postgresql-client-16
+          echo "/usr/lib/postgresql/16/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/16/bin/pg_restore --version
       - name: Rehearse exact owned disposable RC
         env:
           GITHUB_TOKEN: ${{ github.token }}
