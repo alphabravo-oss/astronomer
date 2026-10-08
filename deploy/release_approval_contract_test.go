@@ -53,9 +53,15 @@ func TestV120PromotionRequiresAutomatedRehearsal(t *testing.T) {
 		if err := yaml.Unmarshal(raw, &workflow); err != nil {
 			t.Fatal(err)
 		}
+		approved := "needs.preflight.outputs.image-tag == 'v1.2.0'"
+		externalGate := "needs.preflight.outputs.image-tag != 'v1.2.0'"
+		if path == "../.github/workflows/release.yaml" {
+			approved = `contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)`
+			externalGate = "!" + approved
+		}
 		rc := workflow.Jobs["rc-rehearsal"]
-		if rc.If != "needs.preflight.outputs.image-tag == 'v1.2.0'" {
-			t.Errorf("%s: exception is not scoped to v1.2.0", path)
+		if rc.If != approved {
+			t.Errorf("%s: exception is not scoped to approved releases", path)
 		}
 		promote := workflow.Jobs["promote"]
 		found := false
@@ -71,7 +77,7 @@ func TestV120PromotionRequiresAutomatedRehearsal(t *testing.T) {
 		if !found {
 			t.Errorf("%s: promotion does not wait for rehearsal", path)
 		}
-		for _, clause := range []string{"!cancelled()", "needs.preflight.result == 'success'", "needs.qualify.result == 'success'", "needs.preflight.outputs.image-tag == 'v1.2.0' && needs.rc-rehearsal.result == 'success'", "needs.preflight.outputs.image-tag != 'v1.2.0' && needs.rc-rehearsal.result == 'skipped'"} {
+		for _, clause := range []string{"!cancelled()", "needs.preflight.result == 'success'", "needs.qualify.result == 'success'", approved + " && needs.rc-rehearsal.result == 'success'", externalGate + " && needs.rc-rehearsal.result == 'skipped'"} {
 			if !bytes.Contains([]byte(promote.If), []byte(clause)) {
 				t.Errorf("%s: missing fail-closed clause %s", path, clause)
 			}
@@ -79,13 +85,13 @@ func TestV120PromotionRequiresAutomatedRehearsal(t *testing.T) {
 		verified, external, downloaded := false, false, false
 		for _, step := range promote.Steps {
 			if bytes.Contains([]byte(step.Run), []byte("validate-automated-release.py")) {
-				verified = step.If == "needs.preflight.outputs.image-tag == 'v1.2.0'"
+				verified = step.If == approved
 			}
 			if bytes.Contains([]byte(step.Run), []byte("validate-release-approval.py")) {
-				external = step.If == "needs.preflight.outputs.image-tag != 'v1.2.0'"
+				external = (step.If == externalGate || step.If == "${{ "+externalGate+" }}")
 			}
 			if step.With["name"] == "rc-rehearsal-${{ github.run_id }}" {
-				downloaded = step.If == "needs.preflight.outputs.image-tag == 'v1.2.0'" && step.With["run-id"] == ""
+				downloaded = step.If == approved && step.With["run-id"] == ""
 			}
 		}
 		if !verified || !external || !downloaded {

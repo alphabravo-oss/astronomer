@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the explicitly scoped v1.2.0 automated publication qualification."""
+"""Verify the explicitly scoped v1.2.0/v1.2.1 automated publication qualification."""
 
 import argparse
 import datetime as dt
@@ -46,8 +46,8 @@ def validate_waivers(runtime, directory, tag, now):
 
 
 def validate(args, directory=Path("."), now=None):
-    if args.tag != "v1.2.0":
-        raise ValueError("automated publication exception applies only to v1.2.0")
+    if args.tag not in {"v1.2.0", "v1.2.1"}:
+        raise ValueError("automated publication exception applies only to v1.2.0 and v1.2.1")
     if not approval.COMMIT.fullmatch(args.source_commit) or any(
         not approval.RUN_ID.fullmatch(run) for run in (args.source_run_id, args.producer_run_id)
     ):
@@ -84,11 +84,11 @@ def validate(args, directory=Path("."), now=None):
     rc = values["rc-rehearsal-evidence"]
     approval.validate_rc(rc, args.tag, args.source_commit, args.source_run_id, args.producer_run_id)
     if rc["previous_version"] != "v1.1.0" or rc["release_manifest_sha256"] != digest:
-        raise ValueError("rehearsal does not qualify v1.1.0 to exact v1.2.0 artifacts")
+        raise ValueError("rehearsal does not qualify v1.1.0 to exact target artifacts")
     if approval.stamp(rc["completed_at"], "RC completion") < approval.stamp(rc["started_at"], "RC start"):
         raise ValueError("invalid rehearsal timestamps")
     return {
-        "schema_version": 1, "policy": "v1.2.0-automated-publication",
+        "schema_version": 1, "policy": f"{args.tag}-automated-publication",
         "tag": args.tag, "source_commit": args.source_commit,
         "source_run_id": args.source_run_id, "producer_run_id": args.producer_run_id,
         "release_manifest_sha256": digest,
@@ -97,7 +97,7 @@ def validate(args, directory=Path("."), now=None):
         "rc_rehearsal_evidence_sha256": approval.sha256(directory / "rc-rehearsal-evidence.json"),
         "external_certifications": {name: "deferred" for name in (
             "cloud_acceptance", "scale_certification", "rancher_benchmark", "human_accessibility")},
-        "named_release_approver": "not_required_by_v1.2.0_policy",
+        "named_release_approver": f"not_required_by_{args.tag}_policy",
         "license_qualification": "deferred_findings_retained_in_runtime_image_evidence",
     }
 

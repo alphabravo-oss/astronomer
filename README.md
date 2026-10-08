@@ -240,7 +240,7 @@ helm upgrade --install ngf \
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 1.2.0 \
+  --version 1.2.1 \
   --namespace astronomer \
   --create-namespace \
   --set-file secrets.secretKey=./jwt-key \
@@ -252,12 +252,12 @@ operator (or select external data services), TLS, bootstrap credentials,
 encryption keys, a Valkey password Secret, and backup settings:
 
 ```bash
-git clone --branch v1.2.0 --depth 1 \
+git clone --branch v1.2.1 --depth 1 \
   https://github.com/alphabravo-oss/astronomer.git astronomer-release
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 1.2.0 \
+  --version 1.2.1 \
   --namespace astronomer \
   --create-namespace \
   -f astronomer-release/deploy/chart/values-production.yaml \

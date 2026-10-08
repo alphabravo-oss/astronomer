@@ -304,7 +304,7 @@ validate-image-version:
 	@version='$(VERSION)'; version="$${version#v}"; \
 	if ! printf '%s\n' "$$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$$'; then \
 		echo "VERSION=$(VERSION) is not strict semantic versioning; agent connections would be rejected" >&2; \
-		echo "use a value such as 1.2.0-local.1 (IMG_TAG may be set independently)" >&2; \
+		echo "use a value such as 1.2.1-local.1 (IMG_TAG may be set independently)" >&2; \
 		exit 1; \
 	fi
 

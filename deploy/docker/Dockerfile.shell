@@ -71,7 +71,7 @@ RUN apk add --no-cache ca-certificates coreutils curl \
 
 FROM alpine:3.22@sha256:365499d9dccb7c8cfaffef995a6c382e71174585e0556f6476ead1c5971c39fb AS base
 
-ARG VERSION=1.2.0
+ARG VERSION=1.2.1
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 ARG KUBECTL_VERSION=v1.35.9

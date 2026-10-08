@@ -3,7 +3,7 @@
   "waivers": [
     {
       "reference": "docker.io/dexidp/dex@sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462",
-      "release_version": "v1.2.0",
+      "release_version": "v1.2.1",
       "category": "vulnerability",
       "ids": [
         "CVE-2025-68121",
@@ -66,13 +66,13 @@
         "CVE-2026-84445",
         "GHSA-hrxh-6v49-42gf"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.0 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
     {
       "reference": "ghcr.io/fluxcd/helm-controller@sha256:0d52fff5c4d476277b8fcb6beb9041e269adb5db943fe69f5a806ea0c92b1511",
-      "release_version": "v1.2.0",
+      "release_version": "v1.2.1",
       "category": "vulnerability",
       "ids": [
         "CVE-2026-50163",
@@ -81,13 +81,13 @@
         "CVE-2026-84445",
         "CVE-2026-85731"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.0 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
     {
       "reference": "ghcr.io/fluxcd/kustomize-controller@sha256:2ebeaa341da77d52b6abbbba5efcee0450d47f8b42f0e6f33b08f9020262d606",
-      "release_version": "v1.2.0",
+      "release_version": "v1.2.1",
       "category": "vulnerability",
       "ids": [
         "CVE-2026-103111",
@@ -96,13 +96,13 @@
         "CVE-2026-84445",
         "GHSA-hrxh-6v49-42gf"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.0 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
     {
       "reference": "ghcr.io/fluxcd/source-controller@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
-      "release_version": "v1.2.0",
+      "release_version": "v1.2.1",
       "category": "vulnerability",
       "ids": [
         "CVE-2026-49478",
@@ -115,13 +115,13 @@
         "CVE-2026-84445",
         "CVE-2026-85731"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.0 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
     {
       "reference": "docker.io/library/postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
-      "release_version": "v1.2.0",
+      "release_version": "v1.2.1",
       "category": "vulnerability",
       "ids": [
         "CVE-2025-61726",
@@ -147,13 +147,13 @@
         "CVE-2026-56860",
         "CVE-2026-56862"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.0 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
     {
       "reference": "quay.io/prometheus/node-exporter@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
-      "release_version": "v1.2.0",
+      "release_version": "v1.2.1",
       "category": "vulnerability",
       "ids": [
         "CVE-2026-33818",
@@ -166,13 +166,13 @@
         "CVE-2026-56860",
         "CVE-2026-56862"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.0 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
     {
       "reference": "registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b",
-      "release_version": "v1.2.0",
+      "release_version": "v1.2.1",
       "category": "vulnerability",
       "ids": [
         "CVE-2026-56854",
@@ -180,19 +180,19 @@
         "CVE-2026-84445",
         "GHSA-hrxh-6v49-42gf"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.0 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
     {
       "reference": "ghcr.io/alphabravocompany/charlie@sha256:59896880ef7bb5793f870fa33ad6b4bd07fcd39d321510e8cb92fd8f37e81d7a",
-      "release_version": "v1.2.0",
+      "release_version": "v1.2.1",
       "category": "vulnerability",
       "ids": [
         "CVE-2026-14456",
         "CVE-2026-56854"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.0 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "The release owner explicitly accepts these upstream package findings for v1.2.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     }

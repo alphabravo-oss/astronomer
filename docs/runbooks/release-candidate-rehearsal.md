@@ -4,7 +4,7 @@ The release workflow qualifies every image reachable from the signed release
 manifest: first-party workloads, chart runtime dependencies, Flux controllers,
 built-in bundle images, and containerized Charlie artifacts. Each exact digest
 must publish `linux/amd64` and `linux/arm64`, pass the fixed high/critical Trivy
-gate, and produce an SPDX SBOM. For tags other than v1.2.0, licenses must be in
+gate, and produce an SPDX SBOM. For tags other than v1.2.0 and v1.2.1, licenses must be in
 `deploy/release/license-policy.json`. A waiver must name the exact image digest,
 category and finding IDs, approver, reason, and future expiry. Stale, duplicate,
 expired, mutable-reference, and unused waivers fail the release. A waiver with
@@ -18,14 +18,13 @@ unexploitable. New finding IDs, changed digests and other release versions are
 not covered. The signed runtime evidence retains the raw reports and a copy of
 the waiver document. Scanning, SBOM generation and signatures remain mandatory.
 
-`CHARLIE_GH_TOKEN` must be able to read both the private Charlie release assets
-and its GHCR package (`repo` and `read:packages` for a classic PAT). The image
-qualification step uses that credential for registry reads and restores the
-workflow publishing token afterward. Charlie's Sigstore v0.3 bundles are
-verified with Cosign's explicit new-bundle-format option and the pinned
+`CHARLIE_GH_TOKEN` must read the private Charlie release assets. Qualification
+verifies the signed OCI archive and all blobs against the signed image digest,
+then scans that archive without requiring GHCR package-read scope. Charlie's
+Sigstore bundles use Cosign's explicit new-bundle-format option and pinned
 workflow identity.
 
-For **v1.2.0 only**, release and recovery workflows automatically run the
+For **v1.2.0 and v1.2.1 only**, release and recovery workflows automatically run the
 rehearsal below against v1.1.0 after all three clean-cluster Kubernetes checks
 pass. Promotion requires that job to succeed, verifies its signed evidence
 against the current producer run and original build run, and checks that both
@@ -36,7 +35,7 @@ certifications and license qualification are explicitly deferred. Unresolved
 license findings and per-image pending-review status remain in the signed runtime
 report and retained SBOMs; unwaived vulnerability findings still block publication.
 A separately named approver is not
-required for this tag. The changelog discloses this qualification scope.
+required for these two tags. The changelog discloses this qualification scope.
 
 For subsequent releases, run the manual `pre-promotion release candidate rehearsal` workflow with the
 target tag, source release-workflow run ID, and previous published tag. The
@@ -53,10 +52,14 @@ readiness. Private artifacts live only under an owner-readable `mktemp`
 directory and are destroyed with the owned cluster. Only the closed-schema,
 digest-only `rc-rehearsal-evidence.json` and Sigstore bundle are retained.
 
-For tags other than v1.2.0, promotion runs in the protected `release-production` environment. Its
+For tags other than v1.2.0 and v1.2.1, promotion runs in the protected `release-production` environment. Its
 `RELEASE_APPROVAL_JSON` must conform to
 `deploy/release/release-approval.schema.json` and bind the exact tag, commit,
 source run, runtime-image report digest, RC report digest, cloud acceptance
 digest, named approver, and external NVDA, Narrator, and VoiceOver results.
 The runtime-image digest is recomputed from the downloaded release artifact;
 missing, mismatched, unknown, or not-passed evidence fails before publication.
+
+The release owner explicitly extended the same waivers and qualification deferrals
+to v1.2.1 on 2026-10-08 after the unpublished v1.2.0 candidate failed startup.
+Signed v1.2.0 artifacts remain unchanged; v1.2.1 is built and qualified afresh.

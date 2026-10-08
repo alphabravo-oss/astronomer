@@ -88,23 +88,23 @@ image:
   server:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
-    tag: "v1.2.0"
+    tag: "v1.2.1"
     digest: ""             # Published upgrades set the exact sha256 digest.
   worker:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-worker
-    tag: "v1.2.0"
+    tag: "v1.2.1"
     digest: ""
   agent:
     # Used by the server when rendering install.yaml.template for new clusters.
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-agent
-    tag: "v1.2.0"
+    tag: "v1.2.1"
     digest: ""
   migrate:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-migrate
-    tag: "v1.2.0"
+    tag: "v1.2.1"
     digest: ""
 
 # =============================================================================
@@ -143,7 +143,7 @@ frontend:
     whenUnsatisfiable: ScheduleAnyway
   image:
     repository: astronomer-frontend
-    tag: "v1.2.0"
+    tag: "v1.2.1"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   hostAliases: []
@@ -538,7 +538,7 @@ preflight:
     # Same image runs the in-browser kubectl shell pods, so air-gapped
     # operators only need to mirror one image for both surfaces.
     repository: astronomer-shell
-    tag: "v1.2.0"
+    tag: "v1.2.1"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   # Read-only upgrade admission for external databases. Empty databases are
@@ -1202,7 +1202,7 @@ managementBackup:
   # air-gapped.
   image:
     repository: ghcr.io/alphabravo-oss/astronomer-dr
-    tag: "v1.2.0"
+    tag: "v1.2.1"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry
@@ -1311,7 +1311,7 @@ managementRestoreDrill:
   # as managementBackup so the drill can run wherever the backup runs.
   image:
     repository: ghcr.io/alphabravo-oss/astronomer-dr
-    tag: "v1.2.0"
+    tag: "v1.2.1"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry
