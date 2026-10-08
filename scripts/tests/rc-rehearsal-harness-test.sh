@@ -119,6 +119,12 @@ else
 fi
 STUB
 
+make_stub docker <<'STUB'
+set -euo pipefail
+[[ "$*" == "network inspect k3d-astronomer-rc-888 --format "* ]] || exit 2
+printf '172.19.0.1\n'
+STUB
+
 make_stub cosign <<'STUB'
 set -euo pipefail
 printf 'cosign %s\n' "$*" >>"$RC_HARNESS_TRACE"
@@ -219,6 +225,8 @@ elif [[ "$*" == *"get pods"* ]]; then
   printf 'postgres-0'
 elif [[ "$*" == *" get service "* ]]; then
   printf 'astronomer-server\n'
+elif [[ "$*" == *" apply -f -" ]]; then
+  cat >"$RC_HARNESS_STATE/sink-policy.json"
 elif [[ "$*" == *" apply "* || "$*" == *" rollout status "* ]]; then
   :
 elif [[ "$*" == *" scale "* ]]; then
@@ -282,6 +290,12 @@ grep -Fq "ref=$previous_commit" "$trace"
 grep -Fq 'previous-install' "$trace"
 grep -Fq 'image.server.tag=v1.1.0' "$trace"
 grep -Fq 'image.server.tag=v1.2.0' "$trace"
+
+# The receiver exception must not permit another destination, port or workload.
+jq -e '.spec == {
+  podSelector:{matchLabels:{"app.kubernetes.io/instance":"astronomer","app.kubernetes.io/component":"worker"}},
+  policyTypes:["Egress"],egress:[{to:[{ipBlock:{cidr:"172.19.0.1/32"}}],ports:[{protocol:"TCP",port:18081}]}]
+}' "$state/sink-policy.json" >/dev/null
 
 # The safety-critical order is quiesce old workloads, promote the verified
 # restored database, then run the target chart migration.

@@ -11,7 +11,7 @@ target="$1"; source_run_id="$2"; previous="$3"
 run_id="${GITHUB_RUN_ID:-}"; [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || die "GITHUB_RUN_ID is required"
 cluster="astronomer-rc-${run_id}"; ack="${RC_DISPOSABLE_ACK:-}"
 [[ "$cluster" =~ ^astronomer-rc-[1-9][0-9]*$ && "$ack" == "destroy-${cluster}" ]] || die "set exact RC_DISPOSABLE_ACK=destroy-${cluster}"
-for tool in gh jq k3d kubectl helm cosign sha256sum openssl python3 pg_restore curl tar sort find; do command -v "$tool" >/dev/null || die "missing $tool"; done
+for tool in gh jq docker k3d kubectl helm cosign sha256sum openssl python3 pg_restore curl tar sort find; do command -v "$tool" >/dev/null || die "missing $tool"; done
 k3d cluster list -o json | jq -e --arg name "$cluster" 'any(.[]; .name==$name)' >/dev/null && die "refusing pre-existing cluster"
 work="$(mktemp -d)"; chmod 0700 "$work"; created=0; port_forward_pid=""; sink_pid=""; started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 cleanup() {
@@ -81,6 +81,16 @@ helm --kube-context "$context" upgrade --install astronomer "$previous_chart" --
   --set server.replicaCount=2 --set worker.replicaCount=2 \
   --set-string worker.env.ASTRONOMER_RC_ALLOW_PRIVATE_WEBHOOKS=true \
   --atomic --wait --timeout 15m
+# The production worker policy intentionally omits the test receiver port.
+# Permit only this owned cluster's workers to reach the exact host receiver;
+# the additional policy is destroyed with the disposable cluster.
+sink_gateway="$(docker network inspect "k3d-${cluster}" --format '{{(index .IPAM.Config 0).Gateway}}')"
+sink_cidr="$(python3 -c 'import ipaddress,sys; print(str(ipaddress.IPv4Address(sys.argv[1])) + "/32")' "$sink_gateway")"
+jq -n --arg cidr "$sink_cidr" '{apiVersion:"networking.k8s.io/v1",kind:"NetworkPolicy",
+  metadata:{name:"rc-webhook-proof",namespace:"astronomer"},
+  spec:{podSelector:{matchLabels:{"app.kubernetes.io/instance":"astronomer","app.kubernetes.io/component":"worker"}},
+    policyTypes:["Egress"],egress:[{to:[{ipBlock:{cidr:$cidr}}],ports:[{protocol:"TCP",port:18081}]}]}}' |
+  kubectl --context "$context" apply -f -
 postgres="$(kubectl --context "$context" -n astronomer get pods -l app.kubernetes.io/component=postgres -o jsonpath='{.items[0].metadata.name}')"; [[ -n "$postgres" ]] || die "bundled PostgreSQL absent"
 kubectl --context "$context" -n astronomer port-forward svc/astronomer-server 18080:8000 >"$work/port-forward.log" 2>&1 & port_forward_pid=$!
 for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:18080/health/ >/dev/null 2>&1 && break; sleep 1; done
