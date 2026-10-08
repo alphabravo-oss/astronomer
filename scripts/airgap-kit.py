@@ -51,12 +51,7 @@ Do not put registry passwords, TLS keys, or Helm secrets in this directory.
 
 ```bash
 sha256sum --check SHA256SUMS
-cosign verify-blob \\
-  --bundle release-manifest.sigstore.json \\
-  --certificate-identity \\
-    "https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/{version}" \\
-  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\
-  release-manifest.json
+python3 verify-release-metadata.py --directory . --tag {version}
 ```
 
 `astronomer-images.txt` is the complete digest-pinned container list derived
@@ -234,6 +229,15 @@ def verify_release_manifest(manifest_path: Path, signature: Path, manifest: dict
     version = validate_release_version(manifest)
     if not signature.is_file():
         raise KitError("release manifest Sigstore bundle is required before loading images")
+    identity = COSIGN_WORKFLOW.format(version=version)
+    if any((manifest_path.parent / name).exists() for name in ("release-recovery.json", "release-recovery.sigstore.json")):
+        spec = importlib.util.spec_from_file_location("metadata", SCRIPT_DIR / "verify-release-metadata.py")
+        metadata = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(metadata)
+        try:
+            identity = metadata.metadata_identity(manifest_path.parent, version, manifest_path=manifest_path)
+        except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+            raise KitError("release recovery proof does not authenticate the supplied manifest") from exc
     run(
         [
             "cosign",
@@ -241,7 +245,7 @@ def verify_release_manifest(manifest_path: Path, signature: Path, manifest: dict
             "--bundle",
             str(signature),
             "--certificate-identity",
-            COSIGN_WORKFLOW.format(version=version),
+            identity,
             "--certificate-oidc-issuer",
             COSIGN_ISSUER,
             str(manifest_path),
@@ -306,6 +310,10 @@ def pack(
         copy_kit_file(root, "release-manifest.json", manifest_path)
         if signature is not None:
             copy_kit_file(root, "release-manifest.sigstore.json", signature)
+        for name in ("release-recovery.json", "release-recovery.sigstore.json"):
+            source = manifest_path.parent / name
+            if source.exists():
+                copy_kit_file(root, name, source)
         copy_kit_file(root, chart_package.name, chart_package)
         copy_kit_file(root, "values-production.yaml", values_production)
         if flux_archive is not None:
@@ -316,6 +324,7 @@ def pack(
         write_kit_file(root, "README.md", KIT_README.format(version=version).encode("utf-8"))
         for name, mode in (
             ("airgap-kit.py", 0o755),
+            ("verify-release-metadata.py", 0o755),
             ("mirror-release.py", 0o755),
             ("astronomer-save-images.sh", 0o755),
             ("astronomer-load-images.sh", 0o755),

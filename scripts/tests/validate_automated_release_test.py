@@ -104,6 +104,33 @@ class AutomatedReleaseTest(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.validate()
 
+    def test_recovered_metadata_requires_extra_proof_and_keeps_rc_identity(self):
+        self.args.repository = validator.metadata.REPOSITORY
+        self.args.source_commit = validator.metadata.RECOVERY_COMMIT
+        self.args.source_run_id = validator.metadata.RECOVERY_SOURCE_RUN
+        self.args.rc_identity = validator.metadata.RECOVERY_IDENTITY
+        self.write("release-manifest", {"release": {"version": self.args.tag, "source_commit": self.args.source_commit}})
+        digest = validator.approval.sha256(self.root / "release-manifest.json")
+        self.runtime["release_manifest_sha256"] = digest
+        self.write("runtime-image-evidence", self.runtime)
+        self.rc.update(source_commit=self.args.source_commit, source_run_id=self.args.source_run_id, release_manifest_sha256=digest)
+        self.write("rc-rehearsal-evidence", self.rc)
+        chart = self.root / "astronomer-1.2.0.tgz"
+        chart.write_bytes(b"chart")
+        self.write("release-recovery", dict(schema_version=1, tag=self.args.tag, source_commit=self.args.source_commit,
+                   source_run_id=self.args.source_run_id, producer_run_id="456", producer_commit="b" * 40,
+                   files={name: validator.metadata.sha(self.root / name) for name in validator.metadata.FILES}))
+        (self.root / "release-recovery.sigstore.json").write_text("bundle")
+        with patch.object(validator.metadata, "verify_signature") as proof_verify:
+            result = self.validate()
+            proof_verify.assert_called_once()
+            self.assertEqual(proof_verify.call_args.args[2], validator.metadata.RECOVERY_IDENTITY)
+            self.assertEqual([call.args[2] for call in self.verify.call_args_list], [validator.metadata.RECOVERY_IDENTITY] * 3)
+            self.assertEqual(result["release_recovery_sha256"], validator.approval.sha256(self.root / "release-recovery.json"))
+            proof_verify.side_effect = subprocess.CalledProcessError(1, "cosign")
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.validate()
+
     def test_invalid_signature_aborts_publication(self):
         self.verify.side_effect = subprocess.CalledProcessError(1, "cosign")
         with self.assertRaises(subprocess.CalledProcessError):

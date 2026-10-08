@@ -494,6 +494,7 @@ jobs:
           openssl rand -base64 48 > /tmp/release-lint-jwt-key
           openssl rand -base64 32 | tr '+/' '-_' > /tmp/release-lint-encryption-key
           helm lint deploy/chart \
+            -f deploy/chart/values-dev.yaml \
             --set-file secrets.secretKey=/tmp/release-lint-jwt-key \
             --set-file secrets.encryptionKey=/tmp/release-lint-encryption-key
 
@@ -522,6 +523,7 @@ jobs:
               echo "refusing to reuse astronomer:${CHART_VERSION}: published chart contents differ from this commit" >&2
               exit 1
             }
+            cp "existing-chart/astronomer-${CHART_VERSION}.tgz" "astronomer-${CHART_VERSION}.tgz"
             echo "reusing already-published immutable chart astronomer:${CHART_VERSION}@${chart_digest}"
           else
             helm push "astronomer-${CHART_VERSION}.tgz" "oci://ghcr.io/alphabravo-oss/charts" 2>&1 | tee chart-push.log

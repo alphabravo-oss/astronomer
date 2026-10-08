@@ -366,9 +366,11 @@ test("keyboard-only resource create, scale, restart, YAML preview/apply, and del
     ),
   ).toBe(true);
   expect(mutations.some((record) => record.dryRun)).toBe(true);
-  expect(
-    mutations.some(
-      (record) => record.path === OBJECT_PATH && record.method === "DELETE",
-    ),
-  ).toBe(true);
+  await expect
+    .poll(() =>
+      mutations.some(
+        (record) => record.path === OBJECT_PATH && record.method === "DELETE",
+      ),
+    )
+    .toBe(true);
 });
