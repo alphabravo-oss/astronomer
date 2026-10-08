@@ -119,6 +119,12 @@ else
 fi
 STUB
 
+make_stub docker <<'STUB'
+set -euo pipefail
+[[ "$*" == "network inspect k3d-astronomer-rc-888 --format "* ]] || exit 2
+printf '172.19.0.1\n'
+STUB
+
 make_stub cosign <<'STUB'
 set -euo pipefail
 printf 'cosign %s\n' "$*" >>"$RC_HARNESS_TRACE"
@@ -183,6 +189,11 @@ elif [[ "$*" == *"--atomic --cleanup-on-fail --wait --wait-for-jobs"* ]]; then
     printf 'duplicate\n' >"$BACKUP_ROOT/extra/BACKUP_SHA256SUMS"
   }
 elif [[ "$*" == *"upgrade --install astronomer "* ]]; then
+  # Model the prior release's one-replica development defaults. The real
+  # rehearsal must provision capacity before the unchanged disruption gate.
+  replicas=1
+  [[ "$*" == *"--set server.replicaCount=2"* && "$*" == *"--set worker.replicaCount=2"* ]] && replicas=2
+  printf '%s\n' "$replicas" >"$RC_HARNESS_STATE/previous-replicas"
   printf 'previous-install\n' >>"$RC_HARNESS_TRACE"
 elif [[ "$*" == *"upgrade --install ngf "* || "$*" == *" rollback "* ]]; then
   :
@@ -203,7 +214,9 @@ elif [[ "$*" == *" get nodes "* ]]; then
 elif [[ "$*" == *"get deployments"* ]]; then
   printf '{"items":[{"metadata":{"name":"astronomer-server","generation":1,"labels":{"app.kubernetes.io/component":"server"}},"spec":{"replicas":1},"status":{"observedGeneration":1,"availableReplicas":1,"updatedReplicas":1}},{"metadata":{"name":"astronomer-worker","generation":1,"labels":{"app.kubernetes.io/component":"worker"}},"spec":{"replicas":1},"status":{"observedGeneration":1,"availableReplicas":1,"updatedReplicas":1}}]}\n'
 elif [[ "$*" == *"get poddisruptionbudgets"* ]]; then
-  printf '{"items":[{"status":{"disruptionsAllowed":1}}]}\n'
+  allowed=$(($(cat "$RC_HARNESS_STATE/previous-replicas") - 1))
+  [[ "${RC_HARNESS_NO_DISRUPTION:-0}" == 0 ]] || allowed=0
+  printf '{"items":[{"status":{"disruptionsAllowed":%s}}]}\n' "$allowed"
 elif [[ "$*" == *"get secret astronomer-bootstrap"* ]]; then
   printf 'cGFzc3dvcmQ='
 elif [[ "$*" == *"get secrets"* ]]; then
@@ -212,6 +225,8 @@ elif [[ "$*" == *"get pods"* ]]; then
   printf 'postgres-0'
 elif [[ "$*" == *" get service "* ]]; then
   printf 'astronomer-server\n'
+elif [[ "$*" == *" apply -f -" ]]; then
+  cat >"$RC_HARNESS_STATE/sink-policy.json"
 elif [[ "$*" == *" apply "* || "$*" == *" rollout status "* ]]; then
   :
 elif [[ "$*" == *" scale "* ]]; then
@@ -276,6 +291,12 @@ grep -Fq 'previous-install' "$trace"
 grep -Fq 'image.server.tag=v1.1.0' "$trace"
 grep -Fq 'image.server.tag=v1.2.0' "$trace"
 
+# The receiver exception must not permit another destination, port or workload.
+jq -e '.spec == {
+  podSelector:{matchLabels:{"app.kubernetes.io/instance":"astronomer","app.kubernetes.io/component":"worker"}},
+  policyTypes:["Egress"],egress:[{to:[{ipBlock:{cidr:"172.19.0.1/32"}}],ports:[{protocol:"TCP",port:18081}]}]
+}' "$state/sink-policy.json" >/dev/null
+
 # The safety-critical order is quiesce old workloads, promote the verified
 # restored database, then run the target chart migration.
 quiesce_line="$(line_of 'quiesce ')"
@@ -305,6 +326,7 @@ expect_failure() {
   [[ ! -e "$root/rc-rehearsal-evidence.json" ]]
 }
 
+expect_failure RC_HARNESS_NO_DISRUPTION 'one or more Astronomer PodDisruptionBudgets allow no voluntary disruption'
 expect_failure RC_HARNESS_BAD_RUN 'source run identity mismatch'
 expect_failure RC_HARNESS_PREEXISTING 'refusing pre-existing cluster'
 expect_failure RC_HARNESS_DUP_TARGET 'duplicate target artifact release-manifest.json'

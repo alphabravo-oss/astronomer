@@ -11,7 +11,7 @@ target="$1"; source_run_id="$2"; previous="$3"
 run_id="${GITHUB_RUN_ID:-}"; [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || die "GITHUB_RUN_ID is required"
 cluster="astronomer-rc-${run_id}"; ack="${RC_DISPOSABLE_ACK:-}"
 [[ "$cluster" =~ ^astronomer-rc-[1-9][0-9]*$ && "$ack" == "destroy-${cluster}" ]] || die "set exact RC_DISPOSABLE_ACK=destroy-${cluster}"
-for tool in gh jq k3d kubectl helm cosign sha256sum openssl python3 pg_restore curl tar sort find; do command -v "$tool" >/dev/null || die "missing $tool"; done
+for tool in gh jq docker k3d kubectl helm cosign sha256sum openssl python3 pg_restore curl tar sort find; do command -v "$tool" >/dev/null || die "missing $tool"; done
 k3d cluster list -o json | jq -e --arg name "$cluster" 'any(.[]; .name==$name)' >/dev/null && die "refusing pre-existing cluster"
 work="$(mktemp -d)"; chmod 0700 "$work"; created=0; port_forward_pid=""; sink_pid=""; started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 cleanup() {
@@ -66,6 +66,9 @@ PY
 chmod 0600 "$work/jwt-key" "$work/fernet-key"
 previous_ref() { jq -er --arg name "$1" '.astronomer.images[]|select(.name==$name)|.reference' "$work/previous/release-manifest.json"; }
 server_ref="$(previous_ref server)"; worker_ref="$(previous_ref worker)"; agent_ref="$(previous_ref agent)"; migrate_ref="$(previous_ref migrate)"; frontend_ref="$(previous_ref frontend)"; shell_ref="$(previous_ref shell)"
+# The development profile has single replicas, but the upgrade readiness gate
+# requires a spare replica for each enabled disruption budget. Exercise that
+# production safety gate with two replicas instead of disabling the budgets.
 helm --kube-context "$context" upgrade --install astronomer "$previous_chart" --namespace astronomer --create-namespace -f "$work/previous/values-k3d.yaml" \
   --set-file secrets.secretKey="$work/jwt-key" --set-file secrets.encryptionKey="$work/fernet-key" --set-file release.manifest="$work/previous/release-manifest.json" \
   --set-string image.server.registry=ghcr.io/alphabravo-oss --set-string image.server.repository=astronomer-go-server --set-string image.server.tag="$previous" --set-string image.server.digest="${server_ref##*@}" \
@@ -75,8 +78,19 @@ helm --kube-context "$context" upgrade --install astronomer "$previous_chart" --
   --set-string frontend.image.registry=ghcr.io/alphabravo-oss --set-string frontend.image.repository=astronomer-frontend --set-string frontend.image.tag="$previous" --set-string frontend.image.digest="${frontend_ref##*@}" \
   --set-string preflight.image.registry=ghcr.io/alphabravo-oss --set-string preflight.image.repository=astronomer-shell --set-string preflight.image.tag="$previous" --set-string preflight.image.digest="${shell_ref##*@}" \
   --set-string config.agentImageRepository="$agent_ref" --set-string config.agentImageTag="$previous" --set-string kubectlShell.image="$shell_ref" \
+  --set server.replicaCount=2 --set worker.replicaCount=2 \
   --set-string worker.env.ASTRONOMER_RC_ALLOW_PRIVATE_WEBHOOKS=true \
   --atomic --wait --timeout 15m
+# The production worker policy intentionally omits the test receiver port.
+# Permit only this owned cluster's workers to reach the exact host receiver;
+# the additional policy is destroyed with the disposable cluster.
+sink_gateway="$(docker network inspect "k3d-${cluster}" --format '{{(index .IPAM.Config 0).Gateway}}')"
+sink_cidr="$(python3 -c 'import ipaddress,sys; print(str(ipaddress.IPv4Address(sys.argv[1])) + "/32")' "$sink_gateway")"
+jq -n --arg cidr "$sink_cidr" '{apiVersion:"networking.k8s.io/v1",kind:"NetworkPolicy",
+  metadata:{name:"rc-webhook-proof",namespace:"astronomer"},
+  spec:{podSelector:{matchLabels:{"app.kubernetes.io/instance":"astronomer","app.kubernetes.io/component":"worker"}},
+    policyTypes:["Egress"],egress:[{to:[{ipBlock:{cidr:$cidr}}],ports:[{protocol:"TCP",port:18081}]}]}}' |
+  kubectl --context "$context" apply -f -
 postgres="$(kubectl --context "$context" -n astronomer get pods -l app.kubernetes.io/component=postgres -o jsonpath='{.items[0].metadata.name}')"; [[ -n "$postgres" ]] || die "bundled PostgreSQL absent"
 kubectl --context "$context" -n astronomer port-forward svc/astronomer-server 18080:8000 >"$work/port-forward.log" 2>&1 & port_forward_pid=$!
 for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:18080/health/ >/dev/null 2>&1 && break; sleep 1; done
