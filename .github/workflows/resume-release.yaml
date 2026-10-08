@@ -738,7 +738,10 @@ jobs:
 
   rc-rehearsal:
     name: qualify v1.2.0/v1.2.1 upgrade, backup and clean restore
-    if: contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
+    # Metadata completion is intentionally skipped when the original chart exists.
+    # Override the implicit success() across that skipped ancestor, while requiring
+    # both direct prerequisite jobs to have succeeded.
+    if: always() && !cancelled() && needs.preflight.result == 'success' && needs.qualify.result == 'success' && contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
     needs: [preflight, qualify]
     runs-on: ubuntu-22.04
     timeout-minutes: 75

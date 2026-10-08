@@ -56,7 +56,11 @@ func TestApprovedV12PromotionRequiresAutomatedRehearsal(t *testing.T) {
 		approved := `contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)`
 		externalGate := "!" + approved
 		rc := workflow.Jobs["rc-rehearsal"]
-		if rc.If != approved {
+		rcCondition := approved
+		if path == "../.github/workflows/resume-release.yaml" {
+			rcCondition = "always() && !cancelled() && needs.preflight.result == 'success' && needs.qualify.result == 'success' && " + approved
+		}
+		if rc.If != rcCondition {
 			t.Errorf("%s: exception is not scoped to approved releases", path)
 		}
 		promote := workflow.Jobs["promote"]
