@@ -533,14 +533,14 @@ extension is explicitly recorded for the next release. This review against
 - GET /api/v1/tools/{slug} added the new `multiline` enum value to the `allOf[subschema #2]/data/form_schema/allOf[#/components/schemas/ToolFormSchema]/fields/items/type` response property for the response status `200`
 
 
-## 1.2.0 transition from the published 1.1.0 API
+## 1.2.1 transition from the published 1.1.0 API
 
 On 2026-10-07 the release owner explicitly retained the 1.2.0 product version
 and reserved 2.0.0 for the upcoming refactor after being informed of the actual
 API incompatibilities. The existing cookie-only browser session design and
 canonical endpoints are retained. This is an intentional compatibility exception,
 not a claim that the removed fields were never shipped. The migration instructions
-are in [the 1.2.0 upgrade notes](../CHANGELOG.md#upgrade-notes-from-110).
+are in [the 1.2.1 upgrade notes](../CHANGELOG.md#upgrade-notes-from-110).
 
 The tag comparison also reports the already-reviewed Charlie field rename with
 wording that differs from the main-branch comparison. Agent/cluster collection
@@ -573,3 +573,6 @@ triples apply only to the published-tag transition; unrelated changes still fail
 - POST /api/v1/clusters/{id}/generate_kubeconfig api path removed without deprecation
 - GET /api/v1/clusters/{id}/kubeconfig api path removed without deprecation
 - GET /api/v1/delivery/fleet/ api path removed without deprecation
+
+On 2026-10-08 the release owner approved v1.2.1 as the replacement for the
+unpublished v1.2.0 candidate. The API migration guidance above still applies.

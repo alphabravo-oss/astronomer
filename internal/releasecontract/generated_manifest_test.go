@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 func TestApplicationImageInventoryByRelease(t *testing.T) {
@@ -65,7 +67,7 @@ finally:
 	if err := os.WriteFile(path, payload, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	manifest, projection, err := Load(path, "1.2.0")
+	manifest, projection, err := Load(path, version.Version)
 	if err != nil {
 		t.Fatalf("application rejected generated release manifest: %v", err)
 	}

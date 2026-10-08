@@ -30,6 +30,7 @@ def digest(character: str) -> str:
 
 class ReleaseManifestTest(unittest.TestCase):
     def setUp(self) -> None:
+        self.version = json.loads((ROOT / "deploy/bundles/catalog.json").read_text())["release"].removeprefix("v")
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.images = self.root / "images"
@@ -43,7 +44,7 @@ class ReleaseManifestTest(unittest.TestCase):
         self.inventory = self.root / "images.txt"
         self.inventory.write_text(
             "\n".join(
-                f"registry.example.test/astronomer/{repository}:v1.2.0"
+                f"registry.example.test/astronomer/{repository}:v{self.version}"
                 for repository in sorted(GENERATOR.FIRST_PARTY.values())
             )
             + "\nthird.example.test/database/postgres:16\n",
@@ -55,8 +56,8 @@ class ReleaseManifestTest(unittest.TestCase):
             encoding="utf-8",
         )
         self.chart = self.root / "Chart.yaml"
-        self.chart.write_text("version: 1.2.0\nappVersion: \"1.2.0\"\n", encoding="utf-8")
-        self.chart_package = self.root / "astronomer-1.1.0.tgz"
+        self.chart.write_text(f'version: {self.version}\nappVersion: "{self.version}"\n', encoding="utf-8")
+        self.chart_package = self.root / f"astronomer-{self.version}.tgz"
         self.chart_package.write_bytes(b"chart")
         self.flux_archive = self.root / "flux.tar.gz"
         self.flux_archive.write_bytes(b"flux")
@@ -68,7 +69,7 @@ class ReleaseManifestTest(unittest.TestCase):
 
     def args(self) -> argparse.Namespace:
         return argparse.Namespace(
-            version="v1.2.0",
+            version=f"v{self.version}",
             source_commit="1" * 40,
             source_date_epoch=1_700_000_000,
             chart_reference=f"registry.example.test/charts/astronomer@{digest('b')}",

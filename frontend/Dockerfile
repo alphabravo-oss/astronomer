@@ -11,7 +11,7 @@ COPY . .
 
 # Baked into the bundle via the Vite `define` (__APP_VERSION__); the release
 # workflow passes VERSION to every component build.
-ARG VERSION=1.2.0
+ARG VERSION=1.2.1
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 ENV VERSION=$VERSION \
@@ -35,7 +35,7 @@ RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
 
 FROM nginx-base
 
-ARG VERSION=1.2.0
+ARG VERSION=1.2.1
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="astronomer-frontend" \

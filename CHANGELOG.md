@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Target release: **1.2.0**.
+Target release: **1.2.1**.
 
 ### Added
 
@@ -21,6 +21,12 @@ Target release: **1.2.0**.
 
 ### Release preparation fixes
 
+- Replace the unpublished v1.2.0 candidate with new immutable v1.2.1 artifacts.
+  Fix server/worker startup to accept the seven-image release manifest, including
+  disaster recovery, and qualify Charlie from its verified signed OCI archive.
+  The release owner explicitly carried the same CVE waivers and qualification
+  deferrals forward to v1.2.1; waiver digests and expiry remain unchanged.
+
 - Update upstream runtime images: Fluent Bit 5.1.3, Dex 2.45.1,
   kube-state-metrics 2.20.0 (chart 8.6.0), and digest-pinned CloudNativePG
   PostgreSQL 17.11 on the maintained standard Trixie image. The CNPG image
@@ -32,7 +38,7 @@ Target release: **1.2.0**.
   the complete shell image without the former kubectl exclusion. Fresh frontend
   builds refresh Alpine packages, including the corrected pcre2 package.
 - Retain unresolved upstream vulnerability findings with explicitly approved,
-  expiring, exact-digest waivers for v1.2.0. Continue to prefer upstream fixes;
+  expiring, exact-digest waivers for v1.2.1. Continue to prefer upstream fixes;
   no custom downstream builds are introduced. The approval covers 115
   image/finding pairs across eight images and expires on 2026-11-06; raw scan
   findings remain disclosed, and newly detected findings remain blocking.
@@ -47,22 +53,22 @@ Target release: **1.2.0**.
 
 ### Release qualification
 
-Publication of v1.2.0 requires automated builds, vulnerability scans, retained license findings,
+Publication of v1.2.1 requires automated builds, vulnerability scans, retained license findings,
 SBOMs and signing, clean installs on Kubernetes 1.33, 1.34 and 1.35, and a signed
-v1.1.0-to-v1.2.0 upgrade, backup/decryption and clean-restore rehearsal.
+v1.1.0-to-v1.2.1 upgrade, backup/decryption and clean-restore rehearsal.
 Cloud-provider acceptance, production-scale certification, the Rancher comparison
 benchmark and human assistive-technology certification are deferred. These
 certifications are not claimed for this release. License qualification is also
 deferred: unresolved license findings remain in the signed runtime-image report
 and retained SBOMs for review. No clean license qualification is claimed.
-Unwaived vulnerability findings remain blocking. The v1.2.0 publication policy
+Unwaived vulnerability findings remain blocking. The v1.2.1 publication policy
 does not require a separately named release approver; this exception is scoped
 to this tag and does not relax the policy for subsequent releases.
 
 ### Upgrade notes from 1.1.0
 
 This release includes intentional API migration changes despite retaining the
-1.2.0 product version. Existing integrations must be reviewed before upgrading;
+1.2.1 product version. Existing integrations must be reviewed before upgrading;
 it is not a fully backward-compatible API update.
 
 - Browser login, refresh and TOTP completion use HttpOnly session cookies; token

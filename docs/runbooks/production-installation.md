@@ -52,7 +52,7 @@ Download the exact tag into a private directory and verify checksums and the
 release manifest before using any digest from it:
 
 ```bash
-export ASTRONOMER_RELEASE=v1.2.0
+export ASTRONOMER_RELEASE=v1.2.1
 mkdir "astronomer-${ASTRONOMER_RELEASE}"
 cd "astronomer-${ASTRONOMER_RELEASE}"
 gh release download "$ASTRONOMER_RELEASE" --repo alphabravo-oss/astronomer
@@ -129,7 +129,7 @@ validation.
 ```bash
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 1.2.0 \
+  --version 1.2.1 \
   --namespace astronomer \
   --create-namespace \
   -f ./deploy/chart/values-production.yaml \

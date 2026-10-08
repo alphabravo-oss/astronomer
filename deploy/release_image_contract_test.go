@@ -46,12 +46,13 @@ var expectedFirstPartyReleaseImages = map[string]struct {
 }
 
 const (
-	releaseVersion      = "1.2.0"
-	chartReleaseVersion = "1.2.0"
+	releaseVersion      = "1.2.1"
+	chartReleaseVersion = "1.2.1"
 )
 
 func TestReleaseIdentityIsConsistent(t *testing.T) {
 	files := map[string][]string{
+		"bundles/catalog.json":          {`"release": "v` + releaseVersion + `"`},
 		"chart/Chart.yaml":              {"version: " + chartReleaseVersion, `appVersion: "` + chartReleaseVersion + `"`},
 		"chart/values.yaml":             {`tag: "v` + chartReleaseVersion + `"`},
 		"../pkg/version/version.go":     {`Version   = "` + releaseVersion + `"`},

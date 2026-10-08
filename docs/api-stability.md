@@ -1,6 +1,6 @@
 # API stability and deprecation policy
 
-> **1.2.0 transition exception:** this release retains the 1.2.0 product version
+> **1.2.1 transition exception:** this release retains the 1.2.1 product version
 > while introducing the explicitly listed authentication, endpoint and pagination
 > changes in [the upgrade notes](../CHANGELOG.md#upgrade-notes-from-110).
 > Those changes do not meet the general backward-compatibility guarantee below;

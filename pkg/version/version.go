@@ -5,7 +5,7 @@ package version
 // source of truth for UN-released dev builds: bump it when the dev cycle moves
 // to the next version. Keep it in sync with deploy/chart/Chart.yaml appVersion.
 var (
-	Version   = "1.2.0"
+	Version   = "1.2.1"
 	GitCommit = "unknown"
 	BuildDate = "unknown"
 )

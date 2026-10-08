@@ -29,7 +29,7 @@
 #   SKIP_PREREQS  Skip Gateway API + NGF install             (default: 0)
 #   SECRET_KEY    JWT signing key                            (default: a local-dev value)
 #   ENCRYPTION_KEY Fernet key wrapping stored credentials     (default: a local-dev value)
-#   VERSION       SemVer used for first-party image metadata  (default: 1.2.0-local.<git-sha>)
+#   VERSION       SemVer used for first-party image metadata  (default: 1.2.1-local.<git-sha>)
 
 set -euo pipefail
 
@@ -98,7 +98,7 @@ short_sha="$(git rev-parse --short HEAD 2>/dev/null || printf 'local')"
 if [[ "${VERSION:-}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
   BUILD_VERSION="$VERSION"
 else
-  BUILD_VERSION="1.2.0-local.${short_sha}"
+  BUILD_VERSION="1.2.1-local.${short_sha}"
 fi
 
 step()    { printf "\n\033[1;36m==> %s\033[0m\n" "$*"; }

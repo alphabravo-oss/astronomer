@@ -126,6 +126,11 @@ test("counts load on first opening the desktop flyout or mobile drawer group", a
 }, testInfo) => {
   const mobile = testInfo.project.name.includes("mobile");
   await installStubs(page);
+  // The shared 200/EOF stream stub reconnects and invalidates queries. This
+  // assertion measures the initial count fetch, independently of live refresh.
+  await page.route("**/api/v1/events/stream/**", (route) =>
+    route.fulfill({ status: 204, body: "" }),
+  );
   await seedAuth(context, page, adminStoreUser);
   const requests: string[] = [];
   await page.route(

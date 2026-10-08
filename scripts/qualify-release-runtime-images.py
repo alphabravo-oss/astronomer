@@ -48,9 +48,9 @@ def waiver_map(document, now, release_version=None):
 def digest_waiver(w,item): return "sha256:"+hashlib.sha256(canonical({**w,"id":item})).hexdigest()
 
 def qualify_findings(version, reference, vulnerabilities, licenses):
-    # The v1.2.0 publication decision defers license qualification, not scanning
+    # The v1.2.0/v1.2.1 publication decision defers license qualification, not scanning
     # or retention. Never apply this exception to vulnerabilities or later tags.
-    if vulnerabilities or (licenses and version != "v1.2.0"):
+    if vulnerabilities or (licenses and version not in {"v1.2.0", "v1.2.1"}):
         raise ValueError(f"unwaived policy findings for {reference}: vulnerabilities={vulnerabilities}, licenses={licenses}")
     return {
         "high_critical_unwaived": 0,
@@ -130,6 +130,6 @@ def main():
     used={item for entry in entries for item in entry["applied_waivers"]}
     unused=set(indexed.values())-used
     if unused: raise ValueError("unused or stale exact-digest waiver is forbidden")
-    report={"schema_version":1,"release_version":manifest["release"]["version"],"release_manifest_sha256":sha(a.manifest),"result":"passed","vulnerability_qualification":"passed","license_qualification":"deferred" if manifest["release"]["version"] == "v1.2.0" else "passed","generated_at":now.replace(microsecond=0).isoformat().replace("+00:00","Z"),"entries":entries,"waivers_sha256":sha(a.waivers),"license_policy_sha256":sha(a.license_policy)}
+    report={"schema_version":1,"release_version":manifest["release"]["version"],"release_manifest_sha256":sha(a.manifest),"result":"passed","vulnerability_qualification":"passed","license_qualification":"deferred" if manifest["release"]["version"] in {"v1.2.0", "v1.2.1"} else "passed","generated_at":now.replace(microsecond=0).isoformat().replace("+00:00","Z"),"entries":entries,"waivers_sha256":sha(a.waivers),"license_policy_sha256":sha(a.license_policy)}
     a.output.parent.mkdir(parents=True,exist_ok=True); a.output.write_bytes(canonical(report))
 if __name__=="__main__": main()
