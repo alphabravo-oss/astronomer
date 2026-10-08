@@ -732,8 +732,8 @@ jobs:
             -l app.kubernetes.io/instance=astronomer || true
 
   rc-rehearsal:
-    name: qualify v1.2.0 upgrade, backup and clean restore
-    if: needs.preflight.outputs.image-tag == 'v1.2.0'
+    name: qualify v1.2.0/v1.2.1 upgrade, backup and clean restore
+    if: contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
     needs: [preflight, qualify]
     runs-on: ubuntu-22.04
     timeout-minutes: 75
@@ -782,8 +782,8 @@ jobs:
     needs: [preflight, qualify, rc-rehearsal]
     if: >-
       always() && !cancelled() && needs.preflight.result == 'success' && needs.qualify.result == 'success' &&
-      ((needs.preflight.outputs.image-tag == 'v1.2.0' && needs.rc-rehearsal.result == 'success') ||
-       (needs.preflight.outputs.image-tag != 'v1.2.0' && needs.rc-rehearsal.result == 'skipped'))
+      ((contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag) && needs.rc-rehearsal.result == 'success') ||
+       (!contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag) && needs.rc-rehearsal.result == 'skipped'))
     runs-on: ubuntu-latest
     environment: release-production
     permissions:
@@ -815,14 +815,14 @@ jobs:
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
         with: {cosign-release: v2.5.3}
 
-      - name: Download current-run v1.2.0 rehearsal evidence
-        if: needs.preflight.outputs.image-tag == 'v1.2.0'
+      - name: Download current-run v1.2.0/v1.2.1 rehearsal evidence
+        if: contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: rc-rehearsal-${{ github.run_id }}
 
-      - name: Verify automated v1.2.0 publication evidence
-        if: needs.preflight.outputs.image-tag == 'v1.2.0'
+      - name: Verify automated v1.2.0/v1.2.1 publication evidence
+        if: contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
         env:
           TAG: ${{ needs.preflight.outputs.image-tag }}
           SOURCE_COMMIT: ${{ needs.preflight.outputs.tag-commit }}
@@ -836,7 +836,7 @@ jobs:
             --repository "$REPOSITORY" --rc-identity "$RC_IDENTITY"
 
       - name: Verify protected release approval and external accessibility evidence
-        if: needs.preflight.outputs.image-tag != 'v1.2.0'
+        if: ${{ !contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag) }}
         env:
           RELEASE_APPROVAL_JSON: ${{ vars.RELEASE_APPROVAL_JSON }}
           TAG: ${{ needs.preflight.outputs.image-tag }}
@@ -927,7 +927,7 @@ jobs:
               -name 'RELEASE_IMAGES' -o -name 'RELEASE_SUBJECTS' \
             \) -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
           qualification_assets=()
-          if [[ "$TAG" == v1.2.0 ]]; then
+          if [[ "$TAG" == v1.2.0 || "$TAG" == v1.2.1 ]]; then
             qualification_assets=(rc-rehearsal-evidence.json rc-rehearsal-evidence.sigstore.json release-qualification.json)
           fi
           if [[ -f release-recovery.json ]]; then

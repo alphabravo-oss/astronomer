@@ -66,6 +66,9 @@ PY
 chmod 0600 "$work/jwt-key" "$work/fernet-key"
 previous_ref() { jq -er --arg name "$1" '.astronomer.images[]|select(.name==$name)|.reference' "$work/previous/release-manifest.json"; }
 server_ref="$(previous_ref server)"; worker_ref="$(previous_ref worker)"; agent_ref="$(previous_ref agent)"; migrate_ref="$(previous_ref migrate)"; frontend_ref="$(previous_ref frontend)"; shell_ref="$(previous_ref shell)"
+# The development profile has single replicas, but the upgrade readiness gate
+# requires a spare replica for each enabled disruption budget. Exercise that
+# production safety gate with two replicas instead of disabling the budgets.
 helm --kube-context "$context" upgrade --install astronomer "$previous_chart" --namespace astronomer --create-namespace -f "$work/previous/values-k3d.yaml" \
   --set-file secrets.secretKey="$work/jwt-key" --set-file secrets.encryptionKey="$work/fernet-key" --set-file release.manifest="$work/previous/release-manifest.json" \
   --set-string image.server.registry=ghcr.io/alphabravo-oss --set-string image.server.repository=astronomer-go-server --set-string image.server.tag="$previous" --set-string image.server.digest="${server_ref##*@}" \
@@ -75,6 +78,7 @@ helm --kube-context "$context" upgrade --install astronomer "$previous_chart" --
   --set-string frontend.image.registry=ghcr.io/alphabravo-oss --set-string frontend.image.repository=astronomer-frontend --set-string frontend.image.tag="$previous" --set-string frontend.image.digest="${frontend_ref##*@}" \
   --set-string preflight.image.registry=ghcr.io/alphabravo-oss --set-string preflight.image.repository=astronomer-shell --set-string preflight.image.tag="$previous" --set-string preflight.image.digest="${shell_ref##*@}" \
   --set-string config.agentImageRepository="$agent_ref" --set-string config.agentImageTag="$previous" --set-string kubectlShell.image="$shell_ref" \
+  --set server.replicaCount=2 --set worker.replicaCount=2 \
   --set-string worker.env.ASTRONOMER_RC_ALLOW_PRIVATE_WEBHOOKS=true \
   --atomic --wait --timeout 15m
 postgres="$(kubectl --context "$context" -n astronomer get pods -l app.kubernetes.io/component=postgres -o jsonpath='{.items[0].metadata.name}')"; [[ -n "$postgres" ]] || die "bundled PostgreSQL absent"

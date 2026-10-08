@@ -32,7 +32,7 @@ func TestPromotionRequiresProtectedDigestBoundExternalApproval(t *testing.T) {
 }
 
 // A deferred external certification must never bypass failed automated qualification.
-func TestV120PromotionRequiresAutomatedRehearsal(t *testing.T) {
+func TestApprovedV12PromotionRequiresAutomatedRehearsal(t *testing.T) {
 	for _, path := range []string{"../.github/workflows/release.yaml", "../.github/workflows/resume-release.yaml"} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -53,12 +53,8 @@ func TestV120PromotionRequiresAutomatedRehearsal(t *testing.T) {
 		if err := yaml.Unmarshal(raw, &workflow); err != nil {
 			t.Fatal(err)
 		}
-		approved := "needs.preflight.outputs.image-tag == 'v1.2.0'"
-		externalGate := "needs.preflight.outputs.image-tag != 'v1.2.0'"
-		if path == "../.github/workflows/release.yaml" {
-			approved = `contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)`
-			externalGate = "!" + approved
-		}
+		approved := `contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)`
+		externalGate := "!" + approved
 		rc := workflow.Jobs["rc-rehearsal"]
 		if rc.If != approved {
 			t.Errorf("%s: exception is not scoped to approved releases", path)

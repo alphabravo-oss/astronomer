@@ -183,6 +183,11 @@ elif [[ "$*" == *"--atomic --cleanup-on-fail --wait --wait-for-jobs"* ]]; then
     printf 'duplicate\n' >"$BACKUP_ROOT/extra/BACKUP_SHA256SUMS"
   }
 elif [[ "$*" == *"upgrade --install astronomer "* ]]; then
+  # Model the prior release's one-replica development defaults. The real
+  # rehearsal must provision capacity before the unchanged disruption gate.
+  replicas=1
+  [[ "$*" == *"--set server.replicaCount=2"* && "$*" == *"--set worker.replicaCount=2"* ]] && replicas=2
+  printf '%s\n' "$replicas" >"$RC_HARNESS_STATE/previous-replicas"
   printf 'previous-install\n' >>"$RC_HARNESS_TRACE"
 elif [[ "$*" == *"upgrade --install ngf "* || "$*" == *" rollback "* ]]; then
   :
@@ -203,7 +208,9 @@ elif [[ "$*" == *" get nodes "* ]]; then
 elif [[ "$*" == *"get deployments"* ]]; then
   printf '{"items":[{"metadata":{"name":"astronomer-server","generation":1,"labels":{"app.kubernetes.io/component":"server"}},"spec":{"replicas":1},"status":{"observedGeneration":1,"availableReplicas":1,"updatedReplicas":1}},{"metadata":{"name":"astronomer-worker","generation":1,"labels":{"app.kubernetes.io/component":"worker"}},"spec":{"replicas":1},"status":{"observedGeneration":1,"availableReplicas":1,"updatedReplicas":1}}]}\n'
 elif [[ "$*" == *"get poddisruptionbudgets"* ]]; then
-  printf '{"items":[{"status":{"disruptionsAllowed":1}}]}\n'
+  allowed=$(($(cat "$RC_HARNESS_STATE/previous-replicas") - 1))
+  [[ "${RC_HARNESS_NO_DISRUPTION:-0}" == 0 ]] || allowed=0
+  printf '{"items":[{"status":{"disruptionsAllowed":%s}}]}\n' "$allowed"
 elif [[ "$*" == *"get secret astronomer-bootstrap"* ]]; then
   printf 'cGFzc3dvcmQ='
 elif [[ "$*" == *"get secrets"* ]]; then
@@ -305,6 +312,7 @@ expect_failure() {
   [[ ! -e "$root/rc-rehearsal-evidence.json" ]]
 }
 
+expect_failure RC_HARNESS_NO_DISRUPTION 'one or more Astronomer PodDisruptionBudgets allow no voluntary disruption'
 expect_failure RC_HARNESS_BAD_RUN 'source run identity mismatch'
 expect_failure RC_HARNESS_PREEXISTING 'refusing pre-existing cluster'
 expect_failure RC_HARNESS_DUP_TARGET 'duplicate target artifact release-manifest.json'
