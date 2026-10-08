@@ -21,6 +21,22 @@ Target release: **1.2.0**.
 
 ### Release preparation fixes
 
+- Update upstream runtime images: Fluent Bit 5.1.3, Dex 2.45.1,
+  kube-state-metrics 2.20.0 (chart 8.6.0), and digest-pinned CloudNativePG
+  PostgreSQL 17.11 on the maintained standard Trixie image. The CNPG image
+  continues to use the separate Barman Cloud plugin; the bundled development
+  database stays on PostgreSQL 16. Existing CNPG deployments using non-C
+  collations must check OS collation-version changes and rebuild affected
+  indexes before refreshing collation versions.
+- Update the signature-verified upstream kubectl binary to 1.35.9 and scan
+  the complete shell image without the former kubectl exclusion. Fresh frontend
+  builds refresh Alpine packages, including the corrected pcre2 package.
+- Retain unresolved upstream vulnerability findings with explicitly approved,
+  expiring, exact-digest waivers for v1.2.0. Continue to prefer upstream fixes;
+  no custom downstream builds are introduced. The approval covers 115
+  image/finding pairs across eight images and expires on 2026-11-06; raw scan
+  findings remain disclosed, and newly detected findings remain blocking.
+
 - Refresh the authenticated Flux distribution to v2.9.6 and Trivy Operator to
   0.35.0 with scanner 0.75.0. Vulnerability database updates remain automatic;
   scanner reports refresh every six hours independently of software version pins.
@@ -39,7 +55,7 @@ benchmark and human assistive-technology certification are deferred. These
 certifications are not claimed for this release. License qualification is also
 deferred: unresolved license findings remain in the signed runtime-image report
 and retained SBOMs for review. No clean license qualification is claimed.
-Vulnerability failures remain blocking. The v1.2.0 publication policy
+Unwaived vulnerability findings remain blocking. The v1.2.0 publication policy
 does not require a separately named release approver; this exception is scoped
 to this tag and does not relax the policy for subsequent releases.
 

@@ -7,7 +7,23 @@ must publish `linux/amd64` and `linux/arm64`, pass the fixed high/critical Trivy
 gate, and produce an SPDX SBOM. For tags other than v1.2.0, licenses must be in
 `deploy/release/license-policy.json`. A waiver must name the exact image digest,
 category and finding IDs, approver, reason, and future expiry. Stale, duplicate,
-expired, mutable-reference, and unused waivers fail the release.
+expired, mutable-reference, and unused waivers fail the release. A waiver with
+`release_version` also fails when the manifest names a different release.
+
+The release owner approved the remaining upstream findings for **v1.2.0** on
+2026-10-07. The committed waiver file names 115 image/finding pairs across eight
+exact image digests and expires on 2026-11-06. This is risk acceptance while
+waiting for upstream fixes, not a claim that the findings are fixed or
+unexploitable. New finding IDs, changed digests and other release versions are
+not covered. The signed runtime evidence retains the raw reports and a copy of
+the waiver document. Scanning, SBOM generation and signatures remain mandatory.
+
+`CHARLIE_GH_TOKEN` must be able to read both the private Charlie release assets
+and its GHCR package (`repo` and `read:packages` for a classic PAT). The image
+qualification step uses that credential for registry reads and restores the
+workflow publishing token afterward. Charlie's Sigstore v0.3 bundles are
+verified with Cosign's explicit new-bundle-format option and the pinned
+workflow identity.
 
 For **v1.2.0 only**, release and recovery workflows automatically run the
 rehearsal below against v1.1.0 after all three clean-cluster Kubernetes checks
@@ -18,7 +34,7 @@ The release attaches the rehearsal evidence, its signature and
 `release-qualification.json`. Cloud, scale, Rancher and human accessibility
 certifications and license qualification are explicitly deferred. Unresolved
 license findings and per-image pending-review status remain in the signed runtime
-report and retained SBOMs; vulnerability failures still block publication.
+report and retained SBOMs; unwaived vulnerability findings still block publication.
 A separately named approver is not
 required for this tag. The changelog discloses this qualification scope.
 

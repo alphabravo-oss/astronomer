@@ -121,7 +121,7 @@ jobs:
           - { name: worker,   context: .,        dockerfile: deploy/docker/Dockerfile.worker,  imageName: astronomer-go-worker }
           - { name: agent,    context: .,        dockerfile: deploy/docker/Dockerfile.agent,   imageName: astronomer-go-agent }
           - { name: migrate,  context: .,        dockerfile: deploy/docker/Dockerfile.migrate, imageName: astronomer-go-migrate }
-          - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   imageName: astronomer-shell, skip_files: /usr/local/bin/kubectl }
+          - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   imageName: astronomer-shell }
           - { name: dr,       context: .,        dockerfile: deploy/docker/Dockerfile.dr,      imageName: astronomer-dr }
           - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile,              imageName: astronomer-frontend }
     steps:
@@ -267,7 +267,6 @@ jobs:
           vuln-type: os,library
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          skip-files: ${{ matrix.component.skip_files }}
           exit-code: "1"
 
       - name: Sign image by digest
@@ -555,7 +554,7 @@ jobs:
             --dir "$work" \
             --pattern "charlie-release-${version}.json" \
             --pattern "charlie-release-${version}.json.signature.sigstore.json"
-          cosign verify-blob \
+          cosign verify-blob --new-bundle-format \
             --bundle "$work/charlie-release-${version}.json.signature.sigstore.json" \
             --certificate-identity "$CHARLIE_CERTIFICATE_IDENTITY" \
             --certificate-oidc-issuer "$CHARLIE_CERTIFICATE_OIDC_ISSUER" \
@@ -619,14 +618,23 @@ jobs:
           sudo install -m 0755 trivy /usr/local/bin/trivy
 
       - name: Qualify every transitive runtime image
+        env:
+          CHARLIE_REGISTRY_TOKEN: ${{ secrets.CHARLIE_GH_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
         run: |
           set -euo pipefail
+          # Charlie is private. Use the same read credential that verified its
+          # signed release assets, then restore this workflow's publishing token.
+          echo "$CHARLIE_REGISTRY_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           ./scripts/qualify-release-runtime-images.py \
             --manifest release-manifest.json \
             --waivers deploy/release/runtime-image-waivers.json \
             --license-policy deploy/release/license-policy.json \
             --work-dir runtime-image-evidence \
             --output runtime-image-evidence.json
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          cp deploy/release/runtime-image-waivers.json runtime-image-evidence/waivers.json
           cosign sign-blob --yes --bundle runtime-image-evidence.sigstore.json runtime-image-evidence.json
           tar -czf runtime-image-evidence.tar.gz runtime-image-evidence/
 
@@ -748,8 +756,8 @@ jobs:
           BUSYBOX|busybox:1.36
           POSTGRES|postgres:16-alpine
           REDIS|valkey/valkey:8-alpine
-          DEX|dexidp/dex:v2.41.1
-          LOGGING|fluent/fluent-bit:3.2.4
+          DEX|dexidp/dex:v2.45.1
+          LOGGING|fluent/fluent-bit:5.1.3
           EOF
 
       - name: Create clean Kubernetes and install Gateway prerequisites

@@ -149,7 +149,15 @@ def runtime_images(
     for source in sorted(sources):
         exact: str | None = None
         if "@sha256:" in source:
-            exact = immutable_reference(source, f"runtime image {source}")
+            # Operators such as CNPG require the version tag alongside a digest.
+            # Preserve that source spelling, but attest the canonical repository
+            # and digest so tags cannot create duplicate artifact identities.
+            repository, pinned_digest = source.rsplit("@", 1)
+            if ":" in repository.rsplit("/", 1)[-1]:
+                repository, tag = repository.rsplit(":", 1)
+                if re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag) is None:
+                    raise ManifestError(f"runtime image {source!r} has an invalid tag")
+            exact = immutable_reference(f"{repository}@{pinned_digest}", f"runtime image {source}")
         else:
             repository_path = source.rsplit(":", 1)[0] if ":" in source.rsplit("/", 1)[-1] else source
             repository = repository_path.rsplit("/", 1)[-1]

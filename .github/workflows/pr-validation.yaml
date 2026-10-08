@@ -420,7 +420,6 @@ jobs:
           vuln-type: os,library
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          skip-files: ${{ matrix.component == 'shell' && '/usr/local/bin/kubectl' || '' }}
           exit-code: "1"
 
       - name: Install syft

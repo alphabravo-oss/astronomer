@@ -69,8 +69,8 @@ def manifest() -> dict:
                     "busybox:1.36": f"docker.io/library/busybox@{DIGEST}",
                     "postgres:16-alpine": f"docker.io/library/postgres@{DIGEST}",
                     "valkey/valkey:8-alpine": f"docker.io/valkey/valkey@{DIGEST}",
-                    "dexidp/dex:v2.41.1": f"docker.io/dexidp/dex@{DIGEST}",
-                    "fluent/fluent-bit:3.2.4": f"docker.io/fluent/fluent-bit@{DIGEST}",
+                    "dexidp/dex:v2.45.1": f"docker.io/dexidp/dex@{DIGEST}",
+                    "fluent/fluent-bit:5.1.3": f"docker.io/fluent/fluent-bit@{DIGEST}",
                 }.items()
             ],
         },

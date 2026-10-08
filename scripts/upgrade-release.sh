@@ -448,9 +448,9 @@ release_args=(
   --set-string "utilities.busybox.digest=$(runtime_digest busybox:1.36)"
   --set-string "postgres.image.digest=$(runtime_digest postgres:16-alpine)"
   --set-string "redis.image.digest=$(runtime_digest valkey/valkey:8-alpine)"
-  --set-string "dex.image.digest=$(runtime_digest dexidp/dex:v2.41.1)"
+  --set-string "dex.image.digest=$(runtime_digest dexidp/dex:v2.45.1)"
   --set-string "managementRestoreDrill.sidecar.image.digest=$(runtime_digest postgres:16-alpine)"
-  --set-string "managementLogging.image.digest=$(runtime_digest fluent/fluent-bit:3.2.4)"
+  --set-string "managementLogging.image.digest=$(runtime_digest fluent/fluent-bit:5.1.3)"
   --set-file "release.manifest=$backup_dir/release-assets/release-manifest.json"
   --timeout "$timeout"
 )

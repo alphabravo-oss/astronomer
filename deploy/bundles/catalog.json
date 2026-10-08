@@ -61,18 +61,18 @@
         "kind": "helm_http",
         "url": "https://prometheus-community.github.io/helm-charts",
         "chart": "kube-state-metrics",
-        "version": "8.0.0",
-        "chart_digest": "sha256:e9a119672c0764580ff8739c11a88dad5a9822607ea10b7e2475b207f8c39f41"
+        "version": "8.6.0",
+        "chart_digest": "sha256:9bdf8485c0df29eb2070bacafbb8a4333a22663fb8049da32ff98ec521576388"
       },
       "scope": "platform",
       "target_namespace": "astronomer-monitoring",
       "release_name": "kube-state-metrics",
       "images": [
-        "registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:85108987d044b18a098126732f98602df408888c0f7d456241f5abefb9744bc1"
+        "registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b"
       ],
       "values": {
         "image": {
-          "sha": "sha256:85108987d044b18a098126732f98602df408888c0f7d456241f5abefb9744bc1"
+          "sha": "sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b"
         },
         "metricLabelsAllowlist": ["pods=[*]", "deployments=[*]"]
       },
