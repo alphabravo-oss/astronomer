@@ -60,22 +60,63 @@ def qualify_findings(version, reference, vulnerabilities, licenses):
     }
 
 
+def prepare_oci_source(directory, reference):
+    """Bind an extracted OCI archive to the signed image, before either scanner reads it."""
+    if not REF.fullmatch(reference): raise ValueError("OCI source requires an exact image reference")
+    root = directory.resolve()
+    if (root / "index.json").is_symlink(): raise ValueError("unsafe OCI index path")
+    digest = reference.split("@", 1)[1]
+    visited = set()
+    def blob(descriptor, document=False):
+        value = descriptor["digest"]
+        if not re.fullmatch(r"sha256:[a-f0-9]{64}", value): raise ValueError("invalid OCI blob digest")
+        path = root / "blobs" / "sha256" / value.split(":", 1)[1]
+        if not path.resolve().is_relative_to(root) or path.is_symlink(): raise ValueError("unsafe OCI blob path")
+        content = path.read_bytes()
+        if "sha256:" + hashlib.sha256(content).hexdigest() != value: raise ValueError("OCI blob digest mismatch")
+        if "size" in descriptor and descriptor["size"] != len(content): raise ValueError("OCI blob size mismatch")
+        if document and value not in visited:
+            visited.add(value)
+            parsed = json.loads(content)
+            for child in parsed.get("manifests", []): blob(child, True)
+            if "config" in parsed: blob(parsed["config"])
+            for child in parsed.get("layers", []): blob(child)
+        return content
+    raw = blob({"digest": digest}, True)
+    index = json.loads(raw)
+    platforms = {f"{x.get('platform',{}).get('os','')}/{x.get('platform',{}).get('architecture','')}" for x in index.get("manifests", [])}
+    if not {"linux/amd64", "linux/arm64"}.issubset(platforms): raise ValueError("OCI source lacks required platforms")
+    # Scan the same platform as the Linux release runner. A flat layout also
+    # supports the pinned Syft version, which cannot resolve nested indexes.
+    # The selected manifest and every blob are bound by the authenticated root.
+    selected = [x for x in index["manifests"] if x.get("platform", {}).get("os") == "linux" and x["platform"].get("architecture") == "amd64"]
+    if len(selected) != 1: raise ValueError("ambiguous OCI scan platform")
+    (root / "index.json").write_bytes(canonical({"schemaVersion": 2, "manifests": selected}))
+    return raw
+
+
 def main():
-    p=argparse.ArgumentParser(); p.add_argument("--manifest",type=Path,required=True); p.add_argument("--waivers",type=Path,required=True); p.add_argument("--license-policy",type=Path,required=True); p.add_argument("--work-dir",type=Path,required=True); p.add_argument("--output",type=Path,required=True); a=p.parse_args()
+    p=argparse.ArgumentParser(); p.add_argument("--manifest",type=Path,required=True); p.add_argument("--waivers",type=Path,required=True); p.add_argument("--license-policy",type=Path,required=True); p.add_argument("--work-dir",type=Path,required=True); p.add_argument("--output",type=Path,required=True); p.add_argument("--charlie-oci-layout",type=Path); a=p.parse_args()
     manifest=json.loads(a.manifest.read_text()); waivers=load_closed(a.waivers,{"schema_version","waivers"},"waivers"); policy=load_closed(a.license_policy,{"schema_version","allowed_spdx_ids"},"license policy")
+    if a.charlie_oci_layout and manifest["charlie"]["artifact"]["kind"] != "container_image": raise ValueError("Charlie OCI source requires a container image")
     if policy["schema_version"]!=1 or not isinstance(policy["allowed_spdx_ids"],list): raise ValueError("invalid license policy")
     allowed=set(policy["allowed_spdx_ids"]); now=dt.datetime.now(dt.timezone.utc); indexed=waiver_map(waivers,now,manifest["release"]["version"])
     a.work_dir.mkdir(parents=True,exist_ok=True); entries=[]
     for index,ref in enumerate(references(manifest)):
-        prefix=a.work_dir/f"image-{index:03d}"; raw=prefix.with_suffix(".manifest.json"); run(["docker","buildx","imagetools","inspect",ref,"--raw"],raw)
+        prefix=a.work_dir/f"image-{index:03d}"; raw=prefix.with_suffix(".manifest.json")
+        archive = a.charlie_oci_layout if ref == manifest["charlie"]["artifact"]["reference"] else None
+        if archive:
+            raw.write_bytes(prepare_oci_source(archive, ref))
+        else:
+            run(["docker","buildx","imagetools","inspect",ref,"--raw"],raw)
         image_manifest=json.loads(raw.read_text()); platforms=sorted({f"{x.get('platform',{}).get('os','')}/{x.get('platform',{}).get('architecture','')}" for x in image_manifest.get("manifests",[])})
         if not {"linux/amd64","linux/arm64"}.issubset(platforms): raise ValueError(f"image lacks required platforms: {ref}")
-        vuln=prefix.with_suffix(".trivy.json"); run(["trivy","image","--quiet","--format","json","--scanners","vuln","--severity","HIGH,CRITICAL","--ignore-unfixed",ref],vuln)
+        vuln=prefix.with_suffix(".trivy.json"); source=["--input",str(archive),"--platform","linux/amd64"] if archive else [ref]; run(["trivy","image","--quiet","--format","json","--scanners","vuln","--severity","HIGH,CRITICAL","--ignore-unfixed",*source],vuln)
         vuln_ids=sorted({v["VulnerabilityID"] for result in json.loads(vuln.read_text()).get("Results",[]) for v in (result.get("Vulnerabilities") or [])})
         applied=[]; unwaived=[]
         for item in vuln_ids:
             waiver=indexed.get((ref,"vulnerability",item)); applied.append(waiver) if waiver else unwaived.append(item)
-        sbom=prefix.with_suffix(".spdx.json"); run(["syft",ref,"-o","spdx-json"],sbom); packages=json.loads(sbom.read_text()).get("packages",[]); license_issues=[]
+        sbom=prefix.with_suffix(".spdx.json"); source=[f"oci-dir:{archive}","--platform","linux/amd64"] if archive else [ref]; run(["syft",*source,"-o","spdx-json"],sbom); packages=json.loads(sbom.read_text()).get("packages",[]); license_issues=[]
         for package in packages:
             expression=package.get("licenseConcluded")
             if not expression or expression in {"NOASSERTION","NONE"}: expression=package.get("licenseDeclared") or "NOASSERTION"

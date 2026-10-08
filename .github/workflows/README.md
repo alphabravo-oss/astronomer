@@ -63,6 +63,14 @@ the Docker-based physical-replication drill does not make the default local
 `make test-postgres-failover-certification`; CI retains its schema-versioned
 RPO/RTO evidence and database logs for 90 days.
 
+Charlie runtime qualification downloads its signed OCI archive through the
+existing release-asset credential. It verifies the archive signature and the
+complete blob graph against the exact image digest bound by Charlie's signed
+release. Scanners receive only that verified image root. The private image
+archive stays in runner temporary storage; publication retains vulnerability
+reports and SBOMs. This does not require adding GHCR package-read scope to the
+release-asset credential.
+
 ## Local CI before pushing
 
 [Local CI](https://github.com/redwoodjs/local-ci) runs the official GitHub
