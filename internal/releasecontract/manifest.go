@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -301,7 +302,7 @@ func (manifest Manifest) Validate(expectedVersion string) (Projection, error) {
 		return Projection{}, errors.New("release manifest compatibility is invalid")
 	}
 	if manifest.Flux.Version == "" || len(manifest.Flux.Controllers) != 3 || len(manifest.Flux.APIs) < 3 ||
-		len(manifest.Astronomer.Images) != 6 || len(manifest.Astronomer.RuntimeImages) < 6 || len(manifest.BuiltInBundles.Components) == 0 ||
+		!validApplicationImages(manifest.Release.Version, manifest.Astronomer.Images) || len(manifest.Astronomer.RuntimeImages) < 6 || len(manifest.BuiltInBundles.Components) == 0 ||
 		!digestPattern.MatchString(manifest.BuiltInBundles.CatalogDigest) || !digestPattern.MatchString(manifest.Charlie.CapabilityDisclosureDigest) {
 		return Projection{}, errors.New("release manifest artifact inventory is incomplete")
 	}
@@ -349,6 +350,23 @@ func (manifest Manifest) Validate(expectedVersion string) (Projection, error) {
 		HeartbeatSchemaMinimum:                manifest.Compatibility.Agent.HeartbeatSchemaMinimum,
 		HeartbeatSchemaMaximum:                manifest.Compatibility.Agent.HeartbeatSchemaMaximum,
 	}, nil
+}
+
+func validApplicationImages(version string, images []Artifact) bool {
+	release, err := semver.StrictNewVersion(strings.TrimPrefix(version, "v"))
+	if err != nil {
+		return false
+	}
+	expected := []string{"agent", "frontend", "migrate", "server", "shell", "worker"}
+	// Disaster recovery became a first-party release artifact in v1.2.0.
+	if release.Major() > 1 || (release.Major() == 1 && release.Minor() >= 2) {
+		expected = append(expected, "dr")
+	}
+	names := make([]string, len(images))
+	for index, artifact := range images {
+		names[index] = artifact.Name
+	}
+	return sameStringSet(names, expected)
 }
 
 func sameStringSet(left, right []string) bool {

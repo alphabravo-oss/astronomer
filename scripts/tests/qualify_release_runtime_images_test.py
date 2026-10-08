@@ -1,5 +1,6 @@
 import datetime as dt
 import importlib.util
+import hashlib
 import json
 import tempfile
 import unittest
@@ -12,6 +13,84 @@ module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 REF="registry.example.test/team/image@sha256:"+"a"*64
 
 class RuntimeQualifierTest(unittest.TestCase):
+    def oci_fixture(self, root, arches=("amd64", "arm64")):
+        blobs = root / "blobs" / "sha256"
+        blobs.mkdir(parents=True)
+        def write(value):
+            content = value if isinstance(value, bytes) else module.canonical(value)
+            digest = hashlib.sha256(content).hexdigest()
+            (blobs / digest).write_bytes(content)
+            return {"digest": "sha256:" + digest, "size": len(content)}
+        layer = write(b"verified image layer")
+        manifests = []
+        for arch in arches:
+            config = write({"architecture": arch, "os": "linux"})
+            descriptor = write({"schemaVersion": 2, "config": config, "layers": [layer]})
+            descriptor.update(platform={"os": "linux", "architecture": arch}, mediaType="application/vnd.oci.image.manifest.v1+json")
+            manifests.append(descriptor)
+        index = write({"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json", "manifests": manifests})
+        (root / "oci-layout").write_text('{"imageLayoutVersion":"1.0.0"}')
+        (root / "index.json").write_text(json.dumps({"schemaVersion": 2, "manifests": [{"digest": "sha256:" + "f" * 64}, index]}))
+        return "registry.example.test/charlie@" + index["digest"], blobs / layer["digest"].split(":")[1]
+
+    def test_oci_source_binds_root_and_removes_alternate_scanner_candidates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); ref, _ = self.oci_fixture(root)
+            raw = module.prepare_oci_source(root, ref)
+            self.assertEqual("sha256:" + hashlib.sha256(raw).hexdigest(), ref.split("@")[1])
+            candidates = json.loads((root / "index.json").read_text())["manifests"]
+            self.assertEqual(len(candidates), 1)
+            authenticated = json.loads(raw)["manifests"]
+            self.assertIn(candidates[0], authenticated)
+            self.assertEqual(candidates[0]["platform"], {"os": "linux", "architecture": "amd64"})
+
+    def test_oci_source_rejects_changed_or_missing_layers(self):
+        for content in (b"tampered", None):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); ref, layer = self.oci_fixture(root)
+                layer.write_bytes(content) if content is not None else layer.unlink()
+                with self.assertRaises((ValueError, FileNotFoundError)):
+                    module.prepare_oci_source(root, ref)
+
+    def test_oci_source_rejects_unbound_root_and_missing_platform(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); ref, _ = self.oci_fixture(root, ("amd64",))
+            with self.assertRaisesRegex(ValueError, "required platforms"):
+                module.prepare_oci_source(root, ref)
+            with self.assertRaises(FileNotFoundError):
+                module.prepare_oci_source(root, ref.split("@")[0] + "@sha256:" + "0" * 64)
+
+    def test_oci_source_rejects_symlinked_index_and_layer(self):
+        for target in ("index", "layer"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); ref, layer = self.oci_fixture(root)
+                original = root / "index.json" if target == "index" else layer
+                moved = root / "original"; original.rename(moved); original.symlink_to(moved)
+                with self.assertRaisesRegex(ValueError, "unsafe OCI"):
+                    module.prepare_oci_source(root, ref)
+
+    def test_archive_scans_keep_the_signed_reference_in_the_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); layout = root / "oci"; ref, _ = self.oci_fixture(layout)
+            manifest = json.loads(json.dumps(self.manifest()).replace(REF, ref))
+            manifest["release"] = {"version": "v1.2.0"}
+            documents = {"manifest": manifest, "waivers": {"schema_version": 1, "waivers": []}, "license-policy": {"schema_version": 1, "allowed_spdx_ids": ["MIT"]}}
+            args = ["qualify-release-runtime-images.py", "--charlie-oci-layout", str(layout)]
+            for name, value in documents.items():
+                path = root / f"{name}.json"; path.write_text(json.dumps(value)); args.extend([f"--{name}", str(path)])
+            output = root / "report.json"
+            args.extend(["--work-dir", str(root / "evidence"), "--output", str(output)])
+            commands = []
+            def fake_run(command, destination):
+                commands.append(command)
+                self.assertIn(command[0], ("trivy", "syft"))
+                destination.write_text(json.dumps({"Results": [], "packages": []}))
+            with patch("sys.argv", args), patch.object(module, "run", fake_run):
+                module.main()
+            self.assertIn("--input", commands[0]); self.assertIn(str(layout), commands[0])
+            self.assertIn(f"oci-dir:{layout}", commands[1])
+            self.assertEqual(json.loads(output.read_text())["entries"][0]["reference"], ref)
+
     def manifest(self):
         artifact={"kind":"container_image","reference":REF}
         return {"astronomer":{"images":[{"reference":REF}],"runtime_images":[{"reference":REF}]},"flux":{"controllers":[{"reference":REF}]},"built_in_bundles":{"components":[{"images":[REF]}]},"charlie":{"artifact":artifact}}

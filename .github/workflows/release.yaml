@@ -551,6 +551,7 @@ jobs:
           work=$(mktemp -d)
           trap 'rm -rf "$work"' EXIT
           version="${CHARLIE_QUALIFIED_VERSION#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           gh release download "$CHARLIE_QUALIFIED_VERSION" \
             --repo AlphaBravoCompany/charlie \
             --dir "$work" \
@@ -571,6 +572,19 @@ jobs:
               raise SystemExit(f"signed Charlie release binds {got}, not {expected}")
           print(f"verified signed Charlie {release['tag']} {got}")
           PY
+          archive="$(jq -er '.artifacts.central_image.oci_layout' "$work/charlie-release-${version}.json")"
+          test "$archive" = "charlie-central-${version}-oci-layout.tar.gz"
+          gh release download "$CHARLIE_QUALIFIED_VERSION" --repo AlphaBravoCompany/charlie --dir "$work" \
+            --pattern "$archive" --pattern "${archive}.signature.sigstore.json"
+          cosign verify-blob --new-bundle-format --bundle "$work/${archive}.signature.sigstore.json" \
+            --certificate-identity "$CHARLIE_CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer "$CHARLIE_CERTIFICATE_OIDC_ISSUER" "$work/$archive" >/dev/null
+          mkdir "$RUNNER_TEMP/charlie-oci"
+          python3 - "$work/$archive" "$RUNNER_TEMP/charlie-oci" <<'PYOCI'
+          import sys, tarfile
+          with tarfile.open(sys.argv[1]) as archive:
+              archive.extractall(sys.argv[2], filter="data")
+          PYOCI
 
       - name: Generate and sign the single release manifest
         env:
@@ -620,22 +634,15 @@ jobs:
           sudo install -m 0755 trivy /usr/local/bin/trivy
 
       - name: Qualify every transitive runtime image
-        env:
-          CHARLIE_REGISTRY_TOKEN: ${{ secrets.CHARLIE_GH_TOKEN }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USERNAME: ${{ github.actor }}
         run: |
           set -euo pipefail
-          # Charlie is private. Use the same read credential that verified its
-          # signed release assets, then restore this workflow's publishing token.
-          echo "$CHARLIE_REGISTRY_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           ./scripts/qualify-release-runtime-images.py \
             --manifest release-manifest.json \
             --waivers deploy/release/runtime-image-waivers.json \
             --license-policy deploy/release/license-policy.json \
             --work-dir runtime-image-evidence \
+            --charlie-oci-layout "$RUNNER_TEMP/charlie-oci" \
             --output runtime-image-evidence.json
-          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
           cp deploy/release/runtime-image-waivers.json runtime-image-evidence/waivers.json
           cosign sign-blob --yes --bundle runtime-image-evidence.sigstore.json runtime-image-evidence.json
           tar -czf runtime-image-evidence.tar.gz runtime-image-evidence/
