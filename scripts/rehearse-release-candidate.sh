@@ -34,12 +34,16 @@ source_commit="$(jq -er '.head_sha|select(test("^[a-f0-9]{40}$"))' <<<"$run_json
 [[ "$(jq -r .path <<<"$run_json")" == ".github/workflows/release.yaml" && "$(jq -r .head_branch <<<"$run_json")" == "$target" ]] || die "source run identity mismatch"
 mkdir "$work/target" "$work/previous" "$work/backups" "$work/evidence"
 gh run download "$source_run_id" --repo "$repo" --pattern "*-${target}" --dir "$work/download"
+metadata_run_id="${RC_METADATA_RUN_ID:-$source_run_id}"
+[[ "$metadata_run_id" =~ ^[1-9][0-9]*$ ]] || die "metadata run id must be numeric"
+if [[ "$metadata_run_id" != "$source_run_id" ]]; then
+  gh run download "$metadata_run_id" --repo "$repo" --name "chart-${target}" --dir "$work/download/recovered-chart"
+fi
 while IFS= read -r -d '' file; do
   name="$(basename "$file")"; [[ ! -e "$work/target/$name" ]] || die "duplicate target artifact $name"; cp -- "$file" "$work/target/$name"
 done < <(find "$work/download" -type f -print0)
 for file in release-manifest.json release-manifest.sigstore.json "astronomer-${target#v}.tgz" server.digest worker.digest agent.digest migrate.digest frontend.digest shell.digest; do [[ -f "$work/target/$file" ]] || die "missing target artifact $file"; done
-identity="https://github.com/${repo}/.github/workflows/release.yaml@refs/tags/${target}"
-cosign verify-blob --bundle "$work/target/release-manifest.sigstore.json" --certificate-identity "$identity" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$work/target/release-manifest.json" >/dev/null
+python3 "$(dirname "${BASH_SOURCE[0]}")/verify-release-metadata.py" --directory "$work/target" --tag "$target" --source-commit "$source_commit" --source-run-id "$source_run_id"
 gh release download "$previous" --repo "$repo" --dir "$work/previous" --pattern "astronomer-${previous#v}.tgz" --pattern release-manifest.json --pattern release-manifest.sigstore.json
 cosign verify-blob --bundle "$work/previous/release-manifest.sigstore.json" --certificate-identity "https://github.com/${repo}/.github/workflows/release.yaml@refs/tags/${previous}" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$work/previous/release-manifest.json" >/dev/null
 previous_chart="$work/previous/astronomer-${previous#v}.tgz"

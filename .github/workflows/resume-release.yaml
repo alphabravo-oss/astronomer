@@ -24,6 +24,11 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_OWNER: alphabravo-oss
+  CHARLIE_QUALIFIED_VERSION: ${{ vars.CHARLIE_QUALIFIED_VERSION }}
+  CHARLIE_ARTIFACT_REFERENCE: ${{ vars.CHARLIE_ARTIFACT_REFERENCE }}
+  CHARLIE_CAPABILITY_DISCLOSURE_DIGEST: ${{ vars.CHARLIE_CAPABILITY_DISCLOSURE_DIGEST }}
+  CHARLIE_CERTIFICATE_IDENTITY: ${{ vars.CHARLIE_CERTIFICATE_IDENTITY }}
+  CHARLIE_CERTIFICATE_OIDC_ISSUER: ${{ vars.CHARLIE_CERTIFICATE_OIDC_ISSUER }}
 
 jobs:
   preflight:
@@ -33,6 +38,8 @@ jobs:
       image-tag: ${{ steps.identity.outputs.image_tag }}
       chart-version: ${{ steps.identity.outputs.chart_version }}
       tag-commit: ${{ steps.identity.outputs.tag_commit }}
+      metadata-required: ${{ steps.identity.outputs.metadata_required }}
+      metadata-run-id: ${{ steps.identity.outputs.metadata_run_id }}
     steps:
       - name: Checkout immutable tag
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -81,7 +88,7 @@ jobs:
 
           artifacts="$(gh api --paginate "repos/${REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.expired == false) | .name')"
-          for name in chart delivery-artifacts server worker agent migrate shell dr frontend; do
+          for name in delivery-artifacts server worker agent migrate shell dr frontend; do
             case "$name" in
               chart) expected="chart-${TAG}" ;;
               delivery-artifacts) expected="delivery-artifacts-${TAG}" ;;
@@ -89,6 +96,19 @@ jobs:
             esac
             grep -Fxq "$expected" <<<"$artifacts"
           done
+
+          metadata_required=false
+          metadata_run_id="$SOURCE_RUN_ID"
+          if ! grep -Fxq "chart-${TAG}" <<<"$artifacts"; then
+            test "$TAG" = v1.2.0
+            test "$tag_commit" = 4a9986c22a582d71273da61e398b03f0dde4e8d8
+            test "$SOURCE_RUN_ID" = 37705872945
+            test "$GITHUB_REF" = refs/heads/main
+            metadata_required=true
+            metadata_run_id="$GITHUB_RUN_ID"
+          fi
+          echo "metadata_required=$metadata_required" >> "$GITHUB_OUTPUT"
+          echo "metadata_run_id=$metadata_run_id" >> "$GITHUB_OUTPUT"
 
           echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "chart_version=$chart_version" >> "$GITHUB_OUTPUT"
@@ -126,6 +146,7 @@ jobs:
             agent:astronomer-go-agent \
             migrate:astronomer-go-migrate \
             shell:astronomer-shell \
+            dr:astronomer-dr \
             frontend:astronomer-frontend; do
             component="${pair%%:*}"
             image="${pair#*:}"
@@ -158,6 +179,7 @@ jobs:
           version: v3.16.2
 
       - name: Verify exact published chart
+        if: steps.identity.outputs.metadata_required != 'true'
         env:
           CHART_VERSION: ${{ steps.identity.outputs.chart_version }}
           IMAGE_TAG: ${{ steps.identity.outputs.image_tag }}
@@ -183,6 +205,7 @@ jobs:
           test "$app_version" = "$CHART_VERSION"
 
       - name: Verify signed release manifest and delivery subjects
+        if: steps.identity.outputs.metadata_required != 'true'
         env:
           IMAGE_TAG: ${{ steps.identity.outputs.image_tag }}
           TAG_COMMIT: ${{ steps.identity.outputs.tag_commit }}
@@ -214,9 +237,298 @@ jobs:
               "$subject" >/dev/null
           done
 
+      - name: Verify original delivery signatures before metadata recovery
+        if: steps.identity.outputs.metadata_required == 'true'
+        env:
+          IMAGE_TAG: ${{ steps.identity.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          for name in astronomer-flux-distribution astronomer-platform-bundles; do
+            subject="$(cat "source-artifacts/${name}.digest")"
+            [[ "$subject" =~ ^ghcr\.io/alphabravo-oss/${name}@sha256:[a-f0-9]{64}$ ]]
+            cosign verify --certificate-identity "https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${IMAGE_TAG}" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$subject" >/dev/null
+          done
+
+  complete-metadata:
+    name: complete missing metadata from immutable tagged source
+    needs: preflight
+    if: needs.preflight.outputs.metadata-required == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      attestations: write
+      artifact-metadata: write
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+
+      - name: Install Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.16.2
+
+      - name: Check build capacity
+        run: ./scripts/check-build-capacity.sh --path .
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with:
+          cosign-release: "v2.5.3"
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          syft-version: "v1.16.0"
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install pinned ORAS
+        run: go install oras.land/oras/cmd/oras@v1.2.2
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download exact image identities
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          pattern: sbom-*-${{ needs.preflight.outputs.image-tag }}
+          path: release-images
+          merge-multiple: true
+
+      - name: Download delivery artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+          name: delivery-artifacts-${{ needs.preflight.outputs.image-tag }}
+          path: release-delivery
+
+      - name: Lint dependency-free management chart
+        run: |
+          test -z "$(find deploy/chart/charts -mindepth 1 -maxdepth 1 -type f -print -quit 2>/dev/null)"
+          test "$(helm dependency list deploy/chart 2>/dev/null | awk 'NR > 1 && NF {count++} END {print count+0}')" -eq 0
+          openssl rand -base64 48 > /tmp/release-lint-jwt-key
+          openssl rand -base64 32 | tr '+/' '-_' > /tmp/release-lint-encryption-key
+          helm lint deploy/chart \
+            -f deploy/chart/values-dev.yaml \
+            --set-file secrets.secretKey=/tmp/release-lint-jwt-key \
+            --set-file secrets.encryptionKey=/tmp/release-lint-encryption-key
+
+      - name: Resolve every tagged runtime image
+        run: ./scripts/resolve-release-images.py --inventory deploy/chart/images.txt --output resolved-images.json
+
+      - name: Package, push, sign, and attest exact chart
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+          CHART_VERSION: ${{ needs.preflight.outputs.chart-version }}
+        run: |
+          set -euo pipefail
+          echo "$GHCR_TOKEN" | helm registry login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          echo "$GHCR_TOKEN" | oras login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          helm package deploy/chart --version "$CHART_VERSION"
+          chart_digest=""
+          if helm show chart "oci://ghcr.io/alphabravo-oss/charts/astronomer" --version "$CHART_VERSION" >/dev/null 2>&1; then
+            chart_digest="$(oras resolve "ghcr.io/alphabravo-oss/charts/astronomer:${CHART_VERSION}")"
+            mkdir -p existing-chart packaged-chart published-chart
+            helm pull "oci://ghcr.io/alphabravo-oss/charts/astronomer" --version "$CHART_VERSION" --destination existing-chart
+            tar -xzf "astronomer-${CHART_VERSION}.tgz" -C packaged-chart
+            tar -xzf "existing-chart/astronomer-${CHART_VERSION}.tgz" -C published-chart
+            diff --no-dereference --recursive --brief packaged-chart published-chart || {
+              echo "refusing to reuse astronomer:${CHART_VERSION}: published chart contents differ from this commit" >&2
+              exit 1
+            }
+            cp "existing-chart/astronomer-${CHART_VERSION}.tgz" "astronomer-${CHART_VERSION}.tgz"
+            echo "reusing already-published immutable chart astronomer:${CHART_VERSION}@${chart_digest}"
+          else
+            helm push "astronomer-${CHART_VERSION}.tgz" "oci://ghcr.io/alphabravo-oss/charts" 2>&1 | tee chart-push.log
+            chart_digest="$(awk '$1 == "Digest:" {digest=$2} END {print digest}' chart-push.log)"
+          fi
+          [[ "$chart_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          chart_ref="ghcr.io/alphabravo-oss/charts/astronomer@${chart_digest}"
+          cosign sign --yes "$chart_ref"
+          syft "file:astronomer-${CHART_VERSION}.tgz" -o spdx-json > sbom-chart.spdx.json
+          cosign attest --yes --predicate sbom-chart.spdx.json --type spdxjson "$chart_ref"
+          jq -n \
+            --arg source "https://github.com/${{ github.repository }}@${{ needs.preflight.outputs.tag-commit }}" \
+            --arg workflow "https://github.com/${{ github.workflow_ref }}" \
+            '{builder:{id:$workflow},buildType:"https://astronomer.io/build-types/helm-chart-v1",invocation:{configSource:{uri:$source}}}' \
+            > provenance-chart.slsa.json
+          cosign attest --yes --predicate provenance-chart.slsa.json --type slsaprovenance "$chart_ref"
+          printf '%s\n' "$chart_ref" > chart.digest
+
+      - name: Verify the qualified Charlie artifact
+        env:
+          GH_TOKEN: ${{ secrets.CHARLIE_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}"
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          version="${CHARLIE_QUALIFIED_VERSION#v}"
+          gh release download "$CHARLIE_QUALIFIED_VERSION" \
+            --repo AlphaBravoCompany/charlie \
+            --dir "$work" \
+            --pattern "charlie-release-${version}.json" \
+            --pattern "charlie-release-${version}.json.signature.sigstore.json"
+          cosign verify-blob --new-bundle-format \
+            --bundle "$work/charlie-release-${version}.json.signature.sigstore.json" \
+            --certificate-identity "$CHARLIE_CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer "$CHARLIE_CERTIFICATE_OIDC_ISSUER" \
+            "$work/charlie-release-${version}.json" >/dev/null
+          python3 - "$work/charlie-release-${version}.json" "$CHARLIE_ARTIFACT_REFERENCE" <<'PY'
+          import json, sys
+          release = json.load(open(sys.argv[1], encoding="utf-8"))
+          expected = sys.argv[2]
+          image = release["artifacts"]["central_image"]
+          got = image["name"] + "@" + image["digest"]
+          if got != expected:
+              raise SystemExit(f"signed Charlie release binds {got}, not {expected}")
+          print(f"verified signed Charlie {release['tag']} {got}")
+          PY
+
+      - name: Generate and sign the single release manifest
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          set -euo pipefail
+          source_epoch="$(git show -s --format=%ct '${{ needs.preflight.outputs.tag-commit }}')"
+          ./scripts/generate-release-manifest.py \
+            --version "$IMAGE_TAG" \
+            --source-commit "${{ needs.preflight.outputs.tag-commit }}" \
+            --source-date-epoch "$source_epoch" \
+            --chart-reference "$(cat chart.digest)" \
+            --chart-package "astronomer-${{ needs.preflight.outputs.chart-version }}.tgz" \
+            --image-digest-dir release-images \
+            --resolved-images resolved-images.json \
+            --flux-reference "$(cat release-delivery/astronomer-flux-distribution.digest)" \
+            --flux-archive release-delivery/flux-distribution.tar.gz \
+            --bundles-reference "$(cat release-delivery/astronomer-platform-bundles.digest)" \
+            --bundles-archive release-delivery/builtin-bundles.tar.gz \
+            --charlie-version "$CHARLIE_QUALIFIED_VERSION" \
+            --charlie-reference "$CHARLIE_ARTIFACT_REFERENCE" \
+            --charlie-capability-digest "$CHARLIE_CAPABILITY_DISCLOSURE_DIGEST" \
+            --charlie-certificate-identity "$CHARLIE_CERTIFICATE_IDENTITY" \
+            --charlie-certificate-oidc-issuer "$CHARLIE_CERTIFICATE_OIDC_ISSUER" \
+            --output release-manifest.json
+          cosign sign-blob --yes --bundle release-manifest.sigstore.json release-manifest.json
+          manifest_tag="ghcr.io/alphabravo-oss/astronomer-release-manifest:${IMAGE_TAG}"
+          if manifest_digest="$(oras resolve "$manifest_tag" 2>/dev/null)"; then
+            mkdir existing-manifest
+            oras pull "${manifest_tag%:*}@${manifest_digest}" -o existing-manifest
+            cmp release-manifest.json existing-manifest/release-manifest.json
+          else
+            oras push --format json "$manifest_tag" \
+              --artifact-type application/vnd.astronomer.release-manifest.v1+json \
+              release-manifest.json:application/vnd.astronomer.release-manifest.v1+json > release-manifest.push.json
+            manifest_digest="$(jq -er '.digest | select(test("^sha256:[a-f0-9]{64}$"))' release-manifest.push.json)"
+          fi
+          [[ "$manifest_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          manifest_ref="ghcr.io/alphabravo-oss/astronomer-release-manifest@${manifest_digest}"
+          cosign sign --yes "$manifest_ref"
+          printf '%s\n' "$manifest_ref" > release-manifest.digest
+          cp deploy/chart/values-production.yaml values-production.yaml
+
+      - name: Install checksum-verified Trivy
+        env:
+          TRIVY_VERSION: 0.75.0
+        run: |
+          set -euo pipefail
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt"
+          grep " trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz$" "trivy_${TRIVY_VERSION}_checksums.txt" | sha256sum --check
+          tar -xzf "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" trivy
+          sudo install -m 0755 trivy /usr/local/bin/trivy
+
+      - name: Qualify every transitive runtime image
+        env:
+          CHARLIE_REGISTRY_TOKEN: ${{ secrets.CHARLIE_GH_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          # Charlie is private. Use the same read credential that verified its
+          # signed release assets, then restore this workflow's publishing token.
+          echo "$CHARLIE_REGISTRY_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          ./scripts/qualify-release-runtime-images.py \
+            --manifest release-manifest.json \
+            --waivers deploy/release/runtime-image-waivers.json \
+            --license-policy deploy/release/license-policy.json \
+            --work-dir runtime-image-evidence \
+            --output runtime-image-evidence.json
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          cp deploy/release/runtime-image-waivers.json runtime-image-evidence/waivers.json
+          cosign sign-blob --yes --bundle runtime-image-evidence.sigstore.json runtime-image-evidence.json
+          tar -czf runtime-image-evidence.tar.gz runtime-image-evidence/
+
+      - name: Bind recovered metadata to the interrupted release
+        env:
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.tag-commit }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          PRODUCER_COMMIT: ${{ github.sha }}
+        run: |
+          python3 - <<'PYPROOF'
+          import hashlib, json, os
+          from pathlib import Path
+          names = ("release-manifest.json", "runtime-image-evidence.json", "runtime-image-evidence.tar.gz", "astronomer-1.2.0.tgz")
+          record = {"schema_version": 1, "tag": "v1.2.0", "source_commit": os.environ["SOURCE_COMMIT"],
+                    "source_run_id": os.environ["SOURCE_RUN_ID"], "producer_run_id": os.environ["GITHUB_RUN_ID"],
+                    "producer_commit": os.environ["PRODUCER_COMMIT"],
+                    "files": {name: "sha256:" + hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in names}}
+          Path("release-recovery.json").write_text(json.dumps(record, indent=2) + "\n")
+          PYPROOF
+          cosign sign-blob --yes --bundle release-recovery.sigstore.json release-recovery.json
+
+      - name: Attest packaged chart file
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: astronomer-${{ needs.preflight.outputs.chart-version }}.tgz
+
+      - name: Upload complete signed release unit
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: chart-${{ needs.preflight.outputs.image-tag }}
+          path: |
+            astronomer-${{ needs.preflight.outputs.chart-version }}.tgz
+            chart.digest
+            sbom-chart.spdx.json
+            provenance-chart.slsa.json
+            release-manifest.json
+            release-manifest.sigstore.json
+            release-manifest.digest
+            runtime-image-evidence.json
+            runtime-image-evidence.sigstore.json
+            runtime-image-evidence.tar.gz
+            resolved-images.json
+            release-recovery.json
+            release-recovery.sigstore.json
+            values-production.yaml
+          retention-days: 90
+
   qualify:
     name: install exact release on a clean cluster · Kubernetes ${{ matrix.kubernetes_minor }}
-    needs: preflight
+    needs: [preflight, complete-metadata]
+    if: always() && !cancelled() && needs.preflight.result == 'success' && (needs.complete-metadata.result == 'success' || needs.complete-metadata.result == 'skipped')
     runs-on: ubuntu-22.04
     timeout-minutes: 35
     strategy:
@@ -234,6 +546,13 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+
+      - name: Checkout recovery verifier
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: recovery-tools
           persist-credentials: false
 
       - name: Install checksum-verified k3d
@@ -268,20 +587,19 @@ jobs:
       - name: Download signed release manifest
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          run-id: ${{ inputs.source_run_id }}
+          run-id: ${{ needs.preflight.outputs.metadata-run-id }}
           github-token: ${{ github.token }}
           name: chart-${{ needs.preflight.outputs.image-tag }}
           path: release-unit
 
-      - name: Verify signed release manifest
+      - name: Verify signed release metadata and chart
         env:
           IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.tag-commit }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
         run: |
-          cosign verify-blob \
-            --bundle release-unit/release-manifest.sigstore.json \
-            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/release.yaml@refs/tags/${IMAGE_TAG}" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            release-unit/release-manifest.json
+          python3 recovery-tools/scripts/verify-release-metadata.py --directory release-unit --tag "$IMAGE_TAG" \
+            --source-commit "$SOURCE_COMMIT" --source-run-id "$SOURCE_RUN_ID" --subject chart
 
       - name: Load immutable image references
         run: |
@@ -412,7 +730,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: refs/tags/${{ needs.preflight.outputs.image-tag }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with: {version: v3.16.2}
@@ -430,6 +748,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RC_DISPOSABLE_ACK: destroy-astronomer-rc-${{ github.run_id }}
+          RC_METADATA_RUN_ID: ${{ needs.preflight.outputs.metadata-run-id }}
           RC_EVIDENCE_OUTPUT: rc-rehearsal-evidence.json
         run: ./scripts/rehearse-release-candidate.sh "${{ needs.preflight.outputs.image-tag }}" "${{ inputs.source_run_id }}" "v1.1.0"
       - name: Sign sanitized RC evidence
@@ -471,6 +790,12 @@ jobs:
           github-token: ${{ github.token }}
           pattern: '*-${{ needs.preflight.outputs.image-tag }}'
           merge-multiple: true
+
+      - name: Download completed metadata
+        if: needs.preflight.outputs.metadata-required == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: chart-${{ needs.preflight.outputs.image-tag }}
 
       - name: Install cosign verifier for protected qualifications
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
@@ -570,6 +895,10 @@ jobs:
         run: |
           git show "refs/tags/$TAG:CHANGELOG.md" | awk '/^## Unreleased/{emit=1; next} /^## /{if (emit) exit} emit' > RELEASE_NOTES.md
           test -s RELEASE_NOTES.md
+          if [[ -f release-recovery.json ]]; then
+            producer_commit="$(jq -er .producer_commit release-recovery.json)"
+            printf '\nRelease metadata was completed by the signed recovery workflow. Application images and delivery bundles retain their original tagged source and signatures. For upgrades use operator tools from https://github.com/alphabravo-oss/astronomer/tree/%s/scripts (including upgrade-release.sh and verify-release-metadata.py), or the included air-gap kit. See release-recovery.json for the exact source and producer identities.\n' "$producer_commit" >> RELEASE_NOTES.md
+          fi
           sort --unique ./*.digest > RELEASE_SUBJECTS
           jq -r '.astronomer.images[].reference' release-manifest.json | sort --unique > RELEASE_IMAGES
           find . -maxdepth 1 -type f \( \
@@ -577,7 +906,7 @@ jobs:
               -name 'sbom-*.spdx.json' -o -name 'provenance-*.slsa.json' -o \
               -name 'release-manifest.json' -o -name 'release-manifest.sigstore.json' -o \
               -name 'runtime-image-evidence.json' -o -name 'runtime-image-evidence.sigstore.json' -o \
-              -name 'RELEASE_NOTES.md' -o \
+              -name 'release-recovery*.json' -o -name 'RELEASE_NOTES.md' -o \
               -name 'rc-rehearsal-evidence*.json' -o -name 'release-qualification.json' -o \
               -name 'values-production.yaml' -o \
               -name 'astronomer-images.txt' -o \
@@ -586,6 +915,9 @@ jobs:
           qualification_assets=()
           if [[ "$TAG" == v1.2.0 ]]; then
             qualification_assets=(rc-rehearsal-evidence.json rc-rehearsal-evidence.sigstore.json release-qualification.json)
+          fi
+          if [[ -f release-recovery.json ]]; then
+            qualification_assets+=(release-recovery.json release-recovery.sigstore.json)
           fi
           gh release create "$TAG" "${qualification_assets[@]}" \
             --repo "$REPOSITORY" \

@@ -180,17 +180,35 @@ must agree. For each first-party chart image (`server`, `worker`, `agent`,
    browsing without a registry pull.
 7. Pushes the exact OCI chart, then installs that published chart and its
    remote images on a clean k3d cluster with the pinned Gateway API/NGF pair.
-8. Only after qualification, promotes the six images to the mutable `latest`
-   convenience channel and creates the GitHub Release with chart, SBOMs, and
-   checksums. Production upgrades always use the exact tag/version, not
-   `latest`.
+8. Only after qualification, creates the GitHub Release with the seven exact
+   images, chart, SBOMs, signatures, retained scan findings, and checksums.
+   Production upgrades use the exact tag/version; no mutable `latest` channel
+   is published.
 
 If the tag workflow is interrupted after publishing its immutable images or
 chart, do not rerun it and do not move the tag. `resume-release.yaml` accepts
 the tag and original run ID, then revalidates the public-main commit, original
 run identity, unexpired artifact set, signed image digests, multi-platform
 indexes, and byte-identical OCI chart. It repeats the clean-cluster install and
-only then performs the withheld `latest` promotion and GitHub Release creation.
+only then creates the GitHub Release.
+
+For the v1.2.0 packaging interruption in run `37705872945` only, recovery can
+complete a missing chart and manifest from immutable commit
+`4a9986c22a582d71273da61e398b03f0dde4e8d8`. It never rebuilds or replaces the
+original images or delivery bundles. The recovered chart, manifest, and runtime
+evidence are signed by `resume-release.yaml@refs/heads/main`; a separately signed
+`release-recovery.json` binds their file hashes to that original tag, commit,
+and run, and records the recovery producer commit/run. The verifier accepts no
+other source or caller-selected signer. The manifest's delivery-artifact trust
+policy remains the original tag workflow identity.
+
+Use the recovery-aware `scripts/upgrade-release.sh` and adjacent
+`scripts/verify-release-metadata.py` from the recovery commit when installing
+v1.2.0. The published air-gap kit contains the verifier and recovery proof.
+Scripts in the immutable application tag predate this recovery and reject its
+metadata signature. The publication step retains the proof and identifies the
+operator-tools commit in release notes. Kubernetes installation and
+v1.1.0 upgrade/backup/clean-restore qualification still run before publication.
 
 The verifier-side runbook at
 [`../../docs/verify-images.md`](../../docs/verify-images.md) documents how

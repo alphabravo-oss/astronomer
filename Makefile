@@ -219,7 +219,7 @@ check-build-capacity: ## Refuse build/release work when filesystem headroom is u
 release-contract-check: ## Verify deterministic release, Flux/bundle, image, and air-gap contracts
 	./scripts/check-build-capacity.sh --path .
 	./scripts/compatibility-contract.py check
-	python3 -m unittest scripts/tests/release_manifest_test.py scripts/tests/mirror_release_test.py scripts/tests/resolve_release_images_test.py scripts/tests/airgap_kit_test.py scripts/tests/validate_release_approval_test.py scripts/tests/validate_automated_release_test.py scripts/tests/qualify_release_runtime_images_test.py
+	python3 -m unittest scripts/tests/release_manifest_test.py scripts/tests/mirror_release_test.py scripts/tests/resolve_release_images_test.py scripts/tests/airgap_kit_test.py scripts/tests/validate_release_approval_test.py scripts/tests/validate_automated_release_test.py scripts/tests/verify_release_metadata_test.py scripts/tests/qualify_release_runtime_images_test.py
 	./scripts/tests/release_artifacts_test.sh
 	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; ./scripts/extract-images.sh >"$$tmp"; diff -u deploy/chart/images.txt "$$tmp"
 	go test ./deploy/bundles ./internal/releasecontract ./deploy -run 'TestRelease|TestInterruptedRelease|TestExactRelease|TestSixImage|TestPromotion|TestV120' -count=1

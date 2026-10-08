@@ -15,6 +15,9 @@ spec.loader.exec_module(approval)
 spec = importlib.util.spec_from_file_location("runtime", Path(__file__).with_name("qualify-release-runtime-images.py"))
 runtime_policy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runtime_policy)
+spec = importlib.util.spec_from_file_location("metadata", Path(__file__).with_name("verify-release-metadata.py"))
+metadata = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(metadata)
 
 
 def validate_waivers(runtime, directory, tag, now):
@@ -57,8 +60,14 @@ def validate(args, directory=Path("."), now=None):
     }
     if args.rc_identity not in allowed_rc:
         raise ValueError("unexpected rehearsal producer workflow")
+    metadata_signer = release_identity
+    recovered = any((directory / name).exists() for name in ("release-recovery.json", "release-recovery.sigstore.json"))
+    if recovered:
+        if args.repository != metadata.REPOSITORY:
+            raise ValueError("recovery repository mismatch")
+        metadata_signer = metadata.metadata_identity(directory, args.tag, args.source_commit, args.source_run_id)
     values = {}
-    for name, identity in (("release-manifest", release_identity), ("runtime-image-evidence", release_identity), ("rc-rehearsal-evidence", args.rc_identity)):
+    for name, identity in (("release-manifest", metadata_signer), ("runtime-image-evidence", metadata_signer), ("rc-rehearsal-evidence", args.rc_identity)):
         path = directory / f"{name}.json"
         values[name] = approval.read_json(path, name)
         approval.verify_signature(path, directory / f"{name}.sigstore.json", identity)
@@ -83,6 +92,7 @@ def validate(args, directory=Path("."), now=None):
         "tag": args.tag, "source_commit": args.source_commit,
         "source_run_id": args.source_run_id, "producer_run_id": args.producer_run_id,
         "release_manifest_sha256": digest,
+        "release_recovery_sha256": approval.sha256(directory / "release-recovery.json") if recovered else None,
         "runtime_image_evidence_sha256": approval.sha256(directory / "runtime-image-evidence.json"),
         "rc_rehearsal_evidence_sha256": approval.sha256(directory / "rc-rehearsal-evidence.json"),
         "external_certifications": {name: "deferred" for name in (

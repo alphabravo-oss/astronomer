@@ -102,7 +102,7 @@ fi
 [[ "$min_ready_nodes" =~ ^[1-9][0-9]*$ ]] || die "MIN_READY_NODES must be a positive integer"
 [[ "$min_backup_free_kib" =~ ^[1-9][0-9]*$ ]] || die "MIN_BACKUP_FREE_KIB must be a positive integer"
 
-for tool in helm kubectl curl gh cosign sha256sum cmp jq awk sort df grep tar; do
+for tool in python3 helm kubectl curl gh cosign sha256sum cmp jq awk sort df grep tar; do
   command -v "$tool" >/dev/null 2>&1 || die "missing required tool: $tool"
 done
 helm upgrade --help | grep -q -- '--reset-then-reuse-values' || \
@@ -170,6 +170,12 @@ if [[ -n "$release_artifact_dir" ]]; then
     [[ -f "$release_artifact_dir/$asset" && ! -L "$release_artifact_dir/$asset" ]] || die "pre-promotion artifact is missing regular file $asset"
     cp -- "$release_artifact_dir/$asset" "$backup_dir/release-assets/$asset"
   done
+  for asset in release-recovery.json release-recovery.sigstore.json; do
+    if [[ -e "$release_artifact_dir/$asset" ]]; then
+      [[ -f "$release_artifact_dir/$asset" && ! -L "$release_artifact_dir/$asset" ]] || die "invalid recovery file $asset"
+      cp -- "$release_artifact_dir/$asset" "$backup_dir/release-assets/$asset"
+    fi
+  done
   if [[ -f "$release_artifact_dir/RELEASE_IMAGES" && ! -L "$release_artifact_dir/RELEASE_IMAGES" ]]; then
     cp -- "$release_artifact_dir/RELEASE_IMAGES" "$backup_dir/release-assets/RELEASE_IMAGES"
   else
@@ -194,7 +200,7 @@ else
   gh release download "$image_tag" --repo "$release_repo" \
     --dir "$backup_dir/release-assets" \
     --pattern RELEASE_IMAGES --pattern SHA256SUMS \
-    --pattern release-manifest.json --pattern release-manifest.sigstore.json \
+    --pattern release-manifest.json --pattern release-manifest.sigstore.json --pattern 'release-recovery*.json' \
     --pattern "astronomer-${chart_version}.tgz"
 fi
 
@@ -245,11 +251,8 @@ runtime_digest() {
 }
 
 release_identity="https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${image_tag}"
-cosign verify-blob \
-  --bundle "$backup_dir/release-assets/release-manifest.sigstore.json" \
-  --certificate-identity "$release_identity" \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  "$backup_dir/release-assets/release-manifest.json" >/dev/null
+python3 "$(dirname "${BASH_SOURCE[0]}")/verify-release-metadata.py" \
+  --directory "$backup_dir/release-assets" --tag "$image_tag"
 jq -e --arg version "$image_tag" --arg chart_digest "sha256:$(sha256sum "$backup_dir/release-assets/astronomer-${chart_version}.tgz" | awk '{print $1}')" '
   .schema_version == 1 and .release.version == $version and
   .astronomer.chart.kind == "helm_chart" and .astronomer.chart.content_digest == $chart_digest
