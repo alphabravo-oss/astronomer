@@ -176,8 +176,10 @@ func TestInflightRequestsAreBounded(t *testing.T) {
 	// originator is blocked on a stream that would otherwise never produce a
 	// frame. Successful replies take the chunked path (K8S_STREAM_FRAME), so a
 	// K8S_RESPONSE here is unambiguously a rejection.
+	// Shedding can finish before an admitted upstream request buffers its body.
+	// Wait for both observations before checking the independent memory bound.
 	waitFor(t, 20*time.Second, "the burst to be either admitted past the bound or shed with a reply each", func() bool {
-		return handlers.high() > maxInflight || ts.countReceived(protocol.MsgK8sResponse) >= burst-maxInflight
+		return handlers.high() > maxInflight || (budget.Peak() > 0 && ts.countReceived(protocol.MsgK8sResponse) >= burst-maxInflight)
 	})
 
 	if got := handlers.high(); got > maxInflight {
