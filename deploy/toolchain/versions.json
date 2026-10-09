@@ -4134,6 +4134,118 @@
       }
     },
     {
+      "artifacts": [
+        {
+          "digest": "sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d",
+          "platformDigests": {
+            "linux/amd64": "sha256:8d298cb81ca94e875d31e804e5aa10b56355d1d7d95d7e1ef8a8d9239f15ada0",
+            "linux/arm64": "sha256:703b5fec9c05b61eaf93b0291f08b0274fa4e00770fbeda8903a8fe3c56fd2f7"
+          },
+          "platforms": [
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "provenance": "docs/assurance/technology-guide/w12/kubernetes-primary/images.json: immutable official OCI indexes, platform manifests and configuration bytes verified",
+          "reference": "rancher/k3s:v1.37.1-k3s1@sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d",
+          "verifiedAt": "2026-10-09T22:34:47.389529+00:00"
+        }
+      ],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "kubernetes/lanes/1.37/version",
+          "value": "{version}"
+        },
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "kubernetes/lanes/1.37/image",
+          "value": "{reference}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T22:45:10.041962+00:00",
+        "provenance": "sha256:8a7655ac83f3b35374f04f0f413ee135c654ae9d25053735ae2106672167d654",
+        "releasedAt": "2026-09-30T16:10:38Z",
+        "stable": true,
+        "version": "1.37.1+k3s1"
+      },
+      "ecosystem": "image",
+      "id": "k3s-experimental-test-runtime",
+      "owner": "platform/QA (W12)",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owned disposable K3s characterization lane only. CNPG1.30 supports Kubernetes1.36 and tests but does not support1.37; vendor vanilla distribution support is separate. Actual full application qualification remains candidate-bound.",
+      "selected": "1.37.1+k3s1",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/k3s-io/k3s/releases"
+      }
+    },
+    {
+      "artifacts": [
+        {
+          "digest": "sha256:057cfd5a9d51b89f1f0ee139c28d5d5fdd5aa7ddeac2742a0ba90c6dbc0329bb",
+          "platformDigests": {
+            "linux/amd64": "sha256:81fc7349ba265f842f9b67311fabd9e7d72698798ba513b7cdf41ffdf1e923e4",
+            "linux/arm64": "sha256:4ceb591dd1e592b98b7c51ff3bdb7143914e1bee0677e7bf3c4f6addde2c93b3"
+          },
+          "platforms": [
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "provenance": "docs/assurance/technology-guide/w12/kubernetes-primary/images.json: immutable official OCI indexes, platform manifests and configuration bytes verified",
+          "reference": "rancher/k3s:v1.36.5-k3s1@sha256:057cfd5a9d51b89f1f0ee139c28d5d5fdd5aa7ddeac2742a0ba90c6dbc0329bb",
+          "verifiedAt": "2026-10-09T22:34:47.389529+00:00"
+        }
+      ],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "kubernetes/lanes/1.36/version",
+          "value": "{version}"
+        },
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "kubernetes/lanes/1.36/image",
+          "value": "{reference}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T22:45:10.041962+00:00",
+        "provenance": "sha256:8a7655ac83f3b35374f04f0f413ee135c654ae9d25053735ae2106672167d654",
+        "releasedAt": "2026-09-30T16:10:38Z",
+        "stable": true,
+        "version": "1.37.1+k3s1"
+      },
+      "ecosystem": "image",
+      "exception": {
+        "createdAt": "2026-10-09T22:45:10.041962+00:00",
+        "evidence": "docs/assurance/technology-guide/w12/kubernetes-primary/k3s-transition.json; https://cloudnative-pg.io/docs/1.30/supported_releases/",
+        "exitCondition": "Upstream CNPG explicitly supports Kubernetes1.37 and candidate-specific actual application, Flux, client-go/Helm/skew, recovery and browser lanes pass; then review promotion without removing previous-minor characterization.",
+        "owner": "platform/QA (W12)",
+        "reason": "Current K3s1.37.1 is experimental with CNPG1.30;1.36.5 is the explicit vendor-supported Kubernetes minor fixture lane. No automatic production upgrade or universal supported-distribution claim.",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "k3s-supported-test-runtime",
+      "owner": "platform/QA (W12)",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owned disposable K3s characterization lane only. CNPG1.30 supports Kubernetes1.36 and tests but does not support1.37; vendor vanilla distribution support is separate. Actual full application qualification remains candidate-bound.",
+      "selected": "1.36.5+k3s1",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/k3s-io/k3s/releases"
+      }
+    },
+    {
       "artifacts": [],
       "consumers": [],
       "discovery": {

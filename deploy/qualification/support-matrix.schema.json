@@ -1,0 +1,197 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "observedAt",
+    "reviewBy",
+    "owner",
+    "runtime",
+    "offeringInventory",
+    "lanes",
+    "claims",
+    "upstream",
+    "limits"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "observedAt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewBy": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runtime": {
+      "const": "deploy/qualification/runtime.json"
+    },
+    "offeringInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "functionalInventory",
+        "functionalRows",
+        "policy"
+      ],
+      "properties": {
+        "path": {
+          "const": "advisor-plans/028-offering-source-inventory.json"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "functionalInventory": {
+          "const": "advisor-plans/028-offering-test-inventory.md"
+        },
+        "functionalRows": {
+          "const": 174
+        },
+        "policy": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "lanes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "postgres17",
+          "postgres18",
+          "postgres17-race",
+          "postgres18-race",
+          "worker17",
+          "worker18",
+          "worker17-race",
+          "worker18-race",
+          "process-restart17",
+          "process-restart18",
+          "redis-outage17",
+          "redis-outage18",
+          "postgres-outage17",
+          "postgres-outage18",
+          "streaming17",
+          "streaming18",
+          "migrations",
+          "components",
+          "live-chromium",
+          "live-firefox",
+          "live-webkit"
+        ]
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 18,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "source",
+          "classification",
+          "scope",
+          "owner",
+          "reviewBy",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]+$"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "classification": {
+            "enum": [
+              "implemented",
+              "exercised_locally",
+              "externally_qualified",
+              "deferred",
+              "unsupported",
+              "unknown"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reviewBy": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "sha256"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "upstream": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "url",
+          "fact"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "pattern": "^https://"
+          },
+          "fact": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

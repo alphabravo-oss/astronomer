@@ -475,3 +475,8 @@ categorical-contract-check: ## Verify canonical category/database/model/browser 
 
 sdk-v1-compatibility: ## Compile every released SDK field/function/method against current SDK
 	./scripts/check-sdk-v1-compatibility.sh
+
+.PHONY: support-matrix-check
+support-matrix-check: ## Validate scoped support claims and executable qualification lanes
+	python3 scripts/runtime-qualification-matrix.py --check
+	python3 -m unittest discover -s scripts/tests -p 'runtime_qualification_matrix_test.py'

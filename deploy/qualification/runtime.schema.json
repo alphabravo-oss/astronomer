@@ -10,7 +10,8 @@
     "gotestsum",
     "requiredExtensions",
     "sourceEvidence",
-    "limits"
+    "limits",
+    "kubernetes"
   ],
   "properties": {
     "schemaVersion": {
@@ -118,6 +119,78 @@
       "items": {
         "type": "string",
         "minLength": 1
+      }
+    },
+    "kubernetes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultMinor",
+        "lanes",
+        "kubectlPolicy"
+      ],
+      "properties": {
+        "defaultMinor": {
+          "const": "1.36"
+        },
+        "lanes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "1.36",
+            "1.37"
+          ],
+          "properties": {
+            "1.36": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "version",
+                "image",
+                "qualification"
+              ],
+              "properties": {
+                "version": {
+                  "const": "1.36.5+k3s1"
+                },
+                "image": {
+                  "type": "string",
+                  "pattern": "^rancher/k3s:v1\\.36\\.5-k3s1@sha256:[a-f0-9]{64}$"
+                },
+                "qualification": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "1.37": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "version",
+                "image",
+                "qualification"
+              ],
+              "properties": {
+                "version": {
+                  "const": "1.37.1+k3s1"
+                },
+                "image": {
+                  "type": "string",
+                  "pattern": "^rancher/k3s:v1\\.37\\.1-k3s1@sha256:[a-f0-9]{64}$"
+                },
+                "qualification": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "kubectlPolicy": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     }
   }

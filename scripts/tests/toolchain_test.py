@@ -128,7 +128,7 @@ class ToolchainTests(unittest.TestCase):
                 toolchain.resolve(c, self.now)
 
     def test_runtime_variants_do_not_accept_prefix_or_arbitrary_suffix(self):
-        for name, bad_tag in [("postgres-test-runtime", "18.60-202610050823-standard-trixie"), ("postgres-test-runtime", "18.6-malicious"), ("valkey-test-runtime", "9.1.20-alpine"), ("valkey-test-runtime", "9.1.2-malicious")]:
+        for name, bad_tag in [("postgres-test-runtime", "18.60-202610050823-standard-trixie"), ("postgres-test-runtime", "18.6-malicious"), ("valkey-test-runtime", "9.1.20-alpine"), ("valkey-test-runtime", "9.1.2-malicious"), ("k3s-supported-test-runtime", "v1.36.50-k3s1"), ("k3s-experimental-test-runtime", "v1.37.1-k3s2")]:
             self.setUp()
             c = next(c for c in self.document["components"] if c["id"] == name)
             artifact = c["artifacts"][0]
