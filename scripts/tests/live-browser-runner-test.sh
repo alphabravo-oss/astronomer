@@ -21,6 +21,7 @@ PATH="$WORK_DIR:/usr/bin:/bin" "$RUNNER" --validate-only >/dev/null
 # shellcheck disable=SC2016
 required_patterns=(
   'qualification_postgres_run'
+  'KUBECTL_SHELL_ENABLED=true'
   'KUBECTL_SHELL_IMAGE=$shell_fixture_image'
   'k3d image import "$artifact_dir/shell-fixture-image.tar" -c "$flux_cluster"'
   'qualification_k3s_image="$(python3 scripts/qualification-kubernetes.py)"'

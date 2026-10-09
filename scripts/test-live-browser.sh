@@ -590,6 +590,7 @@ runtime_env=(
   "ASTRONOMER_ENCRYPTION_KEY=$encryption_key"
   "ASTRONOMER_BOOTSTRAP_PASSWORD=$admin_password"
   "ENV=development"
+  "KUBECTL_SHELL_ENABLED=true"
   "KUBECTL_SHELL_IMAGE=$shell_fixture_image"
   "DEBUG=true"
   "ALLOWED_HOSTS=127.0.0.1,localhost"
