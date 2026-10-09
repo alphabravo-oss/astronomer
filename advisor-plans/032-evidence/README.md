@@ -12,12 +12,12 @@ separately. No historic qualification is attributed to a new candidate.
 | Package | Implementation | Qualification | Evidence / next action |
 | --- | --- | --- | --- |
 | W00 | DONE | Source contracts PASS | Integrated `c4e9993c`; [baseline and verification](../../docs/assurance/technology-guide/README.md). Live CNPG qualification belongs to W12. |
-| W01 | IN PROGRESS | Core authority and focused regressions PASS; final coverage/gates pending | Integrated `34574ffb`: Go 1.27.2, Node 26.11.1, npm 12.2.0 and compatible dependencies. Resolver hardening, complete consumer coverage and final images/browser qualification continue in `implement/032-latest-stable`. |
+| W01 | IMPLEMENTATION READY | Authority, source coverage and focused compatibility PASS; combined frontend qualification running | Integrated final authority/action/consumer/signature series through `c23f77bc`. All 176 components resolved, 335 maintained pin occurrences bound to 212 distinct inventory entries. Exact-source signed release resolution is mandatory for new candidates. Combined W01/W05 qualification and positive Astronomer publisher execution remain separate. |
 | W02 | IN PROGRESS | Enforcement fixtures PASS; source qualification FAIL | Integrated `02f07527`, `a8c0dc4b`, `feddd759`: source collection/enforcement, exact exceptions and publication policy. Complete scan: 569 findings, zero engine errors; 492 HIGH remain unaccepted and 71 MED need triage. External ruleset/check readback remains pending. |
 | W03 | IN PROGRESS | TODO | Verified distribution and actual mirrored provisioning implementation in an isolated executor worktree. W02 trust-policy implementation is available; unresolved source findings remain open. |
 | W04 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W05 | IMPLEMENTATION READY | Full source suite, build and 18 browser cases PASS; combined W01/W05 qualification pending | Integrated refresh `7b167632`, read forwarding `c4fd5119`, awaited Vault invalidation `2867346d`, semantic modal submission `da569b90`, assertion correction `cfe5802b`, and decreasing complexity ratchets `9a896e29`. Integrated remaining observation adapters `b1ede805` and source-bound evidence. All 735 API function declarations classified; reviewer socket tests and AST checks pass. Combined W01/W05 qualification remains pending. |
-| W06 | TODO | TODO | Await dependencies and bounded implementation slice. |
+| W06 | IN PROGRESS | Inventory underway | Category/domain/database/wire parity implementation in isolated `implement/032-category-contracts`; preserve v1 SDK source types, explicit dynamic boundaries and historical rollout terminal states. Migration 073 reserved; paired OpenAPI generation coordinated with W09. |
 | W07 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W08 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W09 | IN PROGRESS | Corrupt-inhibition regressions PASS; full schema/migration work pending | Integrated `677c2246`: bounded versioned parser, once-per-sweep regex preparation, skip/audit/retry behavior and typed handler failures. Broader decoder/writer/reader inventory and reversible migration 072 continue in `implement/032-json-contracts`. |
@@ -54,3 +54,5 @@ separately. No historic qualification is attributed to a new candidate.
 - CNPG, Flux, Valkey, RustFS/S3, Charlie, tenant scoping, audit, and encryption recovery remain invariants.
 - Upstream vulnerabilities follow the accepted update-or-waive policy; disclose unresolved findings.
 - Future publication policy and externally qualified claims require concrete applicable evidence/decisions.
+
+- W01 final reviewer acceptance: 36 authority/resolution/inventory fixtures, 25 security-policy fixtures with the real Gitleaks integration case, and the existing public-client/nullable SDK runtime test pass. Official CNPG signature verification succeeds with networking disabled; the Astronomer signer policy rejects that foreign publisher. New release preflight has only contents/actions read permission for the cross-run signed record. No Astronomer-produced signed record or publication is claimed.
