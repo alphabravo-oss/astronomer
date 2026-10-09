@@ -334,14 +334,14 @@ W17 is run at milestone boundaries, not only after all v2 work. A bounded v1 mil
 
 **Ordered tasks:**
 
-- [ ] W00.1 Record repository SHAs, dirty state, previous release/tag, deployed image identities, Helm revision, Kubernetes version, CNPG topology, Valkey mode, operator/plugin ownership, and evidence timestamps. Inspect only non-secret fields.
-- [ ] W00.2 Build an active component inventory: first-party binaries/images, chart/runtime images, Flux distribution, built-in charts/images, catalog artifacts, Charlie artifacts, database/cache/storage, development stack, release tools, Go/npm/Python graphs, and supporting repositories.
-- [ ] W00.3 Map all E01–E24 findings to current code and prior plans; close only those demonstrably fixed. Record rejected assumptions, including no claim of missing JWT refresh rotation or missing encryption-key rotation.
-- [ ] W00.4 Add a guide decision matrix: literal prescription, Astronomer decision, justification, owning ADR, review trigger, and enforcement test. Record alternative stacks honestly.
-- [ ] W00.5 Capture compatibility surfaces before changes: OpenAPI, generated SDKs, agent protocol/capabilities, CLI commands, durable JSON documents, database schema, source/trust identities, chart values, and released upgrade paths.
-- [ ] W00.6 Convert section 3 invariants into focused contracts or integration assertions where a regression has a meaningful failure mode. Reuse existing chart and production configuration tests; do not add text-mirroring tests merely to increase counts.
-- [ ] W00.7 Confirm ownership for work packages and shared files. No two executors simultaneously edit `go.mod`, frontend lockfile, `compatibility.yaml`, release schemas, or the same migration version.
-- [ ] W00.8 Record required local prerequisites and existing verification target names. New commands in this plan are proposed until implemented.
+- [x] W00.1 Record repository SHAs, dirty state, previous release/tag, deployed image identities, Helm revision, Kubernetes version, CNPG topology, Valkey mode, operator/plugin ownership, and evidence timestamps. Inspect only non-secret fields.
+- [x] W00.2 Build an active component inventory: first-party binaries/images, chart/runtime images, Flux distribution, built-in charts/images, catalog artifacts, Charlie artifacts, database/cache/storage, development stack, release tools, Go/npm/Python graphs, and supporting repositories.
+- [x] W00.3 Map all E01–E24 findings to current code and prior plans; close only those demonstrably fixed. Record rejected assumptions, including no claim of missing JWT refresh rotation or missing encryption-key rotation.
+- [x] W00.4 Add a guide decision matrix: literal prescription, Astronomer decision, justification, owning ADR, review trigger, and enforcement test. Record alternative stacks honestly.
+- [x] W00.5 Capture compatibility surfaces before changes: OpenAPI, generated SDKs, agent protocol/capabilities, CLI commands, durable JSON documents, database schema, source/trust identities, chart values, and released upgrade paths.
+- [x] W00.6 Convert section 3 invariants into focused contracts or integration assertions where a regression has a meaningful failure mode. Reuse existing chart and production configuration tests; do not add text-mirroring tests merely to increase counts.
+- [x] W00.7 Confirm ownership for work packages and shared files. No two executors simultaneously edit `go.mod`, frontend lockfile, `compatibility.yaml`, release schemas, or the same migration version.
+- [x] W00.8 Record required local prerequisites and existing verification target names. New commands in this plan are proposed until implemented.
 
 **Verification:** `make docs-check`, `make release-contract-check`, `make config-docs-check`, `make cli-docs-check`, `node scripts/check-dependency-boundaries.mjs`. Expected: exit 0, no unintended generated/source drift, no weakened contract. Preserve a checked inventory and current source references.
 
