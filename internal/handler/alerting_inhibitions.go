@@ -10,6 +10,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -32,7 +33,12 @@ func (h *AlertingHandler) ListInhibitions(w http.ResponseWriter, r *http.Request
 	}
 	items := make([]map[string]any, 0, len(inhibitions))
 	for _, inhibition := range inhibitions {
-		items = append(items, alertInhibitionResponse(inhibition))
+		item, err := alertInhibitionResponse(inhibition)
+		if err != nil {
+			respondInhibitionIntegrityError(w, r)
+			return
+		}
+		items = append(items, item)
 	}
 	total, _ := h.queries.CountAlertInhibitions(r.Context())
 	paging.Write(w, items, paging.Exact(total, int(limit), int(offset), len(items)))
@@ -50,7 +56,7 @@ func (h *AlertingHandler) GetInhibition(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Inhibition not found")
 		return
 	}
-	RespondJSON(w, http.StatusOK, alertInhibitionResponse(inhibition))
+	respondAlertInhibition(w, r, http.StatusOK, inhibition)
 }
 
 // CreateInhibition handles POST /api/v1/admin/alerting/inhibitions/.
@@ -91,7 +97,7 @@ func (h *AlertingHandler) CreateInhibition(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	w.Header().Set("Location", "/api/v1/admin/alerting/inhibitions/"+inhibition.ID.String()+"/")
-	RespondJSON(w, http.StatusCreated, alertInhibitionResponse(inhibition))
+	respondAlertInhibition(w, r, http.StatusCreated, inhibition)
 }
 
 // UpdateInhibition handles PUT /api/v1/admin/alerting/inhibitions/{id}/.
@@ -140,7 +146,7 @@ func (h *AlertingHandler) UpdateInhibition(w http.ResponseWriter, r *http.Reques
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update inhibition")
 		return
 	}
-	RespondJSON(w, http.StatusOK, alertInhibitionResponse(inhibition))
+	respondAlertInhibition(w, r, http.StatusOK, inhibition)
 }
 
 // DeleteInhibition handles DELETE /api/v1/admin/alerting/inhibitions/{id}/.
@@ -218,29 +224,33 @@ func marshalEqualLabels(labels []string) json.RawMessage {
 	return raw
 }
 
-func alertInhibitionResponse(inhibition sqlc.AlertInhibition) map[string]any {
-	var source, target []InhibitionMatcher
-	var equal []string
-	_ = json.Unmarshal(inhibition.SourceMatchers, &source)
-	_ = json.Unmarshal(inhibition.TargetMatchers, &target)
-	_ = json.Unmarshal(inhibition.EqualLabels, &equal)
-	if source == nil {
-		source = []InhibitionMatcher{}
+func respondInhibitionIntegrityError(w http.ResponseWriter, r *http.Request) {
+	RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Stored inhibition failed integrity validation")
+}
+
+func respondAlertInhibition(w http.ResponseWriter, r *http.Request, status int, inhibition sqlc.AlertInhibition) {
+	response, err := alertInhibitionResponse(inhibition)
+	if err != nil {
+		respondInhibitionIntegrityError(w, r)
+		return
 	}
-	if target == nil {
-		target = []InhibitionMatcher{}
+	RespondJSON(w, status, response)
+}
+
+func alertInhibitionResponse(inhibition sqlc.AlertInhibition) (map[string]any, error) {
+	parsed, err := jsoncontract.ReadInhibitionV1(inhibition.SourceMatchers, inhibition.TargetMatchers, inhibition.EqualLabels)
+	if err != nil {
+		return nil, err
 	}
-	if equal == nil {
-		equal = []string{}
-	}
+
 	return map[string]any{
 		"id":              inhibition.ID.String(),
 		"name":            inhibition.Name,
-		"source_matchers": source,
-		"target_matchers": target,
-		"equal_labels":    equal,
+		"source_matchers": parsed.Source,
+		"target_matchers": parsed.Target,
+		"equal_labels":    parsed.Equal,
 		"enabled":         inhibition.Enabled,
 		"created_at":      inhibition.CreatedAt.UTC().Format(time.RFC3339),
 		"updated_at":      inhibition.UpdatedAt.UTC().Format(time.RFC3339),
-	}
+	}, nil
 }

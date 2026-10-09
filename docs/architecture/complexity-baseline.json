@@ -34,7 +34,7 @@
     "internal/server/routes.go": 1284,
     "internal/tunnel/handler.go": 934,
     "internal/tunnel/server.go": 1513,
-    "internal/worker/tasks/alert_evaluation.go": 1326,
+    "internal/worker/tasks/alert_evaluation.go": 1219,
     "internal/worker/tasks/cluster_decommission.go": 1050,
     "internal/worker/tasks/gitops_sync.go": 926,
     "internal/worker/tasks/project_reconcile.go": 1059,

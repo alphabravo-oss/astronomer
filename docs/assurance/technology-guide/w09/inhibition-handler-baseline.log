@@ -1,0 +1,11 @@
+=== RUN   TestInhibitionReadersRejectCorruptStoredJSON
+=== RUN   TestInhibitionReadersRejectCorruptStoredJSON/list
+    alerting_inhibition_integrity_test.go:51: corrupt row fabricated a valid response: status=200 body={"data":[{"created_at":"0001-01-01T00:00:00Z","enabled":false,"equal_labels":[],"id":"87d16370-bde8-4d0b-80f4-ea0b205414f1","name":"","source_matchers":[],"target_matchers":[],"updated_at":"0001-01-01T00:00:00Z"},{"created_at":"0001-01-01T00:00:00Z","enabled":false,"equal_labels":[],"id":"0d44d14e-f87e-47ee-a76e-b1235989691e","name":"","source_matchers":[],"target_matchers":[],"updated_at":"0001-01-01T00:00:00Z"}],"pagination":{"total":2,"limit":50,"offset":0,"has_more":false,"next_offset":null}}
+=== RUN   TestInhibitionReadersRejectCorruptStoredJSON/get
+    alerting_inhibition_integrity_test.go:51: corrupt row fabricated a valid response: status=200 body={"data":{"created_at":"0001-01-01T00:00:00Z","enabled":false,"equal_labels":[],"id":"87d16370-bde8-4d0b-80f4-ea0b205414f1","name":"","source_matchers":[],"target_matchers":[],"updated_at":"0001-01-01T00:00:00Z"}}
+--- FAIL: TestInhibitionReadersRejectCorruptStoredJSON (0.00s)
+    --- FAIL: TestInhibitionReadersRejectCorruptStoredJSON/list (0.00s)
+    --- FAIL: TestInhibitionReadersRejectCorruptStoredJSON/get (0.00s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/handler	0.055s
+FAIL
