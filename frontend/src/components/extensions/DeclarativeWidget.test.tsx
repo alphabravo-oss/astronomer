@@ -62,6 +62,7 @@ describe("DeclarativeWidget — table", () => {
     expect(screen.getByText("$12.50")).toBeInTheDocument();
     expect(screen.getByText("Namespace")).toBeInTheDocument();
     expect(mockedFetch).toHaveBeenCalledWith("cost", "podCost", {
+      signal: expect.any(AbortSignal),
       context: { clusterId: "c1" },
     });
   });

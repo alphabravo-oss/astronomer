@@ -484,7 +484,9 @@ describe("Charlie global shell accessibility", () => {
     expect(
       await screen.findByText("Kubernetes v1.36.2+k3s1"),
     ).toBeInTheDocument();
-    expect(getCharlieThreadHistory).toHaveBeenCalledWith("thread-1");
+    expect(getCharlieThreadHistory).toHaveBeenCalledWith("thread-1", {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("does not abort hidden work and restores its completed answer when reopened", async () => {
@@ -698,7 +700,9 @@ describe("Charlie global shell accessibility", () => {
     );
     const composer = await screen.findByLabelText("Message Charlie");
     await waitFor(() =>
-      expect(getCharlieThreadHistory).toHaveBeenCalledWith("thread-1"),
+      expect(getCharlieThreadHistory).toHaveBeenCalledWith("thread-1", {
+        signal: expect.any(AbortSignal),
+      }),
     );
     fireEvent.change(composer, { target: { value: "assess health" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
@@ -726,7 +730,9 @@ describe("Charlie global shell accessibility", () => {
     fireEvent.change(composer, { target: { value: "assess health" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
-      expect(getCharlieSession).toHaveBeenCalledWith("session-1"),
+      expect(getCharlieSession).toHaveBeenCalledWith("session-1", {
+        signal: expect.any(AbortSignal),
+      }),
     );
     expect(
       await screen.findByText(/Charlie could not complete this request/),

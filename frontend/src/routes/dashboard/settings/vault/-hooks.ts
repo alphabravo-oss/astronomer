@@ -10,9 +10,8 @@ import {
 } from "@/lib/api/vault";
 export function useVaultConnections(setError: (message: string) => void) {
   const qc = useQueryClient();
-  const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: queryKeys.vault.connections });
-  };
+  const invalidate = () =>
+    qc.invalidateQueries({ queryKey: queryKeys.vault.connections });
   const vaultConnectionsQuery = useQuery({
     queryKey: queryKeys.vault.connections,
     queryFn: ({ signal }) => listVaultConnections({ signal }),
@@ -20,7 +19,9 @@ export function useVaultConnections(setError: (message: string) => void) {
   const createMu = useMutation({
     mutationFn: (body: VaultConnectionWriteRequest) =>
       createVaultConnection(body),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      void invalidate();
+    },
     onError: (err: unknown) =>
       setError(extractApiErrorMessage(err) ?? String(err)),
   });
