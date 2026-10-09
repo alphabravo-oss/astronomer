@@ -305,7 +305,7 @@
     {
       "path": "internal/db/schema_version.go",
       "owner": "db backend",
-      "source_sha256": "58f584e82d42577568f8d9c8c50c5f478c5710a15707001aca5b9b97f1199a0f"
+      "source_sha256": "55905e12af286300d0baf9140cc9d0f3b8a7948a4577ccbb3b5144dc8fabd735"
     },
     {
       "path": "internal/delivery/catalogapp/service.go",

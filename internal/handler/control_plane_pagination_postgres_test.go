@@ -70,8 +70,8 @@ func assertControlPlanePlan(t *testing.T, nodes []paginationPlanNode, index stri
 		}
 		if n.IndexName == index {
 			found = true
-			if n.ActualRows < 0 || n.ActualLoops <= 0 || n.ActualRows*n.ActualLoops > 201 {
-				t.Fatalf("ordering index read%g rows for201-row page", n.ActualRows*n.ActualLoops)
+			if n.ActualRows < 0 || n.RowsRemovedByFilter < 0 || n.RowsRemovedByIndexRecheck < 0 || n.ActualLoops <= 0 || n.rowsExamined() > 201 {
+				t.Fatalf("ordering index read%g rows for201-row page", n.rowsExamined())
 			}
 		}
 		found = assertControlPlanePlan(t, n.Plans, index) || found

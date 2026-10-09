@@ -1,0 +1,227 @@
+=== RUN   TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor
+=== RUN   TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor/alerts
+    control_plane_pagination_postgres_test.go:167: alerts generated keyset plan: [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 0.48,
+              "Total Cost": 24.79,
+              "Plan Rows": 201,
+              "Plan Width": 125,
+              "Actual Startup Time": 0.033,
+              "Actual Total Time": 0.180,
+              "Actual Rows": 201,
+              "Actual Loops": 1,
+              "Shared Hit Blocks": 9,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Incremental Sort",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Startup Cost": 0.48,
+                  "Total Cost": 1190.64,
+                  "Plan Rows": 9841,
+                  "Plan Width": 125,
+                  "Actual Startup Time": 0.032,
+                  "Actual Total Time": 0.163,
+                  "Actual Rows": 201,
+                  "Actual Loops": 1,
+                  "Sort Key": ["fired_at DESC", "id DESC"],
+                  "Presorted Key": ["fired_at"],
+                  "Full-sort Groups": {
+                    "Group Count": 7,
+                    "Sort Methods Used": ["quicksort"],
+                    "Sort Space Memory": {
+                      "Average Sort Space Used": 29,
+                      "Peak Sort Space Used": 29
+                    }
+                  },
+                  "Shared Hit Blocks": 9,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0,
+                  "Plans": [
+                    {
+                      "Node Type": "Index Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Scan Direction": "Forward",
+                      "Index Name": "idx_control_plane_alerts_status",
+                      "Relation Name": "control_plane_alerts",
+                      "Alias": "control_plane_alerts",
+                      "Startup Cost": 0.29,
+                      "Total Cost": 916.53,
+                      "Plan Rows": 9841,
+                      "Plan Width": 125,
+                      "Actual Startup Time": 0.016,
+                      "Actual Total Time": 0.087,
+                      "Actual Rows": 202,
+                      "Actual Loops": 1,
+                      "Index Cond": "(((status)::text = 'resolved'::text) AND (fired_at <= '2020-01-01 01:22:01+00'::timestamp with time zone))",
+                      "Rows Removed by Index Recheck": 0,
+                      "Filter": "(((controller)::text = 'p-2a4e7621552848deb9c1'::text) AND (ROW(fired_at, id) < ROW('2020-01-01 01:22:01+00'::timestamp with time zone, 'db300c83-6bf7-45ad-b3b2-37edc11f6ce5'::uuid)))",
+                      "Rows Removed by Filter": 0,
+                      "Shared Hit Blocks": 9,
+                      "Shared Read Blocks": 0,
+                      "Shared Dirtied Blocks": 0,
+                      "Shared Written Blocks": 0,
+                      "Local Hit Blocks": 0,
+                      "Local Read Blocks": 0,
+                      "Local Dirtied Blocks": 0,
+                      "Local Written Blocks": 0,
+                      "Temp Read Blocks": 0,
+                      "Temp Written Blocks": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 1,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.108,
+            "Triggers": [
+            ],
+            "Execution Time": 0.204
+          }
+        ]
+    control_plane_pagination_postgres_test.go:172: control-plane keyset scanned/sorted remaining dataset: Incremental Sort
+=== RUN   TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor/silences
+    control_plane_pagination_postgres_test.go:167: silences generated keyset plan: [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 720.30,
+              "Total Cost": 720.81,
+              "Plan Rows": 201,
+              "Plan Width": 96,
+              "Actual Startup Time": 4.002,
+              "Actual Total Time": 4.032,
+              "Actual Rows": 201,
+              "Actual Loops": 1,
+              "Shared Hit Blocks": 144,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Sort",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Startup Cost": 720.30,
+                  "Total Cost": 744.91,
+                  "Plan Rows": 9841,
+                  "Plan Width": 96,
+                  "Actual Startup Time": 4.000,
+                  "Actual Total Time": 4.012,
+                  "Actual Rows": 201,
+                  "Actual Loops": 1,
+                  "Sort Key": ["created_at DESC", "id DESC"],
+                  "Sort Method": "top-N heapsort",
+                  "Sort Space Used": 78,
+                  "Sort Space Type": "Memory",
+                  "Shared Hit Blocks": 144,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0,
+                  "Plans": [
+                    {
+                      "Node Type": "Seq Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Relation Name": "control_plane_silences",
+                      "Alias": "control_plane_silences",
+                      "Startup Cost": 0.00,
+                      "Total Cost": 294.63,
+                      "Plan Rows": 9841,
+                      "Plan Width": 96,
+                      "Actual Startup Time": 0.008,
+                      "Actual Total Time": 1.632,
+                      "Actual Rows": 9842,
+                      "Actual Loops": 1,
+                      "Filter": "(ROW(created_at, id) < ROW('2020-01-01 01:22:01+00'::timestamp with time zone, 'ef0f7b1a-6c1e-4d4a-9ef5-a9f09eafeca3'::uuid))",
+                      "Rows Removed by Filter": 199,
+                      "Shared Hit Blocks": 144,
+                      "Shared Read Blocks": 0,
+                      "Shared Dirtied Blocks": 0,
+                      "Shared Written Blocks": 0,
+                      "Local Hit Blocks": 0,
+                      "Local Read Blocks": 0,
+                      "Local Dirtied Blocks": 0,
+                      "Local Written Blocks": 0,
+                      "Temp Read Blocks": 0,
+                      "Temp Written Blocks": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 0,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.072,
+            "Triggers": [
+            ],
+            "Execution Time": 4.056
+          }
+        ]
+    control_plane_pagination_postgres_test.go:172: control-plane keyset scanned/sorted remaining dataset: Sort
+--- FAIL: TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor (1.37s)
+    --- FAIL: TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor/alerts (1.03s)
+    --- FAIL: TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor/silences (0.34s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/handler	1.428s
+FAIL
