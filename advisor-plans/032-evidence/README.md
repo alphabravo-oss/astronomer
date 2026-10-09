@@ -27,7 +27,7 @@ separately. No historic qualification is attributed to a new candidate.
 | W13 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W14 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W15 | TODO | TODO | Await dependencies and bounded implementation slice. |
-| W16 | TODO | TODO | Await dependencies and bounded implementation slice. |
+| W16 | SPIKE / PREREQUISITES | Six native-mode compatibility tests PASS; diagnostic-only startup FAIL as observed | No product FIPS claim or build-policy change. Native Go module v1.0.0 spike is retained; full crypto inventory, decision, operating-environment review and historical-key recovery remain open. |
 | W17 | TODO | TODO | Await dependencies and bounded implementation slice. |
 
 ## Source control
@@ -64,3 +64,6 @@ separately. No historic qualification is attributed to a new candidate.
 - W09 durable-write reviewer acceptance: integrated `ebc39669` after actual task envelope, no-write enqueue, corrupt-row dispatch continuation and FrozenRollout prewrite tests pass. Zero-byte historical task payloads are read as an empty object without rewriting the durable row; new envelopes validate before SQL, retaining the existing dedupe/upsert semantics. Remaining audit envelope, inventory, migration 072 and repair work remains open.
 
 - CNPG17 physical recovery characterization: Barman backup `20261009T202229` completed against RustFS; fresh Cluster UID differs from the source and three replicas become healthy. Schema71, all201 public table row counts and the synthetic recovery marker match. The restore does not archive into the original prefix. This single idle synthetic-fixture sample does not qualify production RPO/RTO, PITR, historical ciphertext/key usability or the complete application. See [physical restore receipt](cnpg17-physical-restore.json).
+
+- W06 terminal-state reviewer acceptance: frozen `24ec277e` model/state/rollout suites pass. Integrated `c0fbf1e6` retains existing database `aborted`/`rollback_failed` values as terminal unavailable states, without adding writer transitions or resumption. Full category parity/SDK generation remains open.
+- W16 exploratory evidence: selected native Go module v1.0.0 with `fips140=on` passes six actual auth encryption/legacy-key/password compatibility tests, zero skips. `fips140=only` fails at startup in redis script SHA1 identification before those auth tests run; its credential package selector matched no tests and is not counted. Diagnostic-only mode is not a production policy or certified product claim. See [native mode](fips-on-auth.json), [diagnostic mode](fips-only-auth.json), and [official Go mechanism/limitations](https://go.dev/doc/security/fips140). Full W16 remains open.
