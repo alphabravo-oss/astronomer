@@ -46,5 +46,7 @@ External Flux DNS/network enforcement and private-registry operation remain
 part of the disconnected live qualification.
 
 No public API, database schema, root dependency graph or version pin changed.
-The only JSON shape addition is `public_ca` in the existing internal credential
-receipt projection; its existing canonical serializer remains the owner.
+The internal credential receipt projection retains public trust identities
+through its existing canonical serializer. The later constructor-only
+[keyed QA consumer](keyed-qa-consumer.md) adds its own captured public signing-key
+identity without changing production OIDC configuration.

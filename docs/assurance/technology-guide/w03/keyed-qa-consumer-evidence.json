@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "workPackage": "W03",
+  "slice": "constructor-only-captured-key-qa-consumer",
+  "baselineCommit": "a7262bb45beab03d1a7c4a4d97195c5786fdaeaa",
+  "implementationStatus": "READY_FOR_REVIEW",
+  "packageStatus": "IN_PROGRESS",
+  "authoritativeQualification": false,
+  "sourceSha256": {
+    "deploy/bundles/cmd/distribution/publication_test.go": "6351741d076e41902c2135019297da80fa620467e199049f8b856524a2748f5d",
+    "deploy/bundles/cmd/distribution/keyed_consumer_test.go": "f3b196ff1c86d7c5490c323dbbd1e1e91f6cf30f8346e80f00ad22259e490558",
+    "docs/assurance/technology-guide/w03/builtin-private-ca.md": "78227ff2aff7a4eb5977c6998015e137639b3e8e1049bc915a1f3bd6f371923a",
+    "docs/assurance/technology-guide/w03/keyed-qa-consumer.md": "5bf9d4525b43881b07fac20d15a9ed6e995060ed9fabc4cbcf94ff3dc638212d",
+    "internal/delivery/builtin/catalog_identity.go": "e0247a1402ab453bb713505d5a51c171f4f747d7d6c1b4e2c4c16ac338074b77",
+    "internal/delivery/builtin/catalog_authorization.go": "03a1e0494d465064e8a6eb8a87c46bab6dea074da3f1bf58d253847a70178d92",
+    "internal/delivery/provider/builtin_ca.go": "8677dd118a4b4a27e3197bb10129b8ce56d0d24c97fa711a3dd1c03a2792f924",
+    "internal/delivery/provider/provider.go": "83babf8bed8929b75c4b0950e98a919ce6a4c7684518e10cf84de7ec924163f9",
+    "internal/delivery/provider/builtin_public_key.go": "357813109453d7a19a0e127228b0b435372ce309d689b1c4f0d8a471be8b68ed",
+    "internal/delivery/provider/builtin_public_key_test.go": "5506b98cb8cafccbd3688729690691115ef3b2398f77604a39efbc1f70d77fd6",
+    "internal/delivery/resolver/verifier.go": "8c1c20121e1617f5616b715a3b27766b24d0aeddeb582d1da38f99c1a4950067",
+    "internal/delivery/resolver/public_key_snapshot.go": "bea2568524c272d7cb3b5ef632dfef1dbb9000c377faf2fb53fcda751cd263c1",
+    "internal/delivery/resolver/public_key_snapshot_test.go": "71575adcf60206322b329d1df6771523e9561fec6e8e2553936b4ba3d999333d",
+    "internal/server/app_builtin_ca.go": "79a9791e431c2608fd2866f2f46e6f07c65f4652ba12495b1541d5b0d962730c",
+    "internal/server/app_builtin_ca_test.go": "462ff833363ad43f44c185e966e9ffce754d822c73a4e1470991633cd29d9ee1"
+  },
+  "environment": {
+    "go": "go1.27.2",
+    "GOMAXPROCS": "4",
+    "GOFLAGS": "-p=2",
+    "actualProducerCOSIGN_BIN": "/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3",
+    "cosignSha256": "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
+  },
+  "verification": [
+    {
+      "name": "actual-keyed-chain",
+      "command": "go test ./deploy/bundles/cmd/distribution -run TestActualPublisherCopiesSigns|TestActualPublisherCloses -count=1",
+      "result": "PASS",
+      "logPath": "/tmp/plan032-w03-keyed-actual.log",
+      "logSha256": "5d3135ce35c68d11398b2ba8ff60d67fb81e0519081f3a39aa1b5c9d45456957"
+    },
+    {
+      "name": "focused-unit",
+      "command": "go test ./internal/delivery/provider ./internal/delivery/resolver -run TestBuiltinPublicKey|TestPublicKeySnapshot -count=1",
+      "result": "PASS",
+      "logPath": "/tmp/plan032-w03-keyed-unit.log",
+      "logSha256": "d9456943e1f2283f2770bc10a6be72a2647f5d4313898a13e4a725aa82df560d"
+    },
+    {
+      "name": "nine-package-race",
+      "command": "go test -race ./internal/delivery/provider ./internal/delivery/builtin ./internal/delivery/resolver ./internal/delivery/distribution ./internal/server ./internal/agent/delivery ./internal/releasecontract ./deploy/bundles ./deploy/bundles/cmd/distribution -count=1",
+      "result": "PASS",
+      "logPath": "/tmp/plan032-w03-keyed-nine-race.log",
+      "logSha256": "796b6b8b0c6328f4e54d52693bc6cf1cf7054456bec848e91ca11f148810d9e9"
+    },
+    {
+      "name": "final-affected-race",
+      "command": "go test -race ./internal/delivery/provider ./deploy/bundles/cmd/distribution -count=1",
+      "result": "PASS",
+      "logPath": "/tmp/plan032-w03-keyed-final-affected-race.log",
+      "logSha256": "75d5834143cd141933734d6d785b5320530faa783f4d2501ff89cf4882be7e2f"
+    },
+    {
+      "name": "final-provider-race",
+      "command": "go test -race ./internal/delivery/provider -count=1",
+      "result": "PASS",
+      "logPath": "/tmp/plan032-w03-keyed-provider-final.log",
+      "logSha256": "8efed32d952bf1cd0285432478d742c14e5264a782de4162de2986bc5d82289b"
+    },
+    {
+      "name": "release-contract",
+      "command": "make release-contract-check",
+      "result": "PASS",
+      "logPath": "/tmp/plan032-w03-keyed-release-contract.log",
+      "logSha256": "628dd387f57c0f884a53ef3dd04532ab5bed1f8824c5fe990f1de60f8172d71c"
+    },
+    {
+      "name": "docs",
+      "command": "make docs-check",
+      "result": "PASS",
+      "logPath": "/tmp/plan032-w03-keyed-docs.log",
+      "logSha256": "e2f1ee5589f116643411e4633733b8916e19a9926a5d7b67c96149ea47bcd832"
+    }
+  ],
+  "checks": {
+    "gitDiffCheck": "PASS",
+    "dependencyBoundary": "PASS: 14 rules, 1489 files, 9557 imports",
+    "complexity": "PASS: 2100 production source files, 42 file ceilings, 64 function ceilings"
+  },
+  "sequence": "Nine-package race pass followed by small factory return/import formatting and renderer-value fixture changes; final provider+actual producer race repeated. Rotation fixture then improved to same CA plus changed signer and combined binding; final provider race repeated. No source changed after relevant final race pass.",
+  "positiveControls": [
+    "Actual official Cosign 3.1.3 publication of 4-subject and 6-subject graphs reaches canonical captured-key loader, provider Snapshot and agent Secret.cosign.pub/OCI mandatory verify/digest materialization",
+    "Factory returns the same canonical loader for provisioner injection",
+    "Captured trust material remains immutable after source/returned-slice mutation; cleanup removes owned directory",
+    "Same CA with changed public signer advances receipt epoch and invalidates acknowledgment; combined CA/key hydration preserves both bindings"
+  ],
+  "negativeControls": [
+    "Missing, unsafe reference, symlink, malformed/leading/trailing/multiple PEM and oversized mounted public keys rejected",
+    "Development, unsigned, keyless, mismatched KeyRef, other trust directory and closed snapshot factory inputs rejected",
+    "Changed deterministic source ownership, subject digest or stored KeyRef rejected before hydration"
+  ],
+  "limits": [
+    "Constructor-only QA keyed composition; production server exact vendor OIDC constructor/config unchanged",
+    "Owned registry and ephemeral QA identity; no production OIDC publication, server candidate startup or live Flux reconciliation",
+    "Fake query fixtures are not actual SQL/CNPG qualification",
+    "Public certificate and signing-key fingerprints only; no secret hash or private-key receipt",
+    "Supplier database sizes/freshness, registry authentication and full production signed candidate remain unresolved separately",
+    "Unsigned source-bound observation cannot mark W03 or release DONE"
+  ]
+}

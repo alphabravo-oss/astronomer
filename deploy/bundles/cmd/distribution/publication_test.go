@@ -152,6 +152,7 @@ func actualPublisherFixture(t *testing.T, scanner bool) {
 	if signed != 2*(len(index.Children)+len(index.Assets)+1) || publicRequests.Load() != 0 || transport.unexpected.Load() != 0 {
 		t.Fatalf("signed=%d public=%d unexpected=%d", signed, publicRequests.Load(), transport.unexpected.Load())
 	}
+	verifyActualKeyedConsumer(t, index, client, directory)
 	verifyActualOfflinePublication(t, fixture, index, options.Trust, directory)
 	offlineOptions := distribution.OfflineOptions{Repository: index.Repository, Digest: index.Digest, CatalogDigest: index.CatalogDigest, Release: index.Release, Profile: "builtins", TrustDirectory: directory, Policy: options.Trust}
 	transfer, err := captureOfflineTransfer(t.Context(), layout, offlineOptions, client, options.Network)

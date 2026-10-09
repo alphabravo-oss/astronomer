@@ -68,6 +68,9 @@ func (p *Provider) applyBuiltinCAMetadata(ctx context.Context, row sqlc.ListClus
 	if len(p.builtinCA) == 0 || !builtinCAEligible(row) {
 		return "", nil
 	}
+	if len(p.builtinSigningKey) != 0 && !p.builtinSigningPolicyMatches(row) {
+		return "", nil
+	}
 	approved, err := p.authorizeBuiltinCA(ctx, row.ClusterID, row.ProjectID, row.SourceID, *assignment)
 	if err != nil {
 		return "", errors.New("builtin source TLS trust authorization failed")

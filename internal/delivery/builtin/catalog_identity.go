@@ -33,7 +33,19 @@ func AuthorizesCatalogAssignment(catalog builtinbundles.Catalog, cluster, projec
 	}
 	trust := catalogTrustPolicy(catalog)
 	verify := assignment.Source.Verify
-	if trust.AllowUnsigned || verify == nil || verify.Provider != "cosign" || trust.Provider != model.SignatureCosignKeyless || len(verify.OIDCIdentities) != 1 || verify.OIDCIdentities[0].Issuer != trust.Issuer || verify.OIDCIdentities[0].Subject != trust.Identity || assignment.Source.TrustSecret != "" {
+	if trust.AllowUnsigned || verify == nil || verify.Provider != "cosign" || assignment.ProjectID != project.String() {
+		return false
+	}
+	switch trust.Provider {
+	case model.SignatureCosignKeyless:
+		if len(verify.OIDCIdentities) != 1 || verify.OIDCIdentities[0].Issuer != trust.Issuer || verify.OIDCIdentities[0].Subject != trust.Identity || assignment.Source.TrustSecret != "" {
+			return false
+		}
+	case model.SignatureCosignKey:
+		if trust.KeyRef == "" || len(verify.OIDCIdentities) != 0 || assignment.Source.TrustSecret != protocol.ObjectNames(project.String(), assignment.DeploymentID).TrustSecret {
+			return false
+		}
+	default:
 		return false
 	}
 	for _, component := range catalog.Components {
