@@ -1,0 +1,191 @@
+=== RUN   TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL
+--- PASS: TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL (0.00s)
+=== RUN   TestCatalogCursorPostgresTraversalBeyondLegacyCeiling
+    pagination_postgres_test.go:203: final strict keyset generated query plan: [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 0.56,
+              "Total Cost": 62.32,
+              "Plan Rows": 201,
+              "Plan Width": 113,
+              "Actual Startup Time": 0.034,
+              "Actual Total Time": 0.332,
+              "Actual Rows": 201.00,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 213,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Nested Loop",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Join Type": "Inner",
+                  "Startup Cost": 0.56,
+                  "Total Cost": 2782.44,
+                  "Plan Rows": 9053,
+                  "Plan Width": 113,
+                  "Actual Startup Time": 0.033,
+                  "Actual Total Time": 0.312,
+                  "Actual Rows": 201.00,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Inner Unique": true,
+                  "Shared Hit Blocks": 213,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0,
+                  "Plans": [
+                    {
+                      "Node Type": "Index Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Scan Direction": "Forward",
+                      "Index Name": "idx_helm_charts_keyset",
+                      "Relation Name": "helm_charts",
+                      "Alias": "c",
+                      "Startup Cost": 0.41,
+                      "Total Cost": 2546.91,
+                      "Plan Rows": 9749,
+                      "Plan Width": 113,
+                      "Actual Startup Time": 0.014,
+                      "Actual Total Time": 0.197,
+                      "Actual Rows": 201.00,
+                      "Actual Loops": 1,
+                      "Disabled": false,
+                      "Index Cond": "(ROW((name)::text, repository_id, id) > ROW('cursor-9789f3a5-767d-4e77-82f8-c931b459378d-00100'::text, 'e33b63fa-29bb-4384-b034-ba414c109cfa'::uuid, 'a400945d-2c21-4976-a1ad-4f78169d3d55'::uuid))",
+                      "Rows Removed by Index Recheck": 0,
+                      "Filter": "(((name)::text ~~* '%cursor-9789f3a5-767d-4e77-82f8-c931b459378d%'::text) OR ((COALESCE(display_name, ''::character varying))::text ~~* '%cursor-9789f3a5-767d-4e77-82f8-c931b459378d%'::text) OR (COALESCE(description, ''::text) ~~* '%cursor-9789f3a5-767d-4e77-82f8-c931b459378d%'::text))",
+                      "Rows Removed by Filter": 0,
+                      "Index Searches": 1,
+                      "Shared Hit Blocks": 209,
+                      "Shared Read Blocks": 0,
+                      "Shared Dirtied Blocks": 0,
+                      "Shared Written Blocks": 0,
+                      "Local Hit Blocks": 0,
+                      "Local Read Blocks": 0,
+                      "Local Dirtied Blocks": 0,
+                      "Local Written Blocks": 0,
+                      "Temp Read Blocks": 0,
+                      "Temp Written Blocks": 0
+                    },
+                    {
+                      "Node Type": "Memoize",
+                      "Parent Relationship": "Inner",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Startup Cost": 0.15,
+                      "Total Cost": 0.16,
+                      "Plan Rows": 1,
+                      "Plan Width": 16,
+                      "Actual Startup Time": 0.000,
+                      "Actual Total Time": 0.000,
+                      "Actual Rows": 1.00,
+                      "Actual Loops": 201,
+                      "Disabled": false,
+                      "Cache Key": "c.repository_id",
+                      "Cache Mode": "logical",
+                      "Cache Hits": 199,
+                      "Cache Misses": 2,
+                      "Cache Evictions": 0,
+                      "Cache Overflows": 0,
+                      "Peak Memory Usage": 1,
+                      "Shared Hit Blocks": 4,
+                      "Shared Read Blocks": 0,
+                      "Shared Dirtied Blocks": 0,
+                      "Shared Written Blocks": 0,
+                      "Local Hit Blocks": 0,
+                      "Local Read Blocks": 0,
+                      "Local Dirtied Blocks": 0,
+                      "Local Written Blocks": 0,
+                      "Temp Read Blocks": 0,
+                      "Temp Written Blocks": 0,
+                      "Plans": [
+                        {
+                          "Node Type": "Index Scan",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Scan Direction": "Forward",
+                          "Index Name": "helm_repositories_pkey",
+                          "Relation Name": "helm_repositories",
+                          "Alias": "r",
+                          "Startup Cost": 0.14,
+                          "Total Cost": 0.15,
+                          "Plan Rows": 1,
+                          "Plan Width": 16,
+                          "Actual Startup Time": 0.008,
+                          "Actual Total Time": 0.008,
+                          "Actual Rows": 1.00,
+                          "Actual Loops": 2,
+                          "Disabled": false,
+                          "Index Cond": "(id = c.repository_id)",
+                          "Rows Removed by Index Recheck": 0,
+                          "Filter": "(owner_project_id IS NULL)",
+                          "Rows Removed by Filter": 0,
+                          "Index Searches": 2,
+                          "Shared Hit Blocks": 4,
+                          "Shared Read Blocks": 0,
+                          "Shared Dirtied Blocks": 0,
+                          "Shared Written Blocks": 0,
+                          "Local Hit Blocks": 0,
+                          "Local Read Blocks": 0,
+                          "Local Dirtied Blocks": 0,
+                          "Local Written Blocks": 0,
+                          "Temp Read Blocks": 0,
+                          "Temp Written Blocks": 0
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 32,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.509,
+            "Triggers": [
+            ],
+            "Execution Time": 0.372
+          }
+        ]
+--- PASS: TestCatalogCursorPostgresTraversalBeyondLegacyCeiling (1.08s)
+=== RUN   TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation
+=== RUN   TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/actor
+=== RUN   TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/filter
+=== RUN   TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/project
+--- PASS: TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation (0.04s)
+    --- PASS: TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/actor (0.00s)
+    --- PASS: TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/filter (0.00s)
+    --- PASS: TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/project (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	1.168s

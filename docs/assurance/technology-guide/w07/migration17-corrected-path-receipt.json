@@ -1,0 +1,10 @@
+{
+  "source": "53162d7d",
+  "binary_sha256": "4d4b16c218f5f03c6be2ae77ddbbcbdf6c9a00331444298651fa2eb09a3f8b48",
+  "major": 17,
+  "database": "plan032_w07_cursor17",
+  "exit_code": 0,
+  "duration_seconds": 1.565,
+  "schema": "73",
+  "version_exit_code": 0
+}

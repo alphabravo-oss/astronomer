@@ -1,0 +1,10 @@
+{
+  "source": "72c2fb75a86db7a687e70db97a6d2220cf9f1add",
+  "major": 18,
+  "schema": 73,
+  "database": "plan032_w07_cursor18",
+  "race": true,
+  "exit_code": 0,
+  "duration_seconds": 129.713,
+  "log_sha256": "e9681c2146c42e2769d45d2304e36b01e078ddd41d113301c438cbbae34f2d56"
+}
