@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "4799556282a8084bf6a29eab38c9033e2cc1880a",
+  "sourceDirty": false,
+  "observedAt": "2026-10-09T23:43:33.501192+00:00",
+  "sourceFiles": [
+    {
+      "path": "scripts/otel-pgx-qualification/main.go",
+      "sha256": "99bdcd2d0409d1e7cf24a5656048f889f2bd26bac8ec6d9ed4a872dd459c8a9a"
+    },
+    {
+      "path": "scripts/otel-pgx-qualification/main_test.go",
+      "sha256": "e10168de8cc8a237b6aa50d8000d9ecbca791c4cb542e3b634096d071092ccc2"
+    }
+  ],
+  "binarySha256": "998b5c6a1b4a049ef4b70dfde85cf3def574ac4712f9e988ce91eaba93e563c2",
+  "artifacts": [
+    {
+      "path": "docs/assurance/technology-guide/w10/actual-pgx/hardened-4799/actual-callbacks.json",
+      "sha256": "5c35535e0b05bc987e21679b8c4f07999c78a241ac3b11b6645aa6ae248a8add"
+    }
+  ],
+  "guards": [
+    "Private regular no-symlink bounded reference; malformed/duplicate query rejected",
+    "No-user/passwordless capture safe",
+    "Actual server_version_num 180006 (major18) checked before any CREATE/TRUNCATE/INSERT"
+  ],
+  "unitRace": "pass",
+  "vet": "pass",
+  "scope": "Owned callback DB and real loopback OTLP only; prior8005 receipt retained, no whole-app/collector claim."
+}
