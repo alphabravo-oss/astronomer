@@ -37,7 +37,6 @@ export function AssignTemplateModal({ onClose }: { onClose: () => void }) {
           template_id: value.templateId,
         });
         setServerError(undefined);
-        setServerError(undefined);
         onClose();
       } catch (error) {
         setServerError(

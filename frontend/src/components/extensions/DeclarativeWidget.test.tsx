@@ -61,10 +61,14 @@ describe("DeclarativeWidget — table", () => {
     expect(await screen.findByText("team-a")).toBeInTheDocument();
     expect(screen.getByText("$12.50")).toBeInTheDocument();
     expect(screen.getByText("Namespace")).toBeInTheDocument();
-    expect(mockedFetch).toHaveBeenCalledWith("cost", "podCost", {
-      signal: expect.any(AbortSignal),
-      context: { clusterId: "c1" },
-    });
+    expect(mockedFetch).toHaveBeenCalledWith(
+      "cost",
+      "podCost",
+      {
+        context: { clusterId: "c1" },
+      },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("renders the manifest emptyText when the proxy returns no rows", async () => {
