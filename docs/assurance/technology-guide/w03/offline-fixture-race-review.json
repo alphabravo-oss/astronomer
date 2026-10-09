@@ -8,10 +8,14 @@
   "resolution": "All fixture map/counter reads and mutations synchronize through locked helpers; copied key/blob snapshots release locks before signer/network/verifier calls. Proxy counters and rejected-destination counters atomic. No tests quarantined or retried by policy.",
   "result": "PASS",
   "root_baseline_failure": {
-    "diagnostic": "ServeHTTP writes verified_registry_test.go:122 versus TestSelectedCosignProducerToVerifiedLoader direct map read:304",
-    "origin": "root immutable review notification; equivalent root raw log requested for separate retained root receipt",
+    "diagnostic": "DATA RACE in actual selected Cosign registry fixture; handler writes overlap direct test map reads",
+    "exit_code": 1,
+    "origin": "independent root immutable-source reproduction",
     "qualification": "initial handler-only mutex was incomplete",
-    "result": "FAIL"
+    "result": "FAIL",
+    "retained_log": "offline-fixture-race-baseline.log",
+    "sha256": "104f3b305aa6baf52599e18bf8aa0098e2aeb22f8fdd34b890c5c80de055db6a",
+    "source_commit": "fa5d8f6c"
   },
   "schema_version": 1,
   "slice": "owned-registry-fixture-race-review",
