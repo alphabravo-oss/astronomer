@@ -177,3 +177,25 @@ func TestScanViewRetainsValidAdditiveV1Strategy(t *testing.T) {
 		t.Fatalf("valid additive strategy lost: %v", err)
 	}
 }
+
+func TestSystemReleaseSlotsBoundsUnsignedBudgetsBeforeNarrowing(t *testing.T) {
+	for _, budget := range []uint32{1 << 31, ^uint32(0)} {
+		strategy := model.RolloutStrategy{MaxConcurrent: budget, MaxUnavailable: model.Amount{Type: model.AmountCount, Value: budget}}
+		if got := systemReleaseSlots(strategy, 3, counts{}); got != 3 {
+			t.Errorf("large v1 budget stalled rollout: got=%d want=3", got)
+		}
+		if got := systemReleaseSlots(strategy, 3, counts{inFlight: 1}); got != 2 {
+			t.Errorf("in-flight reservation lost: got=%d want=2", got)
+		}
+		if got := systemReleaseSlots(strategy, 0, counts{}); got != 0 {
+			t.Errorf("empty fleet has slots: %d", got)
+		}
+		if got := systemReleaseSlots(strategy, -1, counts{}); got != 0 {
+			t.Errorf("invalid negative fleet has slots: %d", got)
+		}
+	}
+	strategy := model.RolloutStrategy{MaxConcurrent: ^uint32(0), MaxUnavailable: model.Amount{Type: model.AmountCount, Value: ^uint32(0)}}
+	if got := systemReleaseSlots(strategy, 1<<31-1, counts{inFlight: 1<<31 - 1, immatureReady: 1<<31 - 1, failed: 1<<31 - 1}); got != 0 {
+		t.Errorf("count subtraction wrapped into available slots: %d", got)
+	}
+}
