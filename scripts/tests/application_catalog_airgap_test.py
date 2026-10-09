@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tarfile
@@ -219,6 +220,35 @@ class ApplicationCatalogArchiveTest(unittest.TestCase):
             with self.assertRaises(MODULE.CatalogArchiveError):
                 MODULE.export(self.export_args)
             self.assertFalse(self.output.exists())
+
+    def test_actual_runbook_snippet_uses_canonical_current_release_contract(self):
+        from release_manifest_test import ReleaseManifestTest, GENERATOR
+        fixture = ReleaseManifestTest()
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        document = GENERATOR.build(fixture.args())
+        self.bom = self.work / "release-manifest.json"
+        snippet = re.search(r"<!-- verified-release-contract:start -->\n```bash\n(.*?)\n```", (ROOT / "docs/airgapped-install.md").read_text(), re.S).group(1)
+        environment = os.environ | {"DISTRIBUTION_VERIFIER": str(self.verifier), "RELEASE_MANIFEST": str(self.bom),
+                     "RELEASE_SIGNATURE": str(self.signature), "SIGSTORE_TRUST_DIRECTORY": str(self.work),
+                     "RELEASE_SIGNATURE_PROVIDER": "cosign_key", "RELEASE_KEY_REF": "vendor",
+                     "RELEASE_CERTIFICATE_IDENTITY": "", "RELEASE_CERTIFICATE_OIDC_ISSUER": "",
+                     "ASTRONOMER_RELEASE": document["release"]["version"]}
+        mutations = [None, lambda doc: doc["release"].update(install_mode="fresh_only"),
+                     lambda doc: doc["astronomer"].update(images=[image for image in doc["astronomer"]["images"] if image["name"] != "dr"]),
+                     lambda doc: doc["astronomer"]["images"].append(doc["astronomer"]["images"][0]),
+                     lambda doc: doc.update(unknown=True)]
+        for mutation in mutations:
+            value = json.loads(MODULE.encoded(document))
+            if mutation:
+                mutation(value)
+            self.bom.write_bytes(GENERATOR.encode(value))
+            self.sign_transfer()  # every malformed contract has authentic QA signing evidence
+            result = subprocess.run(["bash", "-c", snippet], env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertEqual(result.returncode == 0, mutation is None)
+        environment["ASTRONOMER_RELEASE"] = "v1.2.999"
+        self.bom.write_bytes(GENERATOR.encode(document)); self.sign_transfer()
+        self.assertNotEqual(subprocess.run(["bash", "-c", snippet], env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE).returncode, 0)
 
 
 if __name__ == "__main__":

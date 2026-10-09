@@ -22,8 +22,23 @@ beforeEach(async () => {
   server = createServer((req, res) => {
     if (req.method === "POST" && req.url?.endsWith("/install/")) {
       committed++;
+      res.statusCode = 202;
       res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ data: { id: "operation-1" } }));
+      res.end(
+        JSON.stringify({
+          data: {
+            id: "operation-1",
+            targetType: "logging",
+            targetKey: "cluster-1",
+            operationType: "install",
+            status: "pending",
+            attemptCount: 0,
+            errorMessage: "",
+            createdAt: "2026-10-09T00:00:00Z",
+            updatedAt: "2026-10-09T00:00:00Z",
+          },
+        }),
+      );
       return;
     }
     const closed = new Promise<void>((resolve) => res.on("close", resolve));

@@ -50,7 +50,17 @@ func main() {
 	issuer := flag.String("certificate-oidc-issuer", "", "exact authorized publisher issuer")
 	applicationProfiles := flag.String("application-profiles", "", "reviewed closed application chart/profile input index")
 	applicationArchive := flag.String("verify-application-archive", "", "authenticate and verify a closed application archive before extraction")
+	releaseManifest := flag.String("validate-release-manifest", "", "authenticate and run the canonical release contract validator")
+	expectedRelease := flag.String("expected-release", "", "exact expected vX.Y.Z release identity")
 	flag.Parse()
+	if *releaseManifest != "" {
+		if err := validateReleaseManifest(*releaseManifest, *detachedSignature, *trustDirectory, *provider, *keyRef, *identity, *issuer, *expectedRelease); err != nil {
+			fmt.Fprintln(os.Stderr, "authenticated release contract rejected")
+			os.Exit(1)
+		}
+		fmt.Println("authenticated release contract valid")
+		return
+	}
 	if *applicationArchive != "" {
 		if err := verifyApplicationArchive(*applicationArchive, *verifyDocument, *detachedSignature, *trustDirectory, *provider, *keyRef, *identity, *issuer); err != nil {
 			fmt.Fprintln(os.Stderr, "application catalog archive verification blocked:", err)
