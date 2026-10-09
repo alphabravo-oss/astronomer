@@ -11,4 +11,3 @@ npm notice run vitest run --maxWorkers=1 src/lib/api/monitoring-stack.test.ts sr
 
     Isolate  2 workers spawned · ~658ms startup each (spawn + environment, per file)
              at least ~658ms faster with isolate: false — reuses workers across files instead of one per file
-
