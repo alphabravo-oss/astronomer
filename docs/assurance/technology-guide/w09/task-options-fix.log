@@ -1,0 +1,148 @@
+=== RUN   TestInhibitionIntegrityAuditDedupeRevisionAndRedaction
+--- PASS: TestInhibitionIntegrityAuditDedupeRevisionAndRedaction (0.00s)
+=== RUN   TestInhibitionAuditFailureStillEvaluatesValidAlerts
+2026/10/09 21:12:02 INFO evaluating all alert rules
+2026/10/09 21:12:02 WARN skipping corrupt inhibition rule_id=17aa201e-d9a8-4699-80b5-8b653b1c4faf category=equal_labels:invalid_shape
+2026/10/09 21:12:02 INFO alert evaluation complete
+--- PASS: TestInhibitionAuditFailureStillEvaluatesValidAlerts (0.00s)
+=== RUN   TestInhibition_SourceFiresSuppressesTarget
+--- PASS: TestInhibition_SourceFiresSuppressesTarget (0.00s)
+=== RUN   TestInhibition_SourceResolvesReleasesTarget
+--- PASS: TestInhibition_SourceResolvesReleasesTarget (0.00s)
+=== RUN   TestInhibition_EqualLabelsMismatchDoesNotSuppress
+--- PASS: TestInhibition_EqualLabelsMismatchDoesNotSuppress (0.00s)
+=== RUN   TestInhibition_RegexSourceMatcher
+--- PASS: TestInhibition_RegexSourceMatcher (0.00s)
+=== RUN   TestInhibition_NoSelfInhibition
+--- PASS: TestInhibition_NoSelfInhibition (0.00s)
+=== RUN   TestInhibition_CorruptJSONCannotSuppress
+=== RUN   TestInhibition_CorruptJSONCannotSuppress/equal_labels_syntax
+=== RUN   TestInhibition_CorruptJSONCannotSuppress/equal_labels_object
+=== RUN   TestInhibition_CorruptJSONCannotSuppress/equal_labels_number
+=== RUN   TestInhibition_CorruptJSONCannotSuppress/equal_labels_null
+=== RUN   TestInhibition_CorruptJSONCannotSuppress/source_wrong_boolean
+=== RUN   TestInhibition_CorruptJSONCannotSuppress/target_wrong_boolean
+=== RUN   TestInhibition_CorruptJSONCannotSuppress/source_null_value
+=== RUN   TestInhibition_CorruptJSONCannotSuppress/target_null_value
+--- PASS: TestInhibition_CorruptJSONCannotSuppress (0.00s)
+    --- PASS: TestInhibition_CorruptJSONCannotSuppress/equal_labels_syntax (0.00s)
+    --- PASS: TestInhibition_CorruptJSONCannotSuppress/equal_labels_object (0.00s)
+    --- PASS: TestInhibition_CorruptJSONCannotSuppress/equal_labels_number (0.00s)
+    --- PASS: TestInhibition_CorruptJSONCannotSuppress/equal_labels_null (0.00s)
+    --- PASS: TestInhibition_CorruptJSONCannotSuppress/source_wrong_boolean (0.00s)
+    --- PASS: TestInhibition_CorruptJSONCannotSuppress/target_wrong_boolean (0.00s)
+    --- PASS: TestInhibition_CorruptJSONCannotSuppress/source_null_value (0.00s)
+    --- PASS: TestInhibition_CorruptJSONCannotSuppress/target_null_value (0.00s)
+=== RUN   TestInhibition_ValidRuleContinuesAfterCorruptRule
+--- PASS: TestInhibition_ValidRuleContinuesAfterCorruptRule (0.00s)
+=== RUN   TestInhibition_HistoricalEmptyArrays
+--- PASS: TestInhibition_HistoricalEmptyArrays (0.00s)
+=== RUN   TestDecodeIngestBodyRejectsOversizedReport
+--- PASS: TestDecodeIngestBodyRejectsOversizedReport (0.02s)
+=== RUN   TestEnqueueTaskOutboxAppliesDefaults
+--- PASS: TestEnqueueTaskOutboxAppliesDefaults (0.00s)
+=== RUN   TestEnqueueTaskOutboxPreservesOptions
+--- PASS: TestEnqueueTaskOutboxPreservesOptions (0.00s)
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/null
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/[]
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"token":"private-fixture"}_{}
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_correlation_id":null}
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_traceparent":42}
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_tracestate":{}}
+--- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/null (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/[] (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"token":"private-fixture"}_{} (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_correlation_id":null} (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_traceparent":42} (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_tracestate":{}} (0.00s)
+=== RUN   TestEnqueueTaskOutboxLegacyEmptyObjectAdapter
+--- PASS: TestEnqueueTaskOutboxLegacyEmptyObjectAdapter (0.00s)
+=== RUN   TestEnqueueTaskOutboxRejectsUnrepresentableOptionsBeforeWrite
+--- PASS: TestEnqueueTaskOutboxRejectsUnrepresentableOptionsBeforeWrite (0.00s)
+=== RUN   TestEnqueueTaskOutboxPreservesStorageBoundariesAndV1Defaults
+--- PASS: TestEnqueueTaskOutboxPreservesStorageBoundariesAndV1Defaults (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	0.076s
+=== RUN   TestInhibitionReadersRejectCorruptStoredJSON
+=== RUN   TestInhibitionReadersRejectCorruptStoredJSON/list
+2026/10/09 21:12:24 ERROR request failed request_id=5a14557c-4307-4307-9ec2-e1a3342a8776 status=500 code=internal_error internal_detail="Stored inhibition failed integrity validation"
+=== RUN   TestInhibitionReadersRejectCorruptStoredJSON/get
+2026/10/09 21:12:24 ERROR request failed request_id=94a91a6d-7db5-4078-b4f5-1715844b1b19 status=500 code=internal_error internal_detail="Stored inhibition failed integrity validation"
+--- PASS: TestInhibitionReadersRejectCorruptStoredJSON (0.00s)
+    --- PASS: TestInhibitionReadersRejectCorruptStoredJSON/list (0.00s)
+    --- PASS: TestInhibitionReadersRejectCorruptStoredJSON/get (0.00s)
+=== RUN   TestInhibitionRequestValidateNestedBeforeMutation
+--- PASS: TestInhibitionRequestValidateNestedBeforeMutation (0.00s)
+=== RUN   TestInhibitionRequestV1OptionalNullEmptyAndFalse
+--- PASS: TestInhibitionRequestV1OptionalNullEmptyAndFalse (0.00s)
+=== RUN   TestAtomicClusterTemplateTaskRejectsInvalidPayloadAndOptionsBeforeSQL
+--- PASS: TestAtomicClusterTemplateTaskRejectsInvalidPayloadAndOptionsBeforeSQL (0.00s)
+=== RUN   TestClusterTemplateApplicationTaskAndAuditCommitTogether
+=== RUN   TestClusterTemplateApplicationTaskAndAuditCommitTogether/commit_application_task_and_audit
+=== RUN   TestClusterTemplateApplicationTaskAndAuditCommitTogether/audit_failure_rolls_back_application_and_task
+--- PASS: TestClusterTemplateApplicationTaskAndAuditCommitTogether (0.00s)
+    --- PASS: TestClusterTemplateApplicationTaskAndAuditCommitTogether/commit_application_task_and_audit (0.00s)
+    --- PASS: TestClusterTemplateApplicationTaskAndAuditCommitTogether/audit_failure_rolls_back_application_and_task (0.00s)
+=== RUN   TestPlatformDefaultTemplate_ClusterCreateDoesNotAutoAttach
+--- PASS: TestPlatformDefaultTemplate_ClusterCreateDoesNotAutoAttach (0.00s)
+=== RUN   TestPlatformDefaultTemplate_ClusterCreateNoAttachWhenDefaultNotSet
+--- PASS: TestPlatformDefaultTemplate_ClusterCreateNoAttachWhenDefaultNotSet (0.00s)
+=== RUN   TestPlatformDefaultTemplate_ClusterCreateAutoAttachFailureDoesNotFailCreate
+=== RUN   TestPlatformDefaultTemplate_ClusterCreateAutoAttachFailureDoesNotFailCreate/platform_configuration_fetch_fails
+=== RUN   TestPlatformDefaultTemplate_ClusterCreateAutoAttachFailureDoesNotFailCreate/default_points_at_nonexistent_template
+=== RUN   TestPlatformDefaultTemplate_ClusterCreateAutoAttachFailureDoesNotFailCreate/upsert_of_application_row_fails
+--- PASS: TestPlatformDefaultTemplate_ClusterCreateAutoAttachFailureDoesNotFailCreate (0.00s)
+    --- PASS: TestPlatformDefaultTemplate_ClusterCreateAutoAttachFailureDoesNotFailCreate/platform_configuration_fetch_fails (0.00s)
+    --- PASS: TestPlatformDefaultTemplate_ClusterCreateAutoAttachFailureDoesNotFailCreate/default_points_at_nonexistent_template (0.00s)
+    --- PASS: TestPlatformDefaultTemplate_ClusterCreateAutoAttachFailureDoesNotFailCreate/upsert_of_application_row_fails (0.00s)
+=== RUN   TestDecodeOptionalJSON
+=== RUN   TestDecodeOptionalJSON/#00
+=== RUN   TestDecodeOptionalJSON/__
+=== RUN   TestDecodeOptionalJSON/{}
+=== RUN   TestDecodeOptionalJSON/{"revision":2}
+=== RUN   TestDecodeOptionalJSON/null
+=== RUN   TestDecodeOptionalJSON/{"revision":
+=== RUN   TestDecodeOptionalJSON/{"revision":"two"}
+=== RUN   TestDecodeOptionalJSON/{"revision":2}_{}
+=== RUN   TestDecodeOptionalJSON/{"revision":2}_garbage
+=== RUN   TestDecodeOptionalJSON/{"revison":2}
+--- PASS: TestDecodeOptionalJSON (0.00s)
+    --- PASS: TestDecodeOptionalJSON/#00 (0.00s)
+    --- PASS: TestDecodeOptionalJSON/__ (0.00s)
+    --- PASS: TestDecodeOptionalJSON/{} (0.00s)
+    --- PASS: TestDecodeOptionalJSON/{"revision":2} (0.00s)
+    --- PASS: TestDecodeOptionalJSON/null (0.00s)
+    --- PASS: TestDecodeOptionalJSON/{"revision": (0.00s)
+    --- PASS: TestDecodeOptionalJSON/{"revision":"two"} (0.00s)
+    --- PASS: TestDecodeOptionalJSON/{"revision":2}_{} (0.00s)
+    --- PASS: TestDecodeOptionalJSON/{"revision":2}_garbage (0.00s)
+    --- PASS: TestDecodeOptionalJSON/{"revison":2} (0.00s)
+=== RUN   TestPlatformDefaultTemplate_GetReturnsTemplate
+--- PASS: TestPlatformDefaultTemplate_GetReturnsTemplate (0.00s)
+=== RUN   TestPlatformDefaultTemplate_GetReturnsNullWhenUnset
+--- PASS: TestPlatformDefaultTemplate_GetReturnsNullWhenUnset (0.00s)
+=== RUN   TestPlatformDefaultTemplate_PUTSetsAndUnsets
+--- PASS: TestPlatformDefaultTemplate_PUTSetsAndUnsets (0.00s)
+=== RUN   TestPlatformDefaultTemplate_PUTRejectsBadTemplateID
+--- PASS: TestPlatformDefaultTemplate_PUTRejectsBadTemplateID (0.00s)
+=== RUN   TestPlatformDefaultTemplate_ReapplyCreatesApplication
+--- PASS: TestPlatformDefaultTemplate_ReapplyCreatesApplication (0.00s)
+=== RUN   TestPlatformDefaultTemplate_ReapplyReturns409WhenNoDefaultSet
+--- PASS: TestPlatformDefaultTemplate_ReapplyReturns409WhenNoDefaultSet (0.00s)
+=== RUN   TestPlatformDefaultTemplate_RequiresSuperuser
+--- PASS: TestPlatformDefaultTemplate_RequiresSuperuser (0.00s)
+=== RUN   TestPlatformDefaultTemplate_GetSurfaceDBErrorsAs500
+2026/10/09 21:12:24 ERROR request failed request_id=f9ca4528-6792-48de-869d-29e5c1528edd status=500 code=db_error internal_detail=boom
+--- PASS: TestPlatformDefaultTemplate_GetSurfaceDBErrorsAs500 (0.00s)
+=== RUN   TestDecodeStrictJSONBodyStandaloneSizeBound
+--- PASS: TestDecodeStrictJSONBodyStandaloneSizeBound (0.04s)
+=== RUN   TestDecodeAndValidateRejectsUnknownAndTrailingJSON
+=== RUN   TestDecodeAndValidateRejectsUnknownAndTrailingJSON/unknown_field
+=== RUN   TestDecodeAndValidateRejectsUnknownAndTrailingJSON/trailing_document
+--- PASS: TestDecodeAndValidateRejectsUnknownAndTrailingJSON (0.00s)
+    --- PASS: TestDecodeAndValidateRejectsUnknownAndTrailingJSON/unknown_field (0.00s)
+    --- PASS: TestDecodeAndValidateRejectsUnknownAndTrailingJSON/trailing_document (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	0.096s
