@@ -1,0 +1,9 @@
+# Diagnostic redaction qualification
+
+The retained baseline JSON/OTLP tests fail with the prior tracing initializer and plain JSON handler. The actual production database probe also fails when an executed SQL literal reaches the exporter. On frozen `e65c61b7`, official pgx tracing options exclude SQL statements and connection details; real OTLP contains neither the literal probe nor bind probe nor connection/password, while callbacks and trace linkage remain present.
+
+Server, worker and agent startup use the shared slog JSON handler. Sensitive named fields, sensitive groups and arbitrary structured objects are omitted before JSON serialization. Correlation IDs and safe category fields remain available in logs. Trace export applies the field policy to resources, attributes, events and links; error status codes survive without arbitrary descriptions. Resource and link secret fixtures plus bounded receiver waits were added after the initial proof.
+
+Recognized bearer, cookie/header, credential URL, private-key and envelope formats are scrubbed in diagnostic strings. This cannot identify arbitrary unlabelled secret strings. PostgreSQL and Kubernetes typed errors therefore omit server-controlled messages/details and retain SQLSTATE or safe HTTP/reason categories. Explicit upstream HTTP error paths omit raw response bodies; actual httptest failures are checked through final JSON and OTLP boundaries. Successful response parsing and public authentication wire formats retain their contracts.
+
+The initial broad database suite failed an inherited expected-schema constant mismatch; its raw output remains here. The reviewed canonical schema73 correction has been merged before the next full database gate. No collector deployment, whole API/queue/tunnel execution or acceptable performance overhead is claimed by this packet.

@@ -1,0 +1,7 @@
+ok  	github.com/alphabravocompany/astronomer-go/internal/observability	10.395s
+--- FAIL: TestExpectedSchemaVersionMatchesMigrations (0.01s)
+    schema_version_test.go:42: ExpectedSchemaVersion=71 but max migration on disk is 72; bump the constant in schema_version.go when adding a migration
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/db	0.041s
+ok  	github.com/alphabravocompany/astronomer-go/scripts/otel-pgx-qualification	1.031s
+FAIL

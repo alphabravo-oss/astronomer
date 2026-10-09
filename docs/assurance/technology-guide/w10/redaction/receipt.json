@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-09T23:57:56.238888+00:00",
+  "actualProbeSourceCommit": "e65c61b7b2b11ec8f7795e055325cd0a6ca740e8",
+  "actualProbeSourceDirty": false,
+  "binarySha256": "2f5ad1ae6465906f259694e9e7ad43cfd80530000c45ae9789c51620c42983d2",
+  "baselineOverrides": [
+    {
+      "path": "otel_tracing.go",
+      "sha256": "fd8f8d2f6dbf9db21b35fa8292a7250feb1a6af2764199dfc1a6d34613074845"
+    },
+    {
+      "path": "db.go",
+      "sha256": "de6d857829de03b4cbb87aa4283430106fade3de099bc8d7ecb5de12efdb31da"
+    },
+    {
+      "path": "redaction.go",
+      "sha256": "1484a4d76e6843e6a3b14fdc28c2745a76f020e4e3f495b6d12a347808ec072d"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/baseline-json-otlp.log",
+      "sha256": "dc435045334bc2cef4c64d357b375985921f0b3ddf50ca3eb3568dbcdb24c9b1"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/baseline-json-otlp-result.json",
+      "sha256": "c1323e2069bb1fb442994671832ced35a87346ef933c7c2d2ec4456dd5b5624c"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/baseline-sql-literal.log",
+      "sha256": "73614dab67bfcb4dc4f35231c97a0bacc3107d2489d15244fe98fc3f23472f63"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/baseline-sql-literal-result.json",
+      "sha256": "8029c26a0d7096d6f21fef55b520f9ece68653e6a4f92e96d50ee3786b3584bf"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/initial-full-package-race.log",
+      "sha256": "2573a1d4f273de7fd645516799f26cfd7f4381290b2a22289b451dab607501db"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/actual-sql-literal.json",
+      "sha256": "b2424cee939740703448bf6a0028ed16e05847e1051dc2b0b874c1b152fd2351"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/focused-race.log",
+      "sha256": "6be89cdf8b40684fb7e3b551d746e0aa67272ffe84075c2ef8d6d7fcc503dd0f"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/vet.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/redaction/capacity-before.json",
+      "sha256": "457cdbe79b0fa7f68a355e6b3fea1e173cb05a449e3f7c5834bc2a6b30a12196"
+    }
+  ],
+  "actualProbe": "Executed literal SQL and bound value on actual owned PostgreSQL18.6; raw OTLP contains neither literal/bind probe nor real DSN/password; safe spans and root linkage retained.",
+  "inheritedFailure": "Initial broad database suite expected71 while migration72 existed; retained. Reviewed main correction73 now authored into W10. Full post-merge gate pending capacity threshold; no passing claim for that suite.",
+  "limitations": "Heuristic text scrubbing cannot identify arbitrary unlabelled secrets. Shared handler omits arbitrary structured objects, applies sensitive field policy, and removes PostgreSQL/Kubernetes server text while retaining safe code/category. Actual raw HTTP body source repairs are separately tested. No whole-application collector or performance acceptance claim."
+}
