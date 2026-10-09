@@ -551,6 +551,57 @@ test("workload snapshot restores deleted member data through the durable Velero 
   await page.waitForTimeout(35_000);
 });
 
+test("terminal disconnect cancels the real tunnel and deletes its scoped pod", async ({
+  page,
+  context,
+}) => {
+  await loginViaForm(page);
+  await page.goto(`/dashboard/clusters/${clusterID}/shell`);
+  const opened = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      response.url().endsWith(`/clusters/${clusterID}/shell/sessions/`),
+  );
+  await page
+    .getByRole("button", { name: "Connect", exact: true })
+    .first()
+    .click();
+  const response = await opened;
+  expect(response.status()).toBe(201);
+  const { data: session } = await response.json();
+  expect(typeof session.id).toBe("string");
+  expect(typeof session.pod_name).toBe("string");
+  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  // The marker is not present contiguously in the echoed command. Seeing it
+  // proves stdin reached the real remote process and stdout returned through
+  // the authenticated tunnel before Disconnect cancels the long-running task.
+  await page.locator(".wterm").click();
+  await page.keyboard.type("printf '%s%s\\n' w12- remote-ready; sleep 120");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".wterm")).toContainText("w12-remote-ready");
+
+  const closed = page.waitForResponse(
+    (result) =>
+      result.request().method() === "POST" &&
+      result.url().endsWith(`/shell/sessions/${session.id}/close/`),
+  );
+  await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+  expect((await closed).status()).toBe(200);
+  await expect(page.getByText("Disconnected", { exact: true })).toBeVisible();
+  const sessionPath = `/api/v1/clusters/${clusterID}/shell/sessions/${session.id}/`;
+  await expect
+    .poll(async () => {
+      const result = await context.request.get(sessionPath);
+      if (result.status() !== 200) return `http${result.status()}`;
+      return (await result.json()).data.status;
+    })
+    .toBe("closed");
+  const podPath = `/api/v1/clusters/${clusterID}/k8s/api/v1/namespaces/${session.pod_namespace}/pods/${session.pod_name}`;
+  await expect
+    .poll(async () => (await context.request.get(podPath)).status())
+    .toBe(404);
+});
+
 test("cluster decommission completes through the authenticated agent tunnel", async ({
   page,
 }) => {

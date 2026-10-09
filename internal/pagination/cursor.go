@@ -29,11 +29,14 @@ var ErrInvalidCursor = errors.New("invalid pagination cursor")
 // contract that produced it; Seen preserves backward-compatible page metadata
 // without ever sending that offset to SQL.
 type Cursor struct {
-	Version int       `json:"v"`
-	Time    time.Time `json:"t"`
-	ID      uuid.UUID `json:"id"`
-	Binding string    `json:"b"`
-	Seen    int       `json:"n"`
+	Version  int        `json:"v"`
+	Time     time.Time  `json:"t"`
+	ID       uuid.UUID  `json:"id"`
+	Binding  string     `json:"b"`
+	Seen     int        `json:"n"`
+	Text     *string    `json:"k,omitempty"`
+	Group    *uuid.UUID `json:"g,omitempty"`
+	IssuedAt int64      `json:"iat,omitempty"`
 }
 
 func NewCursor(at time.Time, id uuid.UUID, binding string, seen int) Cursor {
@@ -61,21 +64,31 @@ func DecodeCursor(value, binding string) (Cursor, error) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	var cursor Cursor
+	// Keep the original closed wire format: signed-only fields are unknown
+	// even when their values would decode to zero values in Cursor.
+	var cursor struct {
+		Version int       `json:"v"`
+		Time    time.Time `json:"t"`
+		ID      uuid.UUID `json:"id"`
+		Binding string    `json:"b"`
+		Seen    int       `json:"n"`
+	}
 	if err := decoder.Decode(&cursor); err != nil {
 		return Cursor{}, ErrInvalidCursor
 	}
 	if err := ensureCursorEOF(decoder); err != nil {
 		return Cursor{}, ErrInvalidCursor
 	}
-	if err := validateCursor(cursor, binding); err != nil {
+	position := NewCursor(cursor.Time, cursor.ID, cursor.Binding, cursor.Seen)
+	position.Version = cursor.Version
+	if err := validateCursor(position, binding); err != nil {
 		return Cursor{}, err
 	}
-	return cursor, nil
+	return position, nil
 }
 
 func validateCursor(cursor Cursor, binding string) error {
-	if cursor.Version != cursorVersion || cursor.Time.IsZero() || cursor.ID == uuid.Nil ||
+	if cursor.Version != cursorVersion || cursor.Time.IsZero() || cursor.Text != nil || cursor.Group != nil || cursor.IssuedAt != 0 || cursor.ID == uuid.Nil ||
 		cursor.Seen < 0 || cursor.Seen > maxCursorSeen || cursor.Binding == "" || cursor.Binding != binding {
 		return ErrInvalidCursor
 	}
@@ -119,6 +132,16 @@ func CursorPage(total int64, limit, seen, pageLen int, nextCursor string) Metada
 		metadata.NextCursor = &nextCursor
 		next := seen + pageLen
 		metadata.NextOffset = &next
+	}
+	return metadata
+}
+
+// CursorUncounted reports only the authorized sentinel/continuation evidence.
+// It avoids a repeated full-table COUNT on indexed keyset pages.
+func CursorUncounted(limit, seen, pageLen int, nextCursor string) Metadata {
+	metadata := Uncounted(limit, seen, pageLen, nextCursor != "")
+	if nextCursor != "" {
+		metadata.NextCursor = &nextCursor
 	}
 	return metadata
 }

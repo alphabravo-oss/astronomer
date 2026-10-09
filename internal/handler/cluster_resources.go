@@ -172,6 +172,10 @@ type ClusterMirroredLimitRangeDTO struct {
 
 // ListIngressClasses serves GET /clusters/{cluster_id}/ingress-classes/.
 func (h *ClusterResourcesHandler) ListIngressClasses(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	cid, ok := h.resolveCluster(w, r)
 	if !ok {
 		return
@@ -208,6 +212,10 @@ func (h *ClusterResourcesHandler) ListIngressClasses(w http.ResponseWriter, r *h
 
 // ListGatewayClasses serves GET /clusters/{cluster_id}/gateway-classes/.
 func (h *ClusterResourcesHandler) ListGatewayClasses(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	cid, ok := h.resolveCluster(w, r)
 	if !ok {
 		return
@@ -246,6 +254,10 @@ func (h *ClusterResourcesHandler) ListGatewayClasses(w http.ResponseWriter, r *h
 // ListNetworkPolicies serves GET /clusters/{cluster_id}/network-policies/.
 // Honors ?namespace= for namespace-scoped narrowing.
 func (h *ClusterResourcesHandler) ListNetworkPolicies(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	cid, ok := h.resolveCluster(w, r)
 	if !ok {
 		return
@@ -299,6 +311,10 @@ func (h *ClusterResourcesHandler) ListNetworkPolicies(w http.ResponseWriter, r *
 // ListResourceQuotas serves GET /clusters/{cluster_id}/resource-quotas/.
 // Honors ?namespace=.
 func (h *ClusterResourcesHandler) ListResourceQuotas(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	cid, ok := h.resolveCluster(w, r)
 	if !ok {
 		return
@@ -350,6 +366,10 @@ func (h *ClusterResourcesHandler) ListResourceQuotas(w http.ResponseWriter, r *h
 // ListLimitRanges serves GET /clusters/{cluster_id}/limit-ranges/. Honors
 // ?namespace=.
 func (h *ClusterResourcesHandler) ListLimitRanges(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	cid, ok := h.resolveCluster(w, r)
 	if !ok {
 		return

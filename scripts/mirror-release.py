@@ -16,6 +16,8 @@ import json
 import os
 import re
 import subprocess
+import stat
+import tempfile
 import sys
 from pathlib import Path
 from typing import Any
@@ -447,9 +449,114 @@ def write_atomic(path: Path, payload: bytes) -> None:
         raise MirrorError(f"cannot write {path}: {exc}") from exc
 
 
+
+def distribution_v2_command(args: argparse.Namespace) -> list[str]:
+    """Delegate v2 trust/copy to one independently hash-pinned canonical tool."""
+    binary = args.distribution_verifier
+    try:
+        info = binary.lstat()
+        if not binary.is_absolute() or not stat.S_ISREG(info.st_mode) or not os.access(binary, os.X_OK):
+            raise MirrorError("absolute regular executable distribution verifier required")
+        if info.st_size <= 0 or info.st_size > 128 * 1024 * 1024:
+            raise MirrorError("distribution verifier exceeds executable bounds")
+        digest = hashlib.sha256()
+        with binary.open("rb") as handle:
+            if not os.path.samestat(info, os.fstat(handle.fileno())):
+                raise MirrorError("distribution verifier changed during read")
+            observed = 0
+            while chunk := handle.read(1024 * 1024):
+                observed += len(chunk)
+                if observed > 128 * 1024 * 1024:
+                    raise MirrorError("distribution verifier exceeds executable bounds")
+                digest.update(chunk)
+        if "sha256:" + digest.hexdigest() != args.verifier_sha256:
+            raise MirrorError("distribution verifier differs from independent tool digest")
+    except OSError as exc:
+        raise MirrorError("distribution verifier unavailable") from exc
+    command = [
+        str(binary), "--repository", args.repository,
+        "--expected-distribution-digest", args.distribution_digest,
+        "--expected-catalog-digest", args.catalog_digest,
+        "--expected-release", args.release,
+        "--trust-directory", str(args.trust_directory),
+        "--signature-provider", args.signature_provider,
+        "--mirror-target", args.target,
+        "--release-manifest-digest", args.release_manifest_digest,
+    ]
+    for name, flag in (("key_ref", "--key-ref"), ("certificate_identity", "--certificate-identity"),
+                       ("certificate_oidc_issuer", "--certificate-oidc-issuer")):
+        if getattr(args, name):
+            command.extend([flag, getattr(args, name)])
+    if args.command == "v2-plan":
+        command.extend(["--plan-offline-mirror", str(args.transfer), "--mirror-output-directory", str(args.output_directory)])
+    else:
+        command.extend(["--mirror-offline-transfer", str(args.transfer),
+                        "--mirror-endorsement", str(args.endorsement), "--signature", str(args.signature),
+                        "--mirror-key-ref", args.operator_key_ref,
+                        "--mirror-trust-directory", str(args.operator_trust_directory),
+                        "--destination-policy", str(args.destination_policy)])
+        if args.registry_ca_file:
+            command.extend(["--registry-ca-file", str(args.registry_ca_file)])
+    return command
+
+
+def run_distribution_v2(args: argparse.Namespace) -> None:
+    command = distribution_v2_command(args)
+    try:
+        with tempfile.TemporaryDirectory(prefix="astronomer-mirror-verifier-") as directory:
+            snapshot = Path(directory) / "distribution-verifier"
+            original = args.distribution_verifier.lstat()
+            with args.distribution_verifier.open("rb") as source, snapshot.open("xb") as destination:
+                if not os.path.samestat(original, os.fstat(source.fileno())):
+                    raise MirrorError("distribution verifier changed during capture")
+                copied = 0
+                while chunk := source.read(1024 * 1024):
+                    copied += len(chunk)
+                    if copied > 128 * 1024 * 1024:
+                        raise MirrorError("distribution verifier exceeds executable bounds")
+                    destination.write(chunk)
+            os.chmod(snapshot, 0o500)
+            captured = argparse.Namespace(**vars(args))
+            captured.distribution_verifier = snapshot
+            command = distribution_v2_command(captured)
+            subprocess.run(command, check=True, timeout=30 * 60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raise MirrorError("canonical v2 distribution mirror action blocked; no qualification reported") from exc
+    print("mirror-release: canonical v2 distribution mirror action complete")
+
+
+def add_distribution_v2_parsers(subparsers: Any) -> None:
+    for name in ("v2-plan", "v2-copy"):
+        child = subparsers.add_parser(name, help="canonical authenticated distribution v2 mirror action; historical v1 commands unchanged")
+        child.add_argument("--distribution-verifier", required=True, type=Path)
+        child.add_argument("--verifier-sha256", required=True)
+        child.add_argument("--transfer", required=True, type=Path)
+        child.add_argument("--repository", required=True)
+        child.add_argument("--distribution-digest", required=True)
+        child.add_argument("--catalog-digest", required=True)
+        child.add_argument("--release", required=True)
+        child.add_argument("--release-manifest-digest", required=True)
+        child.add_argument("--trust-directory", required=True, type=Path)
+        child.add_argument("--signature-provider", required=True, choices=("cosign_key", "cosign_keyless"))
+        child.add_argument("--key-ref")
+        child.add_argument("--certificate-identity")
+        child.add_argument("--certificate-oidc-issuer")
+        child.add_argument("--target", required=True)
+        if name == "v2-plan":
+            child.add_argument("--output-directory", required=True, type=Path)
+        else:
+            child.add_argument("--endorsement", required=True, type=Path)
+            child.add_argument("--signature", required=True, type=Path)
+            child.add_argument("--operator-key-ref", required=True)
+            child.add_argument("--operator-trust-directory", required=True, type=Path)
+            child.add_argument("--destination-policy", required=True, type=Path)
+            child.add_argument("--registry-ca-file", type=Path)
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     subparsers = result.add_subparsers(dest="command", required=True)
+    add_distribution_v2_parsers(subparsers)
     plan_parser = subparsers.add_parser("plan", help="write a deterministic copy/rewrite plan without registry writes")
     plan_parser.add_argument("--manifest", required=True, type=Path)
     plan_parser.add_argument("--destination-registry", required=True)
@@ -467,6 +574,9 @@ def parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = parser().parse_args()
     try:
+        if args.command in {"v2-plan", "v2-copy"}:
+            run_distribution_v2(args)
+            return 0
         if args.command == "plan":
             manifest = load_json(args.manifest)
             document = plan(args.manifest, args.destination_registry)

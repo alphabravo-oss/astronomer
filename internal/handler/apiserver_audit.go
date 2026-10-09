@@ -253,6 +253,10 @@ func (h *ApiserverAuditHandler) PersistAuditEvents(ctx context.Context, clusterI
 
 // List handles GET /api/v1/clusters/{cluster_id}/apiserver-audit/.
 func (h *ApiserverAuditHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return

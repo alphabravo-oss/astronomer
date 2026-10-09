@@ -23,6 +23,10 @@ import (
 // fleet-wide: list every cluster's outputs, then filter per-cluster by the
 // caller's RBAC (mirrors ListOperations). A malformed cluster_id is still 400.
 func (h *LoggingHandler) ListOutputs(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 

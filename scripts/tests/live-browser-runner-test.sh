@@ -21,6 +21,9 @@ PATH="$WORK_DIR:/usr/bin:/bin" "$RUNNER" --validate-only >/dev/null
 # shellcheck disable=SC2016
 required_patterns=(
   'qualification_postgres_run'
+  'KUBECTL_SHELL_ENABLED=true'
+  'KUBECTL_SHELL_IMAGE=$shell_fixture_image'
+  'k3d image import "$artifact_dir/shell-fixture-image.tar" -c "$flux_cluster"'
   'qualification_k3s_image="$(python3 scripts/qualification-kubernetes.py)"'
   '--image "$qualification_k3s_image"'
   'arbitrary Kubernetes image overrides are not allowed'
@@ -94,6 +97,18 @@ for pattern in "${required_patterns[@]}"; do
   }
 done
 
+# A real initial candidate exposed import-before-create. Reject that ordering
+# for both first-party shell and S3 fixture images before a new stack is run.
+python3 - "$RUNNER" <<'PYORDER'
+from pathlib import Path
+import sys
+source = Path(sys.argv[1]).read_text()
+created = source.index('flux_created=1')
+for import_statement in ('k3d image import "$artifact_dir/shell-fixture-image.tar"', 'k3d image import "$artifact_dir/s3-fixture-images.tar"'):
+    if source.index(import_statement) < created:
+        raise SystemExit("live fixture images must be imported after owned cluster creation")
+PYORDER
+
 if grep -Eq 'localhost:(5433|6380)|k3d cluster delete \$|kubectl config use-context|member-a|member-b' "$RUNNER"; then
   echo "live-browser runner must not use existing compose endpoints or mutable Kubernetes context" >&2
   exit 1
@@ -128,10 +143,10 @@ grep -Fq 'video: "retain-on-failure"' "$ROOT/frontend/playwright.config.ts"
 # journey is intentionally nested under `if (trivyEnabled)` and CI enables it
 # through the runner environment handoff asserted above. Optional engineering
 # measurements are excluded from the default live project during discovery;
-# their parameterized declarations are not part of these 16 release journeys.
+# their parameterized declarations are not part of these 18 release journeys.
 live_test_count="$(grep -RhE '^[[:space:]]*test\(' "$ROOT/frontend/tests/e2e-live" --include='*.spec.ts' --exclude='efficiency.live.spec.ts' | wc -l | tr -d ' ')"
-[[ "$live_test_count" == "16" ]] || {
-  echo "live-browser runner expects 16 explicit retry-free journeys, found $live_test_count" >&2
+[[ "$live_test_count" == "18" ]] || {
+  echo "live-browser runner expects 18 explicit retry-free journeys, found $live_test_count" >&2
   exit 1
 }
 

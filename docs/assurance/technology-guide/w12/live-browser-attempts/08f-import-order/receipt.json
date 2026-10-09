@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-09T23:14:40.483276+00:00",
+  "sourceCommit": "08f4734f",
+  "status": "fail",
+  "phase": "shell_image_import_before_cluster_creation",
+  "browserCasesRun": 0,
+  "newKubernetesClusterCreated": false,
+  "firstPartyShellImageBuild": "pass; official selected kubectl signature/checksum verification completed in source Dockerfile build",
+  "actualFailure": "k3d image import rejected nonexistent owned cluster. This ordering defect is corrected separately in3c2c7bff; original source and diagnostic bytes are retained.",
+  "artifacts": [
+    {
+      "path": "browser/build-shell.log",
+      "sha256": "d9603bbe28632a258953f47906b886c5fa2d94af9d9776abc1ec760aca9b8d5c",
+      "bytes": 7668
+    },
+    {
+      "path": "browser/import-shell.log",
+      "sha256": "b7495382c371868c315d438a09b2bc6f014789aee3981ade7c467bdaf7c9a7c6",
+      "bytes": 103
+    },
+    {
+      "path": "browser/result.txt",
+      "sha256": "e93176b9cdf866ef0c78d24b2eae43327a3a79c44849a0a5e00140124cbfe5a6",
+      "bytes": 14
+    },
+    {
+      "path": "capacity-before.json",
+      "sha256": "2832f012f632b578857be8ac01ec6f7c8ad9b7e2504b81d02d5b590eddb5f0a6",
+      "bytes": 204
+    },
+    {
+      "path": "matrix-receipt.json",
+      "sha256": "9aecfa4e6a9563ac51216bd742ac9ff55622b9c8f76d14d902af27f27e07a59d",
+      "bytes": 995
+    },
+    {
+      "path": "runner.log",
+      "sha256": "c5c0dd89dde94c882da837924dd4a377251f78a40c9b0a5efae530a6c3840628",
+      "bytes": 343
+    }
+  ],
+  "scope": "No authenticated browser, whole application or Kubernetes support pass is claimed. Public retained logs contain only candidate build and import metadata; generated credentials/private references are excluded."
+}

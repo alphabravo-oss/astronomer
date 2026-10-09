@@ -697,8 +697,8 @@ Expected: typed generated interfaces, no unintended transaction behavior change,
 - [ ] W10.2 Update Grafana, Loki, Tempo, Prometheus, and collector versions through W01. Replace Promtail with supported Alloy or an existing Fluent Bit pipeline, selected by configuration ownership and deployment fit.
 - [ ] W10.3 Capture current log labels, tenant-safe fields, trace attributes, and dashboard queries before migrating. Verify collector changes against Loki/Tempo migration notes.
 - [ ] W10.4 Specify context propagation across API request, durable operation, queued task, database call, agent tunnel, Kubernetes operation, and Flux reconciliation observation. Use stable operation correlation when asynchronous work cannot be represented as one synchronous span.
-- [ ] W10.5 Inspect pgx tracing and preserve any used optional interfaces when composing tracers. Do not add an interface merely because the guide names it; add tests for interfaces exercised by this application's pool/query/batch behavior.
-- [ ] W10.6 Validate OTel initialization failure, explicit disablement, no-op behavior, bounded exporter timeouts, resource identity, and shutdown flushing.
+- [x] W10.5 Inspect pgx tracing and preserve any used optional interfaces when composing tracers. Do not add an interface merely because the guide names it; add tests for interfaces exercised by this application's pool/query/batch behavior.
+- [x] W10.6 Validate OTel initialization failure, explicit disablement, no-op behavior, bounded exporter timeouts, resource identity, and shutdown flushing.
 - [ ] W10.7 Define cardinality budgets: user IDs, raw URLs, resource names, SQL parameter values, and operation IDs must not become unlimited metric labels.
 - [ ] W10.8 Redact bearer tokens, cookies, database credentials, private keys, secret manifests, and sensitive request data before logging/export. Add fixtures asserting their absence.
 - [ ] W10.9 Publish health distinctions: process readiness, dependency readiness, queue ownership, stale observed state, downstream reconciliation, exporter failure, and scan database freshness.

@@ -42,7 +42,7 @@ func TestBuiltinCAAuthorizationBindsCatalogIdentityAndDestination(t *testing.T) 
 	ns := uuid.MustParse("2b079af7-4a47-4dbe-984b-a67d78ab6909")
 	project := uuid.NewSHA1(ns, []byte("project\x00"+cluster.String()))
 	source := uuid.NewSHA1(ns, []byte("source\x00"+project.String()+"\x00"+component.Source.URL+"\x00"+catalog.DistributionIdentity))
-	assignment := protocol.DeliveryAssignmentV2{Scope: protocol.DeliveryScopePlatform, Source: protocol.DeliverySourceV2{Kind: protocol.DeliverySourceHelmOCI, URL: component.Source.URL, Chart: component.Source.Chart, Revision: component.Source.Version, Digest: component.Source.ChartDigest, Verify: &protocol.DeliveryVerifyV2{Provider: "cosign", OIDCIdentities: []protocol.DeliveryOIDCIdentity{{Issuer: "issuer", Subject: "publisher"}}}}}
+	assignment := protocol.DeliveryAssignmentV2{ProjectID: project.String(), Scope: protocol.DeliveryScopePlatform, Source: protocol.DeliverySourceV2{Kind: protocol.DeliverySourceHelmOCI, URL: component.Source.URL, Chart: component.Source.Chart, Revision: component.Source.Version, Digest: component.Source.ChartDigest, Verify: &protocol.DeliveryVerifyV2{Provider: "cosign", OIDCIdentities: []protocol.DeliveryOIDCIdentity{{Issuer: "issuer", Subject: "publisher"}}}}}
 	policy := httpclient.DestinationPolicy{Restricted: true, Origins: []httpclient.TrustedOrigin{{URL: "https://10.20.30.40", CIDRs: []netip.Prefix{netip.MustParsePrefix("10.20.30.40/32")}}}}
 	fixture := &caCatalogFixture{catalog: catalog}
 	authorize := builtinCAAuthorizer(fixture, policy)

@@ -18,6 +18,10 @@ import (
 )
 
 func (h *ToolHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	tools, err := h.queries.ListClusterTools(r.Context(), sqlc.ListClusterToolsParams{
 		Limit:  int32(queryLimit(r, 20)),
 		Offset: int32(queryOffset(r)),

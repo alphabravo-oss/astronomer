@@ -397,6 +397,12 @@ func TestAllowlistSnapshotPaginationContract(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			newRouterWithHandler(NewApiserverAllowlistHandler(q)).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/clusters/"+clusterID.String()+"/apiserver-allowlist/snapshots/"+tc.query, nil))
+			if tc.name == "overflow" {
+				if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"code":"offset_not_supported"`) || q.snapshotPage.Limit != 0 {
+					t.Fatalf("unsupported continuation reached query or did not reject: status%d query%+v", rec.Code, q.snapshotPage)
+				}
+				return
+			}
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 			}

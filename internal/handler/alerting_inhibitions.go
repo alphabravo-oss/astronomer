@@ -20,6 +20,10 @@ import (
 
 // ListInhibitions handles GET /api/v1/admin/alerting/inhibitions/.
 func (h *AlertingHandler) ListInhibitions(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 50))
 	offset := int32(queryOffset(r))
 

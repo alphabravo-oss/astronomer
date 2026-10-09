@@ -33,6 +33,10 @@ type alertEventSummaryResponse struct {
 
 // ListEvents handles GET /api/v1/alerting/events/.
 func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 

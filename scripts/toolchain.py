@@ -163,7 +163,11 @@ def align(document, root=ROOT, write=False):
 
 def fetch_bytes(url):
     accept = "text/html, application/atom+xml" if url.startswith("https://github.com/") else "application/json"
-    request = urllib.request.Request(url, headers={"User-Agent": "Astronomer-version-discovery", "Accept": accept})
+    headers = {"User-Agent": "Astronomer-version-discovery", "Accept": accept}
+    # The primary Git site requires its HTML presentation user agent.
+    if urllib.parse.urlparse(url).hostname == "git-scm.com":
+        headers = {"User-Agent": "Mozilla/5.0", "Accept": "text/html"}
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
         if response.status != 200:
             raise ValueError(f"upstream HTTP status {response.status}")
@@ -238,7 +242,13 @@ def resolve(component, now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
     upstream = component["upstream"]
     kind = upstream["kind"]
-    if kind == "postgres":
+    if kind == "git":
+        raw, digest = fetch_bytes(upstream["url"])
+        releases = re.findall(r'Latest source release</h4>\s*<span class="version">([0-9]+\.[0-9]+\.[0-9]+)</span>\s*<a [^>]+>Release Notes</a>\s*<time>\((\d{4}-\d{2}-\d{2})\)</time>', raw.decode())
+        if len(releases) != 1:
+            raise ValueError("Git primary metadata lacks one dated final source release")
+        rows, metadata = [(releases[0][0], releases[0][1], True)], None
+    elif kind == "postgres":
         raw, digest = fetch_bytes(upstream["url"])
         versions = re.findall(r"<tr>\s*<td>\d+</td>\s*<td>(\d+\.\d+)</td>\s*<td>Yes</td>", raw.decode())
         if not versions:
@@ -267,7 +277,7 @@ def resolve(component, now=None):
         metadata = json.loads(subprocess.check_output(["go", "run", "./deploy/toolchain/check", "--yaml-json"], input=raw, cwd=ROOT))
     else:
         metadata, digest = fetch_json(upstream["url"])
-    if kind in ("image", "github-feed", "postgres"):
+    if kind in ("image", "github-feed", "postgres", "git"):
         pass
     elif kind == "alpine":
         branch = next(branch for branch in metadata["release_branches"] if branch["rel_branch"] == metadata["latest_stable"])

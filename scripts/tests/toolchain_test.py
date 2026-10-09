@@ -20,6 +20,16 @@ class ToolchainTests(unittest.TestCase):
         self.document = json.loads(toolchain.AUTHORITY.read_text())
         self.now = dt.datetime(2026, 10, 9, 23, 59, tzinfo=dt.timezone.utc)
 
+    def test_git_primary_requires_one_dated_final_release(self):
+        c = next(c for c in self.document["components"] if c["id"] == "git-flux-fixture")
+        markup = b'Latest source release</h4><span class="version">2.56.0</span><a href="/release">Release Notes</a><time>(2026-09-28)</time>'
+        with patch.object(toolchain, "fetch_bytes", return_value=(markup, "digest")):
+            self.assertEqual(toolchain.resolve(c, self.now)["upstreamStable"], "2.56.0")
+        for invalid in (markup + markup, markup.replace(b"2.56.0", b"2.57.0-rc1"), markup.replace(b"2026-09-28", b"2026-10-10")):
+            with patch.object(toolchain, "fetch_bytes", return_value=(invalid, "digest")):
+                with self.assertRaises(ValueError):
+                    toolchain.resolve(c, self.now)
+
     def test_duplicate_ids(self):
         self.document["components"].append(copy.deepcopy(self.document["components"][0]))
         with self.assertRaisesRegex(ValueError, "duplicate"):

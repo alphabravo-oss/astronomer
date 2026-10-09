@@ -18,7 +18,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ControlPlaneQuerier interface {
@@ -45,11 +44,12 @@ type ControlPlaneMutationTx interface {
 type controlPlaneRunTxFunc func(context.Context, func(ControlPlaneMutationTx) error) error
 
 type ControlPlaneHandler struct {
-	queries    ControlPlaneQuerier
-	service    *controlplane.Service
-	runTx      controlPlaneRunTxFunc
-	mu         sync.Mutex
-	evaluateCh chan struct{}
+	cursorCodec *paging.CursorCodec
+	queries     ControlPlaneQuerier
+	service     *controlplane.Service
+	runTx       controlPlaneRunTxFunc
+	mu          sync.Mutex
+	evaluateCh  chan struct{}
 }
 
 func (h *ControlPlaneHandler) SetRunTx(runTx controlPlaneRunTxFunc) {
@@ -192,29 +192,6 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 	RespondJSON(w, http.StatusOK, controlPlanePolicyResponse(policy))
 }
 
-func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request) {
-	arg := sqlc.ListControlPlaneAlertsParams{
-		Limit:  int32(queryLimit(r, 50)),
-		Offset: int32(queryOffset(r)),
-	}
-	if status := r.URL.Query().Get("status"); status != "" {
-		arg.Status = pgtype.Text{String: status, Valid: true}
-	}
-	if controller := r.URL.Query().Get("controller"); controller != "" {
-		arg.Controller = pgtype.Text{String: controller, Valid: true}
-	}
-	alerts, err := h.queries.ListControlPlaneAlerts(r.Context(), arg)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AlertError, "Failed to list control plane alerts")
-		return
-	}
-	resp := make([]map[string]any, 0, len(alerts))
-	for _, alert := range alerts {
-		resp = append(resp, controlPlaneAlertResponse(alert))
-	}
-	paging.Write(w, resp, paging.FromPage(int(arg.Limit), int(arg.Offset), len(resp)))
-}
-
 func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -241,22 +218,6 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 		return
 	}
 	RespondJSON(w, http.StatusOK, controlPlaneAlertResponse(alert))
-}
-
-func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
-	items, err := h.queries.ListControlPlaneSilences(r.Context(), sqlc.ListControlPlaneSilencesParams{
-		Limit:  int32(queryLimit(r, 50)),
-		Offset: int32(queryOffset(r)),
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SilenceError, "Failed to list control plane silences")
-		return
-	}
-	resp := make([]map[string]any, 0, len(items))
-	for _, item := range items {
-		resp = append(resp, controlPlaneSilenceResponse(item))
-	}
-	paging.Write(w, resp, paging.FromPage(queryLimit(r, 50), queryOffset(r), len(resp)))
 }
 
 func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Request) {

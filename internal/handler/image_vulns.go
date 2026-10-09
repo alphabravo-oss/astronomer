@@ -109,6 +109,10 @@ func (h *ImageVulnHandler) ClusterSummary(w http.ResponseWriter, r *http.Request
 // ClusterTopImages handles GET /api/v1/clusters/{cluster_id}/vulnerabilities/images/.
 // Optional ?namespace=foo filter; pagination via ?limit=&offset=.
 func (h *ImageVulnHandler) ClusterTopImages(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -156,6 +160,10 @@ func (h *ImageVulnHandler) ClusterTopImages(w http.ResponseWriter, r *http.Reque
 // ClusterReportDetail handles GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}/.
 // Returns the report row + a paginated, severity-filterable CVE list.
 func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return

@@ -34,6 +34,7 @@ type output struct {
 }
 
 func main() {
+	mirror := registerMirrorFlags()
 	catalogPath := flag.String("catalog", "", "catalog JSON")
 	charts := flag.String("charts", "", "directory containing <slug>.tgz")
 	directory := flag.String("output-directory", "", "new OCI layout directory (preparation only)")
@@ -65,6 +66,14 @@ func main() {
 	expectedDigest := flag.String("expected-distribution-digest", "", "caller-pinned original signed parent subject digest")
 	expectedCatalog := flag.String("expected-catalog-digest", "", "caller-pinned signed catalog digest")
 	flag.Parse()
+	if mirror.selected() {
+		if err := mirror.run(*repository, *expectedDigest, *expectedCatalog, *expectedRelease, *trustDirectory, *provider, *keyRef, *identity, *issuer, *detachedSignature, *networkFile, *caFile); err != nil {
+			fmt.Fprintln(os.Stderr, "verified distribution mirror blocked:", err)
+			os.Exit(1)
+		}
+		fmt.Println("verified distribution mirror action complete")
+		return
+	}
 	if *exportLayout != "" || *offlineArchive != "" {
 		if err := offlineTransferFromFlags(*exportLayout, *transferOutput, *offlineArchive, *importDirectory, *repository, *expectedDigest, *expectedCatalog, *expectedRelease, *trustDirectory, *provider, *keyRef, *identity, *issuer, *networkFile, *caFile); err != nil {
 			fmt.Fprintln(os.Stderr, "offline distribution transfer blocked:", err)

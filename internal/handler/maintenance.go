@@ -405,6 +405,10 @@ func (h *MaintenanceHandler) ListActive(w http.ResponseWriter, r *http.Request) 
 
 // ListDeferred handles GET /api/v1/admin/deferred-operations/.
 func (h *MaintenanceHandler) ListDeferred(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}

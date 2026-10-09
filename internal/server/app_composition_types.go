@@ -14,6 +14,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	deliveryhandler "github.com/alphabravocompany/astronomer-go/internal/handler/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
@@ -34,6 +35,7 @@ import (
 // Keeping the hand-off typed makes the production composition root reviewable
 // without hiding dependencies in globals or an untyped service locator.
 type productionComposition struct {
+	cursorCodec                          *paging.CursorCodec
 	runtime                              *runtimeSupervisor
 	database                             *db.DB
 	queries                              *sqlc.Queries

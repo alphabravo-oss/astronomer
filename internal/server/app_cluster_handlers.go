@@ -146,6 +146,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 		"logging":    loggingHandler,
 		"security":   securityHandler,
 	}))
+	controlPlaneHandler.SetCursorCodec(c.cursorCodec)
 	controlPlaneHandler.SetRunTx(sqlcMutationTxRunner[handler.ControlPlaneMutationTx](database))
 	c.clusterSnapshotsHandler = clusterSnapshotsHandler
 	c.controlPlaneSnapshotHandler = controlPlaneSnapshotHandler

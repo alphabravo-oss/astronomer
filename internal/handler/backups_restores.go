@@ -132,6 +132,10 @@ func createRestoreOperationWith(ctx context.Context, q any, params sqlc.CreateRe
 
 // ListRestores handles GET /api/v1/backups/restores/.
 func (h *BackupHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	allow, restricted, ok := h.authz.resourceScopeFilter(w, r, rbac.ResourceBackups, rbac.VerbRead)
 	if !ok {
 		return

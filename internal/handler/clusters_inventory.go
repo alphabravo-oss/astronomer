@@ -199,6 +199,10 @@ func (h *ClusterHandler) Summary(w http.ResponseWriter, r *http.Request) {
 
 // List handles GET /api/v1/clusters/.
 func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validatePageOffset(w, r) {
+		return
+	}
+
 	// Clamp limit/offset via the shared helper: limit → [1,200] (default 20),
 	// offset → >=0. Previously an int32(queryInt(...)) with no upper bound, so
 	// e.g. limit=3e9 overflowed the int32 param to a negative value.
@@ -429,25 +433,6 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		metadata = paging.CursorPage(total, limitInt, seen, len(enriched), nextCursor)
 	}
 	paging.Write(w, enriched, metadata)
-}
-
-// inFlightDecommissionSet returns which of the given cluster IDs have a
-// pending/running decommission. Best-effort — returns an empty set on any
-// error. The query receives only the already-authorized page IDs, so work is
-// bounded by the page size and no estate-wide decommission state is read.
-func (h *ClusterHandler) inFlightDecommissionSet(ctx context.Context, ids []uuid.UUID) map[uuid.UUID]bool {
-	set := map[uuid.UUID]bool{}
-	if len(ids) == 0 {
-		return set
-	}
-	rows, err := h.queries.ListPendingClusterDecommissionsForClusters(ctx, ids)
-	if err != nil {
-		return set
-	}
-	for _, row := range rows {
-		set[row.ClusterID] = true
-	}
-	return set
 }
 
 // Create handles POST /api/v1/clusters/.

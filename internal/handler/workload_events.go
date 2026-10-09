@@ -14,6 +14,10 @@ import (
 )
 
 func (h *WorkloadHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return

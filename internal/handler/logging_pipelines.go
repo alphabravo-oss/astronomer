@@ -24,6 +24,10 @@ import (
 // ListPipelines handles GET /api/v1/logging/pipelines/ (fleet-wide) and the
 // cluster-scoped ?cluster_id= form — same shape as ListOutputs above.
 func (h *LoggingHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 

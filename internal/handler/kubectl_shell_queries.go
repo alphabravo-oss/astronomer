@@ -13,6 +13,10 @@ import (
 
 // List handles GET /clusters/{cluster_id}/shell/sessions/.
 func (h *KubectlShellHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if h.Queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ShellUnavailable, "Kubectl shell is not configured")
 		return
@@ -70,6 +74,10 @@ func (h *KubectlShellHandler) commandCountsForSessions(ctx context.Context, sess
 
 // AdminListAll handles GET /admin/shell-sessions/.
 func (h *KubectlShellHandler) AdminListAll(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gateSuperuser(w, r) {
 		return
 	}

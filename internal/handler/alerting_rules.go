@@ -15,6 +15,10 @@ import (
 
 // ListRules handles GET /api/v1/alerting/rules/.
 func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 

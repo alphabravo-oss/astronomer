@@ -187,40 +187,6 @@ func catalogVisibleToProject(ctx context.Context, queries CatalogQuerier, projec
 	return err == nil && catalogVisibilityAllowsRead(visibility)
 }
 
-// ListCharts handles GET /api/v1/catalog/charts/.
-//
-// Migration 061: when ?project_id=<uuid> is present, the visible catalog
-// set is narrowed from "every helm_repositories row" to the project-scoped
-// union (globals + own + subscribed). Without project_id the behaviour
-// is unchanged for the admin view.
-// Migration 071: also accepts ?tag= to filter on helm_chart_tags (used by
-// the service-mesh tab "Install" deep-link).
-func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
-	filter, ok := h.catalogChartFilter(w, r)
-	if !ok {
-		return
-	}
-	limit, offset := queryLimit(r, 20), queryOffset(r)
-	if !filter.GlobalScope && len(filter.RepositoryIds) == 0 {
-		paging.Write(w, []sqlc.HelmChart{}, paging.Exact(0, limit, offset, 0))
-		return
-	}
-	charts, err := h.queries.ListFilteredHelmCharts(r.Context(), sqlc.ListFilteredHelmChartsParams{
-		GlobalScope: filter.GlobalScope, RepositoryIds: filter.RepositoryIds,
-		Tag: filter.Tag, SearchPattern: filter.SearchPattern, QueryLimit: int32(limit), QueryOffset: int32(offset),
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")
-		return
-	}
-	total, err := h.queries.CountFilteredHelmCharts(r.Context(), filter)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count charts")
-		return
-	}
-	paging.Write(w, charts, paging.Exact(total, limit, offset, len(charts)))
-}
-
 // GetChart handles GET /api/v1/catalog/charts/{id}/.
 func (h *CatalogHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -250,6 +216,10 @@ func (h *CatalogHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 
 // ListChartVersions handles GET /api/v1/catalog/charts/{id}/versions/.
 func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	chartID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid chart ID")

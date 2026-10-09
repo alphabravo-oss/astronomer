@@ -1,0 +1,50 @@
+test-live-browser: creating isolated Flux member cluster test-run-live-230487-68bf
+Cloning into bare repository '/root/.cache/astronomer-032/qualification/w12-frozen-3c-live-chromium/browser/flux-fixture/git/repository.git'...
+done.
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile.runtime
+#1 transferring dockerfile: 322B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+#4 resolve docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 0.0s done
+#4 CACHED
+
+#5 [2/2] RUN apk add --no-cache       git=2.49.1-r0       git-daemon=2.49.1-r0     && git config --system --add safe.directory /fixture/flux-fixture/git/repository.git
+#5 0.525 ERROR: unable to select packages:
+#5 0.526   git-2.54.0-r0:
+#5 0.526     breaks: world[git=2.49.1-r0]
+#5 0.526     satisfies: git-daemon-2.54.0-r0[git=2.54.0-r0]
+#5 0.526                git-daemon-2.54.0-r0[git=2.54.0-r0]
+#5 0.526   git-daemon-2.54.0-r0:
+#5 0.526     breaks: world[git-daemon=2.49.1-r0]
+#5 ERROR: process "/bin/sh -c apk add --no-cache       git=2.49.1-r0       git-daemon=2.49.1-r0     && git config --system --add safe.directory /fixture/flux-fixture/git/repository.git" did not complete successfully: exit code: 2
+------
+ > [2/2] RUN apk add --no-cache       git=2.49.1-r0       git-daemon=2.49.1-r0     && git config --system --add safe.directory /fixture/flux-fixture/git/repository.git:
+0.525 ERROR: unable to select packages:
+0.526   git-2.54.0-r0:
+0.526     breaks: world[git=2.49.1-r0]
+0.526     satisfies: git-daemon-2.54.0-r0[git=2.54.0-r0]
+0.526                git-daemon-2.54.0-r0[git=2.54.0-r0]
+0.526   git-daemon-2.54.0-r0:
+0.526     breaks: world[git-daemon=2.49.1-r0]
+------
+Dockerfile.runtime:3
+--------------------
+   2 |     
+   3 | >>> RUN apk add --no-cache \
+   4 | >>>       git=2.49.1-r0 \
+   5 | >>>       git-daemon=2.49.1-r0 \
+   6 | >>>     && git config --system --add safe.directory /fixture/flux-fixture/git/repository.git
+   7 |     
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c apk add --no-cache       git=2.49.1-r0       git-daemon=2.49.1-r0     && git config --system --add safe.directory /fixture/flux-fixture/git/repository.git" did not complete successfully: exit code: 2
+test-live-browser: artifacts: /root/.cache/astronomer-032/qualification/w12-frozen-3c-live-chromium/browser

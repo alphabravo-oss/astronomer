@@ -398,6 +398,10 @@ func findExistingRatingForUpdate(ctx context.Context, q ChartRatingMutationTx, u
 
 // ListRatings handles GET /charts/{chart_id}/ratings/.
 func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	chartID, err := uuid.Parse(chi.URLParam(r, "chart_id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")

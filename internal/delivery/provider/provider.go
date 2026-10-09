@@ -44,11 +44,14 @@ type Decryptor interface {
 }
 
 type Provider struct {
-	queries            Querier
-	decryptor          Decryptor
-	builtinCA          []byte
-	builtinCAIdentity  string
-	authorizeBuiltinCA BuiltinCAAuthorizer
+	queries                Querier
+	decryptor              Decryptor
+	builtinCA              []byte
+	builtinCAIdentity      string
+	authorizeBuiltinCA     BuiltinCAAuthorizer
+	builtinSigningKey      []byte
+	builtinSigningKeyRef   string
+	builtinSigningIdentity string
 }
 
 func New(queries Querier, decryptor Decryptor) *Provider {
@@ -96,7 +99,7 @@ func (p *Provider) Snapshot(ctx context.Context, authenticatedCluster uuid.UUID,
 	}
 
 	for attempt := 0; attempt < maxSnapshotFinalizeAttempts; attempt++ {
-		response, rows, systemRelease, contentDigest, credentialDigest, err := p.build(ctx, authenticatedCluster)
+		response, rows, systemRelease, contentDigest, credentialDigest, bindings, err := p.build(ctx, authenticatedCluster)
 		if err != nil {
 			return protocol.DeliveryStateResponseV2{}, err
 		}
@@ -135,7 +138,7 @@ func (p *Provider) Snapshot(ctx context.Context, authenticatedCluster uuid.UUID,
 				CredentialEpoch:    response.CredentialEpoch,
 			}, nil
 		}
-		if err := p.hydrateCredentials(&response, rows, systemRelease); err != nil {
+		if err := p.hydrateCredentials(&response, rows, systemRelease, bindings); err != nil {
 			return protocol.DeliveryStateResponseV2{}, err
 		}
 		if err := response.Validate(); err != nil {
@@ -146,15 +149,15 @@ func (p *Provider) Snapshot(ctx context.Context, authenticatedCluster uuid.UUID,
 	return protocol.DeliveryStateResponseV2{}, ErrSnapshotChanged
 }
 
-func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.DeliveryStateResponseV2, []sqlc.ListClusterDeliveryAssignmentsRow, *sqlc.GetClusterDeliverySystemReleaseRow, string, string, error) {
+func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.DeliveryStateResponseV2, []sqlc.ListClusterDeliveryAssignmentsRow, *sqlc.GetClusterDeliverySystemReleaseRow, string, string, map[string]publicTrustBinding, error) {
 	rows, err := p.queries.ListClusterDeliveryAssignments(ctx, sqlc.ListClusterDeliveryAssignmentsParams{
 		ClusterID: clusterID, QueryLimit: protocol.MaxDeliveryAssignments + protocol.MaxDeliveryDeletions + 1,
 	})
 	if err != nil {
-		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", fmt.Errorf("list cluster delivery assignments: %w", err)
+		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", nil, fmt.Errorf("list cluster delivery assignments: %w", err)
 	}
 	if len(rows) > protocol.MaxDeliveryAssignments+protocol.MaxDeliveryDeletions {
-		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", errors.New("delivery snapshot exceeds object limit")
+		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", nil, errors.New("delivery snapshot exceeds object limit")
 	}
 	response := protocol.DeliveryStateResponseV2{
 		ProtocolVersion: protocol.DeliveryProtocolVersion,
@@ -166,12 +169,14 @@ func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.Del
 		DeploymentID string `json:"deployment_id"`
 		Epoch        int64  `json:"epoch"`
 		PublicCA     string `json:"public_ca,omitempty"`
+		PublicSigner string `json:"public_signer,omitempty"`
 	}
 	credentialGenerations := make([]credentialGeneration, 0, len(rows))
+	bindings := make(map[string]publicTrustBinding)
 	for index := range rows {
 		row := rows[index]
 		if row.ClusterID != clusterID {
-			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", fmt.Errorf("assignment %s crossed the authenticated cluster boundary", row.ID)
+			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", nil, fmt.Errorf("assignment %s crossed the authenticated cluster boundary", row.ID)
 		}
 		if row.Action == "delete" {
 			response.Deletions = append(response.Deletions, protocol.DeliveryDeletionV2{
@@ -182,14 +187,19 @@ func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.Del
 		}
 		assignment, err := p.assignmentMetadata(row)
 		if err != nil {
-			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", fmt.Errorf("assignment %s: %w", row.ID, err)
+			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", nil, fmt.Errorf("assignment %s: %w", row.ID, err)
 		}
 		caIdentity, err := p.applyBuiltinCAMetadata(ctx, row, &assignment)
 		if err != nil {
-			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", err
+			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", nil, err
 		}
+		signerIdentity, err := p.builtinSigningAuthorization(ctx, row, assignment)
+		if err != nil {
+			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", nil, err
+		}
+		bindings[row.ID.String()] = publicTrustBinding{CA: caIdentity != "", SigningKey: signerIdentity != ""}
 		response.Assignments = append(response.Assignments, assignment)
-		credentialGenerations = append(credentialGenerations, credentialGeneration{DeploymentID: row.ID.String(), Epoch: row.CredentialEpoch, PublicCA: caIdentity})
+		credentialGenerations = append(credentialGenerations, credentialGeneration{DeploymentID: row.ID.String(), Epoch: row.CredentialEpoch, PublicCA: caIdentity, PublicSigner: signerIdentity})
 	}
 	sort.Slice(response.Assignments, func(i, j int) bool {
 		return response.Assignments[i].DeploymentID < response.Assignments[j].DeploymentID
@@ -204,24 +214,24 @@ func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.Del
 	if err == nil {
 		system, buildErr := systemReleaseMetadata(row)
 		if buildErr != nil {
-			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", buildErr
+			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", nil, buildErr
 		}
 		response.System = &system
 		systemRelease = &row
 	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", fmt.Errorf("get cluster delivery system release: %w", err)
+		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", nil, fmt.Errorf("get cluster delivery system release: %w", err)
 	}
 
 	// Compute intent and credential-generation identities separately. The
 	// intent digest excludes credential bytes. The credential digest contains
-	// only monotonically increasing epochs and public CA identities, never an
+	// only monotonically increasing epochs and public certificate/signing-key identities, never an
 	// offline-verifiable secret.
 	digestProjection := response
 	digestProjection.SnapshotGeneration = 1
 	digestProjection.CredentialEpoch = 0
 	contentDigest, err := digestProjection.CanonicalETag()
 	if err != nil {
-		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", err
+		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", nil, err
 	}
 	credentialProjection := struct {
 		Assignments []credentialGeneration `json:"assignments"`
@@ -232,9 +242,9 @@ func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.Del
 	}
 	credentialDigest, err := canonicalDigest(credentialProjection)
 	if err != nil {
-		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", err
+		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", nil, err
 	}
-	return response, rows, systemRelease, contentDigest, credentialDigest, nil
+	return response, rows, systemRelease, contentDigest, credentialDigest, bindings, nil
 }
 
 func systemReleaseMetadata(row sqlc.GetClusterDeliverySystemReleaseRow) (protocol.DeliverySystemReleaseV2, error) {
@@ -360,7 +370,7 @@ func (p *Provider) assignmentMetadata(row sqlc.ListClusterDeliveryAssignmentsRow
 	return assignment, nil
 }
 
-func (p *Provider) hydrateCredentials(response *protocol.DeliveryStateResponseV2, rows []sqlc.ListClusterDeliveryAssignmentsRow, systemRelease *sqlc.GetClusterDeliverySystemReleaseRow) error {
+func (p *Provider) hydrateCredentials(response *protocol.DeliveryStateResponseV2, rows []sqlc.ListClusterDeliveryAssignmentsRow, systemRelease *sqlc.GetClusterDeliverySystemReleaseRow, bindings map[string]publicTrustBinding) error {
 	if response == nil {
 		return errors.New("delivery response is required")
 	}
@@ -405,8 +415,13 @@ func (p *Provider) hydrateCredentials(response *protocol.DeliveryStateResponseV2
 			return err
 		}
 		credentialVersion := row.CredentialEpoch
-		if needsAuth && builtinCAEligible(row) && len(p.builtinCA) != 0 {
+		binding := bindings[row.ID.String()]
+		if binding.CA {
 			data["caFile"] = bytes.Clone(p.builtinCA)
+			credentialVersion = response.CredentialEpoch
+		}
+		if binding.SigningKey {
+			data["trust.cosign.pub"] = bytes.Clone(p.builtinSigningKey)
 			credentialVersion = response.CredentialEpoch
 		}
 		hasAuth, hasTrust := false, false

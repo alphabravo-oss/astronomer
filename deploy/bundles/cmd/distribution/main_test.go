@@ -46,11 +46,11 @@ func producerFixture(t *testing.T, template string) (string, string, string, str
 		configBytes, _ := json.Marshal(ocispec.Image{Platform: ocispec.Platform{Architecture: architecture, OS: "linux"}})
 		configDigest := digest.FromBytes(configBytes)
 		_ = os.WriteFile(filepath.Join(platforms, configDigest.Encoded()+".json"), configBytes, 0600)
-		child := ocispec.Manifest{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageManifest, Config: ocispec.Descriptor{Digest: configDigest, Size: int64(len(configBytes))}, Layers: []ocispec.Descriptor{{Digest: digest.FromString("fixture"), Size: 7}}}
+		child := ocispec.Manifest{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageManifest, Config: ocispec.Descriptor{MediaType: ocispec.MediaTypeImageConfig, Digest: configDigest, Size: int64(len(configBytes))}, Layers: []ocispec.Descriptor{{MediaType: ocispec.MediaTypeImageLayer, Digest: digest.FromString("fixture"), Size: 7}}}
 		childBytes, _ := json.Marshal(child)
 		childDigest := digest.FromBytes(childBytes)
 		_ = os.WriteFile(filepath.Join(platforms, childDigest.Encoded()+".json"), childBytes, 0600)
-		index.Manifests = append(index.Manifests, ocispec.Descriptor{Digest: childDigest, Size: int64(len(childBytes)), Platform: &ocispec.Platform{OS: "linux", Architecture: architecture}})
+		index.Manifests = append(index.Manifests, ocispec.Descriptor{MediaType: ocispec.MediaTypeImageManifest, Digest: childDigest, Size: int64(len(childBytes)), Platform: &ocispec.Platform{OS: "linux", Architecture: architecture}})
 	}
 	indexBytes, _ := json.Marshal(index)
 	indexDigest := digest.FromBytes(indexBytes)

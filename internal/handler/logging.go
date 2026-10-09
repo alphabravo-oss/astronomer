@@ -468,6 +468,10 @@ func replacePipelineOutputs(ctx context.Context, q interface {
 
 // ListOperations handles GET /api/v1/logging/operations/.
 func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 50))
 	offset := int32(queryOffset(r))
 	arg := sqlc.ListLoggingOperationsParams{Limit: limit, Offset: offset}
