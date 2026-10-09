@@ -43,7 +43,9 @@ func readCursorRequest(w http.ResponseWriter, r *http.Request, defaultLimit int,
 	page.offset = offset
 	page.seen = int(offset)
 	values, provided := r.URL.Query()["cursor"]
-	page.provided = provided
+	// An explicit empty cursor opts into the signed initial page. Only a
+	// nonempty token carries a position; malformed tokens never restart.
+	page.provided = provided && len(values) == 1 && values[0] != ""
 	_, offsetProvided := r.URL.Query()["offset"]
 	if provided && (len(values) != 1 || offsetProvided) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cursor must be one opaque value and cannot be combined with offset")
@@ -58,7 +60,7 @@ func readCursorRequest(w http.ResponseWriter, r *http.Request, defaultLimit int,
 		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "An authenticated pagination actor is required")
 		return page, false
 	}
-	if provided {
+	if page.provided {
 		page.cursor, err = codec.Decode(values[0], binding)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid or expired pagination cursor")
