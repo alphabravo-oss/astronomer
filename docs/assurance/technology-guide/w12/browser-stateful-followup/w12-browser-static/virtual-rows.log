@@ -1,0 +1,17 @@
+npm notice run astronomer-frontend@1.2.1 npx
+npm notice run 'vitest' run src/components/ui/__tests__/data-table.behavior.test.tsx src/components/ui/__tests__/data-table.depth.test.tsx src/components/ui/__tests__/combobox.test.tsx --maxWorkers=1
+
+ RUN  v5.0.3 /root/astronomer-all/astronomer-032-w12-matrix/frontend
+
+Not implemented: Window's scrollTo() method
+Not implemented: Window's scrollTo() method
+
+ Test Files  3 passed (3)
+      Tests  63 passed (63)
+   Start at  22:43:16
+   Duration  19.57s (tests 50%, import 27%, environment 14%, transform 7%, setup 2%)
+
+     Import  78 modules were evaluated 139 times · 5.24s total, 27% of tracked time
+             ~2.30s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+

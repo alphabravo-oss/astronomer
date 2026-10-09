@@ -1,0 +1,28 @@
+2026-10-09 22:39:44.655 UTC [8] LOG:  starting PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-10-09 22:39:44.656 UTC [8] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-10-09 22:39:44.656 UTC [8] LOG:  listening on IPv6 address "::", port 5432
+2026-10-09 22:39:44.659 UTC [8] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-09 22:39:44.665 UTC [20] LOG:  database system was interrupted; last known up at 2026-10-09 22:39:43 UTC
+2026-10-09 22:39:44.724 UTC [21] FATAL:  the database system is starting up
+2026-10-09 22:39:44.868 UTC [20] LOG:  starting backup recovery with redo LSN 0/3000028, checkpoint LSN 0/3000080, on timeline ID 1
+2026-10-09 22:39:44.868 UTC [20] LOG:  entering standby mode
+2026-10-09 22:39:44.870 UTC [20] LOG:  redo starts at 0/3000028
+2026-10-09 22:39:44.871 UTC [20] LOG:  completed backup recovery with redo LSN 0/3000028 and end LSN 0/3000120
+2026-10-09 22:39:44.871 UTC [20] LOG:  consistent recovery state reached at 0/3000120
+2026-10-09 22:39:44.871 UTC [8] LOG:  database system is ready to accept read-only connections
+2026-10-09 22:39:44.886 UTC [22] LOG:  started streaming WAL from primary at 0/4000000 on timeline 1
+2026-10-09 22:40:14.390 UTC [22] FATAL:  could not receive data from WAL stream: server closed the connection unexpectedly
+		This probably means the server terminated abnormally
+		before or while processing the request.
+2026-10-09 22:40:14.392 UTC [20] LOG:  invalid record length at 0/452CB10: expected at least 24, got 0
+2026-10-09 22:40:14.397 UTC [38] FATAL:  streaming replication receiver "walreceiver" could not connect to the primary server: connection to server at "primary" (172.21.0.2), port 5432 failed: Connection refused
+		Is the server running on that host and accepting TCP/IP connections?
+2026-10-09 22:40:14.397 UTC [20] LOG:  waiting for WAL to become available at 0/452CB28
+2026-10-09 22:40:14.688 UTC [20] LOG:  received promote request
+2026-10-09 22:40:14.688 UTC [20] LOG:  redo done at 0/452CAE8 system usage: CPU: user: 0.00 s, system: 0.01 s, elapsed: 29.81 s
+2026-10-09 22:40:14.688 UTC [20] LOG:  last completed transaction was at log time 2026-10-09 22:40:14.343148+00
+2026-10-09 22:40:14.691 UTC [20] LOG:  selected new timeline ID: 2
+2026-10-09 22:40:14.712 UTC [20] LOG:  archive recovery complete
+2026-10-09 22:40:14.717 UTC [14] LOG:  checkpoint starting: force
+2026-10-09 22:40:14.719 UTC [8] LOG:  database system is ready to accept connections
+2026-10-09 22:40:14.795 UTC [49] LOG:  PID 120 in cancel request did not match any process

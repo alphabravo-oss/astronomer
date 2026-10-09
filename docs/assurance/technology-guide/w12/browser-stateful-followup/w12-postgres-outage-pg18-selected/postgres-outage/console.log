@@ -1,0 +1,279 @@
+=== RUN   TestPostgresOutageQualification
+=== RUN   TestPostgresOutageQualification/healthy_transaction/admin_queue
+--- PASS: TestPostgresOutageQualification/healthy_transaction/admin_queue (0.01s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/admin_task_outbox
+--- PASS: TestPostgresOutageQualification/healthy_transaction/admin_task_outbox (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/alerting
+--- PASS: TestPostgresOutageQualification/healthy_transaction/alerting (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/apiserver_allowlist
+--- PASS: TestPostgresOutageQualification/healthy_transaction/apiserver_allowlist (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/audit_export
+--- PASS: TestPostgresOutageQualification/healthy_transaction/audit_export (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/auth
+--- PASS: TestPostgresOutageQualification/healthy_transaction/auth (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/backup
+--- PASS: TestPostgresOutageQualification/healthy_transaction/backup (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/catalog
+--- PASS: TestPostgresOutageQualification/healthy_transaction/catalog (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/chart_rating
+--- PASS: TestPostgresOutageQualification/healthy_transaction/chart_rating (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/cloud_credential
+--- PASS: TestPostgresOutageQualification/healthy_transaction/cloud_credential (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/cluster_agent
+--- PASS: TestPostgresOutageQualification/healthy_transaction/cluster_agent (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/cluster_group
+--- PASS: TestPostgresOutageQualification/healthy_transaction/cluster_group (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/cluster
+--- PASS: TestPostgresOutageQualification/healthy_transaction/cluster (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/cluster_registration
+--- PASS: TestPostgresOutageQualification/healthy_transaction/cluster_registration (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/cluster_registry
+--- PASS: TestPostgresOutageQualification/healthy_transaction/cluster_registry (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/cluster_snapshot
+--- PASS: TestPostgresOutageQualification/healthy_transaction/cluster_snapshot (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/cluster_template
+--- PASS: TestPostgresOutageQualification/healthy_transaction/cluster_template (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/control_plane
+--- PASS: TestPostgresOutageQualification/healthy_transaction/control_plane (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/control_plane_snapshot
+--- PASS: TestPostgresOutageQualification/healthy_transaction/control_plane_snapshot (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/dashboard
+--- PASS: TestPostgresOutageQualification/healthy_transaction/dashboard (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/dex
+--- PASS: TestPostgresOutageQualification/healthy_transaction/dex (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/extension
+--- PASS: TestPostgresOutageQualification/healthy_transaction/extension (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/gatekeeper_constraint
+--- PASS: TestPostgresOutageQualification/healthy_transaction/gatekeeper_constraint (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/gitops
+--- PASS: TestPostgresOutageQualification/healthy_transaction/gitops (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/group_mappings
+--- PASS: TestPostgresOutageQualification/healthy_transaction/group_mappings (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/image_vulnerability
+--- PASS: TestPostgresOutageQualification/healthy_transaction/image_vulnerability (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/logging
+--- PASS: TestPostgresOutageQualification/healthy_transaction/logging (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/maintenance_gate
+--- PASS: TestPostgresOutageQualification/healthy_transaction/maintenance_gate (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/maintenance
+--- PASS: TestPostgresOutageQualification/healthy_transaction/maintenance (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/management_backup
+--- PASS: TestPostgresOutageQualification/healthy_transaction/management_backup (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/monitoring
+--- PASS: TestPostgresOutageQualification/healthy_transaction/monitoring (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/native_rbac
+--- PASS: TestPostgresOutageQualification/healthy_transaction/native_rbac (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/network_policy
+--- PASS: TestPostgresOutageQualification/healthy_transaction/network_policy (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/node
+--- PASS: TestPostgresOutageQualification/healthy_transaction/node (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/notification_template
+--- PASS: TestPostgresOutageQualification/healthy_transaction/notification_template (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/platform_default_template
+--- PASS: TestPostgresOutageQualification/healthy_transaction/platform_default_template (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/platform_settings
+--- PASS: TestPostgresOutageQualification/healthy_transaction/platform_settings (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/principal
+--- PASS: TestPostgresOutageQualification/healthy_transaction/principal (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/project_catalog
+--- PASS: TestPostgresOutageQualification/healthy_transaction/project_catalog (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/project_namespace
+--- PASS: TestPostgresOutageQualification/healthy_transaction/project_namespace (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/quota
+--- PASS: TestPostgresOutageQualification/healthy_transaction/quota (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/rbac
+--- PASS: TestPostgresOutageQualification/healthy_transaction/rbac (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/read_audit_policy
+--- PASS: TestPostgresOutageQualification/healthy_transaction/read_audit_policy (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/resource
+--- PASS: TestPostgresOutageQualification/healthy_transaction/resource (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/resource_settings
+--- PASS: TestPostgresOutageQualification/healthy_transaction/resource_settings (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/scim
+--- PASS: TestPostgresOutageQualification/healthy_transaction/scim (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/security
+--- PASS: TestPostgresOutageQualification/healthy_transaction/security (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/siem
+--- PASS: TestPostgresOutageQualification/healthy_transaction/siem (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/smtp
+--- PASS: TestPostgresOutageQualification/healthy_transaction/smtp (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/sso_callback
+--- PASS: TestPostgresOutageQualification/healthy_transaction/sso_callback (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/support_bundle
+--- PASS: TestPostgresOutageQualification/healthy_transaction/support_bundle (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/table_views
+--- PASS: TestPostgresOutageQualification/healthy_transaction/table_views (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/tool
+--- PASS: TestPostgresOutageQualification/healthy_transaction/tool (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/totp
+--- PASS: TestPostgresOutageQualification/healthy_transaction/totp (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/user
+--- PASS: TestPostgresOutageQualification/healthy_transaction/user (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/user_preferences
+--- PASS: TestPostgresOutageQualification/healthy_transaction/user_preferences (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/vault
+--- PASS: TestPostgresOutageQualification/healthy_transaction/vault (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/webhook
+--- PASS: TestPostgresOutageQualification/healthy_transaction/webhook (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/workload
+--- PASS: TestPostgresOutageQualification/healthy_transaction/workload (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/delivery_bundle
+--- PASS: TestPostgresOutageQualification/healthy_transaction/delivery_bundle (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/delivery_configuration_template
+--- PASS: TestPostgresOutageQualification/healthy_transaction/delivery_configuration_template (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/delivery_override_set
+--- PASS: TestPostgresOutageQualification/healthy_transaction/delivery_override_set (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/delivery_source
+--- PASS: TestPostgresOutageQualification/healthy_transaction/delivery_source (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/delivery_target
+--- PASS: TestPostgresOutageQualification/healthy_transaction/delivery_target (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/alert_notification
+--- PASS: TestPostgresOutageQualification/healthy_transaction/alert_notification (0.00s)
+=== RUN   TestPostgresOutageQualification/healthy_transaction/crd_cluster_decommission
+--- PASS: TestPostgresOutageQualification/healthy_transaction/crd_cluster_decommission (0.00s)
+2026/10/09 22:48:48 INFO audit event recorded event=audit_recorded source=service action=admin.smtp.test resource_type=smtp resource_id=00000000-0000-0000-0000-000000000001
+2026/10/09 22:48:48 INFO audit event recorded event=audit_recorded source=service action=cluster.k8s_proxy.intent resource_type=cluster resource_id=qualification-cluster
+2026/10/09 22:48:48 INFO audit event recorded event=audit_recorded source=service action=cluster.k8s_proxy.outcome resource_type=cluster resource_id=qualification-cluster
+=== RUN   TestPostgresOutageQualification/outage_transaction/admin_queue
+--- PASS: TestPostgresOutageQualification/outage_transaction/admin_queue (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/admin_task_outbox
+--- PASS: TestPostgresOutageQualification/outage_transaction/admin_task_outbox (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/alerting
+--- PASS: TestPostgresOutageQualification/outage_transaction/alerting (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/apiserver_allowlist
+--- PASS: TestPostgresOutageQualification/outage_transaction/apiserver_allowlist (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/audit_export
+--- PASS: TestPostgresOutageQualification/outage_transaction/audit_export (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/auth
+--- PASS: TestPostgresOutageQualification/outage_transaction/auth (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/backup
+--- PASS: TestPostgresOutageQualification/outage_transaction/backup (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/catalog
+--- PASS: TestPostgresOutageQualification/outage_transaction/catalog (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/chart_rating
+--- PASS: TestPostgresOutageQualification/outage_transaction/chart_rating (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/cloud_credential
+--- PASS: TestPostgresOutageQualification/outage_transaction/cloud_credential (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/cluster_agent
+--- PASS: TestPostgresOutageQualification/outage_transaction/cluster_agent (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/cluster_group
+--- PASS: TestPostgresOutageQualification/outage_transaction/cluster_group (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/cluster
+--- PASS: TestPostgresOutageQualification/outage_transaction/cluster (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/cluster_registration
+--- PASS: TestPostgresOutageQualification/outage_transaction/cluster_registration (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/cluster_registry
+--- PASS: TestPostgresOutageQualification/outage_transaction/cluster_registry (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/cluster_snapshot
+--- PASS: TestPostgresOutageQualification/outage_transaction/cluster_snapshot (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/cluster_template
+--- PASS: TestPostgresOutageQualification/outage_transaction/cluster_template (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/control_plane
+--- PASS: TestPostgresOutageQualification/outage_transaction/control_plane (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/control_plane_snapshot
+--- PASS: TestPostgresOutageQualification/outage_transaction/control_plane_snapshot (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/dashboard
+--- PASS: TestPostgresOutageQualification/outage_transaction/dashboard (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/dex
+--- PASS: TestPostgresOutageQualification/outage_transaction/dex (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/extension
+--- PASS: TestPostgresOutageQualification/outage_transaction/extension (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/gatekeeper_constraint
+--- PASS: TestPostgresOutageQualification/outage_transaction/gatekeeper_constraint (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/gitops
+--- PASS: TestPostgresOutageQualification/outage_transaction/gitops (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/group_mappings
+--- PASS: TestPostgresOutageQualification/outage_transaction/group_mappings (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/image_vulnerability
+--- PASS: TestPostgresOutageQualification/outage_transaction/image_vulnerability (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/logging
+--- PASS: TestPostgresOutageQualification/outage_transaction/logging (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/maintenance_gate
+--- PASS: TestPostgresOutageQualification/outage_transaction/maintenance_gate (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/maintenance
+--- PASS: TestPostgresOutageQualification/outage_transaction/maintenance (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/management_backup
+--- PASS: TestPostgresOutageQualification/outage_transaction/management_backup (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/monitoring
+--- PASS: TestPostgresOutageQualification/outage_transaction/monitoring (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/native_rbac
+--- PASS: TestPostgresOutageQualification/outage_transaction/native_rbac (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/network_policy
+--- PASS: TestPostgresOutageQualification/outage_transaction/network_policy (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/node
+--- PASS: TestPostgresOutageQualification/outage_transaction/node (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/notification_template
+--- PASS: TestPostgresOutageQualification/outage_transaction/notification_template (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/platform_default_template
+--- PASS: TestPostgresOutageQualification/outage_transaction/platform_default_template (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/platform_settings
+--- PASS: TestPostgresOutageQualification/outage_transaction/platform_settings (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/principal
+--- PASS: TestPostgresOutageQualification/outage_transaction/principal (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/project_catalog
+--- PASS: TestPostgresOutageQualification/outage_transaction/project_catalog (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/project_namespace
+--- PASS: TestPostgresOutageQualification/outage_transaction/project_namespace (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/quota
+--- PASS: TestPostgresOutageQualification/outage_transaction/quota (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/rbac
+--- PASS: TestPostgresOutageQualification/outage_transaction/rbac (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/read_audit_policy
+--- PASS: TestPostgresOutageQualification/outage_transaction/read_audit_policy (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/resource
+--- PASS: TestPostgresOutageQualification/outage_transaction/resource (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/resource_settings
+--- PASS: TestPostgresOutageQualification/outage_transaction/resource_settings (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/scim
+--- PASS: TestPostgresOutageQualification/outage_transaction/scim (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/security
+--- PASS: TestPostgresOutageQualification/outage_transaction/security (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/siem
+--- PASS: TestPostgresOutageQualification/outage_transaction/siem (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/smtp
+--- PASS: TestPostgresOutageQualification/outage_transaction/smtp (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/sso_callback
+--- PASS: TestPostgresOutageQualification/outage_transaction/sso_callback (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/support_bundle
+--- PASS: TestPostgresOutageQualification/outage_transaction/support_bundle (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/table_views
+--- PASS: TestPostgresOutageQualification/outage_transaction/table_views (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/tool
+--- PASS: TestPostgresOutageQualification/outage_transaction/tool (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/totp
+--- PASS: TestPostgresOutageQualification/outage_transaction/totp (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/user
+--- PASS: TestPostgresOutageQualification/outage_transaction/user (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/user_preferences
+--- PASS: TestPostgresOutageQualification/outage_transaction/user_preferences (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/vault
+--- PASS: TestPostgresOutageQualification/outage_transaction/vault (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/webhook
+--- PASS: TestPostgresOutageQualification/outage_transaction/webhook (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/workload
+--- PASS: TestPostgresOutageQualification/outage_transaction/workload (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/delivery_bundle
+--- PASS: TestPostgresOutageQualification/outage_transaction/delivery_bundle (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/delivery_configuration_template
+--- PASS: TestPostgresOutageQualification/outage_transaction/delivery_configuration_template (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/delivery_override_set
+--- PASS: TestPostgresOutageQualification/outage_transaction/delivery_override_set (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/delivery_source
+--- PASS: TestPostgresOutageQualification/outage_transaction/delivery_source (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/delivery_target
+--- PASS: TestPostgresOutageQualification/outage_transaction/delivery_target (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/alert_notification
+--- PASS: TestPostgresOutageQualification/outage_transaction/alert_notification (0.00s)
+=== RUN   TestPostgresOutageQualification/outage_transaction/crd_cluster_decommission
+--- PASS: TestPostgresOutageQualification/outage_transaction/crd_cluster_decommission (0.00s)
+2026/10/09 22:48:50 ERROR request failed request_id=ce780c26-141d-4468-8504-626e21106bee status=503 code=audit_unavailable internal_detail="Mandatory audit storage is unavailable; mutation success was not confirmed"
+2026/10/09 22:48:50 ERROR request failed request_id=ebae5cac-d192-48da-b7e5-473e6ae7e281 status=503 code=audit_unavailable internal_detail="Mandatory audit storage is unavailable; authentication is temporarily unavailable"
+2026/10/09 22:48:50 ERROR request failed request_id=5e761dca-cebf-4f50-81e9-63bbde99b4ed status=503 code=not_configured internal_detail="SMTP settings are not configured yet"
+2026/10/09 22:48:50 ERROR mandatory kubernetes proxy audit intent failed cluster_id=qualification-cluster method=PATCH error="failed to connect to `user=postgres_outage database=postgres_outage`: 127.0.0.1:53447 (127.0.0.1): dial error: dial tcp 127.0.0.1:53447: connect: connection refused"
+2026/10/09 22:48:50 ERROR request failed request_id=8c1a6947-c8d6-4df5-ba38-8482c7599610 status=503 code=audit_unavailable internal_detail="Mandatory audit storage is unavailable; mutation success was not confirmed"
+2026/10/09 22:48:50 ERROR request failed request_id=2d991955-2fa0-4207-ba4e-c9e6aa3be1be status=503 code=audit_unavailable internal_detail="Mandatory audit storage is unavailable; mutation success was not confirmed"
+--- PASS: TestPostgresOutageQualification (2.83s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/server	2.885s
+
+DONE 133 tests in 2.885s

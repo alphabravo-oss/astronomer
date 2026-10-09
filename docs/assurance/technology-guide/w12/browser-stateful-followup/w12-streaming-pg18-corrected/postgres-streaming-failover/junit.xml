@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="1" errors="0" time="0.130169">
+	<testsuite tests="1" failures="1" time="0.130000" name="github.com/alphabravocompany/astronomer-go/internal/server" timestamp="2026-10-09T22:38:53Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/server" name="TestPostgresFailoverRecoveryCertification" time="0.070000">
+			<failure message="Failed" type="">=== RUN   TestPostgresFailoverRecoveryCertification&#xA;    postgres_failover_certification_integration_test.go:297: PostgreSQL version = &#34;18.6 (Debian 18.6-1.pgdg13+2)&#34;, want 16.x&#xA;--- FAIL: TestPostgresFailoverRecoveryCertification (0.07s)&#xA;</failure>
+		</testcase>
+	</testsuite>
+</testsuites>

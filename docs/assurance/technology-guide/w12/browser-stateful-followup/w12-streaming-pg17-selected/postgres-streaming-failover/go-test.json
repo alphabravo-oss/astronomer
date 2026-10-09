@@ -1,0 +1,8 @@
+{"Time":"2026-10-09T22:42:19.689034362Z","Action":"start","Package":"github.com/alphabravocompany/astronomer-go/internal/server"}
+{"Time":"2026-10-09T22:42:19.745130259Z","Action":"run","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Test":"TestPostgresFailoverRecoveryCertification"}
+{"Time":"2026-10-09T22:42:19.745219146Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Test":"TestPostgresFailoverRecoveryCertification","Output":"=== RUN   TestPostgresFailoverRecoveryCertification\n","OutputType":"frame"}
+{"Time":"2026-10-09T22:42:20.391183172Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Test":"TestPostgresFailoverRecoveryCertification","Output":"--- PASS: TestPostgresFailoverRecoveryCertification (0.65s)\n","OutputType":"frame"}
+{"Time":"2026-10-09T22:42:20.391223658Z","Action":"pass","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Test":"TestPostgresFailoverRecoveryCertification","Elapsed":0.65}
+{"Time":"2026-10-09T22:42:20.391247524Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-10-09T22:42:20.396517335Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Output":"ok  \tgithub.com/alphabravocompany/astronomer-go/internal/server\t0.707s\n"}
+{"Time":"2026-10-09T22:42:20.396580014Z","Action":"pass","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Elapsed":0.708}

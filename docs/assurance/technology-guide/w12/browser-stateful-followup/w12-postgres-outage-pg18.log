@@ -1,0 +1,84 @@
+{"time":"2026-10-09T22:43:26.600910471Z","level":"INFO","msg":"database migration","detail":"1/u initial (671.383826ms)"}
+{"time":"2026-10-09T22:43:26.608942865Z","level":"INFO","msg":"database migration","detail":"2/u management_backup_destinations (679.39521ms)"}
+{"time":"2026-10-09T22:43:26.618263964Z","level":"INFO","msg":"database migration","detail":"3/u loki_ingest_tokens (688.727931ms)"}
+{"time":"2026-10-09T22:43:26.624233614Z","level":"INFO","msg":"database migration","detail":"4/u logging_outputs_is_system (694.682151ms)"}
+{"time":"2026-10-09T22:43:26.634301038Z","level":"INFO","msg":"database migration","detail":"5/u security_scan_lifecycle (704.813749ms)"}
+{"time":"2026-10-09T22:43:26.644177864Z","level":"INFO","msg":"database migration","detail":"6/u cluster_list_filter_indexes (714.680906ms)"}
+{"time":"2026-10-09T22:43:26.653617067Z","level":"INFO","msg":"database migration","detail":"7/u cluster_status_filter_index (724.117142ms)"}
+{"time":"2026-10-09T22:43:26.662225605Z","level":"INFO","msg":"database migration","detail":"8/u cluster_provider_filter_index (732.693069ms)"}
+{"time":"2026-10-09T22:43:26.66930342Z","level":"INFO","msg":"database migration","detail":"9/u cluster_environment_filter_index (739.770884ms)"}
+{"time":"2026-10-09T22:43:26.677523778Z","level":"INFO","msg":"database migration","detail":"10/u tool_operation_scope_index (747.994417ms)"}
+{"time":"2026-10-09T22:43:26.684943939Z","level":"INFO","msg":"database migration","detail":"11/u catalog_operation_scope_index (755.483559ms)"}
+{"time":"2026-10-09T22:43:26.693034973Z","level":"INFO","msg":"database migration","detail":"12/u logging_operation_scope_index (91.950995ms)"}
+{"time":"2026-10-09T22:43:26.701353735Z","level":"INFO","msg":"database migration","detail":"13/u installed_chart_scope_index (92.314159ms)"}
+{"time":"2026-10-09T22:43:26.709247447Z","level":"INFO","msg":"database migration","detail":"14/u anomaly_baseline_scope_index (90.898633ms)"}
+{"time":"2026-10-09T22:43:26.720128885Z","level":"INFO","msg":"database migration","detail":"15/u transactional_audit_outbox (95.751539ms)"}
+{"time":"2026-10-09T22:43:26.73090273Z","level":"INFO","msg":"database migration","detail":"16/u logging_saved_searches (96.497835ms)"}
+{"time":"2026-10-09T22:43:26.736990561Z","level":"INFO","msg":"database migration","detail":"17/u durable_audit_siem_fanout (92.642536ms)"}
+{"time":"2026-10-09T22:43:26.744883132Z","level":"INFO","msg":"database migration","detail":"18/u logging_pipeline_output_restrict (91.157451ms)"}
+{"time":"2026-10-09T22:43:26.75332184Z","level":"INFO","msg":"database migration","detail":"19/u gatekeeper_constraint_reconciliation (91.014691ms)"}
+{"time":"2026-10-09T22:43:26.761860948Z","level":"INFO","msg":"database migration","detail":"20/u admin_queue_operations (92.448832ms)"}
+{"time":"2026-10-09T22:43:26.76939857Z","level":"INFO","msg":"database migration","detail":"21/u management_backup_sagas (91.75173ms)"}
+{"time":"2026-10-09T22:43:26.781476219Z","level":"INFO","msg":"database migration","detail":"22/u resource_operations (96.418446ms)"}
+{"time":"2026-10-09T22:43:26.792557573Z","level":"INFO","msg":"database migration","detail":"23/u node_operations (99.410259ms)"}
+{"time":"2026-10-09T22:43:26.801981003Z","level":"INFO","msg":"database migration","detail":"24/u siem_test_operations (100.513884ms)"}
+{"time":"2026-10-09T22:43:26.811418891Z","level":"INFO","msg":"database migration","detail":"25/u dex_operations (102.035869ms)"}
+{"time":"2026-10-09T22:43:26.819290791Z","level":"INFO","msg":"database migration","detail":"26/u image_vulnerability_scanner_version_digest (99.055897ms)"}
+{"time":"2026-10-09T22:43:26.825902889Z","level":"INFO","msg":"database migration","detail":"27/u agent_connections_retention (94.892327ms)"}
+{"time":"2026-10-09T22:43:26.833161334Z","level":"INFO","msg":"database migration","detail":"28/u scim_token_lifecycle (96.089238ms)"}
+{"time":"2026-10-09T22:43:26.839946287Z","level":"INFO","msg":"database migration","detail":"29/u agent_connections_one_active (94.971564ms)"}
+{"time":"2026-10-09T22:43:26.861369158Z","level":"INFO","msg":"database migration","detail":"30/u audit_query_scale (107.937702ms)"}
+{"time":"2026-10-09T22:43:26.871179347Z","level":"INFO","msg":"database migration","detail":"31/u gitops_webhook_auth (109.226717ms)"}
+{"time":"2026-10-09T22:43:26.878703693Z","level":"INFO","msg":"database migration","detail":"32/u rbac_template_application_and_user_search (109.204865ms)"}
+{"time":"2026-10-09T22:43:26.889619303Z","level":"INFO","msg":"database migration","detail":"33/u user_preferences (108.065377ms)"}
+{"time":"2026-10-09T22:43:26.900377065Z","level":"INFO","msg":"database migration","detail":"34/u support_bundle_operations (107.709344ms)"}
+{"time":"2026-10-09T22:43:26.907398353Z","level":"INFO","msg":"database migration","detail":"35/u cluster_badges (105.28453ms)"}
+{"time":"2026-10-09T22:43:26.919086297Z","level":"INFO","msg":"database migration","detail":"36/u delivery_status_digest_runtime_generation (107.545355ms)"}
+{"time":"2026-10-09T22:43:26.927536986Z","level":"INFO","msg":"database migration","detail":"37/u cluster_agent_overrides (108.144543ms)"}
+{"time":"2026-10-09T22:43:26.935529544Z","level":"INFO","msg":"database migration","detail":"38/u delivery_target_overrides (109.534841ms)"}
+{"time":"2026-10-09T22:43:26.947418716Z","level":"INFO","msg":"database migration","detail":"39/u external_principals (114.130433ms)"}
+{"time":"2026-10-09T22:43:26.957541753Z","level":"INFO","msg":"database migration","detail":"40/u cluster_liveness (117.488376ms)"}
+{"time":"2026-10-09T22:43:26.964474025Z","level":"INFO","msg":"database migration","detail":"41/u project_resource_quota_allocations (103.006913ms)"}
+{"time":"2026-10-09T22:43:26.971337436Z","level":"INFO","msg":"database migration","detail":"42/u curated_cluster_tools (100.047161ms)"}
+{"time":"2026-10-09T22:43:26.978970276Z","level":"INFO","msg":"database migration","detail":"43/u tool_operation_execution_exclusivity (100.17474ms)"}
+{"time":"2026-10-09T22:43:26.984497722Z","level":"INFO","msg":"database migration","detail":"44/u istio_release_plan (94.77846ms)"}
+{"time":"2026-10-09T22:43:26.995872034Z","level":"INFO","msg":"database migration","detail":"45/u audit_export_operations (95.393339ms)"}
+{"time":"2026-10-09T22:43:27.004243665Z","level":"INFO","msg":"database migration","detail":"46/u tool_drift_leases (96.748058ms)"}
+{"time":"2026-10-09T22:43:27.01647955Z","level":"INFO","msg":"database migration","detail":"47/u refresh_session_families (97.3018ms)"}
+{"time":"2026-10-09T22:43:27.024455576Z","level":"INFO","msg":"database migration","detail":"48/u notification_delivery_identity (96.776623ms)"}
+{"time":"2026-10-09T22:43:27.052618707Z","level":"INFO","msg":"database migration","detail":"49/u durable_json_governance (116.962546ms)"}
+{"time":"2026-10-09T22:43:27.065310751Z","level":"INFO","msg":"database migration","detail":"50/u cluster_health_conditions_contract (117.732885ms)"}
+{"time":"2026-10-09T22:43:27.073508624Z","level":"INFO","msg":"database migration","detail":"51/u disable_invalid_dhi_catalog (115.850121ms)"}
+{"time":"2026-10-09T22:43:27.082008807Z","level":"INFO","msg":"database migration","detail":"52/u durable_json_contract_corrections (117.451576ms)"}
+{"time":"2026-10-09T22:43:27.099527768Z","level":"INFO","msg":"database migration","detail":"53/u application_catalog_v1 (128.069545ms)"}
+{"time":"2026-10-09T22:43:27.107629069Z","level":"INFO","msg":"database migration","detail":"54/u application_catalog_history_backfill (128.577571ms)"}
+{"time":"2026-10-09T22:43:27.114119699Z","level":"INFO","msg":"database migration","detail":"55/u installed_chart_project_ownership (129.515277ms)"}
+{"time":"2026-10-09T22:43:27.120099186Z","level":"INFO","msg":"database migration","detail":"56/u default_system_projects (124.103458ms)"}
+{"time":"2026-10-09T22:43:27.128313711Z","level":"INFO","msg":"database migration","detail":"57/u catalog_user_discovery (123.93949ms)"}
+{"time":"2026-10-09T22:43:27.134947891Z","level":"INFO","msg":"database migration","detail":"58/u delivery_system_component_inventory (118.337163ms)"}
+{"time":"2026-10-09T22:43:27.155171403Z","level":"INFO","msg":"database migration","detail":"59/u delivery_configuration_templates (130.634364ms)"}
+{"time":"2026-10-09T22:43:27.162420711Z","level":"INFO","msg":"database migration","detail":"60/u delivery_effective_configuration (109.71453ms)"}
+{"time":"2026-10-09T22:43:27.168142873Z","level":"INFO","msg":"database migration","detail":"61/u delivery_durable_json_governance (102.754677ms)"}
+{"time":"2026-10-09T22:43:27.172797445Z","level":"INFO","msg":"database migration","detail":"62/u charlie_delegation_function_search_path (99.193182ms)"}
+{"time":"2026-10-09T22:43:27.177776791Z","level":"INFO","msg":"database migration","detail":"63/u user_preferences_pinned_clusters (95.634554ms)"}
+{"time":"2026-10-09T22:43:27.183689201Z","level":"INFO","msg":"database migration","detail":"64/u user_preferences_display (84.04866ms)"}
+{"time":"2026-10-09T22:43:27.190494383Z","level":"INFO","msg":"database migration","detail":"65/u user_preferences_starred_types (82.783609ms)"}
+{"time":"2026-10-09T22:43:27.196535566Z","level":"INFO","msg":"database migration","detail":"66/u user_preferences_json_governance (82.345474ms)"}
+{"time":"2026-10-09T22:43:27.207066922Z","level":"INFO","msg":"database migration","detail":"67/u pin_cluster_tool_releases (86.893165ms)"}
+{"time":"2026-10-09T22:43:27.21422079Z","level":"INFO","msg":"database migration","detail":"68/u add_cis_operator_crd_release (85.784058ms)"}
+{"time":"2026-10-09T22:43:27.221409914Z","level":"INFO","msg":"database migration","detail":"69/u align_rancher_tool_dependencies (86.357538ms)"}
+{"time":"2026-10-09T22:43:27.226611988Z","level":"INFO","msg":"database migration","detail":"70/u enable_cert_manager_startup_check (71.319707ms)"}
+{"time":"2026-10-09T22:43:27.235493138Z","level":"INFO","msg":"database migration","detail":"71/u user_table_views (72.999991ms)"}
+{"time":"2026-10-09T22:43:27.242833757Z","level":"INFO","msg":"database migration","detail":"72/u durable_json_nested_validation (74.607747ms)"}
+=== RUN   TestPostgresOutageQualification
+    postgres_outage_qualification_integration_test.go:75: dedicated PostgreSQL outage container guard failed
+--- FAIL: TestPostgresOutageQualification (0.02s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/server	0.113s
+
+=== Failed
+=== FAIL: internal/server TestPostgresOutageQualification (0.02s)
+    postgres_outage_qualification_integration_test.go:75: dedicated PostgreSQL outage container guard failed
+
+DONE 1 tests, 1 failure in 0.114s
+qualification evidence: /root/.cache/astronomer-032/qualification/w12-postgres-outage-pg18/postgres-outage/evidence.json

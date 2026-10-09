@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="2" failures="0" errors="0" time="0.119234">
+	<testsuite tests="2" failures="0" time="0.119000" name="github.com/alphabravocompany/astronomer-go/internal/db/sqlc" timestamp="2026-10-09T22:47:46Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/db/sqlc" name="TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders" time="0.050000"></testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/db/sqlc" name="TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted" time="0.060000"></testcase>
+	</testsuite>
+</testsuites>

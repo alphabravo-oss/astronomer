@@ -1,0 +1,6 @@
+=== RUN   TestPostgresFailoverRecoveryCertification
+--- PASS: TestPostgresFailoverRecoveryCertification (0.69s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/server	0.745s
+
+DONE 1 tests in 0.746s
