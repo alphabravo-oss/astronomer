@@ -1,0 +1,26 @@
+=== RUN   TestPostgresDurableJSONNestedNewWritesAndLegacyArrays
+=== RUN   TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/legacy_empty
+=== RUN   TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/optional_regex_and_additive_key
+=== RUN   TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/Go_regex_not_Postgres_regex
+=== RUN   TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/missing_value
+=== RUN   TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/null_value
+=== RUN   TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/null_regex
+=== RUN   TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/equal_nested_value
+--- PASS: TestPostgresDurableJSONNestedNewWritesAndLegacyArrays (0.02s)
+    --- PASS: TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/legacy_empty (0.01s)
+    --- PASS: TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/optional_regex_and_additive_key (0.00s)
+    --- PASS: TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/Go_regex_not_Postgres_regex (0.00s)
+    --- PASS: TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/missing_value (0.00s)
+    --- PASS: TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/null_value (0.00s)
+    --- PASS: TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/null_regex (0.00s)
+    --- PASS: TestPostgresDurableJSONNestedNewWritesAndLegacyArrays/equal_nested_value (0.00s)
+=== RUN   TestPostgresTaskPayloadSchemaMatchesV1Adapter
+--- PASS: TestPostgresTaskPayloadSchemaMatchesV1Adapter (0.02s)
+=== RUN   TestPostgresDurableJSONExpandPreservesCorruptHistoricalRows
+--- PASS: TestPostgresDurableJSONExpandPreservesCorruptHistoricalRows (0.01s)
+=== RUN   TestPostgresPlacementAndRolloutNestedWireShapes
+--- PASS: TestPostgresPlacementAndRolloutNestedWireShapes (0.01s)
+=== RUN   TestPostgresIntegrityAuditDedupeUsesExistingOutbox
+--- PASS: TestPostgresIntegrityAuditDedupeUsesExistingOutbox (0.01s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/jsoncontract	0.100s
