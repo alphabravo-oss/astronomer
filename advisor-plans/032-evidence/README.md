@@ -23,7 +23,7 @@ separately. No historic qualification is attributed to a new candidate.
 | W09 | IN PROGRESS | Corrupt-inhibition regressions PASS; full schema/migration work pending | Integrated `677c2246`: bounded versioned parser, once-per-sweep regex preparation, skip/audit/retry behavior and typed handler failures. Broader decoder/writer/reader inventory and reversible migration 072 continue in `implement/032-json-contracts`. |
 | W10 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W11 | TODO | TODO | Await dependencies and bounded implementation slice. |
-| W12 | TODO | TODO | Await dependencies and bounded implementation slice. |
+| W12 | PREREQUISITES / CHARACTERIZATION | CNPG17 previous-major 21/21 integration PASS; full matrix TODO | Owned supported-minor K3s1.36.5 cluster has CNPG17.11 three replicas, synchronous replication and RustFS1.0.1 authenticated S3 operations. Existing 21 real-database cases pass with zero skips. PostgreSQL18, failover/physical restore/keys/full application/cross-browser qualification remain open. |
 | W13 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W14 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W15 | TODO | TODO | Await dependencies and bounded implementation slice. |
@@ -56,3 +56,6 @@ separately. No historic qualification is attributed to a new candidate.
 - Future publication policy and externally qualified claims require concrete applicable evidence/decisions.
 
 - W01 final reviewer acceptance: 36 authority/resolution/inventory fixtures, 25 security-policy fixtures with the real Gitleaks integration case, and the existing public-client/nullable SDK runtime test pass. Official CNPG signature verification succeeds with networking disabled; the Astronomer signer policy rejects that foreign publisher. New release preflight has only contents/actions read permission for the cross-run signed record. No Astronomer-produced signed record or publication is claimed.
+
+- CNPG17 reviewer characterization: migrations and all 21 expected integration tests pass on frozen `d4274b07`, zero structured skips, against an owned database via private-node NodePort. The first attempt failed after a dropped port-forward and remains retained separately. No restored-key, failover, backup/restore or PostgreSQL18 claim follows from this result. See [stateful prerequisites](cnpg36-stateful-prerequisites.json) and [integration receipt](cnpg17-integration.json).
+- W09 decoder followups `c8c506a2` and `3bfce84b` reviewed: malformed/trailing/chunked bodies cannot reach ordinary mutation writes; explicit least-privilege shell fallback retains read-only Role verbs. Safe nested inhibition fields and typed errors pass actual handler tests. Paired canonical OpenAPI generation with historical Go SDK pointer compatibility remains owned by W06.
