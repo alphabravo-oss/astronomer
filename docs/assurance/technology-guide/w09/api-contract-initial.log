@@ -1,0 +1,104 @@
+./scripts/verify-enterprise.sh api-contract
+
+==> Tool prerequisites and exact versions
+
+==> Pinned Charlie Product Bridge contract
+make[1]: Entering directory '/root/astronomer-all/astronomer-032-w09'
+./scripts/check-charlie-contract-generated.sh
+pinned/authority-policy.json: OK
+pinned/bridge-service.json: OK
+pinned/bridge.openapi.yaml: OK
+pinned/conformance/product-adapter-conformance-v1.json: OK
+pinned/credential-route-matrix.json: OK
+pinned/live-qualification-scenarios-v1.json: OK
+pinned/schemas/alert-delivery-v1.schema.json: OK
+pinned/schemas/capability-v1.schema.json: OK
+pinned/schemas/connector-capability-v1.schema.json: OK
+pinned/schemas/finding-v1.schema.json: OK
+pinned/schemas/kubernetes-visibility-v1.schema.json: OK
+pinned/schemas/live-isolation-observation-v1.schema.json: OK
+pinned/schemas/onboarding-v1.schema.json: OK
+pinned/schemas/product-adapter-conformance-v1.schema.json: OK
+pinned/schemas/product-adapter-result-v1.schema.json: OK
+WARNING: You are using an OpenAPI 3.1.x specification, which is not yet supported by oapi-codegen (https://github.com/oapi-codegen/oapi-codegen/issues/373) and so some functionality may not be available. Until oapi-codegen supports OpenAPI 3.1, it is recommended to downgrade your spec to 3.0.x
+Charlie pinned contract and generated client are current
+make[1]: Leaving directory '/root/astronomer-all/astronomer-032-w09'
+
+==> API contract Go build
+
+==> API contract Go vet
+
+==> API package tests
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	19.834s
+ok  	github.com/alphabravocompany/astronomer-go/internal/server	7.281s
+ok  	github.com/alphabravocompany/astronomer-go/internal/auth	1.195s
+ok  	github.com/alphabravocompany/astronomer-go/internal/server/middleware	0.296s
+
+==> Documentation links, lifecycle classification, and terminology
+documentation contract passed: 122 current documents, 608 relative links
+docs/configuration.md is current
+.env.example is current
+✔ environment keys and defaults follow the configuration schema (2.980441ms)
+✔ schema drift cannot silently drop a bound field or default (1.36502ms)
+✔ unrecognized defaults and missing Vite configuration fail closed (0.347715ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 79.518741
+
+==> Repository-wide file and function complexity budgets
+complexity budget passed: 2071 production source file(s), 41 file ceiling(s), 65 function ceiling(s)
+
+==> Go and frontend dependency-direction boundaries
+dependency boundaries passed: 14 rules, 1490 files, 9535 imports
+
+==> Release compatibility contract and generated documentation
+compatibility contract: valid; generated views are current
+
+==> OpenAPI route coverage
+OpenAPI coverage report
+=======================
+router operations   : 828
+spec operations     : 838
+documented (matched): 828
+missing (undocumented routes): 0
+extra (spec drift, no route): 0
+nil-gated (unrouted in dump, allowlisted): 10
+coverage            : 100.0%  (828/828)
+
+==> OpenAPI route synchronization and operation quality
+OpenAPI routes and stable operationIds are synchronized.
+OpenAPI quality gate passed for 854 operations, including 107 actionable 202 mutations and 5 explicit exceptions.
+
+==> OpenAPI Spectral schema validation
+OpenAPI Spectral schema lint passed (1062 advisory warning(s) suppressed).
+
+==> OpenAPI breaking-change review
+OpenAPI compatibility gate passed against HEAD:docs/openapi.yaml; reports: /tmp/astronomer-verify-enterprise
+
+==> OpenAPI request-schema fields vs Go request structs
+OpenAPI request-schema field contract
+=====================================
+request shapes (named and inline)        : 163
+  bound to a Go struct                   : 163
+  unbound, on the debt list              : 0
+  unbound, NOT on the debt list          : 0
+  explicitly provisional                 : 0
+  bound but property-less (placeholder)  : 0
+bindings (marker occurrences)            : 163
+  field-comparable                       : 163
+per-field waivers                        : 9
+schemas with field drift                 : 0
+drifting fields                          : 0
+inline request bodies (field-verifiable) : 36
+proxy passthrough request bodies         : 44
+polymorphic Kubernetes request bodies    : 2
+
+==> Generated frontend OpenAPI types
+frontend/src/types/openapi.generated.ts is out of date.
+Run `cd frontend && npm run openapi:types`.
+make: *** [Makefile:166: verify] Error 1
