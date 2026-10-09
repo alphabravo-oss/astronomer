@@ -34,10 +34,11 @@ type paginationQueryPlan struct {
 }
 
 type paginationPlanNode struct {
-	NodeType    string               `json:"Node Type"`
-	IndexName   string               `json:"Index Name"`
-	ActualRows  int                  `json:"Actual Rows"`
-	ActualLoops int                  `json:"Actual Loops"`
+	NodeType  string `json:"Node Type"`
+	IndexName string `json:"Index Name"`
+	// EXPLAIN reports numeric averages; PostgreSQL18 emits 201.00 for 201 rows.
+	ActualRows  float64              `json:"Actual Rows"`
+	ActualLoops float64              `json:"Actual Loops"`
 	Plans       []paginationPlanNode `json:"Plans"`
 }
 
@@ -50,8 +51,8 @@ func assertBoundedChartPlan(t *testing.T, nodes []paginationPlanNode) bool {
 		}
 		if node.IndexName == "idx_helm_charts_keyset" {
 			found = true
-			if node.ActualRows*node.ActualLoops > 201 {
-				t.Fatalf("chart index read%d rows for201-row sentinel", node.ActualRows*node.ActualLoops)
+			if node.ActualRows < 0 || node.ActualLoops <= 0 || node.ActualRows*node.ActualLoops > 201 {
+				t.Fatalf("chart index read%g rows for201-row sentinel", node.ActualRows*node.ActualLoops)
 			}
 		}
 		found = assertBoundedChartPlan(t, node.Plans) || found
