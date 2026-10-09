@@ -1,9 +1,7 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -105,18 +103,6 @@ func decodeStrictJSONBody(r *http.Request, out any) error {
 // It preserves extra properties while imposing the same size/document bound.
 func decodeV1JSONBody(r *http.Request, out any) error {
 	return jsoncontract.DecodeRequest(r, out, jsoncontract.AdditiveV1)
-}
-
-func ensureJSONEOF(decoder *json.Decoder) error {
-	var extra any
-	err := decoder.Decode(&extra)
-	if errors.Is(err, io.EOF) {
-		return nil
-	}
-	if err == nil {
-		return errors.New("request body must contain exactly one JSON value")
-	}
-	return err
 }
 
 // writeValidationError renders a validator.ValidationErrors as the uniform 422

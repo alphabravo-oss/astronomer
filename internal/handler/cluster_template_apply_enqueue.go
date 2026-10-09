@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -44,32 +43,28 @@ func upsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, q any, 
 	if !ok || outbox == nil || task == nil {
 		return sqlc.ClusterTemplateApplication{}, false, nil
 	}
-	if opts.QueueName == "" {
-		opts.QueueName = "default"
+	// This atomic path historically rejected negative retries through the SQL
+	// check; retain that behavior before using the generic writer's v1 defaults.
+	if opts.MaxRetry < 0 {
+		return sqlc.ClusterTemplateApplication{}, true, &jsoncontract.Error{Field: "task_options", Category: "out_of_range"}
 	}
-	if opts.MaxDeliveryAttempts <= 0 {
-		opts.MaxDeliveryAttempts = 20
-	}
-	if opts.NextAttemptAt.IsZero() {
-		opts.NextAttemptAt = time.Now().UTC()
-	}
-	dedupe := pgtype.Text{}
-	if opts.DedupeKey != "" {
-		dedupe = pgtype.Text{String: opts.DedupeKey, Valid: true}
+	prepared, err := tasks.PrepareTaskOutbox(ctx, task, opts)
+	if err != nil {
+		return sqlc.ClusterTemplateApplication{}, true, err
 	}
 	row, err := atomicQ.UpsertClusterTemplateApplicationWithTaskOutbox(ctx, sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams{
 		ClusterID:           app.ClusterID,
 		TemplateID:          app.TemplateID,
 		SpecSnapshot:        app.SpecSnapshot,
-		DedupeKey:           dedupe,
-		TaskType:            task.Type(),
-		Payload:             task.Payload(),
-		QueueName:           opts.QueueName,
-		MaxRetry:            int32(opts.MaxRetry),
-		TimeoutSeconds:      int32(opts.Timeout.Round(time.Second) / time.Second),
-		UniqueSeconds:       int32(opts.Unique.Round(time.Second) / time.Second),
-		MaxDeliveryAttempts: int32(opts.MaxDeliveryAttempts),
-		NextAttemptAt:       pgtype.Timestamptz{Time: opts.NextAttemptAt.UTC(), Valid: true},
+		DedupeKey:           prepared.DedupeKey,
+		TaskType:            prepared.TaskType,
+		Payload:             prepared.Payload,
+		QueueName:           prepared.QueueName,
+		MaxRetry:            prepared.MaxRetry,
+		TimeoutSeconds:      prepared.TimeoutSeconds,
+		UniqueSeconds:       prepared.UniqueSeconds,
+		MaxDeliveryAttempts: prepared.MaxDeliveryAttempts,
+		NextAttemptAt:       prepared.NextAttemptAt,
 	})
 	return row, true, err
 }
