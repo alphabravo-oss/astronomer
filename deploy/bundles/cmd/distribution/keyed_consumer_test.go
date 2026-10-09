@@ -15,6 +15,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/provider"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -60,13 +61,17 @@ func (q *keyedConsumerQueries) FinalizeDeliveryAssignmentSnapshot(_ context.Cont
 // keyed consumer. It does not exercise production server startup or vendor OIDC.
 func verifyActualKeyedConsumer(t *testing.T, index subjectIndex, client *http.Client, trustDirectory string) {
 	t.Helper()
+	verifyActualKeyedConsumerOptions(t, index, client, trustDirectory, nil, httpclient.DestinationPolicy{})
+}
+func verifyActualKeyedConsumerOptions(t *testing.T, index subjectIndex, client *http.Client, trustDirectory string, mirror *distribution.MirrorPlan, network httpclient.DestinationPolicy) {
+	t.Helper()
 	snapshot, err := resolver.CaptureMountedPublicKey(trustDirectory, "qa")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer snapshot.Close()
 	queries := &keyedConsumerQueries{}
-	state, loader, err := provider.NewBuiltinQAConsumer(queries, nil, snapshot, nil, distribution.Options{Repository: index.Repository, Digest: index.Digest, CatalogDigest: index.CatalogDigest, Release: index.Release, Profile: "builtins", Policy: model.TrustPolicy{Provider: model.SignatureCosignKey, KeyRef: "qa"}, Client: client})
+	state, loader, err := provider.NewBuiltinQAConsumer(queries, nil, snapshot, nil, distribution.Options{Repository: index.Repository, Digest: index.Digest, CatalogDigest: index.CatalogDigest, Release: index.Release, Profile: "builtins", Policy: model.TrustPolicy{Provider: model.SignatureCosignKey, KeyRef: "qa"}, Client: client, MirrorPlan: mirror, Network: network})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +90,9 @@ func verifyActualKeyedConsumer(t *testing.T, index subjectIndex, client *http.Cl
 		return body
 	}
 	for _, component := range catalog.Components {
+		if mirror != nil && (!strings.HasPrefix(component.Source.URL, "oci://1.1.1.1/mirror/") || strings.Contains(string(encode(component.Values)), "1.1.1.1/fixture@") || strings.Contains(string(encode(component.Values)), "1.1.1.1/distribution/assets/")) {
+			t.Fatal("public chart/image location survived qualified mirror projection")
+		}
 		source := uuid.NewSHA1(namespace, []byte("source\x00"+project.String()+"\x00"+component.Source.URL+"\x00"+catalog.DistributionIdentity))
 		row := sqlc.ListClusterDeliveryAssignmentsRow{ID: uuid.New(), TargetID: uuid.New(), ClusterID: cluster, ProjectID: project, SourceID: source, DesiredGeneration: 1, DesiredSpecDigest: "sha256:" + strings.Repeat("a", 64), Action: "apply", Scope: string(model.ScopePlatform), SourceType: string(model.SourceHelmOCI), Url: component.Source.URL, AuthMode: string(model.AuthNone), ResolvedRevision: component.Source.Version, ArtifactDigest: component.Source.ChartDigest, Renderer: string(model.RendererHelm), DesiredOverrides: json.RawMessage(`{}`), TrustPolicy: encode(model.TrustPolicy{Provider: model.SignatureCosignKey, KeyRef: "qa"}), RendererSpec: encode(model.RendererSpec{Kind: model.RendererHelm, Helm: &model.HelmSpec{Chart: component.Source.Chart, ChartVersion: component.Source.Version, ReleaseName: component.ReleaseName, TargetNamespace: component.TargetNamespace, Values: encode(component.Values)}}), ReconciliationPolicy: encode(model.ReconciliationPolicy{Interval: model.Duration(time.Minute), RetryInterval: model.Duration(time.Minute), Timeout: model.Duration(5 * time.Minute), Prune: true, Wait: true, Drift: model.DriftRepair})}
 		queries.rows = append(queries.rows, row)
