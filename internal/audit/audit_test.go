@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
 type fakeWriter struct {
@@ -168,5 +171,39 @@ func TestRecordIncludesBeforeAfterAndTags(t *testing.T) {
 	tags := detail["tags"].(map[string]any)
 	if tags["scope"] != "global" {
 		t.Fatalf("tags.scope = %v, want global", tags["scope"])
+	}
+}
+
+type invalidEnvelopeBus struct{ calls int }
+
+func (b *invalidEnvelopeBus) Publish(string, any) { b.calls++ }
+
+func TestRecordInvalidEnvelopeReportsFailureWithoutDBOrBus(t *testing.T) {
+	var log bytes.Buffer
+	previousLog := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&log, nil)))
+	defer slog.SetDefault(previousLog)
+	busPublisherMu.RLock()
+	previousBus := busPublisher
+	busPublisherMu.RUnlock()
+	bus := &invalidEnvelopeBus{}
+	SetBusPublisher(bus)
+	defer SetBusPublisher(previousBus)
+	writer := &fakeWriter{}
+	event := Event{Action: "cluster.update", ResourceType: "cluster", ResourceID: "private-fixture", Detail: map[string]any{"value": make(chan string)}}
+	counter := auditWriteFailuresTotal.WithLabelValues(observability.MetricValues("sync")...)
+	before := testutil.ToFloat64(counter)
+	Record(t.Context(), writer, event)
+	if err := RecordMandatory(t.Context(), writer, event); !errors.Is(err, ErrMandatoryPersistenceUnavailable) {
+		t.Fatalf("mandatory path did not reject invalid envelope: %v", err)
+	}
+	if writer.last != nil || bus.calls != 0 {
+		t.Fatalf("invalid envelope reached database/bus: db=%t bus=%d", writer.last != nil, bus.calls)
+	}
+	if testutil.ToFloat64(counter) != before+2 {
+		t.Fatal("marshal failures missing from existing persistence failure metric")
+	}
+	if strings.Contains(log.String(), "private-fixture") || !strings.Contains(log.String(), "invalid_json") {
+		t.Fatal("diagnostic must contain category and no event content")
 	}
 }
