@@ -572,6 +572,14 @@ test("terminal disconnect cancels the real tunnel and deletes its scoped pod", a
   expect(typeof session.id).toBe("string");
   expect(typeof session.pod_name).toBe("string");
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  // The marker is not present contiguously in the echoed command. Seeing it
+  // proves stdin reached the real remote process and stdout returned through
+  // the authenticated tunnel before Disconnect cancels the long-running task.
+  await page.locator(".wterm").click();
+  await page.keyboard.type("printf '%s%s\\n' w12- remote-ready; sleep 120");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".wterm")).toContainText("w12-remote-ready");
+
   const closed = page.waitForResponse(
     (result) =>
       result.request().method() === "POST" &&
