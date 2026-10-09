@@ -14,72 +14,36 @@ import (
 // ReadArchive is invoked only after subject authentication. Nothing is written
 // to disk: all member names/types/sizes/hashes must match the signed closed BOM.
 func ReadArchive(payload []byte, release, catalogDigest, profileName string) (builtinbundles.Catalog, BOM, error) {
+	catalog, bom, _, err := readArchiveMembers(payload, release, catalogDigest, profileName)
+	return catalog, bom, err
+}
+
+func readArchiveMembers(payload []byte, release, catalogDigest, profileName string) (builtinbundles.Catalog, BOM, map[string][]byte, error) {
 	var empty builtinbundles.Catalog
 	members, bom, err := ReadClosedArchive(payload, release, catalogDigest)
 	if err != nil {
-		return empty, BOM{}, err
+		return empty, BOM{}, nil, err
 	}
 	catalog, err := builtinbundles.Parse(members["catalog.json"])
 	if err != nil || catalog.Release != release {
-		return empty, BOM{}, errors.New("distribution catalog is invalid")
+		return empty, BOM{}, nil, errors.New("distribution catalog is invalid")
 	}
 	if err := validateChartSubjects(bom, catalog); err != nil {
-		return empty, bom, err
+		return empty, bom, nil, err
 	}
 	if err := validateProfile(bom, members, catalog, profileName); err != nil {
-		return empty, bom, err
+		return empty, bom, nil, err
 	}
-	return catalog, bom, nil
+	return catalog, bom, members, nil
 }
 
 // ReadClosedArchive applies the same closed BOM/member contract to authenticated
 // distribution and application archives. Callers must authenticate their parent
 // subject or detached archive document before invoking it. It never extracts.
 func ReadClosedArchive(payload []byte, release, catalogDigest string) (map[string][]byte, BOM, error) {
-	if int64(len(payload)) > MaximumArchiveBytes {
-		return nil, BOM{}, errors.New("distribution archive exceeds bounds")
-	}
-	compressedInput := bytes.NewReader(payload)
-	compressed, err := gzip.NewReader(compressedInput)
+	members, err := ReadBoundedRegularArchive(payload, MaximumArchiveBytes, MaximumExpandedBytes, MaximumMembers)
 	if err != nil {
-		return nil, BOM{}, errors.New("distribution archive compression is invalid")
-	}
-	defer compressed.Close()
-	compressed.Multistream(false)
-	expanded, err := io.ReadAll(io.LimitReader(compressed, MaximumExpandedBytes+1))
-	if err != nil || int64(len(expanded)) > MaximumExpandedBytes || compressedInput.Len() != 0 {
-		return nil, BOM{}, errors.New("distribution archive compression exceeds bounds or has trailing data")
-	}
-	raw := bytes.NewReader(expanded)
-	reader := tar.NewReader(raw)
-	members := map[string][]byte{}
-	var total int64
-	for {
-		header, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, BOM{}, errors.New("distribution archive is invalid")
-		}
-		if !memberPath(header.Name) || header.Typeflag != tar.TypeReg || header.Size < 0 || header.Size > MaximumArchiveBytes || len(members) >= MaximumMembers {
-			return nil, BOM{}, errors.New("distribution archive member is unsafe")
-		}
-		if _, exists := members[header.Name]; exists {
-			return nil, BOM{}, errors.New("distribution archive member is duplicated")
-		}
-		total += header.Size
-		if total > MaximumExpandedBytes {
-			return nil, BOM{}, errors.New("distribution expanded archive exceeds bounds")
-		}
-		data, err := io.ReadAll(io.LimitReader(reader, header.Size+1))
-		if err != nil || int64(len(data)) != header.Size {
-			return nil, BOM{}, errors.New("distribution archive member size mismatch")
-		}
-		members[header.Name] = data
-	}
-	if trailing, _ := io.ReadAll(raw); len(bytes.Trim(trailing, "\x00")) != 0 {
-		return nil, BOM{}, errors.New("distribution archive has trailing payload")
+		return nil, BOM{}, err
 	}
 	var bom BOM
 	if len(members["bom.json"]) > 1<<20 || decodeClosed(members["bom.json"], &bom) != nil {
@@ -112,6 +76,61 @@ func ReadClosedArchive(payload []byte, release, catalogDigest string) (map[strin
 		return nil, BOM{}, err
 	}
 	return members, bom, nil
+}
+
+// ReadBoundedRegularArchive is the shared safe in-memory transfer reader. It
+// never extracts; callers must authenticate the resulting closed graph before
+// any disk write. Bounds may narrow the fixed operator-transfer ceiling.
+func ReadBoundedRegularArchive(payload []byte, maximumCompressed, maximumExpanded int64, maximumMembers int) (map[string][]byte, error) {
+	if maximumCompressed <= 0 || maximumCompressed > 2*MaximumExpandedBytes || maximumExpanded <= 0 || maximumExpanded > 2*MaximumExpandedBytes || maximumMembers <= 0 || maximumMembers > 4*MaximumMembers {
+		return nil, errors.New("archive reader bounds invalid")
+	}
+	if int64(len(payload)) > maximumCompressed {
+		return nil, errors.New("distribution archive exceeds bounds")
+	}
+	compressedInput := bytes.NewReader(payload)
+	compressed, err := gzip.NewReader(compressedInput)
+	if err != nil {
+		return nil, errors.New("distribution archive compression is invalid")
+	}
+	defer compressed.Close()
+	compressed.Multistream(false)
+	expanded, err := io.ReadAll(io.LimitReader(compressed, maximumExpanded+1))
+	if err != nil || int64(len(expanded)) > maximumExpanded || compressedInput.Len() != 0 {
+		return nil, errors.New("distribution archive compression exceeds bounds or has trailing data")
+	}
+	raw := bytes.NewReader(expanded)
+	reader := tar.NewReader(raw)
+	members := map[string][]byte{}
+	var total int64
+	for {
+		header, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, errors.New("distribution archive is invalid")
+		}
+		if !memberPath(header.Name) || header.Typeflag != tar.TypeReg || header.Size < 0 || header.Size > MaximumArchiveBytes || len(members) >= maximumMembers {
+			return nil, errors.New("distribution archive member is unsafe")
+		}
+		if _, exists := members[header.Name]; exists {
+			return nil, errors.New("distribution archive member is duplicated")
+		}
+		total += header.Size
+		if total > maximumExpanded {
+			return nil, errors.New("distribution expanded archive exceeds bounds")
+		}
+		data, err := io.ReadAll(io.LimitReader(reader, header.Size+1))
+		if err != nil || int64(len(data)) != header.Size {
+			return nil, errors.New("distribution archive member size mismatch")
+		}
+		members[header.Name] = data
+	}
+	if trailing, _ := io.ReadAll(raw); len(bytes.Trim(trailing, "\x00")) != 0 {
+		return nil, errors.New("distribution archive has trailing payload")
+	}
+	return members, nil
 }
 
 func validateProfile(bom BOM, members map[string][]byte, catalog builtinbundles.Catalog, name string) error {

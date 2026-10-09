@@ -84,6 +84,9 @@ func publishLayout(ctx context.Context, options publicationOptions) error {
 	}
 	credential := credentials.Credential(credentialStore)
 	subjects := append([]publishedSubject{}, index.Children...)
+	for _, asset := range index.Assets {
+		subjects = append(subjects, publishedSubject{Repository: asset.Repository, Digest: asset.Digest})
+	}
 	subjects = append(subjects, publishedSubject{Repository: index.Repository, Digest: index.Digest})
 	signer := options.sign
 	if signer == nil {

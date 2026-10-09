@@ -46,6 +46,9 @@ type Loader struct {
 	cached  *builtinbundles.Catalog
 	status  Status
 	fetch   artifactFetcher
+	// Only VerifyOfflineStore installs this closed in-memory transport. It is
+	// never selected by runtime configuration or distribution document fields.
+	offline *offlineRegistry
 }
 type artifactFetcher func(context.Context, *http.Client, string, string, string, model.TrustPolicy, string, int64) ([]byte, resolver.Verification, error)
 
@@ -95,7 +98,7 @@ func (l *Loader) Load(ctx context.Context) (builtinbundles.Catalog, error) {
 		return builtinbundles.Catalog{}, err
 	}
 	if l.cached == nil {
-		if err := l.options.Network.ValidateURL(ctx, "https://"+l.options.Repository); err != nil {
+		if err := l.validateLocation(ctx, l.options.Repository); err != nil {
 			l.status.BlockedCategory = "network"
 			return builtinbundles.Catalog{}, errors.New("distribution location is outside operator policy")
 		}
@@ -123,7 +126,7 @@ func (l *Loader) Load(ctx context.Context) (builtinbundles.Catalog, error) {
 }
 
 func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbundles.Catalog, error) {
-	catalog, bom, err := ReadArchive(payload, l.options.Release, l.options.CatalogDigest, l.options.Profile)
+	catalog, bom, members, err := readArchiveMembers(payload, l.options.Release, l.options.CatalogDigest, l.options.Profile)
 	if err != nil {
 		return builtinbundles.Catalog{}, err
 	}
@@ -132,6 +135,9 @@ func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbun
 	catalog.VerificationIssuer = l.options.Policy.Issuer
 	catalog.VerificationProvider = string(l.options.Policy.Provider)
 	catalog.VerificationKeyRef = l.options.Policy.KeyRef
+	if err := projectArtifactValues(&catalog, bom); err != nil {
+		return builtinbundles.Catalog{}, err
+	}
 	// Project locations first, then authenticate the same immutable child subjects
 	// at approved mirrors. Their original vendor signature remains mandatory.
 	for index := range catalog.Components {
@@ -157,7 +163,7 @@ func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbun
 	}
 	for _, component := range catalog.Components {
 		repository := strings.TrimPrefix(component.Source.URL, "oci://") + "/" + component.Source.Chart
-		if err := l.options.Network.ValidateURL(ctx, "https://"+repository); err != nil {
+		if err := l.validateLocation(ctx, repository); err != nil {
 			return builtinbundles.Catalog{}, errors.New("child chart location is outside operator policy")
 		}
 		archive, verification, err := l.fetch(ctx, l.options.Client, repository, component.Source.ChartDigest, "application/vnd.cncf.helm.chart.content.v1.tar+gzip", l.options.Policy, l.options.TrustDirectory, MaximumArchiveBytes)
@@ -176,7 +182,20 @@ func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbun
 	if err := catalog.Validate(); err != nil {
 		return builtinbundles.Catalog{}, err
 	}
+	if err := l.verifyPublishedAssets(ctx, bom, members); err != nil {
+		return builtinbundles.Catalog{}, err
+	}
 	return catalog, nil
+}
+
+func (l *Loader) validateLocation(ctx context.Context, repository string) error {
+	if l.offline != nil {
+		if l.options.Client.Transport != l.offline || !l.offline.repositories[repository] {
+			return errors.New("offline subject is outside the closed local graph")
+		}
+		return ctx.Err()
+	}
+	return l.options.Network.ValidateURL(ctx, "https://"+repository)
 }
 
 func cloneCatalog(catalog builtinbundles.Catalog) builtinbundles.Catalog {

@@ -1,0 +1,12 @@
+=== RUN   TestPostgresRecoveryFixtureProductionReaders
+    postgres_integration_test.go:48: seed rejected SQLSTATE=23514 table=cluster_deployments constraint=cluster_deployment_phase_valid
+--- FAIL: TestPostgresRecoveryFixtureProductionReaders (0.05s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/scripts/cnpg-recovery-fixture	0.096s
+
+=== Failed
+=== FAIL: scripts/cnpg-recovery-fixture TestPostgresRecoveryFixtureProductionReaders (0.05s)
+    postgres_integration_test.go:48: seed rejected SQLSTATE=23514 table=cluster_deployments constraint=cluster_deployment_phase_valid
+
+DONE 1 tests, 1 failure in 0.096s
+qualification evidence: /root/.cache/astronomer-032/qualification/w12-recovery-draft/recovery-readers/evidence.json

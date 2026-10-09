@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "name": "postgres-integrations",
+  "sourceCommit": "9dda3bf59bf1b6525c1dfdae729c29abed809b85",
+  "sourceDirty": false,
+  "sourceBefore": {
+    "schema_version": 2,
+    "source_file_count": 5878,
+    "source_tree_sha256": "7906c8c6c5ffb4c1c6c2545561bab93693c5b9707f621ba9259e5ee3a9701615"
+  },
+  "sourceAfter": {
+    "schema_version": 2,
+    "source_file_count": 5878,
+    "source_tree_sha256": "7906c8c6c5ffb4c1c6c2545561bab93693c5b9707f621ba9259e5ee3a9701615"
+  },
+  "sourceStable": true,
+  "startedAt": "2026-10-09T22:23:45.635920+00:00",
+  "completedAt": "2026-10-09T22:25:47.269152+00:00",
+  "durationSeconds": 121.633232,
+  "exitCode": 0,
+  "status": "pass",
+  "goVersion": "go version go1.27.2 linux/amd64",
+  "gotestsumVersion": "gotestsum version v1.13.0",
+  "goArguments": [
+    "-p=1",
+    "-count=1",
+    "-timeout=10m",
+    "-run",
+    "^(TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether|TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership|TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory|TestPostgresSystemReleaseBootstrapIdempotencyAndDraft|TestPostgresSystemReleaseBootstrapImmutableAndRevoked|TestPostgresSystemReleaseBootstrapRollbackAfterInsert|TestPostgresSystemReleaseBootstrapSameTransactionLock|TestPostgresSystemReleaseBootstrapConcurrentFirstCreate|TestPostgresCatalogAssetsIdempotencyAndExplicitGeneration|TestPostgresCatalogAssetsUncuratedChartDoesNotInventVersionLedger|TestPostgresCatalogAssetsLateValidationRollsBackPriorWrites|TestPostgresDurableJSONNestedNewWritesAndLegacyArrays|TestPostgresTaskPayloadSchemaMatchesV1Adapter|TestPostgresDurableJSONExpandPreservesCorruptHistoricalRows|TestPostgresIntegrityAuditDedupeUsesExistingOutbox|TestPostgresPlacementAndRolloutNestedWireShapes|TestCatalogSearchFiltersScopeBeforePaginationAndCounts|TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders|TestCatalogOperationStatusReadsExactRolloutAndDeletion|TestClusterRestoreHistoryFiltersSourceBeforePagination|TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted|TestUpsertCharlieAlertPolicyRevisionSemantics|TestCharlieAlertReconcileCandidatesRequireFindingScope|TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore|TestMarkRunningAgentUpgradeSucceededByVersion_NormalizesTheMatch|TestMarkRunningAgentUpgradeSucceededByVersion_MatchesAcrossVersionSpellings|TestAdminVisibilityQueriesAgainstMigratedPostgres|TestProvisionerPostgresMultiSourceAssets|TestPostgresPlanningTransactionAndHAFencing|TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses|TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease|TestRecordAgentHeartbeatAtomicWrite|TestDeactivateInactiveUsersPostgresSemantics|TestRefreshSessionConcurrentRotationAndReplayRevokesFamily|TestTableViewsPostgresConcurrentCreatesRespectTheCap|TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner|TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault)$",
+    "./internal/db/sqlc",
+    "./internal/charlie",
+    "./internal/delivery/builtin",
+    "./internal/delivery/rollout",
+    "./internal/delivery/catalogapp",
+    "./internal/delivery/systemrelease",
+    "./internal/worker/tasks",
+    "./internal/handler",
+    "./internal/jsoncontract"
+  ],
+  "race": false,
+  "buildTags": [],
+  "postgresMajor": "18",
+  "operands": {
+    "schemaVersion": 1,
+    "defaultPostgresMajor": "18",
+    "postgres": {
+      "18": {
+        "version": "18.6",
+        "image": "ghcr.io/cloudnative-pg/postgresql:18.6-202610050823-standard-trixie@sha256:79be0d10e78b7ac4520cf6c5db199a8bb7f6de53b3229f47e90cab5865528a0d",
+        "lane": "current-major qualification candidate"
+      },
+      "17": {
+        "version": "17.11",
+        "image": "ghcr.io/cloudnative-pg/postgresql:17.11-202610050823-standard-trixie@sha256:d456fe7392b0b2147b4cea0dc124d51aee7ad3ec522c57f3177799e01f29a2d1",
+        "lane": "previous production major"
+      }
+    },
+    "valkey": {
+      "version": "9.1.2",
+      "image": "valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11"
+    },
+    "gotestsum": "1.13.0",
+    "requiredExtensions": [
+      "citext",
+      "pgcrypto",
+      "uuid-ossp",
+      "vector"
+    ],
+    "sourceEvidence": "advisor-plans/032-evidence/cnpg18-prerequisites.json",
+    "limits": [
+      "These immutable operands qualify disposable test databases; they do not switch the production chart major.",
+      "Standalone Docker fixtures do not qualify CloudNativePG operator failover, backup or recovery."
+    ]
+  },
+  "testContract": {
+    "expected": [
+      "TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether",
+      "TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership",
+      "TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory",
+      "TestPostgresSystemReleaseBootstrapIdempotencyAndDraft",
+      "TestPostgresSystemReleaseBootstrapImmutableAndRevoked",
+      "TestPostgresSystemReleaseBootstrapRollbackAfterInsert",
+      "TestPostgresSystemReleaseBootstrapSameTransactionLock",
+      "TestPostgresSystemReleaseBootstrapConcurrentFirstCreate",
+      "TestPostgresCatalogAssetsIdempotencyAndExplicitGeneration",
+      "TestPostgresCatalogAssetsUncuratedChartDoesNotInventVersionLedger",
+      "TestPostgresCatalogAssetsLateValidationRollsBackPriorWrites",
+      "TestPostgresDurableJSONNestedNewWritesAndLegacyArrays",
+      "TestPostgresTaskPayloadSchemaMatchesV1Adapter",
+      "TestPostgresDurableJSONExpandPreservesCorruptHistoricalRows",
+      "TestPostgresIntegrityAuditDedupeUsesExistingOutbox",
+      "TestPostgresPlacementAndRolloutNestedWireShapes",
+      "TestCatalogSearchFiltersScopeBeforePaginationAndCounts",
+      "TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders",
+      "TestCatalogOperationStatusReadsExactRolloutAndDeletion",
+      "TestClusterRestoreHistoryFiltersSourceBeforePagination",
+      "TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted",
+      "TestUpsertCharlieAlertPolicyRevisionSemantics",
+      "TestCharlieAlertReconcileCandidatesRequireFindingScope",
+      "TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore",
+      "TestMarkRunningAgentUpgradeSucceededByVersion_NormalizesTheMatch",
+      "TestMarkRunningAgentUpgradeSucceededByVersion_MatchesAcrossVersionSpellings",
+      "TestAdminVisibilityQueriesAgainstMigratedPostgres",
+      "TestProvisionerPostgresMultiSourceAssets",
+      "TestPostgresPlanningTransactionAndHAFencing",
+      "TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses",
+      "TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease",
+      "TestRecordAgentHeartbeatAtomicWrite",
+      "TestDeactivateInactiveUsersPostgresSemantics",
+      "TestRefreshSessionConcurrentRotationAndReplayRevokesFamily",
+      "TestTableViewsPostgresConcurrentCreatesRespectTheCap",
+      "TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner",
+      "TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault"
+    ],
+    "terminal": {
+      "TestMarkRunningAgentUpgradeSucceededByVersion_NormalizesTheMatch": "pass",
+      "TestMarkRunningAgentUpgradeSucceededByVersion_MatchesAcrossVersionSpellings": "pass",
+      "TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders": "pass",
+      "TestCatalogSearchFiltersScopeBeforePaginationAndCounts": "pass",
+      "TestUpsertCharlieAlertPolicyRevisionSemantics": "pass",
+      "TestCharlieAlertReconcileCandidatesRequireFindingScope": "pass",
+      "TestClusterRestoreHistoryFiltersSourceBeforePagination": "pass",
+      "TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore": "pass",
+      "TestRecordAgentHeartbeatAtomicWrite": "pass",
+      "TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted": "pass",
+      "TestRefreshSessionConcurrentRotationAndReplayRevokesFamily": "pass",
+      "TestDeactivateInactiveUsersPostgresSemantics": "pass",
+      "TestAdminVisibilityQueriesAgainstMigratedPostgres": "pass",
+      "TestProvisionerPostgresMultiSourceAssets": "pass",
+      "TestPostgresPlanningTransactionAndHAFencing": "pass",
+      "TestPostgresCatalogAssetsIdempotencyAndExplicitGeneration": "pass",
+      "TestPostgresCatalogAssetsUncuratedChartDoesNotInventVersionLedger": "pass",
+      "TestPostgresCatalogAssetsLateValidationRollsBackPriorWrites": "pass",
+      "TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether": "pass",
+      "TestCatalogOperationStatusReadsExactRolloutAndDeletion": "pass",
+      "TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership": "pass",
+      "TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory": "pass",
+      "TestPostgresSystemReleaseBootstrapIdempotencyAndDraft": "pass",
+      "TestPostgresSystemReleaseBootstrapImmutableAndRevoked": "pass",
+      "TestPostgresSystemReleaseBootstrapRollbackAfterInsert": "pass",
+      "TestPostgresSystemReleaseBootstrapSameTransactionLock": "pass",
+      "TestPostgresSystemReleaseBootstrapConcurrentFirstCreate": "pass",
+      "TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses": "pass",
+      "TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease": "pass",
+      "TestTableViewsPostgresConcurrentCreatesRespectTheCap": "pass",
+      "TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner": "pass",
+      "TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault": "pass",
+      "TestPostgresDurableJSONNestedNewWritesAndLegacyArrays": "pass",
+      "TestPostgresTaskPayloadSchemaMatchesV1Adapter": "pass",
+      "TestPostgresDurableJSONExpandPreservesCorruptHistoricalRows": "pass",
+      "TestPostgresPlacementAndRolloutNestedWireShapes": "pass",
+      "TestPostgresIntegrityAuditDedupeUsesExistingOutbox": "pass"
+    },
+    "missing": [],
+    "skipped": [],
+    "failed": [],
+    "complete": true
+  },
+  "privateOriginalDirectory": "/tmp/astronomer-private-go-evidence-6l_p9tua",
+  "originalDigests": {
+    "console.log": "sha256:dca4d7691bad7cc2ab51fe3f6db725432a28d286b0d35991a77ce1690f68a174",
+    "junit.xml": "sha256:33d2a05a5d999574e42e4226b06864bf7441549303a934dd40d3d6851c3418be",
+    "go-test.json": "sha256:23ea71138e8d0109fd58ccc2e842274a53d3c56023563a9219a8c837b2ecdc1b"
+  },
+  "publicDigests": {
+    "junit.xml": "sha256:33d2a05a5d999574e42e4226b06864bf7441549303a934dd40d3d6851c3418be",
+    "console.log": "sha256:dca4d7691bad7cc2ab51fe3f6db725432a28d286b0d35991a77ce1690f68a174",
+    "go-test.json": "sha256:23ea71138e8d0109fd58ccc2e842274a53d3c56023563a9219a8c837b2ecdc1b"
+  }
+}

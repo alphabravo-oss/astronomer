@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-. scripts/lib/docker-test-endpoint.sh
+. scripts/lib/qualification-runtime.sh
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required for the worker runtime integration test." >&2
@@ -13,35 +13,22 @@ fi
 suffix="$$-$(date +%s)"
 postgres_container="astronomer-worker-int-pg-${suffix}"
 redis_container="astronomer-worker-int-redis-${suffix}"
-credential="$(openssl rand -hex 18 2>/dev/null || printf 'worker-int-%s' "$suffix")"
+credential="$(openssl rand -hex 24)"
 
 cleanup() {
   docker rm -f "$postgres_container" "$redis_container" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-docker run -d --rm --name "$postgres_container" \
-  -e POSTGRES_USER=worker_test \
-  -e POSTGRES_PASSWORD="$credential" \
-  -e POSTGRES_DB=worker_test \
-  -p "${DOCKER_TEST_BIND_HOST}::5432" pgvector/pgvector:pg16 >/dev/null
-docker run -d --rm --name "$redis_container" \
-  -p "${DOCKER_TEST_BIND_HOST}::6379" redis:7-alpine >/dev/null
-
-for _ in $(seq 1 60); do
-  if docker exec "$postgres_container" pg_isready -U worker_test -d worker_test >/dev/null 2>&1 && \
-     docker exec "$redis_container" redis-cli ping >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
-docker exec "$postgres_container" pg_isready -U worker_test -d worker_test >/dev/null
-docker exec "$redis_container" redis-cli ping >/dev/null
+qualification_postgres_run "$postgres_container" worker_test "$credential" worker_test
+qualification_valkey_run "$redis_container" "$credential"
+qualification_postgres_ready "$postgres_container" worker_test worker_test
+qualification_valkey_ready "$redis_container"
 
 postgres_port="$(docker port "$postgres_container" 5432/tcp | awk -F: 'NR == 1 {print $NF}')"
 redis_port="$(docker port "$redis_container" 6379/tcp | awk -F: 'NR == 1 {print $NF}')"
 export ASTRONOMER_WORKER_INTEGRATION_DATABASE_URL="postgres://worker_test:${credential}@${DOCKER_TEST_CONNECT_HOST}:${postgres_port}/worker_test?sslmode=disable"
-export ASTRONOMER_WORKER_INTEGRATION_REDIS_URL="redis://${DOCKER_TEST_CONNECT_HOST}:${redis_port}/0"
+export ASTRONOMER_WORKER_INTEGRATION_REDIS_URL="redis://:${credential}@${DOCKER_TEST_CONNECT_HOST}:${redis_port}/0"
 
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"; cleanup' EXIT
@@ -52,5 +39,5 @@ race_args=()
 if [[ "${WORKER_INTEGRATION_RACE:-0}" == "1" ]]; then
   race_args=(-race)
 fi
-go test "${race_args[@]}" ./internal/worker \
-	-run '^TestWorkerPostgresRedisIntegration$' -count=1 -timeout=5m
+python3 scripts/qualification-go.py --name worker-runtime --expected TestWorkerPostgresRedisIntegration -- \
+  "${race_args[@]}" -p=1 -count=1 -timeout=5m -run '^TestWorkerPostgresRedisIntegration$' ./internal/worker

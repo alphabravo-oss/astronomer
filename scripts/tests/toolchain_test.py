@@ -127,6 +127,16 @@ class ToolchainTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'future'):
                 toolchain.resolve(c, self.now)
 
+    def test_runtime_variants_do_not_accept_prefix_or_arbitrary_suffix(self):
+        for name, bad_tag in [("postgres-test-runtime", "18.60-202610050823-standard-trixie"), ("postgres-test-runtime", "18.6-malicious"), ("valkey-test-runtime", "9.1.20-alpine"), ("valkey-test-runtime", "9.1.2-malicious")]:
+            self.setUp()
+            c = next(c for c in self.document["components"] if c["id"] == name)
+            artifact = c["artifacts"][0]
+            repository = artifact["reference"].split("@",1)[0].rsplit(":",1)[0]
+            artifact["reference"] = repository + ":" + bad_tag + "@" + artifact["digest"]
+            with self.assertRaisesRegex(ValueError,"exactly identify"):
+                toolchain.validate(self.document,self.now)
+
     def test_source_closure_hash_rejects_changed_tool_graph(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

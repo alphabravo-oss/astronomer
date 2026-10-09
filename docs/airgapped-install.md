@@ -119,6 +119,49 @@ failed local subject or signature yields its blocked category before mutation,
 with no public fallback. Preserve accepted workload history while repairing
 the owned artifact/policy and retry the durable delivery operation.
 
+## Signed v2 distribution graph transfer
+
+Future v2 distributions carry immutable parent and chart OCI subjects. Their
+offline graph transfer includes every original manifest, configuration, layer
+and legacy Cosign signature manifest. A recursive registry copy alone may omit
+legacy signature tags. The qualified precompiled distribution verifier captures
+them explicitly with `--export-published-layout` and `--transfer-output`, using
+the exact prepared `subjects.json` and independent release/root/catalog pins.
+It verifies the captured graph before emitting an archive. Registry CA and
+credentials use the approved CA file and normal protected Docker credential
+store; no credential is an archive field or command argument.
+
+After the release manifest has passed the canonical authenticated validator,
+an offline import can derive its pins from that authenticated manifest:
+
+```bash
+bundle_subject=$(jq -er '.built_in_bundles.artifact.reference' release-manifest.json)
+bundle_subject=${bundle_subject#oci://}
+catalog_digest=$(jq -er '.built_in_bundles.catalog_digest' release-manifest.json)
+"${DISTRIBUTION_VERIFIER:?qualified precompiled verifier required}" \
+  --verify-offline-transfer distribution-transfer.tar.gz \
+  --offline-import-directory verified-distribution-store \
+  --repository "${bundle_subject%@*}" \
+  --expected-distribution-digest "${bundle_subject##*@}" \
+  --expected-catalog-digest "$catalog_digest" \
+  --expected-release "${RELEASE_TAG:?authenticated release identity required}" \
+  --trust-directory /etc/astronomer/delivery-trust \
+  --signature-provider cosign_keyless \
+  --certificate-identity "https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/${RELEASE_TAG}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Offline verification has no HTTP or DNS transport and refuses network options.
+It authenticates the parent and every consumed child with the same mounted
+Sigstore trust before creating the new private OCI store. The index grants no
+trust by itself. Missing, changed, orphan, extra or unsafe members fail before
+filesystem mutation; original vendor signature bytes remain unchanged. This
+source interface is qualified with an owned QA registry and a distinct local
+QA key. Production OIDC publisher execution, signed verifier asset availability,
+the complete current supplier profile and live disconnected operation remain
+separate prerequisites. Stop if the selected release lacks these artifacts;
+historical v1 tags do not become v2 qualified through this interface.
+
 ## Air-gap kit (USB / sneakernet)
 
 Each GitHub Release includes `astronomer-airgap-vX.Y.Z.tar.gz` and

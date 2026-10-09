@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
-. scripts/lib/docker-test-endpoint.sh
+. scripts/lib/qualification-runtime.sh
 
 for tool in docker go openssl python3; do
   command -v "$tool" >/dev/null 2>&1 || {
@@ -22,18 +22,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker run -d --rm --name "$container" \
-  -e POSTGRES_USER=integration \
-  -e POSTGRES_PASSWORD="$credential" \
-  -e POSTGRES_DB=integration \
-  -p "${DOCKER_TEST_BIND_HOST}::5432" \
-  pgvector/pgvector:pg16 >/dev/null
-
-for _ in $(seq 1 60); do
-  docker exec "$container" pg_isready -U integration -d integration >/dev/null 2>&1 && break
-  sleep 1
-done
-docker exec "$container" pg_isready -U integration -d integration >/dev/null
+qualification_postgres_run "$container" integration "$credential" integration
+qualification_postgres_ready "$container" integration integration
 port="$(docker port "$container" 5432/tcp | awk -F: 'NR == 1 { print $NF }')"
 database_url="postgres://integration:${credential}@${DOCKER_TEST_CONNECT_HOST}:${port}/integration?sslmode=disable"
 
@@ -52,8 +42,21 @@ export INACTIVE_USER_RETENTION_TEST_DATABASE_URL="$database_url"
 export REFRESH_SESSION_TEST_DATABASE_URL="$database_url"
 export TABLE_VIEWS_TEST_DATABASE_URL="$database_url"
 export ASTRONOMER_JSON_TEST_DATABASE_URL="$database_url"
+export ASTRONOMER_SYSTEM_RELEASE_TEST_DATABASE_URL="$database_url"
+export ASTRONOMER_CATALOG_APPLICATION_TEST_DATABASE_URL="$database_url"
 
 expected=(
+  TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether
+  TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership
+  TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory
+  TestPostgresSystemReleaseBootstrapIdempotencyAndDraft
+  TestPostgresSystemReleaseBootstrapImmutableAndRevoked
+  TestPostgresSystemReleaseBootstrapRollbackAfterInsert
+  TestPostgresSystemReleaseBootstrapSameTransactionLock
+  TestPostgresSystemReleaseBootstrapConcurrentFirstCreate
+  TestPostgresCatalogAssetsIdempotencyAndExplicitGeneration
+  TestPostgresCatalogAssetsUncuratedChartDoesNotInventVersionLedger
+  TestPostgresCatalogAssetsLateValidationRollsBackPriorWrites
   TestPostgresDurableJSONNestedNewWritesAndLegacyArrays
   TestPostgresTaskPayloadSchemaMatchesV1Adapter
   TestPostgresDurableJSONExpandPreservesCorruptHistoricalRows
@@ -87,34 +90,10 @@ if [[ "${POSTGRES_INTEGRATION_RACE:-0}" == "1" ]]; then
   race_args=(-race)
 fi
 
-report="$temporary/go-test.json"
-set +e
-go test "${race_args[@]}" -json -p=1 -count=1 -timeout=10m \
-  -run "$pattern" \
+expected_args=()
+for expected_test in "${expected[@]}"; do expected_args+=(--expected "$expected_test"); done
+python3 scripts/qualification-go.py --name postgres-integrations "${expected_args[@]}" -- \
+  "${race_args[@]}" -p=1 -count=1 -timeout=10m -run "$pattern" \
   ./internal/db/sqlc ./internal/charlie ./internal/delivery/builtin \
-  ./internal/delivery/rollout ./internal/delivery/catalogapp ./internal/worker/tasks \
-  ./internal/handler ./internal/jsoncontract | tee "$report"
-test_status=${PIPESTATUS[0]}
-set -e
-(( test_status == 0 )) || exit "$test_status"
-
-python3 - "$report" "${expected[@]}" <<'PY'
-import json
-import sys
-
-path, *expected = sys.argv[1:]
-terminal = {}
-with open(path, encoding="utf-8") as handle:
-    for line in handle:
-        event = json.loads(line)
-        test = event.get("Test")
-        action = event.get("Action")
-        if test in expected and action in {"pass", "fail", "skip"}:
-            terminal[test] = action
-missing = sorted(set(expected) - set(terminal))
-skipped = sorted(test for test, action in terminal.items() if action == "skip")
-failed = sorted(test for test, action in terminal.items() if action == "fail")
-if missing or skipped or failed:
-    raise SystemExit(f"integration contract incomplete: missing={missing} skipped={skipped} failed={failed}")
-print(f"postgres integration contract passed: {len(expected)}/{len(expected)} tests executed")
-PY
+  ./internal/delivery/rollout ./internal/delivery/catalogapp ./internal/delivery/systemrelease ./internal/worker/tasks \
+  ./internal/handler ./internal/jsoncontract

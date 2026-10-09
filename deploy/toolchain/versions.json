@@ -3788,6 +3788,37 @@
       "artifacts": [],
       "consumers": [
         {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "gotestsum",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T22:16:46.728377+00:00",
+        "provenance": "sha256:4003cc31ef5b1bc2ebe7f421a4b0b6b013724aceb7524c39490cb5df10bb3087",
+        "releasedAt": "2025-09-11T03:19:25Z",
+        "stable": true,
+        "version": "1.13.0"
+      },
+      "ecosystem": "github",
+      "id": "gotestsum",
+      "owner": "platform/testing (W12)",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Official stable runner built unchanged using selectedGo1.27.2; structured negative fixtures and actualPG18 readers exercised onlinux/amd64. Final source/race matrix separate.",
+      "selected": "1.13.0",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/gotestyourself/gotestsum/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
           "count": 1,
           "kind": "regex",
           "path": "Makefile",
@@ -6542,6 +6573,18 @@
           "path": "deploy/chart/values.yaml",
           "selector": "imageName: (ghcr.io/cloudnative-pg/postgresql:[^\\s]+)",
           "value": "{reference}"
+        },
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "postgres/17/image",
+          "value": "{reference}"
+        },
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "postgres/17/version",
+          "value": "{version}"
         }
       ],
       "discovery": {
@@ -6568,6 +6611,58 @@
       ],
       "qualification": "Existing PostgreSQL17.11 CNPG image is a current patched comparison lane; no PG18major adoption/failover/extension/backup qualification is claimed.",
       "selected": "17.11",
+      "upstream": {
+        "kind": "postgres",
+        "url": "https://www.postgresql.org/support/versioning/"
+      }
+    },
+    {
+      "artifacts": [
+        {
+          "digest": "sha256:79be0d10e78b7ac4520cf6c5db199a8bb7f6de53b3229f47e90cab5865528a0d",
+          "platformDigests": {
+            "linux/amd64": "sha256:2dec999a31ecd2d13ec1a7e292370a9001c17f572d4a2cf2ee46b2761930ad40",
+            "linux/arm64": "sha256:1609f9836c3a99dd88bc9b09ff6964a118f2f7e2a040ecd16ba7bf5f2953754e"
+          },
+          "platforms": [
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "provenance": "docs/assurance/technology-guide/w12/runtime-primary/images.json: official indexes/platform manifests and config bytes verified",
+          "reference": "ghcr.io/cloudnative-pg/postgresql:18.6-202610050823-standard-trixie@sha256:79be0d10e78b7ac4520cf6c5db199a8bb7f6de53b3229f47e90cab5865528a0d",
+          "verifiedAt": "2026-10-09T22:15:37.212930+00:00"
+        }
+      ],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "postgres/18/image",
+          "value": "{reference}"
+        },
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "postgres/18/version",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T19:46:23.407690Z",
+        "provenance": "sha256:3bd34fc19d0f2e84d52f2f17c288ec6e3d79b6e0646f1b7a560b84d8e92ea176; sha256:6b09b36a375be7674b25d5ca52cb18a4b498c663c681d28625d1ae2e5d593ce1",
+        "releasedAt": "2026-08-13",
+        "stable": true,
+        "version": "18.6"
+      },
+      "ecosystem": "image",
+      "id": "postgres-test-runtime",
+      "owner": "platform/database (W12)",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Disposable PostgreSQL18.6 schema72/extension/production reader fixtures; actual CNPG failover/physical restore retained separately, no production major selection.",
+      "selected": "18.6",
       "upstream": {
         "kind": "postgres",
         "url": "https://www.postgresql.org/support/versioning/"
@@ -6863,6 +6958,58 @@
       ],
       "qualification": "Source selects valkey/valkey:8-alpine with no qualified patch digest; Valkey9.1.2 is a major persisted-data/runtime change. Existing cache/session, worker queue, outage recovery and AOF restart contracts need real9.x qualification.",
       "selected": null,
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/valkey-io/valkey/releases"
+      }
+    },
+    {
+      "artifacts": [
+        {
+          "digest": "sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11",
+          "platformDigests": {
+            "linux/amd64": "sha256:3b83b0b6a598bb390c8186a408a69949772f439548a81c5ea0ab7ccf102c248d",
+            "linux/arm64": "sha256:eb5a657e070199befde516f47a1015338b752f083e09c7736cb8c07d9ec99bdd"
+          },
+          "platforms": [
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "provenance": "docs/assurance/technology-guide/w12/runtime-primary/images.json: official indexes/platform manifests and config bytes verified",
+          "reference": "valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11",
+          "verifiedAt": "2026-10-09T22:15:37.212930+00:00"
+        }
+      ],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "valkey/image",
+          "value": "{reference}"
+        },
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.json",
+          "selector": "valkey/version",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:9fa198fbf0b5222aaf85bdce43a2bea792b430722ddfa783589a86fcca15e15b",
+        "releasedAt": "2026-09-01T00:01:31Z",
+        "stable": true,
+        "version": "9.1.2"
+      },
+      "ecosystem": "github",
+      "id": "valkey-test-runtime",
+      "owner": "platform/cache (W12)",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Authenticated Valkey9.1.2 disposable AOF fixtures; worker/restart/outage lanes must qualify exact source before adoption.",
+      "selected": "9.1.2",
       "upstream": {
         "kind": "github",
         "url": "https://api.github.com/repos/valkey-io/valkey/releases"

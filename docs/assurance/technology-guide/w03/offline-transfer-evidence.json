@@ -1,0 +1,118 @@
+{
+  "actual_chain": [
+    "Actual original parent and three chart child Cosign3.1.3 signatures",
+    "Bounded authenticated registry capture including config/layers and legacy signature tags",
+    "Canonical signature verification through immutable in-memory no-socket/no-DNS transport",
+    "Closed archive with caller-pinned parent/catalog/release identities",
+    "Signature-before-import creates a new standard OCI store and preserves original signature manifest bytes"
+  ],
+  "gates": [
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 COSIGN_BIN=/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3 go test ./internal/delivery/builtin ./internal/delivery/resolver ./internal/delivery/distribution ./internal/releasecontract ./internal/config ./deploy/bundles ./deploy/bundles/cmd/distribution ./internal/agent/delivery -count=1",
+      "output": "ok  \tgithub.com/alphabravocompany/astronomer-go/internal/delivery/builtin\t0.028s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/delivery/resolver\t0.140s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/delivery/distribution\t1.327s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/releasecontract\t2.648s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/config\t0.708s\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles\t0.163s\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution\t2.870s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/agent/delivery\t10.500s\n",
+      "result": "PASS"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 COSIGN_BIN=/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3 go test ./deploy/bundles/cmd/distribution -run TestActualPublisher -count=1 -v",
+      "output": "=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-extra\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-missing\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-unknown-index\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-duplicate\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-traversal\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-symlink\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-hardlink\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-trailing\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-missing-config\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-changed-blob\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-orphan-blob\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-extra-subject\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-wrong-key\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-tampered-signature\n=== RUN   TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-duplicate-json\n--- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren (2.23s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-extra (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-missing (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-unknown-index (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-duplicate (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-traversal (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-symlink (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-hardlink (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/transfer-trailing (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-missing-config (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-changed-blob (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-orphan-blob (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-extra-subject (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-wrong-key (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-tampered-signature (0.00s)\n    --- PASS: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren/offline-duplicate-json (0.00s)\nPASS\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution\t2.273s\n",
+      "result": "PASS"
+    },
+    {
+      "command": "COSIGN_BIN=/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3 GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 python3 scripts/tests/application_catalog_airgap_test.py",
+      "output": "........\n----------------------------------------------------------------------\nRan 8 tests in 23.171s\n\nOK\n{\"verification\": \"verified\", \"inventory\": \"complete_for_reviewed_profiles\", \"runtime_qualification\": \"unavailable_until_signed_local_OCI_catalog_and_child_subjects_qualified\"}\n",
+      "result": "PASS"
+    },
+    {
+      "command": "python3 scripts/tests/airgap_kit_test.py",
+      "output": ".airgap-kit: air-gap kit commands do not accept credentials, tokens, or secret values\nairgap-kit: air-gap kit commands do not accept credentials, tokens, or secret values\n......\n----------------------------------------------------------------------\nRan 7 tests in 0.161s\n\nOK\n",
+      "result": "PASS"
+    },
+    {
+      "command": "make docs-check",
+      "output": "node scripts/check-docs.mjs\ndocumentation contract passed: 118 current documents, 608 relative links\nnode scripts/check-complexity-budget.mjs\ncomplexity budget passed: 2094 production source file(s), 42 file ceiling(s), 64 function ceiling(s)\nnode scripts/check-dependency-boundaries.mjs\ndependency boundaries passed: 14 rules, 1489 files, 9557 imports\nnode scripts/test-flake-report.mjs --validate\ntest-flake-report: policy valid (0 active quarantines)\nnode scripts/security-wave-review.mjs\nsecurity wave review: 10 controls, 8 waves, 28 evidence anchors; pass\n",
+      "result": "PASS"
+    },
+    {
+      "command": "jsonschema.Draft202012Validator: offline schema positive1/negative6",
+      "output": "offline transfer schema: positive1/negative6 PASS; cryptographic trust remains canonical runtime verifier\n",
+      "result": "PASS"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 make release-contract-check",
+      "output": "./scripts/check-build-capacity.sh --path .\ncheck-build-capacity: path=. mount=/ available=64GiB free=19% required=20GiB/20%\ncheck-build-capacity: BLOCK \u2014 insufficient safe filesystem headroom\nmake: *** [Makefile:220: release-contract-check] Error 1\n",
+      "result": "BLOCKED_HOST_CAPACITY"
+    }
+  ],
+  "identity": "distinct ephemeral QA key; original publisher signature bytes preserved, not production OIDC qualification",
+  "initial_go_failure": {
+    "output": "ok  \tgithub.com/alphabravocompany/astronomer-go/internal/delivery/builtin\t0.025s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/delivery/resolver\t0.253s\nfatal error: concurrent map read and map write\n\ngoroutine 186 [running]:\ninternal/runtime/maps.fatal({0x28285b6?, 0x4211790?})\n\t/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/src/runtime/panic.go:1195 +0x18\ngithub.com/alphabravocompany/astronomer-go/internal/delivery/distribution.(*registryFixture).ServeHTTP(0x1fc550640140, {0x42911a0, 0x1fc550d28d20}, 0x1fc55090bcc0)\n\t/root/astronomer-all/astronomer-032-w03/internal/delivery/distribution/verified_registry_test.go:96 +0x1317\nnet/http.serverHandler.ServeHTTP({0x1fc550640940?}, {0x42911a0?, 0x1fc550d28d20?}, 0x1?)\n\t/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/src/net/http/server.go:3436 +0x8e\nnet/http.(*conn).serve(0x1fc550b4acf0, {0x42951c0, 0x1fc550f880c0})\n\t/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/src/net/http/server.go:2157 +0x6dc\ncreated by net/http.(*Server).Serve in goroutine 152\n\t/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/src/net/http/server.go:3604 +0x4fd\nFAIL\tgithub.com/alphabravocompany/astronomer-go/internal/delivery/distribution\t1.052s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/releasecontract\t3.139s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/config\t0.766s\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles\t0.169s\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution\t2.860s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/agent/delivery\t11.415s\nFAIL\n",
+    "resolution": "Owned existing registryFixture now serializes HTTP map access because actual Cosign can issue concurrent reads/writes. No runtime code suppression, retries or quarantine.",
+    "result": "FAIL"
+  },
+  "live_disconnected_qualified": false,
+  "negative_cases": [
+    "Missing configuration",
+    "Changed blob",
+    "Orphan blob",
+    "Unconsumed subject",
+    "Wrong mounted key",
+    "Tampered actual signature",
+    "Duplicate signature-manifest JSON",
+    "Extra transfer member",
+    "Missing transfer member",
+    "Unknown index field",
+    "Duplicate member",
+    "Traversal",
+    "Symlink",
+    "Hardlink",
+    "Trailing compressed data",
+    "Wrong independently pinned release; no destination written",
+    "Descriptor external URLs/inline bytes",
+    "Caller mutations do not affect owned store",
+    "Offline action rejects network options"
+  ],
+  "network_evidence": {
+    "external_proxy_negative_control_requests": 1,
+    "external_requests_during_production_verification": 0,
+    "offline_store_has_no_network_transport": true,
+    "runtime_network_bypass_configuration_added": false
+  },
+  "new_existing_serializer_calls": {
+    "deploy/bundles/cmd/distribution/offline_transfer.go": [
+      "packOfflineTransfer -> writeJSON(offlineTransferIndex)",
+      "importOfflineTransfer -> writeJSON(offlineTransferIndex/OCI Index/OCI layout version)"
+    ]
+  },
+  "new_json_serializers": [],
+  "package_done": false,
+  "pending": [
+    "Full release-contract recheck after shared host exceeds20% free threshold (publisher slice earlier full gate PASS61)",
+    "Prerequisite OCI children and mirror runtime DB rewrites",
+    "Future v2 release pipeline wiring",
+    "Closed current supplier profile",
+    "Published signed verifier tool assets",
+    "W04 fresh-cache/no-egress",
+    "W12 object-store and recovery"
+  ],
+  "production_vendor_publication_qualified": false,
+  "schema_version": 1,
+  "slice": "canonical-offline-closed-graph-transfer",
+  "source_base_commit": "4f42fc2f6f17a55190442d7ac6d4e715b83a74e6",
+  "source_sha256": {
+    "deploy/bundles/cmd/distribution/main.go": "b7056c41bd73474a678736e568bca7b31d5e2003c8884f55c28ec146f18c0207",
+    "deploy/bundles/cmd/distribution/offline_capture.go": "39515aebd2db4cd0c4ba4ebe5d6678431afc89aed30af2da9262d283a05782c3",
+    "deploy/bundles/cmd/distribution/offline_cli.go": "ecd9d81dad927e6dd7f05c3a3d02db940599edbd86bbe0254a05d099dd3dfd1f",
+    "deploy/bundles/cmd/distribution/offline_transfer.go": "2cd91ba19ee24e2acb4dea0742b3c61f98f3954ee2cfb39ba2a9e124716ca281",
+    "deploy/bundles/cmd/distribution/offline_transfer_test.go": "bb6af09d9a8f73463b7296384e9fb6166eaa342c004b0fa8d3b65666f07a2d27",
+    "deploy/bundles/cmd/distribution/publication_test.go": "825c0949a877d3a90bb329e21cb9cb8b0c173f136d6f87e617a902467a8730ef",
+    "deploy/bundles/schemas/distribution-offline-transfer-v1.schema.json": "7e826db6afbc074a4af84c07e805809ebcc9b7d779ff8a8a6b491d502dd9d803",
+    "docs/airgapped-install.md": "a59dd0c2021809df7b5941458f2f9a9e432bd08b46b2807d2e406d74e099722d",
+    "internal/delivery/distribution/archive.go": "0be18d4a1bb40ef0b887f0a6243bfb988cb6617b16bd3bb3b0b5303a0cf42bd5",
+    "internal/delivery/distribution/loader.go": "24b9990f332abd1477cfa9f7c40253d5f48c3693d1b83a5036cd357e20e5a915",
+    "internal/delivery/distribution/offline_store.go": "86b7f2bb6d74225419a07ad4e0e481b383a799c7a0094b29e05fbe639d4d6337",
+    "internal/delivery/distribution/offline_store_test.go": "a8f44504d8481ecc07e3c861420e5f9f8a4c4689a8947780793b90a01309bc28",
+    "internal/delivery/distribution/verified_registry_test.go": "c7e6f85ca4bc423a0b0ff62efda4bb6190d9ea181e9b2c66983fcef58e6a1332"
+  },
+  "supplier_profile_qualified": false,
+  "work_package": "W03"
+}
