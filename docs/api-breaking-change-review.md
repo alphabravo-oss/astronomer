@@ -576,3 +576,44 @@ triples apply only to the published-tag transition; unrelated changes still fail
 
 On 2026-10-08 the release owner approved v1.2.1 as the replacement for the
 unpublished v1.2.0 candidate. The API migration guidance above still applies.
+
+Reviewed 2026-10-09 for Plan032 W09/W06 inhibition validation, expiring
+2026-11-08. These 22 exact POST/PUT differences apply only to the paths below;
+unrelated operation, field, warning or future change remains outside this
+review. Re-review against the released baseline before expiry; remove obsolete
+entries when that baseline advances. The released v1.2.1 handlers already
+rejected missing/empty source and target arrays, empty names and blank matcher
+labels. Their required/minimum/pattern schema corrections record that behavior.
+Blank equality labels are intentional validation hardening: released handlers
+accepted them, while the new handler returns a safe field-specific 422 before
+mutation. The same bounded change rejects missing/null matcher values and
+explicit null regex flags formerly normalized by Go zero values. Empty string
+values and omitted regex=false remain accepted, as do supported optional null
+collections/enabled values and additive properties. These malformed-input
+changes are disclosed in the [released-handler receipt](assurance/technology-guide/w09/inhibition-contract-review.md);
+they are not represented as unchanged runtime behavior. No historical released
+specification is edited, and this review does not waive generated SDK layout
+compatibility checks.
+
+- POST /api/v1/admin/alerting/inhibitions/ the request property `source_matchers` became required
+- POST /api/v1/admin/alerting/inhibitions/ the request property `target_matchers` became required
+- POST /api/v1/admin/alerting/inhibitions/ the `source_matchers` request property's minItems was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `target_matchers` request property's minItems was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `equal_labels/items/` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `name` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `source_matchers/items/label` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `target_matchers/items/label` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ added the pattern `\S` to the request property `equal_labels/items/`
+- POST /api/v1/admin/alerting/inhibitions/ added the pattern `\S` to the request property `source_matchers/items/label`
+- POST /api/v1/admin/alerting/inhibitions/ added the pattern `\S` to the request property `target_matchers/items/label`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the request property `source_matchers` became required
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the request property `target_matchers` became required
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `source_matchers` request property's minItems was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `target_matchers` request property's minItems was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `equal_labels/items/` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `name` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `source_matchers/items/label` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `target_matchers/items/label` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `equal_labels/items/`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `source_matchers/items/label`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `target_matchers/items/label`
