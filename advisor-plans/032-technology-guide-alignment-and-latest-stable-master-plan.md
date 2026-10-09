@@ -544,13 +544,13 @@ Expected: all required cases execute, no expected test is silently skipped, publ
 - [x] W05.1 Add an explicit refresh deadline with a dedicated shared refresh lifetime, not the first caller's AbortSignal. Retain HttpOnly cookies, CSRF headers, singleflight, one-retry guard, and existing redirect behavior.
 - [x] W05.2 Reject every queued follower when refresh times out/fails; clear queue/ownership deterministically. Verify a later login/recovery can make progress.
 - [x] W05.3 Preserve Axios cancellation identity through transport error enrichment so intentional abort is not displayed as a real offline/server error.
-- [ ] W05.4 Inventory all TanStack read query functions and API adapters; forward query signals through generated operations and bounded Kubernetes proxy adapters.
-- [ ] W05.5 Distinguish durable mutations/operation ownership from cancelable observation. Cancelling polling must not cancel a committed server operation.
-- [ ] W05.6 Replace selected filename list checks with broader AST-aware or equally defensible discovery. Maintain narrow documented exceptions for intentionally long-lived streams.
-- [ ] W05.7 Convert modal forms to semantic form submission using existing ModalShell/formkit patterns; bind footer buttons to the form without invalid nested forms.
-- [ ] W05.8 Persist server errors and shared FormErrorSummary; associate fields/descriptions, retain focus, keyboard Enter behavior, pending state, and credential sentinel semantics.
-- [ ] W05.9 Include dash-prefixed colocated components in adoption checks. Router file classification must not exempt an interactive form.
-- [ ] W05.10 Ensure successful save clears errors, closes correctly, updates Query ownership, and does not duplicate side effects under retries.
+- [x] W05.4 Inventory all TanStack read query functions and API adapters; forward query signals through generated operations and bounded Kubernetes proxy adapters.
+- [x] W05.5 Distinguish durable mutations/operation ownership from cancelable observation. Cancelling polling must not cancel a committed server operation.
+- [x] W05.6 Replace selected filename list checks with broader AST-aware or equally defensible discovery. Maintain narrow documented exceptions for intentionally long-lived streams.
+- [x] W05.7 Convert modal forms to semantic form submission using existing ModalShell/formkit patterns; bind footer buttons to the form without invalid nested forms.
+- [x] W05.8 Persist server errors and shared FormErrorSummary; associate fields/descriptions, retain focus, keyboard Enter behavior, pending state, and credential sentinel semantics.
+- [x] W05.9 Include dash-prefixed colocated components in adoption checks. Router file classification must not exempt an interactive form.
+- [x] W05.10 Ensure successful save clears errors, closes correctly, updates Query ownership, and does not duplicate side effects under retries.
 
 **Tests:** concurrent 401 singleflight; refresh never resolves then deadline; all followers released; second 401 not refreshed; recovery after timeout; cancellation during queue wait; cancellation during tunnel read; operation continues after dialog closed; modal server error remains visible; Enter submits once; invalid fields focus/summary; secret field blank edit retains stored credentials.
 

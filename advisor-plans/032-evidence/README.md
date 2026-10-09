@@ -16,11 +16,11 @@ separately. No historic qualification is attributed to a new candidate.
 | W02 | IN PROGRESS | Enforcement fixtures PASS; source qualification FAIL | Integrated `02f07527`, `a8c0dc4b`, `feddd759`: source collection/enforcement, exact exceptions and publication policy. Complete scan: 569 findings, zero engine errors; 492 HIGH remain unaccepted and 71 MED need triage. External ruleset/check readback remains pending. |
 | W03 | IN PROGRESS | TODO | Verified distribution and actual mirrored provisioning implementation in an isolated executor worktree. W02 trust-policy implementation is available; unresolved source findings remain open. |
 | W04 | TODO | TODO | Await dependencies and bounded implementation slice. |
-| W05 | IN PROGRESS | Full source suite 337 files / 2,341 tests, build and 18 browser cases PASS; final read-adapter followup pending | Integrated refresh `7b167632`, read forwarding `c4fd5119`, awaited Vault invalidation `2867346d`, semantic modal submission `da569b90`, assertion correction `cfe5802b`, and decreasing complexity ratchets `9a896e29`. Final adapter classification and combined W01/W05 qualification continue in `implement/032-browser-boundaries`. |
+| W05 | IMPLEMENTATION READY | Full source suite, build and 18 browser cases PASS; combined W01/W05 qualification pending | Integrated refresh `7b167632`, read forwarding `c4fd5119`, awaited Vault invalidation `2867346d`, semantic modal submission `da569b90`, assertion correction `cfe5802b`, and decreasing complexity ratchets `9a896e29`. Integrated remaining observation adapters `b1ede805` and source-bound evidence. All 735 API function declarations classified; reviewer socket tests and AST checks pass. Combined W01/W05 qualification remains pending. |
 | W06 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W07 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W08 | TODO | TODO | Await dependencies and bounded implementation slice. |
-| W09 | TODO | TODO | Await dependencies and bounded implementation slice. |
+| W09 | IN PROGRESS | TODO | Durable JSON decoder/writer/reader validation, corrupt-inhibition handling and reversible migration 072 in `implement/032-json-contracts`. |
 | W10 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W11 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W12 | TODO | TODO | Await dependencies and bounded implementation slice. |
