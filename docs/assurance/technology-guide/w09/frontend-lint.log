@@ -1,0 +1,2 @@
+npm notice run astronomer-frontend@1.2.1 lint
+npm notice run eslint . --ext .ts,.tsx --max-warnings=0
