@@ -1,0 +1,27 @@
+{
+  "source_commit": "5f885e96a2d00663ae1a3df9d6dcdf82f37f52b3",
+  "started_at": "2026-10-09T21:49:39.610692+00:00",
+  "completed_at": "2026-10-09T21:49:43.548741+00:00",
+  "postgres_major": 17,
+  "cluster": "plan032-postgres",
+  "database": "plan032_w09_review17",
+  "schema": "72|f",
+  "race": false,
+  "expected": 5,
+  "terminal": {
+    "TestPostgresSystemReleaseBootstrapIdempotencyAndDraft": "pass",
+    "TestPostgresSystemReleaseBootstrapImmutableAndRevoked": "pass",
+    "TestPostgresSystemReleaseBootstrapRollbackAfterInsert": "pass",
+    "TestPostgresSystemReleaseBootstrapSameTransactionLock": "pass",
+    "TestPostgresSystemReleaseBootstrapConcurrentFirstCreate": "pass"
+  },
+  "missing": [],
+  "failed": [],
+  "all_structured_skips": [],
+  "test_exit_code": 0,
+  "sha256": {
+    "/root/.cache/astronomer-032/qualification/cnpg36/w08-root/pg17-integration.jsonl": "fbfc3fca08123e0910acfeb0169f933876a91f491eb7908f9a541f37e60b955f"
+  },
+  "scope": "Fresh dedicated database on owned three-instance CNPG 1.30.1/K3s 1.36.5; TLS transport; System-release characterization on already migrated schema 72 with isolated randomized owned fixture schemas; no full app, failover, or historical restore claim",
+  "receipt_source_sha256": "934ff4a89988fdac64d01535a2aa0c08492782581c052d2fc7a0270353734655"
+}

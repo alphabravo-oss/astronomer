@@ -58,7 +58,7 @@ def prepare_layout(root: Path, repository="qa.example.test/distribution") -> Pat
     catalog_path = root / "reviewed-catalog.json"
     catalog_path.write_bytes(encode(catalog))
     assets = root / "assets.json"
-    assets.write_bytes(encode({"schema_version": 1, "required_categories": ["catalog", "chart", "values", "image_inventory"], "assets": []}))
+    assets.write_bytes(encode({"schema_version": 2, "capabilities": [], "required_categories": ["catalog", "chart", "values", "image_inventory"], "assets": []}))
     layout = root / "layout"
     result = subprocess.run(["bash", "scripts/build-builtin-bundles.sh", "--v2", "--charts-directory", str(charts),
                              "--asset-index", str(assets), "--platform-evidence", str(platforms), "--repository", repository,

@@ -115,10 +115,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   request.mockImplementation(async (config) => {
     const url = String(config.url);
-    if (url.endsWith("/preview")) return { data: { data: PREVIEW } } as never;
-    if (url.endsWith("/sizer")) return { data: { data: SIZER } } as never;
+    if (url.endsWith("/preview"))
+      return { status: 200, data: { data: PREVIEW } } as never;
+    if (url.endsWith("/sizer"))
+      return { status: 200, data: { data: SIZER } } as never;
     if (url.endsWith("/operations")) {
       return {
+        status: 200,
         data: {
           data: [OP],
           pagination: { limit: 5, offset: 0, returned: 1, has_more: false },
@@ -126,9 +129,12 @@ beforeEach(() => {
       } as never;
     }
     if (url.endsWith("/status")) {
-      return { data: { data: { status: "healthy" } } } as never;
+      return { status: 200, data: { data: { status: "healthy" } } } as never;
     }
-    return { data: { data: OP } } as never;
+    return {
+      status: config.method === "GET" ? 200 : 202,
+      data: { data: OP },
+    } as never;
   });
 });
 
@@ -183,11 +189,20 @@ describe("generated per-cluster monitoring lifecycle", () => {
     }
   });
 
+  it("rejects an undeclared synchronous status for a durable asynchronous mutation", async () => {
+    request.mockResolvedValueOnce({ status: 200, data: { data: OP } } as never);
+    await expect(installClusterStack("cluster-1")).rejects.toMatchObject({
+      code: "invalid_categorical_response",
+      kind: "malformed",
+    });
+  });
+
   it("rejects a success envelope without data instead of fabricating success", async () => {
-    request.mockResolvedValueOnce({ data: {} } as never);
-    await expect(getClusterStackStatus("cluster-1")).rejects.toThrow(
-      "getClusterStackStatus returned no data payload",
-    );
+    request.mockResolvedValueOnce({ status: 200, data: {} } as never);
+    await expect(getClusterStackStatus("cluster-1")).rejects.toMatchObject({
+      code: "invalid_categorical_response",
+      kind: "malformed",
+    });
   });
 });
 

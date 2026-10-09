@@ -1,3 +1,4 @@
+import { classifyCategory } from "@/lib/api/categorical-values";
 import type { CharlieFinding } from "@/lib/api/charlie";
 
 export type FindingLifecycleDecision =
@@ -18,6 +19,15 @@ const lifecycle = new Set<string>([
 export function findingLifecycleDecisions(
   finding: CharlieFinding,
 ): FindingLifecycleDecision[] {
+  if (
+    classifyCategory("CharlieFindingSummaryStateValue", finding.state).kind !==
+      "known" ||
+    classifyCategory(
+      "CharlieFindingSummaryWorkflowStateValue",
+      finding.workflowState,
+    ).kind !== "known"
+  )
+    return [];
   return finding.availableDecisions.filter(
     (decision): decision is FindingLifecycleDecision => lifecycle.has(decision),
   );

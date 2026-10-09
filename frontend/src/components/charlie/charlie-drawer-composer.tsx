@@ -25,7 +25,12 @@ export function CharlieComposerFeedback({
 }: {
   conversation: Pick<
     CharlieConversation,
-    "send" | "history" | "abort" | "streamUnavailable" | "turnFailed"
+    | "send"
+    | "history"
+    | "abort"
+    | "streamUnavailable"
+    | "turnFailed"
+    | "categoryActionsAllowed"
   >;
   commandNotice?: string;
 }) {
@@ -62,6 +67,7 @@ export function CharlieComposerFeedback({
               <ActionButton
                 intent="bare"
                 size="none"
+                disabled={!conversation.categoryActionsAllowed}
                 onClick={() => send.mutate(send.variables!)}
                 className="rounded-sm border px-2 py-1 text-xs"
               >

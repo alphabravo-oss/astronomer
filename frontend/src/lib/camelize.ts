@@ -1,3 +1,5 @@
+import type { CamelizeKeys } from "@/types/wire-contract";
+
 // Recursively rewrite snake_case keys to camelCase for explicitly mapped
 // feature payloads. The shared HTTP transport deliberately never calls this.
 
@@ -19,4 +21,9 @@ export function camelizeKeys<T = unknown>(value: T): T {
     return out as unknown as T;
   }
   return value;
+}
+
+// This mapper changes key names without narrowing wire values or categories.
+export function camelizeWire<T>(value: T): CamelizeKeys<T> {
+  return camelizeKeys(value) as CamelizeKeys<T>;
 }

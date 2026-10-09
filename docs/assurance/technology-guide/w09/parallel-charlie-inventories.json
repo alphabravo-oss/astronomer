@@ -1,0 +1,37 @@
+{
+  "source_before": {
+    "schema_version": 2,
+    "source_file_count": 5811,
+    "source_tree_sha256": "8474e97f039581ad8c8b32b4a9dcfa7f211a079ea07e9c4b90d59c8bf7b0e019"
+  },
+  "source_after": {
+    "schema_version": 2,
+    "source_file_count": 5811,
+    "source_tree_sha256": "8474e97f039581ad8c8b32b4a9dcfa7f211a079ea07e9c4b90d59c8bf7b0e019"
+  },
+  "source_tree_stable": true,
+  "commands": [
+    {
+      "command": ["bash", "scripts/check-charlie-contract-generated.sh"],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "scripts/code-health-inventory.mjs",
+        "--check",
+        "--verify-doc"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "scripts/operation-task-inventory.mjs",
+        "--check",
+        "--verify-doc"
+      ],
+      "exit_code": 0
+    }
+  ]
+}

@@ -29,7 +29,6 @@ package tasks
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -202,8 +201,7 @@ type GitOpsDeps struct {
 	Enqueuer   GitOpsEnqueuer
 	TaskOutbox TaskOutboxWriter
 	// Decryptor unwraps the source's auth_encrypted blob before it's
-	// handed to go-git. nil in dev / when no Fernet key is configured, in
-	// which case the stored value is used verbatim (plaintext fallback).
+	// handed to go-git. Without it, only legacy plaintext is accepted.
 	Decryptor GitOpsDecryptor
 	Log       *slog.Logger
 	CloneRoot string // overrides GitOpsCloneRoot when non-empty
@@ -797,27 +795,6 @@ func (runtime GitOpsRuntime) buildGitAuth(src sqlc.GitopsRegistrationSource) (tr
 	default:
 		return nil, fmt.Errorf("unknown auth_mode %q", src.AuthMode)
 	}
-}
-
-// decryptGitAuth retains the legacy-plaintext compatibility window while
-// failing loudly for a token-shaped Fernet value that no configured key can
-// decrypt. Returning ciphertext as an HTTPS password hides key loss as an
-// upstream Git authentication failure and defeats actionable operations.
-func (runtime GitOpsRuntime) decryptGitAuth(blob string) (string, error) {
-	if runtime.Deps.Decryptor == nil || blob == "" {
-		return blob, nil
-	}
-	if plaintext, err := runtime.Deps.Decryptor.Decrypt(blob); err == nil {
-		return plaintext, nil
-	} else if looksLikeFernetToken(blob) {
-		return "", err
-	}
-	return blob, nil
-}
-
-func looksLikeFernetToken(value string) bool {
-	decoded, err := base64.URLEncoding.DecodeString(value)
-	return err == nil && len(decoded) >= 57 && decoded[0] == 0x80
 }
 
 func (runtime GitOpsRuntime) updateSourceGauges(ctx context.Context, src sqlc.GitopsRegistrationSource) {

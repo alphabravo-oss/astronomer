@@ -293,6 +293,7 @@ verify_contract_artifacts() {
   run_logged openapi-spectral node scripts/openapi-spectral.mjs
 
   step "OpenAPI breaking-change review"
+  run_logged openapi-current-review-tests python3 scripts/tests/openapi_current_reviews_test.py
   run_logged openapi-breaking ./scripts/openapi-breaking-change.sh
 
   step "OpenAPI request-schema fields vs Go request structs"
@@ -301,7 +302,12 @@ verify_contract_artifacts() {
   step "Generated frontend OpenAPI types"
   run_logged openapi-generated-types node scripts/generate-openapi-types.mjs --check
   run_logged openapi-generated-client node scripts/generate-openapi-client.mjs --check
+  run_logged categorical-contract python3 scripts/categorical-contracts.py check
+  run_logged categorical-contract-tests python3 -m unittest discover -s scripts/tests -p categorical_contract_test.py
   run_logged openapi-generated-go-sdk ./scripts/check-go-sdk-generated.sh
+  run_logged go-sdk-v1-compatibility ./scripts/check-sdk-v1-compatibility.sh
+  run_logged go-sdk-v1-negative-tests python3 -m unittest discover -s scripts/tests -p sdk_v1_compatibility_test.py
+  run_logged generated-schema-binding-tests node --test scripts/lib/generated-schema-binding.test.mjs
 
   step "Embedded OpenAPI asset"
   if ! cmp -s docs/openapi.yaml internal/handler/assets/openapi.yaml; then

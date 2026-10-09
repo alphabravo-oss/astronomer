@@ -30,6 +30,11 @@ func archiveFixture(t *testing.T, extra []fixtureMember, mutate func(*BOM, map[s
 	images := map[string]bool{}
 	for index := range catalog.Components {
 		component := &catalog.Components[index]
+		// This bounded archive fixture qualifies chart consumption only. Scanner
+		// database capabilities are exercised separately with exact QA subjects.
+		if operator, ok := component.Values["operator"].(map[string]any); ok {
+			operator["vulnerabilityScannerEnabled"] = false
+		}
 		chart := chartFixture(t, component.Slug)
 		component.Source.ChartDigest = contentDigest(chart)
 		members["charts/"+component.Slug+".tgz"] = chart
@@ -45,7 +50,7 @@ func archiveFixture(t *testing.T, extra []fixtureMember, mutate func(*BOM, map[s
 	catalogDigest := contentDigest(members["catalog.json"])
 	members["profiles/values.json"], _ = json.Marshal(values)
 	members["profiles/images.json"], _ = json.Marshal(inventory)
-	bom := BOM{SchemaVersion: 1, Release: catalog.Release, CatalogDigest: catalogDigest, Profiles: []Profile{{Name: "builtins", Qualification: "qualified", ValuesPath: "profiles/values.json", InventoryPath: "profiles/images.json", RequiredCategories: []string{"catalog", "chart", "values", "image_inventory"}, BlockedCategories: []string{}}}}
+	bom := BOM{SchemaVersion: 1, AssetContractVersion: 1, Assets: []Asset{}, Release: catalog.Release, CatalogDigest: catalogDigest, Profiles: []Profile{{Name: "builtins", Qualification: "qualified", ValuesPath: "profiles/values.json", InventoryPath: "profiles/images.json", RequiredCategories: []string{"catalog", "chart", "values", "image_inventory"}, BlockedCategories: []string{}, Capabilities: []string{}}}}
 	for name, data := range members {
 		category := "chart"
 		if name == "catalog.json" {

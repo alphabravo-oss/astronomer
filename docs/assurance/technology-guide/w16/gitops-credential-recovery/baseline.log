@@ -1,0 +1,18 @@
+--- FAIL: TestGitOpsEncryptedCredentialRecoveryFailsClosed (0.00s)
+    --- FAIL: TestGitOpsEncryptedCredentialRecoveryFailsClosed/current/missing (0.00s)
+        gitops_credential_recovery_test.go:53: unavailable encrypted credential was returned as plaintext
+    --- FAIL: TestGitOpsEncryptedCredentialRecoveryFailsClosed/current/wrong (0.00s)
+        gitops_credential_recovery_test.go:53: unavailable encrypted credential was returned as plaintext
+    --- FAIL: TestGitOpsEncryptedCredentialRecoveryFailsClosed/legacy/missing (0.00s)
+        gitops_credential_recovery_test.go:53: unavailable encrypted credential was returned as plaintext
+    --- FAIL: TestGitOpsEncryptedCredentialRecoveryFailsClosed/unsupported-envelope/missing (0.00s)
+        gitops_credential_recovery_test.go:53: unavailable encrypted credential was returned as plaintext
+    --- FAIL: TestGitOpsEncryptedCredentialRecoveryFailsClosed/unsupported-envelope/wrong (0.00s)
+        gitops_credential_recovery_test.go:53: unavailable encrypted credential was returned as plaintext
+    --- FAIL: TestGitOpsEncryptedCredentialRecoveryFailsClosed/malformed-envelope/missing (0.00s)
+        gitops_credential_recovery_test.go:53: unavailable encrypted credential was returned as plaintext
+    --- FAIL: TestGitOpsEncryptedCredentialRecoveryFailsClosed/malformed-envelope/wrong (0.00s)
+        gitops_credential_recovery_test.go:53: unavailable encrypted credential was returned as plaintext
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	0.054s
+FAIL

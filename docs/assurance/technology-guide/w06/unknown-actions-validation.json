@@ -1,0 +1,50 @@
+{
+  "apiMutableSourceAttempt": {
+    "all36Subgates": "PASS",
+    "retainedEvidenceDigest": "sha256:ad5863c779744f737fb07f4389ee4eee6ea12458c9d19eb9941a125a5b06b5e2",
+    "status": "FAIL: source tree changed while review followups were applied"
+  },
+  "baseCommit": "5f88e5720e2abb195f7577f5d3adfabedae11ebf",
+  "categoryTests": {
+    "passed": 12
+  },
+  "fullLegacySDK": "PASS: 2634 types, 10671 fields, 2002 functions, 4132 methods, 1230 constants; pointer/marshal roundtrips PASS",
+  "nextGate": "Frozen combined integration full frontend and API qualification; no mutable-source green claim.",
+  "observedAt": "2026-10-09T21:28:33.665654+00:00",
+  "rawReleasedAPIDiff": "FAIL: 76 retained warnings; 54 exact response vocabulary refinements have technical review through2026-10-16; 22 separate W09 request differences",
+  "realDatabase": "PASS: 22 complete CHECK sets, 152 accepted known values and all unknowns rejected; dedicated schema71 production adapter PASS",
+  "schemaVersion": 1,
+  "sourceFiles": {
+    "docs/api-breaking-change-review.md": "sha256:122e8dfa790522f6730fabc1ea87595eaac7f487a02f70c8e1c5cb9780b78385",
+    "docs/openapi.yaml": "sha256:90611087d94603dabb5860066e85f2703f4526da4769138dcfe3fefcfdcc27b5",
+    "docs/rancher-quality-phase0-code-health-inventory.md": "sha256:0416182551c04236eb34ecc660d6006b8d08906ce70df87cd5cafd81115ed343",
+    "frontend/src/components/charlie/__tests__/charlie-shell.test.tsx": "sha256:e7c6b14e6d2db51056b106d499450f2fa0eefa33b9adf40c9e8d995ef8ce28db",
+    "frontend/src/components/charlie/__tests__/finding-workflow.test.ts": "sha256:58c689b0b2bf4382aaf0886aa4cfbedcc9535eb05ce4e4613f62b786ff6e5c9d",
+    "frontend/src/components/charlie/charlie-drawer-composer.tsx": "sha256:744764f34403e7293a4c3675211accd514dd4fef524ecbe6259a38a79a96feab",
+    "frontend/src/components/charlie/charlie-drawer.tsx": "sha256:c10d2f9ee2dd799c60c228b40728c7b34586ff713e30f6c01cd173ead15eaafe",
+    "frontend/src/components/charlie/finding-workflow.ts": "sha256:e105ee328b45399103459961f5c78a0f78828dcf34510d010c26602a6f0f450a",
+    "frontend/src/components/charlie/settings/kubernetes-tab.tsx": "sha256:75e7affeb4f3808d5567ec9e69ad75d38cf79b7fa0832a7a549d931d32b4143b",
+    "frontend/src/components/charlie/settings/mode-tab-model.ts": "sha256:c9f3a9ff95d497387eed2132bbc867c1923567f8f37695bb9e4c24ff1ae44568",
+    "frontend/src/components/charlie/use-charlie-conversation.ts": "sha256:0f7ef07d2c433d75ec1481bf57575867659958d4374e3336f38570bdb0b6903f",
+    "frontend/src/components/clusters/registration-connect-step.tsx": "sha256:e7f136e98efc8fd449728e7937f11821d63209ce040fb14931cb216b19fa1cb1",
+    "frontend/src/components/clusters/registration-timeline.test.tsx": "sha256:f901b6bf9024a6ea13c9f5d6bca16639ed6d575b7cce43c4fb161eb1598cecae",
+    "frontend/src/components/clusters/registration-timeline.tsx": "sha256:ea6af88aa4a4ea9261a73b83b749ec5ccf1fb25e6ffe1dd284f509eed3b84fba",
+    "frontend/src/routes/dashboard/charlie/-approvals.tsx": "sha256:ed2d5b9da4c0dc2339a8d973dbc52137b910e76a742b1579c9d44167cae84786",
+    "frontend/src/routes/dashboard/charlie/-finding-detail.tsx": "sha256:1f1ea30362c9ed41beebe71ed48c08643c45ed5d2463af59e68267006604b4b1",
+    "frontend/src/routes/dashboard/charlie/index.test.tsx": "sha256:9675e79de898f848c07e78bf495f7b8e81882fca6a1183bc8ecd20c93956d84d",
+    "frontend/src/routes/dashboard/clusters/$id/delivery/system-components/-freshness.test.tsx": "sha256:691c7f33e148547f6b6b3fb1c61cd1eeeb0ddb6c32962279f0ff2043b8a50804",
+    "frontend/src/routes/dashboard/delivery/deployments/$deploymentId/-page.tsx": "sha256:6407966cb227d1df903c9879904f38f5f58cdfdb40d5135e174c21d100fc51c8",
+    "frontend/src/routes/dashboard/delivery/deployments/-freshness.test.tsx": "sha256:a8c5d50adcda6981a76c0f3aa2f1a5059c78ec64601b490f4683ea2447f3f7a1",
+    "internal/handler/assets/openapi.yaml": "sha256:90611087d94603dabb5860066e85f2703f4526da4769138dcfe3fefcfdcc27b5",
+    "oapi-codegen.compatibility-base.overlay.yaml": "sha256:ec22f86ef355b3f096a5958ca3bdc662f95571167d6e3df0dae3de78b9fad98a",
+    "oapi-codegen.overlay.yaml": "sha256:0be2e45633b06791880d1f3050fe9634bf2d918fb556baf68e9e4f784d2dca0e",
+    "pkg/astroclient/astroclient.gen.go": "sha256:27c07eb5aeaf40089a93e87e3e859dfc1810db8adcf888a2032d520d345ae19c",
+    "scripts/categorical-contracts.py": "sha256:bac7206c9dee825a5279f7cdd32014d624202718b9741e22bc641be7ee51dfc2",
+    "scripts/tests/categorical_contract_test.py": "sha256:2cf78988f176cb024f5d410ee0f780fc378a8d3b05daa16cdabd964303e3dd1a"
+  },
+  "unknownActionUISweep": {
+    "logDigest": "sha256:febd7cbcdc79b68e9756d1eff5db4eab5ad861a6d79f24a48f6d1d97f9819621",
+    "passedFiles": 6,
+    "passedTests": 52
+  }
+}

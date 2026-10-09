@@ -17585,6 +17585,36 @@
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
     },
     {
+      "path": "deploy/bundles/cmd/distribution/application.go",
+      "owner": "delivery/distribution",
+      "scope": "Release build/import JSON readers and outputs; exact function/operand schemas and legacy error assumptions declared per site; W03 owns authenticity and archive closure"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/application_archive.go",
+      "owner": "delivery/distribution",
+      "scope": "Release build/import JSON readers and outputs; exact function/operand schemas and legacy error assumptions declared per site; W03 owns authenticity and archive closure"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/artifact.go",
+      "owner": "delivery/distribution",
+      "scope": "Release build/import JSON readers and outputs; exact function/operand schemas and legacy error assumptions declared per site; W03 owns authenticity and archive closure"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/main.go",
+      "owner": "delivery/distribution",
+      "scope": "Release build/import JSON readers and outputs; exact function/operand schemas and legacy error assumptions declared per site; W03 owns authenticity and archive closure"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/verification.go",
+      "owner": "delivery/distribution",
+      "scope": "Release build/import JSON readers and outputs; exact function/operand schemas and legacy error assumptions declared per site; W03 owns authenticity and archive closure"
+    },
+    {
+      "path": "deploy/bundles/embed.go",
+      "owner": "delivery/builtinbundles",
+      "scope": "Release build/import JSON readers and outputs; exact function/operand schemas and legacy error assumptions declared per site; W03 owns authenticity and archive closure"
+    },
+    {
       "path": "internal/agent/apiserver_audit.go",
       "owner": "/agent",
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
@@ -18105,6 +18135,11 @@
       "scope": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes; each exact call declares reader behavior and limitations"
     },
     {
+      "path": "internal/delivery/distribution/contract.go",
+      "owner": "delivery/distribution",
+      "scope": "Release build/import JSON readers and outputs; exact function/operand schemas and legacy error assumptions declared per site; W03 owns authenticity and archive closure"
+    },
+    {
       "path": "internal/delivery/distribution/loader.go",
       "owner": "delivery/distribution",
       "scope": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes; each exact call declares reader behavior and limitations"
@@ -18138,6 +18173,11 @@
       "path": "internal/delivery/provider/provider.go",
       "owner": "/delivery/provider",
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
+    },
+    {
+      "path": "internal/delivery/resolver/artifact.go",
+      "owner": "delivery/distribution",
+      "scope": "Release build/import JSON readers and outputs; exact function/operand schemas and legacy error assumptions declared per site; W03 owns authenticity and archive closure"
     },
     {
       "path": "internal/delivery/resolver/oci.go",
@@ -29656,15 +29696,6 @@
       "reader_behavior": "Copy previously decoded catalog values and rewrite only authenticated image subjects; discarded JSON results are bounded-source assumptions, and non-object projected values return the content-free blocked values error"
     },
     {
-      "path": "internal/httpclient/destinations.go",
-      "function": "ParseDestinationPolicy",
-      "operation": "json.NewDecoder",
-      "arguments": ["strings.NewReader(raw)"],
-      "owner": "httpclient/operator-network-policy",
-      "schema": "Strict product operator DestinationPolicy and TrustedOrigin objects, max64KiB, finite origins/CIDRs",
-      "reader_behavior": "Disallow unknown fields; reject null, trailing documents and invalid domain destinations with content-free errors; empty input retains unrestricted default"
-    },
-    {
       "path": "internal/jsoncontract/decode.go",
       "function": "Decode",
       "operation": "json.NewDecoder",
@@ -29683,6 +29714,192 @@
       "owner": "worker/catalog-sync",
       "schema": "Versioned v1 audit object with repository_id UUID, repository type and domain-owned safe failure message; no repository URL",
       "reader_behavior": "Marshal error returns before legacy direct audit write; ordinary database failure remains existing best-effort discarded result; not transactional mandatory audit or whole-reader correctness proof"
+    },
+    {
+      "path": "internal/delivery/distribution/contract.go",
+      "function": "decodeClosed",
+      "operation": "jsoncontract.Decode",
+      "arguments": ["data", "target"],
+      "owner": "delivery/distribution",
+      "schema": "Closed authenticated distribution BOM/member DTOs and release-tooling documents",
+      "reader_behavior": "Shared duplicate/depth/unknown-field/EOF rejection; caller owns document and category size bounds, signature/closure/domain validation; return typed failure"
+    },
+    {
+      "path": "internal/delivery/distribution/contract.go",
+      "function": "validateJSON",
+      "operation": "jsoncontract.Decode",
+      "arguments": ["data", "&document"],
+      "owner": "delivery/distribution",
+      "schema": "Authenticated archive values JSON, intentionally open chart values under signed chart/schema/render constraints",
+      "reader_behavior": "Shared duplicate/depth/EOF rejection into generic value; does not close arbitrary chart keys; archive category bounds apply"
+    },
+    {
+      "path": "internal/delivery/resolver/artifact.go",
+      "function": "fetchArtifactPayload",
+      "operation": "jsoncontract.Decode",
+      "arguments": ["manifestBytes", "&manifest"],
+      "owner": "delivery/distribution",
+      "schema": "OCI v2 artifact manifest with exact one payload descriptor",
+      "reader_behavior": "Digest-bound max1MiB bytes decoded by canonical reader; reject unknown/duplicate/deep/trailing JSON and invalid layer media, URLs, digest or size with static errors"
+    },
+    {
+      "path": "internal/httpclient/destinations.go",
+      "function": "ParseDestinationPolicy",
+      "operation": "jsoncontract.Decode",
+      "arguments": ["[]byte(raw)", "&decoded"],
+      "owner": "httpclient/operator-network-policy",
+      "schema": "Strict product DestinationPolicy and TrustedOrigin objects, max64KiB, finite origins/CIDRs",
+      "reader_behavior": "Shared unknown/duplicate/depth/EOF rejection; null and invalid domain destinations reject with content-free error; empty input retains unrestricted default, exact size-error text retained"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/application.go",
+      "function": "renderApplicationProfiles",
+      "operation": "json.Marshal",
+      "arguments": [
+        "applicationProfileOutput{Input: profile, Rendered: rendered}"
+      ],
+      "owner": "delivery/distribution",
+      "schema": "deploy/bundles/schemas/application-profile-report-v1.schema.json; rendered bounded applicationProfileOutput",
+      "reader_behavior": "Serialization used only for aggregate report-size accounting. Marshal error is discarded under typed strict-decoded profile/rendered JSON graph assumption; not whole-callgraph marshal proof or a new persistence contract"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/application_archive.go",
+      "function": "verifyApplicationArchive",
+      "operation": "json.Marshal",
+      "arguments": ["values"],
+      "owner": "delivery/distribution",
+      "schema": "Signed chart values object",
+      "reader_behavior": "Marshal bytes compare authenticated, strictly decoded input with re-rendered chart values/images. Error discarded under decoded JSON/typed rendered graph assumption; chart value keys remain open under signed chart/schema/render constraints"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/application_archive.go",
+      "function": "verifyApplicationArchive",
+      "operation": "json.Marshal",
+      "arguments": ["rendered.Rendered.Values"],
+      "owner": "delivery/distribution",
+      "schema": "Signed chart values object",
+      "reader_behavior": "Marshal bytes compare authenticated, strictly decoded input with re-rendered chart values/images. Error discarded under decoded JSON/typed rendered graph assumption; chart value keys remain open under signed chart/schema/render constraints"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/application_archive.go",
+      "function": "verifyApplicationArchive",
+      "operation": "json.Marshal",
+      "arguments": ["requalified.Images"],
+      "owner": "delivery/distribution",
+      "schema": "Canonical immutable image-reference array in application-profile-report-v1",
+      "reader_behavior": "Marshal bytes compare authenticated, strictly decoded input with re-rendered chart values/images. Error discarded under decoded JSON/typed rendered graph assumption; chart value keys remain open under signed chart/schema/render constraints"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/application_archive.go",
+      "function": "verifyApplicationArchive",
+      "operation": "json.Marshal",
+      "arguments": ["rendered.Rendered.Images"],
+      "owner": "delivery/distribution",
+      "schema": "Canonical immutable image-reference array in application-profile-report-v1",
+      "reader_behavior": "Marshal bytes compare authenticated, strictly decoded input with re-rendered chart values/images. Error discarded under decoded JSON/typed rendered graph assumption; chart value keys remain open under signed chart/schema/render constraints"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/artifact.go",
+      "function": "buildLayout",
+      "operation": "json.Marshal",
+      "arguments": ["result.Catalog"],
+      "owner": "delivery/distribution",
+      "schema": "Owned builtinbundles.Catalog release catalog",
+      "reader_behavior": "Marshal error returned; producer validates catalog and consumer checks exact archive member/catalog digest"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/artifact.go",
+      "function": "buildLayout",
+      "operation": "json.Marshal",
+      "arguments": ["values"],
+      "owner": "delivery/distribution",
+      "schema": "Builtin chart values object profiles/builtins.values.json",
+      "reader_behavior": "Marshal error discarded under parsed catalog JSON graph assumption; signed chart/schema/render constraints own open values keys, archive consumer validates closure"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/artifact.go",
+      "function": "buildLayout",
+      "operation": "json.Marshal",
+      "arguments": ["inventory"],
+      "owner": "delivery/distribution",
+      "schema": "distribution.Inventory v1 profiles/builtins.images.json",
+      "reader_behavior": "Typed canonical digest-pinned image/platform/workload graph; marshal error discarded under finite typed graph assumption; consumer closes inventory/member relationship"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/artifact.go",
+      "function": "buildLayout",
+      "operation": "json.Marshal",
+      "arguments": [
+        "map[string]any{\"render_digests\": result.RenderDigests, \"dependencies\": result.Dependencies}"
+      ],
+      "owner": "delivery/distribution",
+      "schema": "Builtin render evidence object with render_digests and dependencies",
+      "reader_behavior": "Marshal error discarded for typed string maps/slices assembled by producer; authenticated values-category document and bounds validated by archive consumer"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/artifact.go",
+      "function": "buildLayout",
+      "operation": "json.Marshal",
+      "arguments": [
+        "map[string]string{\"name\": component.Source.Chart, \"version\": component.Source.Version}"
+      ],
+      "owner": "delivery/distribution",
+      "schema": "OCI Helm config name/version string object",
+      "reader_behavior": "Marshal error discarded for constructed string-only object; exact OCI descriptor digest binds generated config bytes"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/artifact.go",
+      "function": "buildLayout",
+      "operation": "json.Marshal",
+      "arguments": ["bom"],
+      "owner": "delivery/distribution",
+      "schema": "distribution.BOM v1 with asset_contract_version=1, member/role/subject/capability closure and artifact config paths",
+      "reader_behavior": "Marshal error discarded for finite typed BOM graph; ReadArchive revalidates exact BOM/member/config closure before emitting any qualified layout"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/artifact.go",
+      "function": "writeJSON",
+      "operation": "json.Marshal",
+      "arguments": ["value"],
+      "owner": "delivery/distribution",
+      "schema": "Owned OCI index, OCI layout and distribution subjectIndex output documents",
+      "reader_behavior": "General helper invoked only for these fixed producer-owned documents; marshal error returned before filesystem write; helper is not a public arbitrary-JSON schema boundary"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/artifact.go",
+      "function": "writeOCI",
+      "operation": "json.Marshal",
+      "arguments": ["manifest"],
+      "owner": "delivery/distribution",
+      "schema": "OCI v2 Manifest with producer-owned config and payload descriptors",
+      "reader_behavior": "Marshal error discarded for typed descriptor/string graph; hashed manifest bytes own immutable descriptor and archive consumer enforces exact media/config/payload closure"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/main.go",
+      "function": "main",
+      "operation": "json.NewEncoder",
+      "arguments": ["os.Stdout"],
+      "owner": "delivery/distribution",
+      "schema": "application-profile-report-v1, distribution subjectIndex or output catalog/images/render_digests/dependencies report selected by explicit command branch",
+      "reader_behavior": "Encoder failure exits nonzero; branches emit only producer-validated typed reports; no database persistence or independently trusted authority"
+    },
+    {
+      "path": "deploy/bundles/cmd/distribution/verification.go",
+      "function": "authenticateDetachedDocument",
+      "operation": "jsoncontract.Decode",
+      "arguments": ["signed", "&bundle"],
+      "owner": "delivery/distribution",
+      "schema": "Opaque external Sigstore signature bundle object",
+      "reader_behavior": "Bounded signed bundle bytes use duplicate/depth/EOF generic reader; canonical offline resolver verifier independently checks pinned trust and subject digest; bundle-selected keys are not trusted; static failure"
+    },
+    {
+      "path": "deploy/bundles/embed.go",
+      "function": "Parse",
+      "operation": "json.NewDecoder",
+      "arguments": ["strings.NewReader(string(data))"],
+      "owner": "delivery/builtinbundles",
+      "schema": "Owned embedded or supplied builtinbundles.Catalog release input",
+      "reader_behavior": "Legacy DisallowUnknownFields plus EOF and Catalog.Validate; raw syntax error wrapped, duplicate keys/depth not independently rejected here. Supplied tooling file bytes are bounded; release catalog is source-owned. Inventory does not claim this older reader has canonical duplicate/depth behavior"
     }
   ]
 }

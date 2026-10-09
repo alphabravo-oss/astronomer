@@ -79,6 +79,25 @@ function indent(text, spaces = 2) {
     .join('\n');
 }
 
+const categoryRegistry = JSON.parse(fs.readFileSync(path.join(repoRoot, 'deploy/contracts/categories.json'), 'utf8'));
+const categoryNames = new Set(categoryRegistry.categories.map((row) => row.schema));
+const categoryObjects = new Set([...categoryNames].map((name) => schemas[name]));
+let readRepresentation = false;
+function schemaRefs(value) {
+  if (!value || typeof value !== 'object') return [];
+  return [...(value.$ref?.startsWith('#/components/schemas/') ? [value.$ref.split('/').at(-1)] : []), ...Object.values(value).flatMap(schemaRefs)];
+}
+const readSchemaNames = new Set(categoryNames);
+let found = true;
+while (found) {
+  found = false;
+  for (const [name, schema] of Object.entries(schemas)) {
+    if (!readSchemaNames.has(name) && schemaRefs(schema).some((ref) => readSchemaNames.has(ref))) {
+      readSchemaNames.add(name); found = true;
+    }
+  }
+}
+
 function refName(ref) {
   const prefix = '#/components/schemas/';
   if (typeof ref !== 'string' || !ref.startsWith(prefix)) {
@@ -86,7 +105,7 @@ function refName(ref) {
   }
   const name = ref.slice(prefix.length);
   assertIdentifier(name);
-  return `OpenAPIComponents['schemas']['${name}']`;
+  return `${readRepresentation ? 'OpenAPIReadComponents' : 'OpenAPIComponents'}['schemas']['${name}']`;
 }
 
 function resolveLocalRef(ref) {
@@ -151,7 +170,7 @@ function typeForSchema(schema, level = 0) {
     return withNullable(union(schema.oneOf.map((item) => typeForSchema(item, level))), schema);
   }
   if (Array.isArray(schema.enum)) {
-    return withNullable(union(schema.enum.map((value) => literal(value))), schema);
+    return withNullable(union([...schema.enum.map((value) => literal(value)), ...(readRepresentation && categoryObjects.has(schema) ? [literal('unsupported')] : [])]), schema);
   }
 
   const rawType = Array.isArray(schema.type)
@@ -212,6 +231,15 @@ function generate() {
   lines.push('}');
   lines.push('');
 
+  lines.push('export interface OpenAPIReadComponents {');
+  lines.push(`  schemas: Omit<OpenAPIComponents['schemas'], ${[...readSchemaNames].sort().map(literal).join(' | ')}> & {`);
+  readRepresentation = true;
+  for (const name of [...readSchemaNames].sort()) {
+    lines.push(`    ${name}: ${indent(typeForSchema(schemas[name], 4), 4).trimStart()};`);
+  }
+  readRepresentation = false;
+  lines.push('  };', '}', '');
+  const readOperations = [];
   const operationIds = new Set();
   lines.push('export interface OpenAPIOperations {');
   for (const [routePath, pathItemRaw] of Object.entries(spec.paths ?? {})) {
@@ -262,15 +290,22 @@ function generate() {
 	  }
 
       const successTypes = [];
+      const readSuccessTypes = [];
       for (const [status, responseRaw] of Object.entries(operation.responses ?? {})) {
         if (!/^[23]\d\d$/.test(status) && status !== 'default') continue;
         const response = resolveObject(responseRaw) ?? {};
         const contents = Object.values(response.content ?? {});
         if (!contents.length) {
           successTypes.push('void');
+          readSuccessTypes.push('void');
           continue;
         }
-        for (const content of contents) successTypes.push(typeForSchema(content?.schema, 6));
+        for (const content of contents) {
+          successTypes.push(typeForSchema(content?.schema, 6));
+          readRepresentation = true;
+          readSuccessTypes.push(typeForSchema(content?.schema, 6));
+          readRepresentation = false;
+        }
       }
       const routeClass = operation['x-astronomer-route-class'];
       if (!successTypes.length && ['stream', 'proxy'].includes(routeClass)) successTypes.push('void');
@@ -281,11 +316,13 @@ function generate() {
       lines.push(`    path: ${literal(routePath)};`);
       lines.push(`    arguments: ${argumentLines.join('\n')};`);
       lines.push(`    response: ${union(successTypes)};`);
+      readOperations.push(`  ${literal(id)}: { response: ${union(readSuccessTypes.length ? readSuccessTypes : successTypes)} };`);
       lines.push('  };');
     }
   }
   lines.push('}');
   lines.push('');
+  lines.push('export interface OpenAPIReadOperations {', ...readOperations, '}', '');
   lines.push('export type OpenAPIOperationId = keyof OpenAPIOperations;');
   lines.push('');
   lines.push("export type OpenAPISchemaName = keyof OpenAPIComponents['schemas'];");

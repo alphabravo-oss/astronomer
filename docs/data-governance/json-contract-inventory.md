@@ -24,6 +24,17 @@ distribution clone/profile serializer results are explicitly recorded as
 predecoded-value assumptions, not proof that arbitrary Go maps cannot fail.
 Caller byte bounds and content-free helper errors are recorded separately.
 
+The final reviewed build-boundary refresh covers 396 modules, 1,155 calls and
+1,129 unique function/operation/argument bindings on combined main `e4f1cb2c`
+plus the owned destination reader. Discovery now includes `deploy/bundles` and
+import-bound canonical `jsoncontract.Decode` consumers. Each build serializer
+has a precise schema/operand annotation; legacy catalog duplicate/depth behavior
+and discarded typed-data marshal assumptions remain explicit. The old policy
+fails the expanded build inventory, and negative fixtures reject new exporters
+or changed canonical-reader operands even in an already owned module.
+Destination policy now uses the shared duplicate/depth/unknown/EOF reader while
+preserving empty unrestricted input and the exact 64 KiB byte boundary.
+
 Canonical query bindings identify named SQL candidates. Canonical query-extension
 templates are also inventoried, including the idempotency response writer that
 returns a marshal error before SQL. Physical column candidates come from sqlc's

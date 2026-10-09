@@ -23,6 +23,34 @@ func unrelated() { value := 1; _ = value }
 	}
 }
 
+func TestDiscoverBuildAndCanonicalReaderBypasses(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"internal", "cmd", "pkg", "deploy/bundles/cmd/example"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	source := `package fixture
+import (j "encoding/json"; contract "github.com/alphabravocompany/astronomer-go/internal/jsoncontract")
+func emit(value any) { j.Marshal(value) }
+func read(raw []byte, value any) { contract.Decode(raw, value) }
+func shadow(raw []byte, value any) { contract := local(); contract.Decode(raw, value) }
+`
+	path := filepath.Join(root, "deploy/bundles/cmd/example/main.go")
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := discover(root)
+	if err != nil || len(result.JSONCalls) != 2 {
+		t.Fatalf("build exporter/reader bypass not discovered or shadow misbound: calls=%+v error=%v", result.JSONCalls, err)
+	}
+	for _, call := range result.JSONCalls {
+		if call.Function == "shadow" || call.Path != "deploy/bundles/cmd/example/main.go" {
+			t.Fatalf("unrelated reader classified: %+v", call)
+		}
+	}
+}
+
 func TestDiscoverPersistenceJSONColumns(t *testing.T) {
 	source := "package sqlc\nimport j \"encoding/json\"\ntype Row struct {\nPayload j.RawMessage `json:\"payload\"`\nName string `json:\"name\"`\n}"
 	path := filepath.Join(t.TempDir(), "models.go")

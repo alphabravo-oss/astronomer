@@ -1,0 +1,21 @@
+{
+  "actual_signer_adapter_executed": true,
+  "characterized_interface": "sign --registry-cacert PATH (registry TLS CA, not signing-certificate chain)",
+  "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 COSIGN_BIN=/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3 go test ./deploy/bundles/cmd/distribution -run TestActualSigner\\|TestSignerPreflight -count=1 -v",
+  "identity": "owned TLS registry and ephemeral QA key; production OIDC not executed",
+  "invalid_signer_preflight": "absolute regular executable required before layout preparation or registry writes",
+  "official_cosign": "3.1.3",
+  "output": "=== RUN   TestActualSignerUsesOwnedPrivateRegistryCA\n2026/10/09 22:08:58 http: TLS handshake error from 127.0.0.1:52302: remote error: tls: bad certificate\n2026/10/09 22:08:58 http: TLS handshake error from 127.0.0.1:52312: client sent an HTTP request to an HTTPS server\n2026/10/09 22:08:59 http: TLS handshake error from 127.0.0.1:52384: read tcp 127.0.0.1:43753->127.0.0.1:52384: read: connection reset by peer\n2026/10/09 22:08:59 http: TLS handshake error from 127.0.0.1:52374: read tcp 127.0.0.1:43753->127.0.0.1:52374: read: connection reset by peer\n--- PASS: TestActualSignerUsesOwnedPrivateRegistryCA (0.56s)\n=== RUN   TestSignerPreflightRejectsBeforeAnyRegistryWrite\n--- PASS: TestSignerPreflightRejectsBeforeAnyRegistryWrite (0.00s)\nPASS\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution\t0.601s\n",
+  "package_done": false,
+  "private_ca_negative": "without approved CA actual sign fails",
+  "private_ca_positive": "with owned immutable CA actual sign succeeds and canonical OCI verifier authenticates readback",
+  "result": "PASS",
+  "schema_version": 1,
+  "slice": "publisher-private-registry-ca-review",
+  "source_base_commit": "7337da73",
+  "source_sha256": {
+    "deploy/bundles/cmd/distribution/publication.go": "a7db042ee6cd4811b9a69da25fd88ab936d20f61712d2aa2a29069c0bc881380",
+    "deploy/bundles/cmd/distribution/publication_tls_test.go": "6ca06fb8b61709d293c45a044aad17eed3b55ce7a10056d30b146d8ca8e18bcc"
+  },
+  "work_package": "W03"
+}

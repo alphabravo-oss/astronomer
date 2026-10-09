@@ -310,3 +310,23 @@ it("uses populated legacy timestamp only as report time and never fills modern m
   ).toBeInTheDocument();
   expect(screen.queryByText(/Reported /)).not.toBeInTheDocument();
 });
+
+it("disables deployment mutations for an unsupported phase even with update permission", () => {
+  context.canUpdate = true;
+  const queryClient = client();
+  queryClient.setQueryData(
+    queryKeys.delivery.deployment("project", "deployment"),
+    {
+      etag: '"generation-1"',
+      data: { deployment: { ...fixture(), phase: "unsupported" }, events: [] },
+    },
+  );
+  const view = mount(queryClient, <DeploymentDetailPage />);
+  expect(screen.getByText("unsupported", { exact: true })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reconcile" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Suspend" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Reconcile" }));
+  expect(api.actOnClusterDeployment).not.toHaveBeenCalled();
+  view.unmount();
+  queryClient.clear();
+});

@@ -414,6 +414,40 @@ describe("Charlie global shell accessibility", () => {
     );
   });
 
+  it("renders an unsupported session read-only with send and abort disabled", async () => {
+    vi.mocked(getCharlieActiveThread).mockResolvedValue({
+      thread: {
+        id: "thread-1",
+        title: "Future turn",
+        state: "active",
+        current_session_id: "session-1",
+      },
+      current_session: { id: "session-1", state: "unsupported" },
+    } as never);
+    vi.mocked(getCharlieSession).mockResolvedValue({
+      id: "session-1",
+      state: "unsupported",
+    } as never);
+    vi.mocked(getCharlieThreadHistory).mockResolvedValue([]);
+    await renderShell();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Charlie assistant" }),
+    );
+    expect(
+      await screen.findByText(/Unsupported session state/),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Message Charlie"), {
+      target: { value: "mutate" },
+    });
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Abort turn" })).toBeNull();
+    fireEvent.keyDown(screen.getByLabelText("Message Charlie"), {
+      key: "Enter",
+    });
+    expect(sendCharlieThreadMessage).not.toHaveBeenCalled();
+    expect(abortCharlieSession).not.toHaveBeenCalled();
+  });
+
   it("keeps second-turn progress visible when the prior status cache is terminal", async () => {
     vi.mocked(getCharlieActiveThread).mockResolvedValue({
       thread: {

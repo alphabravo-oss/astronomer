@@ -3,9 +3,7 @@ package httpclient
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -13,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 // TrustedOrigin is operator authority for one origin and its entire DNS answer
@@ -41,14 +41,9 @@ func ParseDestinationPolicy(raw string) (DestinationPolicy, error) {
 	if len(raw) > 64<<10 {
 		return policy, errors.New("destination policy exceeds size limit")
 	}
-	decoder := json.NewDecoder(strings.NewReader(raw))
-	decoder.DisallowUnknownFields()
 	var decoded *DestinationPolicy
-	if err := decoder.Decode(&decoded); err != nil || decoded == nil {
+	if err := jsoncontract.Decode([]byte(raw), &decoded); err != nil || decoded == nil {
 		return policy, errors.New("destination policy is invalid")
-	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		return policy, errors.New("destination policy has trailing input")
 	}
 	policy = *decoded
 	if err := policy.Validate(); err != nil {

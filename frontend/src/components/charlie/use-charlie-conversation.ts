@@ -191,8 +191,13 @@ export function useCharlieConversation({
   }, [history.data, local, viewingThreadId]);
   const showProgress =
     !viewingThreadId && (send.isPending || awaitingReply) && !send.isError;
+  const categoryActionsAllowed =
+    sessionStatus.data?.state !== "unsupported" &&
+    activeThread.data?.current_session?.state !== "unsupported" &&
+    activeThread.data?.thread?.state !== "unsupported";
   const historyReady =
-    (!displayedThreadId && !sessionId) || history.data !== undefined;
+    categoryActionsAllowed &&
+    ((!displayedThreadId && !sessionId) || history.data !== undefined);
   // Keep the latest turn visible above the fixed composer unless the user has
   // scrolled up to read earlier history.
   useLayoutEffect(() => {
@@ -221,6 +226,7 @@ export function useCharlieConversation({
     messages,
     showProgress,
     historyReady,
+    categoryActionsAllowed,
   };
 }
 export type CharlieConversation = ReturnType<typeof useCharlieConversation>;

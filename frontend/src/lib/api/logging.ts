@@ -30,7 +30,7 @@ import type {
   PaginatedResponse,
 } from "@/types";
 import { mapPage } from "./pagination";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
 
 type LoggingContracts = OpenAPIComponents["schemas"];
@@ -453,7 +453,8 @@ export async function getLoggingOperations(
   const response = await listLoggingOperationsOperation({
     signal,
     query: {
-      status: params?.status as LoggingOperationWire["status"] | undefined,
+      status: params?.status as
+        Exclude<LoggingOperationWire["status"], "unsupported"> | undefined,
       targetType: params?.target_type as
         LoggingOperationWire["targetType"] | undefined,
       targetKey: params?.target_key,

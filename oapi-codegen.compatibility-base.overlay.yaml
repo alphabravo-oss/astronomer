@@ -1,0 +1,48 @@
+# OpenAPI Overlay (https://github.com/OAI/Overlay-Specification) applied by
+# oapi-codegen BEFORE generation (see oapi-codegen.yaml -> output-options.overlay).
+#
+# WHY THIS EXISTS
+# docs/openapi.yaml is the canonical wire contract. This Go-only overlay
+# preserves released v1 source identities and pointer layouts while resolving
+# Go field-name collisions. It also retains the released inhibition pointer
+# fields while canonical schemas describe current writer requirements.
+#
+#   1. ResourceSearchResult includes upstream snake_case Kubernetes metadata
+#      alongside the canonical camelCase projection. Both normalize to the
+#      same Go field names, so the wire-specific fields need explicit names.
+#
+# These are generator-only Go representation adjustments. Canonical JSON
+# property names and HTTP operations come from docs/openapi.yaml.
+overlay: 1.0.0
+info:
+  title: astroclient codegen fixups
+  version: 1.0.0
+actions:
+  # --- duplicate camel/snake field names in one struct ------------------------
+  # ResourceSearchResult.results[].(cluster_id|cluster_name) collide with
+  # ResourceRow.clusterId and the sibling clusterName.
+  - target: $.components.schemas.ResourceSearchResult.properties.results.items.allOf[1].properties.cluster_id
+    description: Rename snake_case dup so it does not collide with ResourceRow.clusterId.
+    update:
+      x-go-name: ClusterIdSnake
+  - target: $.components.schemas.ResourceSearchResult.properties.results.items.allOf[1].properties.cluster_name
+    description: Rename snake_case dup so it does not collide with clusterName.
+    update:
+      x-go-name: ClusterNameSnake
+  # Preserve the v1 Go SDK pointer layout while the canonical document states
+  # the already-enforced runtime requirements and nullable defaults.
+  - target: $.components.schemas.InhibitionRequest.required
+    description: Replace the required array rather than append to it in overlay semantics.
+    remove: true
+  - target: $.components.schemas.InhibitionRequest
+    description: Keep optional pointer fields in existing Go clients.
+    update:
+      required: [name]
+  - target: $.components.schemas.InhibitionRequest.properties.equal_labels
+    description: Retain *[]string with omitempty in the v1 SDK.
+    update:
+      nullable: false
+  - target: $.components.schemas.InhibitionRequest.properties.enabled
+    description: Retain *bool with omitempty in the v1 SDK.
+    update:
+      nullable: false

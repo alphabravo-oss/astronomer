@@ -21,15 +21,21 @@ import (
 )
 
 type assetInput struct {
-	Path     string   `json:"path"`
-	File     string   `json:"file"`
-	Category string   `json:"category"`
-	Images   []string `json:"images"`
+	ID                   string   `json:"id"`
+	Path                 string   `json:"path"`
+	File                 string   `json:"file"`
+	Category             string   `json:"category"`
+	Images               []string `json:"images"`
+	Digest               string   `json:"digest"`
+	ArtifactSubject      string   `json:"artifact_subject"`
+	ArtifactManifestFile string   `json:"artifact_manifest_file"`
+	ArtifactConfigFile   string   `json:"artifact_config_file"`
 }
 type assetIndex struct {
 	SchemaVersion      int          `json:"schema_version"`
 	RequiredCategories []string     `json:"required_categories"`
 	Assets             []assetInput `json:"assets"`
+	Capabilities       []string     `json:"capabilities"`
 }
 type publishedSubject struct {
 	Component       string `json:"component"`
@@ -58,7 +64,7 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 	}
 	var assets assetIndex
 	data, err := boundedFile(assetPath, 1<<20)
-	if err != nil || closedJSON(data, &assets) != nil || assets.SchemaVersion != 1 {
+	if err != nil || closedJSON(data, &assets) != nil || assets.SchemaVersion != 2 || assets.Capabilities == nil || assets.Assets == nil {
 		return empty, errors.New("asset closure schema is invalid")
 	}
 	members := map[string][]byte{}
@@ -77,7 +83,11 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 			workloads[image] = append(workloads[image], component.Slug)
 		}
 	}
+	closedAssets := []distribution.Asset{}
 	for _, asset := range assets.Assets {
+		if asset.Images == nil || (asset.ArtifactSubject == "" && (asset.ArtifactManifestFile != "" || asset.ArtifactConfigFile != "")) {
+			return empty, errors.New("asset subject shape invalid")
+		}
 		for _, image := range asset.Images {
 			normalized, err := pinnedImage(image)
 			if err != nil || normalized != image {
@@ -110,13 +120,54 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 			return empty, errors.New("asset closure duplicates a reserved member")
 		}
 		content, err := boundedFile(asset.File, distribution.MaximumArchiveBytes)
-		if err != nil {
+		if err != nil || sha(content) != asset.Digest {
 			return empty, errors.New("asset closure input is unavailable")
+		}
+		if asset.Category == "operator" || asset.Category == "plugin" || asset.Category == "database" || asset.Category == "runtime_image" {
+			classified := map[string]bool{}
+			if err := collectRenderedImages(string(content), classified); err != nil || len(classified) != len(asset.Images) {
+				return empty, errors.New("prerequisite manifest image set is not closed")
+			}
+			for _, image := range asset.Images {
+				if !classified[image] {
+					return empty, errors.New("prerequisite manifest differs from declared immutable images")
+				}
+			}
 		}
 		members[asset.Path] = content
 		kinds[asset.Path] = asset.Category
+		closedAsset := distribution.Asset{ID: asset.ID, MemberPath: asset.Path, Images: asset.Images, ArtifactSubject: asset.ArtifactSubject}
+		if asset.ArtifactSubject != "" {
+			manifest, err := boundedFile(asset.ArtifactManifestFile, 1<<20)
+			_, subject, ok := strings.Cut(asset.ArtifactSubject, "@")
+			if err != nil || !ok || sha(manifest) != subject {
+				return empty, errors.New("database manifest capture missing or changed")
+			}
+			path := "assets/" + asset.ID + ".oci-manifest.json"
+			if _, exists := members[path]; exists {
+				return empty, errors.New("database manifest member collision")
+			}
+			members[path] = manifest
+			kinds[path] = "vulnerability_database"
+			closedAsset.ArtifactManifestPath = path
+			config, err := boundedFile(asset.ArtifactConfigFile, 1<<20)
+			if err != nil {
+				return empty, errors.New("database configuration capture missing")
+			}
+			configPath := "assets/" + asset.ID + ".oci-config.json"
+			if _, exists := members[configPath]; exists {
+				return empty, errors.New("database configuration member collision")
+			}
+			members[configPath] = config
+			kinds[configPath] = "vulnerability_database"
+			closedAsset.ArtifactConfigPath = configPath
+		}
+		closedAssets = append(closedAssets, closedAsset)
 	}
-	bom := distribution.BOM{SchemaVersion: 1, Release: result.Catalog.Release, CatalogDigest: sha(catalog), Profiles: []distribution.Profile{{Name: "builtins", Qualification: "qualified", ValuesPath: "profiles/builtins.values.json", InventoryPath: "profiles/builtins.images.json", RequiredCategories: assets.RequiredCategories, BlockedCategories: []string{}}}}
+	if err := distribution.ValidateAssetClosure(closedAssets, kinds, assets.Capabilities); err != nil {
+		return empty, err
+	}
+	bom := distribution.BOM{SchemaVersion: 1, AssetContractVersion: 1, Assets: closedAssets, Release: result.Catalog.Release, CatalogDigest: sha(catalog), Profiles: []distribution.Profile{{Name: "builtins", Qualification: "qualified", ValuesPath: "profiles/builtins.values.json", InventoryPath: "profiles/builtins.images.json", RequiredCategories: assets.RequiredCategories, BlockedCategories: []string{}, Capabilities: assets.Capabilities}}}
 	index := subjectIndex{SchemaVersion: 1, Release: result.Catalog.Release, Repository: repository, CatalogDigest: bom.CatalogDigest, MediaType: distribution.MediaType, Children: []publishedSubject{}}
 	if err := os.Mkdir(directory, 0700); err != nil {
 		return empty, errors.New("OCI output directory must be new")
@@ -350,6 +401,29 @@ func validateLayout(directory string) error {
 	if err := validateSubjectBlob(directory, index.Digest, index.ArchiveDigest, distribution.MediaType); err != nil {
 		return err
 	}
+	indexData, err := boundedFile(filepath.Join(directory, "index.json"), 1<<20)
+	var layoutIndex ocispec.Index
+	if err != nil || closedJSON(indexData, &layoutIndex) != nil || layoutIndex.SchemaVersion != 2 || len(layoutIndex.Manifests) != len(index.Children)+1 {
+		return errors.New("OCI layout index does not close declared subjects")
+	}
+	expectedReferences := map[string]string{"distribution": index.Digest}
+	for _, child := range index.Children {
+		expectedReferences[child.LayoutReference] = child.Digest
+	}
+	for _, descriptor := range layoutIndex.Manifests {
+		name := descriptor.Annotations[ocispec.AnnotationRefName]
+		if expectedReferences[name] == "" || descriptor.Digest.String() != expectedReferences[name] || descriptor.MediaType != ocispec.MediaTypeImageManifest || len(descriptor.URLs) != 0 || len(descriptor.Data) != 0 {
+			return errors.New("OCI layout reference differs from declared immutable subject")
+		}
+		data, err := boundedFile(filepath.Join(directory, "blobs", "sha256", descriptor.Digest.Encoded()), 1<<20)
+		if err != nil || descriptor.Size != int64(len(data)) {
+			return errors.New("OCI layout subject descriptor size differs")
+		}
+		delete(expectedReferences, name)
+	}
+	if len(expectedReferences) != 0 {
+		return errors.New("OCI layout reference omitted")
+	}
 	seen := map[string]bool{}
 	for _, child := range index.Children {
 		if seen[child.Component] || child.LayoutReference != "chart_"+child.Component {
@@ -385,8 +459,16 @@ func validateSubjectBlob(directory, subject, archiveDigest, media string) error 
 		return errors.New("emitted OCI subject identity changed")
 	}
 	var manifest ocispec.Manifest
-	if closedJSON(manifestBytes, &manifest) != nil || manifest.SchemaVersion != 2 || len(manifest.Layers) != 1 || manifest.Layers[0].Digest.String() != archiveDigest || manifest.Layers[0].MediaType != media || len(manifest.Layers[0].URLs) > 0 {
+	if closedJSON(manifestBytes, &manifest) != nil || manifest.SchemaVersion != 2 || len(manifest.Layers) != 1 || manifest.Layers[0].Digest.String() != archiveDigest || manifest.Layers[0].MediaType != media || len(manifest.Layers[0].URLs) > 0 || len(manifest.Layers[0].Data) > 0 {
 		return errors.New("emitted OCI payload descriptor changed")
+	}
+	configuration := manifest.Config
+	if configuration.Digest.Algorithm() != digest.SHA256 || configuration.Size <= 0 || configuration.Size > 1<<20 || len(configuration.URLs) != 0 || len(configuration.Data) != 0 {
+		return errors.New("OCI layout config descriptor invalid")
+	}
+	config, err := boundedFile(filepath.Join(directory, "blobs", "sha256", configuration.Digest.Encoded()), 1<<20)
+	if err != nil || sha(config) != configuration.Digest.String() || int64(len(config)) != configuration.Size {
+		return errors.New("OCI layout configuration missing or changed")
 	}
 	layer := manifest.Layers[0]
 	if layer.Digest.Algorithm() != digest.SHA256 {

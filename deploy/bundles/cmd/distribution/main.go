@@ -23,6 +23,7 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/engine"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
+	ociregistry "oras.land/oras-go/v2/registry"
 )
 
 type output struct {
@@ -40,7 +41,65 @@ func main() {
 	assets := flag.String("asset-index", "", "closed external prerequisite asset index")
 	platforms := flag.String("platform-evidence", "", "directory of captured digest-bound OCI indexes and child manifests")
 	verifyLayout := flag.String("verify-layout", "", "validate prepared OCI subject/catalog closure without authentication or publication")
+	verifyDocument := flag.String("verify-document", "", "authenticate a bounded detached document with the canonical offline verifier")
+	detachedSignature := flag.String("signature", "", "detached signature or Sigstore bundle file")
+	trustDirectory := flag.String("trust-directory", "", "absolute mounted public trust directory; never fetched")
+	provider := flag.String("signature-provider", "", "cosign_key or cosign_keyless")
+	keyRef := flag.String("key-ref", "", "mounted vendor public key reference")
+	identity := flag.String("certificate-identity", "", "exact authorized publisher identity")
+	issuer := flag.String("certificate-oidc-issuer", "", "exact authorized publisher issuer")
+	applicationProfiles := flag.String("application-profiles", "", "reviewed closed application chart/profile input index")
+	applicationArchive := flag.String("verify-application-archive", "", "authenticate and verify a closed application archive before extraction")
+	releaseManifest := flag.String("validate-release-manifest", "", "authenticate and run the canonical release contract validator")
+	expectedRelease := flag.String("expected-release", "", "exact expected vX.Y.Z release identity")
+	publishDirectory := flag.String("publish-layout", "", "publish and canonically verify every immutable prepared OCI subject")
+	publisherMode := flag.String("publisher-mode", "production", "production vendor OIDC or distinct qa key identity")
+	cosignBinary := flag.String("cosign-bin", "", "absolute qualified signer binary path")
+	qaKey := flag.String("qa-signing-key", "", "QA-only local key file; never used by production OIDC mode")
+	networkFile := flag.String("destination-policy", "", "bounded operator destination policy JSON file")
+	caFile := flag.String("registry-ca-file", "", "operator-provided registry CA PEM file")
 	flag.Parse()
+	if *publishDirectory != "" {
+		if err := publishFromFlags(*publishDirectory, *expectedRelease, *publisherMode, *cosignBinary, *qaKey, *trustDirectory, *provider, *keyRef, *identity, *issuer, *networkFile, *caFile); err != nil {
+			fmt.Fprintln(os.Stderr, "verified immutable distribution publication blocked:", err)
+			os.Exit(1)
+		}
+		fmt.Println("verified immutable distribution publication")
+		return
+	}
+	if *releaseManifest != "" {
+		if err := validateReleaseManifest(*releaseManifest, *detachedSignature, *trustDirectory, *provider, *keyRef, *identity, *issuer, *expectedRelease); err != nil {
+			fmt.Fprintln(os.Stderr, "authenticated release contract rejected")
+			os.Exit(1)
+		}
+		fmt.Println("authenticated release contract valid")
+		return
+	}
+	if *applicationArchive != "" {
+		if err := verifyApplicationArchive(*applicationArchive, *verifyDocument, *detachedSignature, *trustDirectory, *provider, *keyRef, *identity, *issuer); err != nil {
+			fmt.Fprintln(os.Stderr, "application catalog archive verification blocked:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *applicationProfiles != "" {
+		result, err := renderApplicationProfiles(*catalogPath, *applicationProfiles, *platforms)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "application catalog profile blocked:", err)
+			os.Exit(1)
+		}
+		if err := json.NewEncoder(os.Stdout).Encode(result); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+	if *verifyDocument != "" {
+		if err := verifyDetachedDocument(*verifyDocument, *detachedSignature, *trustDirectory, *provider, *keyRef, *identity, *issuer); err != nil {
+			fmt.Fprintln(os.Stderr, "distribution document authentication failed")
+			os.Exit(1)
+		}
+		return
+	}
 	if *verifyLayout != "" {
 		if err := validateLayout(*verifyLayout); err != nil {
 			fmt.Fprintln(os.Stderr, "distribution layout blocked:", err)
@@ -90,68 +149,104 @@ func produce(catalogPath, charts string) (output, error) {
 		if fmt.Sprintf("sha256:%x", sha256.Sum256(compressed)) != component.Source.ChartDigest {
 			return output{}, errors.New("chart archive digest differs from reviewed catalog")
 		}
-		if err := distribution.ValidateChartArchive(compressed); err != nil {
+		profile, err := renderReviewedChart(compressed, component.Values, component.ReleaseName, component.TargetNamespace, component.Requirements.KubernetesMinimum)
+		if err != nil {
 			return output{}, err
 		}
-		chart, err := loader.LoadArchive(bytes.NewReader(compressed))
-		if err != nil {
-			return output{}, errors.New("chart archive cannot be loaded")
-		}
-		if err := action.CheckDependencies(chart, chart.Metadata.Dependencies); err != nil {
-			return output{}, errors.New("recursive chart dependencies are incomplete")
-		}
-		values, err := chartutil.CoalesceValues(chart, component.Values)
-		if err != nil {
-			return output{}, errors.New("chart values cannot be coalesced")
-		}
-		capabilities := chartutil.DefaultCapabilities.Copy()
-		capabilities.KubeVersion.Version = component.Requirements.KubernetesMinimum
-		renderValues, err := chartutil.ToRenderValues(chart, values, chartutil.ReleaseOptions{Name: component.ReleaseName, Namespace: component.TargetNamespace, Revision: 1, IsInstall: true}, capabilities)
-		if err != nil {
-			return output{}, errors.New("chart values cannot be rendered")
-		}
-		rendered, err := engine.Render(chart, renderValues)
-		if err != nil {
-			return output{}, errors.New("chart profile render failed")
+		if profile.Chart != component.Source.Chart || profile.Version != component.Source.Version {
+			return output{}, errors.New("chart metadata differs from reviewed catalog identity")
 		}
 		imageSet := map[string]bool{}
-		paths := make([]string, 0, len(rendered))
-		for name := range rendered {
-			paths = append(paths, name)
-		}
-		sort.Strings(paths)
-		var renderedBytes bytes.Buffer
-		for _, name := range paths {
-			body := rendered[name]
-			if len(body) > 16<<20 || renderedBytes.Len()+len(body) > 64<<20 {
-				return output{}, errors.New("chart render exceeds bounds")
-			}
-			renderedBytes.WriteString(name + "\n" + body + "\n")
-			if err := collectRenderedImages(body, imageSet); err != nil {
-				return output{}, err
-			}
-		}
-		// Values expose images for generated jobs/sidecars that static templates
-		// cannot emit before the operator observes workloads. All are classified.
-		if err := collectValueImages(map[string]any(values), imageSet); err != nil {
-			return output{}, err
+		for _, image := range profile.Images {
+			imageSet[image] = true
 		}
 		for _, declared := range component.Images {
 			if !imageSet[declared] {
 				return output{}, errors.New("declared component image is not classified by render or effective values")
 			}
 		}
-		component.Values = map[string]any(values)
+		component.Values = profile.Values
 		component.Images = sortedImages(imageSet)
 		result.Images[component.Slug] = component.Images
-		result.RenderDigests[component.Slug] = fmt.Sprintf("sha256:%x", sha256.Sum256(renderedBytes.Bytes()))
-		for _, dependency := range chart.Metadata.Dependencies {
-			result.Dependencies[component.Slug] = append(result.Dependencies[component.Slug], dependency.Name+"@"+dependency.Version)
-		}
-		sort.Strings(result.Dependencies[component.Slug])
+		result.RenderDigests[component.Slug] = profile.RenderDigest
+		result.Dependencies[component.Slug] = profile.Dependencies
 	}
 	return result, nil
 }
+
+type renderedProfile struct {
+	Chart        string         `json:"chart"`
+	Version      string         `json:"version"`
+	Values       map[string]any `json:"values"`
+	Images       []string       `json:"images"`
+	RenderDigest string         `json:"render_digest"`
+	Dependencies []string       `json:"dependencies"`
+}
+
+func renderReviewedChart(compressed []byte, overrides map[string]any, releaseName, namespace, kubernetesVersion string) (renderedProfile, error) {
+	if err := distribution.ValidateChartArchive(compressed); err != nil {
+		return renderedProfile{}, err
+	}
+	chart, err := loader.LoadArchive(bytes.NewReader(compressed))
+	if err != nil {
+		return renderedProfile{}, errors.New("chart archive cannot be loaded")
+	}
+	if err := action.CheckDependencies(chart, chart.Metadata.Dependencies); err != nil {
+		return renderedProfile{}, errors.New("recursive chart dependencies are incomplete")
+	}
+	values, err := chartutil.CoalesceValues(chart, overrides)
+	if err != nil {
+		return renderedProfile{}, errors.New("chart values cannot be coalesced")
+	}
+	if chart.Metadata.Name == "trivy-operator" {
+		if _, _, err := distribution.ScannerValues(map[string]any(values)); err != nil {
+			return renderedProfile{}, err
+		}
+	}
+	capabilities := chartutil.DefaultCapabilities.Copy()
+	parsedVersion, err := chartutil.ParseKubeVersion(kubernetesVersion)
+	if err != nil {
+		return renderedProfile{}, errors.New("profile Kubernetes version invalid")
+	}
+	capabilities.KubeVersion = *parsedVersion
+	renderValues, err := chartutil.ToRenderValues(chart, values, chartutil.ReleaseOptions{Name: releaseName, Namespace: namespace, Revision: 1, IsInstall: true}, capabilities)
+	if err != nil {
+		return renderedProfile{}, errors.New("chart values cannot be rendered")
+	}
+	rendered, err := engine.Render(chart, renderValues)
+	if err != nil {
+		return renderedProfile{}, errors.New("chart profile render failed")
+	}
+	imageSet := map[string]bool{}
+	paths := make([]string, 0, len(rendered))
+	for name := range rendered {
+		paths = append(paths, name)
+	}
+	sort.Strings(paths)
+	var renderedBytes bytes.Buffer
+	for _, name := range paths {
+		body := rendered[name]
+		if len(body) > 16<<20 || renderedBytes.Len()+len(body) > 64<<20 {
+			return renderedProfile{}, errors.New("chart render exceeds bounds")
+		}
+		renderedBytes.WriteString(name + "\n" + body + "\n")
+		if err := collectRenderedImages(body, imageSet); err != nil {
+			return renderedProfile{}, err
+		}
+	}
+	// Values expose images for generated jobs/sidecars that static templates
+	// cannot emit before the operator observes workloads. All are classified.
+	if err := collectValueImages(map[string]any(values), imageSet); err != nil {
+		return renderedProfile{}, err
+	}
+	result := renderedProfile{Chart: chart.Metadata.Name, Version: chart.Metadata.Version, Values: map[string]any(values), Images: sortedImages(imageSet), RenderDigest: fmt.Sprintf("sha256:%x", sha256.Sum256(renderedBytes.Bytes())), Dependencies: []string{}}
+	for _, dependency := range chart.Metadata.Dependencies {
+		result.Dependencies = append(result.Dependencies, dependency.Name+"@"+dependency.Version)
+	}
+	sort.Strings(result.Dependencies)
+	return result, nil
+}
+
 func pinnedImage(raw string) (string, error) {
 	repository, digest, ok := strings.Cut(raw, "@")
 	if !ok || len(digest) != 71 || !strings.HasPrefix(digest, "sha256:") {
@@ -169,7 +264,12 @@ func pinnedImage(raw string) (string, error) {
 	if colon := strings.LastIndex(repository, ":"); colon > lastSlash {
 		repository = repository[:colon]
 	}
-	return repository + "@" + digest, nil
+	normalized := repository + "@" + digest
+	parsed, err := ociregistry.ParseReference(normalized)
+	if err != nil || parsed.Registry != strings.ToLower(parsed.Registry) || (!strings.ContainsAny(parsed.Registry, ".:") && parsed.Registry != "localhost") {
+		return "", errors.New("image registry or repository syntax invalid")
+	}
+	return normalized, nil
 }
 func collectRenderedImages(body string, images map[string]bool) error {
 	decoder := utilyaml.NewYAMLOrJSONDecoder(strings.NewReader(body), 4096)
@@ -191,7 +291,7 @@ func walkImageFields(value any, images map[string]bool) error {
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, child := range typed {
-			if key == "image" {
+			if key == "image" || key == "imageName" {
 				if raw, ok := child.(string); ok {
 					image, err := pinnedImage(raw)
 					if err != nil {

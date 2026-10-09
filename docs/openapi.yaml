@@ -98,6 +98,170 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}
   schemas:
+    CharlieAdminAgentReplicaStateValue:
+      type: string
+      x-go-type: string
+      enum: ["ready", "degraded", "unavailable", "unknown"]
+    CharlieAdminAlertDeliveryProofStatusValue:
+      type: string
+      x-go-type: string
+      enum: ["queued", "delivering", "retry", "delivered", "suppressed", "dead"]
+    CharlieAdminDiagnosticCheckStateValue:
+      type: string
+      x-go-type: string
+      enum: ["healthy", "degraded", "unavailable", "inactive", "ready", "unknown"]
+    CharlieKubernetesVisibilityStateValue:
+      type: string
+      x-go-type: string
+      enum: ["not_configured", "disabled", "enabled"]
+    CharlieOnboardingStatusStateValue:
+      type: string
+      x-go-type: string
+      enum: ["validated", "consumed"]
+    CharlieThreadMetadataStateValue:
+      type: string
+      x-go-type: string
+      enum: ["active", "archived"]
+    DeliveryRolloutState:
+      type: string
+      x-go-type: string
+      enum: ["draft", "resolving", "awaiting_approval", "queued", "progressing", "paused", "rejected", "aborted", "succeeded", "failed", "rolling_back", "rolled_back", "rollback_failed"]
+    DeliveryRolloutClusterState:
+      type: string
+      x-go-type: string
+      enum: ["pending", "released", "acknowledged", "reconciling", "ready", "blocked", "timed_out", "failed", "skipped", "rolling_back", "ready_previous", "rollback_failed", "aborted"]
+    DeliveryDeploymentPhase:
+      type: string
+      x-go-type: string
+      enum: ["pending", "blocked", "applying", "ready", "degraded", "failed", "suspended", "deleting", "removed", "unknown"]
+    DeliverySourceKind:
+      type: string
+      x-go-type: string
+      enum: ["git", "oci_artifact", "helm_http", "helm_oci"]
+    DeliveryRendererKind:
+      type: string
+      x-go-type: string
+      enum: ["kustomize", "helm"]
+    DeliveryApprovalDecision:
+      type: string
+      x-go-type: string
+      enum: ["approved", "rejected"]
+    DeliverySourceAuthModeValue:
+      type: string
+      x-go-type: string
+      enum: ["none", "basic", "bearer", "ssh", "workload_identity"]
+    DeliverySourceStatusValue:
+      type: string
+      x-go-type: string
+      enum: ["pending", "ready", "degraded", "revoked"]
+    DeliveryBundleState:
+      type: string
+      x-go-type: string
+      enum: ["resolving", "ready", "failed", "revoked"]
+    DeliveryVerificationStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "verified", "failed", "unsigned"]
+    DeliveryStrategyKind:
+      type: string
+      x-go-type: string
+      enum: ["all_at_once", "rolling", "canary", "partitioned"]
+    DeliveryFailureAction:
+      type: string
+      x-go-type: string
+      enum: ["pause", "abort", "rollback"]
+    DeliverySystemReleaseState:
+      type: string
+      x-go-type: string
+      enum: ["draft", "released", "retired", "revoked"]
+    DeliverySystemRolloutState:
+      type: string
+      x-go-type: string
+      enum: ["draft", "awaiting_approval", "queued", "progressing", "paused", "aborted", "succeeded", "failed", "rolling_back", "rolled_back", "rollback_failed"]
+    DeliverySystemAssignmentPhase:
+      type: string
+      x-go-type: string
+      enum: ["pending", "released", "applying", "ready", "failed", "rolling_back", "rolled_back", "rollback_failed", "aborted"]
+    AgentCredentialState:
+      type: string
+      x-go-type: string
+      enum: ["unknown", "valid", "expiring", "expired", "revoked"]
+    AgentRegistrationState:
+      type: string
+      x-go-type: string
+      enum: ["unknown", "registered", "failed", "rejected"]
+    ClusterRegistrationPhaseValue:
+      type: string
+      x-go-type: string
+      enum: ["created", "awaiting_agent", "connected", "provisioning", "ready", "failed"]
+    DurableOperationStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "retrying", "failed", "succeeded"]
+    AgentLifecycleOperationState:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "succeeded", "failed", "cancelled"]
+    NodeOperationState:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "retrying", "blocked", "failed", "succeeded"]
+    PollingOperationStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "completed", "failed", "superseded"]
+    ClusterConnectionStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "active", "disconnected", "error"]
+    SecurityScannerState:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "completed", "failed", "cancelled"]
+    ClusterSecurityPolicySyncStatusValue:
+      type: string
+      x-go-type: string
+      enum: ["synced", "pending", "failed", "unknown"]
+    CharlieSessionMetadataStateValue:
+      type: string
+      x-go-type: string
+      enum: ["creating", "active", "waiting_approval", "completed", "aborted", "failed"]
+    CharlieFindingSummaryStateValue:
+      type: string
+      x-go-type: string
+      enum: ["open", "acknowledged", "dismissed", "resolved", "expired"]
+    CharlieFindingSummaryWorkflowStateValue:
+      type: string
+      x-go-type: string
+      enum: ["approval_pending", "manual_remediation_required", "remediation_in_progress", "verification_pending", "resolved", "rejected", "dismissed", "expired"]
+    CharlieAdminTriggerEventStateValue:
+      type: string
+      x-go-type: string
+      enum: ["pending", "dispatching", "dispatched", "retry", "dead", "completed", "suppressed"]
+    CharlieApprovalSummaryStateValue:
+      type: string
+      x-go-type: string
+      enum: ["pending", "approved", "denied", "expired"]
+    CharlieApprovalState:
+      type: string
+      x-go-type: string
+      enum: ["pending", "approved", "rejected", "expired", "dispatched"]
+    CharlieReceiptState:
+      type: string
+      x-go-type: string
+      enum: ["claimed", "blocked", "waiting_approval", "deferred", "dispatched", "ambiguous", "verifying", "succeeded", "failed", "fenced"]
+    CharlieConnectionOnboardingState:
+      type: string
+      x-go-type: string
+      enum: ["validated", "secrets_pending", "secrets_written", "consumed", "active", "failed"]
+    BackupKnownStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "in_progress", "completed", "failed"]
+    RestoreKnownStatus:
+      type: string
+      x-go-type: string
+      enum: ["pending", "running", "completed", "failed"]
     CharlieOnboardingRequest:
       type: object
       additionalProperties: false
@@ -187,9 +351,7 @@ components:
         replica_count: {type: integer, minimum: 2, maximum: 20}
         issued_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
-        state:
-          type: string
-          enum: [validated, consumed]
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieOnboardingStatusStateValue"}
         idempotent:
           type: boolean
     CharlieSessionResource:
@@ -293,7 +455,7 @@ components:
       properties:
         id: {type: string, format: uuid}
         title: {type: string, maxLength: 120}
-        state: {type: string, enum: [active, archived]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieThreadMetadataStateValue"}
         current_session_id: {type: string, format: uuid, nullable: true}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -313,9 +475,7 @@ components:
         client_session_id: {type: string, format: uuid}
         intent: {type: string}
         resource_scope_summary: {type: string}
-        state:
-          type: string
-          enum: [creating, active, waiting_approval, completed, aborted, failed]
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieSessionMetadataStateValue"}
         visibility: {type: string, enum: [private, incident]}
         central_revision: {type: integer, format: int64, minimum: 0}
         source: {type: string, enum: [user, event]}
@@ -337,16 +497,13 @@ components:
         id: {type: string, format: uuid}
         title: {type: string, maxLength: 256}
         severity: {type: string, enum: [info, low, medium, high, critical]}
-        state: {type: string, enum: [open, acknowledged, dismissed, resolved, expired]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieFindingSummaryStateValue"}
         summary: {type: string, maxLength: 2048}
         reason_no_action: {type: string, maxLength: 64}
         repeat_count: {type: integer, minimum: 1}
         updated_at: {type: string, format: date-time}
         affected_resource: {$ref: '#/components/schemas/CharlieFindingResource'}
-        workflow_state:
-          type: string
-          enum: [approval_pending, manual_remediation_required, remediation_in_progress, verification_pending, resolved, rejected, dismissed, expired]
-          description: Product-authorized operator workflow derived from durable finding state; it is not execution authority.
+        workflow_state: {"type": "string", "description": "Product-authorized operator workflow derived from durable finding state; it is not execution authority.", "$ref": "#/components/schemas/CharlieFindingSummaryWorkflowStateValue"}
         available_decisions:
           type: array
           uniqueItems: true
@@ -474,7 +631,7 @@ components:
         ordinal: {type: integer, minimum: 0, maximum: 19}
         instance_id: {type: string, description: Opaque product-agent instance identifier; never a credential.}
         role: {type: string, enum: [leader, standby, unknown]}
-        state: {type: string, enum: [ready, degraded, unavailable, unknown]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieAdminAgentReplicaStateValue"}
         last_heartbeat_at: {type: string, format: date-time}
         version: {type: string}
     CharlieAdminMode:
@@ -501,7 +658,7 @@ components:
         schema: {type: string, enum: [charlie.kubernetes-visibility/v1]}
         profile: {type: string, enum: [disabled, product_namespace, cluster_diagnostics]}
         revision: {type: integer, format: int64, minimum: 0}
-        state: {type: string, enum: [not_configured, disabled, enabled]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieKubernetesVisibilityStateValue"}
         instance_id: {type: string, maxLength: 128}
         namespaces: {type: array, maxItems: 32, uniqueItems: true, items: {type: string, maxLength: 63}}
         product_owned_only: {type: boolean, enum: [true]}
@@ -681,7 +838,7 @@ components:
         delivery_id: {type: string, format: uuid}
         finding_id: {type: string, format: uuid}
         delivery_kind: {type: string, enum: [initial, escalation]}
-        status: {type: string, enum: [queued, delivering, retry, delivered, suppressed, dead]}
+        status: {"type": "string", "$ref": "#/components/schemas/CharlieAdminAlertDeliveryProofStatusValue"}
         template_identity: {type: string, enum: [charlie.finding.initial/v1, charlie.finding.escalation/v1, unrecognized]}
         deep_link_valid: {type: boolean}
         content_free: {type: boolean, description: True only when the persisted subject/body exactly match Astronomer's fixed content-free template and finding-bound deep link.}
@@ -732,7 +889,7 @@ components:
         event_type: {type: string, maxLength: 64}
         resource_type: {type: string, maxLength: 64}
         resource_id: {type: string, maxLength: 255}
-        state: {type: string, enum: [pending, dispatching, dispatched, retry, dead, completed, suppressed]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieAdminTriggerEventStateValue"}
         repeat_count: {type: integer, format: int32, minimum: 1}
         attempt_count: {type: integer, format: int32, minimum: 0}
         last_error_code: {type: string, maxLength: 64}
@@ -752,7 +909,7 @@ components:
       properties:
         operation_id: {type: string, format: uuid}
         event_id: {type: string, format: uuid}
-        status: {type: string, enum: [pending, dispatching, dispatched, retry, dead, completed, suppressed]}
+        status: {"type": "string", "$ref": "#/components/schemas/CharlieAdminTriggerEventStateValue"}
         status_url: {type: string}
     CharlieAdminPermission:
       type: object
@@ -782,7 +939,7 @@ components:
       properties:
         id: {type: string}
         label: {type: string}
-        state: {type: string, enum: [healthy, degraded, unavailable, inactive, ready, unknown]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieAdminDiagnosticCheckStateValue"}
         summary: {type: string}
         next_action: {type: string}
         checked_at: {type: string, format: date-time}
@@ -827,7 +984,7 @@ components:
       properties:
         id: {type: string, minLength: 1, maxLength: 128}
         title: {type: string, maxLength: 256}
-        state: {type: string, enum: [pending, approved, denied, expired]}
+        state: {"type": "string", "$ref": "#/components/schemas/CharlieApprovalSummaryStateValue"}
         eligible: {type: boolean}
         capability: {type: string}
         target: {type: string}
@@ -1048,7 +1205,7 @@ components:
         targetType: {type: string, enum: [output, pipeline]}
         targetKey: {type: string}
         operationType: {type: string}
-        status: {type: string, enum: [pending, running, completed, failed, superseded]}
+        status: {"type": "string", "$ref": "#/components/schemas/PollingOperationStatus"}
         attemptCount: {type: integer, format: int32, minimum: 0}
         startedAt: {type: string, format: date-time, nullable: true}
         completedAt: {type: string, format: date-time, nullable: true}
@@ -1286,7 +1443,7 @@ components:
         cluster_id: {type: string, format: uuid}
         template_id: {type: string, format: uuid}
         applied_at: {type: string, format: date-time, nullable: true}
-        sync_status: {type: string, enum: [synced, pending, failed, unknown]}
+        sync_status: {"type": "string", "$ref": "#/components/schemas/ClusterSecurityPolicySyncStatusValue"}
         error_message: {type: string}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -1339,7 +1496,7 @@ components:
         id: {type: string, format: uuid}
         cluster_id: {type: string, format: uuid}
         scan_type: {type: string}
-        status: {type: string, enum: [pending, running, completed, failed, cancelled]}
+        status: {"type": "string", "$ref": "#/components/schemas/SecurityScannerState"}
         passed: {type: integer, minimum: 0}
         failed: {type: integer, minimum: 0}
         warned: {type: integer, minimum: 0}
@@ -1518,7 +1675,7 @@ components:
         targetType: {type: string, enum: [cluster_stack, shared_thanos, shared_alertmanager, shared_grafana, shared_loki]}
         targetKey: {type: string}
         operationType: {type: string, enum: [install, upgrade, replace, uninstall]}
-        status: {type: string, enum: [pending, running, completed, failed, superseded]}
+        status: {"type": "string", "$ref": "#/components/schemas/PollingOperationStatus"}
         attemptCount: {type: integer, format: int32, minimum: 0}
         startedAt: {type: string, format: date-time, nullable: true}
         completedAt: {type: string, format: date-time, nullable: true}
@@ -3708,7 +3865,7 @@ components:
         action: {type: string, enum: [retry, discard]}
         queue: {type: string, minLength: 1}
         task_id: {type: string, minLength: 1}
-        status: {type: string, enum: [pending, running, retrying, failed, succeeded]}
+        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
         attempt_count: {type: integer, format: int32, minimum: 0}
         last_error:
           type: string
@@ -3733,7 +3890,7 @@ components:
         namespace: {type: string}
         resource_name: {type: string, minLength: 1}
         action: {type: string, enum: [apply, delete]}
-        status: {type: string, enum: [pending, running, retrying, failed, succeeded]}
+        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
         generation: {type: integer, format: int64, minimum: 1}
         observed_generation: {type: integer, format: int64, minimum: 0}
         attempt_count: {type: integer, format: int32, minimum: 0}
@@ -4367,7 +4524,7 @@ components:
       required: [id, status, attempt_count, size, expires_at, created_at, updated_at, status_url]
       properties:
         id: {type: string, format: uuid}
-        status: {type: string, enum: [pending, running, retrying, failed, succeeded]}
+        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
         attempt_count: {type: integer, format: int32, minimum: 0}
         error_code: {type: string}
         filename: {type: string}
@@ -4517,13 +4674,7 @@ components:
           description: Canonical digest included in generated manifests and agent upgrade plans.
         description:
           type: string
-        status:
-          type: string
-          enum:
-            - pending
-            - active
-            - disconnected
-            - error
+        status: {"type": "string", "$ref": "#/components/schemas/ClusterConnectionStatus"}
         api_server_url: {type: string, format: uri}
         ca_certificate: {type: string, description: Public CA bundle used to verify the Kubernetes API endpoint; never an authentication credential.}
         environment:
@@ -4549,15 +4700,7 @@ components:
           type: object
           additionalProperties:
             type: string
-        registration_phase:
-          type: string
-          enum:
-            - created
-            - awaiting_agent
-            - connected
-            - provisioning
-            - ready
-            - failed
+        registration_phase: {"type": "string", "$ref": "#/components/schemas/ClusterRegistrationPhaseValue"}
         install_baseline:
           type: boolean
           nullable: true
@@ -4677,15 +4820,7 @@ components:
         cluster_id:
           type: string
           format: uuid
-        phase:
-          type: string
-          enum:
-            - created
-            - awaiting_agent
-            - connected
-            - provisioning
-            - ready
-            - failed
+        phase: {"type": "string", "$ref": "#/components/schemas/ClusterRegistrationPhaseValue"}
         install_baseline:
           type: boolean
           nullable: true
@@ -5645,14 +5780,7 @@ components:
           type: string
           enum:
             - agent_upgrade
-        status:
-          type: string
-          enum:
-            - pending
-            - running
-            - succeeded
-            - failed
-            - cancelled
+        status: {"type": "string", "$ref": "#/components/schemas/AgentLifecycleOperationState"}
         target_version:
           type: string
         target_image:
@@ -5779,7 +5907,7 @@ components:
         action:
           type: string
           enum: [cordon, uncordon, set_label, remove_label, set_annotation, remove_annotation, add_taint, remove_taint, drain]
-        status: {type: string, enum: [pending, running, retrying, blocked, failed, succeeded]}
+        status: {"type": "string", "$ref": "#/components/schemas/NodeOperationState"}
         generation: {type: integer, format: int64, minimum: 1}
         observed_generation: {type: integer, format: int64, minimum: 0}
         attempt_count: {type: integer, format: int32, minimum: 0}
@@ -7034,7 +7162,7 @@ components:
         targetType: {type: string}
         targetKey: {type: string}
         operationType: {type: string, enum: [install, upgrade, uninstall, adopt, rollback]}
-        status: {type: string, enum: [pending, running, completed, failed, superseded]}
+        status: {"type": "string", "$ref": "#/components/schemas/PollingOperationStatus"}
         attemptCount: {type: integer, minimum: 0}
         startedAt: {type: string, format: date-time, nullable: true}
         completedAt: {type: string, format: date-time, nullable: true}
@@ -8413,7 +8541,7 @@ components:
         action: { type: string, enum: [apply, register_sso] }
         target_id: { type: string, format: uuid }
         runtime_generation: { type: integer, format: int64, minimum: 0 }
-        status: { type: string, enum: [pending, running, retrying, failed, succeeded] }
+        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
         phase: { type: string, enum: [queued, reconciling, finalizing, completed] }
         attempt_count: { type: integer, minimum: 0 }
         error_code: { type: string }
@@ -8943,7 +9071,7 @@ components:
       required: [id, status, attempt_count, size, expires_at, created_at, updated_at, status_url]
       properties:
         id: {type: string, format: uuid}
-        status: {type: string, enum: [pending, running, retrying, failed, succeeded]}
+        status: {"type": "string", "$ref": "#/components/schemas/DurableOperationStatus"}
         attempt_count: {type: integer, format: int32, minimum: 0}
         error_code: {type: string}
         filename: {type: string}
@@ -10185,7 +10313,7 @@ components:
       additionalProperties: false
       required: [kind]
       properties:
-        kind: {type: string, enum: [kustomize, helm]}
+        kind: {"type": "string", "$ref": "#/components/schemas/DeliveryRendererKind"}
         kustomize: {$ref: '#/components/schemas/DeliveryKustomizeRenderer'}
         helm: {$ref: '#/components/schemas/DeliveryHelmRenderer'}
     DeliveryBundleVersionDraft:
@@ -10228,13 +10356,13 @@ components:
       additionalProperties: false
       required: [type, max_concurrent, max_unavailable, min_ready, progress_deadline, failure_threshold, on_failure, respect_maintenance_windows]
       properties:
-        type: {type: string, enum: [all_at_once, rolling, canary, partitioned]}
+        type: {"type": "string", "$ref": "#/components/schemas/DeliveryStrategyKind"}
         max_concurrent: {type: integer, minimum: 1}
         max_unavailable: {$ref: '#/components/schemas/DeliveryAmount'}
         min_ready: {type: string}
         progress_deadline: {type: string}
         failure_threshold: {$ref: '#/components/schemas/DeliveryAmount'}
-        on_failure: {type: string, enum: [pause, abort, rollback]}
+        on_failure: {"type": "string", "$ref": "#/components/schemas/DeliveryFailureAction"}
         respect_maintenance_windows: {type: boolean}
         shuffle_seed: {type: string, maxLength: 128}
         canary: {$ref: '#/components/schemas/DeliveryCanaryStrategy'}
@@ -10243,13 +10371,13 @@ components:
       type: object
       additionalProperties: false
       properties:
-        type: {type: string, enum: [all_at_once, rolling, canary, partitioned]}
+        type: {"type": "string", "$ref": "#/components/schemas/DeliveryStrategyKind"}
         max_concurrent: {type: integer, minimum: 1}
         max_unavailable: {$ref: '#/components/schemas/DeliveryAmount'}
         min_ready: {type: string}
         progress_deadline: {type: string}
         failure_threshold: {$ref: '#/components/schemas/DeliveryAmount'}
-        on_failure: {type: string, enum: [pause, abort, rollback]}
+        on_failure: {"type": "string", "$ref": "#/components/schemas/DeliveryFailureAction"}
         respect_maintenance_windows: {type: boolean}
         shuffle_seed: {type: string, maxLength: 128}
         canary: {$ref: '#/components/schemas/DeliveryCanaryStrategy'}
@@ -10268,9 +10396,9 @@ components:
       required: [source_id, type, url, auth_mode, trust_policy, revision]
       properties:
         source_id: {type: string, format: uuid}
-        type: {type: string, enum: [git, oci_artifact, helm_http, helm_oci]}
+        type: {"type": "string", "$ref": "#/components/schemas/DeliverySourceKind"}
         url: {type: string, format: uri}
-        auth_mode: {type: string, enum: [none, basic, bearer, ssh, workload_identity]}
+        auth_mode: {"type": "string", "$ref": "#/components/schemas/DeliverySourceAuthModeValue"}
         trust_policy: {$ref: '#/components/schemas/DeliveryTrustPolicy'}
         revision: {$ref: '#/components/schemas/DeliveryImmutableRevision'}
     DeliveryVersionIdentity:
@@ -10421,7 +10549,7 @@ components:
         project_id: {type: string, format: uuid}
         cohort: {type: integer, minimum: -1}
         binding_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
-        decision: {type: string, enum: [approved, rejected]}
+        decision: {"type": "string", "$ref": "#/components/schemas/DeliveryApprovalDecision"}
         expires_at: {type: string, format: date-time}
     DeliveryConfigurationSecretRef:
       type: object
@@ -10439,7 +10567,7 @@ components:
         project_id: {type: string, format: uuid}
         name: {type: string, minLength: 1, maxLength: 128}
         description: {type: string, maxLength: 4096}
-        renderer: {type: string, enum: [helm, kustomize]}
+        renderer: {"type": "string", "$ref": "#/components/schemas/DeliveryRendererKind"}
         values: {type: object, additionalProperties: true, maxProperties: 1024}
         patches: {type: array, maxItems: 64, items: {type: string, maxLength: 65536}}
         secret_refs: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/DeliveryConfigurationSecretRef'}}
@@ -10453,7 +10581,7 @@ components:
         project_id: {type: string, format: uuid}
         name: {type: string}
         description: {type: string}
-        renderer: {type: string, enum: [helm, kustomize]}
+        renderer: {"type": "string", "$ref": "#/components/schemas/DeliveryRendererKind"}
         values: {type: object, additionalProperties: true}
         patches: {type: array, items: {type: string}}
         secret_refs: {type: array, items: {$ref: '#/components/schemas/DeliveryConfigurationSecretRef'}}
@@ -10565,9 +10693,9 @@ components:
         project_id: {type: string, format: uuid}
         name: {type: string, minLength: 1, maxLength: 128}
         description: {type: string, maxLength: 4096}
-        type: {type: string, enum: [git, oci_artifact, helm_http, helm_oci]}
+        type: {"type": "string", "$ref": "#/components/schemas/DeliverySourceKind"}
         url: {type: string, format: uri, maxLength: 2048}
-        auth_mode: {type: string, enum: [none, basic, bearer, ssh, workload_identity]}
+        auth_mode: {"type": "string", "$ref": "#/components/schemas/DeliverySourceAuthModeValue"}
         credential: {$ref: '#/components/schemas/DeliverySourceCredentialInput'}
         ca_bundle: {type: string, writeOnly: true, maxLength: 262144}
         proxy_ref: {type: string, maxLength: 128}
@@ -10599,9 +10727,9 @@ components:
         project_id: {type: string, format: uuid}
         name: {type: string}
         description: {type: string}
-        type: {type: string, enum: [git, oci_artifact, helm_http, helm_oci]}
+        type: {"type": "string", "$ref": "#/components/schemas/DeliverySourceKind"}
         url: {type: string, format: uri}
-        auth_mode: {type: string, enum: [none, basic, bearer, ssh, workload_identity]}
+        auth_mode: {"type": "string", "$ref": "#/components/schemas/DeliverySourceAuthModeValue"}
         credential:
           type: object
           additionalProperties: false
@@ -10612,7 +10740,7 @@ components:
             epoch: {type: integer, format: int64, minimum: 0}
         proxy_ref: {type: string}
         trust_policy: {$ref: '#/components/schemas/DeliveryTrustPolicy'}
-        status: {type: string, enum: [pending, ready, degraded, revoked]}
+        status: {"type": "string", "$ref": "#/components/schemas/DeliverySourceStatusValue"}
         last_resolved_at: {type: string, format: date-time, nullable: true}
         last_error_code: {type: string}
         created_at: {type: string, format: date-time}
@@ -10672,7 +10800,7 @@ components:
         bundle_id: {type: string, format: uuid}
         source_id: {type: string, format: uuid}
         version: {type: string}
-        renderer: {type: string, enum: [kustomize, helm]}
+        renderer: {"type": "string", "$ref": "#/components/schemas/DeliveryRendererKind"}
         scope: {type: string, enum: [namespace, platform]}
         requested_revision: {type: string}
         resolved_revision: {type: string}
@@ -10682,9 +10810,9 @@ components:
         required_capabilities: {type: array, items: {$ref: '#/components/schemas/DeliveryCapabilityRequirement'}}
         dependency_bundle_ids: {type: array, items: {type: string, format: uuid}}
         spec_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
-        verification_status: {type: string, enum: [pending, verified, failed, unsigned]}
+        verification_status: {"type": "string", "$ref": "#/components/schemas/DeliveryVerificationStatus"}
         verification_identity: {type: string}
-        state: {type: string, enum: [resolving, ready, failed, revoked]}
+        state: {"type": "string", "$ref": "#/components/schemas/DeliveryBundleState"}
         last_error_code: {type: string}
         created_at: {type: string, format: date-time}
     DeliveryBundleEnvelope:
@@ -10849,7 +10977,7 @@ components:
         request_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
         plan_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
         frozen_plan: {type: object, additionalProperties: true}
-        state: {type: string}
+        state: {"type": "string", "$ref": "#/components/schemas/DeliveryRolloutState"}
         fencing_generation: {type: integer, format: int64, minimum: 1}
         total_clusters: {type: integer, format: int32, minimum: 0}
         ready_clusters: {type: integer, format: int32, minimum: 0}
@@ -10915,7 +11043,7 @@ components:
         rollout_id: {type: string, format: uuid}
         cohort: {type: integer, format: int32}
         binding_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
-        decision: {type: string, enum: [approved, rejected]}
+        decision: {"type": "string", "$ref": "#/components/schemas/DeliveryApprovalDecision"}
         decided_by: {type: string, format: uuid, nullable: true}
         decided_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
@@ -10933,7 +11061,7 @@ components:
         previous_bundle_version_id: {type: string, format: uuid, nullable: true}
         desired_bundle_version_id: {type: string, format: uuid}
         desired_spec_digest: {type: string}
-        state: {type: string}
+        state: {"type": "string", "$ref": "#/components/schemas/DeliveryRolloutClusterState"}
         assignment_action: {type: string, enum: [apply, rollback]}
         attempt: {type: integer, format: int32, minimum: 0}
         fence: {type: integer, format: int64, minimum: 0}
@@ -11050,7 +11178,7 @@ components:
         desired_revision: {type: string}
         observed_revision: {type: string}
         action: {type: string, enum: [apply, delete, suspend]}
-        phase: {type: string, enum: [pending, blocked, applying, ready, degraded, failed, suspended, deleting, removed, unknown]}
+        phase: {"type": "string", "$ref": "#/components/schemas/DeliveryDeploymentPhase"}
         conditions: {type: array, items: {$ref: '#/components/schemas/DeliveryCondition'}}
         source_kind: {type: string}
         source_name: {type: string}
@@ -11297,7 +11425,7 @@ components:
         credential_key_version: {type: integer, format: int32}
         credential_epoch: {type: integer, format: int64}
         spec_digest: {type: string}
-        state: {type: string}
+        state: {"type": "string", "$ref": "#/components/schemas/DeliverySystemReleaseState"}
         released_at: {type: string, format: date-time, nullable: true}
         retired_at: {type: string, format: date-time, nullable: true}
         created_by: {type: string, format: uuid, nullable: true}
@@ -11310,7 +11438,7 @@ components:
         previous_release_id: {type: string, format: uuid, nullable: true}
         strategy: {type: object, additionalProperties: true}
         strategy_digest: {type: string}
-        state: {type: string}
+        state: {"type": "string", "$ref": "#/components/schemas/DeliverySystemRolloutState"}
         fencing_generation: {type: integer, format: int64}
         total_clusters: {type: integer, format: int32, minimum: 0}
         ready_clusters: {type: integer, format: int32, minimum: 0}

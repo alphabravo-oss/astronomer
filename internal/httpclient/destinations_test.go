@@ -86,7 +86,11 @@ func TestDestinationClientPinsAddressAndRejectsRebinding(t *testing.T) {
 	}
 	response, err := client.Get("http://storage.corp:9000/bucket")
 	if err == nil {
-		defer response.Body.Close()
+		defer func() {
+			if closeErr := response.Body.Close(); closeErr != nil {
+				t.Error("response body cleanup failed")
+			}
+		}()
 		_, err = io.ReadAll(response.Body)
 	}
 	if captured != "10.42.1.7:9000" || err == nil {
@@ -192,11 +196,12 @@ func TestPublicCDNRedirectConnectsWithoutCredentialsAndBlocksPrivate(t *testing.
 			t.Fatalf("unchecked/private connected IP %s", host)
 		}
 		var local string
-		if port == sourcePort {
+		switch port {
+		case sourcePort:
 			local = strings.TrimPrefix(source.URL, "https://")
-		} else if port == destinationPort {
+		case destinationPort:
 			local = strings.TrimPrefix(destination.URL, "https://")
-		} else {
+		default:
 			t.Fatal("unexpected port")
 		}
 		return (&net.Dialer{}).DialContext(ctx, network, local)

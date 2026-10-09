@@ -71,6 +71,21 @@ class JSONGovernanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"JSON site drift"):
             gate.validate(self.actual,self.policy)
 
+    def test_build_exporter_in_owned_module_cannot_add_unowned_wire_shape(self):
+        path="deploy/bundles/cmd/distribution/main.go"
+        self.policy["json_modules"]=[{"path":path,"owner":"distribution","scope":"report"}]
+        self.actual["json_calls"]=[{"path":path,"function":"newExport","operation":"j.Marshal","arguments":["newReport"]}]
+        with self.assertRaisesRegex(ValueError,"JSON site drift"):
+            gate.validate(self.actual,self.policy)
+
+    def test_canonical_reader_operand_change_requires_new_exact_review(self):
+        row={"path":"deploy/bundles/cmd/distribution/read.go","function":"read","operation":"contract.Decode","arguments":["authenticated","&closedReport"]}
+        self.policy["json_modules"]=[{"path":row["path"],"owner":"distribution","scope":"reader"}]
+        self.policy["json_sites"]=[row|{"owner":"distribution","schema":"closed report","reader_behavior":"strict authenticated reader"}]
+        self.actual["json_calls"]=[row|{"arguments":["untrusted","&openMap"]}]
+        with self.assertRaisesRegex(ValueError,"JSON site drift"):
+            gate.validate(self.actual,self.policy)
+
     def test_read_only_exception_cannot_be_claimed_by_a_mutation(self):
         row={"key":"internal/handler/new.go:create:decodeV1JSONBody","classification":"strict_product","unknown_fields":"additive_v1","owner":"api","malformed_body":"deny_elevation_preserve_read_only_session"}
         self.policy["requests"]=[row]
