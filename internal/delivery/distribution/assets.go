@@ -16,6 +16,7 @@ type Asset struct {
 	Images               []string `json:"images"`
 	ArtifactSubject      string   `json:"artifact_subject"`
 	ArtifactManifestPath string   `json:"artifact_manifest_path"`
+	ArtifactConfigPath   string   `json:"artifact_config_path"`
 }
 
 var assetRoles = map[string]string{
@@ -44,13 +45,13 @@ func validateAssetDeclarations(assets []Asset, members map[string]string) error 
 		database := asset.ID == "trivy-database" || asset.ID == "trivy-java-database"
 		if database {
 			repository, digest, ok := strings.Cut(asset.ArtifactSubject, "@")
-			if !ok || !digestPattern.MatchString(digest) || members[asset.ArtifactManifestPath] != "vulnerability_database" || len(asset.Images) != 0 {
+			if !ok || !digestPattern.MatchString(digest) || members[asset.ArtifactManifestPath] != "vulnerability_database" || members[asset.ArtifactConfigPath] != "vulnerability_database" || asset.ArtifactConfigPath == asset.ArtifactManifestPath || asset.ArtifactConfigPath == asset.MemberPath || asset.ArtifactManifestPath == asset.MemberPath || len(asset.Images) != 0 {
 				return errors.New("distribution database artifact identity incomplete")
 			}
 			if _, err := builtinbundles.NormalizeOCISourceURL("oci://" + repository); err != nil {
 				return errors.New("distribution database repository invalid")
 			}
-		} else if asset.ArtifactSubject != "" || asset.ArtifactManifestPath != "" || (asset.ID != "cnpg-crds" && asset.ID != "application-catalog" && len(asset.Images) == 0) {
+		} else if asset.ArtifactSubject != "" || asset.ArtifactManifestPath != "" || asset.ArtifactConfigPath != "" || (asset.ID != "cnpg-crds" && asset.ID != "application-catalog" && len(asset.Images) == 0) {
 			return errors.New("distribution prerequisite role lacks correct immutable OCI subjects")
 		}
 		images := map[string]bool{}
@@ -103,14 +104,58 @@ func ValidateAssetClosure(assets []Asset, members map[string]string, capabilitie
 // RequiredBuiltinCapabilities derives scanner prerequisites from the effective
 // chart values. Other platform capabilities are explicitly bound by the signed
 // profile supplied by the platform distribution owner.
-func RequiredBuiltinCapabilities(catalog builtinbundles.Catalog) []string {
+func RequiredBuiltinCapabilities(catalog builtinbundles.Catalog) ([]string, error) {
+	required := false
 	for _, component := range catalog.Components {
-		operator, _ := component.Values["operator"].(map[string]any)
-		if enabled, _ := operator["vulnerabilityScannerEnabled"].(bool); enabled {
-			return []string{"vulnerability-scanning"}
+		if component.Source.Chart != "trivy-operator" {
+			continue
+		}
+		enabled, _, err := ScannerValues(component.Values)
+		if err != nil {
+			return nil, err
+		}
+		if enabled {
+			required = true
 		}
 	}
-	return []string{}
+	if required {
+		return []string{"vulnerability-scanning"}, nil
+	}
+	return []string{}, nil
+}
+
+// ScannerValues rejects ambiguous Helm truthiness before capability derivation.
+// Additive unrelated chart values remain allowed; scanner fields are typed.
+func ScannerValues(values map[string]any) (bool, map[string]any, error) {
+	trivy := map[string]any{}
+	if raw, exists := values["trivy"]; exists {
+		var ok bool
+		trivy, ok = raw.(map[string]any)
+		if !ok || trivy == nil {
+			return false, nil, blocked("values", "scanner trivy configuration must be an object")
+		}
+		for _, key := range []string{"dbRegistry", "dbRepository", "javaDbRegistry", "javaDbRepository"} {
+			if raw, exists := trivy[key]; exists {
+				if _, ok := raw.(string); !ok {
+					return false, nil, blocked("values", "scanner database location must be a string")
+				}
+			}
+		}
+	}
+	if raw, exists := values["operator"]; exists {
+		operator, ok := raw.(map[string]any)
+		if !ok || operator == nil {
+			return false, nil, blocked("values", "scanner operator configuration must be an object")
+		}
+		if raw, exists := operator["vulnerabilityScannerEnabled"]; exists {
+			enabled, ok := raw.(bool)
+			if !ok {
+				return false, nil, blocked("values", "scanner enabled configuration must be boolean")
+			}
+			return enabled, trivy, nil
+		}
+	}
+	return false, trivy, nil
 }
 
 func validateArtifactAssets(assets []Asset, members map[string][]byte) error {
@@ -126,7 +171,11 @@ func validateArtifactAssets(assets []Asset, members map[string][]byte) error {
 		}
 		layer := manifest.Layers[0]
 		payload := members[asset.MemberPath]
-		if layer.Digest.String() != contentDigest(payload) || layer.Size != int64(len(payload)) || len(layer.URLs) != 0 {
+		config := members[asset.ArtifactConfigPath]
+		if len(config) == 0 || len(config) > 1<<20 || manifest.Config.Digest.String() != contentDigest(config) || manifest.Config.Size != int64(len(config)) || len(manifest.Config.URLs) != 0 || len(manifest.Config.Data) != 0 {
+			return blocked("vulnerability_database", "database OCI configuration binding invalid")
+		}
+		if layer.Digest.String() != contentDigest(payload) || layer.Size != int64(len(payload)) || len(layer.URLs) != 0 || len(layer.Data) != 0 {
 			return blocked("vulnerability_database", "database OCI payload binding invalid")
 		}
 	}
@@ -139,11 +188,16 @@ func validateScannerDatabaseBindings(catalog builtinbundles.Catalog, assets []As
 		subjects[asset.ID] = asset.ArtifactSubject
 	}
 	for _, component := range catalog.Components {
-		operator, _ := component.Values["operator"].(map[string]any)
-		if enabled, _ := operator["vulnerabilityScannerEnabled"].(bool); !enabled {
+		if component.Source.Chart != "trivy-operator" {
 			continue
 		}
-		trivy, _ := component.Values["trivy"].(map[string]any)
+		enabled, trivy, err := ScannerValues(component.Values)
+		if err != nil {
+			return err
+		}
+		if !enabled {
+			continue
+		}
 		for key, role := range map[string]string{"dbRepository": "trivy-database", "javaDbRepository": "trivy-java-database"} {
 			repository, _ := trivy[key].(string)
 			registryKey := "dbRegistry"

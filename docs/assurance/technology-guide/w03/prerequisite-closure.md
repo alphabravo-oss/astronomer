@@ -30,11 +30,18 @@ linux/amd64 and linux/arm64. The consumer requires the exact image and workload
 scope in the signed inventory; extra, duplicated or unclassified scopes fail.
 
 Vulnerability databases are platform-independent artifacts. Their exact OCI
-manifest bytes are included in the closed archive and bound to the subject
-digest. A single payload layer must match the bundled database archive hash and
-size, with no external layer URL. Effective scanner values derive the scanning
+manifest and config bytes are included in the closed archive and bound to their
+subject and descriptor digests. Config and single payload layer hashes and sizes
+must match the bundled bytes, with no external URL or inline descriptor data.
+No invented config or public fetch can reconstruct a missing original blob.
+Effective scanner values derive the scanning
 capability and must select those same database subjects, so leaving the
-capability list empty cannot bypass database closure. This establishes content
+capability list empty cannot bypass database closure. Owned scanner configuration
+requires object operator/trivy fields, a boolean enabled flag and string database
+locations. Helm strings `"true"` and `"false"` cannot silently skip prerequisites.
+The renderer retains Helm's existing recursive chart values schema validation;
+fixtures exercise its actual rejection path and preserve valid additive values.
+This establishes content
 identity, not database freshness or real Trivy operation; W04 owns those gates.
 
 The producer does not install or take ownership of an operator. The assets

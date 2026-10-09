@@ -210,7 +210,11 @@ func validateProfile(bom BOM, members map[string][]byte, catalog builtinbundles.
 		for _, capability := range profile.Capabilities {
 			declared[capability] = true
 		}
-		for _, capability := range RequiredBuiltinCapabilities(catalog) {
+		required, err := RequiredBuiltinCapabilities(catalog)
+		if err != nil {
+			return err
+		}
+		for _, capability := range required {
 			if !declared[capability] {
 				return blocked("vulnerability_database", "effective scanner values lack declared database capability")
 			}

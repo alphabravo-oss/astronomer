@@ -174,6 +174,11 @@ func renderReviewedChart(compressed []byte, overrides map[string]any, releaseNam
 	if err != nil {
 		return renderedProfile{}, errors.New("chart values cannot be coalesced")
 	}
+	if chart.Metadata.Name == "trivy-operator" {
+		if _, _, err := distribution.ScannerValues(map[string]any(values)); err != nil {
+			return renderedProfile{}, err
+		}
+	}
 	capabilities := chartutil.DefaultCapabilities.Copy()
 	parsedVersion, err := chartutil.ParseKubeVersion(kubernetesVersion)
 	if err != nil {

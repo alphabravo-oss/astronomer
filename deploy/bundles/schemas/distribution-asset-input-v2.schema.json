@@ -52,7 +52,8 @@
           "images",
           "digest",
           "artifact_subject",
-          "artifact_manifest_file"
+          "artifact_manifest_file",
+          "artifact_config_file"
         ],
         "properties": {
           "id": {
@@ -112,6 +113,9 @@
             "type": "string"
           },
           "artifact_manifest_file": {
+            "type": "string"
+          },
+          "artifact_config_file": {
             "type": "string"
           }
         }

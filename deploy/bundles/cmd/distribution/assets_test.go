@@ -18,13 +18,16 @@ func TestProducerClosesEnabledScannerDatabaseSubjects(t *testing.T) {
 	repositories := map[string]string{}
 	for _, role := range []string{"trivy-database", "trivy-java-database"} {
 		payload := []byte("QA-only database archive for " + role)
-		manifest, _ := json.Marshal(map[string]any{"schemaVersion": 2, "layers": []any{map[string]any{"digest": sha(payload), "size": len(payload)}}})
+		config := []byte(`{"qa":"captured config"}`)
+		manifest, _ := json.Marshal(map[string]any{"schemaVersion": 2, "config": map[string]any{"digest": sha(config), "size": len(config)}, "layers": []any{map[string]any{"digest": sha(payload), "size": len(payload)}}})
 		payloadFile := filepath.Join(t.TempDir(), "database.tgz")
 		manifestFile := filepath.Join(t.TempDir(), "manifest.json")
+		configFile := filepath.Join(t.TempDir(), "config.json")
 		_ = os.WriteFile(payloadFile, payload, 0600)
 		_ = os.WriteFile(manifestFile, manifest, 0600)
+		_ = os.WriteFile(configFile, config, 0600)
 		repositories[role] = role + "@" + sha(manifest)
-		assets.Assets = append(assets.Assets, assetInput{ID: role, Path: "assets/" + role + ".tgz", File: payloadFile, Digest: sha(payload), Category: "vulnerability_database", Images: []string{}, ArtifactSubject: "registry.example.test/" + repositories[role], ArtifactManifestFile: manifestFile})
+		assets.Assets = append(assets.Assets, assetInput{ID: role, Path: "assets/" + role + ".tgz", File: payloadFile, Digest: sha(payload), Category: "vulnerability_database", Images: []string{}, ArtifactSubject: "registry.example.test/" + repositories[role], ArtifactManifestFile: manifestFile, ArtifactConfigFile: configFile})
 	}
 	component := &result.Catalog.Components[0]
 	component.Values["operator"] = map[string]any{"vulnerabilityScannerEnabled": true}
@@ -40,7 +43,7 @@ func TestProducerClosesEnabledScannerDatabaseSubjects(t *testing.T) {
 	if err != nil || len(bom.Assets) != 2 {
 		t.Fatalf("producer-consumer closure: %v", err)
 	}
-	for _, mutation := range []func(*assetIndex){func(a *assetIndex) { a.Assets = a.Assets[:1] }, func(a *assetIndex) { a.Assets[0].Digest = sha([]byte("wrong")) }, func(a *assetIndex) { a.Capabilities = []string{} }, func(a *assetIndex) {
+	for _, mutation := range []func(*assetIndex){func(a *assetIndex) { a.Assets = a.Assets[:1] }, func(a *assetIndex) { a.Assets[0].Digest = sha([]byte("wrong")) }, func(a *assetIndex) { a.Capabilities = []string{} }, func(a *assetIndex) { a.Assets[0].ArtifactConfigFile = "missing-config" }, func(a *assetIndex) { a.Assets[0].ArtifactConfigFile = a.Assets[0].File }, func(a *assetIndex) {
 		a.Assets[0].ArtifactSubject = "registry.example.test/wrong@" + sha([]byte("wrong"))
 	}} {
 		data, _ := json.Marshal(assets)

@@ -29,6 +29,7 @@ type assetInput struct {
 	Digest               string   `json:"digest"`
 	ArtifactSubject      string   `json:"artifact_subject"`
 	ArtifactManifestFile string   `json:"artifact_manifest_file"`
+	ArtifactConfigFile   string   `json:"artifact_config_file"`
 }
 type assetIndex struct {
 	SchemaVersion      int          `json:"schema_version"`
@@ -84,7 +85,7 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 	}
 	closedAssets := []distribution.Asset{}
 	for _, asset := range assets.Assets {
-		if asset.Images == nil || (asset.ArtifactSubject == "" && asset.ArtifactManifestFile != "") {
+		if asset.Images == nil || (asset.ArtifactSubject == "" && (asset.ArtifactManifestFile != "" || asset.ArtifactConfigFile != "")) {
 			return empty, errors.New("asset subject shape invalid")
 		}
 		for _, image := range asset.Images {
@@ -149,6 +150,17 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 			members[path] = manifest
 			kinds[path] = "vulnerability_database"
 			closedAsset.ArtifactManifestPath = path
+			config, err := boundedFile(asset.ArtifactConfigFile, 1<<20)
+			if err != nil {
+				return empty, errors.New("database configuration capture missing")
+			}
+			configPath := "assets/" + asset.ID + ".oci-config.json"
+			if _, exists := members[configPath]; exists {
+				return empty, errors.New("database configuration member collision")
+			}
+			members[configPath] = config
+			kinds[configPath] = "vulnerability_database"
+			closedAsset.ArtifactConfigPath = configPath
 		}
 		closedAssets = append(closedAssets, closedAsset)
 	}

@@ -17,7 +17,7 @@ class DistributionAssetSchemaTest(unittest.TestCase):
         return {"schema_version": 2, "required_categories": ["catalog", "chart", "values", "image_inventory"],
                 "capabilities": ["database-cnpg"], "assets": [{"id": "postgres-server", "path": "assets/cluster.yaml",
                 "file": "/reviewed/cluster.yaml", "category": "database", "images": ["registry.example.test/postgres@sha256:" + "a" * 64],
-                "digest": "sha256:" + "b" * 64, "artifact_subject": "", "artifact_manifest_file": ""}]}
+                "digest": "sha256:" + "b" * 64, "artifact_subject": "", "artifact_manifest_file": "", "artifact_config_file": ""}]}
 
     def validate(self, value):
         VALIDATOR.validate_schema(value, SCHEMA, SCHEMA)

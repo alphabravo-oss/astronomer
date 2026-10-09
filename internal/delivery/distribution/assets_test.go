@@ -48,18 +48,43 @@ func TestPrerequisiteCapabilitiesRequireExactRoles(t *testing.T) {
 
 func TestDatabaseArtifactBindsExactManifestAndPayload(t *testing.T) {
 	payload := []byte("local QA database payload")
-	manifest, _ := json.Marshal(map[string]any{"schemaVersion": 2, "layers": []any{map[string]any{"digest": contentDigest(payload), "size": len(payload)}}})
-	asset := Asset{ID: "trivy-database", MemberPath: "db/archive.tgz", ArtifactSubject: "registry.example.test/db@" + contentDigest(manifest), ArtifactManifestPath: "db/manifest.json", Images: []string{}}
-	members := map[string][]byte{asset.MemberPath: payload, asset.ArtifactManifestPath: manifest}
+	config := []byte(`{"qa":"captured config"}`)
+	manifest, _ := json.Marshal(map[string]any{"schemaVersion": 2, "config": map[string]any{"digest": contentDigest(config), "size": len(config)}, "layers": []any{map[string]any{"digest": contentDigest(payload), "size": len(payload)}}})
+	asset := Asset{ID: "trivy-database", MemberPath: "db/archive.tgz", ArtifactSubject: "registry.example.test/db@" + contentDigest(manifest), ArtifactManifestPath: "db/manifest.json", ArtifactConfigPath: "db/config.json", Images: []string{}}
+	members := map[string][]byte{asset.MemberPath: payload, asset.ArtifactManifestPath: manifest, asset.ArtifactConfigPath: config}
 	if err := validateArtifactAssets([]Asset{asset}, members); err != nil {
 		t.Fatal(err)
 	}
-	for _, change := range []func(){func() { members[asset.MemberPath] = []byte("changed payload") }, func() { members[asset.ArtifactManifestPath] = append(manifest, []byte("{}")...) }, func() { asset.ArtifactSubject = "registry.example.test/db@sha256:" + strings.Repeat("f", 64) }} {
+	for _, change := range []func(){func() { members[asset.MemberPath] = []byte("changed payload") }, func() { members[asset.ArtifactManifestPath] = append(manifest, []byte("{}")...) }, func() { delete(members, asset.ArtifactConfigPath) }, func() { members[asset.ArtifactConfigPath] = []byte("changed config") }, func() { asset.ArtifactSubject = "registry.example.test/db@sha256:" + strings.Repeat("f", 64) }} {
 		members[asset.MemberPath] = payload
 		members[asset.ArtifactManifestPath] = manifest
+		members[asset.ArtifactConfigPath] = config
 		change()
 		if validateArtifactAssets([]Asset{asset}, members) == nil {
 			t.Fatal("changed database identity accepted")
+		}
+	}
+	for _, descriptor := range []string{"config", "layer"} {
+		for _, field := range []string{"urls", "data"} {
+			var raw map[string]any
+			_ = json.Unmarshal(manifest, &raw)
+			target := raw["config"].(map[string]any)
+			if descriptor == "layer" {
+				target = raw["layers"].([]any)[0].(map[string]any)
+			}
+			if field == "urls" {
+				target[field] = []string{"https://public.example.test/fallback"}
+			} else {
+				target[field] = "aW5saW5l"
+			}
+			changed, _ := json.Marshal(raw)
+			members[asset.ArtifactManifestPath] = changed
+			members[asset.ArtifactConfigPath] = config
+			members[asset.MemberPath] = payload
+			asset.ArtifactSubject = "registry.example.test/db@" + contentDigest(changed)
+			if validateArtifactAssets([]Asset{asset}, members) == nil {
+				t.Fatalf("authentic manifest accepted %s %s", descriptor, field)
+			}
 		}
 	}
 }
