@@ -409,17 +409,17 @@ W17 is run at milestone boundaries, not only after all v2 work. A bounded v1 mil
 **Ordered tasks:**
 
 - [ ] W02.1 Capture current gosec results using the selected toolchain. Triage HIGH/MED findings by code path and rule; separate true defects, inaccessible/test only code, and documented standard platform behavior.
-- [ ] W02.2 Separate scan/report collection from severity/policy enforcement. Preserve SARIF on failed scans; fail for unaccepted HIGH findings. Decide MED behavior explicitly and document reviewed exceptions rather than blanket `-no-fail`.
-- [ ] W02.3 Produce govulncheck SARIF and enforce its actual reported reachable finding semantics. Do not invent severity fields the tool does not emit; enrich from trusted advisory metadata where needed.
+- [x] W02.2 Separate scan/report collection from severity/policy enforcement. Preserve SARIF on failed scans; fail for unaccepted HIGH findings. Decide MED behavior explicitly and document reviewed exceptions rather than blanket `-no-fail`.
+- [x] W02.3 Produce govulncheck SARIF and enforce its actual reported reachable finding semantics. Do not invent severity fields the tool does not emit; enrich from trusted advisory metadata where needed.
 - [ ] W02.4 Keep full-history redacted Gitleaks, safe checkout credentials, action digest pins, and reviewable allowlists. Test reverted-secret detection with synthetic nonsecret fixture values.
-- [ ] W02.5 Implement exceptions with rule/advisory IDs, scope, path or artifact digest, reason, owner/approver, release applicability, expiry, and verification evidence. Reject stale/unknown/duplicate/unmatched exceptions.
-- [ ] W02.6 Preserve upstream-CVE policy: adopt a fixed newer upstream artifact when available; otherwise retain findings and accept exact upstream risk without forcing an Astronomer fork. Record availability checks and renewed expiry decisions.
-- [ ] W02.7 Preserve v1.2.0/v1.2.1 qualification/license deferrals and published artifacts. Do not retrofit claims or automatically extend tag-specific exceptions to a new tag.
-- [ ] W02.8 Define future automated release-policy requirements and explicit deferred qualifications as data. Resolve whether a maintenance candidate follows a new approved automated policy or the currently strict future tag contract before publication; implementation/fixes continue independently.
-- [ ] W02.9 Specify a GitHub ruleset patch with exact stable check names, protected main, no force push/deletion, review policy, workflow permissions, and controlled break glass. Check fork PR/SARIF permissions and unavailable code-scanning features.
+- [x] W02.5 Implement exceptions with rule/advisory IDs, scope, path or artifact digest, reason, owner/approver, release applicability, expiry, and verification evidence. Reject stale/unknown/duplicate/unmatched exceptions.
+- [x] W02.6 Preserve upstream-CVE policy: adopt a fixed newer upstream artifact when available; otherwise retain findings and accept exact upstream risk without forcing an Astronomer fork. Record availability checks and renewed expiry decisions.
+- [x] W02.7 Preserve v1.2.0/v1.2.1 qualification/license deferrals and published artifacts. Do not retrofit claims or automatically extend tag-specific exceptions to a new tag.
+- [x] W02.8 Define future automated release-policy requirements and explicit deferred qualifications as data. Resolve whether a maintenance candidate follows a new approved automated policy or the currently strict future tag contract before publication; implementation/fixes continue independently.
+- [x] W02.9 Specify a GitHub ruleset patch with exact stable check names, protected main, no force push/deletion, review policy, workflow permissions, and controlled break glass. Check fork PR/SARIF permissions and unavailable code-scanning features.
 - [ ] W02.10 Validate ruleset/check identity against actual emitted workflow checks, avoiding merge queues or skipped jobs that make required checks impossible. Retain a machine-readable readback of applied settings.
-- [ ] W02.11 Set recommended security-response SLAs: daily triage for critical/exploited findings, target 3 days critical/7 days high where fix exists, with an owned documented exception for incompatibility or no fix. The release owner can select a different explicit SLA.
-- [ ] W02.12 Keep vulnerability, license, FIPS, and accessibility evidence distinct. A CVE waiver does not qualify a license or certify a cryptographic module.
+- [x] W02.11 Set recommended security-response SLAs: daily triage for critical/exploited findings, target 3 days critical/7 days high where fix exists, with an owned documented exception for incompatibility or no fix. The release owner can select a different explicit SLA.
+- [x] W02.12 Keep vulnerability, license, FIPS, and accessibility evidence distinct. A CVE waiver does not qualify a license or certify a cryptographic module.
 
 **Negative tests:** unwaived HIGH produces nonzero exit; waived exact finding passes with findings retained; changed digest/new finding/expired exception fails; report upload still runs on failure; malformed SARIF/missing report fails closed; released tag-specific deferral rejected for unrelated tag.
 

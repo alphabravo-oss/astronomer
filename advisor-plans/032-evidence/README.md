@@ -13,10 +13,10 @@ separately. No historic qualification is attributed to a new candidate.
 | --- | --- | --- | --- |
 | W00 | DONE | Source contracts PASS | Integrated `c4e9993c`; [baseline and verification](../../docs/assurance/technology-guide/README.md). Live CNPG qualification belongs to W12. |
 | W01 | IN PROGRESS | Core authority and focused regressions PASS; final coverage/gates pending | Integrated `34574ffb`: Go 1.27.2, Node 26.11.1, npm 12.2.0 and compatible dependencies. Resolver hardening, complete consumer coverage and final images/browser qualification continue in `implement/032-latest-stable`. |
-| W02 | IN PROGRESS | TODO | Source security enforcement and exact exceptions; isolated `implement/032-security-policy`. External ruleset application is separate. |
-| W03 | TODO | TODO | Await dependencies and bounded implementation slice. |
+| W02 | IN PROGRESS | Enforcement fixtures PASS; source qualification FAIL | Integrated `02f07527`, `a8c0dc4b`, `feddd759`: source collection/enforcement, exact exceptions and publication policy. Complete scan: 569 findings, zero engine errors; 492 HIGH remain unaccepted and 71 MED need triage. External ruleset/check readback remains pending. |
+| W03 | IN PROGRESS | TODO | Verified distribution and actual mirrored provisioning implementation in an isolated executor worktree. W02 trust-policy implementation is available; unresolved source findings remain open. |
 | W04 | TODO | TODO | Await dependencies and bounded implementation slice. |
-| W05 | IN PROGRESS | Focused transport, socket cancellation, forms and cache regressions PASS; final suite pending | Integrated refresh `7b167632`, read forwarding `c4fd5119`, awaited Vault invalidation `2867346d`, semantic modal submission `da569b90`, assertion correction `cfe5802b`, and decreasing complexity ratchets `9a896e29`. Clean full suite/build/browser run continues in `implement/032-browser-boundaries`. |
+| W05 | IN PROGRESS | Full source suite 337 files / 2,341 tests, build and 18 browser cases PASS; final read-adapter followup pending | Integrated refresh `7b167632`, read forwarding `c4fd5119`, awaited Vault invalidation `2867346d`, semantic modal submission `da569b90`, assertion correction `cfe5802b`, and decreasing complexity ratchets `9a896e29`. Final adapter classification and combined W01/W05 qualification continue in `implement/032-browser-boundaries`. |
 | W06 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W07 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W08 | TODO | TODO | Await dependencies and bounded implementation slice. |
@@ -41,6 +41,8 @@ separately. No historic qualification is attributed to a new candidate.
 - W05 review: 47 focused form-adoption, persistent SIEM error and actual extension signal assertions pass. Five complexity ceilings decrease; none increase. Full combined toolchain/browser qualification remains required.
 - W02 bounded static triage: five exact G109/G404 claims have positive source controls and are retained as expiring source-bound false positives. The complete scanner reports 569 findings without engine errors; other findings remain open. Retained triage artifact: `/root/.codex/state/plugins/codex-security/scans/astronomer/artifacts-5817c9cd58f3f1c5a377c37b7bb81d5adb90d025fb12a3874ce4497a5798d9c2/findings/plan032-five-source-controls.json`, SHA256 `ca585e17101b078551fbdf409eb75c7ce7c3ab5d7afcc208b7a928f5f44524cc`.
 - W12 preparation: owned disposable cluster `astro032-cnpg-20261009` has three ready K3s 1.37.1 server nodes. This connected prerequisite is not CNPG failover, backup/restore, signed candidate or disconnected qualification. See [environment receipt](prerequisite-environment.json).
+- W02 reviewer rerun: 25 security fixtures, five scanner-closure fixtures, 29 publication-policy fixtures and the release contract pass. Synthetic reverted-secret detection is included. The full source gate remains red; enforcement implementation is not a complete finding disposition.
+- W12 preparation: the Kubernetes 1.36.5 disposable cluster also has all five CNPG, Barman and cert-manager deployments ready and both Barman certificates ready. Neither disposable cluster has an application database or application workload yet.
 - No deployment or release qualification is inferred from these source gates.
 
 ## Rules
