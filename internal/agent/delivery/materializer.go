@@ -68,6 +68,14 @@ func BuildAssignment(assignment protocol.DeliveryAssignmentV2, capabilities Capa
 		return Materialization{}, err
 	}
 	if len(authData) != 0 {
+		if assignment.Source.Kind == protocol.DeliverySourceHelmOCI || assignment.Source.Kind == protocol.DeliverySourceOCIArtifact {
+			for from, to := range map[string]string{"caFile": "ca.crt", "certFile": "tls.crt", "keyFile": "tls.key"} {
+				if value, exists := authData[from]; exists {
+					authData[to] = value
+					delete(authData, from)
+				}
+			}
+		}
 		result.Objects = append(result.Objects, secretObject(assignment, names, names.AuthSecret, authData))
 	}
 	if len(trustData) != 0 {
@@ -196,7 +204,31 @@ func sourceObject(assignment protocol.DeliveryAssignmentV2, names ObjectNames) (
 	default:
 		return nil, fmt.Errorf("unsupported source kind %q", source.Kind)
 	}
+	if source.Kind == protocol.DeliverySourceHelmOCI || source.Kind == protocol.DeliverySourceOCIArtifact {
+		setOCICredentialReferences(spec, assignment, names)
+	}
 	return managedObject(assignment, gvk, names.ControlNamespace, names.Source, map[string]any{"spec": spec}), nil
+}
+
+func setOCICredentialReferences(spec map[string]any, assignment protocol.DeliveryAssignmentV2, names ObjectNames) {
+	if assignment.Credential == nil {
+		return
+	}
+	hasAuth, hasTLS := false, false
+	for key := range assignment.Credential.Data {
+		switch key {
+		case "caFile", "certFile", "keyFile":
+			hasTLS = true
+		case "username", "password", ".dockerconfigjson":
+			hasAuth = true
+		}
+	}
+	if hasTLS {
+		spec["certSecretRef"] = map[string]any{"name": names.AuthSecret}
+	}
+	if !hasAuth {
+		delete(spec, "secretRef")
+	}
 }
 
 func addOCIVerification(spec map[string]any, source protocol.DeliverySourceV2, names ObjectNames) {

@@ -2,10 +2,11 @@ package builtin
 
 import (
 	"fmt"
-	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"strings"
 
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 )
 
@@ -22,6 +23,26 @@ func catalogSourceIdentityForComponent(project uuid.UUID, component builtinbundl
 	identity.id = stableID("source", project.String(), normalized, distributionIdentity)
 	identity.name = fmt.Sprintf("astronomer-builtins-source-%s", stableID(normalized, distributionIdentity).String())
 	return identity, nil
+}
+
+// AuthorizesCatalogAssignment identifies the exact immutable builtin source
+// created by this provisioner. A platform-scoped user source is insufficient.
+func AuthorizesCatalogAssignment(catalog builtinbundles.Catalog, cluster, project, source uuid.UUID, assignment protocol.DeliveryAssignmentV2) bool {
+	if catalog.DistributionIdentity == "" || project != stableID("project", cluster.String()) || assignment.Scope != protocol.DeliveryScopePlatform || assignment.Source.Kind != protocol.DeliverySourceHelmOCI {
+		return false
+	}
+	trust := catalogTrustPolicy(catalog)
+	verify := assignment.Source.Verify
+	if trust.AllowUnsigned || verify == nil || verify.Provider != "cosign" || trust.Provider != model.SignatureCosignKeyless || len(verify.OIDCIdentities) != 1 || verify.OIDCIdentities[0].Issuer != trust.Issuer || verify.OIDCIdentities[0].Subject != trust.Identity || assignment.Source.TrustSecret != "" {
+		return false
+	}
+	for _, component := range catalog.Components {
+		identity, err := catalogSourceIdentityForComponent(project, component, catalog.DistributionIdentity)
+		if err == nil && sourceType(identity) == model.SourceHelmOCI && identity.id == source && assignment.Source.URL == identity.url && assignment.Source.Chart == component.Source.Chart && assignment.Source.Revision == component.Source.Version && assignment.Source.Digest == component.Source.ChartDigest {
+			return true
+		}
+	}
+	return false
 }
 
 // Source-development keeps historical deterministic IDs. A verified release or

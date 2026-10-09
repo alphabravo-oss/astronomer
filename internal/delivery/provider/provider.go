@@ -44,8 +44,11 @@ type Decryptor interface {
 }
 
 type Provider struct {
-	queries   Querier
-	decryptor Decryptor
+	queries            Querier
+	decryptor          Decryptor
+	builtinCA          []byte
+	builtinCAIdentity  string
+	authorizeBuiltinCA BuiltinCAAuthorizer
 }
 
 func New(queries Querier, decryptor Decryptor) *Provider {
@@ -162,6 +165,7 @@ func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.Del
 	type credentialGeneration struct {
 		DeploymentID string `json:"deployment_id"`
 		Epoch        int64  `json:"epoch"`
+		PublicCA     string `json:"public_ca,omitempty"`
 	}
 	credentialGenerations := make([]credentialGeneration, 0, len(rows))
 	for index := range rows {
@@ -180,8 +184,12 @@ func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.Del
 		if err != nil {
 			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", fmt.Errorf("assignment %s: %w", row.ID, err)
 		}
+		caIdentity, err := p.applyBuiltinCAMetadata(ctx, row, &assignment)
+		if err != nil {
+			return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", err
+		}
 		response.Assignments = append(response.Assignments, assignment)
-		credentialGenerations = append(credentialGenerations, credentialGeneration{DeploymentID: row.ID.String(), Epoch: row.CredentialEpoch})
+		credentialGenerations = append(credentialGenerations, credentialGeneration{DeploymentID: row.ID.String(), Epoch: row.CredentialEpoch, PublicCA: caIdentity})
 	}
 	sort.Slice(response.Assignments, func(i, j int) bool {
 		return response.Assignments[i].DeploymentID < response.Assignments[j].DeploymentID
@@ -206,7 +214,8 @@ func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.Del
 
 	// Compute intent and credential-generation identities separately. The
 	// intent digest excludes credential bytes. The credential digest contains
-	// only monotonically increasing epochs, never an offline-verifiable secret.
+	// only monotonically increasing epochs and public CA identities, never an
+	// offline-verifiable secret.
 	digestProjection := response
 	digestProjection.SnapshotGeneration = 1
 	digestProjection.CredentialEpoch = 0
@@ -388,12 +397,17 @@ func (p *Provider) hydrateCredentials(response *protocol.DeliveryStateResponseV2
 		if !needsAuth && !needsTrust {
 			continue
 		}
-		if p.decryptor == nil {
+		if p.decryptor == nil && (row.CredentialEncrypted != "" || row.CaBundleEncrypted != "") {
 			return errors.New("source credential decryptor is unavailable")
 		}
 		data, err := p.decryptCredential(row.SourceType, row.CredentialEncrypted, row.CaBundleEncrypted)
 		if err != nil {
 			return err
+		}
+		credentialVersion := row.CredentialEpoch
+		if needsAuth && builtinCAEligible(row) && len(p.builtinCA) != 0 {
+			data["caFile"] = bytes.Clone(p.builtinCA)
+			credentialVersion = response.CredentialEpoch
 		}
 		hasAuth, hasTrust := false, false
 		for key := range data {
@@ -407,7 +421,7 @@ func (p *Provider) hydrateCredentials(response *protocol.DeliveryStateResponseV2
 			zeroMap(data)
 			return fmt.Errorf("source %s credential shape does not match its non-secret metadata", row.SourceID)
 		}
-		assignment.Credential = &protocol.DeliveryCredentialMaterial{Version: row.CredentialEpoch, Data: data}
+		assignment.Credential = &protocol.DeliveryCredentialMaterial{Version: credentialVersion, Data: data}
 	}
 	return nil
 }

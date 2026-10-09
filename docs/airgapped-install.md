@@ -90,6 +90,17 @@ server and worker. Registry credentials remain in separately managed Secrets;
 do not print them during diagnostics. Source policy exceptions grant transport
 access only, and do not make an unsigned artifact trusted.
 
+For a verified builtin anonymous-read OCI source, the server passes the captured
+registry CA through the agent's Opaque Secret and Flux `certSecretRef`, retaining
+the exact child digest and publisher signature policy. Restart the server after
+rotating this CA; the credential receipt invalidates an older acknowledged
+assignment. The source must match the verified builtin catalog and independent
+origin/CIDR policy. This does not configure registry authentication for builtins;
+qualify an anonymous-read registry profile explicitly, or retain authenticated
+registry delivery as an unavailable prerequisite. Existing user source
+credentials and per-source CA configuration remain separate. See the
+[source contract and qualification limits](assurance/technology-guide/w03/builtin-private-ca.md).
+
 Until a signed local application catalog and its immutable child subjects have
 been qualified, set `catalog.enabled: false`, `catalog.sourceURL: ""` and
 `catalog.digest: ""` in the disconnected profile. This gives an explicit
