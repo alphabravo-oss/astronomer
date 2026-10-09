@@ -39,8 +39,11 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     ...(await importOriginal<typeof import("@tanstack/react-router")>()),
     Link: RouterLinkStub,
     useNavigate: () => navigate,
-    useLocation: <T,>({ select }: { select: (location: { searchStr: string }) => T }) =>
-      select({ searchStr: search.toString() }),
+    useLocation: <T,>({
+      select,
+    }: {
+      select: (location: { searchStr: string }) => T;
+    }) => select({ searchStr: search.toString() }),
   };
 });
 vi.mock("@/lib/api/charlie", async (importOriginal) => ({
@@ -223,6 +226,28 @@ describe("Charlie hub acceptance", () => {
     );
     expect(decideCharlieApproval).not.toHaveBeenCalled();
   });
+
+  it.each(["state", "workflowState"] as const)(
+    "keeps unsupported finding %s neutral despite advertised decisions",
+    async (field) => {
+      search = new URLSearchParams("tab=findings&finding=finding-1");
+      const unsupported = { ...finding, [field]: "unsupported" as const };
+      vi.mocked(getCharlieFinding).mockResolvedValue(unsupported);
+      vi.mocked(listCharlieFindings).mockResolvedValue([unsupported]);
+      renderHub();
+      expect(
+        (await screen.findAllByText(/unsupported/)).length,
+      ).toBeGreaterThan(0);
+      for (const name of [
+        "acknowledge",
+        "start remediation",
+        "dismiss",
+        "resolve",
+      ])
+        expect(screen.queryByRole("button", { name })).toBeNull();
+      expect(transitionCharlieFinding).not.toHaveBeenCalled();
+    },
+  );
 
   it("requires exact confirmation and preserves bounded rationale for one eligible approval", async () => {
     const approval: CharlieApproval = {

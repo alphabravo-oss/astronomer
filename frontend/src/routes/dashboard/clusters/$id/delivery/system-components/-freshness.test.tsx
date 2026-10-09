@@ -191,3 +191,26 @@ it("labels legacy source time as unknown and preserves health", () => {
   ).toBeInTheDocument();
   expect(screen.getAllByText("healthy", { exact: true })).toHaveLength(2);
 });
+
+it("keeps unsupported system update vocabulary neutral without mutation controls", () => {
+  render(
+    <SystemComponentContent
+      component={{
+        ...fixture(),
+        health: "unknown",
+        compatibility: "unknown",
+        updateState: "unknown",
+      }}
+      clusterId="cluster"
+      workloadHref=""
+    />,
+  );
+  for (const badge of screen.getAllByText("unknown", { exact: true })) {
+    expect(badge.className).not.toContain("success");
+  }
+  expect(
+    screen.queryByRole("button", {
+      name: /Reconcile|Suspend|Rollback|Approve/i,
+    }),
+  ).toBeNull();
+});

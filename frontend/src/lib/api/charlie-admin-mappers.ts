@@ -13,7 +13,7 @@ import type {
   CharlieTriggerEvent,
   CharlieTriggerRule,
 } from "@/lib/api/charlie-admin";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/openapi.generated";
 
 type Schemas = OpenAPIComponents["schemas"];
 
@@ -171,7 +171,7 @@ export function mapCharlieTriggerRule(
     gracePeriodSeconds: wire.grace_period_seconds,
     flapWindowSeconds: wire.flap_window_seconds,
     flapCount: wire.flap_count,
-	    estateThresholdPercent: wire.estate_threshold_percent,
+    estateThresholdPercent: wire.estate_threshold_percent,
     minimumAgentVersion: wire.minimum_agent_version,
     suppressed: wire.suppressed,
     maximumAttempts: wire.maximum_attempts,
@@ -215,9 +215,7 @@ export function mapCharlieAutomation(
   };
 }
 
-function mapCharlieAlertChannel(
-  wire: Schemas["CharlieAdminAlertChannel"],
-) {
+function mapCharlieAlertChannel(wire: Schemas["CharlieAdminAlertChannel"]) {
   return {
     id: wire.id,
     name: wire.name,

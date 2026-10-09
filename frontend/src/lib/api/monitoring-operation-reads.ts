@@ -9,7 +9,7 @@ import type {
 export interface MonitoringOperationListParams {
   targetType?: MonitoringOperationTargetType;
   targetKey?: string;
-  status?: MonitoringOperationStatus;
+  status?: Exclude<MonitoringOperationStatus, "unsupported">;
   limit?: number;
   offset?: number;
 }

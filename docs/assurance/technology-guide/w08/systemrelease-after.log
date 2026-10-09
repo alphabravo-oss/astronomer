@@ -1,0 +1,25 @@
+=== RUN   TestPostgresSystemReleaseBootstrapIdempotencyAndDraft
+--- PASS: TestPostgresSystemReleaseBootstrapIdempotencyAndDraft (0.06s)
+=== RUN   TestPostgresSystemReleaseBootstrapImmutableAndRevoked
+--- PASS: TestPostgresSystemReleaseBootstrapImmutableAndRevoked (0.04s)
+=== RUN   TestPostgresSystemReleaseBootstrapRollbackAfterInsert
+--- PASS: TestPostgresSystemReleaseBootstrapRollbackAfterInsert (0.04s)
+=== RUN   TestPostgresSystemReleaseBootstrapSameTransactionLock
+--- PASS: TestPostgresSystemReleaseBootstrapSameTransactionLock (0.05s)
+=== RUN   TestPostgresSystemReleaseBootstrapConcurrentFirstCreate
+    bootstrap_postgres_test.go:224: baseline concurrent first insert: one committed creator, one exact SQLSTATE40001; explicit retry reads the same release
+--- PASS: TestPostgresSystemReleaseBootstrapConcurrentFirstCreate (0.06s)
+=== RUN   TestBuildProducesValidatedDeterministicRelease
+--- PASS: TestBuildProducesValidatedDeterministicRelease (0.00s)
+=== RUN   TestBuildPreservesPrereleaseWhenAddingSystemIdentityMetadata
+--- PASS: TestBuildPreservesPrereleaseWhenAddingSystemIdentityMetadata (0.00s)
+=== RUN   TestBuildRejectsPartialConfiguration
+--- PASS: TestBuildRejectsPartialConfiguration (0.00s)
+=== RUN   TestBuildSupportsOfflinePinnedCosignKey
+--- PASS: TestBuildSupportsOfflinePinnedCosignKey (0.00s)
+=== RUN   TestBuildSupportsOverlappingOfflineKeyRotation
+--- PASS: TestBuildSupportsOverlappingOfflineKeyRotation (0.00s)
+=== RUN   TestBuildAllowsUnconfiguredDevelopment
+--- PASS: TestBuildAllowsUnconfiguredDevelopment (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrelease	0.262s

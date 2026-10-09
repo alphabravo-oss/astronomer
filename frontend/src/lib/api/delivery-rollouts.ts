@@ -1,6 +1,13 @@
+import type { OpenAPIComponents as StrictComponents } from "@/types/openapi.generated";
+import type { CategoryValue } from "@/types/categories.generated";
+import {
+  rolloutActionMatrix,
+  type RolloutAction,
+} from "@/types/categories.generated";
 /** Delivery rollout contracts and operations. */
 
-import { camelizeKeys } from "@/lib/camelize";
+import { classifyCategory } from "@/lib/api/categorical-values";
+import { camelizeWire } from "@/lib/camelize";
 import * as generated from "@/lib/api/generated/client";
 import { requireEnvelopeData } from "@/lib/api/data-envelope";
 import {
@@ -17,7 +24,7 @@ import type {
   DeliverySourceType,
 } from "@/lib/api/delivery-sources";
 import type { Placement, PlacementRequest } from "@/lib/api/delivery-targets";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type {
   AssertNoPhantomWireKeys,
   CamelizeKeys,
@@ -25,38 +32,12 @@ import type {
 
 export type RolloutStrategyType =
   "all_at_once" | "rolling" | "canary" | "partitioned";
-export type RolloutFailureAction = "pause" | "abort" | "rollback";
+export type RolloutFailureAction = CategoryValue<"DeliveryFailureAction">;
 export type AmountType = "count" | "percent";
 
-export type RolloutState =
-  | "draft"
-  | "resolving"
-  | "awaiting_approval"
-  | "rejected"
-  | "queued"
-  | "progressing"
-  | "paused"
-  | "aborted"
-  | "succeeded"
-  | "failed"
-  | "rolling_back"
-  | "rolled_back"
-  | "rollback_failed";
+export type RolloutState = CategoryValue<"DeliveryRolloutState">;
 
-export type RolloutClusterState =
-  | "pending"
-  | "released"
-  | "acknowledged"
-  | "reconciling"
-  | "ready"
-  | "blocked"
-  | "timed_out"
-  | "failed"
-  | "skipped"
-  | "rolling_back"
-  | "ready_previous"
-  | "rollback_failed"
-  | "aborted";
+export type RolloutClusterState = CategoryValue<"DeliveryRolloutClusterState">;
 
 export interface Amount {
   type: AmountType;
@@ -64,13 +45,13 @@ export interface Amount {
 }
 
 export interface RolloutStrategy {
-  type: RolloutStrategyType;
+  type: RolloutStrategyType | "unsupported";
   maxConcurrent: number;
   maxUnavailable: Amount;
   minReady: string;
   progressDeadline: string;
   failureThreshold: Amount;
-  onFailure: RolloutFailureAction;
+  onFailure: RolloutFailureAction | "unsupported";
   respectMaintenanceWindows: boolean;
   shuffleSeed?: string;
   canary?: {
@@ -116,7 +97,7 @@ export type DeliveryRollout = Omit<
   "strategy" | "state"
 > & {
   strategy: RolloutStrategy;
-  state: RolloutState;
+  state: RolloutState | "unsupported";
 };
 
 export type DeliveryRolloutApproval = CamelizeKeys<
@@ -197,27 +178,27 @@ export type DeliveryFrozenRollout = Omit<
 export type DeliveryRolloutCluster = Omit<
   CamelizeKeys<OpenAPIComponents["schemas"]["DeliveryRolloutCluster"]>,
   "state"
-> & { state: RolloutClusterState };
+> & { state: RolloutClusterState | "unsupported" };
 
 function mapRollout(
   wire: DeliveryContracts["DeliveryRollout"],
 ): DeliveryRollout {
-  return camelizeKeys(wire) as unknown as DeliveryRollout;
+  return camelizeWire(wire);
 }
 function mapRolloutEvent(
   wire: DeliveryContracts["DeliveryRolloutEvent"],
 ): DeliveryRolloutEvent {
-  return camelizeKeys(wire) as unknown as DeliveryRolloutEvent;
+  return camelizeWire(wire);
 }
 function mapRolloutCluster(
   wire: DeliveryContracts["DeliveryRolloutCluster"],
 ): DeliveryRolloutCluster {
-  return camelizeKeys(wire) as unknown as DeliveryRolloutCluster;
+  return camelizeWire(wire);
 }
 function mapFrozenRollout(
   wire: DeliveryContracts["DeliveryFrozenRollout"],
 ): DeliveryFrozenRollout {
-  const mapped = camelizeKeys(wire) as unknown as CamelizeKeys<typeof wire>;
+  const mapped = camelizeWire(wire);
   const { idempotencyKey: _idempotencyKey, ...safe } = mapped;
   const { trustPolicy, ...source } = mapped.desired.source;
   return {
@@ -231,14 +212,12 @@ function mapFrozenRollout(
 function mapRolloutDetail(
   wire: DeliveryContracts["DeliveryRolloutDetail"],
 ): DeliveryRolloutDetail {
-  const mapped = camelizeKeys(wire) as unknown as CamelizeKeys<typeof wire>;
+  const mapped = camelizeWire(wire);
   return {
     ...mapped,
     rollout: mapRollout(wire.rollout),
     frozenPlan: mapFrozenRollout(wire.frozen_plan),
-    approvals: wire.approvals.map((item) =>
-      camelizeKeys(item),
-    ) as unknown as DeliveryRolloutApproval[],
+    approvals: wire.approvals.map((item) => camelizeWire(item)),
     timeline: wire.timeline.map(mapRolloutEvent),
   } as DeliveryRolloutDetail;
 }
@@ -250,7 +229,7 @@ export async function startDeliveryRollout(
     preview_digest: string;
     confirm_all_clusters: boolean;
     strategy: RolloutStrategyRequest;
-  } & DeliveryContracts["DeliveryRolloutStart"],
+  } & StrictComponents["schemas"]["DeliveryRolloutStart"],
   targetGeneration: number,
   key: string,
   signal?: AbortSignal,
@@ -393,7 +372,7 @@ export async function actOnDeliveryRollout(
                   },
                 },
               );
-  return camelizeKeys(requireEnvelopeData(response.data, "delivery response"));
+  return camelizeWire(requireEnvelopeData(response.data, "delivery response"));
 }
 
 export async function approveDeliveryRollout(
@@ -421,18 +400,28 @@ export async function approveDeliveryRollout(
       signal,
     },
   );
-  return camelizeKeys(requireEnvelopeData(response.data, "delivery response"));
+  return camelizeWire(requireEnvelopeData(response.data, "delivery response"));
 }
 
-export function rolloutIsTerminal(state: RolloutState): boolean {
-  return [
-    "rejected",
-    "aborted",
-    "succeeded",
-    "failed",
-    "rolled_back",
-    "rollback_failed",
-  ].includes(state);
+const rolloutTerminalStates: Record<RolloutState, boolean> = {
+  draft: false,
+  resolving: false,
+  awaiting_approval: false,
+  rejected: true,
+  queued: false,
+  progressing: false,
+  paused: false,
+  aborted: true,
+  succeeded: true,
+  failed: true,
+  rolling_back: false,
+  rolled_back: true,
+  rollback_failed: true,
+};
+export function rolloutIsTerminal(state: unknown): boolean {
+  const result = classifyCategory("DeliveryRolloutState", state);
+  if (result.kind === "unknown") return false;
+  return rolloutTerminalStates[result.value];
 }
 
 const frozenRolloutMatchesWire: AssertNoPhantomWireKeys<
@@ -458,3 +447,11 @@ void [
   deliveryRolloutEventMatchesWire,
   rolloutClusterMatchesWire,
 ];
+
+export type { RolloutAction } from "@/types/categories.generated";
+export function availableRolloutActions(
+  state: unknown,
+): readonly RolloutAction[] {
+  const result = classifyCategory("DeliveryRolloutState", state);
+  return result.kind === "known" ? rolloutActionMatrix[result.value] : [];
+}

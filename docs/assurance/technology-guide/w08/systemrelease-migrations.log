@@ -1,0 +1,4 @@
+./scripts/check-migrations.sh
+check-migrations: OK (72 migration files scanned)
+./scripts/check-migrations-test.sh
+check-migrations-test: all policy fixtures passed

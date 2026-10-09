@@ -25,7 +25,7 @@ import {
 import { mapPage } from "@/lib/api/pagination";
 import type { PaginatedResponse } from "@/types";
 import { createIdempotencyKey } from "@/lib/api/idempotency";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 
 // ============================================================
 // Types

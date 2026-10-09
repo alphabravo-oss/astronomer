@@ -15,7 +15,7 @@ import {
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
 import { mapPage } from "@/lib/api/pagination";
 import type { PaginatedResponse } from "@/types";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 
 export interface QueueSummary {
   name: string;
@@ -61,7 +61,9 @@ export interface TaskOutboxEntry {
   updated_at?: string;
 }
 
-export async function listQueues(signal?: AbortSignal): Promise<QueueSummary[]> {
+export async function listQueues(
+  signal?: AbortSignal,
+): Promise<QueueSummary[]> {
   const response = await getAdminQueues({ signal });
   const data = response.data as QueueSummary[] | undefined;
   return Array.isArray(data) ? data : [];

@@ -1,6 +1,6 @@
 /** Delivery controller, inventory, compatibility, and estate operations. */
 
-import { camelizeKeys } from "@/lib/camelize";
+import { camelizeWire } from "@/lib/camelize";
 import * as generated from "@/lib/api/generated/client";
 import { requireEnvelopeData } from "@/lib/api/data-envelope";
 import type { DeliveryContracts } from "@/lib/api/delivery-common";
@@ -8,7 +8,7 @@ import {
   mapClusterDeployment,
   type ClusterDeployment,
 } from "@/lib/api/delivery-deployments";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type {
   AssertNoPhantomWireKeys,
   CamelizeKeys,
@@ -65,17 +65,17 @@ function mapInventory(
   wire: DeliveryContracts["DeliveryClusterInventory"],
 ): ClusterDeliveryInventory {
   return {
-    ...camelizeKeys(wire),
+    ...camelizeWire(wire),
     deployments: wire.deployments.map(mapClusterDeployment),
-  } as unknown as ClusterDeliveryInventory;
+  };
 }
 function mapCompatibility(
   wire: DeliveryContracts["DeliverySystemCompatibility"],
 ): DeliverySystemCompatibility {
-  return camelizeKeys(wire) as unknown as DeliverySystemCompatibility;
+  return camelizeWire(wire);
 }
 function mapEstate(wire: DeliveryContracts["DeliveryFleet"]): DeliveryEstate {
-  return camelizeKeys(wire) as unknown as DeliveryEstate;
+  return camelizeWire(wire);
 }
 
 export async function getClusterDeliveryInventory(

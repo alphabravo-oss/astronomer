@@ -87,7 +87,11 @@ export function CharlieDrawer() {
           onToggleHistory={() => setConversationListOpen((value) => !value)}
           onNewChat={newChat}
           newChatPending={startNewChat.isPending}
-          canAbort={!!sessionId && !viewingThreadId}
+          canAbort={
+            !!sessionId &&
+            !viewingThreadId &&
+            conversation.categoryActionsAllowed
+          }
           onAbort={() => setConfirmAbort(true)}
         />
       }
@@ -119,6 +123,11 @@ export function CharlieDrawer() {
             composer.setCommandHelpOpen(false);
           }}
         />
+      )}
+      {!conversation.categoryActionsAllowed && (
+        <p role="status" className="px-5 py-3 text-muted-foreground">
+          Unsupported session state. Conversation history remains read-only.
+        </p>
       )}
       <CharlieTranscript
         messages={conversation.messages}

@@ -23,7 +23,7 @@ import type {
   ToolPreviewResponse,
   ToolStatus,
 } from "@/types";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 
 type Schemas = OpenAPIComponents["schemas"];
 

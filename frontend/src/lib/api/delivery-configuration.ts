@@ -1,6 +1,7 @@
+import type { OpenAPIComponents as StrictComponents } from "@/types/openapi.generated";
 /** Flux delivery configuration templates and ordered override sets. */
 
-import { camelizeKeys } from "@/lib/camelize";
+import { camelizeWire } from "@/lib/camelize";
 import * as generated from "@/lib/api/generated/client";
 import { requireEnvelopeData } from "@/lib/api/data-envelope";
 import {
@@ -9,7 +10,7 @@ import {
   type DeliveryPage,
   type PageParams,
 } from "@/lib/api/delivery-common";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
 
 type Contracts = OpenAPIComponents["schemas"];
@@ -18,7 +19,7 @@ export type DeliveryConfigurationTemplate = CamelizeKeys<
   OpenAPIComponents["schemas"]["DeliveryConfigurationTemplate"]
 >;
 export type DeliveryConfigurationTemplateWrite =
-  OpenAPIComponents["schemas"]["DeliveryConfigurationTemplateWrite"] & {
+  StrictComponents["schemas"]["DeliveryConfigurationTemplateWrite"] & {
     project_id: string;
   };
 export type DeliveryOverrideSet = CamelizeKeys<
@@ -35,13 +36,13 @@ export type DeliveryEffectiveConfiguration = CamelizeKeys<
 function mapConfigurationTemplate(
   wire: Contracts["DeliveryConfigurationTemplate"],
 ): DeliveryConfigurationTemplate {
-  return camelizeKeys(wire) as unknown as DeliveryConfigurationTemplate;
+  return camelizeWire(wire);
 }
 
 function mapOverrideSet(
   wire: Contracts["DeliveryOverrideSet"],
 ): DeliveryOverrideSet {
-  return camelizeKeys(wire) as unknown as DeliveryOverrideSet;
+  return camelizeWire(wire);
 }
 
 function mapLegacyPage<TWire, TView>(
@@ -219,7 +220,7 @@ export async function resolveDeliveryEffectiveConfiguration(
     },
     signal,
   });
-  return camelizeKeys(
+  return camelizeWire(
     requireEnvelopeData(wire, "effective delivery configuration response"),
-  ) as unknown as DeliveryEffectiveConfiguration;
+  );
 }

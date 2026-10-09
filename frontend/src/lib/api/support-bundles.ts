@@ -4,7 +4,7 @@ import {
   getSupportBundleOperation as getSupportBundleOperationRequest,
 } from "@/lib/api/generated/client";
 import { createIdempotencyKey } from "@/lib/api/idempotency";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 
 export type SupportBundleOperation =
   OpenAPIComponents["schemas"]["SupportBundleOperation"];
@@ -30,7 +30,10 @@ export async function getSupportBundleOperation(
   id: string,
   signal?: AbortSignal,
 ): Promise<SupportBundleOperation> {
-  const response = await getSupportBundleOperationRequest({ path: { id }, signal });
+  const response = await getSupportBundleOperationRequest({
+    path: { id },
+    signal,
+  });
   return requireOperation(response.data);
 }
 
