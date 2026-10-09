@@ -2357,7 +2357,17 @@
     "compatibility": "passed",
     "source_security": "blocked_unaccepted_findings",
     "review_until": "2026-10-16T00:00:00Z",
-    "fixed_upstream_adopted": "google.golang.org/grpc v1.84.0 clears imported GO-2026-6443; no waiver"
+    "fixed_upstream_adopted": "google.golang.org/grpc v1.84.0 clears imported GO-2026-6443; no waiver",
+    "compiler_workspace_binding": "builder compares actual module-selected GOVERSION to qualified compiler and forces GOWORK=off",
+    "ai_provider_environment_present_at_verification": false,
+    "workflow_ai_boundary": "explicit env -u GOSEC_AI_PROVIDER -u GOSEC_AI_API_KEY -u GOSEC_AI_BASE_URL; no AI/fix flags",
+    "upstream_transitive_prerelease": {
+      "module": "go.yaml.in/yaml/v4",
+      "version": "v4.0.0-rc.6",
+      "classification": "mandatory unchanged upstream gosec dependency; no final v4 version available",
+      "authority_owner": "W01",
+      "evidence": "scanner-provenance/yaml4-versions.log"
+    }
   },
   "approval": "unsigned_evidence_only"
 }

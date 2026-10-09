@@ -86,6 +86,14 @@ def evaluate(gosec, vuln, exceptions, statuses, scope, root=ROOT, now=None):
             raise ValueError('exception is unknown, unmatched, or source changed')
         accepted.add(fingerprint)
     policy = json.loads((root / 'deploy/security/source-policy.json').read_text())
+    required_policy = {'schema_version','gosec_blocked_severities','gosec_medium_policy','govulncheck_scan_level','govulncheck_blocked_level','triage_owner','triage_cadence','recommended_fix_days','no_fix_policy'}
+    if not isinstance(policy, dict) or set(policy) != required_policy or type(policy['schema_version']) is not int or policy['schema_version'] != 1:
+        raise ValueError('source policy violates closed schema')
+    days = policy['recommended_fix_days']
+    if not isinstance(days, dict) or set(days) != {'critical_or_exploited','high'} or any(type(value) is not int or value < 1 for value in days.values()):
+        raise ValueError('source response targets invalid')
+    if not isinstance(policy['triage_owner'], str) or not policy['triage_owner'].strip() or policy['triage_cadence'] != 'daily' or policy['no_fix_policy'] != 'exact_scoped_expiring_exception_with_findings_retained':
+        raise ValueError('source ownership or no-fix policy invalid')
     if policy['gosec_blocked_severities'] != ['HIGH'] or policy['govulncheck_scan_level'] != 'symbol' or policy['govulncheck_blocked_level'] != 'error' or policy['gosec_medium_policy'] != 'retain_and_require_owned_review':
         raise ValueError('unsupported source policy')
     reviews_path = root / 'deploy/security/source-reviews.json'

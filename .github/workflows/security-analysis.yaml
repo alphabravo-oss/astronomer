@@ -40,10 +40,11 @@ jobs:
         run: |
           mkdir -p security-raw security-reports
           set +e
+          export GOWORK=off
           scripts/build-gosec.sh "$RUNNER_TEMP/astronomer-gosec" >security-raw/gosec-build.log 2>&1
           build_status=$?
           if [ "$build_status" -eq 0 ]; then
-            "$RUNNER_TEMP/astronomer-gosec" -no-fail -fmt json -out security-raw/gosec.json ./... >security-raw/gosec.log 2>&1
+            env -u GOSEC_AI_PROVIDER -u GOSEC_AI_API_KEY -u GOSEC_AI_BASE_URL "$RUNNER_TEMP/astronomer-gosec" -no-fail -fmt json -out security-raw/gosec.json ./... >security-raw/gosec.log 2>&1
             gosec_status=$?
           else
             gosec_status=$build_status

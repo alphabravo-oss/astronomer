@@ -91,6 +91,13 @@ class SecurityPolicyTest(unittest.TestCase):
     def test_symlink_outside_and_unknown_rule(self):
         self.high(); (self.root/'sample.go').unlink(); (self.root/'sample.go').symlink_to(ROOT/'go.mod')
         with self.assertRaises(ValueError): self.run_policy()
+    def test_closed_source_policy(self):
+        path=self.root/'deploy/security/source-policy.json';base=json.loads(path.read_text())
+        for update in ({'unknown':True},{'triage_owner':''},{'recommended_fix_days':{'high':True,'critical_or_exploited':3}},{'schema_version':True},{'triage_cadence':'never'}):
+            doc=copy.deepcopy(base);doc.update(update);path.write_text(json.dumps(doc))
+            with self.subTest(update=update),self.assertRaises(ValueError):self.run_policy()
+        doc=copy.deepcopy(base);del doc['no_fix_policy'];path.write_text(json.dumps(doc))
+        with self.assertRaises(ValueError):self.run_policy()
     def test_sarif_retained_on_failure(self):
         self.high(); r=self.run_policy(); s=policy.sarif(r,'gosec')
         self.assertEqual(len(s['runs'][0]['results']),1); self.assertNotIn('SOURCE SNIPPET',json.dumps(s))

@@ -38,7 +38,7 @@ class PolicyContractTest(unittest.TestCase):
             with self.subTest(changes=changes),self.assertRaises(ValueError):runtime.waiver_map(bad,now,'v1.2.2')
     def test_workflow_report_enforcement_and_fork_contract(self):
         text=(ROOT/'.github/workflows/security-analysis.yaml').read_text()
-        for contract in ('fetch-depth: 0','persist-credentials: false','--redact=100','--log-opts=--all','scripts/security-source-policy.py','if-no-files-found: error','github.event.pull_request.head.repo.full_name == github.repository'):
+        for contract in ('fetch-depth: 0','persist-credentials: false','--redact=100','--log-opts=--all','scripts/security-source-policy.py','if-no-files-found: error','github.event.pull_request.head.repo.full_name == github.repository','env -u GOSEC_AI_PROVIDER -u GOSEC_AI_API_KEY -u GOSEC_AI_BASE_URL','export GOWORK=off'):
             self.assertIn(contract,text)
         self.assertEqual(text.count('-no-fail'),1)
         self.assertLess(text.index('Collect source scans'),text.index('Enforce source security policy'))
