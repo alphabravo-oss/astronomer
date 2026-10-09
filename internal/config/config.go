@@ -131,10 +131,14 @@ type Config struct {
 	DeliveryFluxDistributionKeyring    [][]byte `mapstructure:"-"`
 	// DistributionDestinationPolicy is closed operator network authority, independent
 	// of signed artifact content. Restricted mode permits only listed origins.
+	DistributionMirrorPlanPath        string `mapstructure:"distribution_mirror_plan_path"`
+	DistributionMirrorSignaturePath   string `mapstructure:"distribution_mirror_signature_path"`
+	DistributionMirrorKeyRef          string `mapstructure:"distribution_mirror_key_ref"`
 	DistributionDestinationPolicy     string `mapstructure:"distribution_destination_policy"`
 	BackupS3DestinationPolicy         string `mapstructure:"backup_s3_destination_policy"`
 	BackupS3CAFile                    string `mapstructure:"backup_s3_ca_file"`
 	DeliveryBundleRepository          string `mapstructure:"delivery_bundle_repository"`
+	DeliveryBundleCatalogDigest       string `mapstructure:"delivery_bundle_catalog_digest"`
 	DeliveryBundleDigest              string `mapstructure:"delivery_bundle_digest"`
 	DeliveryBundleCertificateIdentity string `mapstructure:"delivery_bundle_certificate_identity"`
 	DeliveryBundleOIDCIssuer          string `mapstructure:"delivery_bundle_oidc_issuer"`
@@ -402,6 +406,7 @@ func applyReleaseManifest(cfg *Config) error {
 	}
 	cfg.DeliveryBundleRepository = release.BundleRepository
 	cfg.DeliveryBundleDigest = release.BundleDigest
+	cfg.DeliveryBundleCatalogDigest = release.BundleCatalogDigest
 	cfg.DeliveryBundleOIDCIssuer = release.CertificateOIDCIssuer
 	cfg.DeliveryBundleCertificateIdentity = release.CertificateIdentity
 	return nil

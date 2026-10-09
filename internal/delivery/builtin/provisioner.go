@@ -60,13 +60,14 @@ type Provisioner struct {
 	previewer    Previewer
 	planner      Planner
 	registration Registration
+	catalog      CatalogLoader
 }
 
-func NewProvisioner(pool *pgxpool.Pool, previewer Previewer, planner Planner, registration Registration) (*Provisioner, error) {
-	if pool == nil || previewer == nil || planner == nil || registration == nil {
+func NewProvisioner(pool *pgxpool.Pool, previewer Previewer, planner Planner, registration Registration, catalog CatalogLoader) (*Provisioner, error) {
+	if pool == nil || previewer == nil || planner == nil || registration == nil || catalog == nil {
 		return nil, errors.New("built-in delivery provisioner dependencies are required")
 	}
-	return &Provisioner{pool: pool, previewer: previewer, planner: planner, registration: registration}, nil
+	return &Provisioner{pool: pool, previewer: previewer, planner: planner, registration: registration, catalog: catalog}, nil
 }
 
 type registrationState struct {
@@ -89,6 +90,7 @@ type sourceIdentity struct {
 	id   uuid.UUID
 	name string
 	url  string
+	kind model.SourceType
 }
 
 // Reconcile is called after an authenticated delivery status commit. Errors do
@@ -104,7 +106,7 @@ func (p *Provisioner) Reconcile(ctx context.Context, clusterID uuid.UUID) error 
 	if !state.shouldReconcile() {
 		return nil
 	}
-	catalog, err := builtinbundles.Load()
+	catalog, err := p.loadCatalog(ctx)
 	if err != nil {
 		return err
 	}
@@ -233,7 +235,7 @@ func (p *Provisioner) ensureAssetsTransaction(ctx context.Context, clusterID uui
 		return nil, errors.New("built-in project identity conflict")
 	}
 
-	trust := model.TrustPolicy{AllowUnsigned: true}
+	trust := catalogTrustPolicy(catalog)
 	trustJSON, _ := json.Marshal(trust)
 	for _, source := range sources {
 		if err := ensureCatalogSource(ctx, tx, projectID, source, trust, trustJSON); err != nil {
@@ -250,7 +252,7 @@ func (p *Provisioner) ensureAssetsTransaction(ctx context.Context, clusterID uui
 		if !ok {
 			return nil, fmt.Errorf("built-in component %s has no planned source identity", component.Slug)
 		}
-		target, err := ensureComponent(ctx, tx, projectID, clusterID, source, catalog.Release, component, trust)
+		target, err := ensureComponent(ctx, tx, projectID, clusterID, source, catalog.Release, component, trust, catalog.DistributionIdentity, catalog.VerificationIdentity)
 		if err != nil {
 			return nil, err
 		}
@@ -279,7 +281,7 @@ func planCatalogSources(catalog builtinbundles.Catalog, projectID uuid.UUID) ([]
 		if !component.DefaultEnabled {
 			continue
 		}
-		source, err := catalogSourceIdentity(projectID, component.Source.URL)
+		source, err := catalogSourceIdentityForComponent(projectID, component, catalog.DistributionIdentity)
 		if err != nil {
 			return nil, nil, fmt.Errorf("plan built-in source for %s: %w", component.Slug, err)
 		}
@@ -318,20 +320,24 @@ func catalogSourceIdentity(projectID uuid.UUID, rawURL string) (sourceIdentity, 
 	if normalized != rawURL {
 		return sourceIdentity{}, fmt.Errorf("source URL %q is not canonical (want %q)", rawURL, normalized)
 	}
+	return sourceIdentityFromCanonical(projectID, normalized), nil
+}
+
+func sourceIdentityFromCanonical(projectID uuid.UUID, normalized string) sourceIdentity {
 	if normalized == systemSourceURL {
 		return sourceIdentity{
 			id: stableID("source", projectID.String(), systemSourceName), name: systemSourceName, url: normalized,
-		}, nil
+		}
 	}
 	digest := sha256.Sum256([]byte(normalized))
 	name := fmt.Sprintf("astronomer-builtins-source-%x", digest[:8])
-	return sourceIdentity{id: stableID("source", projectID.String(), normalized), name: name, url: normalized}, nil
+	return sourceIdentity{id: stableID("source", projectID.String(), normalized), name: name, url: normalized}
 }
 
 func ensureCatalogSource(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, source sourceIdentity, trust model.TrustPolicy, trustJSON []byte) error {
 	definition := model.Source{
-		ID: source.id, ProjectID: projectID, Name: source.name, Description: systemSourceDescription,
-		Type: model.SourceHelmHTTP, URL: source.url, AuthMode: model.AuthNone, Trust: trust,
+		ID: source.id, ProjectID: projectID, Name: source.name, Description: sourceDescription(source),
+		Type: sourceType(source), URL: source.url, AuthMode: model.AuthNone, Trust: trust,
 	}
 	if err := definition.Validate(); err != nil {
 		return fmt.Errorf("validate built-in source %s: %w", source.name, err)
@@ -339,20 +345,20 @@ func ensureCatalogSource(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, so
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO delivery_sources (
 			id,project_id,name,description,source_type,url,auth_mode,trust_policy,status,last_resolved_at
-		) VALUES ($1,$2,$3,$4,'helm_http',$5,'none',$6,'ready',now())
+		) VALUES ($1,$2,$3,$4,$7,$5,'none',$6,'ready',now())
 		ON CONFLICT (id) DO NOTHING`, source.id, projectID, source.name,
-		systemSourceDescription, source.url, trustJSON); err != nil {
+		sourceDescription(source), source.url, trustJSON, string(sourceType(source))); err != nil {
 		return fmt.Errorf("ensure built-in source %s: %w", source.name, err)
 	}
 	var matches bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (
 		SELECT 1 FROM delivery_sources
 		WHERE id=$1 AND project_id=$2 AND name=$3 AND description=$4
-		  AND source_type='helm_http' AND url=$5 AND auth_mode='none'
+		  AND source_type=$7 AND url=$5 AND auth_mode='none'
 		  AND credential_encrypted='' AND credential_key_version=0 AND credential_epoch=0
 		  AND ca_bundle_encrypted='' AND proxy_ref='' AND trust_policy=$6::jsonb
 		  AND status='ready' AND last_error_code=''
-	)`, source.id, projectID, source.name, systemSourceDescription, source.url, trustJSON).Scan(&matches); err != nil {
+	)`, source.id, projectID, source.name, sourceDescription(source), source.url, trustJSON, string(sourceType(source))).Scan(&matches); err != nil {
 		return fmt.Errorf("verify built-in source %s: %w", source.name, err)
 	}
 	if !matches {
@@ -361,7 +367,7 @@ func ensureCatalogSource(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, so
 	return nil
 }
 
-func ensureComponent(ctx context.Context, tx pgx.Tx, projectID, clusterID uuid.UUID, source sourceIdentity, release string, component builtinbundles.Component, trust model.TrustPolicy) (targetIdentity, error) {
+func ensureComponent(ctx context.Context, tx pgx.Tx, projectID, clusterID uuid.UUID, source sourceIdentity, release string, component builtinbundles.Component, trust model.TrustPolicy, distributionIdentity, verificationIdentity string) (targetIdentity, error) {
 	bundleID := stableID("bundle", projectID.String(), component.Slug)
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO component_bundles (id,project_id,name,description)
@@ -412,7 +418,7 @@ func ensureComponent(ctx context.Context, tx pgx.Tx, projectID, clusterID uuid.U
 		return targetIdentity{}, err
 	}
 	resolvedSource := model.ResolvedSourceSpec{
-		SourceID: source.id, Type: model.SourceHelmHTTP,
+		SourceID: source.id, Type: sourceType(source),
 		URL: source.url, AuthMode: model.AuthNone,
 		Trust: trust, Revision: revision,
 	}
@@ -420,18 +426,24 @@ func ensureComponent(ctx context.Context, tx pgx.Tx, projectID, clusterID uuid.U
 	rendererJSON, _ := json.Marshal(draft.Renderer)
 	reconciliationJSON, _ := json.Marshal(reconciliation)
 	requirementsJSON, _ := json.Marshal(requirements)
-	versionID := stableID("version", bundleID.String(), release, component.Source.Version, component.Source.ChartDigest)
-	versionLabel := strings.TrimPrefix(release, "v") + "+" + component.Source.Version
+	versionID, versionLabel := componentVersionIdentity(bundleID, release, component, distributionIdentity)
+	verificationStatus := "unsigned"
+	if distributionIdentity != "" {
+		verificationStatus = "verified"
+		verificationIdentity += ";distribution:" + distributionIdentity + ";upstream:" + component.Source.OriginalURL + ";archive:" + component.Source.OriginalArchiveDigest
+	} else {
+		verificationIdentity = "source-development:" + release
+	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO component_bundle_versions (
 			id,bundle_id,source_id,version,renderer,scope,requested_revision,resolved_revision,
 			artifact_digest,source_spec,renderer_spec,reconciliation_policy,health_policy,
 			requirements,dependency_bundle_ids,spec_digest,verification_status,
 			verification_identity,state
-		) VALUES ($1,$2,$3,$4,'helm','platform',$5,$5,$6,$7,$8,$9,'{}',$10,'[]',$11,'verified',$12,'ready')
+		) VALUES ($1,$2,$3,$4,'helm','platform',$5,$5,$6,$7,$8,$9,'{}',$10,'[]',$11,$12,$13,'ready')
 		ON CONFLICT (id) DO NOTHING`, versionID, bundleID, source.id, versionLabel,
 		component.Source.Version, component.Source.ChartDigest, sourceJSON, rendererJSON,
-		reconciliationJSON, requirementsJSON, specDigest.String(), "astronomer-release-catalog:"+release); err != nil {
+		reconciliationJSON, requirementsJSON, specDigest.String(), verificationStatus, verificationIdentity); err != nil {
 		return targetIdentity{}, fmt.Errorf("ensure built-in version %s: %w", component.Slug, err)
 	}
 	var actualBundle uuid.UUID

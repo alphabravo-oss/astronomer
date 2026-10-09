@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "fixture": "owned isolated Docker pgvector/pgvector:pg16; random unique schemas",
+  "release_qualification": false,
+  "postgres18_cnpg_qualification": false,
+  "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 BUILTIN_PROVISIONER_TEST_DATABASE_URL=<private owned fixture DSN> go test -json ./internal/delivery/builtin -run TestProvisionerPostgresMultiSourceAssets|TestAutomaticScanningPostgres -count=1 -timeout=3m",
+  "exit_code": 1,
+  "tests": {
+    "TestAutomaticScanningPostgres/existing_remote_with_baseline_off": "pass",
+    "TestAutomaticScanningPostgres/existing_remote_with_baseline_on": "pass",
+    "TestAutomaticScanningPostgres/explicit_opt_out": "pass",
+    "TestAutomaticScanningPostgres/unready_inventory": "pass",
+    "TestAutomaticScanningPostgres/local_cluster": "pass",
+    "TestAutomaticScanningPostgres/not_enrolled": "pass",
+    "TestAutomaticScanningPostgres/failed_registration": "pass",
+    "TestAutomaticScanningPostgres/new_baseline": "pass",
+    "TestAutomaticScanningPostgres/new_metrics_only": "pass",
+    "TestAutomaticScanningPostgres": "pass",
+    "TestProvisionerPostgresMultiSourceAssets/same_source_retry_stability_and_current_compatibility": "pass",
+    "TestProvisionerPostgresMultiSourceAssets/multiple_sources_bind_each_component": "pass",
+    "TestProvisionerPostgresMultiSourceAssets/source_conflict_rolls_back_dependent_assets": "pass",
+    "TestProvisionerPostgresMultiSourceAssets/verified_mirror_transition_retains_accepted_history_and_stable_ownership": "fail",
+    "TestProvisionerPostgresMultiSourceAssets/concurrent_retries_converge": "pass",
+    "TestProvisionerPostgresMultiSourceAssets": "fail"
+  }
+}

@@ -10,6 +10,7 @@ cannot quietly publish mutually inconsistent artifacts.
 from __future__ import annotations
 
 import argparse
+import subprocess
 import datetime as dt
 import hashlib
 import json
@@ -175,10 +176,35 @@ def runtime_images(
     return output
 
 
+def emitted_bundle_catalog(args: argparse.Namespace) -> dict[str, Any]:
+    """Consume exact prepared v2 bytes; signatures are added by publication later.
+
+    The runtime uses the same Go contract after authenticating the OCI subject.
+    No legacy embedded catalog can substitute for the emitted identity.
+    """
+    metadata_path = args.bundle_distribution_metadata
+    if metadata_path.name != "subjects.json":
+        raise ManifestError("v2 metadata must be the producer subjects.json")
+    try:
+        subprocess.run(["go", "run", "./deploy/bundles/cmd/distribution", "--verify-layout", str(metadata_path.parent)],
+                       cwd=ROOT, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ManifestError("prepared v2 distribution does not pass the canonical Go closure validator") from exc
+    metadata = load_json(metadata_path)
+    if metadata["release"] != args.version or metadata["repository"] + "@" + metadata["digest"] != args.bundles_reference.removeprefix("oci://"):
+        raise ManifestError("v2 distribution subject differs from supplied release identity")
+    if metadata["archive_digest"] != sha256_file(args.bundles_archive):
+        raise ManifestError("v2 distribution archive differs from emitted subject")
+    catalog_path = metadata_path.parent / "catalog.json"
+    if metadata["catalog_digest"] != sha256_file(catalog_path):
+        raise ManifestError("v2 emitted catalog identity changed")
+    return load_json(catalog_path)
+
+
 def build(args: argparse.Namespace) -> dict[str, Any]:
     compatibility = load_json(args.compatibility)
     flux_provenance = load_json(args.flux_provenance)
-    catalog = load_json(args.bundle_catalog)
+    catalog = emitted_bundle_catalog(args) if getattr(args, "bundle_distribution_metadata", None) else load_json(args.bundle_catalog)
     chart_version, app_version = chart_versions(args.chart_metadata)
     version = "v" + chart_version
     if args.version != version or app_version != chart_version or VERSION_RE.fullmatch(args.version) is None:
@@ -287,7 +313,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         },
         "built_in_bundles": {
             "artifact": artifact("astronomer-platform-bundles", "oci_artifact", args.bundles_reference, sha256_file(args.bundles_archive)),
-            "catalog_digest": sha256_file(args.bundle_catalog),
+            "catalog_digest": (load_json(args.bundle_distribution_metadata)["catalog_digest"] if getattr(args,"bundle_distribution_metadata",None) else sha256_file(args.bundle_catalog)),
             "components": bundle_components,
         },
         "charlie": {
@@ -343,6 +369,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--chart-metadata", type=Path, default=ROOT / "deploy/chart/Chart.yaml")
     result.add_argument("--image-inventory", type=Path, default=ROOT / "deploy/chart/images.txt")
     result.add_argument("--flux-provenance", type=Path, default=ROOT / "deploy/flux/provenance.json")
+    result.add_argument("--bundle-distribution-metadata", type=Path, help="opt-in exact v2 producer subjects.json; overrides legacy bundle catalog")
     result.add_argument("--bundle-catalog", type=Path, default=ROOT / "deploy/bundles/catalog.json")
     return result
 
