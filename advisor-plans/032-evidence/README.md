@@ -20,7 +20,7 @@ separately. No historic qualification is attributed to a new candidate.
 | W06 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W07 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W08 | TODO | TODO | Await dependencies and bounded implementation slice. |
-| W09 | IN PROGRESS | TODO | Durable JSON decoder/writer/reader validation, corrupt-inhibition handling and reversible migration 072 in `implement/032-json-contracts`. |
+| W09 | IN PROGRESS | Corrupt-inhibition regressions PASS; full schema/migration work pending | Integrated `677c2246`: bounded versioned parser, once-per-sweep regex preparation, skip/audit/retry behavior and typed handler failures. Broader decoder/writer/reader inventory and reversible migration 072 continue in `implement/032-json-contracts`. |
 | W10 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W11 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W12 | TODO | TODO | Await dependencies and bounded implementation slice. |
@@ -43,6 +43,8 @@ separately. No historic qualification is attributed to a new candidate.
 - W12 preparation: owned disposable cluster `astro032-cnpg-20261009` has three ready K3s 1.37.1 server nodes. This connected prerequisite is not CNPG failover, backup/restore, signed candidate or disconnected qualification. See [environment receipt](prerequisite-environment.json).
 - W02 reviewer rerun: 25 security fixtures, five scanner-closure fixtures, 29 publication-policy fixtures and the release contract pass. Synthetic reverted-secret detection is included. The full source gate remains red; enforcement implementation is not a complete finding disposition.
 - W12 preparation: the Kubernetes 1.36.5 disposable cluster also has all five CNPG, Barman and cert-manager deployments ready and both Barman certificates ready. Neither disposable cluster has an application database or application workload yet.
+- W09 reviewer rerun: named inhibition tests execute and pass in the JSON contract, worker and handler packages. Baseline suppression and fabricated-response failures are retained. Valid alerts run before an audit failure is returned for retry; stored payloads are excluded from diagnostics.
+- Storage/cache metadata prerequisites: RustFS 1.0.1 and Valkey 9.1.2 Alpine resolve to immutable amd64/arm64 identities. [Receipt](storage-image-prerequisites.json) proves OCI metadata only, not runtime, signature, retention or recovery qualification.
 - No deployment or release qualification is inferred from these source gates.
 
 ## Rules
