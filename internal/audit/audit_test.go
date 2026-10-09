@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -205,5 +207,30 @@ func TestRecordInvalidEnvelopeReportsFailureWithoutDBOrBus(t *testing.T) {
 	}
 	if strings.Contains(log.String(), "private-fixture") || !strings.Contains(log.String(), "invalid_json") {
 		t.Fatal("diagnostic must contain category and no event content")
+	}
+}
+
+func TestRecordOversizedDetailRejectedBeforeDBOrBus(t *testing.T) {
+	previousLog := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	defer slog.SetDefault(previousLog)
+	writer := &fakeWriter{}
+	busPublisherMu.RLock()
+	previous := busPublisher
+	busPublisherMu.RUnlock()
+	bus := &invalidEnvelopeBus{}
+	SetBusPublisher(bus)
+	defer SetBusPublisher(previous)
+	event := Event{Action: "cluster.update", ResourceType: "cluster", ResourceID: "synthetic-size", Detail: map[string]any{"value": strings.Repeat("x", jsoncontract.MaxDocumentBytes)}}
+	Record(t.Context(), writer, event)
+	if err := RecordMandatory(t.Context(), writer, event); !errors.Is(err, ErrMandatoryPersistenceUnavailable) {
+		t.Errorf("oversized mandatory detail accepted: %v", err)
+	}
+	q := &outboxCapture{}
+	if _, err := RecordOutbox(t.Context(), q, event, "synthetic-size", OutboxOptions{}); !errors.Is(err, ErrInvalidOutbox) {
+		t.Errorf("oversized outbox detail accepted: %v", err)
+	}
+	if writer.last != nil || bus.calls != 0 || q.arg.Action != "" {
+		t.Errorf("oversized detail reached database/bus: db=%t bus=%d outbox=%t", writer.last != nil, bus.calls, q.arg.Action != "")
 	}
 }
