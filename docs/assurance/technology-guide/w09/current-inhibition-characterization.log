@@ -1,0 +1,60 @@
+=== RUN   TestInhibitionReleasedCompatibilityBoundary
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/valid_empty_value_omitted_regex
+2026/10/09 21:27:31 ERROR request failed request_id=03bbaf5e-cd98-47df-a93c-f3a7ac3cc6e4 status=500 code=create_error internal_detail="Failed to create inhibition"
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/missing_source
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/empty_source
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/missing_target
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/empty_target
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/empty_name
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/empty_label
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/blank_label
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/missing_value
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/null_value
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/null_regex
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/blank_equality_label
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/POST/optional_nulls
+2026/10/09 21:27:31 ERROR request failed request_id=883ad762-1104-45e9-ab5c-5dafcfccff86 status=500 code=create_error internal_detail="Failed to create inhibition"
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/valid_empty_value_omitted_regex
+2026/10/09 21:27:31 ERROR request failed request_id=f4981585-d802-4aa4-b986-10f556ca9d78 status=500 code=update_error internal_detail="Failed to update inhibition"
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/missing_source
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/empty_source
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/missing_target
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/empty_target
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/empty_name
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/empty_label
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/blank_label
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/missing_value
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/null_value
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/null_regex
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/blank_equality_label
+=== RUN   TestInhibitionReleasedCompatibilityBoundary/PUT/optional_nulls
+2026/10/09 21:27:31 ERROR request failed request_id=7d97aa18-b071-488f-b2b1-d2ec517875e1 status=500 code=update_error internal_detail="Failed to update inhibition"
+--- PASS: TestInhibitionReleasedCompatibilityBoundary (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/valid_empty_value_omitted_regex (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/missing_source (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/empty_source (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/missing_target (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/empty_target (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/empty_name (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/empty_label (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/blank_label (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/missing_value (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/null_value (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/null_regex (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/blank_equality_label (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/POST/optional_nulls (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/valid_empty_value_omitted_regex (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/missing_source (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/empty_source (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/missing_target (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/empty_target (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/empty_name (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/empty_label (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/blank_label (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/missing_value (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/null_value (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/null_regex (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/blank_equality_label (0.00s)
+    --- PASS: TestInhibitionReleasedCompatibilityBoundary/PUT/optional_nulls (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	0.053s
