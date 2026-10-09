@@ -5,7 +5,7 @@ The canonical reader is `internal/jsoncontract.DecodeRequest`. It reads at most
 REST middleware still supplies the existing 30 second socket read deadline;
 this reader also enforces the byte bound when a handler runs without middleware.
 An empty optional body returns EOF. Top-level JSON null is not an object DTO.
-Malformed input cannot reach a mutation through the converted decoders.
+Malformed input is rejected before ordinary product mutations. The shell elevation adapter is a deliberate exception: malformed or empty input denies elevation while the existing authorized read-only session creation remains available. Its actual handler fixture verifies that provisioned Roles contain no write verbs. Optional mutation bodies are inspected even with unknown/chunked content length; an empty EOF retains route defaults.
 
 ## Published v1 clients
 

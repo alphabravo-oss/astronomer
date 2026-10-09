@@ -57,7 +57,7 @@ func DecodeRequest(r *http.Request, out any, policy RequestPolicy) error {
 		decoder.DisallowUnknownFields()
 	}
 	if err := decoder.Decode(out); err != nil {
-		return err
+		return safeRequestError(err)
 	}
 	var extra any
 	err := decoder.Decode(&extra)
@@ -67,5 +67,15 @@ func DecodeRequest(r *http.Request, out any, policy RequestPolicy) error {
 	if err == nil {
 		return &Error{"body", "trailing_document"}
 	}
-	return err
+	return safeRequestError(err)
+}
+
+func safeRequestError(err error) error {
+	var tooLarge *http.MaxBytesError
+	var schemaErr *Error
+	if errors.As(err, &tooLarge) || errors.As(err, &schemaErr) || errors.Is(err, io.EOF) {
+		return err
+	}
+	// Syntax/type/unknown-field errors can contain request keys or values.
+	return &Error{"body", "invalid_json"}
 }
