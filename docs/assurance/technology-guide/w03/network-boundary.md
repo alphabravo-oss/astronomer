@@ -1,0 +1,15 @@
+# W03 network boundary evidence
+
+This bounded slice implements canonical destination policy and the actual S3 connectivity probe. W03 remains in progress. No release, airgap, S3 write/read/list/delete/retention, RustFS, or CNPG qualification is claimed.
+
+`internal/httpclient.DestinationPolicy` defaults to bounded public HTTPS. Private exceptions require an exact origin (scheme, canonical host, effective numeric port) and CIDRs. Restricted mode has no public fallback. Plain HTTP is permitted only for an explicitly configured private origin; it does not bypass the prohibited address classes. IPv4-mapped IPv6 is checked after unmapping. Trailing-dot/zone/ambiguous-port aliases, URL credentials, metadata, loopback, link-local, multicast, unspecified addresses, mixed DNS answers outside policy, cross-origin redirects, and response overflow are rejected. Each connection independently resolves and connects directly to the validated IP. Ambient proxies are ignored; explicit proxies must satisfy policy.
+
+The production delivery resolver now uses this canonical transport. Existing resolver source host/CIDR policy semantics remain explicit. Signed asset content cannot modify destination policy.
+
+`BackupS3DestinationPolicy` and `BackupS3CAFile` are typed configuration injected by production composition. Stored storage endpoints cannot grant themselves private permission. The backup probe retains SigV4 authentication and path-style bucket listing, uses the canonical bounded client, and returns redacted errors without upstream response bodies. Existing authenticated API download paths have no functional browser presigning feature; no unused external endpoint configuration was added.
+
+Optional environment bindings were extracted into a configuration helper to reduce the oversized `Load` function. The config generator reads both canonical files, and its fixture contract still rejects missing bindings. The complexity baseline ratchet removes only the reduced `Load` ceiling in this slice.
+
+Validation: selected Go 1.27.2; `go test ./internal/httpclient ./internal/delivery/resolver ./internal/handler -run 'Destination|Network|ProbeS3|BackupS3' -count=1` passed. The transport tests exercise exact host/port/CIDR controls, mapped IPv4/IPv6, mixed DNS answers, check/connect rebinding, direct checked-IP dialing, cross-origin credential removal, and response bounds. S3 tests exercise existing probe behavior plus independent operator authority and upstream-error redaction. The S3 positive response is a unit transport fixture, not a RustFS qualification. `make config-docs-check` passed including three generator fixtures before this bounded commit; root reviews/reruns the isolated commit.
+
+Further W03 work (separate commits): authenticated v2 closed BOM and signed child OCI production/export, actual provisioner injection, durable mirror transitions, disconnected catalog fetch paths, safe catalog import, inventory completeness, chart configuration, and runbook/status contracts.

@@ -102,7 +102,6 @@
     "frontend/src/routes/dashboard/settings/webhooks/new/index.tsx:NewWebhookWizard": 296,
     "internal/auth/group_sync.go:SyncUserGroups": 290,
     "internal/charlie/catalog.go:ReadCapabilityCatalog": 299,
-    "internal/config/config.go:Load": 247,
     "internal/grafanaproxy/promql.go:injectPromQLMatcher": 334,
     "internal/grafanaproxy/rewrite.go:jsonLooksLikeObject": 372,
     "internal/handler/monitoring_operations_runner.go:executeMonitoringOperation": 289,

@@ -1,0 +1,25 @@
+{
+  "base_commit": "feddd759ad498a28c26abc32b2614aa06cc4d920",
+  "release_qualification": false,
+  "schema_version": 1,
+  "slice": "canonical-network-and-s3-probe",
+  "source_sha256": {
+    ".env.example": "aba03e7ba2f2ba294cb0efa98c3bbb1797ea4fda3f80681536f7a6e0eedf527c",
+    "docs/architecture/complexity-baseline.json": "20c41cd1d296b3a3b02e7fc89137617670c655a2bd835a97bc9a56aa3b51782f",
+    "docs/configuration.md": "82f0ed6e0c5f5113be8f0bb52f3d56f0930471fc653b35df8118d7226c967e2d",
+    "internal/config/config.go": "7c50c0d2f472042d0a402f70ecc25664bae49f055cb1bf33c04ec3cbbb3029ac",
+    "internal/config/optional_env.go": "204251e9bbcfe9a2d8ca5c90b959a162d2575d932745634b1779fe78e74cc761",
+    "internal/delivery/resolver/network.go": "da5e8084a24834c56aefc9073cf7d55a10abfef3ccef237c098693fd905424a0",
+    "internal/handler/backups.go": "5e75793efad057e3e0a88d266e12e719ddf29c68f37d4d3e41b535e6d28fd465",
+    "internal/handler/backups_helpers.go": "69772e4fc181929da4288cefd5c3f99f693e3f82624753741a3193955d5b80b8",
+    "internal/handler/backups_network.go": "cc8dfd5d72074c3fe62dfd389122fe56a13bfbe138ddaf26eea434abc956d063",
+    "internal/handler/backups_network_test.go": "2fa313f9e3c7046bf4ecd2657797541e9ea6c8836c3793852da44f039da76197",
+    "internal/httpclient/destinations.go": "960de7cc8ff98b1596fcd3775627afbaefe6796031432ac7795c4d86d5cc14b0",
+    "internal/httpclient/destinations_test.go": "ab6f9f6542830918373f8845d5dce4ab9455d680d6a191e796e6e6c21def9d95",
+    "internal/httpclient/trust.go": "ad22e6ad43dc8ba643acb780674e7c0bf170885a2b012c0a18ad95b138f8574b",
+    "internal/server/app_backup_network.go": "89eb5d9d3b3f6a4ab3f69f51ca53585d4c38082b34e798bcb2c673fecaf07746",
+    "internal/server/app_core_handlers.go": "9da30d687c4d2da550427c538947e6a7dea656c3717822f368cae18b08b821d0",
+    "scripts/generate-config-docs.mjs": "18f7833ab7e817998650538074c37d87e023979854a953cba8b4f31ae06b7ea1"
+  },
+  "work_package": "W03"
+}

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"net"
 	"net/http"
 	"net/netip"
@@ -105,40 +106,9 @@ type safeClientFactory struct{}
 
 func (safeClientFactory) Client(policy NetworkPolicy, tlsConfig *tls.Config, proxyRaw string, limits Limits) (*http.Client, error) {
 	limits = limits.withDefaults()
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = tlsConfig
-	transport.MaxIdleConns = 32
-	transport.MaxIdleConnsPerHost = 4
-	transport.IdleConnTimeout = 30 * time.Second
-	transport.ResponseHeaderTimeout = 30 * time.Second
-	transport.ExpectContinueTimeout = time.Second
-	transport.DialContext = policy.dialContext
-	transport.Proxy = nil
-	if proxyRaw != "" {
-		proxyURL, err := url.Parse(proxyRaw)
-		if err != nil || proxyURL.Scheme != "https" || proxyURL.Hostname() == "" || proxyURL.User != nil {
-			return nil, denied("configured proxy URL is invalid")
-		}
-		if err := policy.ValidateURL(context.Background(), proxyURL.String()); err != nil {
-			return nil, err
-		}
-		transport.Proxy = http.ProxyURL(proxyURL)
-	}
-	client := &http.Client{Timeout: limits.Timeout, Transport: transport}
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if len(via) >= limits.MaxRedirects {
-			return &Error{Code: CodeLimitExceeded, Message: "source redirect limit exceeded"}
-		}
-		if err := policy.ValidateURL(req.Context(), req.URL.String()); err != nil {
-			return err
-		}
-		// Never forward credentials across origins. Go strips Authorization for
-		// many redirects, but this explicit rule also covers custom headers.
-		if len(via) > 0 && !sameOrigin(via[0].URL, req.URL) {
-			req.Header.Del("Authorization")
-			req.Header.Del("Proxy-Authorization")
-		}
-		return nil
+	client, err := httpclient.NewDestinationClient(httpclient.DestinationPolicy{PrivateHosts: policy.AllowedPrivateHosts, PrivateCIDRs: policy.AllowedPrivateCIDRs}, httpclient.DestinationOptions{TLSConfig: tlsConfig, ProxyURL: proxyRaw, Timeout: limits.Timeout, MaxRedirects: limits.MaxRedirects, MaxResponseBytes: limits.MaxArtifactBytes})
+	if err != nil {
+		return nil, denied("source client policy is invalid")
 	}
 	return client, nil
 }
