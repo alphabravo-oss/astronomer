@@ -15,6 +15,15 @@ class JSONGovernanceTests(unittest.TestCase):
         self.actual = {"columns": [{"model": "Record", "column": "payload", "storage":"json_slot"}], "requests": [], "json_calls": []}
         self.policy = {"schema_version": 1, "columns": [{"model": "Record", "column": "payload", "storage":"json_slot", "classification": "versioned_internal", "schema_version": 1, "owner": "domain", "schema": "record-v1", "reader_behavior": "typed_error"}], "requests": [], "nonrequest_decoder_exceptions": [], "json_modules": [], "json_sites": []}
 
+    def test_boolean_is_not_schema_version(self):
+        self.policy["schema_version"]=True
+        with self.assertRaisesRegex(ValueError,"schema_version"):
+            gate.validate(self.actual,self.policy)
+        self.policy["schema_version"]=1
+        self.policy["columns"][0]["schema_version"]=True
+        with self.assertRaisesRegex(ValueError,"classification/version"):
+            gate.validate(self.actual,self.policy)
+
     def test_new_persistence_requires_owner(self):
         self.actual["columns"].append({"model": "NewRecord", "column": "new_payload"})
         with self.assertRaisesRegex(ValueError, "JSON persistence drift"):

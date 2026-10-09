@@ -9,10 +9,10 @@ of claiming every opaque field acquired a strict nested product schema.
 
 Commands on this scoped source:
 
-- `go test -p=2 ./tools/json-governance`: five AST fixtures pass, including import
+- `go test -p=2 ./tools/json-governance`: six AST fixtures pass, including import
   aliases, request/response binding, generic helpers, byte/encrypted storage,
   and shadowed alias/nested request negatives.
-- `python3 scripts/check-json-governance-test.py`: nine negative fixtures pass,
+- `python3 scripts/check-json-governance-test.py`: ten negative fixtures pass,
   including storage representation drift and a new serializer in an already
   owned module requiring a schema/reader owner.
 - `make data-governance-check`: passes with 189 request owners, 205 classified

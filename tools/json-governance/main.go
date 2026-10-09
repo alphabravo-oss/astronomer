@@ -157,7 +157,10 @@ func bodyBinding(expr ast.Expr, names map[string]*ast.Object) bool {
 			return true
 		}
 		name, ok := sel.X.(*ast.Ident)
-		if binding, exists := names[name.Name]; ok && exists && name.Obj == binding {
+		if !ok {
+			return true
+		}
+		if binding, exists := names[name.Name]; exists && name.Obj == binding {
 			bound = true
 		}
 		return true

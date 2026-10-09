@@ -81,3 +81,22 @@ func local(incoming *h.Request) { j := unrelated; j.NewDecoder(incoming.Body) }
 		t.Fatalf("shadowed binding accepted: requests=%+v calls=%+v err=%v", requests, calls, err)
 	}
 }
+
+func TestDiscoverNestedBodyExpressionsDoNotPanicOrBindUnrelatedRequest(t *testing.T) {
+	source := `package example
+import (j "encoding/json"; h "net/http")
+func nested(incoming *h.Request,response *h.Response) {
+ j.NewDecoder(response.HTTPResponse.Body)
+ j.NewDecoder(response.Read().Body)
+ j.NewDecoder(incoming.Body)
+ func(incoming *h.Response) { j.NewDecoder(incoming.Body) }(response)
+}`
+	path := filepath.Join(t.TempDir(), "example.go")
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	requests, calls, err := discoverSites(path, "example.go")
+	if err != nil || len(requests) != 1 || len(calls) != 4 {
+		t.Fatalf("nested body binding: requests=%+v calls=%+v err=%v", requests, calls, err)
+	}
+}
