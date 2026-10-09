@@ -1,6 +1,6 @@
 # Plan 032: Technology-guide alignment and latest-stable modernization
 
-> **Status:** TODO — planning complete; implementation has not started.
+> **Status:** IN PROGRESS — implementation authorized 2026-10-09 on `implement/032-technology-guide`; [execution evidence](./032-evidence/README.md).
 > **Prepared:** 2026-10-09.
 > **Main repository baseline:** `3b378ef16141b9eaac35a1e5fe292e061b69f5f1`.
 > **Catalog baseline:** `3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5`.
