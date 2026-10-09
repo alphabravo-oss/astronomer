@@ -1,3 +1,4 @@
+import { classifyCategory } from "@/lib/api/categorical-values";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { FormShell } from "@/components/ui/form-shell";
@@ -100,13 +101,20 @@ export function CredentialDialog({
   onClose: () => void;
 }) {
   const client = useQueryClient();
+  const authMode = classifyCategory(
+    "DeliverySourceAuthModeValue",
+    source.authMode,
+  );
   const mutation = useMutation({
-    mutationFn: (credential: SourceCredentialInput) =>
-      rotateDeliverySourceCredential(
+    mutationFn: (credential: SourceCredentialInput) => {
+      if (authMode.kind === "unknown")
+        throw new Error("Unsupported source credential mode");
+      return rotateDeliverySourceCredential(
         source.id,
-        { project_id: projectId, auth_mode: source.authMode, credential },
+        { project_id: projectId, auth_mode: authMode.value, credential },
         crypto.randomUUID(),
-      ),
+      );
+    },
     onSuccess: () => {
       client.invalidateQueries({
         queryKey: queryKeys.delivery.sourcesAll(projectId),
@@ -115,6 +123,12 @@ export function CredentialDialog({
       onClose();
     },
   });
+  if (authMode.kind === "unknown")
+    return (
+      <ModalShell title="Unsupported source credentials" onClose={onClose}>
+        <p>This source uses an unsupported credential mode.</p>
+      </ModalShell>
+    );
   return (
     <ModalShell
       title={`Rotate ${source.name} credentials`}
@@ -128,12 +142,12 @@ export function CredentialDialog({
           mutation.mutate(
             credentialFromForm(
               new FormData(event.currentTarget),
-              source.authMode,
+              authMode.value,
             ),
           );
         }}
       >
-        <CredentialFields mode={source.authMode} />
+        <CredentialFields mode={authMode.value} />
         {mutation.isError && <ErrorMessage error={mutation.error} />}
         <div className="flex justify-end gap-2">
           <ActionButton onClick={onClose}>Cancel</ActionButton>

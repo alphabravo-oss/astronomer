@@ -25,7 +25,9 @@ import {
   approveDeliveryRollout,
   getDeliveryRollout,
   listDeliveryRolloutClusters,
+  availableRolloutActions,
   rolloutIsTerminal,
+  type RolloutAction,
   type DeliveryRolloutCluster,
 } from "@/lib/api/delivery-rollouts";
 import { queryKeys } from "@/lib/query-keys";
@@ -37,8 +39,6 @@ import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { toastSuccess } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
-
-type RolloutAction = "pause" | "resume" | "abort" | "retry" | "rollback";
 
 const clusterColumns: Column<DeliveryRolloutCluster>[] = [
   {
@@ -141,16 +141,7 @@ export function RolloutDetailPage() {
   );
   const rollout = detail.data?.data.rollout;
   const plan = detail.data?.data.frozenPlan;
-  const availableActions: RolloutAction[] =
-    rollout?.state === "paused"
-      ? ["resume", "abort", "retry", "rollback"]
-      : rollout?.state === "failed" || rollout?.state === "rollback_failed"
-        ? ["retry", "rollback"]
-        : rollout && !rolloutIsTerminal(rollout.state)
-          ? ["pause", "abort"]
-          : rollout?.state === "succeeded"
-            ? ["rollback"]
-            : [];
+  const availableActions = availableRolloutActions(rollout?.state);
   const pendingGates = plan
     ? [
         {
@@ -288,7 +279,7 @@ export function RolloutDetailPage() {
                     <ActionButton
                       intent="primary"
                       type="button"
-                      disabled={!canApprove}
+                      disabled={!canApprove || rollout?.state === "unsupported"}
                       onClick={() =>
                         setApproval({
                           cohort: gate.cohort,

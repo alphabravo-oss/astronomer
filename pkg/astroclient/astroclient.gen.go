@@ -2684,6 +2684,9 @@ type AgentConnectionDiagnostic struct {
 	Status         string             `json:"status"`
 }
 
+// AgentCredentialState defines model for AgentCredentialState.
+type AgentCredentialState = string
+
 // AgentDiagnostics defines model for AgentDiagnostics.
 type AgentDiagnostics struct {
 	Agent                 ClusterAgentItem                  `json:"agent"`
@@ -2730,6 +2733,9 @@ type AgentLifecycleOperationOperationType string
 
 // AgentLifecycleOperationStatus defines model for AgentLifecycleOperation.Status.
 type AgentLifecycleOperationStatus string
+
+// AgentLifecycleOperationState defines model for AgentLifecycleOperationState.
+type AgentLifecycleOperationState = string
 
 // AgentLifecycleOperationsResponse defines model for AgentLifecycleOperationsResponse.
 type AgentLifecycleOperationsResponse struct {
@@ -2829,6 +2835,9 @@ type AgentProxy struct {
 	HttpsProxy *string `json:"https_proxy,omitempty"`
 	NoProxy    *string `json:"no_proxy,omitempty"`
 }
+
+// AgentRegistrationState defines model for AgentRegistrationState.
+type AgentRegistrationState = string
 
 // AgentResourceValues defines model for AgentResourceValues.
 type AgentResourceValues struct {
@@ -3404,6 +3413,9 @@ type BackupDrillResult struct {
 // BackupDrillResultStatus defines model for BackupDrillResult.Status.
 type BackupDrillResultStatus string
 
+// BackupKnownStatus defines model for BackupKnownStatus.
+type BackupKnownStatus = string
+
 // BackupResponse defines model for BackupResponse.
 type BackupResponse struct {
 	BackupType         *string             `json:"backup_type,omitempty"`
@@ -3818,6 +3830,9 @@ type CharlieAdminAgentReplicaRole string
 // CharlieAdminAgentReplicaState defines model for CharlieAdminAgentReplica.State.
 type CharlieAdminAgentReplicaState string
 
+// CharlieAdminAgentReplicaStateValue defines model for CharlieAdminAgentReplicaStateValue.
+type CharlieAdminAgentReplicaStateValue = string
+
 // CharlieAdminAlertChannel defines model for CharlieAdminAlertChannel.
 type CharlieAdminAlertChannel struct {
 	// DestinationConfigured Indicates a local destination exists without returning its value.
@@ -3857,6 +3872,9 @@ type CharlieAdminAlertDeliveryProofStatus string
 
 // CharlieAdminAlertDeliveryProofTemplateIdentity defines model for CharlieAdminAlertDeliveryProof.TemplateIdentity.
 type CharlieAdminAlertDeliveryProofTemplateIdentity string
+
+// CharlieAdminAlertDeliveryProofStatusValue defines model for CharlieAdminAlertDeliveryProofStatusValue.
+type CharlieAdminAlertDeliveryProofStatusValue = string
 
 // CharlieAdminAlertDeliveryProofView defines model for CharlieAdminAlertDeliveryProofView.
 type CharlieAdminAlertDeliveryProofView struct {
@@ -3958,6 +3976,9 @@ type CharlieAdminDiagnosticCheck struct {
 // CharlieAdminDiagnosticCheckState defines model for CharlieAdminDiagnosticCheck.State.
 type CharlieAdminDiagnosticCheckState string
 
+// CharlieAdminDiagnosticCheckStateValue defines model for CharlieAdminDiagnosticCheckStateValue.
+type CharlieAdminDiagnosticCheckStateValue = string
+
 // CharlieAdminDiagnostics defines model for CharlieAdminDiagnostics.
 type CharlieAdminDiagnostics struct {
 	Checks        []CharlieAdminDiagnosticCheck  `json:"checks"`
@@ -4048,6 +4069,9 @@ type CharlieAdminTriggerEvent struct {
 // CharlieAdminTriggerEventState defines model for CharlieAdminTriggerEvent.State.
 type CharlieAdminTriggerEventState string
 
+// CharlieAdminTriggerEventStateValue defines model for CharlieAdminTriggerEventStateValue.
+type CharlieAdminTriggerEventStateValue = string
+
 // CharlieAdminTriggerRule defines model for CharlieAdminTriggerRule.
 type CharlieAdminTriggerRule struct {
 	CooldownSeconds        int32                               `json:"cooldown_seconds"`
@@ -4095,6 +4119,9 @@ type CharlieApprovalReviewSummary struct {
 	Rollback          *string `json:"rollback,omitempty"`
 }
 
+// CharlieApprovalState defines model for CharlieApprovalState.
+type CharlieApprovalState = string
+
 // CharlieApprovalSummary Bounded display metadata only; signed authority material never crosses the browser boundary.
 type CharlieApprovalSummary struct {
 	Capability         string                       `json:"capability"`
@@ -4118,6 +4145,9 @@ type CharlieApprovalSummaryEffect string
 
 // CharlieApprovalSummaryState defines model for CharlieApprovalSummary.State.
 type CharlieApprovalSummaryState string
+
+// CharlieApprovalSummaryStateValue defines model for CharlieApprovalSummaryStateValue.
+type CharlieApprovalSummaryStateValue = string
 
 // CharlieCommandCatalog defines model for CharlieCommandCatalog.
 type CharlieCommandCatalog struct {
@@ -4158,6 +4188,9 @@ type CharlieCommandRequest struct {
 	Id        string            `json:"id"`
 	Version   string            `json:"version"`
 }
+
+// CharlieConnectionOnboardingState defines model for CharlieConnectionOnboardingState.
+type CharlieConnectionOnboardingState = string
 
 // CharlieContextSearchResult defines model for CharlieContextSearchResult.
 type CharlieContextSearchResult struct {
@@ -4281,6 +4314,12 @@ type CharlieFindingSummaryState string
 // CharlieFindingSummaryWorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
 type CharlieFindingSummaryWorkflowState string
 
+// CharlieFindingSummaryStateValue defines model for CharlieFindingSummaryStateValue.
+type CharlieFindingSummaryStateValue = string
+
+// CharlieFindingSummaryWorkflowStateValue defines model for CharlieFindingSummaryWorkflowStateValue.
+type CharlieFindingSummaryWorkflowStateValue = string
+
 // CharlieFindingTransitionRequest defines model for CharlieFindingTransitionRequest.
 type CharlieFindingTransitionRequest struct {
 	RequestId openapi_types.UUID `json:"request_id"`
@@ -4359,6 +4398,9 @@ type CharlieKubernetesVisibilityRequest struct {
 
 // CharlieKubernetesVisibilityRequestProfile defines model for CharlieKubernetesVisibilityRequest.Profile.
 type CharlieKubernetesVisibilityRequestProfile string
+
+// CharlieKubernetesVisibilityStateValue defines model for CharlieKubernetesVisibilityStateValue.
+type CharlieKubernetesVisibilityStateValue = string
 
 // CharlieMessageRequest defines model for CharlieMessageRequest.
 type CharlieMessageRequest struct {
@@ -4440,6 +4482,9 @@ type CharlieOnboardingStatusSchema string
 // CharlieOnboardingStatusState defines model for CharlieOnboardingStatus.State.
 type CharlieOnboardingStatusState string
 
+// CharlieOnboardingStatusStateValue defines model for CharlieOnboardingStatusStateValue.
+type CharlieOnboardingStatusStateValue = string
+
 // CharlieOperationStatus defines model for CharlieOperationStatus.
 type CharlieOperationStatus struct {
 	Capability   string                       `json:"capability"`
@@ -4455,6 +4500,9 @@ type CharlieOperationStatus struct {
 
 // CharlieOperationStatusEffect defines model for CharlieOperationStatus.Effect.
 type CharlieOperationStatusEffect string
+
+// CharlieReceiptState defines model for CharlieReceiptState.
+type CharlieReceiptState = string
 
 // CharlieSessionCreateRequest defines model for CharlieSessionCreateRequest.
 type CharlieSessionCreateRequest struct {
@@ -4487,6 +4535,9 @@ type CharlieSessionMetadataState string
 
 // CharlieSessionMetadataVisibility defines model for CharlieSessionMetadata.Visibility.
 type CharlieSessionMetadataVisibility string
+
+// CharlieSessionMetadataStateValue defines model for CharlieSessionMetadataStateValue.
+type CharlieSessionMetadataStateValue = string
 
 // CharlieSessionResource defines model for CharlieSessionResource.
 type CharlieSessionResource struct {
@@ -4523,6 +4574,9 @@ type CharlieThreadMetadata struct {
 
 // CharlieThreadMetadataState defines model for CharlieThreadMetadata.State.
 type CharlieThreadMetadataState string
+
+// CharlieThreadMetadataStateValue defines model for CharlieThreadMetadataStateValue.
+type CharlieThreadMetadataStateValue = string
 
 // CharlieTriggerRetryReceipt defines model for CharlieTriggerRetryReceipt.
 type CharlieTriggerRetryReceipt struct {
@@ -4807,6 +4861,9 @@ type ClusterConditionResponse struct {
 // ClusterConditionResponseStatus defines model for ClusterConditionResponse.Status.
 type ClusterConditionResponseStatus string
 
+// ClusterConnectionStatus defines model for ClusterConnectionStatus.
+type ClusterConnectionStatus = string
+
 // ClusterDeployment defines model for ClusterDeployment.
 type ClusterDeployment struct {
 	Action                  ClusterDeploymentAction   `json:"action"`
@@ -4988,6 +5045,9 @@ type ClusterMonitoringConfigEnvelope_Data struct {
 	union json.RawMessage
 }
 
+// ClusterRegistrationPhaseValue defines model for ClusterRegistrationPhaseValue.
+type ClusterRegistrationPhaseValue = string
+
 // ClusterRegistryConfigLegacy Schema not yet fully enumerated; shape is the handler's JSON payload. Permissive object placeholder so every $ref in this spec resolves.
 type ClusterRegistryConfigLegacy map[string]interface{}
 
@@ -5056,6 +5116,9 @@ type ClusterSecurityPolicyCreateRequest struct {
 type ClusterSecurityPolicyEnvelope struct {
 	Data ClusterSecurityPolicy `json:"data"`
 }
+
+// ClusterSecurityPolicySyncStatusValue defines model for ClusterSecurityPolicySyncStatusValue.
+type ClusterSecurityPolicySyncStatusValue = string
 
 // ClusterTemplateApplicationResponse defines model for ClusterTemplateApplicationResponse.
 type ClusterTemplateApplicationResponse struct {
@@ -5654,6 +5717,9 @@ type DeliveryApprovalBinding struct {
 	Required bool   `json:"required"`
 }
 
+// DeliveryApprovalDecision defines model for DeliveryApprovalDecision.
+type DeliveryApprovalDecision = string
+
 // DeliveryAsyncOperationReceipt defines model for DeliveryAsyncOperationReceipt.
 type DeliveryAsyncOperationReceipt struct {
 	AcceptedAt  time.Time                           `json:"accepted_at"`
@@ -5694,6 +5760,9 @@ type DeliveryBundlePage struct {
 	Data       []DeliveryBundle   `json:"data"`
 	Pagination PaginationMetadata `json:"pagination"`
 }
+
+// DeliveryBundleState defines model for DeliveryBundleState.
+type DeliveryBundleState = string
 
 // DeliveryBundleVersion defines model for DeliveryBundleVersion.
 type DeliveryBundleVersion struct {
@@ -5905,6 +5974,9 @@ type DeliveryControllerInventory struct {
 // DeliveryControllerInventoryCompatibilityStatus defines model for DeliveryControllerInventory.CompatibilityStatus.
 type DeliveryControllerInventoryCompatibilityStatus string
 
+// DeliveryDeploymentPhase defines model for DeliveryDeploymentPhase.
+type DeliveryDeploymentPhase = string
+
 // DeliveryEffectiveConfiguration defines model for DeliveryEffectiveConfiguration.
 type DeliveryEffectiveConfiguration struct {
 	AppliedLayers []openapi_types.UUID   `json:"applied_layers"`
@@ -5924,6 +5996,9 @@ type DeliveryEffectiveConfigurationRequest struct {
 	OverrideIds []openapi_types.UUID   `json:"override_ids"`
 	ProjectId   *openapi_types.UUID    `json:"project_id,omitempty"`
 }
+
+// DeliveryFailureAction defines model for DeliveryFailureAction.
+type DeliveryFailureAction = string
 
 // DeliveryFleet defines model for DeliveryFleet.
 type DeliveryFleet struct {
@@ -6208,6 +6283,9 @@ type DeliveryReconciliationPolicyInput struct {
 // DeliveryReconciliationPolicyInputDrift defines model for DeliveryReconciliationPolicyInput.Drift.
 type DeliveryReconciliationPolicyInputDrift string
 
+// DeliveryRendererKind defines model for DeliveryRendererKind.
+type DeliveryRendererKind = string
+
 // DeliveryRendererSpec defines model for DeliveryRendererSpec.
 type DeliveryRendererSpec struct {
 	Helm      *DeliveryHelmRenderer      `json:"helm,omitempty"`
@@ -6273,7 +6351,7 @@ type DeliveryRollout struct {
 	ReleasedClusters    int32                   `json:"released_clusters"`
 	RequestDigest       *string                 `json:"request_digest,omitempty"`
 	StartedAt           *time.Time              `json:"started_at"`
-	State               string                  `json:"state"`
+	State               DeliveryRolloutState    `json:"state"`
 	Strategy            DeliveryRolloutStrategy `json:"strategy"`
 	StrategyDigest      *string                 `json:"strategy_digest,omitempty"`
 	TargetGeneration    int64                   `json:"target_generation"`
@@ -6337,7 +6415,7 @@ type DeliveryRolloutCluster struct {
 	ReleaseOrder            int32                                  `json:"release_order"`
 	ReleasedAt              *time.Time                             `json:"released_at"`
 	RolloutId               openapi_types.UUID                     `json:"rollout_id"`
-	State                   string                                 `json:"state"`
+	State                   DeliveryRolloutClusterState            `json:"state"`
 	UpdatedAt               time.Time                              `json:"updated_at"`
 }
 
@@ -6349,6 +6427,9 @@ type DeliveryRolloutClusterPage struct {
 	Data       []DeliveryRolloutCluster `json:"data"`
 	Pagination PaginationMetadata       `json:"pagination"`
 }
+
+// DeliveryRolloutClusterState defines model for DeliveryRolloutClusterState.
+type DeliveryRolloutClusterState = string
 
 // DeliveryRolloutCohort defines model for DeliveryRolloutCohort.
 type DeliveryRolloutCohort struct {
@@ -6438,6 +6519,9 @@ type DeliveryRolloutStart struct {
 	Strategy           DeliveryRolloutStrategyInput `json:"strategy"`
 }
 
+// DeliveryRolloutState defines model for DeliveryRolloutState.
+type DeliveryRolloutState = string
+
 // DeliveryRolloutStrategy defines model for DeliveryRolloutStrategy.
 type DeliveryRolloutStrategy struct {
 	Canary                    *DeliveryCanaryStrategy          `json:"canary,omitempty"`
@@ -6512,6 +6596,9 @@ type DeliverySourceStatus string
 // DeliverySourceType defines model for DeliverySource.Type.
 type DeliverySourceType string
 
+// DeliverySourceAuthModeValue defines model for DeliverySourceAuthModeValue.
+type DeliverySourceAuthModeValue = string
+
 // DeliverySourceCredentialInput Write-only credential material; never returned by the API.
 type DeliverySourceCredentialInput struct {
 	KnownHosts *string `json:"known_hosts,omitempty"`
@@ -6539,6 +6626,9 @@ type DeliverySourceEnvelope struct {
 	Data DeliverySource `json:"data"`
 }
 
+// DeliverySourceKind defines model for DeliverySourceKind.
+type DeliverySourceKind = string
+
 // DeliverySourcePage defines model for DeliverySourcePage.
 type DeliverySourcePage struct {
 	Data       []DeliverySource   `json:"data"`
@@ -6554,6 +6644,9 @@ type DeliverySourcePatch struct {
 	TrustPolicy *DeliveryTrustPolicy `json:"trust_policy,omitempty"`
 	Url         *string              `json:"url,omitempty"`
 }
+
+// DeliverySourceStatusValue defines model for DeliverySourceStatusValue.
+type DeliverySourceStatusValue = string
 
 // DeliverySourceVerification defines model for DeliverySourceVerification.
 type DeliverySourceVerification struct {
@@ -6598,6 +6691,12 @@ type DeliverySourceWriteAuthMode string
 
 // DeliverySourceWriteType defines model for DeliverySourceWrite.Type.
 type DeliverySourceWriteType string
+
+// DeliveryStrategyKind defines model for DeliveryStrategyKind.
+type DeliveryStrategyKind = string
+
+// DeliverySystemAssignmentPhase defines model for DeliverySystemAssignmentPhase.
+type DeliverySystemAssignmentPhase = string
 
 // DeliverySystemCompatibility defines model for DeliverySystemCompatibility.
 type DeliverySystemCompatibility struct {
@@ -6663,30 +6762,33 @@ type DeliverySystemComponentUpdateState string
 
 // DeliverySystemRelease defines model for DeliverySystemRelease.
 type DeliverySystemRelease struct {
-	AgentImage             *string                 `json:"agent_image,omitempty"`
-	AgentVersion           *string                 `json:"agent_version,omitempty"`
-	ArtifactDigest         *string                 `json:"artifact_digest,omitempty"`
-	ArtifactUrl            *string                 `json:"artifact_url,omitempty"`
-	CrdStorageVersion      *string                 `json:"crd_storage_version,omitempty"`
-	CreatedAt              *time.Time              `json:"created_at,omitempty"`
-	CreatedBy              *openapi_types.UUID     `json:"created_by"`
-	CredentialEpoch        *int64                  `json:"credential_epoch,omitempty"`
-	CredentialKeyVersion   *int32                  `json:"credential_key_version,omitempty"`
-	DistributionDigest     *string                 `json:"distribution_digest,omitempty"`
-	Id                     *openapi_types.UUID     `json:"id,omitempty"`
-	Interval               *string                 `json:"interval,omitempty"`
-	MaximumKubernetes      *string                 `json:"maximum_kubernetes,omitempty"`
-	MinimumKubernetes      *string                 `json:"minimum_kubernetes,omitempty"`
-	PreviousStorageVersion *string                 `json:"previous_storage_version,omitempty"`
-	ReleaseSequence        *int64                  `json:"release_sequence,omitempty"`
-	ReleasedAt             *time.Time              `json:"released_at"`
-	RetiredAt              *time.Time              `json:"retired_at"`
-	SpecDigest             *string                 `json:"spec_digest,omitempty"`
-	State                  *string                 `json:"state,omitempty"`
-	Timeout                *string                 `json:"timeout,omitempty"`
-	VerificationPolicy     *map[string]interface{} `json:"verification_policy,omitempty"`
-	Version                *string                 `json:"version,omitempty"`
+	AgentImage             *string                     `json:"agent_image,omitempty"`
+	AgentVersion           *string                     `json:"agent_version,omitempty"`
+	ArtifactDigest         *string                     `json:"artifact_digest,omitempty"`
+	ArtifactUrl            *string                     `json:"artifact_url,omitempty"`
+	CrdStorageVersion      *string                     `json:"crd_storage_version,omitempty"`
+	CreatedAt              *time.Time                  `json:"created_at,omitempty"`
+	CreatedBy              *openapi_types.UUID         `json:"created_by"`
+	CredentialEpoch        *int64                      `json:"credential_epoch,omitempty"`
+	CredentialKeyVersion   *int32                      `json:"credential_key_version,omitempty"`
+	DistributionDigest     *string                     `json:"distribution_digest,omitempty"`
+	Id                     *openapi_types.UUID         `json:"id,omitempty"`
+	Interval               *string                     `json:"interval,omitempty"`
+	MaximumKubernetes      *string                     `json:"maximum_kubernetes,omitempty"`
+	MinimumKubernetes      *string                     `json:"minimum_kubernetes,omitempty"`
+	PreviousStorageVersion *string                     `json:"previous_storage_version,omitempty"`
+	ReleaseSequence        *int64                      `json:"release_sequence,omitempty"`
+	ReleasedAt             *time.Time                  `json:"released_at"`
+	RetiredAt              *time.Time                  `json:"retired_at"`
+	SpecDigest             *string                     `json:"spec_digest,omitempty"`
+	State                  *DeliverySystemReleaseState `json:"state,omitempty"`
+	Timeout                *string                     `json:"timeout,omitempty"`
+	VerificationPolicy     *map[string]interface{}     `json:"verification_policy,omitempty"`
+	Version                *string                     `json:"version,omitempty"`
 }
+
+// DeliverySystemReleaseState defines model for DeliverySystemReleaseState.
+type DeliverySystemReleaseState = string
 
 // DeliverySystemResource defines model for DeliverySystemResource.
 type DeliverySystemResource struct {
@@ -6702,24 +6804,27 @@ type DeliverySystemResource struct {
 
 // DeliverySystemRollout defines model for DeliverySystemRollout.
 type DeliverySystemRollout struct {
-	CompletedAt       *time.Time              `json:"completed_at"`
-	CreatedAt         *time.Time              `json:"created_at,omitempty"`
-	FailedClusters    *int32                  `json:"failed_clusters,omitempty"`
-	FencingGeneration *int64                  `json:"fencing_generation,omitempty"`
-	Id                *openapi_types.UUID     `json:"id,omitempty"`
-	LastErrorCode     *string                 `json:"last_error_code,omitempty"`
-	PreviousReleaseId *openapi_types.UUID     `json:"previous_release_id"`
-	ProgressDeadline  *time.Time              `json:"progress_deadline"`
-	ReadyClusters     *int32                  `json:"ready_clusters,omitempty"`
-	ReleaseId         *openapi_types.UUID     `json:"release_id,omitempty"`
-	ReleasedClusters  *int32                  `json:"released_clusters,omitempty"`
-	StartedAt         *time.Time              `json:"started_at"`
-	State             *string                 `json:"state,omitempty"`
-	Strategy          *map[string]interface{} `json:"strategy,omitempty"`
-	StrategyDigest    *string                 `json:"strategy_digest,omitempty"`
-	TotalClusters     *int32                  `json:"total_clusters,omitempty"`
-	UpdatedAt         *time.Time              `json:"updated_at,omitempty"`
+	CompletedAt       *time.Time                  `json:"completed_at"`
+	CreatedAt         *time.Time                  `json:"created_at,omitempty"`
+	FailedClusters    *int32                      `json:"failed_clusters,omitempty"`
+	FencingGeneration *int64                      `json:"fencing_generation,omitempty"`
+	Id                *openapi_types.UUID         `json:"id,omitempty"`
+	LastErrorCode     *string                     `json:"last_error_code,omitempty"`
+	PreviousReleaseId *openapi_types.UUID         `json:"previous_release_id"`
+	ProgressDeadline  *time.Time                  `json:"progress_deadline"`
+	ReadyClusters     *int32                      `json:"ready_clusters,omitempty"`
+	ReleaseId         *openapi_types.UUID         `json:"release_id,omitempty"`
+	ReleasedClusters  *int32                      `json:"released_clusters,omitempty"`
+	StartedAt         *time.Time                  `json:"started_at"`
+	State             *DeliverySystemRolloutState `json:"state,omitempty"`
+	Strategy          *map[string]interface{}     `json:"strategy,omitempty"`
+	StrategyDigest    *string                     `json:"strategy_digest,omitempty"`
+	TotalClusters     *int32                      `json:"total_clusters,omitempty"`
+	UpdatedAt         *time.Time                  `json:"updated_at,omitempty"`
 }
+
+// DeliverySystemRolloutState defines model for DeliverySystemRolloutState.
+type DeliverySystemRolloutState = string
 
 // DeliverySystemVolume defines model for DeliverySystemVolume.
 type DeliverySystemVolume struct {
@@ -6871,6 +6976,9 @@ type DeliveryTrustPolicy struct {
 
 // DeliveryTrustPolicyProvider defines model for DeliveryTrustPolicy.Provider.
 type DeliveryTrustPolicyProvider string
+
+// DeliveryVerificationStatus defines model for DeliveryVerificationStatus.
+type DeliveryVerificationStatus = string
 
 // DeliveryVersionIdentity defines model for DeliveryVersionIdentity.
 type DeliveryVersionIdentity struct {
@@ -7057,6 +7165,9 @@ type DexSettingsRequest struct {
 	RuntimeSecretName *string `json:"runtime_secret_name,omitempty"`
 	ServiceName       *string `json:"service_name,omitempty"`
 }
+
+// DurableOperationStatus defines model for DurableOperationStatus.
+type DurableOperationStatus = string
 
 // Error defines model for Error.
 type Error struct {
@@ -7660,7 +7771,7 @@ type InhibitionEnvelope struct {
 	Data InhibitionResponse `json:"data"`
 }
 
-// InhibitionMatcher defines model for InhibitionMatcher.
+// InhibitionMatcher Label/value keys are required; an empty value matches an empty label value. Omitted is_regex means false.
 type InhibitionMatcher struct {
 	IsRegex *bool  `json:"is_regex,omitempty"`
 	Label   string `json:"label"`
@@ -7680,7 +7791,7 @@ type InhibitionPage struct {
 	Pagination PaginationMetadata   `json:"pagination"`
 }
 
-// InhibitionRequest Alert inhibition rule create/update body (P-03).
+// InhibitionRequest Full create/update body. Source and target require at least one matcher. Omitted or null equal_labels normalizes to an empty array; omitted or null enabled defaults to true.
 type InhibitionRequest struct {
 	Enabled        *bool                `json:"enabled,omitempty"`
 	EqualLabels    *[]string            `json:"equal_labels,omitempty"`
@@ -7699,6 +7810,20 @@ type InhibitionResponse struct {
 	SourceMatchers []InhibitionMatcherResponse `json:"source_matchers"`
 	TargetMatchers []InhibitionMatcherResponse `json:"target_matchers"`
 	UpdatedAt      time.Time                   `json:"updated_at"`
+}
+
+// InhibitionValidationErrorEnvelope defines model for InhibitionValidationErrorEnvelope.
+type InhibitionValidationErrorEnvelope struct {
+	Error struct {
+		Code   string `json:"code"`
+		Fields []struct {
+			Field   string `json:"field"`
+			Message string `json:"message"`
+			Rule    string `json:"rule"`
+		} `json:"fields"`
+		Message   string  `json:"message"`
+		RequestId *string `json:"request_id,omitempty"`
+	} `json:"error"`
 }
 
 // InstalledAppEnriched defines model for InstalledAppEnriched.
@@ -8879,6 +9004,9 @@ type NodeOperationEnvelope struct {
 	Data NodeOperation `json:"data"`
 }
 
+// NodeOperationState defines model for NodeOperationState.
+type NodeOperationState = string
+
 // NodeSummary defines model for NodeSummary.
 type NodeSummary struct {
 	Architecture         *string                   `json:"architecture,omitempty"`
@@ -9200,6 +9328,9 @@ type PodSecurityTemplateWriteRequestEnforceLevel string
 
 // PodSecurityTemplateWriteRequestWarnLevel defines model for PodSecurityTemplateWriteRequest.WarnLevel.
 type PodSecurityTemplateWriteRequestWarnLevel string
+
+// PollingOperationStatus defines model for PollingOperationStatus.
+type PollingOperationStatus = string
 
 // PrincipalConnectorStatus defines model for PrincipalConnectorStatus.
 type PrincipalConnectorStatus struct {
@@ -10016,6 +10147,9 @@ type ResourceSearchResult_Results_Item struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// RestoreKnownStatus defines model for RestoreKnownStatus.
+type RestoreKnownStatus = string
+
 // RestoreOperationResponse defines model for RestoreOperationResponse.
 type RestoreOperationResponse struct {
 	BackupId           *openapi_types.UUID `json:"backup_id,omitempty"`
@@ -10367,6 +10501,9 @@ type SecurityControllerStatusHealth string
 type SecurityControllerStatusEnvelope struct {
 	Data SecurityControllerStatus `json:"data"`
 }
+
+// SecurityScannerState defines model for SecurityScannerState.
+type SecurityScannerState = string
 
 // ServiceMeshDetectionResponse defines model for ServiceMeshDetectionResponse.
 type ServiceMeshDetectionResponse struct {
@@ -82961,6 +83098,7 @@ type PostAdminAlertingInhibitionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON201      *InhibitionEnvelope
+	JSON422      *InhibitionValidationErrorEnvelope
 }
 
 // Status returns HTTPResponse.Status
@@ -83026,6 +83164,7 @@ type PutAdminAlertingInhibitionsByIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *InhibitionEnvelope
+	JSON422      *InhibitionValidationErrorEnvelope
 }
 
 // Status returns HTTPResponse.Status
@@ -115712,6 +115851,13 @@ func ParsePostAdminAlertingInhibitionsResponse(rsp *http.Response) (*PostAdminAl
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest InhibitionValidationErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
 	}
 
 	return response, nil
@@ -115779,6 +115925,13 @@ func ParsePutAdminAlertingInhibitionsByIdResponse(rsp *http.Response) (*PutAdmin
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest InhibitionValidationErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	}
 

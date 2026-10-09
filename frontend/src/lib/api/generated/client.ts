@@ -3,7 +3,8 @@
 
 import type { AxiosRequestConfig, AxiosResponseHeaders, RawAxiosResponseHeaders } from 'axios';
 import api from '@/lib/api/transport';
-import type { OpenAPIOperationId, OpenAPIOperations } from '@/types/openapi.generated';
+import { validateCategoricalResponse } from '@/lib/api/categorical-values';
+import type { OpenAPIOperationId, OpenAPIOperations, OpenAPIReadOperations } from '@/types/openapi.generated';
 
 export interface OpenAPIRequestOptions {
   signal?: AbortSignal;
@@ -892,7 +893,7 @@ export const operationMetadata = {
 export async function executeOpenAPIOperationWithResponse<K extends OpenAPIOperationId>(
   operationId: K,
   args: OpenAPIArguments<K>,
-): Promise<OpenAPIResponse<OpenAPIOperations[K]['response']>> {
+): Promise<OpenAPIResponse<OpenAPIReadOperations[K]['response']>> {
   const metadata = operationMetadata[operationId];
   const values = args as OpenAPIRequestOptions & { path?: Record<string, unknown>; query?: Record<string, unknown>; headerParams?: Record<string, unknown>; body?: unknown };
   let url: string = metadata.path;
@@ -910,13 +911,14 @@ export async function executeOpenAPIOperationWithResponse<K extends OpenAPIOpera
     headers: { ...parameterHeaders, ...values.headers }, responseType: metadata.responseType,
   } as AxiosRequestConfig;
   const response = await api.request(config);
-  return { data: response.data as OpenAPIOperations[K]['response'], headers: response.headers, status: response.status };
+  const checked = validateCategoricalResponse(operationId, response.status, response.data);
+  return { data: checked as OpenAPIReadOperations[K]['response'], headers: response.headers, status: response.status };
 }
 
 export async function executeOpenAPIOperation<K extends OpenAPIOperationId>(
   operationId: K,
   args: OpenAPIArguments<K>,
-): Promise<OpenAPIOperations[K]['response']> {
+): Promise<OpenAPIReadOperations[K]['response']> {
   return (await executeOpenAPIOperationWithResponse(operationId, args)).data;
 }
 

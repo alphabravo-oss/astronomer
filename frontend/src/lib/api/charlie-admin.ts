@@ -21,7 +21,7 @@ import {
   charlieActivation,
 } from "@/lib/api/generated/client";
 import { createIdempotencyKey } from "@/lib/api/idempotency";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
 import {
   mapCharlieAccess,
@@ -39,7 +39,7 @@ import {
 
 export type CharlieMode = "disabled" | "read_only" | "approval" | "auto";
 export type HealthState =
-  "healthy" | "degraded" | "unavailable" | "inactive" | "ready" | "unknown";
+  OpenAPIComponents["schemas"]["CharlieAdminDiagnosticCheck"]["state"];
 
 export interface CharlieOnboardingInput {
   package: Record<string, unknown>;
@@ -76,7 +76,7 @@ export interface CharlieOnboardingView {
   replicaCount: number;
   issuedAt: string;
   expiresAt: string;
-  state: "validated" | "consumed";
+  state: OpenAPIComponents["schemas"]["CharlieOnboardingStatus"]["state"];
   idempotent: boolean;
 }
 export interface CharlieConnectionView {
@@ -104,7 +104,7 @@ export interface CharlieAgentView {
     ordinal: number;
     instanceId?: string;
     role: "leader" | "standby" | "unknown";
-    state: "ready" | "degraded" | "unavailable" | "unknown";
+    state: OpenAPIComponents["schemas"]["CharlieAdminAgentReplica"]["state"];
     lastHeartbeatAt?: string;
     version?: string;
   }>;
@@ -210,13 +210,7 @@ export type CharlieActionPolicyInput = Pick<
   | "cooldownSeconds"
 >;
 export type CharlieTriggerEventState =
-  | "pending"
-  | "dispatching"
-  | "dispatched"
-  | "retry"
-  | "dead"
-  | "completed"
-  | "suppressed";
+  OpenAPIComponents["schemas"]["CharlieAdminTriggerEvent"]["state"];
 export interface CharlieTriggerEvent {
   id: string;
   retryOfEventId?: string;
@@ -279,7 +273,7 @@ export interface CharlieKubernetesVisibilityView {
   schema: "charlie.kubernetes-visibility/v1";
   profile: CharlieKubernetesVisibilityProfile;
   revision: number;
-  state: "not_configured" | "disabled" | "enabled";
+  state: OpenAPIComponents["schemas"]["CharlieKubernetesVisibility"]["state"];
   instanceId: string;
   namespaces: string[];
   productOwnedOnly: true;
@@ -325,7 +319,10 @@ export async function validateCharlieOnboarding(
   signal?: AbortSignal,
 ): Promise<CharlieOnboardingView> {
   return mapCharlieOnboarding(
-    await adminCharlieOnboardingValidate({ body: onboardingWire(input), signal }),
+    await adminCharlieOnboardingValidate({
+      body: onboardingWire(input),
+      signal,
+    }),
   );
 }
 export async function consumeCharlieOnboarding(
@@ -333,7 +330,10 @@ export async function consumeCharlieOnboarding(
   signal?: AbortSignal,
 ): Promise<CharlieOnboardingView> {
   return mapCharlieOnboarding(
-    await adminCharlieOnboardingConsume({ body: onboardingWire(input), signal }),
+    await adminCharlieOnboardingConsume({
+      body: onboardingWire(input),
+      signal,
+    }),
   );
 }
 export async function validateCharlieConnect(
@@ -606,7 +606,7 @@ export async function deleteCharlieAutomationRule(
   });
 }
 export async function listCharlieTriggerEvents(
-  state: CharlieTriggerEventState = "dead",
+  state: Exclude<CharlieTriggerEventState, "unsupported"> = "dead",
   offset = 0,
   limit = 20,
   signal?: AbortSignal,
@@ -632,7 +632,8 @@ export async function retryCharlieTriggerEvent(
     signal,
   });
   const receipt = response.data;
-  if (!receipt) throw new Error("Charlie trigger retry omitted its operation receipt");
+  if (!receipt)
+    throw new Error("Charlie trigger retry omitted its operation receipt");
   return {
     operationId: receipt.operation_id,
     eventId: receipt.event_id,

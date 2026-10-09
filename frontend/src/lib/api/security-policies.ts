@@ -15,7 +15,7 @@ import type {
   PaginatedResponse,
 } from "@/types";
 import { mapPage } from "./pagination";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 
 type Schemas = OpenAPIComponents["schemas"];
 

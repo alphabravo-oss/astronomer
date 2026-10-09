@@ -8,9 +8,9 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 
 ## Scan Scope
 
-- Worker Go files scanned: 105
-- Handler Go files scanned: 354
-- Production source files scanned: 495
+- Worker Go files scanned: 106
+- Handler Go files scanned: 357
+- Production source files scanned: 499
 - Task constants resolved: 160
 - Worker handler registrations: 91
 - Periodic schedules: 62
@@ -160,7 +160,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/handler/admin_management_backup_operations.go:127`](internal/handler/admin_management_backup_operations.go:127) - `if _, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{DedupeKey: "management_backup_operation:" + operation.ID.String(), MaxRetry: 20, Timeout: 5 * time.Minute, MaxDeliveryAttempts: 30}); err != nil {`
 - [`internal/handler/admin_queues.go:294`](internal/handler/admin_queues.go:294) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/apiserver_allowlist.go:457`](internal/handler/apiserver_allowlist.go:457) - `_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
-- [`internal/handler/catalog_repositories.go:395`](internal/handler/catalog_repositories.go:395) - `outbox, mutationErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
+- [`internal/handler/catalog_repositories.go:394`](internal/handler/catalog_repositories.go:394) - `outbox, mutationErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/cloud_credentials_targets.go:113`](internal/handler/cloud_credentials_targets.go:113) - `_, err = q.UpsertCloudCredentialMaterializationWithTaskOutbox(ctx, sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams{`
 - [`internal/handler/cloud_credentials_targets.go:142`](internal/handler/cloud_credentials_targets.go:142) - `err = q.DeleteCloudCredentialMaterializationWithTaskOutbox(ctx, sqlc.DeleteCloudCredentialMaterializationWithTaskOutboxParams{`
 - [`internal/handler/cloud_credentials.go:69`](internal/handler/cloud_credentials.go:69) - `UpsertCloudCredentialMaterializationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams) (sqlc.CloudCredentialMaterialization, error)`
@@ -184,9 +184,9 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/worker/tasks/gitops_sync.go:532`](internal/worker/tasks/gitops_sync.go:532) - `if _, err := EnqueueTaskOutbox(ctx, runtime.Deps.TaskOutbox, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/notification_dispatch.go:120`](internal/worker/tasks/notification_dispatch.go:120) - `_, err = EnqueueTaskOutbox(ctx, q, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/security_scan.go:255`](internal/worker/tasks/security_scan.go:255) - `_, err = EnqueueTaskOutbox(ctx, runtime.Deps.Outbox, task, TaskOutboxOptions{`
-- [`internal/worker/tasks/task_outbox_enqueue.go:16`](internal/worker/tasks/task_outbox_enqueue.go:16) - `UpsertTaskOutbox(ctx context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)`
-- [`internal/worker/tasks/task_outbox_enqueue.go:29`](internal/worker/tasks/task_outbox_enqueue.go:29) - `func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task, opts TaskOutboxOptions) (sqlc.TaskOutbox, error) {`
-- [`internal/worker/tasks/task_outbox_enqueue.go:47`](internal/worker/tasks/task_outbox_enqueue.go:47) - `return q.UpsertTaskOutbox(ctx, sqlc.UpsertTaskOutboxParams{`
+- [`internal/worker/tasks/task_outbox_enqueue.go:17`](internal/worker/tasks/task_outbox_enqueue.go:17) - `UpsertTaskOutbox(ctx context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)`
+- [`internal/worker/tasks/task_outbox_enqueue.go:30`](internal/worker/tasks/task_outbox_enqueue.go:30) - `func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task, opts TaskOutboxOptions) (sqlc.TaskOutbox, error) {`
+- [`internal/worker/tasks/task_outbox_enqueue.go:56`](internal/worker/tasks/task_outbox_enqueue.go:56) - `return q.UpsertTaskOutbox(ctx, sqlc.UpsertTaskOutboxParams{`
 
 ## Durable Operation Tables
 
@@ -238,7 +238,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `agent_token_rotation` |1 |[`internal/handler/clusters_registration.go:264`](internal/handler/clusters_registration.go:264) |
 | `apiserver_allowlist_reconcile` |1 |[`internal/handler/apiserver_allowlist.go:391`](internal/handler/apiserver_allowlist.go:391) |
 | `catalog` |4 |[`internal/handler/catalog_installations.go:248`](internal/handler/catalog_installations.go:248)<br>[`internal/handler/catalog_installations.go:328`](internal/handler/catalog_installations.go:328)<br>[`internal/handler/catalog_installations.go:602`](internal/handler/catalog_installations.go:602)<br>[`internal/handler/catalog_installations.go:680`](internal/handler/catalog_installations.go:680) |
-| `catalog_repository_sync` |1 |[`internal/handler/catalog_repositories.go:359`](internal/handler/catalog_repositories.go:359) |
+| `catalog_repository_sync` |1 |[`internal/handler/catalog_repositories.go:358`](internal/handler/catalog_repositories.go:358) |
 | `cluster_template_apply` |1 |[`internal/handler/cluster_templates_applications.go:103`](internal/handler/cluster_templates_applications.go:103) |
 | `cluster_template_reapply` |1 |[`internal/handler/cluster_templates_applications.go:226`](internal/handler/cluster_templates_applications.go:226) |
 | `cluster-snapshot` |1 |[`internal/handler/cluster_snapshots_crud.go:62`](internal/handler/cluster_snapshots_crud.go:62) |

@@ -1,0 +1,3115 @@
+{
+  "authority": "docs/openapi.yaml#/components/schemas",
+  "boundaries": [
+    "Canonical categories have one value authority. Generated read schemas are separate from strict write schemas and can represent unsupported strings safely; no raw future value is coerced to a known successful state.",
+    "Backup/restore status columns and v1 wire fields stay open. Known running plus historical in_progress are recognized; missing or future values become neutral unknown in views. No new database CHECK or migration silently rejects historical rows.",
+    "Kubernetes resource kinds, volume phases, provider/distribution names, product-bridge extension maps and diagnostic details stay open where upstream owns their vocabulary. DeliveryPhaseBadge now maps unrecognized labels to neutral styling rather than pending/success. Such open strings never narrow to closed domain unions via a double assertion.",
+    "Charlie central approval rejected/dispatched is distinct from product-bridge summary denied. Onboarding central six-state lifecycle remains distinct from the bridge two-state proof. They have separate canonical identities; no blind union or coercion equates them.",
+    "Operational rollout controls are sourced from control.go actionTransition; scheduler state transitions differ deliberately. Draft/rolling_back/rollback_failed expose no operational controls; resolving permits pause in the control writer.",
+    "Ancillary existing closed inline OpenAPI enums and database constraints remain authoritative in their existing domains; inventory does not claim they were rewritten into the 41 focused category schemas.",
+    "No migration073 required: all retained rollout cluster terminal values already exist in production CHECK sets. Dedicated real database proof is baseline71; pending W09 migration072 and final canonical schema72 are separate combined integration gates."
+  ],
+  "counts": {
+    "boundChecks": 22,
+    "initialDiscreteChecks": 98,
+    "inventoriedDirectFields": 117,
+    "namedCategories": 41,
+    "namedWireBindings": 51
+  },
+  "databaseChecks": [
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "agent_connection_event_type",
+      "values": [
+        "connected",
+        "disconnected",
+        "reconnecting",
+        "auth_failed",
+        "registration_failed",
+        "heartbeat_stale",
+        "api_unreachable",
+        "protocol_incompatible",
+        "credential_expired",
+        "credential_revoked",
+        "upgrade_failed",
+        "upgrade_stalled",
+        "audit_ingestion_failed",
+        "metrics_ingestion_failed",
+        "state_ingestion_failed",
+        "command_expired",
+        "command_failed"
+      ]
+    },
+    {
+      "category": "AgentLifecycleOperationState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "agent_lifecycle_operations_status_check",
+      "values": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "agent_ops_audit_ingestion",
+      "values": [
+        "unknown",
+        "healthy",
+        "degraded",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "agent_ops_auth_state",
+      "values": [
+        "unknown",
+        "ok",
+        "failed",
+        "expired",
+        "revoked"
+      ]
+    },
+    {
+      "category": "AgentCredentialState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "agent_ops_credential_state",
+      "values": [
+        "unknown",
+        "valid",
+        "expiring",
+        "expired",
+        "revoked"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "agent_ops_metrics_ingestion",
+      "values": [
+        "unknown",
+        "healthy",
+        "degraded",
+        "failed"
+      ]
+    },
+    {
+      "category": "AgentRegistrationState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "agent_ops_registration_state",
+      "values": [
+        "unknown",
+        "registered",
+        "failed",
+        "rejected"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "agent_ops_state_ingestion",
+      "values": [
+        "unknown",
+        "healthy",
+        "degraded",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "agent_ops_upgrade_state",
+      "values": [
+        "unknown",
+        "current",
+        "available",
+        "pending",
+        "running",
+        "stalled",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "alert_anomaly_dir_valid",
+      "values": [
+        "above",
+        "below",
+        "either"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "alert_rule_kind_valid",
+      "values": [
+        "threshold",
+        "anomaly"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "allowlist_mode_valid",
+      "values": [
+        "enforce",
+        "monitor",
+        "disabled"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "allowlist_status_valid",
+      "values": [
+        "synced",
+        "drifting",
+        "pending",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "audit_action_class_valid",
+      "values": [
+        "mutation",
+        "read",
+        "auth",
+        "system"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "audit_action_class_valid",
+      "values": [
+        "mutation",
+        "read",
+        "auth",
+        "system"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_approval_decision_valid",
+      "values": [
+        "approve",
+        "reject"
+      ]
+    },
+    {
+      "category": "CharlieApprovalState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "charlie_approval_state",
+      "values": [
+        "pending",
+        "approved",
+        "rejected",
+        "expired",
+        "dispatched"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_receipt_effect",
+      "values": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "category": "CharlieReceiptState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "charlie_receipt_state",
+      "values": [
+        "claimed",
+        "blocked",
+        "waiting_approval",
+        "deferred",
+        "dispatched",
+        "ambiguous",
+        "verifying",
+        "succeeded",
+        "failed",
+        "fenced"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_receipt_terminal_result",
+      "values": [
+        "blocked",
+        "deferred",
+        "succeeded",
+        "failed",
+        "fenced"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_alert_delivery_kind",
+      "values": [
+        "initial",
+        "escalation"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_alert_delivery_severity",
+      "values": [
+        "info",
+        "low",
+        "medium",
+        "warning",
+        "high",
+        "critical"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_alert_delivery_status",
+      "values": [
+        "queued",
+        "delivering",
+        "retry",
+        "delivered",
+        "suppressed",
+        "dead"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_alert_policy_severity",
+      "values": [
+        "info",
+        "low",
+        "medium",
+        "warning",
+        "high",
+        "critical"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_artifact_pending_state",
+      "values": [
+        "idle",
+        "claiming",
+        "claimed",
+        "materialized"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_connection_health",
+      "values": [
+        "inactive",
+        "installing",
+        "ready",
+        "degraded",
+        "unavailable",
+        "disconnected",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_connection_kubernetes_visibility_profile",
+      "values": [
+        "disabled",
+        "product_namespace",
+        "cluster_diagnostics"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_connection_kubernetes_visibility_rediscovery",
+      "values": [
+        "ready",
+        "required"
+      ]
+    },
+    {
+      "category": "CharlieConnectionOnboardingState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "charlie_connection_onboarding_state",
+      "values": [
+        "validated",
+        "secrets_pending",
+        "secrets_written",
+        "consumed",
+        "active",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_connection_requested_mode",
+      "values": [
+        "disabled",
+        "read_only",
+        "approval",
+        "auto"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_connection_verified_mode",
+      "values": [
+        "disabled",
+        "read_only",
+        "approval",
+        "auto"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_delegation_principal",
+      "values": [
+        "user",
+        "service"
+      ]
+    },
+    {
+      "category": "CharlieFindingSummaryStateValue",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "charlie_finding_decision_status",
+      "values": [
+        "open",
+        "acknowledged",
+        "dismissed",
+        "resolved",
+        "expired"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_finding_decision_value",
+      "values": [
+        "acknowledge",
+        "start_remediation",
+        "request_verification",
+        "dismiss",
+        "resolve"
+      ]
+    },
+    {
+      "category": "CharlieFindingSummaryWorkflowStateValue",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "charlie_finding_decision_workflow",
+      "values": [
+        "approval_pending",
+        "manual_remediation_required",
+        "remediation_in_progress",
+        "verification_pending",
+        "resolved",
+        "rejected",
+        "dismissed",
+        "expired"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_finding_mode",
+      "values": [
+        "read_only",
+        "approval",
+        "auto"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_finding_severity",
+      "values": [
+        "info",
+        "low",
+        "medium",
+        "warning",
+        "high",
+        "critical"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_finding_source",
+      "values": [
+        "user",
+        "trigger",
+        "system"
+      ]
+    },
+    {
+      "category": "CharlieFindingSummaryStateValue",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "charlie_finding_status",
+      "values": [
+        "open",
+        "acknowledged",
+        "dismissed",
+        "resolved",
+        "expired"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_finding_workflow_consistency",
+      "values": [
+        "open",
+        "acknowledged"
+      ]
+    },
+    {
+      "category": "CharlieFindingSummaryWorkflowStateValue",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "charlie_finding_workflow_state",
+      "values": [
+        "approval_pending",
+        "manual_remediation_required",
+        "remediation_in_progress",
+        "verification_pending",
+        "resolved",
+        "rejected",
+        "dismissed",
+        "expired"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_interactive_threads_state_chk",
+      "values": [
+        "active",
+        "archived"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_session_source",
+      "values": [
+        "user",
+        "event"
+      ]
+    },
+    {
+      "category": "CharlieSessionMetadataStateValue",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "charlie_session_state",
+      "values": [
+        "creating",
+        "active",
+        "waiting_approval",
+        "completed",
+        "aborted",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_session_visibility",
+      "values": [
+        "private",
+        "incident"
+      ]
+    },
+    {
+      "category": "CharlieAdminTriggerEventStateValue",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "charlie_trigger_event_state",
+      "values": [
+        "pending",
+        "dispatching",
+        "dispatched",
+        "retry",
+        "dead",
+        "completed",
+        "suppressed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_trigger_mode",
+      "values": [
+        "read_only",
+        "approval",
+        "auto"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "charlie_trigger_severity",
+      "values": [
+        "info",
+        "warning",
+        "critical"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "cluster_condition_remediation_attempts_outcome_check",
+      "values": [
+        "success",
+        "failed",
+        "skipped"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "cluster_deployment_action_valid",
+      "values": [
+        "apply",
+        "suspend",
+        "delete"
+      ]
+    },
+    {
+      "category": "DeliveryDeploymentPhase",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "cluster_deployment_phase_valid",
+      "values": [
+        "pending",
+        "blocked",
+        "applying",
+        "ready",
+        "degraded",
+        "failed",
+        "suspended",
+        "deleting",
+        "removed",
+        "unknown"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "step_status_valid",
+      "values": [
+        "pending",
+        "running",
+        "success",
+        "failed",
+        "skipped"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "detected_mesh_valid",
+      "values": [
+        "istio",
+        "linkerd",
+        "kuma",
+        "cilium",
+        "none",
+        "unknown"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "clusters_managed_by_valid",
+      "values": [
+        "ui",
+        "api",
+        "crd",
+        "system",
+        "flux"
+      ]
+    },
+    {
+      "category": "ClusterRegistrationPhaseValue",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "registration_phase_valid",
+      "values": [
+        "created",
+        "awaiting_agent",
+        "connected",
+        "provisioning",
+        "ready",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "app_status_valid",
+      "values": [
+        "applied",
+        "reverted"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "component_bundle_renderer_valid",
+      "values": [
+        "kustomize",
+        "helm"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "component_bundle_scope_valid",
+      "values": [
+        "namespace",
+        "platform"
+      ]
+    },
+    {
+      "category": "DeliveryBundleState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "component_bundle_state_valid",
+      "values": [
+        "resolving",
+        "ready",
+        "failed",
+        "revoked"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "component_bundle_verification_valid",
+      "values": [
+        "pending",
+        "verified",
+        "failed",
+        "unsigned"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "scope_valid",
+      "values": [
+        "global",
+        "cluster",
+        "project"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "widget_type_valid",
+      "values": [
+        "grafana_panel",
+        "prom_sparkline",
+        "prom_stat",
+        "url_iframe"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "delivery_controller_compatibility_valid",
+      "values": [
+        "unknown",
+        "compatible",
+        "incompatible",
+        "upgrade_required",
+        "degraded"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "delivery_rollout_approval_decision_valid",
+      "values": [
+        "approved",
+        "rejected"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "delivery_rollout_cluster_action_valid",
+      "values": [
+        "apply",
+        "rollback"
+      ]
+    },
+    {
+      "category": "DeliveryRolloutClusterState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "delivery_rollout_cluster_state_valid",
+      "values": [
+        "pending",
+        "released",
+        "acknowledged",
+        "reconciling",
+        "ready",
+        "blocked",
+        "timed_out",
+        "failed",
+        "skipped",
+        "rolling_back",
+        "ready_previous",
+        "rollback_failed",
+        "aborted"
+      ]
+    },
+    {
+      "category": "DeliveryRolloutState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "delivery_rollout_state_valid",
+      "values": [
+        "draft",
+        "resolving",
+        "awaiting_approval",
+        "queued",
+        "progressing",
+        "paused",
+        "rejected",
+        "aborted",
+        "succeeded",
+        "failed",
+        "rolling_back",
+        "rolled_back",
+        "rollback_failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "delivery_resolution_status_valid",
+      "values": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "delivery_resolution_verification_valid",
+      "values": [
+        "pending",
+        "verified",
+        "failed",
+        "unsigned"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "delivery_source_auth_valid",
+      "values": [
+        "none",
+        "basic",
+        "bearer",
+        "ssh",
+        "workload_identity"
+      ]
+    },
+    {
+      "category": "DeliverySourceStatusValue",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "delivery_source_status_valid",
+      "values": [
+        "pending",
+        "ready",
+        "degraded",
+        "revoked"
+      ]
+    },
+    {
+      "category": "DeliverySourceKind",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "delivery_source_type_valid",
+      "values": [
+        "git",
+        "oci_artifact",
+        "helm_http",
+        "helm_oci"
+      ]
+    },
+    {
+      "category": "DeliverySystemAssignmentPhase",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "delivery_system_assignment_phase_valid",
+      "values": [
+        "pending",
+        "released",
+        "applying",
+        "ready",
+        "failed",
+        "rolling_back",
+        "rolled_back",
+        "rollback_failed",
+        "aborted"
+      ]
+    },
+    {
+      "category": "DeliverySystemReleaseState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "delivery_system_release_state_valid",
+      "values": [
+        "draft",
+        "released",
+        "retired",
+        "revoked"
+      ]
+    },
+    {
+      "category": "DeliverySystemRolloutState",
+      "classification": "canonical complete-set parity checked",
+      "constraint": "delivery_system_rollout_state_valid",
+      "values": [
+        "draft",
+        "awaiting_approval",
+        "queued",
+        "progressing",
+        "paused",
+        "aborted",
+        "succeeded",
+        "failed",
+        "rolling_back",
+        "rolled_back",
+        "rollback_failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "delivery_target_deletion_valid",
+      "values": [
+        "active",
+        "deleting",
+        "deleted"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "dex_settings_runtime_phase_valid",
+      "values": [
+        "fresh",
+        "prepare",
+        "cutover"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "status_valid",
+      "values": [
+        "active",
+        "tombstoned"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "auth_mode_valid",
+      "values": [
+        "none",
+        "https_token",
+        "ssh_key"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "on_delete_valid",
+      "values": [
+        "log",
+        "tombstone",
+        "decommission"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "sync_mode_valid",
+      "values": [
+        "manual",
+        "interval"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "scope_valid",
+      "values": [
+        "global",
+        "cluster",
+        "project"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "kubectl_status_valid",
+      "values": [
+        "starting",
+        "active",
+        "closed",
+        "expired",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "mode_valid",
+      "values": [
+        "blackout",
+        "permitted"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "on_block_valid",
+      "values": [
+        "refuse",
+        "defer"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "np_status_valid",
+      "values": [
+        "pending",
+        "applied",
+        "failed",
+        "drifting"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "np_kind_valid",
+      "values": [
+        "builtin",
+        "custom"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "body_format_valid",
+      "values": [
+        "text",
+        "markdown",
+        "html",
+        "json"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "channel_valid",
+      "values": [
+        "email",
+        "webhook"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "pod_security_profile_valid",
+      "values": [
+        "privileged",
+        "baseline",
+        "restricted"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "projects_managed_by_valid",
+      "values": [
+        "ui",
+        "api",
+        "crd",
+        "system",
+        "flux"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "enforcement_valid",
+      "values": [
+        "soft",
+        "hard"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "repair_job_states_status_check",
+      "values": [
+        "unknown",
+        "success",
+        "failed",
+        "skipped"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "transport_valid",
+      "values": [
+        "syslog_udp",
+        "syslog_tcp",
+        "syslog_tls",
+        "splunk_hec",
+        "ndjson_https"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "task_outbox_status_valid",
+      "values": [
+        "pending",
+        "delivering",
+        "failed",
+        "delivered",
+        "dead"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "tunnel_locator_event_type",
+      "values": [
+        "lookup_failed",
+        "owner_missing",
+        "owner_unreachable",
+        "registration_failed",
+        "state_stale",
+        "recovered"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "ui_extensions_compatibility_status_check",
+      "values": [
+        "compatible",
+        "incompatible",
+        "unknown"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing bounded ancillary database category; not changed by this package",
+      "constraint": "auth_method_valid",
+      "values": [
+        "token",
+        "approle",
+        "kubernetes"
+      ]
+    }
+  ],
+  "firstPartyWritersReaders": {
+    "Charlie": [
+      "frontend/src/lib/api/charlie.test.ts",
+      "frontend/src/lib/api/charlie.ts",
+      "frontend/src/lib/api/charlie-admin-mappers.ts",
+      "frontend/src/lib/api/charlie-admin.test.ts",
+      "frontend/src/lib/api/charlie-admin.ts",
+      "internal/handler/charlie_threads.go",
+      "frontend/src/routes/dashboard/charlie/-shared.tsx",
+      "frontend/src/routes/dashboard/charlie/-conversations.tsx",
+      "frontend/src/routes/dashboard/charlie/-investigations.tsx",
+      "frontend/src/routes/dashboard/charlie/index.test.tsx",
+      "frontend/src/routes/dashboard/charlie/-approvals.tsx",
+      "frontend/src/routes/dashboard/charlie/index.tsx",
+      "frontend/src/routes/dashboard/charlie/-findings.tsx",
+      "frontend/src/routes/dashboard/charlie/-finding-detail.tsx",
+      "frontend/src/components/charlie/finding-workflow.ts",
+      "frontend/src/components/charlie/charlie-drawer-history.tsx",
+      "frontend/src/components/charlie/charlie-session-state.ts",
+      "frontend/src/components/charlie/use-charlie-session-mutations.ts",
+      "frontend/src/components/charlie/use-charlie-session-stream.ts",
+      "frontend/src/components/charlie/charlie-shell.tsx",
+      "frontend/src/components/charlie/context-registry.ts",
+      "frontend/src/components/charlie/charlie-drawer-transcript.tsx",
+      "frontend/src/components/charlie/charlie-drawer.tsx",
+      "frontend/src/components/charlie/charlie-drawer-composer.tsx",
+      "frontend/src/components/charlie/charlie-mode.ts",
+      "frontend/src/components/charlie/use-charlie-session-reconciliation.ts",
+      "frontend/src/components/charlie/admin-utils.ts",
+      "frontend/src/components/charlie/use-charlie-conversation.ts",
+      "frontend/src/components/charlie/charlie-drawer-primitives.tsx",
+      "frontend/src/components/charlie/settings/automation-tab.tsx",
+      "frontend/src/components/charlie/settings/kubernetes-tab.tsx",
+      "frontend/src/components/charlie/settings/access-tab.tsx",
+      "frontend/src/components/charlie/settings/automation-dead-letters.tsx",
+      "frontend/src/components/charlie/settings/automation-model.ts",
+      "frontend/src/components/charlie/settings/automation-action-policies.tsx",
+      "frontend/src/components/charlie/settings/mode-transition-indicator.tsx",
+      "frontend/src/components/charlie/settings/mode-tab.tsx",
+      "frontend/src/components/charlie/settings/automation-rule-section.tsx",
+      "frontend/src/components/charlie/settings/shared.tsx",
+      "frontend/src/components/charlie/settings/mode-tab-model.ts",
+      "frontend/src/components/charlie/settings/diagnostics-tab.tsx",
+      "frontend/src/components/charlie/settings/connection-tab.tsx",
+      "frontend/src/components/charlie/settings/alerts-tab.tsx",
+      "frontend/src/components/charlie/settings/agent-tab.tsx",
+      "frontend/src/components/charlie/use-charlie-composer.ts",
+      "frontend/src/components/charlie/charlie-context.ts",
+      "frontend/src/components/charlie/topbar-findings.ts",
+      "frontend/src/components/charlie/charlie-drawer-header.tsx",
+      "frontend/src/components/charlie/message-parts.tsx",
+      "frontend/src/components/charlie/charlie-capability.tsx",
+      "frontend/src/components/charlie/turn-progress.ts",
+      "frontend/src/components/charlie/safe-markdown.tsx",
+      "frontend/src/components/charlie/commands.ts",
+      "frontend/src/components/charlie/loading-panel.tsx",
+      "frontend/src/components/charlie/charlie-drawer-scope.tsx",
+      "frontend/src/components/charlie/__tests__/topbar-findings.test.ts",
+      "frontend/src/components/charlie/__tests__/finding-workflow.test.ts",
+      "frontend/src/components/charlie/__tests__/charlie-shell.test.tsx",
+      "frontend/src/components/charlie/__tests__/session-stream.test.tsx",
+      "frontend/src/components/charlie/__tests__/charlie-utils.test.tsx",
+      "frontend/src/components/charlie/__tests__/charlie-admin-page.test.tsx",
+      "frontend/src/components/charlie/__tests__/admin-utils.test.ts",
+      "frontend/src/components/charlie/__tests__/turn-progress.test.ts",
+      "frontend/src/components/charlie/__tests__/commands.test.ts",
+      "frontend/src/components/charlie/__tests__/message-parts.test.tsx",
+      "internal/handler/charlie_context_test.go",
+      "internal/handler/charlie_operations.go",
+      "internal/handler/charlie_audit_test.go",
+      "internal/handler/charlie_approvals.go",
+      "internal/handler/charlie_approvals_test.go",
+      "internal/handler/charlie_context.go",
+      "internal/handler/charlie_onboarding.go",
+      "internal/handler/charlie_admin.go",
+      "internal/handler/charlie_findings_test.go",
+      "internal/db/queries/charlie.sql",
+      "internal/handler/charlie_findings.go",
+      "internal/handler/charlie_sessions_test.go",
+      "internal/handler/charlie_operations_test.go",
+      "internal/handler/charlie_sessions.go",
+      "internal/handler/charlie_audit.go",
+      "internal/handler/charlie_admin_test.go",
+      "internal/handler/charlie_onboarding_test.go",
+      "internal/charlie/audit_test.go",
+      "internal/charlie/admin_diagnostics.go",
+      "internal/charlie/operational_capability_adapter.go",
+      "internal/charlie/discovery_qualification.go",
+      "internal/charlie/action_receipts.go",
+      "internal/charlie/finding_store.go",
+      "internal/charlie/system_health_capability_adapter_test.go",
+      "internal/charlie/capability_schema.go",
+      "internal/charlie/trigger_ingest_test.go",
+      "internal/charlie/finding_publisher.go",
+      "internal/charlie/delivery_capability_adapter.go",
+      "internal/charlie/queue_capability_adapter_test.go",
+      "internal/charlie/management_kubernetes_adapter_test.go",
+      "internal/charlie/artifact_reconcile_test.go",
+      "internal/charlie/finding_projection_test.go",
+      "internal/charlie/cluster_agent_capability_adapter_test.go",
+      "internal/charlie/connect_token.go",
+      "internal/charlie/identity_test.go",
+      "internal/charlie/downstream_boundary_test.go",
+      "internal/charlie/cluster_agent_health.go",
+      "internal/charlie/metrics.go",
+      "internal/charlie/non_execution_matrix_test.go",
+      "internal/charlie/action_guard_test.go",
+      "internal/charlie/central_finding_sync.go",
+      "internal/charlie/triggers_test.go",
+      "internal/charlie/observability.go",
+      "internal/charlie/sessions.go",
+      "internal/charlie/session_access.go",
+      "internal/charlie/mcp_runtime_test.go",
+      "internal/charlie/trigger_sweep_test.go",
+      "internal/charlie/lifecycle_adapters.go",
+      "internal/charlie/availability_test.go",
+      "internal/charlie/activation_helm.go",
+      "internal/charlie/work_pipeline_capability_adapter_test.go",
+      "internal/charlie/finding_advisory.go",
+      "internal/charlie/bridge_adapter_finding_test.go",
+      "internal/charlie/commands.go",
+      "internal/charlie/operational_capability_adapter_test.go",
+      "internal/charlie/trust_test.go",
+      "internal/charlie/mode_control.go",
+      "internal/charlie/onboarding_test.go",
+      "internal/charlie/policy.go",
+      "internal/charlie/admin_test.go",
+      "internal/charlie/policy_test.go",
+      "internal/charlie/event_runtime_test.go",
+      "internal/charlie/action_reconciler.go",
+      "internal/charlie/platform_inventory_test.go",
+      "internal/charlie/audit_contract_test.go",
+      "internal/charlie/session_context.go",
+      "internal/charlie/bridge_adapter.go",
+      "internal/charlie/context_search.go",
+      "internal/charlie/trust.go",
+      "internal/charlie/observability_source_test.go",
+      "internal/charlie/catalog.go",
+      "internal/charlie/capability_invariants.go",
+      "internal/charlie/managed_bridge_test.go",
+      "internal/charlie/mode_store.go",
+      "internal/charlie/capability_invariants_test.go",
+      "internal/charlie/admin_bridge.go",
+      "internal/charlie/mode_ceiling_rollout_test.go",
+      "internal/charlie/availability.go",
+      "internal/charlie/admin_alert_delivery_test.go",
+      "internal/charlie/bridge_adapter_approval_test.go",
+      "internal/charlie/catalog_executor.go",
+      "internal/charlie/action_envelope_contract_test.go",
+      "internal/charlie/managed_bridge.go",
+      "internal/charlie/approval_access.go",
+      "internal/charlie/lifecycle_adapters_test.go",
+      "internal/charlie/authority_alert_acceptance_test.go",
+      "internal/charlie/activation.go",
+      "internal/charlie/mcp_test.go",
+      "internal/charlie/audit_contract.json",
+      "internal/charlie/mode_control_test.go",
+      "internal/charlie/admin_visibility_capability_adapter_test.go",
+      "internal/charlie/cluster_agent_health_test.go",
+      "internal/charlie/read_adapter_matrix_test.go",
+      "internal/charlie/approval_access_test.go",
+      "internal/charlie/session_access_test.go",
+      "internal/charlie/action_safety_test.go",
+      "internal/charlie/admin_workload_test.go",
+      "internal/charlie/action_audit_test.go",
+      "internal/charlie/feature_lifecycle.go",
+      "internal/charlie/event_runtime.go",
+      "internal/charlie/action_receipts_test.go",
+      "internal/charlie/onboarding.go",
+      "internal/charlie/observability_test.go",
+      "internal/charlie/write_fence.go",
+      "internal/charlie/delegation_test.go",
+      "internal/charlie/catalog_executor_test.go",
+      "internal/charlie/findings.go",
+      "internal/charlie/action_reconciler_test.go",
+      "internal/charlie/activation_test.go",
+      "internal/charlie/admin_workload.go",
+      "internal/charlie/contract/qualification_profile_test.go",
+      "internal/charlie/platform_inventory.go",
+      "internal/charlie/work_pipeline_capability_adapter.go",
+      "internal/charlie/discovery_qualification_test.go",
+      "internal/charlie/mcp.go",
+      "internal/charlie/audit_contract.go",
+      "internal/charlie/runtime_ticker.go",
+      "internal/charlie/runtime_lifecycle_test.go",
+      "internal/charlie/trigger_admin_test.go",
+      "internal/charlie/trigger_sweep.go",
+      "internal/charlie/onboarding_consumer.go",
+      "internal/charlie/runtime_lifecycle.go",
+      "internal/charlie/retention_test.go",
+      "internal/charlie/action_audit.go",
+      "internal/charlie/finding_advisory_test.go",
+      "internal/charlie/trigger_admin.go",
+      "internal/charlie/secret_writer_test.go",
+      "internal/charlie/finding_access_test.go",
+      "internal/charlie/artifact_reconcile.go",
+      "internal/charlie/secret_writer.go",
+      "internal/charlie/agent_status_sync.go",
+      "internal/charlie/product_version_test.go",
+      "internal/charlie/trigger_defaults.go",
+      "internal/charlie/finding_projection.go",
+      "internal/charlie/threads_test.go",
+      "internal/charlie/trigger_ingest.go",
+      "internal/charlie/product_version.go",
+      "internal/charlie/product_adapter_conformance_test.go",
+      "internal/charlie/admin_bridge_test.go",
+      "internal/charlie/finding_workflow.go",
+      "internal/charlie/triggers.go",
+      "internal/charlie/action_guard.go",
+      "internal/charlie/admin_visibility_capability_adapter.go",
+      "internal/charlie/queue_capability_adapter.go",
+      "internal/charlie/delegation.go",
+      "internal/charlie/authority_audit.go",
+      "internal/charlie/finding_workflow_test.go",
+      "internal/charlie/central_finding_sync_test.go",
+      "internal/charlie/contract/runtime_test.go",
+      "internal/charlie/testdata/action-envelope-vector.json",
+      "internal/charlie/runtime_capability_adapter_test.go",
+      "internal/charlie/management_kubernetes_adapter.go",
+      "internal/charlie/action_safety.go",
+      "internal/charlie/findings_test.go",
+      "internal/charlie/system_health_capability_adapter.go",
+      "internal/charlie/finding_store_test.go",
+      "internal/charlie/admin_mode_prerequisites.go",
+      "internal/charlie/agent_status_sync_test.go",
+      "internal/charlie/feature_lifecycle_test.go",
+      "internal/charlie/trigger_dispatch_test.go",
+      "internal/charlie/runtime_capability_adapter.go",
+      "internal/charlie/identity.go",
+      "internal/charlie/mcp_listener.go",
+      "internal/charlie/audit.go",
+      "internal/charlie/live_authority_test.go",
+      "internal/charlie/admin_diagnostics_test.go",
+      "internal/charlie/gate_test.go",
+      "internal/charlie/queue_terminal_publisher.go",
+      "internal/charlie/operation_access.go",
+      "internal/charlie/mode_ceiling_rollout.go",
+      "internal/charlie/commands_test.go",
+      "internal/charlie/trigger_dispatch.go",
+      "internal/charlie/finding_publisher_test.go",
+      "internal/charlie/metrics_test.go",
+      "internal/charlie/catalog_test.go",
+      "internal/charlie/alert_policy_test.go",
+      "internal/charlie/onboarding_consumer_test.go",
+      "internal/charlie/finding_access.go",
+      "internal/charlie/admin.go",
+      "internal/charlie/kubernetes_visibility.go",
+      "internal/charlie/queue_terminal_publisher_test.go",
+      "internal/charlie/threads.go",
+      "internal/charlie/sessions_test.go",
+      "internal/charlie/catalog_safety_test.go",
+      "internal/charlie/retention.go",
+      "internal/charlie/context_search_test.go",
+      "internal/charlie/mcp_runtime.go",
+      "internal/charlie/alert_policy.go",
+      "internal/charlie/mcp_listener_test.go",
+      "internal/charlie/gate.go",
+      "internal/charlie/kubernetes_visibility_test.go",
+      "internal/charlie/live_authority.go",
+      "internal/charlie/cluster_agent_capability_adapter.go",
+      "internal/charlie/contract/runtime.go",
+      "internal/charlie/contract/contract_test.go",
+      "internal/charlie/contract/client_test.go",
+      "internal/charlie/contract/qualification_profile.go",
+      "internal/charlie/contract/pinned/bridge-service.json",
+      "internal/charlie/contract/fakebridge/fake_test.go",
+      "internal/charlie/contract/fakebridge/fake.go",
+      "internal/charlie/contract/approval.go",
+      "internal/charlie/contract/README.md",
+      "internal/charlie/contract/client.go",
+      "internal/charlie/contract/revocation_test.go",
+      "internal/charlie/contract/checksums.sha256",
+      "internal/charlie/contract/approval_test.go",
+      "internal/charlie/contract/codegen.yaml",
+      "internal/charlie/contract/onboarding.go",
+      "internal/charlie/contract/revocation.go",
+      "internal/charlie/contract/generate.go",
+      "internal/charlie/contract/verify.go",
+      "internal/charlie/contract/pin.json",
+      "internal/charlie/contract/pinned/bridge.openapi.yaml",
+      "internal/charlie/contract/pinned/authority-policy.json",
+      "internal/charlie/contract/pinned/credential-route-matrix.json",
+      "internal/charlie/contract/pinned/schemas/onboarding-v1.schema.json",
+      "internal/charlie/contract/pinned/schemas/capability-v1.schema.json",
+      "internal/charlie/contract/pinned/schemas/connector-capability-v1.schema.json",
+      "internal/charlie/contract/pinned/schemas/alert-delivery-v1.schema.json",
+      "internal/charlie/contract/cmd/specprep/main.go",
+      "internal/charlie/contract/pinned/schemas/product-adapter-result-v1.schema.json",
+      "internal/charlie/contract/pinned/schemas/live-isolation-observation-v1.schema.json",
+      "internal/charlie/contract/pinned/schemas/kubernetes-visibility-v1.schema.json",
+      "internal/charlie/contract/pinned/schemas/finding-v1.schema.json",
+      "internal/charlie/contract/pinned/schemas/product-adapter-conformance-v1.schema.json",
+      "internal/charlie/contract/pinned/live-qualification-scenarios-v1.json",
+      "internal/charlie/contract/versions.go",
+      "internal/charlie/contract/pinned/conformance/product-adapter-conformance-v1.json",
+      "internal/charlie/contract/internal/schema/schema.gen.go",
+      "internal/charlie/contract/internal/wire/client.gen.go",
+      "internal/charlie/contract/internal/wire/bridge.codegen.openapi.yaml"
+    ],
+    "agent-and-registration": [
+      "frontend/src/lib/api/cluster-agents.ts",
+      "frontend/src/lib/api/cluster-registration.ts",
+      "frontend/src/lib/api/cluster-agents-generated.test.ts",
+      "frontend/src/lib/api/cluster-registration-generated.test.ts",
+      "internal/handler/cluster_agents_optional_json_test.go",
+      "internal/handler/cluster_registration.go",
+      "internal/handler/cluster_registration_transactional_audit_test.go",
+      "internal/handler/cluster_agents_search.go",
+      "internal/handler/cluster_agents_response.go",
+      "internal/handler/cluster_agents_transactional_audit_test.go",
+      "internal/handler/cluster_agents_inventory.go",
+      "internal/handler/cluster_agents_test.go",
+      "internal/db/queries/agent_ingest.sql",
+      "internal/handler/cluster_agents_diagnostics.go",
+      "internal/handler/cluster_agents_upgrade.go",
+      "internal/handler/cluster_agents_upgrade_plan.go",
+      "internal/handler/cluster_agents.go",
+      "internal/handler/cluster_agents_search_test.go",
+      "internal/handler/cluster_registration_test.go",
+      "internal/db/queries/agents.sql"
+    ],
+    "backup-restore": [
+      "frontend/src/components/backups/hooks.ts",
+      "frontend/src/components/backups/cron.ts",
+      "frontend/src/components/backups/remote-storage-picker.tsx",
+      "frontend/src/routes/dashboard/backups/runs/$runId/index.tsx",
+      "frontend/src/routes/dashboard/backups/restores/$restoreId/index.tsx",
+      "frontend/src/routes/dashboard/backups/index.tsx",
+      "frontend/src/routes/dashboard/backups/storage/new/index.tsx",
+      "frontend/src/routes/dashboard/backups/schedules/new/index.tsx",
+      "frontend/src/lib/api/backups.ts",
+      "frontend/src/lib/api/backups.test.ts",
+      "internal/handler/backups_storage.go",
+      "internal/handler/backups_transactional_audit_test.go",
+      "internal/handler/backups.go",
+      "internal/handler/backups_reconciler_test.go",
+      "internal/handler/backups_retention.go",
+      "internal/handler/backups_schedules.go",
+      "internal/handler/backups_velero_test.go",
+      "internal/handler/backups_response.go",
+      "internal/handler/backups_response_test.go",
+      "internal/handler/backups_restores.go",
+      "internal/handler/backups_helpers.go",
+      "internal/db/queries/backups.sql",
+      "internal/handler/backups_velero.go",
+      "internal/handler/backups_retention_test.go",
+      "internal/handler/backups_reconciler.go",
+      "internal/handler/backups_audit_test.go",
+      "internal/handler/backups_authz_test.go",
+      "internal/handler/backups_runs.go"
+    ],
+    "delivery": [
+      "internal/delivery/asyncop/receipt_test.go",
+      "internal/delivery/asyncop/receipt.go",
+      "internal/delivery/deployment/control_test.go",
+      "internal/delivery/deployment/target_delete.go",
+      "internal/delivery/deployment/control.go",
+      "internal/delivery/deployment/control_audit_test.go",
+      "internal/delivery/qualification/scale.go",
+      "internal/delivery/qualification/soak.go",
+      "internal/delivery/qualification/qualification_test.go",
+      "internal/delivery/qualification/report.go",
+      "internal/delivery/builtin/provisioner_test.go",
+      "internal/delivery/builtin/automatic_scanning.go",
+      "internal/delivery/builtin/automatic_scanning_test.go",
+      "internal/delivery/builtin/provisioner_postgres_test.go",
+      "internal/delivery/builtin/provisioner.go",
+      "internal/delivery/model/types.go",
+      "internal/delivery/model/model_test.go",
+      "internal/delivery/model/target_overrides.go",
+      "internal/delivery/model/rollout.go",
+      "internal/delivery/model/digest_test.go",
+      "internal/delivery/model/digest.go",
+      "internal/delivery/model/target_overrides_test.go",
+      "internal/delivery/model/errors.go",
+      "internal/delivery/model/placement.go",
+      "internal/delivery/model/enums.gen.go",
+      "internal/delivery/provider/provider.go",
+      "internal/delivery/provider/provider_test.go",
+      "internal/delivery/configuration/merge.go",
+      "internal/delivery/configuration/merge_test.go",
+      "internal/delivery/systemrelease/bootstrap.go",
+      "internal/delivery/systemrelease/bootstrap_test.go",
+      "internal/delivery/resolver/git.go",
+      "internal/delivery/resolver/service.go",
+      "internal/delivery/resolver/types.go",
+      "internal/delivery/resolver/resolver_test.go",
+      "internal/delivery/resolver/git_ssh_test.go",
+      "internal/delivery/resolver/verifier.go",
+      "internal/delivery/resolver/network.go",
+      "internal/delivery/resolver/verifier_test.go",
+      "internal/delivery/resolver/postgres_worker.go",
+      "internal/delivery/resolver/policy.go",
+      "internal/delivery/resolver/policy_test.go",
+      "internal/delivery/resolver/oci.go",
+      "internal/delivery/resolver/helm_http.go",
+      "internal/delivery/catalogapp/status_test.go",
+      "internal/delivery/catalogapp/service.go",
+      "internal/delivery/catalogapp/audit.go",
+      "internal/delivery/catalogapp/operation_status_integration_test.go",
+      "internal/delivery/catalogapp/operation_status.go",
+      "internal/delivery/catalogapp/audit_test.go",
+      "internal/delivery/metrics/metrics_test.go",
+      "internal/delivery/metrics/metrics.go",
+      "internal/delivery/systemrollout/service.go",
+      "internal/delivery/systemrollout/service_audit_test.go",
+      "internal/delivery/systemrollout/service_test.go",
+      "internal/delivery/placement/placement_test.go",
+      "internal/delivery/placement/placement.go",
+      "internal/delivery/status/deployment_observation.go",
+      "internal/delivery/status/observation.go",
+      "internal/delivery/status/ingester.go",
+      "internal/delivery/status/observation_test.go",
+      "internal/delivery/status/empty_conditions_test.go",
+      "internal/delivery/status/deployment_observation_test.go",
+      "internal/delivery/status/ingester_test.go",
+      "frontend/src/routes/dashboard/delivery/sources/-credential-fields.tsx",
+      "frontend/src/routes/dashboard/delivery/sources/index.tsx",
+      "frontend/src/routes/dashboard/delivery/sources/-source-dialogs.tsx",
+      "frontend/src/routes/dashboard/delivery/sources/-source-create-dialog.tsx",
+      "frontend/src/routes/dashboard/delivery/sources/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/-estate-overview.tsx",
+      "internal/delivery/rollout/types.go",
+      "internal/delivery/rollout/scheduler_test.go",
+      "internal/delivery/rollout/rollout_test.go",
+      "internal/delivery/rollout/control_test.go",
+      "internal/delivery/rollout/errors.go",
+      "internal/delivery/rollout/control.go",
+      "internal/delivery/rollout/cohorts.go",
+      "internal/delivery/rollout/postgres_reconciler_cache_test.go",
+      "internal/delivery/rollout/postgres_reconciler.go",
+      "internal/delivery/rollout/postgres_store_test.go",
+      "internal/delivery/rollout/scheduler.go",
+      "internal/delivery/rollout/control_audit_test.go",
+      "internal/delivery/rollout/planner.go",
+      "internal/delivery/rollout/postgres_store.go",
+      "internal/delivery/rollout/postgres_integration_test.go",
+      "internal/delivery/compatibility/compatibility.go",
+      "internal/delivery/compatibility/observation.go",
+      "internal/delivery/compatibility/observation_test.go",
+      "internal/delivery/compatibility/compatibility_test.go",
+      "frontend/src/components/delivery/pickers.tsx",
+      "frontend/src/components/delivery/deployment-event-timeline.tsx",
+      "frontend/src/components/delivery/overview-health.tsx",
+      "frontend/src/components/delivery/target-form.ts",
+      "frontend/src/components/delivery/estate-header.tsx",
+      "frontend/src/components/delivery/target-overrides-editor.tsx",
+      "frontend/src/components/delivery/project-scope.test.tsx",
+      "frontend/src/components/delivery/audit-reason-form.tsx",
+      "frontend/src/components/delivery/shared.tsx",
+      "frontend/src/components/delivery/target-overrides-editor.test.ts",
+      "frontend/src/components/delivery/deployment-event-timeline.test.tsx",
+      "frontend/src/components/delivery/shared.test.tsx",
+      "frontend/src/routes/dashboard/delivery/override-sets/index.tsx",
+      "frontend/src/routes/dashboard/delivery/override-sets/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/-estate-columns.tsx",
+      "frontend/src/routes/dashboard/delivery/-project-overview.tsx",
+      "frontend/src/routes/dashboard/delivery/configuration-templates/index.tsx",
+      "frontend/src/routes/dashboard/delivery/configuration-templates/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/index.test.tsx",
+      "frontend/src/routes/dashboard/delivery/-estate-summary.tsx",
+      "frontend/src/routes/dashboard/delivery/deployments/$deploymentId/index.tsx",
+      "frontend/src/routes/dashboard/delivery/deployments/$deploymentId/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/deployments/-freshness.test.tsx",
+      "frontend/src/routes/dashboard/delivery/deployments/-freshness.tsx",
+      "frontend/src/routes/dashboard/delivery/deployments/index.tsx",
+      "frontend/src/routes/dashboard/delivery/deployments/-page.tsx",
+      "internal/delivery/state/state_test.go",
+      "internal/delivery/state/state.go",
+      "internal/delivery/state/persisted_terminal_test.go",
+      "frontend/src/routes/dashboard/delivery/rollouts/$rolloutId/-event-timeline.tsx",
+      "frontend/src/routes/dashboard/delivery/rollouts/$rolloutId/index.test.tsx",
+      "frontend/src/routes/dashboard/delivery/rollouts/$rolloutId/event-timeline.test.tsx",
+      "frontend/src/routes/dashboard/delivery/rollouts/$rolloutId/index.tsx",
+      "frontend/src/routes/dashboard/delivery/rollouts/$rolloutId/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/rollouts/index.tsx",
+      "frontend/src/routes/dashboard/delivery/rollouts/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/bundles/$bundleId/versions/$versionId/index.tsx",
+      "frontend/src/routes/dashboard/delivery/bundles/$bundleId/index.tsx",
+      "frontend/src/routes/dashboard/delivery/bundles/$bundleId/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/bundles/index.tsx",
+      "frontend/src/routes/dashboard/delivery/bundles/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/index.tsx",
+      "frontend/src/routes/dashboard/delivery/targets/placement.test.ts",
+      "frontend/src/routes/dashboard/delivery/targets/index.tsx",
+      "frontend/src/routes/dashboard/delivery/targets/-create-target-dialog.tsx",
+      "frontend/src/routes/dashboard/delivery/targets/$targetId/-target-edit-fields.tsx",
+      "frontend/src/routes/dashboard/delivery/targets/$targetId/-preview-panel.tsx",
+      "frontend/src/routes/dashboard/delivery/targets/$targetId/-target-edit-dialog.tsx",
+      "frontend/src/routes/dashboard/delivery/targets/$targetId/-launch-fields.tsx",
+      "frontend/src/routes/dashboard/delivery/targets/$targetId/-launch-form.ts",
+      "frontend/src/routes/dashboard/delivery/targets/$targetId/-target-edit-form.ts",
+      "frontend/src/routes/dashboard/delivery/targets/$targetId/-launch-dialog.tsx",
+      "frontend/src/routes/dashboard/delivery/targets/$targetId/index.tsx",
+      "frontend/src/routes/dashboard/delivery/targets/$targetId/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/targets/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/route.tsx",
+      "frontend/src/routes/dashboard/delivery/-page.tsx",
+      "frontend/src/routes/dashboard/delivery/-estate-focus.ts",
+      "frontend/src/lib/api/delivery-bundles.ts",
+      "frontend/src/lib/api/delivery-common.ts",
+      "frontend/src/lib/api/delivery-configuration.ts",
+      "frontend/src/lib/api/delivery-rollouts.ts",
+      "frontend/src/lib/api/delivery-system.ts",
+      "frontend/src/lib/api/delivery-deployments.ts",
+      "frontend/src/lib/api/delivery-sources.ts",
+      "frontend/src/lib/api/delivery-targets.ts",
+      "internal/db/queries/delivery_override_sets.sql",
+      "internal/db/queries/delivery_test.go",
+      "internal/db/queries/delivery_system.sql",
+      "internal/handler/delivery/bundle_trust.go",
+      "internal/handler/delivery/source_test.go",
+      "internal/handler/delivery/bundle_test.go",
+      "internal/handler/delivery/control_contract_test.go",
+      "internal/handler/delivery/system_rollout.go",
+      "internal/handler/delivery/rollout.go",
+      "internal/handler/delivery/target_empty_arrays_test.go",
+      "internal/handler/delivery/common.go",
+      "internal/handler/delivery/target_transactional_audit_test.go",
+      "internal/handler/delivery/bundle_trust_test.go",
+      "internal/handler/delivery/mutation_test.go",
+      "internal/handler/delivery/rollout_actions_test.go",
+      "internal/handler/delivery/mutation.go",
+      "internal/handler/delivery/configuration_template.go",
+      "internal/handler/delivery/source_transactional_audit_test.go",
+      "internal/handler/delivery/target.go",
+      "internal/handler/delivery/bundle_transactional_audit_test.go",
+      "internal/handler/delivery/inventory.go",
+      "internal/handler/delivery/deployment_observation_test.go",
+      "internal/handler/delivery/observation_inventory_test.go",
+      "internal/handler/delivery/inventory_test.go",
+      "internal/handler/delivery/override_set.go",
+      "internal/handler/delivery/deployment.go",
+      "internal/handler/delivery/bundle.go",
+      "internal/handler/delivery/target_test.go",
+      "internal/handler/delivery/source.go",
+      "internal/handler/delivery/audit_test.go",
+      "internal/db/queries/delivery_configuration_templates.sql",
+      "internal/db/queries/delivery_runtime_generation_guard_test.go",
+      "internal/db/queries/delivery.sql"
+    ],
+    "operations": [
+      "frontend/src/lib/api/tools.test.ts",
+      "frontend/src/lib/api/tools.ts",
+      "frontend/src/lib/api/nodes.ts",
+      "frontend/src/lib/api/nodes-generated.test.ts",
+      "frontend/src/lib/api/logging.ts",
+      "frontend/src/lib/api/operation-polling.ts",
+      "frontend/src/lib/api/monitoring-stack.ts",
+      "frontend/src/lib/api/monitoring-operation-reads.ts",
+      "frontend/src/lib/api/nodes-operation.test.ts",
+      "frontend/src/lib/api/logging.test.ts",
+      "frontend/src/lib/api/monitoring-stack.test.ts",
+      "frontend/src/lib/api/monitoring-stack-previews.ts",
+      "frontend/src/lib/api/monitoring-data.ts",
+      "frontend/src/lib/api/operation-polling.test.ts",
+      "internal/handler/node_operations_test.go",
+      "internal/handler/node_operations.go",
+      "internal/db/queries/tool_operations.sql",
+      "internal/db/queries/logging_operations.sql",
+      "internal/db/queries/node_operations.sql",
+      "internal/db/queries/monitoring_operations.sql"
+    ],
+    "policy-scanner": [
+      "frontend/src/lib/api/security-policies.ts",
+      "frontend/src/lib/api/security-scans.ts",
+      "frontend/src/lib/api/security-policies.test.ts",
+      "frontend/src/lib/api/security-scans.test.ts",
+      "internal/handler/security_templates.go",
+      "internal/handler/security.go",
+      "internal/handler/security_posture.go",
+      "internal/handler/security_scans.go",
+      "internal/handler/security_transactional_audit_test.go",
+      "internal/handler/security_export_audit_test.go",
+      "internal/handler/security_policies.go",
+      "internal/handler/security_scan_reports.go",
+      "internal/handler/security_cis_test.go",
+      "internal/handler/security_profiles.go",
+      "internal/handler/security_scope_test.go",
+      "internal/db/queries/security.sql"
+    ]
+  },
+  "schemaVersion": 1,
+  "sourceDigests": {
+    "deploy/contracts/categories.json": "sha256:5a963d04d4802887993ffcb93e8d04fc019bdb46ab449931d670b0a8d4d23a57",
+    "docs/openapi.yaml": "sha256:946205bdacdfd900d3bf96f8946c0e61780867310f7fd5175dbeaa8268f3550c",
+    "internal/db/migrations/001_initial.up.sql": "sha256:39bed852b80f7d4a87fcc0560ca0e0e9a1921bb836b86fc5c93121830ac19a40",
+    "internal/delivery/rollout/control.go": "sha256:de56f8a1ea5f4b51957ff413c6544a4da5f68f76fa23c8a1c06a05169416e918"
+  },
+  "wireFields": [
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "type",
+      "schema": "AdminQueueDLQEntryWire",
+      "values": null
+    },
+    {
+      "category": "DurableOperationStatus",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "AdminQueueOperation",
+      "values": [
+        "pending",
+        "running",
+        "retrying",
+        "failed",
+        "succeeded"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "AgentClusterConditionDiagnostic",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "type",
+      "schema": "AgentClusterConditionDiagnostic",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "AgentConnectionDiagnostic",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "operation_type",
+      "schema": "AgentLifecycleOperation",
+      "values": [
+        "agent_upgrade"
+      ]
+    },
+    {
+      "category": "AgentLifecycleOperationState",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "AgentLifecycleOperation",
+      "values": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "type",
+      "schema": "AgentLiveEventDiagnostic",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "phase",
+      "schema": "AgentLivePodDiagnostic",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "state",
+      "schema": "AgentOfflineBehavior",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "AgentSelfTest",
+      "values": [
+        "passed",
+        "warning",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "AgentSelfTestCheck",
+      "values": [
+        "passed",
+        "warning",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "AgentUpgradeRecommendation",
+      "values": null
+    },
+    {
+      "category": "DurableOperationStatus",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "AuditExportOperation",
+      "values": [
+        "pending",
+        "running",
+        "retrying",
+        "failed",
+        "succeeded"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "BackupDrillResult",
+      "values": [
+        "success",
+        "failure",
+        "partial",
+        "running"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "BackupResponse",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "CISFinding",
+      "values": [
+        "pass",
+        "fail",
+        "warn",
+        "skip",
+        "info"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "source",
+      "schema": "CISProfilesResponse",
+      "values": [
+        "cluster",
+        "fallback"
+      ]
+    },
+    {
+      "category": "SecurityScannerState",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "CISScan",
+      "values": [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    {
+      "category": "CharlieAdminAgentReplicaStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "CharlieAdminAgentReplica",
+      "values": [
+        "ready",
+        "degraded",
+        "unavailable",
+        "unknown"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "type",
+      "schema": "CharlieAdminAlertChannel",
+      "values": [
+        "slack",
+        "pagerduty",
+        "msteams",
+        "webhook"
+      ]
+    },
+    {
+      "category": "CharlieAdminAlertDeliveryProofStatusValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "CharlieAdminAlertDeliveryProof",
+      "values": [
+        "queued",
+        "delivering",
+        "retry",
+        "delivered",
+        "suppressed",
+        "dead"
+      ]
+    },
+    {
+      "category": "CharlieAdminDiagnosticCheckStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "CharlieAdminDiagnosticCheck",
+      "values": [
+        "healthy",
+        "degraded",
+        "unavailable",
+        "inactive",
+        "ready",
+        "unknown"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "source",
+      "schema": "CharlieAdminPermission",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "mode",
+      "schema": "CharlieAdminStatus",
+      "values": null
+    },
+    {
+      "category": "CharlieAdminTriggerEventStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "CharlieAdminTriggerEvent",
+      "values": [
+        "pending",
+        "dispatching",
+        "dispatched",
+        "retry",
+        "dead",
+        "completed",
+        "suppressed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "decision",
+      "schema": "CharlieApprovalDecisionRequest",
+      "values": [
+        "approve",
+        "reject",
+        "deny"
+      ]
+    },
+    {
+      "category": "CharlieApprovalSummaryStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "CharlieApprovalSummary",
+      "values": [
+        "pending",
+        "approved",
+        "denied",
+        "expired"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "type",
+      "schema": "CharlieContextSearchResult",
+      "values": [
+        "installation",
+        "management_component",
+        "alert",
+        "backup",
+        "self_management_application",
+        "agent_connection_record",
+        "cluster_agents",
+        "tunnel"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "type",
+      "schema": "CharlieFindingResource",
+      "values": [
+        "installation",
+        "management_component",
+        "alert",
+        "backup",
+        "self_management_application",
+        "agent_connection_record",
+        "cluster_agents",
+        "tunnel"
+      ]
+    },
+    {
+      "category": "CharlieFindingSummaryStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "CharlieFindingSummary",
+      "values": [
+        "open",
+        "acknowledged",
+        "dismissed",
+        "resolved",
+        "expired"
+      ]
+    },
+    {
+      "category": "CharlieFindingSummaryWorkflowStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "workflow_state",
+      "schema": "CharlieFindingSummary",
+      "values": [
+        "approval_pending",
+        "manual_remediation_required",
+        "remediation_in_progress",
+        "verification_pending",
+        "resolved",
+        "rejected",
+        "dismissed",
+        "expired"
+      ]
+    },
+    {
+      "category": "CharlieKubernetesVisibilityStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "CharlieKubernetesVisibility",
+      "values": [
+        "not_configured",
+        "disabled",
+        "enabled"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "mode",
+      "schema": "CharlieModeRequest",
+      "values": [
+        "disabled",
+        "read_only",
+        "approval",
+        "auto"
+      ]
+    },
+    {
+      "category": "CharlieOnboardingStatusStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "CharlieOnboardingStatus",
+      "values": [
+        "validated",
+        "consumed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "state",
+      "schema": "CharlieOperationStatus",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "source",
+      "schema": "CharlieSessionMetadata",
+      "values": [
+        "user",
+        "event"
+      ]
+    },
+    {
+      "category": "CharlieSessionMetadataStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "CharlieSessionMetadata",
+      "values": [
+        "creating",
+        "active",
+        "waiting_approval",
+        "completed",
+        "aborted",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "type",
+      "schema": "CharlieSessionResource",
+      "values": [
+        "installation",
+        "management_component",
+        "alert",
+        "backup",
+        "self_management_application",
+        "agent_connection_record",
+        "cluster_agents",
+        "tunnel"
+      ]
+    },
+    {
+      "category": "CharlieThreadMetadataStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "CharlieThreadMetadata",
+      "values": [
+        "active",
+        "archived"
+      ]
+    },
+    {
+      "category": "CharlieAdminTriggerEventStateValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "CharlieTriggerRetryReceipt",
+      "values": [
+        "pending",
+        "dispatching",
+        "dispatched",
+        "retry",
+        "dead",
+        "completed",
+        "suppressed"
+      ]
+    },
+    {
+      "category": "ClusterRegistrationPhaseValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "registration_phase",
+      "schema": "Cluster",
+      "values": [
+        "created",
+        "awaiting_agent",
+        "connected",
+        "provisioning",
+        "ready",
+        "failed"
+      ]
+    },
+    {
+      "category": "ClusterConnectionStatus",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "Cluster",
+      "values": [
+        "pending",
+        "active",
+        "disconnected",
+        "error"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "ClusterConditionResponse",
+      "values": [
+        "True",
+        "False",
+        "Unknown"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "type",
+      "schema": "ClusterConditionResponse",
+      "values": null
+    },
+    {
+      "category": "DeliveryDeploymentPhase",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "phase",
+      "schema": "ClusterDeployment",
+      "values": [
+        "pending",
+        "blocked",
+        "applying",
+        "ready",
+        "degraded",
+        "failed",
+        "suspended",
+        "deleting",
+        "removed",
+        "unknown"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "type",
+      "schema": "ClusterEvent",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "ClusterMonitoringConfig",
+      "values": null
+    },
+    {
+      "category": "ClusterSecurityPolicySyncStatusValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "sync_status",
+      "schema": "ClusterSecurityPolicy",
+      "values": [
+        "synced",
+        "pending",
+        "failed",
+        "unknown"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "ClusterTemplateApplicationResponse",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "ClusterToolStatus",
+      "values": [
+        "not_installed",
+        "installed",
+        "installed_unmanaged",
+        "installing",
+        "upgrading",
+        "failed",
+        "uninstalling",
+        "unknown"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "type",
+      "schema": "DeliveryAmount",
+      "values": [
+        "count",
+        "percent"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "DeliveryAsyncOperationReceipt",
+      "values": [
+        "accepted"
+      ]
+    },
+    {
+      "category": "DeliveryRendererKind",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "renderer",
+      "schema": "DeliveryBundleVersion",
+      "values": [
+        "kustomize",
+        "helm"
+      ]
+    },
+    {
+      "category": "DeliveryBundleState",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "DeliveryBundleVersion",
+      "values": [
+        "resolving",
+        "ready",
+        "failed",
+        "revoked"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "renderer",
+      "schema": "DeliveryBundleVersionDraft",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "DeliveryCondition",
+      "values": [
+        "True",
+        "False",
+        "Unknown"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "type",
+      "schema": "DeliveryCondition",
+      "values": [
+        "Ready",
+        "Reconciling",
+        "Stalled",
+        "Drifted"
+      ]
+    },
+    {
+      "category": "DeliveryRendererKind",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "renderer",
+      "schema": "DeliveryConfigurationTemplate",
+      "values": [
+        "kustomize",
+        "helm"
+      ]
+    },
+    {
+      "category": "DeliveryRendererKind",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "renderer",
+      "schema": "DeliveryConfigurationTemplateWrite",
+      "values": [
+        "kustomize",
+        "helm"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "kind",
+      "schema": "DeliveryImmutableRevision",
+      "values": [
+        "git_commit",
+        "oci_digest",
+        "helm_chart"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "state",
+      "schema": "DeliveryObservation",
+      "values": [
+        "current",
+        "stale",
+        "unsynced",
+        "denied",
+        "absent",
+        "disconnected",
+        "unavailable"
+      ]
+    },
+    {
+      "category": "DeliveryRendererKind",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "kind",
+      "schema": "DeliveryRendererSpec",
+      "values": [
+        "kustomize",
+        "helm"
+      ]
+    },
+    {
+      "category": "DeliverySourceAuthModeValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "auth_mode",
+      "schema": "DeliveryResolvedSource",
+      "values": [
+        "none",
+        "basic",
+        "bearer",
+        "ssh",
+        "workload_identity"
+      ]
+    },
+    {
+      "category": "DeliverySourceKind",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "type",
+      "schema": "DeliveryResolvedSource",
+      "values": [
+        "git",
+        "oci_artifact",
+        "helm_http",
+        "helm_oci"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "kind",
+      "schema": "DeliveryResourceIdentity",
+      "values": null
+    },
+    {
+      "category": "DeliveryRolloutState",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "DeliveryRollout",
+      "values": [
+        "draft",
+        "resolving",
+        "awaiting_approval",
+        "queued",
+        "progressing",
+        "paused",
+        "rejected",
+        "aborted",
+        "succeeded",
+        "failed",
+        "rolling_back",
+        "rolled_back",
+        "rollback_failed"
+      ]
+    },
+    {
+      "category": "DeliveryApprovalDecision",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "decision",
+      "schema": "DeliveryRolloutApproval",
+      "values": [
+        "approved",
+        "rejected"
+      ]
+    },
+    {
+      "category": "DeliveryApprovalDecision",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "decision",
+      "schema": "DeliveryRolloutApprovalRecord",
+      "values": [
+        "approved",
+        "rejected"
+      ]
+    },
+    {
+      "category": "DeliveryRolloutClusterState",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "DeliveryRolloutCluster",
+      "values": [
+        "pending",
+        "released",
+        "acknowledged",
+        "reconciling",
+        "ready",
+        "blocked",
+        "timed_out",
+        "failed",
+        "skipped",
+        "rolling_back",
+        "ready_previous",
+        "rollback_failed",
+        "aborted"
+      ]
+    },
+    {
+      "category": "DeliveryFailureAction",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "on_failure",
+      "schema": "DeliveryRolloutStrategy",
+      "values": [
+        "pause",
+        "abort",
+        "rollback"
+      ]
+    },
+    {
+      "category": "DeliveryStrategyKind",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "type",
+      "schema": "DeliveryRolloutStrategy",
+      "values": [
+        "all_at_once",
+        "rolling",
+        "canary",
+        "partitioned"
+      ]
+    },
+    {
+      "category": "DeliveryFailureAction",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "on_failure",
+      "schema": "DeliveryRolloutStrategyInput",
+      "values": [
+        "pause",
+        "abort",
+        "rollback"
+      ]
+    },
+    {
+      "category": "DeliveryStrategyKind",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "type",
+      "schema": "DeliveryRolloutStrategyInput",
+      "values": [
+        "all_at_once",
+        "rolling",
+        "canary",
+        "partitioned"
+      ]
+    },
+    {
+      "category": "DeliverySourceAuthModeValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "auth_mode",
+      "schema": "DeliverySource",
+      "values": [
+        "none",
+        "basic",
+        "bearer",
+        "ssh",
+        "workload_identity"
+      ]
+    },
+    {
+      "category": "DeliverySourceStatusValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "DeliverySource",
+      "values": [
+        "pending",
+        "ready",
+        "degraded",
+        "revoked"
+      ]
+    },
+    {
+      "category": "DeliverySourceKind",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "type",
+      "schema": "DeliverySource",
+      "values": [
+        "git",
+        "oci_artifact",
+        "helm_http",
+        "helm_oci"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "auth_mode",
+      "schema": "DeliverySourceCredentialRotate",
+      "values": [
+        "basic",
+        "bearer",
+        "ssh"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "DeliverySourceVerification",
+      "values": [
+        "pending",
+        "running",
+        "ready",
+        "failed"
+      ]
+    },
+    {
+      "category": "DeliverySourceAuthModeValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "auth_mode",
+      "schema": "DeliverySourceWrite",
+      "values": [
+        "none",
+        "basic",
+        "bearer",
+        "ssh",
+        "workload_identity"
+      ]
+    },
+    {
+      "category": "DeliverySourceKind",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "type",
+      "schema": "DeliverySourceWrite",
+      "values": [
+        "git",
+        "oci_artifact",
+        "helm_http",
+        "helm_oci"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "kind",
+      "schema": "DeliverySystemComponent",
+      "values": null
+    },
+    {
+      "category": "DeliverySystemReleaseState",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "DeliverySystemRelease",
+      "values": [
+        "draft",
+        "released",
+        "retired",
+        "revoked"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "kind",
+      "schema": "DeliverySystemResource",
+      "values": null
+    },
+    {
+      "category": "DeliverySystemRolloutState",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "state",
+      "schema": "DeliverySystemRollout",
+      "values": [
+        "draft",
+        "awaiting_approval",
+        "queued",
+        "progressing",
+        "paused",
+        "aborted",
+        "succeeded",
+        "failed",
+        "rolling_back",
+        "rolled_back",
+        "rollback_failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "phase",
+      "schema": "DeliverySystemVolume",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "renderer",
+      "schema": "DeliveryVersionIdentity",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "source",
+      "schema": "DeliveryVersionIdentity",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "type",
+      "schema": "DexConnector",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "type",
+      "schema": "DexConnectorRequest",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "type",
+      "schema": "DexConnectorType",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "phase",
+      "schema": "DexOperation",
+      "values": [
+        "queued",
+        "reconciling",
+        "finalizing",
+        "completed"
+      ]
+    },
+    {
+      "category": "DurableOperationStatus",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "DexOperation",
+      "values": [
+        "pending",
+        "running",
+        "retrying",
+        "failed",
+        "succeeded"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "LoggingAttachStatus",
+      "values": null
+    },
+    {
+      "category": "PollingOperationStatus",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "LoggingOperation",
+      "values": [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "superseded"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "MonitoringObservedRelease",
+      "values": null
+    },
+    {
+      "category": "PollingOperationStatus",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "MonitoringOperation",
+      "values": [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "superseded"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": true,
+      "property": "mode",
+      "schema": "MonitoringSizerVerdict",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "mode",
+      "schema": "MonitoringStackStatus",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "MonitoringStackStatus",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "NodeActionResponse",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "NodeDetail",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "NodeDrainResponse",
+      "values": [
+        "dry_run",
+        "draining",
+        "drained",
+        "blocked",
+        "partial"
+      ]
+    },
+    {
+      "category": "NodeOperationState",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "NodeOperation",
+      "values": [
+        "pending",
+        "running",
+        "retrying",
+        "blocked",
+        "failed",
+        "succeeded"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "NodeSummary",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "NodeTaintActionResponse",
+      "values": null
+    },
+    {
+      "category": "ClusterRegistrationPhaseValue",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "phase",
+      "schema": "RegistrationStatus",
+      "values": [
+        "created",
+        "awaiting_agent",
+        "connected",
+        "provisioning",
+        "ready",
+        "failed"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "RegistrationStep",
+      "values": [
+        "pending",
+        "running",
+        "success",
+        "failed",
+        "skipped"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "kind",
+      "schema": "ResourceDiscoveryEntry",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "source",
+      "schema": "ResourceDiscoveryEntry",
+      "values": [
+        "kubernetes_discovery",
+        "astronomer_fallback"
+      ]
+    },
+    {
+      "category": "DurableOperationStatus",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "ResourceOperation",
+      "values": [
+        "pending",
+        "running",
+        "retrying",
+        "failed",
+        "succeeded"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "type",
+      "schema": "ResourceSearchResult",
+      "values": null
+    },
+    {
+      "category": null,
+      "classification": "open v1 wire field / dynamic or historical read boundary",
+      "nullable": false,
+      "property": "status",
+      "schema": "RestoreOperationResponse",
+      "values": null
+    },
+    {
+      "category": "DurableOperationStatus",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "SupportBundleOperation",
+      "values": [
+        "pending",
+        "running",
+        "retrying",
+        "failed",
+        "succeeded"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "type",
+      "schema": "ToolFormField",
+      "values": [
+        "string",
+        "number",
+        "boolean",
+        "select",
+        "multiline",
+        "storage"
+      ]
+    },
+    {
+      "category": "PollingOperationStatus",
+      "classification": "named canonical category / strict writes / neutral checked reads",
+      "nullable": false,
+      "property": "status",
+      "schema": "ToolOperation",
+      "values": [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "superseded"
+      ]
+    },
+    {
+      "category": null,
+      "classification": "existing closed OpenAPI enum",
+      "nullable": false,
+      "property": "status",
+      "schema": "ToolPreflightCheck",
+      "values": [
+        "pass",
+        "warn",
+        "block"
+      ]
+    }
+  ]
+}

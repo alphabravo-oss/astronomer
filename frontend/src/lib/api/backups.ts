@@ -1,3 +1,5 @@
+import { classifyCategory } from "@/lib/api/categorical-values";
+
 import {
   deleteBackupsSchedulesById,
   deleteBackupsStorageById,
@@ -137,7 +139,7 @@ export function mapBackupRun(wire: BackupWire): BackupRun {
     name: requiredString(wire.name, "backup.name"),
     storageId: requiredString(wire.storage_id, "backup.storage_id"),
     backupType: (wire.backup_type ?? "full") as BackupType,
-    status: (wire.status ?? "pending") as BackupStatus,
+    status: knownBackupStatus(wire.status),
     filePath: wire.file_path,
     fileSizeBytes: wire.file_size_bytes,
     startedAt: wire.started_at ?? undefined,
@@ -160,7 +162,7 @@ export function mapBackupRestore(wire: RestoreWire): BackupRestore {
   return {
     id: requiredString(wire.id, "restore.id"),
     backupId: requiredString(wire.backup_id, "restore.backup_id"),
-    status: (wire.status ?? "pending") as BackupStatus,
+    status: knownBackupStatus(wire.status),
     startedAt: wire.started_at ?? undefined,
     completedAt: wire.completed_at ?? undefined,
     errorMessage: wire.error_message,
@@ -374,4 +376,9 @@ export async function b2CreateRestore(
       "create restore",
     ),
   );
+}
+
+function knownBackupStatus(value: unknown): BackupStatus {
+  const result = classifyCategory("BackupKnownStatus", value);
+  return result.kind === "known" ? result.value : "unknown";
 }

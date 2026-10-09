@@ -153,6 +153,7 @@ openapi-embed: ## Sync the served spec asset from the source-of-truth docs/opena
 openapi-generate: ## Deterministically sync routes, frontend operations/types, embedded spec, and Go SDK
 	node scripts/sync-openapi-routes.mjs --write
 	node scripts/openapi-quality.mjs
+	python3 scripts/categorical-contracts.py write
 	node scripts/generate-openapi-types.mjs --write
 	node scripts/generate-openapi-client.mjs --write
 	$(MAKE) openapi-embed
@@ -467,3 +468,10 @@ load-test: ## Run the load-test harness (see scripts/loadtest/README.md)
 	 LOADTEST_OUT='$(LOADTEST_OUT)' \
 	 LOADTEST_TOKEN='$(LOADTEST_TOKEN)' \
 	 go run ./scripts/loadtest
+
+categorical-contract-check: ## Verify canonical category/database/model/browser parity
+	python3 scripts/categorical-contracts.py check
+	python3 -m unittest discover -s scripts/tests -p categorical_contract_test.py
+
+sdk-v1-compatibility: ## Compile every released SDK field/function/method against current SDK
+	./scripts/check-sdk-v1-compatibility.sh

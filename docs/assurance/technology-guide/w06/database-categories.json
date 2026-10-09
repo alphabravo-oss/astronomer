@@ -1,0 +1,175 @@
+{
+  "checks": [
+    {
+      "category": "DeliveryRolloutState",
+      "constraint": "delivery_rollout_state_valid",
+      "constraintDigest": "sha256:8563766e1d4fb42d0f285f6758cd93faab890203d7b623f364adaa881443f342",
+      "knownValuesAccepted": 13,
+      "unknownRejected": true
+    },
+    {
+      "category": "DeliveryRolloutClusterState",
+      "constraint": "delivery_rollout_cluster_state_valid",
+      "constraintDigest": "sha256:0c385d883ac93ce3785439b2ec55b879ef316e7aea0a4147b891fbd9f552a220",
+      "knownValuesAccepted": 13,
+      "unknownRejected": true
+    },
+    {
+      "category": "DeliveryDeploymentPhase",
+      "constraint": "cluster_deployment_phase_valid",
+      "constraintDigest": "sha256:250ecf190c29539808ca3b262745cafd5637080ee568761cb03494e792be1a0a",
+      "knownValuesAccepted": 10,
+      "unknownRejected": true
+    },
+    {
+      "category": "DeliverySourceKind",
+      "constraint": "delivery_source_type_valid",
+      "constraintDigest": "sha256:d563a1266bbf6faad1c41e9e76a1e95abff8cca46d2f3125ab9fcded3dd8a98b",
+      "knownValuesAccepted": 4,
+      "unknownRejected": true
+    },
+    {
+      "category": "DeliverySourceStatusValue",
+      "constraint": "delivery_source_status_valid",
+      "constraintDigest": "sha256:03cdf457592a004db622f0cb6fa8d21285a6fecf5474b7d44c278b051a2759f5",
+      "knownValuesAccepted": 4,
+      "unknownRejected": true
+    },
+    {
+      "category": "DeliveryBundleState",
+      "constraint": "component_bundle_state_valid",
+      "constraintDigest": "sha256:ea3ffdee011a9aed610b7270c7a8ad9813cfb371029fd032ee4d113e5e496c24",
+      "knownValuesAccepted": 4,
+      "unknownRejected": true
+    },
+    {
+      "category": "DeliverySystemReleaseState",
+      "constraint": "delivery_system_release_state_valid",
+      "constraintDigest": "sha256:92083711ff25c6c95e3f9f0d8e5388c31f4da9ccd10f3ad94d445c21c2d78ac2",
+      "knownValuesAccepted": 4,
+      "unknownRejected": true
+    },
+    {
+      "category": "DeliverySystemRolloutState",
+      "constraint": "delivery_system_rollout_state_valid",
+      "constraintDigest": "sha256:3874b92f6f0f8e877b7ae1fc46c94b02db1e07932cd8220b35d473344d6b37d3",
+      "knownValuesAccepted": 11,
+      "unknownRejected": true
+    },
+    {
+      "category": "DeliverySystemAssignmentPhase",
+      "constraint": "delivery_system_assignment_phase_valid",
+      "constraintDigest": "sha256:8e9aa0a55011a205c56e1cde9ceca1b8b2d4604e6a5b3cf6cc02d1965e82c7cd",
+      "knownValuesAccepted": 9,
+      "unknownRejected": true
+    },
+    {
+      "category": "AgentCredentialState",
+      "constraint": "agent_ops_credential_state",
+      "constraintDigest": "sha256:98b4fa2186d00d8b63932cd2279c85d14b6d43cb8dd4d3d5dee441443774fe5c",
+      "knownValuesAccepted": 5,
+      "unknownRejected": true
+    },
+    {
+      "category": "AgentRegistrationState",
+      "constraint": "agent_ops_registration_state",
+      "constraintDigest": "sha256:19060d1dc3d34293b09ce25a31572dbde0cea1d4f99c6dc1191128bb8a0740fd",
+      "knownValuesAccepted": 4,
+      "unknownRejected": true
+    },
+    {
+      "category": "ClusterRegistrationPhaseValue",
+      "constraint": "registration_phase_valid",
+      "constraintDigest": "sha256:c972ae54683b0d15780096930bb2f3f27aa2ed7494d1eec240e44c338d15805c",
+      "knownValuesAccepted": 6,
+      "unknownRejected": true
+    },
+    {
+      "category": "AgentLifecycleOperationState",
+      "constraint": "agent_lifecycle_operations_status_check",
+      "constraintDigest": "sha256:a6f514c306541e591592c47eea2e46e47b77daf74f0fdbae04317b6c30ded026",
+      "knownValuesAccepted": 5,
+      "unknownRejected": true
+    },
+    {
+      "category": "CharlieSessionMetadataStateValue",
+      "constraint": "charlie_session_state",
+      "constraintDigest": "sha256:142fb18676e17cc6e50db29f28b16bcb2c2d9a0532996c0271504dc8c889231c",
+      "knownValuesAccepted": 6,
+      "unknownRejected": true
+    },
+    {
+      "category": "CharlieFindingSummaryStateValue",
+      "constraint": "charlie_finding_status",
+      "constraintDigest": "sha256:a3ccc96623684dbe84d39290cf8fa5cdccadc5378803cbee655fbd34219bca10",
+      "knownValuesAccepted": 5,
+      "unknownRejected": true
+    },
+    {
+      "category": "CharlieFindingSummaryStateValue",
+      "constraint": "charlie_finding_decision_status",
+      "constraintDigest": "sha256:9e2baeec224ec14a7a859c44336f62cfb045818561ea183087eaf0c23f47ee4d",
+      "knownValuesAccepted": 5,
+      "unknownRejected": true
+    },
+    {
+      "category": "CharlieFindingSummaryWorkflowStateValue",
+      "constraint": "charlie_finding_workflow_state",
+      "constraintDigest": "sha256:8e81ad944dc89225edac0ae593f9e2f512d98f0437823221d9e94f91d4444577",
+      "knownValuesAccepted": 8,
+      "unknownRejected": true
+    },
+    {
+      "category": "CharlieFindingSummaryWorkflowStateValue",
+      "constraint": "charlie_finding_decision_workflow",
+      "constraintDigest": "sha256:366ec09c551da626c081545ea26fedec0cee058f7f59b8c4a2a64ffb4dee48d2",
+      "knownValuesAccepted": 8,
+      "unknownRejected": true
+    },
+    {
+      "category": "CharlieAdminTriggerEventStateValue",
+      "constraint": "charlie_trigger_event_state",
+      "constraintDigest": "sha256:64307236e5f183d2f0be549ff9cee3dbff1042e73be90f58e1c3ae2543eae628",
+      "knownValuesAccepted": 7,
+      "unknownRejected": true
+    },
+    {
+      "category": "CharlieApprovalState",
+      "constraint": "charlie_approval_state",
+      "constraintDigest": "sha256:e35a679591df0c8588ff04bd8ff386aa77b633028aee476a97b48bfb339ec1d4",
+      "knownValuesAccepted": 5,
+      "unknownRejected": true
+    },
+    {
+      "category": "CharlieReceiptState",
+      "constraint": "charlie_receipt_state",
+      "constraintDigest": "sha256:c6a61b61c98ec41c6c972f116fac0dcc9e6999c1f8e76299169ad59cf3434239",
+      "knownValuesAccepted": 10,
+      "unknownRejected": true
+    },
+    {
+      "category": "CharlieConnectionOnboardingState",
+      "constraint": "charlie_connection_onboarding_state",
+      "constraintDigest": "sha256:4624896dbaf916c4060e2e11a4847aa76ea4fc93620843c9cea536278b58e796",
+      "knownValuesAccepted": 6,
+      "unknownRejected": true
+    }
+  ],
+  "database": "dedicated owned CNPG17.11 category qualification database",
+  "limits": [
+    "Baseline71 only: no combined072/073 or PostgreSQL18 migration qualification claimed.",
+    "Temporary transaction-only fixtures exercise actual migrated CHECK expressions; no production or recovery database touched."
+  ],
+  "observedAt": "2026-10-09T21:09:23.960242+00:00",
+  "productionAdapter": {
+    "logDigest": "sha256:bca463e7bbd98f47f1f895307cb6b74f0866604a55d08116d462497487cb94df",
+    "status": "pass",
+    "test": "TestPostgresPlanningTransactionAndHAFencing"
+  },
+  "schemaVersion": 1,
+  "schemaVersionTested": 71,
+  "sourceFiles": {
+    "deploy/contracts/categories.json": "sha256:5a963d04d4802887993ffcb93e8d04fc019bdb46ab449931d670b0a8d4d23a57",
+    "docs/openapi.yaml": "sha256:946205bdacdfd900d3bf96f8946c0e61780867310f7fd5175dbeaa8268f3550c"
+  }
+}

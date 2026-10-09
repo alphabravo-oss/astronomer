@@ -13,6 +13,11 @@ import * as api from "@/lib/api/delivery-rollouts";
 import { can } from "@/lib/permissions";
 import { RolloutDetailPage } from "./-page";
 
+const transportRequest = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/api/transport", () => ({
+  default: { request: transportRequest },
+}));
+
 const access = vi.hoisted(() => ({ denied: new Set<string>() }));
 vi.mock("@/lib/hooks/auth", () => ({
   useCurrentUser: () => ({ data: { id: "operator" } }),
@@ -167,14 +172,14 @@ beforeEach(() => {
 describe("rollout detail behavior", () => {
   it("submits a reasoned action against the exact ETag and refreshes durable state", async () => {
     vi.mocked(api.actOnDeliveryRollout).mockResolvedValue({
-      operation_id: "operation-1",
+      operationId: "operation-1",
       operation: "delivery.rollout.resume",
       resource: "delivery_rollouts",
-      resource_id: "rollout-1",
-      project_id: "project-1",
+      resourceId: "rollout-1",
+      projectId: "project-1",
       status: "accepted",
-      status_url: "/api/v1/operations/operation-1/",
-      accepted_at: "2026-09-10T00:00:00Z",
+      statusUrl: "/api/v1/operations/operation-1/",
+      acceptedAt: "2026-09-10T00:00:00Z",
     });
     const { invalidation } = mount();
     fireEvent.click(await screen.findByRole("button", { name: /^resume$/i }));
@@ -283,5 +288,49 @@ describe("rollout detail behavior", () => {
     expect(api.getDeliveryRollout).not.toHaveBeenCalled();
     expect(api.listDeliveryRolloutClusters).not.toHaveBeenCalled();
     expect(api.listDeliveryRolloutEvents).not.toHaveBeenCalled();
+  });
+});
+
+describe("future categorical rollout responses", () => {
+  it("renders neutral unknown state through the actual generated client and disables control and approval actions", async () => {
+    function wireKeys(value: unknown): unknown {
+      if (Array.isArray(value)) return value.map(wireKeys);
+      if (value && typeof value === "object")
+        return Object.fromEntries(
+          Object.entries(value).map(([key, item]) => [
+            key.replace(/[A-Z]/g, (letter) => "_" + letter.toLowerCase()),
+            wireKeys(item),
+          ]),
+        );
+      return value;
+    }
+    const wire = wireKeys(detail().data) as Record<string, unknown>;
+    (wire.frozen_plan as Record<string, unknown>).clusters = [];
+    const rollout = wire.rollout as Record<string, unknown>;
+    rollout.state = "future-upstream-state";
+    transportRequest.mockResolvedValue({
+      status: 200,
+      headers: { etag: '"9"' },
+      data: { data: wire },
+    });
+    const original = await vi.importActual<
+      typeof import("@/lib/api/delivery-rollouts")
+    >("@/lib/api/delivery-rollouts");
+    vi.mocked(api.getDeliveryRollout).mockImplementation(
+      original.getDeliveryRollout,
+    );
+    mount();
+    expect(await screen.findByText(/unsupported/i)).toBeVisible();
+    for (const action of ["Pause", "Resume", "Abort", "Retry", "Rollback"])
+      expect(
+        screen.queryByRole("button", {
+          name: new RegExp("^" + action + "$", "i"),
+        }),
+      ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /review approval/i }),
+    ).toBeDisabled();
+    expect(api.actOnDeliveryRollout).not.toHaveBeenCalled();
+    expect(api.approveDeliveryRollout).not.toHaveBeenCalled();
   });
 });

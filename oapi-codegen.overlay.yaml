@@ -1,30 +1,920 @@
-# OpenAPI Overlay (https://github.com/OAI/Overlay-Specification) applied by
-# oapi-codegen BEFORE generation (see oapi-codegen.yaml -> output-options.overlay).
-#
-# WHY THIS EXISTS
-# docs/openapi.yaml is the source of truth and is owned by another track, so we
-# do not edit it here. Instead this overlay patches three spots that make the
-# *generated Go* fail to compile, without changing the wire contract:
-#
-#   1. ResourceSearchResult includes upstream snake_case Kubernetes metadata
-#      alongside the canonical camelCase projection. Both normalize to the
-#      same Go field names, so the wire-specific fields need explicit names.
-#
-# These are codegen-only renames: JSON tags, paths, and request/response bodies
-# are unchanged.
-overlay: 1.0.0
-info:
-  title: astroclient codegen fixups
-  version: 1.0.0
-actions:
-  # --- duplicate camel/snake field names in one struct ------------------------
-  # ResourceSearchResult.results[].(cluster_id|cluster_name) collide with
-  # ResourceRow.clusterId and the sibling clusterName.
-  - target: $.components.schemas.ResourceSearchResult.properties.results.items.allOf[1].properties.cluster_id
-    description: Rename snake_case dup so it does not collide with ResourceRow.clusterId.
-    update:
-      x-go-name: ClusterIdSnake
-  - target: $.components.schemas.ResourceSearchResult.properties.results.items.allOf[1].properties.cluster_name
-    description: Rename snake_case dup so it does not collide with clusterName.
-    update:
-      x-go-name: ClusterNameSnake
+{
+  "overlay": "1.0.0",
+  "info": {
+    "title": "astroclient codegen fixups",
+    "version": "1.0.0"
+  },
+  "actions": [
+    {
+      "target": "$.components.schemas.ResourceSearchResult.properties.results.items.allOf[1].properties.cluster_id",
+      "description": "Rename snake_case dup so it does not collide with ResourceRow.clusterId.",
+      "update": {
+        "x-go-name": "ClusterIdSnake"
+      }
+    },
+    {
+      "target": "$.components.schemas.ResourceSearchResult.properties.results.items.allOf[1].properties.cluster_name",
+      "description": "Rename snake_case dup so it does not collide with clusterName.",
+      "update": {
+        "x-go-name": "ClusterNameSnake"
+      }
+    },
+    {
+      "target": "$.components.schemas.InhibitionRequest.required",
+      "description": "Replace the required array rather than append to it in overlay semantics.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.InhibitionRequest",
+      "description": "Keep optional pointer fields in existing Go clients.",
+      "update": {
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.InhibitionRequest.properties.equal_labels",
+      "description": "Retain *[]string with omitempty in the v1 SDK.",
+      "update": {
+        "nullable": false
+      }
+    },
+    {
+      "target": "$.components.schemas.InhibitionRequest.properties.enabled",
+      "description": "Retain *bool with omitempty in the v1 SDK.",
+      "update": {
+        "nullable": false
+      }
+    },
+    {
+      "target": "$.components.schemas.ClusterDeployment.properties.phase.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.ClusterDeployment.properties.phase",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "blocked",
+          "applying",
+          "ready",
+          "degraded",
+          "failed",
+          "suspended",
+          "deleting",
+          "removed",
+          "unknown"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliverySource.properties.type.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliverySource.properties.type",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "git",
+          "oci_artifact",
+          "helm_http",
+          "helm_oci"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliverySourceWrite.properties.type.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliverySourceWrite.properties.type",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "git",
+          "oci_artifact",
+          "helm_http",
+          "helm_oci"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryResolvedSource.properties.type.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryResolvedSource.properties.type",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "git",
+          "oci_artifact",
+          "helm_http",
+          "helm_oci"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryRendererSpec.properties.kind.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryRendererSpec.properties.kind",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "kustomize",
+          "helm"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryBundleVersion.properties.renderer.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryBundleVersion.properties.renderer",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "kustomize",
+          "helm"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryConfigurationTemplate.properties.renderer.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryConfigurationTemplate.properties.renderer",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "kustomize",
+          "helm"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryConfigurationTemplateWrite.properties.renderer.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryConfigurationTemplateWrite.properties.renderer",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "kustomize",
+          "helm"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutApproval.properties.decision.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutApproval.properties.decision",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "approved",
+          "rejected"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutApprovalRecord.properties.decision.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutApprovalRecord.properties.decision",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "approved",
+          "rejected"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliverySource.properties.auth_mode.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliverySource.properties.auth_mode",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "none",
+          "basic",
+          "bearer",
+          "ssh",
+          "workload_identity"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliverySourceWrite.properties.auth_mode.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliverySourceWrite.properties.auth_mode",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "none",
+          "basic",
+          "bearer",
+          "ssh",
+          "workload_identity"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryResolvedSource.properties.auth_mode.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryResolvedSource.properties.auth_mode",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "none",
+          "basic",
+          "bearer",
+          "ssh",
+          "workload_identity"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliverySource.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliverySource.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "ready",
+          "degraded",
+          "revoked"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryBundleVersion.properties.state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryBundleVersion.properties.state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "resolving",
+          "ready",
+          "failed",
+          "revoked"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryBundleVersion.properties.verification_status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryBundleVersion.properties.verification_status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "verified",
+          "failed",
+          "unsigned"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutStrategy.properties.type.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutStrategy.properties.type",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "all_at_once",
+          "rolling",
+          "canary",
+          "partitioned"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutStrategyInput.properties.type.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutStrategyInput.properties.type",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "all_at_once",
+          "rolling",
+          "canary",
+          "partitioned"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutStrategy.properties.on_failure.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutStrategy.properties.on_failure",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pause",
+          "abort",
+          "rollback"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutStrategyInput.properties.on_failure.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DeliveryRolloutStrategyInput.properties.on_failure",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pause",
+          "abort",
+          "rollback"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.Cluster.properties.registration_phase.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.Cluster.properties.registration_phase",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "created",
+          "awaiting_agent",
+          "connected",
+          "provisioning",
+          "ready",
+          "failed"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.RegistrationStatus.properties.phase.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.RegistrationStatus.properties.phase",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "created",
+          "awaiting_agent",
+          "connected",
+          "provisioning",
+          "ready",
+          "failed"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.AdminQueueOperation.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.AdminQueueOperation.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "retrying",
+          "failed",
+          "succeeded"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.AuditExportOperation.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.AuditExportOperation.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "retrying",
+          "failed",
+          "succeeded"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.DexOperation.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.DexOperation.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "retrying",
+          "failed",
+          "succeeded"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.ResourceOperation.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.ResourceOperation.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "retrying",
+          "failed",
+          "succeeded"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.SupportBundleOperation.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.SupportBundleOperation.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "retrying",
+          "failed",
+          "succeeded"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.AgentLifecycleOperation.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.AgentLifecycleOperation.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "failed",
+          "cancelled"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.NodeOperation.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.NodeOperation.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "retrying",
+          "blocked",
+          "failed",
+          "succeeded"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.LoggingOperation.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.LoggingOperation.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "superseded"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.MonitoringOperation.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.MonitoringOperation.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "superseded"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.ToolOperation.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.ToolOperation.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "superseded"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.Cluster.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.Cluster.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "active",
+          "disconnected",
+          "error"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CISScan.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CISScan.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "failed",
+          "cancelled"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.ClusterSecurityPolicy.properties.sync_status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.ClusterSecurityPolicy.properties.sync_status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "synced",
+          "pending",
+          "failed",
+          "unknown"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieSessionMetadata.properties.state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieSessionMetadata.properties.state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "creating",
+          "active",
+          "waiting_approval",
+          "completed",
+          "aborted",
+          "failed"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieFindingSummary.properties.state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieFindingSummary.properties.state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "open",
+          "acknowledged",
+          "dismissed",
+          "resolved",
+          "expired"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieFindingSummary.properties.workflow_state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieFindingSummary.properties.workflow_state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "approval_pending",
+          "manual_remediation_required",
+          "remediation_in_progress",
+          "verification_pending",
+          "resolved",
+          "rejected",
+          "dismissed",
+          "expired"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieAdminTriggerEvent.properties.state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieAdminTriggerEvent.properties.state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "dispatching",
+          "dispatched",
+          "retry",
+          "dead",
+          "completed",
+          "suppressed"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieTriggerRetryReceipt.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieTriggerRetryReceipt.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "dispatching",
+          "dispatched",
+          "retry",
+          "dead",
+          "completed",
+          "suppressed"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieApprovalSummary.properties.state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieApprovalSummary.properties.state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "denied",
+          "expired"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieAdminAgentReplica.properties.state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieAdminAgentReplica.properties.state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "ready",
+          "degraded",
+          "unavailable",
+          "unknown"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieAdminAlertDeliveryProof.properties.status.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieAdminAlertDeliveryProof.properties.status",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "delivering",
+          "retry",
+          "delivered",
+          "suppressed",
+          "dead"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieAdminDiagnosticCheck.properties.state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieAdminDiagnosticCheck.properties.state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "healthy",
+          "degraded",
+          "unavailable",
+          "inactive",
+          "ready",
+          "unknown"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieKubernetesVisibility.properties.state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieKubernetesVisibility.properties.state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "not_configured",
+          "disabled",
+          "enabled"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieOnboardingStatus.properties.state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieOnboardingStatus.properties.state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "validated",
+          "consumed"
+        ]
+      }
+    },
+    {
+      "target": "$.components.schemas.CharlieThreadMetadata.properties.state.allOf",
+      "description": "Retain v1 Go SDK inline enum type identity.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.CharlieThreadMetadata.properties.state",
+      "description": "Generate the existing inline SDK type from canonical enum values.",
+      "update": {
+        "type": "string",
+        "enum": [
+          "active",
+          "archived"
+        ]
+      }
+    }
+  ]
+}

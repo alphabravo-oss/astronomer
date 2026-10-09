@@ -1,6 +1,6 @@
 /** Component bundle contracts and operations. */
 
-import { camelizeKeys } from "@/lib/camelize";
+import { camelizeWire } from "@/lib/camelize";
 import * as generated from "@/lib/api/generated/client";
 import { requireEnvelopeData } from "@/lib/api/data-envelope";
 import {
@@ -55,7 +55,7 @@ export interface HelmRenderer {
 }
 
 export interface RendererSpec {
-  kind: RendererKind;
+  kind: RendererKind | "unsupported";
   kustomize?: KustomizeRenderer;
   helm?: HelmRenderer;
 }
@@ -65,7 +65,7 @@ export interface ComponentBundleVersion {
   bundleId: string;
   sourceId: string;
   version: string;
-  renderer: RendererKind;
+  renderer: RendererKind | "unsupported";
   scope: BundleScope;
   requestedRevision: string;
   resolvedRevision?: string;
@@ -123,12 +123,12 @@ export interface CreateBundleVersionRequest {
 }
 
 function mapBundle(wire: DeliveryContracts["DeliveryBundle"]): ComponentBundle {
-  return camelizeKeys(wire) as unknown as ComponentBundle;
+  return camelizeWire(wire);
 }
 function mapBundleVersion(
   wire: DeliveryContracts["DeliveryBundleVersion"],
 ): ComponentBundleVersion {
-  return camelizeKeys(wire) as unknown as ComponentBundleVersion;
+  return camelizeWire(wire);
 }
 
 export async function listComponentBundles(

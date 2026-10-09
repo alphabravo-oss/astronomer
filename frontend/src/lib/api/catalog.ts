@@ -41,7 +41,7 @@ import type {
   InstalledChart,
   PaginatedResponse,
 } from "@/types";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
 
 type Schemas = OpenAPIComponents["schemas"];
