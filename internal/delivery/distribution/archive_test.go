@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 type fixtureMember struct {
@@ -86,7 +87,7 @@ func archiveFixture(t *testing.T, extra []fixtureMember, mutate func(*BOM, map[s
 	}
 	_ = writer.Close()
 	_ = compressed.Close()
-	return result.Bytes(), catalog.Release, catalogDigest
+	return result.Bytes(), catalog.Release, bom.CatalogDigest
 }
 func TestReadArchiveClosedBOM(t *testing.T) {
 	payload, release, digest := archiveFixture(t, nil, nil)
@@ -174,5 +175,36 @@ func TestClosedJSONRejectsDuplicateUnknownAndExcessiveNesting(t *testing.T) {
 		if decodeClosed([]byte(body), &inventory) == nil {
 			t.Fatal("ambiguous or invalid schema accepted")
 		}
+	}
+}
+
+func TestSignedNilValuesProfileFailsWithoutMirrorPanic(t *testing.T) {
+	payload, release, digest := archiveFixture(t, nil, func(bom *BOM, members map[string][]byte) {
+		var catalog builtinbundles.Catalog
+		_ = json.Unmarshal(members["catalog.json"], &catalog)
+		slug := catalog.Components[0].Slug
+		catalog.Components[0].Values = nil
+		members["catalog.json"], _ = json.Marshal(catalog)
+		bom.CatalogDigest = contentDigest(members["catalog.json"])
+		var values map[string]map[string]any
+		_ = json.Unmarshal(members["profiles/values.json"], &values)
+		values[slug] = nil
+		members["profiles/values.json"], _ = json.Marshal(values)
+		for index := range bom.Members {
+			member := &bom.Members[index]
+			member.Digest = contentDigest(members[member.Path])
+			member.Size = int64(len(members[member.Path]))
+		}
+	})
+	if _, _, err := ReadArchive(payload, release, digest, "builtins"); err == nil || blockedCategory(err) != "values" {
+		t.Fatalf("signed null values accepted or untyped: %v", err)
+	}
+	catalog, err := builtinbundles.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog.Components[0].Values = nil
+	if _, err := projectMirrors(t.Context(), catalog, &MirrorPlan{}, httpclient.DestinationPolicy{}); err == nil || blockedCategory(err) != "values" {
+		t.Fatalf("nil mirror values were not rejected safely: %v", err)
 	}
 }

@@ -141,6 +141,9 @@ func validateProfile(bom BOM, members map[string][]byte, catalog builtinbundles.
 			return errors.New("distribution values profiles are incomplete")
 		}
 		for _, component := range catalog.Components {
+			if component.Values == nil || values[component.Slug] == nil {
+				return blocked("values", "distribution values profile must be a closed object")
+			}
 			expected, _ := json.Marshal(component.Values)
 			actual, _ := json.Marshal(values[component.Slug])
 			if !bytes.Equal(expected, actual) {

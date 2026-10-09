@@ -2,22 +2,31 @@ package distribution
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/google/uuid"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
 	"github.com/sigstore/sigstore/pkg/signature"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type registryFixture struct {
@@ -26,6 +35,8 @@ type registryFixture struct {
 	payloadReads     int
 	externalRequests int
 	corruptBlob      string
+	uploads          map[string][]byte
+	uploadCount      int
 }
 
 func (f *registryFixture) addArtifact(repository, media string, payload []byte) string {
@@ -56,8 +67,60 @@ func (f *registryFixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/v2/")
+	if repository, uploadID, found := strings.Cut(path, "/blobs/uploads/"); found {
+		if f.uploads == nil {
+			f.uploads = map[string][]byte{}
+		}
+		if r.Method == "POST" {
+			f.uploadCount++
+			id := fmt.Sprint(f.uploadCount)
+			f.uploads[id] = nil
+			w.Header().Set("Location", "/v2/"+repository+"/blobs/uploads/"+id)
+			w.Header().Set("Docker-Upload-UUID", id)
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		content, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
+		if err != nil {
+			w.WriteHeader(400)
+			return
+		}
+		f.uploads[uploadID] = append(f.uploads[uploadID], content...)
+		if r.Method == "PATCH" {
+			w.Header().Set("Location", r.URL.Path)
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		if r.Method == "PUT" {
+			subject := r.URL.Query().Get("digest")
+			if contentDigest(f.uploads[uploadID]) != subject {
+				w.WriteHeader(400)
+				return
+			}
+			f.blobs[subject] = f.uploads[uploadID]
+			delete(f.uploads, uploadID)
+			w.Header().Set("Location", "/v2/"+repository+"/blobs/"+subject)
+			w.Header().Set("Docker-Content-Digest", subject)
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+	}
 	var data []byte
 	if repository, reference, found := strings.Cut(path, "/manifests/"); found {
+		if r.Method == "PUT" {
+			content, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+			if err != nil {
+				w.WriteHeader(400)
+				return
+			}
+			f.manifests[repository+"/"+reference] = content
+			f.manifests[repository+"/"+contentDigest(content)] = content
+			w.Header().Set("Docker-Content-Digest", contentDigest(content))
+			w.Header().Set("Location", r.URL.Path)
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+
 		data = f.manifests[repository+"/"+reference]
 		w.Header().Set("Content-Type", ocispec.MediaTypeImageManifest)
 	} else if _, reference, found := strings.Cut(path, "/blobs/"); found {
@@ -188,5 +251,118 @@ func TestVerifiedRegistryParentAndEveryChildBeforeCache(t *testing.T) {
 	}
 	if f.externalRequests != 0 {
 		t.Fatal("verification fetched public trust material")
+	}
+}
+
+// Explicit opt-in executes the selected Cosign binary against a local registry,
+// while an external proxy trap proves offline QA signing needs no public service.
+func TestSelectedCosignProducerToVerifiedLoader(t *testing.T) {
+	binary := os.Getenv("COSIGN_BIN")
+	if binary == "" {
+		t.Skip("COSIGN_BIN must select the qualified producer binary")
+	}
+	f := &registryFixture{manifests: map[string][]byte{}, blobs: map[string][]byte{}}
+	parent, release, catalogDigest := archiveFixture(t, nil, func(bom *BOM, members map[string][]byte) {
+		for index := range bom.Charts {
+			subject := &bom.Charts[index]
+			subject.Repository = "1.1.1.1/charts"
+			subject.Digest = f.addArtifact("charts/"+subject.Component, "application/vnd.cncf.helm.chart.content.v1.tar+gzip", members["charts/"+subject.Component+".tgz"])
+		}
+	})
+	subject := f.addArtifact("distribution", MediaType, parent)
+	f.blobs[digest.FromString("{}").String()] = []byte("{}")
+	server := httptest.NewServer(f)
+	defer server.Close()
+	externalRequests := 0
+	trap := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { externalRequests++; w.WriteHeader(http.StatusForbidden) }))
+	defer trap.Close()
+	temporary := t.TempDir()
+	random := make([]byte, 24)
+	if _, err := rand.Read(random); err != nil {
+		t.Fatal(err)
+	}
+	password := hex.EncodeToString(random)
+	environment := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + temporary, "DOCKER_CONFIG=" + temporary, "COSIGN_PASSWORD=" + password, "HTTP_PROXY=" + trap.URL, "HTTPS_PROXY=" + trap.URL, "ALL_PROXY=" + trap.URL, "NO_PROXY=127.0.0.1,localhost"}
+	command := exec.Command(binary, "generate-key-pair", "--output-key-prefix", filepath.Join(temporary, "qa"))
+	command.Env = environment
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("QA key generation failed: %v %s", err, output)
+	}
+	version := exec.Command(binary, "version")
+	version.Env = environment
+	versionBytes, err := version.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("selected producer version: %s", versionBytes)
+	keys := make([]string, 0, len(f.manifests))
+	for key := range f.manifests {
+		keys = append(keys, key)
+	}
+	for _, key := range keys {
+		repository, subject, found := strings.Cut(key, "/sha256:")
+		if !found {
+			t.Fatal("fixture subject malformed")
+		}
+		reference := strings.TrimPrefix(server.URL, "http://") + "/" + repository + "@sha256:" + subject
+		command = exec.Command(binary, "sign", "--yes", "--key", filepath.Join(temporary, "qa.key"), "--new-bundle-format=false", "--registry-referrers-mode=legacy", "--tlog-upload=false", "--use-signing-config=false", "--allow-http-registry", reference)
+		command.Env = environment
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("selected QA producer failed: %v %s", err, output)
+		}
+	}
+	serverURL, _ := url.Parse(server.URL)
+	client := &http.Client{Transport: registryRoutingTransport{fixture: f, target: serverURL.Host, base: server.Client().Transport}}
+	loader, err := New(Options{Repository: "1.1.1.1/distribution", Digest: subject, Release: release, CatalogDigest: catalogDigest, Profile: "builtins", Policy: model.TrustPolicy{Provider: model.SignatureCosignKey, KeyRef: "qa"}, TrustDirectory: temporary, Client: client})
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := loader.Load(t.Context())
+	if err != nil || len(catalog.Components) != 3 || loader.Status().Verification != "verified" {
+		t.Fatalf("selected CLI producer did not qualify in-process loader: %v", err)
+	}
+	public, err := os.ReadFile(filepath.Join(temporary, "qa.pub"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, component := range catalog.Components {
+		projectID, deploymentID := uuid.NewString(), uuid.NewString()
+		names := agentdelivery.Names(projectID, deploymentID)
+		values, _ := json.Marshal(component.Values)
+		assignment := protocol.DeliveryAssignmentV2{DeploymentID: deploymentID, TargetID: uuid.NewString(), ProjectID: projectID, Generation: 1, SpecDigest: component.Source.ChartDigest, Action: protocol.DeliveryActionApply, Scope: protocol.DeliveryScopePlatform,
+			Source:   protocol.DeliverySourceV2{Kind: protocol.DeliverySourceHelmOCI, URL: component.Source.URL, Revision: component.Source.Version, Digest: component.Source.ChartDigest, Chart: component.Source.Chart, TrustSecret: names.TrustSecret, Verify: &protocol.DeliveryVerifyV2{Provider: "cosign"}},
+			Renderer: protocol.DeliveryRendererV2{Kind: protocol.DeliveryRendererHelm, Helm: &protocol.DeliveryHelmRenderer{Chart: component.Source.Chart, Version: component.Source.Version, ReleaseName: component.ReleaseName, TargetNamespace: component.TargetNamespace, ServiceAccount: names.Applier, Values: values, InstallRetries: 3, UpgradeRetries: 3, UpgradeRemediation: "rollback", DriftMode: "enabled"}},
+			Policy:   protocol.DeliveryReconciliationPolicy{Interval: "5m", RetryInterval: "30s", Timeout: "10m", Prune: true, Drift: "enabled"}, Credential: &protocol.DeliveryCredentialMaterial{Version: 1, Data: map[string][]byte{"trust.cosign.pub": public}}}
+		capabilities := agentdelivery.Capabilities{SourceKinds: []protocol.DeliverySourceKind{protocol.DeliverySourceHelmOCI}, RendererKinds: []protocol.DeliveryRendererKind{protocol.DeliveryRendererHelm}, FluxAPIVersions: []string{"source.toolkit.fluxcd.io/v1", "helm.toolkit.fluxcd.io/v2"}, PlatformScope: true, NoCrossNamespaceRefs: true, NoRemoteKustomizeBases: true}
+		materialized, err := agentdelivery.BuildAssignment(assignment, capabilities, agentdelivery.ValidationPolicy{AllowPlatformScope: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := materialized.Objects[len(materialized.Objects)-2]
+		release := materialized.Objects[len(materialized.Objects)-1]
+		if got, _, _ := unstructured.NestedString(source.Object, "spec", "ref", "digest"); got != component.Source.ChartDigest {
+			t.Fatal("actual agent materialization refetched a mutable chart version")
+		}
+		if got, _, _ := unstructured.NestedString(source.Object, "spec", "url"); got != component.Source.URL+"/"+component.Source.Chart {
+			t.Fatal("agent consumed a different child repository")
+		}
+		if got, _, _ := unstructured.NestedString(source.Object, "spec", "verify", "provider"); got != "cosign" {
+			t.Fatal("agent lost mandatory child signature policy")
+		}
+		if got, _, _ := unstructured.NestedString(release.Object, "spec", "chartRef", "kind"); got != "OCIRepository" {
+			t.Fatal("agent used an HTTP Helm chart refetch")
+		}
+		for _, capability := range component.Requirements.Capabilities {
+			if capability == "delivery.source.helm_http" {
+				t.Fatal("projected requirements still permit HTTP-only agent")
+			}
+		}
+		capabilities.SourceKinds = []protocol.DeliverySourceKind{protocol.DeliverySourceHelmHTTP}
+		if _, err := agentdelivery.BuildAssignment(assignment, capabilities, agentdelivery.ValidationPolicy{AllowPlatformScope: true}); err == nil {
+			t.Fatal("HTTP-only agent accepted immutable OCI source")
+		}
+	}
+	if externalRequests != 0 || f.externalRequests != 0 {
+		t.Fatalf("QA producer/verifier attempted external service: %d", externalRequests)
 	}
 }

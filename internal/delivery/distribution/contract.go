@@ -3,15 +3,14 @@
 package distribution
 
 import (
-	"bytes"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 const MediaType = "application/vnd.astronomer.builtin-bundles.v2+tar+gzip"
@@ -58,20 +57,8 @@ type Inventory struct {
 
 var categories = map[string]bool{"catalog": true, "chart": true, "chart_dependency": true, "values": true, "image_inventory": true, "crd": true, "tool": true, "operator": true, "plugin": true, "database": true, "trust": true, "vulnerability_database": true, "application_catalog": true, "runtime_image": true}
 
-func decodeClosed(data []byte, target any) error {
-	if err := validateJSON(data); err != nil {
-		return errors.New("distribution document has invalid schema")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return errors.New("distribution document has invalid schema")
-	}
-	if err := decoder.Decode(new(any)); err != io.EOF {
-		return errors.New("distribution document has trailing input")
-	}
-	return nil
-}
+func decodeClosed(data []byte, target any) error { return jsoncontract.Decode(data, target) }
+
 func memberPath(value string) bool {
 	return value != "" && len(value) <= 512 && !strings.ContainsAny(value, "\\\x00") && !strings.HasPrefix(value, "/") && path.Clean(value) == value && value != "." && value != ".." && !strings.HasPrefix(value, "../")
 }
@@ -159,65 +146,7 @@ func categoryLimit(category string) int64 {
 	}
 }
 
-// Reject duplicate object fields and excessive nesting before typed decoding.
-// The authenticated contract has one interpretation across producer/consumer.
-func validateJSON(data []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	if err := consumeJSON(decoder, 0); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); err != io.EOF {
-		return errors.New("trailing JSON")
-	}
-	return nil
-}
-func consumeJSON(decoder *json.Decoder, depth int) error {
-	if depth > 64 {
-		return errors.New("JSON nesting exceeds bounds")
-	}
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, ok := token.(json.Delim)
-	if !ok {
-		return nil
-	}
-	switch delimiter {
-	case '{':
-		fields := map[string]bool{}
-		for decoder.More() {
-			name, err := decoder.Token()
-			if err != nil {
-				return err
-			}
-			key, ok := name.(string)
-			if !ok || fields[key] {
-				return errors.New("duplicate JSON field")
-			}
-			fields[key] = true
-			if err := consumeJSON(decoder, depth+1); err != nil {
-				return err
-			}
-		}
-	case '[':
-		for decoder.More() {
-			if err := consumeJSON(decoder, depth+1); err != nil {
-				return err
-			}
-		}
-	default:
-		return errors.New("invalid JSON delimiter")
-	}
-	closing, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	if delimiter == '{' && closing != json.Delim('}') || delimiter == '[' && closing != json.Delim(']') {
-		return errors.New("invalid JSON closing delimiter")
-	}
-	return nil
-}
+func validateJSON(data []byte) error { var document any; return jsoncontract.Decode(data, &document) }
 
 // DecodeClosedDocument shares the strict single-interpretation JSON contract with preparation tooling.
 func DecodeClosedDocument(data []byte, target any) error { return decodeClosed(data, target) }

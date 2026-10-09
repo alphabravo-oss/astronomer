@@ -1,14 +1,13 @@
 package resolver
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/registry/remote"
@@ -54,9 +53,7 @@ func fetchArtifactPayload(ctx context.Context, client *http.Client, repositoryNa
 		return nil, errors.New("OCI artifact manifest digest mismatch")
 	}
 	var manifest ocispec.Manifest
-	decoder := json.NewDecoder(bytes.NewReader(manifestBytes))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&manifest); err != nil || manifest.SchemaVersion != 2 || len(manifest.Layers) != 1 {
+	if err := jsoncontract.Decode(manifestBytes, &manifest); err != nil || manifest.SchemaVersion != 2 || len(manifest.Layers) != 1 {
 		return nil, errors.New("OCI artifact must have one payload layer")
 	}
 	layer := manifest.Layers[0]

@@ -195,3 +195,30 @@ func TestPlatformClosureRejectsMissingAndContradictoryArchitectures(t *testing.T
 		t.Fatal("index declaration overrode actual configuration architecture")
 	}
 }
+
+func TestProducerBoundsRegularInputsBeforeAllocation(t *testing.T) {
+	root := t.TempDir()
+	file, err := os.Create(filepath.Join(root, "oversized-catalog.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate((4 << 20) + 1); err != nil {
+		t.Fatal(err)
+	}
+	_ = file.Close()
+	if _, err := produce(filepath.Join(root, "oversized-catalog.json"), root); err == nil {
+		t.Fatal("oversized catalog was read")
+	}
+	if _, err := boundedFile(root, 1<<20); err == nil {
+		t.Fatal("directory was read as regular input")
+	}
+	target := filepath.Join(root, "small")
+	_ = os.WriteFile(target, []byte("safe"), 0600)
+	link := filepath.Join(root, "symlink")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := boundedFile(link, 1<<20); err == nil {
+		t.Fatal("symlink input was read")
+	}
+}

@@ -111,6 +111,9 @@ func projectMirrors(ctx context.Context, catalog builtinbundles.Catalog, plan *M
 	}
 	for index := range catalog.Components {
 		component := &catalog.Components[index]
+		if component.Values == nil {
+			return builtinbundles.Catalog{}, blocked("values", "distribution values profile must be a closed object")
+		}
 		target, found := charts[component.Source.URL]
 		if !found {
 			return builtinbundles.Catalog{}, errors.New("mirror endorsement omits chart repository")
@@ -130,7 +133,11 @@ func projectMirrors(ctx context.Context, catalog builtinbundles.Catalog, plan *M
 		if err != nil {
 			return builtinbundles.Catalog{}, err
 		}
-		component.Values = rewritten.(map[string]any)
+		projected, ok := rewritten.(map[string]any)
+		if !ok {
+			return builtinbundles.Catalog{}, blocked("values", "distribution values profile must be a closed object")
+		}
+		component.Values = projected
 	}
 	catalog.DistributionIdentity += ";mirror:" + plan.identity
 	if err := catalog.Validate(); err != nil {

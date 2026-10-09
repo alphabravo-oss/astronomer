@@ -71,7 +71,7 @@ func main() {
 	}
 }
 func produce(catalogPath, charts string) (output, error) {
-	data, err := os.ReadFile(catalogPath)
+	data, err := boundedFile(catalogPath, 4<<20)
 	if err != nil || len(data) > 4<<20 {
 		return output{}, errors.New("catalog input is unavailable or exceeds bounds")
 	}
@@ -83,7 +83,7 @@ func produce(catalogPath, charts string) (output, error) {
 	for index := range result.Catalog.Components {
 		component := &result.Catalog.Components[index]
 		archive := filepath.Join(charts, component.Slug+".tgz")
-		compressed, err := os.ReadFile(archive)
+		compressed, err := boundedFile(archive, distribution.MaximumArchiveBytes)
 		if err != nil || int64(len(compressed)) > distribution.MaximumArchiveBytes {
 			return output{}, errors.New("chart archive is unavailable or exceeds bounds")
 		}

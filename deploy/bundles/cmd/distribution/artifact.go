@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -194,12 +195,22 @@ func boundedFile(name string, maximum int64) ([]byte, error) {
 	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maximum {
 		return nil, errors.New("bounded regular input required")
 	}
-	data, err := os.ReadFile(name)
+	file, err := os.Open(name)
+	if err != nil {
+		return nil, errors.New("input unavailable")
+	}
+	defer file.Close()
+	info, err = file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maximum {
+		return nil, errors.New("bounded regular input required")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maximum+1))
 	if err != nil || int64(len(data)) > maximum {
 		return nil, errors.New("input exceeds bounds")
 	}
 	return data, nil
 }
+
 func closedJSON(data []byte, target any) error {
 	return distribution.DecodeClosedDocument(data, target)
 }
