@@ -45,14 +45,25 @@ type publishedSubject struct {
 	LayoutReference string `json:"layout_reference"`
 }
 type subjectIndex struct {
-	SchemaVersion int                `json:"schema_version"`
-	Release       string             `json:"release"`
-	Repository    string             `json:"repository"`
-	Digest        string             `json:"digest"`
-	CatalogDigest string             `json:"catalog_digest"`
-	ArchiveDigest string             `json:"archive_digest"`
-	MediaType     string             `json:"media_type"`
-	Children      []publishedSubject `json:"children"`
+	SchemaVersion int                     `json:"schema_version"`
+	Release       string                  `json:"release"`
+	Repository    string                  `json:"repository"`
+	Digest        string                  `json:"digest"`
+	CatalogDigest string                  `json:"catalog_digest"`
+	ArchiveDigest string                  `json:"archive_digest"`
+	MediaType     string                  `json:"media_type"`
+	Children      []publishedSubject      `json:"children"`
+	Assets        []publishedAssetSubject `json:"assets"`
+}
+
+type publishedAssetSubject struct {
+	ID              string `json:"id"`
+	OriginalSubject string `json:"original_subject"`
+	Repository      string `json:"repository"`
+	Digest          string `json:"digest"`
+	ArchiveDigest   string `json:"archive_digest"`
+	MediaType       string `json:"media_type"`
+	LayoutReference string `json:"layout_reference"`
 }
 
 // buildLayout prepares exact OCI bytes without publication. It reuses the
@@ -161,6 +172,7 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 			members[configPath] = config
 			kinds[configPath] = "vulnerability_database"
 			closedAsset.ArtifactConfigPath = configPath
+			closedAsset.PublishedSubject = repository + "/assets/" + asset.ID + "@" + subject
 		}
 		closedAssets = append(closedAssets, closedAsset)
 	}
@@ -168,7 +180,7 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 		return empty, err
 	}
 	bom := distribution.BOM{SchemaVersion: 1, AssetContractVersion: 1, Assets: closedAssets, Release: result.Catalog.Release, CatalogDigest: sha(catalog), Profiles: []distribution.Profile{{Name: "builtins", Qualification: "qualified", ValuesPath: "profiles/builtins.values.json", InventoryPath: "profiles/builtins.images.json", RequiredCategories: assets.RequiredCategories, BlockedCategories: []string{}, Capabilities: assets.Capabilities}}}
-	index := subjectIndex{SchemaVersion: 1, Release: result.Catalog.Release, Repository: repository, CatalogDigest: bom.CatalogDigest, MediaType: distribution.MediaType, Children: []publishedSubject{}}
+	index := subjectIndex{SchemaVersion: 1, Release: result.Catalog.Release, Repository: repository, CatalogDigest: bom.CatalogDigest, MediaType: distribution.MediaType, Children: []publishedSubject{}, Assets: []publishedAssetSubject{}}
 	if err := os.Mkdir(directory, 0700); err != nil {
 		return empty, errors.New("OCI output directory must be new")
 	}
@@ -182,6 +194,34 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 		return empty, err
 	}
 	descriptors := []ocispec.Descriptor{}
+	for _, asset := range bom.Assets {
+		if asset.ArtifactSubject == "" {
+			continue
+		}
+		manifestBytes := members[asset.ArtifactManifestPath]
+		var manifest ocispec.Manifest
+		if closedJSON(manifestBytes, &manifest) != nil || len(manifest.Layers) != 1 {
+			return empty, errors.New("captured asset manifest invalid")
+		}
+		if _, err := writeBlob(directory, manifest.Config.MediaType, members[asset.ArtifactConfigPath]); err != nil {
+			return empty, err
+		}
+		if _, err := writeBlob(directory, manifest.Layers[0].MediaType, members[asset.MemberPath]); err != nil {
+			return empty, err
+		}
+		descriptor, err := writeBlob(directory, ocispec.MediaTypeImageManifest, manifestBytes)
+		if err != nil {
+			return empty, err
+		}
+		reference := "asset_" + asset.ID
+		descriptor.Annotations = map[string]string{ocispec.AnnotationRefName: reference}
+		descriptors = append(descriptors, descriptor)
+		publishedRepository, subject, _ := strings.Cut(asset.PublishedSubject, "@")
+		if descriptor.Digest.String() != subject {
+			return empty, errors.New("asset publication invented different manifest bytes")
+		}
+		index.Assets = append(index.Assets, publishedAssetSubject{ID: asset.ID, OriginalSubject: asset.ArtifactSubject, Repository: publishedRepository, Digest: subject, ArchiveDigest: sha(members[asset.MemberPath]), MediaType: manifest.Layers[0].MediaType, LayoutReference: reference})
+	}
 	for _, component := range result.Catalog.Components {
 		content, err := boundedFile(filepath.Join(charts, component.Slug+".tgz"), distribution.MaximumArchiveBytes)
 		if err != nil || sha(content) != component.Source.ChartDigest {
@@ -403,12 +443,15 @@ func validateLayout(directory string) error {
 	}
 	indexData, err := boundedFile(filepath.Join(directory, "index.json"), 1<<20)
 	var layoutIndex ocispec.Index
-	if err != nil || closedJSON(indexData, &layoutIndex) != nil || layoutIndex.SchemaVersion != 2 || len(layoutIndex.Manifests) != len(index.Children)+1 {
+	if err != nil || closedJSON(indexData, &layoutIndex) != nil || layoutIndex.SchemaVersion != 2 || len(layoutIndex.Manifests) != len(index.Children)+len(index.Assets)+1 {
 		return errors.New("OCI layout index does not close declared subjects")
 	}
 	expectedReferences := map[string]string{"distribution": index.Digest}
 	for _, child := range index.Children {
 		expectedReferences[child.LayoutReference] = child.Digest
+	}
+	for _, asset := range index.Assets {
+		expectedReferences[asset.LayoutReference] = asset.Digest
 	}
 	for _, descriptor := range layoutIndex.Manifests {
 		name := descriptor.Annotations[ocispec.AnnotationRefName]
@@ -446,6 +489,41 @@ func validateLayout(directory string) error {
 		if err := validateSubjectBlob(directory, child.Digest, child.ArchiveDigest, "application/vnd.cncf.helm.chart.content.v1.tar+gzip"); err != nil {
 			return err
 		}
+	}
+	if err := validatePublishedAssets(directory, index, bom); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validatePublishedAssets(directory string, index subjectIndex, bom distribution.BOM) error {
+	expected := map[string]distribution.Asset{}
+	for _, asset := range bom.Assets {
+		if asset.ArtifactSubject != "" {
+			expected[asset.ID] = asset
+		}
+	}
+	if len(expected) != len(index.Assets) {
+		return errors.New("emitted prerequisite subjects incomplete")
+	}
+	for _, asset := range index.Assets {
+		original, found := expected[asset.ID]
+		if !found || asset.LayoutReference != "asset_"+asset.ID || asset.Repository != index.Repository+"/assets/"+asset.ID || original.PublishedSubject != asset.Repository+"@"+asset.Digest || original.ArtifactSubject != asset.OriginalSubject {
+			return errors.New("emitted prerequisite differs from signed original subject")
+		}
+		memberDigest := ""
+		for _, member := range bom.Members {
+			if member.Path == original.MemberPath {
+				memberDigest = member.Digest
+			}
+		}
+		if asset.ArchiveDigest != memberDigest {
+			return errors.New("emitted prerequisite payload differs from signed BOM")
+		}
+		if err := validateSubjectBlob(directory, asset.Digest, asset.ArchiveDigest, asset.MediaType); err != nil {
+			return err
+		}
+		delete(expected, asset.ID)
 	}
 	return nil
 }

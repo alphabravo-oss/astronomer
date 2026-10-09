@@ -62,11 +62,22 @@ func (transport *publicationRoutingTransport) RoundTrip(request *http.Request) (
 }
 
 func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testing.T) {
+	actualPublisherFixture(t, false)
+}
+func TestActualPublisherClosesScannerDatabaseSubjectsAndOfflineGraph(t *testing.T) {
+	actualPublisherFixture(t, true)
+}
+
+func actualPublisherFixture(t *testing.T, scanner bool) {
+	t.Helper()
 	binary := os.Getenv("COSIGN_BIN")
 	if binary == "" {
 		t.Skip("COSIGN_BIN selects the qualified actual producer")
 	}
 	catalog, charts, assets, platforms := producerFixture(t, "apiVersion: v1\nkind: Pod\nspec:\n  containers:\n  - image: {{ .Values.image }}\n")
+	if scanner {
+		configureScannerDatabaseFixture(t, catalog, assets)
+	}
 	output, err := produce(catalog, charts)
 	if err != nil {
 		t.Fatal(err)
@@ -138,7 +149,7 @@ func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testin
 			}
 		}
 	}
-	if signed != 2*(len(index.Children)+1) || publicRequests.Load() != 0 || transport.unexpected.Load() != 0 {
+	if signed != 2*(len(index.Children)+len(index.Assets)+1) || publicRequests.Load() != 0 || transport.unexpected.Load() != 0 {
 		t.Fatalf("signed=%d public=%d unexpected=%d", signed, publicRequests.Load(), transport.unexpected.Load())
 	}
 	verifyActualOfflinePublication(t, fixture, index, options.Trust, directory)
@@ -152,6 +163,22 @@ func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testin
 	}
 	if publicRequests.Load() != 0 {
 		t.Fatal("offline verification contacted external proxy")
+	}
+	if scanner {
+		asset := index.Assets[0]
+		key := strings.TrimPrefix(asset.Repository, "1.1.1.1/") + "/sha256-" + asset.Digest[7:] + ".sig"
+		manifests, _ := fixture.snapshot()
+		fixture.mutex.Lock()
+		delete(fixture.manifests, key)
+		fixture.mutex.Unlock()
+		unsigned := options
+		unsigned.sign = func(context.Context, string) error { return nil }
+		if err := publishLayout(t.Context(), unsigned); err == nil {
+			t.Fatal("signed parent authorized unsigned database child")
+		}
+		fixture.mutex.Lock()
+		fixture.manifests[key] = manifests[key]
+		fixture.mutex.Unlock()
 	}
 	// Successful write/sign cannot cover a missing vendor signature after import.
 	fixture.mutex.Lock()
@@ -177,6 +204,9 @@ func verifyActualOfflinePublication(t *testing.T, fixture *publicationRegistry, 
 	var stored []distribution.StoredSubject
 	graph := map[string][]byte{}
 	subjects := append([]publishedSubject{}, index.Children...)
+	for _, asset := range index.Assets {
+		subjects = append(subjects, publishedSubject{Repository: asset.Repository, Digest: asset.Digest})
+	}
 	subjects = append(subjects, publishedSubject{Repository: index.Repository, Digest: index.Digest})
 	for _, subject := range subjects {
 		repository := strings.TrimPrefix(subject.Repository, "1.1.1.1/")
@@ -198,6 +228,23 @@ func verifyActualOfflinePublication(t *testing.T, fixture *publicationRegistry, 
 	catalog, status, err := distribution.VerifyOfflineStore(t.Context(), options, stored, graph)
 	if err != nil || status.Verification != "verified" || len(catalog.Components) != len(index.Children) {
 		t.Fatalf("actual offline graph authentication failed: %v", err)
+	}
+	if len(index.Assets) > 0 {
+		for _, component := range catalog.Components {
+			if component.Source.Chart != "trivy-operator" {
+				continue
+			}
+			trivy := component.Values["trivy"].(map[string]any)
+			for _, asset := range index.Assets {
+				registryKey, repositoryKey := "dbRegistry", "dbRepository"
+				if asset.ID == "trivy-java-database" {
+					registryKey, repositoryKey = "javaDbRegistry", "javaDbRepository"
+				}
+				if trivy[registryKey].(string)+"/"+trivy[repositoryKey].(string) != asset.Repository+"@"+asset.Digest {
+					t.Fatal("downstream database fetch retained supplier location instead of exact endorsed subject")
+				}
+			}
+		}
 	}
 	transfer, err := packOfflineTransfer(t.Context(), options, stored, graph)
 	if err != nil {

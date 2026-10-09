@@ -126,7 +126,7 @@ func (l *Loader) Load(ctx context.Context) (builtinbundles.Catalog, error) {
 }
 
 func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbundles.Catalog, error) {
-	catalog, bom, err := ReadArchive(payload, l.options.Release, l.options.CatalogDigest, l.options.Profile)
+	catalog, bom, members, err := readArchiveMembers(payload, l.options.Release, l.options.CatalogDigest, l.options.Profile)
 	if err != nil {
 		return builtinbundles.Catalog{}, err
 	}
@@ -135,6 +135,9 @@ func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbun
 	catalog.VerificationIssuer = l.options.Policy.Issuer
 	catalog.VerificationProvider = string(l.options.Policy.Provider)
 	catalog.VerificationKeyRef = l.options.Policy.KeyRef
+	if err := projectArtifactValues(&catalog, bom); err != nil {
+		return builtinbundles.Catalog{}, err
+	}
 	// Project locations first, then authenticate the same immutable child subjects
 	// at approved mirrors. Their original vendor signature remains mandatory.
 	for index := range catalog.Components {
@@ -177,6 +180,9 @@ func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbun
 		}
 	}
 	if err := catalog.Validate(); err != nil {
+		return builtinbundles.Catalog{}, err
+	}
+	if err := l.verifyPublishedAssets(ctx, bom, members); err != nil {
 		return builtinbundles.Catalog{}, err
 	}
 	return catalog, nil

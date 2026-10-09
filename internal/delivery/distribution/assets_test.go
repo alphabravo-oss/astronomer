@@ -49,7 +49,7 @@ func TestPrerequisiteCapabilitiesRequireExactRoles(t *testing.T) {
 func TestDatabaseArtifactBindsExactManifestAndPayload(t *testing.T) {
 	payload := []byte("local QA database payload")
 	config := []byte(`{"qa":"captured config"}`)
-	manifest, _ := json.Marshal(map[string]any{"schemaVersion": 2, "config": map[string]any{"digest": contentDigest(config), "size": len(config)}, "layers": []any{map[string]any{"digest": contentDigest(payload), "size": len(payload)}}})
+	manifest, _ := json.Marshal(map[string]any{"schemaVersion": 2, "config": map[string]any{"mediaType": "application/vnd.oci.empty.v1+json", "digest": contentDigest(config), "size": len(config)}, "layers": []any{map[string]any{"mediaType": "application/vnd.aquasec.trivy.db.layer.v1.tar+gzip", "digest": contentDigest(payload), "size": len(payload)}}})
 	asset := Asset{ID: "trivy-database", MemberPath: "db/archive.tgz", ArtifactSubject: "registry.example.test/db@" + contentDigest(manifest), ArtifactManifestPath: "db/manifest.json", ArtifactConfigPath: "db/config.json", Images: []string{}}
 	members := map[string][]byte{asset.MemberPath: payload, asset.ArtifactManifestPath: manifest, asset.ArtifactConfigPath: config}
 	if err := validateArtifactAssets([]Asset{asset}, members); err != nil {

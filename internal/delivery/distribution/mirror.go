@@ -65,7 +65,7 @@ func VerifyMirrorPlan(ctx context.Context, payload, signature []byte, keyRef, tr
 			if _, err := builtinbundles.NormalizeOCISourceURL(rewrite.Target); err != nil {
 				return nil, errors.New("mirror chart target is invalid")
 			}
-		case "image":
+		case "image", "artifact":
 			sourceRepo, sourceDigest, ok := strings.Cut(rewrite.Source, "@")
 			targetRepo, targetDigest, targetOK := strings.Cut(rewrite.Target, "@")
 			if !ok || !targetOK || !digestPattern.MatchString(sourceDigest) || sourceDigest != targetDigest || sourceRepo == "" || targetRepo == "" {
@@ -101,7 +101,7 @@ func projectMirrors(ctx context.Context, catalog builtinbundles.Catalog, plan *M
 				return builtinbundles.Catalog{}, errors.New("mirror chart destination is outside operator policy")
 			}
 		}
-		if rewrite.Kind == "image" {
+		if rewrite.Kind == "image" || rewrite.Kind == "artifact" {
 			images[rewrite.Source] = rewrite.Target
 			repository, _, _ := strings.Cut(rewrite.Target, "@")
 			if err := network.ValidateURL(ctx, "https://"+repository); err != nil {
@@ -149,6 +149,10 @@ func projectMirrors(ctx context.Context, catalog builtinbundles.Catalog, plan *M
 func rewriteValues(value any, images map[string]string) (any, error) {
 	switch typed := value.(type) {
 	case map[string]any:
+		handled, err := rewriteDatabaseLocations(typed, images)
+		if err != nil {
+			return nil, err
+		}
 		// Helm image maps commonly split repository and digest/tag. Reconstruct
 		// the exact signed subject, never perform broad substring replacements.
 		repository, repoOK := typed["repository"].(string)
@@ -191,6 +195,9 @@ func rewriteValues(value any, images map[string]string) (any, error) {
 			}
 		}
 		for key, child := range typed {
+			if handled[key] {
+				continue
+			}
 			rewritten, err := rewriteValues(child, images)
 			if err != nil {
 				return nil, err

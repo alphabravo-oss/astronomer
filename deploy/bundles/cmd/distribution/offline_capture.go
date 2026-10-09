@@ -35,6 +35,9 @@ func captureOfflineTransfer(ctx context.Context, directory string, options distr
 		return nil, errors.New("mandatory original vendor policy required")
 	}
 	all := append([]publishedSubject{{Repository: index.Repository, Digest: index.Digest}}, index.Children...)
+	for _, asset := range index.Assets {
+		all = append(all, publishedSubject{Repository: asset.Repository, Digest: asset.Digest})
+	}
 	stored := make([]distribution.StoredSubject, 0, len(all))
 	graph := &capturedGraph{blobs: map[string][]byte{}}
 	for _, subject := range all {

@@ -15,6 +15,7 @@ type Asset struct {
 	MemberPath           string   `json:"member_path"`
 	Images               []string `json:"images"`
 	ArtifactSubject      string   `json:"artifact_subject"`
+	PublishedSubject     string   `json:"published_subject"`
 	ArtifactManifestPath string   `json:"artifact_manifest_path"`
 	ArtifactConfigPath   string   `json:"artifact_config_path"`
 }
@@ -51,7 +52,14 @@ func validateAssetDeclarations(assets []Asset, members map[string]string) error 
 			if _, err := builtinbundles.NormalizeOCISourceURL("oci://" + repository); err != nil {
 				return errors.New("distribution database repository invalid")
 			}
-		} else if asset.ArtifactSubject != "" || asset.ArtifactManifestPath != "" || asset.ArtifactConfigPath != "" || (asset.ID != "cnpg-crds" && asset.ID != "application-catalog" && len(asset.Images) == 0) {
+			publishedRepository, publishedDigest, found := strings.Cut(asset.PublishedSubject, "@")
+			if !found || publishedDigest != digest {
+				return errors.New("endorsed database subject changed original content identity")
+			}
+			if _, err := builtinbundles.NormalizeOCISourceURL("oci://" + publishedRepository); err != nil {
+				return errors.New("endorsed database repository invalid")
+			}
+		} else if asset.ArtifactSubject != "" || asset.PublishedSubject != "" || asset.ArtifactManifestPath != "" || asset.ArtifactConfigPath != "" || (asset.ID != "cnpg-crds" && asset.ID != "application-catalog" && len(asset.Images) == 0) {
 			return errors.New("distribution prerequisite role lacks correct immutable OCI subjects")
 		}
 		images := map[string]bool{}
@@ -170,6 +178,9 @@ func validateArtifactAssets(assets []Asset, members map[string][]byte) error {
 			return blocked("vulnerability_database", "database OCI manifest binding invalid")
 		}
 		layer := manifest.Layers[0]
+		if manifest.Config.MediaType == "" || layer.MediaType == "" || len(manifest.Config.MediaType) > 256 || len(layer.MediaType) > 256 || strings.ContainsAny(manifest.Config.MediaType+layer.MediaType, "\r\n \t") {
+			return blocked("vulnerability_database", "database descriptor media type invalid")
+		}
 		payload := members[asset.MemberPath]
 		config := members[asset.ArtifactConfigPath]
 		if len(config) == 0 || len(config) > 1<<20 || manifest.Config.Digest.String() != contentDigest(config) || manifest.Config.Size != int64(len(config)) || len(manifest.Config.URLs) != 0 || len(manifest.Config.Data) != 0 {

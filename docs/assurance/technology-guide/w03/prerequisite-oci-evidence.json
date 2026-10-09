@@ -1,0 +1,77 @@
+{
+  "actual_qa_chain": {
+    "canonical_offline_graph_and_import": "PASS",
+    "captured_manifest_config_payload_bytes_unchanged": true,
+    "chart_children": 3,
+    "database_children": 2,
+    "external_proxy_negative_control_requests": 1,
+    "external_requests_during_verify": 0,
+    "identity": "ephemeral local QA key, distinct from production OIDC",
+    "original_supplier_identity_retained": true,
+    "parent": 1,
+    "selected_cosign": "3.1.3",
+    "subjects": 6,
+    "successful_retry_attempts": 2,
+    "unsigned_database_child": "REJECTED"
+  },
+  "classification": "Small QA-only payloads exercise byte/signature/consumer binding. These are not real Trivy DB archives or freshness/startup/size qualification.",
+  "gates": [
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 COSIGN_BIN=/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3 go test -race ./internal/delivery/distribution ./deploy/bundles/cmd/distribution -count=1",
+      "output": "ok  \tgithub.com/alphabravocompany/astronomer-go/internal/delivery/distribution\t2.745s\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution\t8.921s\n",
+      "result": "PASS"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 COSIGN_BIN=/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3 go test ./internal/delivery/builtin ./internal/delivery/resolver ./internal/delivery/distribution ./internal/releasecontract ./internal/config ./deploy/bundles ./deploy/bundles/cmd/distribution ./internal/agent/delivery -count=1",
+      "output": "ok  \tgithub.com/alphabravocompany/astronomer-go/internal/delivery/builtin\t0.025s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/delivery/resolver\t0.231s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/delivery/distribution\t1.375s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/releasecontract\t3.163s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/config\t0.692s\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles\t0.169s\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution\t6.234s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/agent/delivery\t9.235s\n",
+      "result": "PASS"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 python3 scripts/tests/verify_release_metadata_test.py",
+      "output": "...........\n----------------------------------------------------------------------\nRan 11 tests in 0.032s\n\nOK\n",
+      "result": "PASS"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 make release-contract-check",
+      "output": "./scripts/check-build-capacity.sh --path .\ncheck-build-capacity: path=. mount=/ available=71GiB free=22% required=20GiB/20%\n./scripts/compatibility-contract.py check\ncompatibility contract: valid; generated views are current\npython3 -m unittest scripts/tests/release_manifest_test.py scripts/tests/mirror_release_test.py scripts/tests/resolve_release_images_test.py scripts/tests/airgap_kit_test.py scripts/tests/validate_release_approval_test.py scripts/tests/validate_automated_release_test.py scripts/tests/verify_release_metadata_test.py scripts/tests/qualify_release_runtime_images_test.py\n...............airgap-kit: air-gap kit commands do not accept credentials, tokens, or secret values\nairgap-kit: air-gap kit commands do not accept credentials, tokens, or secret values\n..............................................\n----------------------------------------------------------------------\nRan 61 tests in 7.112s\n\nOK\n./scripts/tests/release_artifacts_test.sh\nrelease-artifacts-test: OK\nwalk.go:75: found symbolic link in path: /root/astronomer-all/astronomer-032-w03/deploy/chart/dashboards resolves to /root/astronomer-all/astronomer-032-w03/deploy/dashboards. Contents of linked file included and used\nwalk.go:75: found symbolic link in path: /root/astronomer-all/astronomer-032-w03/deploy/chart/dashboards resolves to /root/astronomer-all/astronomer-032-w03/deploy/dashboards. Contents of linked file included and used\nwalk.go:75: found symbolic link in path: /root/astronomer-all/astronomer-032-w03/deploy/chart/dashboards resolves to /root/astronomer-all/astronomer-032-w03/deploy/dashboards. Contents of linked file included and used\ngo test ./deploy/bundles ./internal/releasecontract ./deploy -run 'TestRelease|TestInterruptedRelease|TestExactRelease|TestSixImage|TestPromotion|TestV120' -count=1\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy/bundles\t0.179s\nok  \tgithub.com/alphabravocompany/astronomer-go/internal/releasecontract\t0.005s [no tests to run]\nok  \tgithub.com/alphabravocompany/astronomer-go/deploy\t0.594s\n",
+      "result": "PASS"
+    },
+    {
+      "command": "make docs-check",
+      "output": "node scripts/check-docs.mjs\ndocumentation contract passed: 118 current documents, 608 relative links\nnode scripts/check-complexity-budget.mjs\ncomplexity budget passed: 2095 production source file(s), 42 file ceiling(s), 64 function ceiling(s)\nnode scripts/check-dependency-boundaries.mjs\ndependency boundaries passed: 14 rules, 1489 files, 9557 imports\nnode scripts/test-flake-report.mjs --validate\ntest-flake-report: policy valid (0 active quarantines)\nnode scripts/security-wave-review.mjs\nsecurity wave review: 10 controls, 8 waves, 28 evidence anchors; pass\n",
+      "result": "PASS"
+    }
+  ],
+  "live_disconnected_qualified": false,
+  "new_json_serializers": [],
+  "package_done": false,
+  "pending": [
+    "Trusted builtin Flux private-CA composition (root narrow lease granted)",
+    "Complete mirror planning/transfer and future v2 workflow wiring",
+    "Real supplier profile sizes/freshness with unchanged fixed bounds",
+    "Published signed verifier assets",
+    "W04 live fresh-cache/no-egress",
+    "W12 actual object-store/recovery"
+  ],
+  "production_vendor_publication_qualified": false,
+  "schema_ownership": "W03 existing BOM.Asset published_subject and subjectIndex.assets fields, captured OCI manifests; existing serializers/readers remain canonical.",
+  "schema_version": 1,
+  "slice": "unchanged-prerequisite-OCI-children",
+  "source_base_commit": "0d31a7a040e003b18586c199549f389ee5b103ba",
+  "source_sha256": {
+    "deploy/bundles/cmd/distribution/artifact.go": "f74838e174388fdb889b553abefb015500cbbe1cd3d6a1468ed4732de3037161",
+    "deploy/bundles/cmd/distribution/assets_test.go": "0d2dd66eb011ba78c78d2bf88f59587f7e587ac9c047633e6316625187876c16",
+    "deploy/bundles/cmd/distribution/offline_capture.go": "3be997142574a6da1a3828a98fa6cfc725eb872ac5d243f7a02682e5151ec434",
+    "deploy/bundles/cmd/distribution/publication.go": "70f5af8dff47993e5048e3d2943c6c0051f04e2aff4551cd7b1fe71e8e70eee9",
+    "deploy/bundles/cmd/distribution/publication_test.go": "b3206d9e133f75b24961691dcf047faa2c7449c33ffe607667c3a77f6efa8bce",
+    "internal/delivery/distribution/archive.go": "8cb514a808cd98a8325b70be657411f2be0ef8f42bff9c6b0bb9516dd1a9c293",
+    "internal/delivery/distribution/asset_delivery.go": "b3cc4fe79a79c108214bc00d9eef564328ce24bb4d776044cf2de1a6d1f756f3",
+    "internal/delivery/distribution/asset_delivery_test.go": "71a0cdada2b3f17d86cdc83963d29ae683b195a2910eeeb1fa535a485e4cf5d4",
+    "internal/delivery/distribution/assets.go": "4b39583c1f71dcc322aa5120b12581f1c31cba6db21ed398b683e362c0aa76a3",
+    "internal/delivery/distribution/assets_test.go": "184c719269f073e04823855db17c0c8230442f508d542514b27611d066231b73",
+    "internal/delivery/distribution/loader.go": "68ea80f7149aadd3f9e442084bbeefe1ca634133dcbce9de4ab69607ef207acb",
+    "internal/delivery/distribution/mirror.go": "95ddec79710fdfca8f9ed3ea66caa55dc6120b7c604e082e48f60bb5ecd0559a"
+  },
+  "supplier_profile_qualified": false,
+  "work_package": "W03"
+}

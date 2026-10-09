@@ -14,22 +14,27 @@ import (
 // ReadArchive is invoked only after subject authentication. Nothing is written
 // to disk: all member names/types/sizes/hashes must match the signed closed BOM.
 func ReadArchive(payload []byte, release, catalogDigest, profileName string) (builtinbundles.Catalog, BOM, error) {
+	catalog, bom, _, err := readArchiveMembers(payload, release, catalogDigest, profileName)
+	return catalog, bom, err
+}
+
+func readArchiveMembers(payload []byte, release, catalogDigest, profileName string) (builtinbundles.Catalog, BOM, map[string][]byte, error) {
 	var empty builtinbundles.Catalog
 	members, bom, err := ReadClosedArchive(payload, release, catalogDigest)
 	if err != nil {
-		return empty, BOM{}, err
+		return empty, BOM{}, nil, err
 	}
 	catalog, err := builtinbundles.Parse(members["catalog.json"])
 	if err != nil || catalog.Release != release {
-		return empty, BOM{}, errors.New("distribution catalog is invalid")
+		return empty, BOM{}, nil, errors.New("distribution catalog is invalid")
 	}
 	if err := validateChartSubjects(bom, catalog); err != nil {
-		return empty, bom, err
+		return empty, bom, nil, err
 	}
 	if err := validateProfile(bom, members, catalog, profileName); err != nil {
-		return empty, bom, err
+		return empty, bom, nil, err
 	}
-	return catalog, bom, nil
+	return catalog, bom, members, nil
 }
 
 // ReadClosedArchive applies the same closed BOM/member contract to authenticated
