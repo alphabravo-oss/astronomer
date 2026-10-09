@@ -403,6 +403,9 @@ func overrideApplies(targetID uuid.UUID, override sqlc.DeliveryOverrideSet, cand
 }
 
 func (tx *postgresPlanningTransaction) InsertRollout(ctx context.Context, plan FrozenRollout) error {
+	if err := plan.Validate(); err != nil {
+		return fmt.Errorf("validate frozen rollout before write: %w", err)
+	}
 	frozenJSON, err := json.Marshal(plan)
 	if err != nil {
 		return fmt.Errorf("marshal frozen rollout: %w", err)

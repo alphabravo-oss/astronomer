@@ -11,10 +11,12 @@ import (
 )
 
 type fakeTaskOutboxWriter struct {
-	arg sqlc.UpsertTaskOutboxParams
+	arg   sqlc.UpsertTaskOutboxParams
+	calls int
 }
 
 func (f *fakeTaskOutboxWriter) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	f.calls++
 	f.arg = arg
 	return sqlc.TaskOutbox{}, nil
 }
@@ -69,5 +71,27 @@ func TestEnqueueTaskOutboxPreservesOptions(t *testing.T) {
 	}
 	if !w.arg.NextAttemptAt.Time.Equal(next) {
 		t.Fatalf("next_attempt_at = %s, want %s", w.arg.NextAttemptAt.Time, next)
+	}
+}
+
+func TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite(t *testing.T) {
+	for _, raw := range []string{`null`, `[]`, `{"token":"private-fixture"} {}`, `{"_correlation_id":null}`, `{"_traceparent":42}`, `{"_tracestate":{}}`} {
+		t.Run(raw, func(t *testing.T) {
+			w := &fakeTaskOutboxWriter{}
+			_, err := EnqueueTaskOutbox(t.Context(), w, asynq.NewTask("example:work", []byte(raw)), TaskOutboxOptions{})
+			if err == nil || w.calls != 0 {
+				t.Fatalf("invalid task accepted: error=%v writes=%d", err, w.calls)
+			}
+		})
+	}
+}
+
+func TestEnqueueTaskOutboxLegacyEmptyObjectAdapter(t *testing.T) {
+	w := &fakeTaskOutboxWriter{}
+	if _, err := EnqueueTaskOutbox(t.Context(), w, asynq.NewTask("example:work", nil), TaskOutboxOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if string(w.arg.Payload) != `{}` {
+		t.Fatalf("legacy empty payload must write canonical object, got %q", w.arg.Payload)
 	}
 }

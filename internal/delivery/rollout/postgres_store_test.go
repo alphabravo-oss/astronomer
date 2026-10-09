@@ -1,10 +1,14 @@
 package rollout
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -101,5 +105,47 @@ func TestCommonPreviousVersionRequiresEveryClusterToMatch(t *testing.T) {
 	clusters[1].Previous = nil
 	if got := commonPreviousVersion(clusters); got.Valid {
 		t.Fatalf("partial previous version was treated as common: %+v", got)
+	}
+}
+
+type countingRolloutDB struct{ calls int }
+
+func (db *countingRolloutDB) Exec(context.Context, string, ...interface{}) (pgconn.CommandTag, error) {
+	db.calls++
+	return pgconn.CommandTag{}, errors.New("unexpected durable write")
+}
+func (db *countingRolloutDB) Query(context.Context, string, ...interface{}) (pgx.Rows, error) {
+	db.calls++
+	return nil, errors.New("unexpected query")
+}
+func (db *countingRolloutDB) QueryRow(context.Context, string, ...interface{}) pgx.Row {
+	db.calls++
+	return rejectedRolloutRow{}
+}
+
+type rejectedRolloutRow struct{}
+
+func (rejectedRolloutRow) Scan(...interface{}) error { return errors.New("unexpected durable write") }
+
+func TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite(t *testing.T) {
+	tests := map[string]func(*FrozenRollout){
+		"strategy": func(p *FrozenRollout) { p.Strategy.MaxConcurrent = 0 },
+		"cohort_membership": func(p *FrozenRollout) {
+			p.Cohorts[0].ClusterIDs = append(p.Cohorts[0].ClusterIDs, p.Cohorts[0].ClusterIDs[0])
+		},
+		"tenant_identity": func(p *FrozenRollout) { p.ProjectID = uuid.Nil },
+		"plan_digest":     func(p *FrozenRollout) { p.Actor = "different-actor" },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			plan := testPlan(t, 1, testStrategy("rolling", 1), false)
+			mutate(&plan)
+			db := &countingRolloutDB{}
+			tx := &postgresPlanningTransaction{queries: sqlc.New(db)}
+			err := tx.InsertRollout(t.Context(), plan)
+			if err == nil || db.calls != 0 {
+				t.Fatalf("invalid frozen plan reached storage: error=%v calls=%d", err, db.calls)
+			}
+		})
 	}
 }

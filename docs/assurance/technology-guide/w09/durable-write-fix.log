@@ -1,0 +1,71 @@
+testing: warning: no tests to run
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/jsoncontract	0.004s [no tests to run]
+=== RUN   TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue
+--- PASS: TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue (0.00s)
+=== RUN   TestDispatchTaskOutboxOnceDeliversRows
+--- PASS: TestDispatchTaskOutboxOnceDeliversRows (0.00s)
+=== RUN   TestDispatchTaskOutboxOnceRetriesEnqueueFailure
+2026/10/09 20:23:31 WARN task outbox row dispatch failed id=691192fc-09b9-4401-8726-0ed35728b0a2 task_type=example:work error="redis down"
+--- PASS: TestDispatchTaskOutboxOnceRetriesEnqueueFailure (0.00s)
+=== RUN   TestDispatchTaskOutboxOnceMarksDuplicateDeliveryAsDelivered
+--- PASS: TestDispatchTaskOutboxOnceMarksDuplicateDeliveryAsDelivered (0.00s)
+=== RUN   TestDispatchTaskOutboxOnceMovesExhaustedRowsToDead
+2026/10/09 20:23:31 WARN task outbox row dispatch failed id=d47ab918-4be6-4c0a-9505-0085ffd73fee task_type=example:work error="redis down"
+--- PASS: TestDispatchTaskOutboxOnceMovesExhaustedRowsToDead (0.00s)
+=== RUN   TestDispatchTaskOutboxOnceFailsWhenUnconfigured
+--- PASS: TestDispatchTaskOutboxOnceFailsWhenUnconfigured (0.00s)
+=== RUN   TestTaskOutboxBackoffCaps
+--- PASS: TestTaskOutboxBackoffCaps (0.00s)
+=== RUN   TestTaskOutboxOptionDefaults
+--- PASS: TestTaskOutboxOptionDefaults (0.00s)
+=== RUN   TestDispatchTaskOutboxCorruptPayloadContinuesValidRows
+=== RUN   TestDispatchTaskOutboxCorruptPayloadContinuesValidRows/null
+2026/10/09 20:23:31 WARN task outbox row dispatch failed id=6c21dcc5-67f5-44fc-bd6f-aa2e713c5000 task_type=example:work error="invalid task_payload: invalid_shape"
+=== RUN   TestDispatchTaskOutboxCorruptPayloadContinuesValidRows/[]
+2026/10/09 20:23:31 WARN task outbox row dispatch failed id=9c4b037b-0815-4340-b3d2-617ab8c94c0e task_type=example:work error="invalid task_payload: invalid_shape"
+=== RUN   TestDispatchTaskOutboxCorruptPayloadContinuesValidRows/{"secret":"private-fixture"}_{}
+2026/10/09 20:23:31 WARN task outbox row dispatch failed id=02559966-a3b9-4074-ae63-7e656f62329c task_type=example:work error="invalid task_payload: invalid_json"
+=== RUN   TestDispatchTaskOutboxCorruptPayloadContinuesValidRows/{"_correlation_id":null}
+2026/10/09 20:23:31 WARN task outbox row dispatch failed id=eaac288c-d11f-4b7c-b43c-9f8bc06ecd72 task_type=example:work error="invalid task_payload: invalid_metadata"
+--- PASS: TestDispatchTaskOutboxCorruptPayloadContinuesValidRows (0.00s)
+    --- PASS: TestDispatchTaskOutboxCorruptPayloadContinuesValidRows/null (0.00s)
+    --- PASS: TestDispatchTaskOutboxCorruptPayloadContinuesValidRows/[] (0.00s)
+    --- PASS: TestDispatchTaskOutboxCorruptPayloadContinuesValidRows/{"secret":"private-fixture"}_{} (0.00s)
+    --- PASS: TestDispatchTaskOutboxCorruptPayloadContinuesValidRows/{"_correlation_id":null} (0.00s)
+=== RUN   TestDispatchTaskOutboxLegacyEmptyPayloadAdapter
+--- PASS: TestDispatchTaskOutboxLegacyEmptyPayloadAdapter (0.00s)
+=== RUN   TestEnqueueTaskOutboxAppliesDefaults
+--- PASS: TestEnqueueTaskOutboxAppliesDefaults (0.00s)
+=== RUN   TestEnqueueTaskOutboxPreservesOptions
+--- PASS: TestEnqueueTaskOutboxPreservesOptions (0.00s)
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/null
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/[]
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"token":"private-fixture"}_{}
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_correlation_id":null}
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_traceparent":42}
+=== RUN   TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_tracestate":{}}
+--- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/null (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/[] (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"token":"private-fixture"}_{} (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_correlation_id":null} (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_traceparent":42} (0.00s)
+    --- PASS: TestEnqueueTaskOutboxRejectsInvalidJSONBeforeWrite/{"_tracestate":{}} (0.00s)
+=== RUN   TestEnqueueTaskOutboxLegacyEmptyObjectAdapter
+--- PASS: TestEnqueueTaskOutboxLegacyEmptyObjectAdapter (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	0.066s
+=== RUN   TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite
+=== RUN   TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/strategy
+=== RUN   TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/cohort_membership
+=== RUN   TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/tenant_identity
+=== RUN   TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/plan_digest
+--- PASS: TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite (0.00s)
+    --- PASS: TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/strategy (0.00s)
+    --- PASS: TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/cohort_membership (0.00s)
+    --- PASS: TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/tenant_identity (0.00s)
+    --- PASS: TestInsertRolloutValidatesFrozenNestedSchemaBeforeWrite/plan_digest (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/rollout	0.016s
