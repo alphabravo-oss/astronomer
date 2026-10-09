@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"time"
 
@@ -86,14 +85,8 @@ func tableViewScopeLock(userID uuid.UUID, tableKey string) string {
 
 func (h *TableViewsHandler) decodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxTableViewBodyBytes)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
+	if err := decodeStrictJSONBody(r, dst); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid table view document")
-		return false
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Request body must contain one JSON object")
 		return false
 	}
 	return true

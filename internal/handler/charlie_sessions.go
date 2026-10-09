@@ -471,20 +471,13 @@ func decodeCharlieJSON(w http.ResponseWriter, r *http.Request, output any) bool 
 		return false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxCharlieSessionRequestBytes)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(output); err != nil {
+	if err := decodeStrictJSONBody(r, output); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidBody, "Charlie request is too large")
 		} else {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid Charlie request")
 		}
-		return false
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid Charlie request")
 		return false
 	}
 	return true

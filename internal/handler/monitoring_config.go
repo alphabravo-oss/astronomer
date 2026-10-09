@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -62,7 +61,7 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		return
 	}
 	var req UpdateMonitoringBackendRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

@@ -19,7 +19,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -303,7 +302,7 @@ func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Reques
 	}
 
 	var body createOrUpdateRatingRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeV1JSONBody(r, &body); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Body must be valid JSON")
 		return
 	}
@@ -506,7 +505,7 @@ func (h *ChartRatingsHandler) UpdateRating(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var body createOrUpdateRatingRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeV1JSONBody(r, &body); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Body must be valid JSON")
 		return
 	}

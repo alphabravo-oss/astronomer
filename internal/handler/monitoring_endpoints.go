@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -14,7 +13,7 @@ import (
 )
 
 func (h *MonitoringHandler) UnmarshalBody(r *http.Request, dst any) error {
-	return json.NewDecoder(r.Body).Decode(dst)
+	return decodeV1JSONBody(r, dst)
 }
 
 // --- Monitoring endpoints CRUD (Python: /api/v1/monitoring/endpoints/) ---

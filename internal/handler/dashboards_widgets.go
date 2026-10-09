@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -65,7 +64,7 @@ func (h *DashboardHandler) AdminCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req WidgetRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
 		return
 	}
@@ -126,7 +125,7 @@ func (h *DashboardHandler) AdminUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req WidgetRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
 		return
 	}

@@ -22,11 +22,11 @@ package handler
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -410,22 +410,12 @@ type settingsRequest struct {
 }
 
 func decodeDexRequest(body io.Reader, target any, allowEmpty bool) error {
-	decoder := json.NewDecoder(body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		if allowEmpty && errors.Is(err, io.EOF) {
-			return nil
-		}
-		return err
+	request := &http.Request{Body: io.NopCloser(body), ContentLength: -1}
+	err := decodeStrictJSONBody(request, target)
+	if allowEmpty && errors.Is(err, io.EOF) {
+		return nil
 	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return fmt.Errorf("multiple JSON values")
-		}
-		return err
-	}
-	return nil
+	return err
 }
 
 // ListConnectorTypes exposes the registry so the UI can render its wizard.

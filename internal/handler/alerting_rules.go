@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -154,7 +153,7 @@ func (h *AlertingHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateAlertRuleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

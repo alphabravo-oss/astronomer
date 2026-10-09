@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -151,7 +150,7 @@ type createNativeRuleRequest struct {
 // Create authors a native rule. POST /native-rbac-rules/
 func (h *NativeRBACHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createNativeRuleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid request body")
 		return
 	}

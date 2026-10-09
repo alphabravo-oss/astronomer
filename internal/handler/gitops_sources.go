@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -53,7 +52,7 @@ func (h *GitOpsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req gitopsSourceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -158,7 +157,7 @@ func (h *GitOpsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req gitopsSourceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

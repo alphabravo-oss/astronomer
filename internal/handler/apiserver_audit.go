@@ -164,7 +164,7 @@ func (h *ApiserverAuditHandler) Ingest(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxIngestBody)
 	var req ingestApiserverAuditRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		if _, ok := err.(*http.MaxBytesError); ok {
 			RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.ValidationError, "Request body too large")
 			return

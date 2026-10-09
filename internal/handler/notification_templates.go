@@ -20,7 +20,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -229,7 +228,7 @@ func (h *NotificationTemplateHandler) Update(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var req templateUpsert
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -343,7 +342,7 @@ func (h *NotificationTemplateHandler) Preview(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req previewRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

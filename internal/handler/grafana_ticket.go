@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -80,7 +79,7 @@ func (h *MonitoringHandler) RedeemGrafanaTicket(w http.ResponseWriter, r *http.R
 		return
 	}
 	var req grafanaTicketRedeemRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "ticket is missing")
 		return
 	}

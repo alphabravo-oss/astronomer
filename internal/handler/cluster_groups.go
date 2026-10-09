@@ -37,7 +37,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -440,7 +439,7 @@ func (h *ClusterGroupHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Create handles POST /api/v1/cluster-groups/.
 func (h *ClusterGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateClusterGroupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -522,7 +521,7 @@ func (h *ClusterGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req UpdateClusterGroupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

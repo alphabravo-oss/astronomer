@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
@@ -117,15 +116,9 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUserPreferencesBodyBytes)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
 	var prefs userpreferences.Preferences
-	if err := decoder.Decode(&prefs); err != nil {
+	if err := decodeStrictJSONBody(r, &prefs); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid preference document")
-		return
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Request body must contain one JSON object")
 		return
 	}
 	if prefs.PinnedClusters == nil {

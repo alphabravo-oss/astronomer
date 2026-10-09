@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -206,7 +205,7 @@ func (h *BackupHandler) UpdateStorageConfig(w http.ResponseWriter, r *http.Reque
 	}
 
 	var req CreateStorageConfigRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

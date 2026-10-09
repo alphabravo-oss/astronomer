@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -129,17 +129,12 @@ func newAuditIntent(r *http.Request, event deliveryAuditEvent, stableKey string)
 
 func decodeRequest(w http.ResponseWriter, r *http.Request, destination any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
+	if err := jsoncontract.DecodeRequest(r, destination, jsoncontract.ExactProduct); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			return fmt.Errorf("request body exceeds %d bytes", maxRequestBytes)
 		}
 		return errors.New("request body must be one valid JSON object with only supported fields")
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errors.New("request body must contain exactly one JSON object")
 	}
 	return nil
 }

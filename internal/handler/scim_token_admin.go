@@ -20,7 +20,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -131,7 +130,7 @@ func (h *SCIMTokenAdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req createSCIMTokenRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

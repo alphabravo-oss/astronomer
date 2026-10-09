@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -46,7 +45,7 @@ func (h *DashboardHandler) AdminCreateDatasource(w http.ResponseWriter, r *http.
 		return
 	}
 	var req DatasourceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
 		return
 	}
@@ -100,7 +99,7 @@ func (h *DashboardHandler) AdminUpdateDatasource(w http.ResponseWriter, r *http.
 		return
 	}
 	var req DatasourceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, err.Error())
 		return
 	}

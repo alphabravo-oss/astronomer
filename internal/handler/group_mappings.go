@@ -199,7 +199,7 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req GroupMappingRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid request body")
 		return
 	}

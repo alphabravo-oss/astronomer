@@ -16,7 +16,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -188,7 +187,7 @@ func (h *ReadAuditPolicyHandler) Create(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var req readAuditPolicyCreate
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -263,7 +262,7 @@ func (h *ReadAuditPolicyHandler) Update(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var req readAuditPolicyUpdate
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
