@@ -23,12 +23,12 @@ type applicationTransferDocument struct {
 func verifyApplicationArchive(archiveFile, document, evidence, trustDirectory, provider, keyRef, identity, issuer string) error {
 	// Authentication precedes even opening the untrusted archive. The evidence
 	// is interpreted only by the canonical verifier with caller-pinned trust.
-	if err := verifyDetachedDocument(document, evidence, trustDirectory, provider, keyRef, identity, issuer); err != nil {
+	data, err := authenticateDetachedDocument(document, evidence, trustDirectory, provider, keyRef, identity, issuer)
+	if err != nil {
 		return errors.New("application archive publisher authentication failed")
 	}
-	data, err := boundedFile(document, 1<<20)
 	var transfer applicationTransferDocument
-	if err != nil || closedJSON(data, &transfer) != nil || transfer.SchemaVersion != 1 || transfer.Kind != "application_catalog_transfer" || !regexp.MustCompile(`^v1\.[0-9]+\.[0-9]+$`).MatchString(transfer.Release) || (transfer.PublisherMode != "production" && transfer.PublisherMode != "qa") {
+	if len(data) > 1<<20 || closedJSON(data, &transfer) != nil || transfer.SchemaVersion != 1 || transfer.Kind != "application_catalog_transfer" || !regexp.MustCompile(`^v1\.[0-9]+\.[0-9]+$`).MatchString(transfer.Release) || (transfer.PublisherMode != "production" && transfer.PublisherMode != "qa") {
 		return errors.New("application transfer contract invalid")
 	}
 	payload, err := boundedFile(archiveFile, distribution.MaximumArchiveBytes)

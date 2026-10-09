@@ -39,6 +39,15 @@ func TestDetachedImportDocumentUsesCanonicalOfflineTrust(t *testing.T) {
 	if err := verifyDetachedDocument(document, evidence, directory, "cosign_key", "vendor", "", ""); err != nil {
 		t.Fatal(err)
 	}
+	owned, err := authenticateDetachedDocument(document, evidence, directory, "cosign_key", "vendor", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(document, []byte("replacement unsigned document"), 0600)
+	if string(owned) != string(data) {
+		t.Fatal("reader bytes changed after verification")
+	}
+	_ = os.WriteFile(document, data, 0600)
 	for _, test := range []struct{ provider, keyRef, identity, issuer string }{
 		{"cosign_key", "unknown", "", ""}, {"cosign_keyless", "", "wrong publisher", "https://issuer.example"}, {"none", "", "", ""},
 	} {
