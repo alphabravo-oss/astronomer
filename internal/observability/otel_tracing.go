@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -14,21 +16,15 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace/noop"
+	"golang.org/x/net/http/httpguts"
 )
 
-// Distributed tracing foundation.
-//
-// Astronomer ships zero OTel instrumentation today. The audit's
-// acceptance bar is one trace that spans HTTP → asynq → DB → tunnel.
-// This file is the bottom layer: an SDK init that no-ops when the user
-// hasn't opted in, and a single Shutdown() the server defers.
-//
-// Opt-in via env:
-//   OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.observability:4318
-//
-// When unset (the default), InitTracing returns the no-op TracerProvider
-// the SDK ships with, so existing dev / test invocations stay free of
-// background goroutines and network egress.
+// HTTP, queue, pgx and tunnel instrumentation share W3C propagation. This
+// initializer is called once at process startup by server, worker and agent.
+// Empty endpoints install a no-op provider; live reconfiguration is not a
+// supported lifecycle. Callers own one bounded Shutdown before process exit.
+const tracingExportTimeout = 5 * time.Second
 
 // TracingConfig captures the operator-facing knobs the otel SDK reads
 // at init time. All fields are optional; an empty Endpoint disables
@@ -108,16 +104,29 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 		log = slog.Default()
 	}
 
+	if err := ctx.Err(); err != nil {
+		return noopShutdown, err
+	}
+	endpoint, err := tracingEndpoint(cfg)
+	if err != nil {
+		return noopShutdown, err
+	}
+	for key, value := range cfg.Headers {
+		if !httpguts.ValidHeaderFieldName(key) || !httpguts.ValidHeaderFieldValue(value) {
+			return noopShutdown, fmt.Errorf("otel exporter headers are malformed")
+		}
+	}
+
 	// Propagator is always set, even when the exporter is off. That
 	// way an incoming traceparent header from a load balancer still
-	// flows through this process — when tracing is later enabled, no
-	// re-deploy is needed to start seeing connected traces.
+	// flows through this process. Enabling export requires process restart.
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
 
-	if strings.TrimSpace(cfg.Endpoint) == "" {
+	if endpoint == "" {
+		otel.SetTracerProvider(noop.NewTracerProvider())
 		log.Debug("otel tracing disabled (OTEL_EXPORTER_OTLP_ENDPOINT unset)")
 		return noopShutdown, nil
 	}
@@ -133,16 +142,15 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 	}
 
 	exporterOpts := []otlptracehttp.Option{
-		otlptracehttp.WithEndpointURL(cfg.Endpoint),
+		otlptracehttp.WithEndpointURL(endpoint),
+		otlptracehttp.WithTimeout(tracingExportTimeout),
+		otlptracehttp.WithHeaders(cfg.Headers),
 	}
 	// Endpoint URL takes precedence; for backwards compat with
 	// non-URL forms ("collector:4318") the explicit Insecure knob is
 	// still honored.
-	if cfg.Insecure || strings.HasPrefix(cfg.Endpoint, "http://") {
+	if cfg.Insecure || strings.HasPrefix(endpoint, "http://") {
 		exporterOpts = append(exporterOpts, otlptracehttp.WithInsecure())
-	}
-	if len(cfg.Headers) > 0 {
-		exporterOpts = append(exporterOpts, otlptracehttp.WithHeaders(cfg.Headers))
 	}
 
 	exporter, err := otlptracehttp.New(ctx, exporterOpts...)
@@ -166,6 +174,7 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 		// flushes the rest on graceful exit.
 		sdktrace.WithBatcher(exporter,
 			sdktrace.WithBatchTimeout(5*time.Second),
+			sdktrace.WithExportTimeout(tracingExportTimeout),
 		),
 	)
 	otel.SetTracerProvider(tp)
@@ -175,6 +184,37 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 		"service_name", serviceName)
 
 	return tp.Shutdown, nil
+}
+
+// Retain explicitly supported legacy host:port endpoints, but reject malformed
+// URLs rather than letting the SDK silently fall back to its default address.
+// Credentials belong in typed Headers, never userinfo or URL query strings.
+func tracingEndpoint(cfg TracingConfig) (string, error) {
+	endpoint := strings.TrimSpace(cfg.Endpoint)
+	if endpoint == "" {
+		return "", nil
+	}
+	if !strings.Contains(endpoint, "://") {
+		host, _, err := net.SplitHostPort(endpoint)
+		if err != nil || host == "" {
+			return "", fmt.Errorf("otel exporter endpoint must be an HTTP(S) URL or host:port")
+		}
+		scheme := "https://"
+		if cfg.Insecure {
+			scheme = "http://"
+		}
+		endpoint = scheme + endpoint
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return "", fmt.Errorf("otel exporter endpoint must be HTTP(S) without credentials, query or fragment")
+	}
+	// SDK1.47 WithEndpointURL treats an absent path as '/', unlike its old
+	// default trace path. Our typed endpoint accepts a collector base URL.
+	if parsed.Path == "" || parsed.Path == "/" {
+		parsed.Path = "/v1/traces"
+	}
+	return parsed.String(), nil
 }
 
 func tracingResource(cfg TracingConfig, serviceName string) (*resource.Resource, error) {
