@@ -2,6 +2,7 @@
 # Run the Playwright live project against disposable PostgreSQL/Redis and the
 # current server, worker, and frontend preview processes.
 set -euo pipefail
+umask 077
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -65,6 +66,7 @@ flux_fixture_container="astronomer-live-browser-flux-$suffix"
 flux_fixture_runtime_image="astronomer-flux-fixture-runtime:alpine-3.22-git-2.49.1"
 rustfs_fixture_image="astronomer-rustfs-fixture:$suffix"
 s3_client_image="astronomer-s3-client-fixture:$suffix"
+shell_fixture_image="astronomer-live-browser-shell:$suffix"
 postgres_user="live_browser"
 postgres_database="live_browser"
 postgres_credential="$(openssl rand -hex 24)"
@@ -79,6 +81,7 @@ worker_metrics_port=""
 server_pid=""
 worker_pid=""
 frontend_pid=""
+preview_ref_created=0
 fixture_pid=""
 flux_cluster="test-run-live-$((BASHPID % 1000000))-$(openssl rand -hex 2)"
 flux_kubeconfig="$artifact_dir/flux-kubeconfig"
@@ -261,6 +264,7 @@ cleanup() {
 		KUBECONFIG="$flux_kubeconfig" kubectl -n velero logs deployment/velero >"$artifact_dir/velero.log" 2>&1 || true
 		KUBECONFIG="$flux_kubeconfig" kubectl get events -A --sort-by=.metadata.creationTimestamp >"$artifact_dir/kubernetes-events.log" 2>&1 || true
 	fi
+  if [[ "$preview_ref_created" == 1 ]]; then rm -f -- "$LIVE_BROWSER_PREVIEW_REF"; fi
   stop_process "$frontend_pid"
   stop_process "$fixture_pid"
   stop_process "$worker_pid"
@@ -269,7 +273,7 @@ cleanup() {
 		k3d cluster delete "$flux_cluster" >/dev/null 2>&1 || true
 	fi
   docker rm -f "$postgres_container" "$redis_container" "$flux_fixture_container" >/dev/null 2>&1 || true
-	docker image rm "$s3_client_image" "$rustfs_fixture_image" >/dev/null 2>&1 || true
+	docker image rm "$s3_client_image" "$rustfs_fixture_image" "$shell_fixture_image" >/dev/null 2>&1 || true
   printf 'exit_status=%d\n' "$status" >"$artifact_dir/result.txt"
   echo "test-live-browser: artifacts: $artifact_dir"
   exit "$status"
@@ -423,6 +427,14 @@ git -C "$artifact_dir/flux-worktree" commit -m "live browser Flux fixture" >/dev
 git_revision="$(git -C "$artifact_dir/flux-worktree" rev-parse HEAD)"
 git clone --bare "$artifact_dir/flux-worktree" "$flux_fixture_root/git/repository.git" >/dev/null
 git_digest="sha256:$(git -C "$artifact_dir/flux-worktree" archive HEAD | sha256sum | awk '{print $1}')"
+# The host client already passed the declared server-skew preflight. Build
+# the first-party shell with that exact official version for this fixture only.
+qualification_kubectl_version="$(kubectl version --client=true -o json | python3 -c 'import json,sys; print(json.load(sys.stdin)["clientVersion"]["gitVersion"])')"
+docker build --pull=false --build-arg "KUBECTL_VERSION=$qualification_kubectl_version" \
+  --build-arg "GIT_COMMIT=$(git rev-parse HEAD)" -t "$shell_fixture_image" \
+  -f deploy/docker/Dockerfile.shell . >"$artifact_dir/build-shell.log" 2>&1
+k3d image import -c "$flux_cluster" "$shell_fixture_image" >"$artifact_dir/import-shell.log" 2>&1
+docker image inspect "$shell_fixture_image" --format '{{.Id}}' >"$artifact_dir/shell-image-id.log"
 docker pull "$rustfs_image" >"$artifact_dir/pull-rustfs.log" 2>&1
 # k3d imports local image tags; the source bytes remain pinned above.
 docker tag "$rustfs_image" "$rustfs_fixture_image"
@@ -575,6 +587,7 @@ runtime_env=(
   "ASTRONOMER_ENCRYPTION_KEY=$encryption_key"
   "ASTRONOMER_BOOTSTRAP_PASSWORD=$admin_password"
   "ENV=development"
+  "KUBECTL_SHELL_IMAGE=$shell_fixture_image"
   "DEBUG=true"
   "ALLOWED_HOSTS=127.0.0.1,localhost"
   "CORS_ALLOWED_ORIGINS=http://127.0.0.1:$frontend_port"
@@ -758,6 +771,23 @@ BACKEND_URL="http://127.0.0.1:$server_port" \
 frontend_pid=$!
 wait_http_ready frontend "$frontend_pid" "http://127.0.0.1:$frontend_port/auth/login"
 assert_stack before-playwright
+
+# An optional private handoff lets the integration reviewer inspect this live
+# owned stack. It is outside retained/uploaded artifacts and removed at exit.
+if [[ -n "${LIVE_BROWSER_PREVIEW_REF:-}" ]]; then
+  LIVE_PREVIEW_PASSWORD="$admin_password" python3 - "$LIVE_BROWSER_PREVIEW_REF" "$artifact_dir" "$ROOT" "$frontend_port" <<'PYREF'
+import json, os, pathlib, sys
+path, artifacts, source, port = map(str, sys.argv[1:])
+p = pathlib.Path(path)
+if not p.is_absolute() or any(p.resolve() == q or q in p.resolve().parents for q in (pathlib.Path(artifacts).resolve(), pathlib.Path(source).resolve())):
+    raise SystemExit("preview reference must be absolute and outside source/artifacts")
+fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+with os.fdopen(fd, "w") as handle:
+    json.dump({"schemaVersion": 1, "scope": "owned synthetic live-browser fixture only", "url": "http://127.0.0.1:" + port, "email": "admin@astronomer.local", "password": os.environ["LIVE_PREVIEW_PASSWORD"]}, handle)
+    handle.write("\n")
+PYREF
+  preview_ref_created=1
+fi
 
 echo "test-live-browser: running Playwright live project"
 set +e

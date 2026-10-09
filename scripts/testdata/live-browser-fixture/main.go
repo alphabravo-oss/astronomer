@@ -147,6 +147,16 @@ func runAgent() error {
 	fixture := &k8sFixture{proxy: proxy}
 	client.RegisterHandler(protocol.MsgK8sRequest, fixture.handle)
 	client.RegisterHandler(protocol.MsgDecommission, fixture.decommission)
+	// Use the production exec adapters against this owned member API. Terminal
+	// cancellation must close a real remote stream, not a synthetic reply.
+	execHandler := agent.NewExecHandler(proxy.Client(), proxy.RESTConfig(), log)
+	client.RegisterHandler(protocol.MsgExecStart, agent.AdaptStreamingHandler(client, execHandler.HandleExecStart))
+	client.RegisterHandler(protocol.MsgExecInput, agent.AdaptVoidHandler(execHandler.HandleExecInput))
+	client.RegisterHandler(protocol.MsgExecResize, agent.AdaptVoidHandler(execHandler.HandleExecResize))
+	client.RegisterHandler(protocol.MsgExecEnd, agent.AdaptVoidHandler(func(msg *protocol.Message) error {
+		execHandler.CloseSession(msg.StreamID)
+		return nil
+	}))
 
 	restConfig = proxy.RESTConfig()
 	deliveryDynamic, err := dynamic.NewForConfig(restConfig)

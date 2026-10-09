@@ -21,6 +21,8 @@ PATH="$WORK_DIR:/usr/bin:/bin" "$RUNNER" --validate-only >/dev/null
 # shellcheck disable=SC2016
 required_patterns=(
   'qualification_postgres_run'
+  'KUBECTL_SHELL_IMAGE=$shell_fixture_image'
+  'k3d image import -c "$flux_cluster" "$shell_fixture_image"'
   'qualification_k3s_image="$(python3 scripts/qualification-kubernetes.py)"'
   '--image "$qualification_k3s_image"'
   'arbitrary Kubernetes image overrides are not allowed'
@@ -128,10 +130,10 @@ grep -Fq 'video: "retain-on-failure"' "$ROOT/frontend/playwright.config.ts"
 # journey is intentionally nested under `if (trivyEnabled)` and CI enables it
 # through the runner environment handoff asserted above. Optional engineering
 # measurements are excluded from the default live project during discovery;
-# their parameterized declarations are not part of these 16 release journeys.
+# their parameterized declarations are not part of these 18 release journeys.
 live_test_count="$(grep -RhE '^[[:space:]]*test\(' "$ROOT/frontend/tests/e2e-live" --include='*.spec.ts' --exclude='efficiency.live.spec.ts' | wc -l | tr -d ' ')"
-[[ "$live_test_count" == "16" ]] || {
-  echo "live-browser runner expects 16 explicit retry-free journeys, found $live_test_count" >&2
+[[ "$live_test_count" == "18" ]] || {
+  echo "live-browser runner expects 18 explicit retry-free journeys, found $live_test_count" >&2
   exit 1
 }
 
