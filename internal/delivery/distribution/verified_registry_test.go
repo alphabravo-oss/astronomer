@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
@@ -43,11 +44,13 @@ type registryFixture struct {
 
 func (f *registryFixture) addArtifact(repository, media string, payload []byte) string {
 	d := digest.FromBytes(payload)
-	f.blobs[d.String()] = payload
 	manifest := ocispec.Manifest{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageManifest, Config: ocispec.Descriptor{MediaType: "application/vnd.oci.empty.v1+json", Digest: digest.FromString("{}"), Size: 2}, Layers: []ocispec.Descriptor{{MediaType: media, Digest: d, Size: int64(len(payload))}}}
 	data, _ := json.Marshal(manifest)
 	subject := contentDigest(data)
+	f.mutex.Lock()
+	f.blobs[d.String()] = payload
 	f.manifests[repository+"/"+subject] = data
+	f.mutex.Unlock()
 	return subject
 }
 func (f *registryFixture) sign(t *testing.T, repository, subject string, signer signature.Signer) {
@@ -58,10 +61,12 @@ func (f *registryFixture) sign(t *testing.T, repository, subject string, signer 
 		t.Fatal(err)
 	}
 	d := digest.FromBytes(payload)
-	f.blobs[d.String()] = payload
 	manifest := ocispec.Manifest{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageManifest, Layers: []ocispec.Descriptor{{MediaType: "application/vnd.dev.cosign.simplesigning.v1+json", Digest: d, Size: int64(len(payload)), Annotations: map[string]string{"dev.cosignproject.cosign/signature": base64.StdEncoding.EncodeToString(raw)}}}}
 	data, _ := json.Marshal(manifest)
+	f.mutex.Lock()
+	f.blobs[d.String()] = payload
 	f.manifests[repository+"/sha256-"+strings.TrimPrefix(subject, "sha256:")+".sig"] = data
+	f.mutex.Unlock()
 }
 func (f *registryFixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Actual Cosign may upload a config/blob while another registry request
@@ -158,7 +163,7 @@ type registryRoutingTransport struct {
 
 func (r registryRoutingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	if request.URL.Host != "1.1.1.1" {
-		r.fixture.externalRequests++
+		r.fixture.recordExternal()
 		return nil, fmt.Errorf("unexpected external fixture destination")
 	}
 	clone := request.Clone(request.Context())
@@ -209,7 +214,7 @@ func TestVerifiedRegistryParentAndEveryChildBeforeCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(catalog.Components) != 3 || loader.Status().Verification != "verified" || f.externalRequests != 0 {
+	if len(catalog.Components) != 3 || loader.Status().Verification != "verified" || f.externalCount() != 0 {
 		t.Fatal("QA signed chain incomplete or contacted external trust")
 	}
 	for _, component := range catalog.Components {
@@ -217,45 +222,44 @@ func TestVerifiedRegistryParentAndEveryChildBeforeCache(t *testing.T) {
 			t.Fatal("child content identity was not projected")
 		}
 	}
-	reads := f.payloadReads
-	if _, err := loader.Load(t.Context()); err != nil || f.payloadReads != reads {
+	reads := f.readCount()
+	if _, err := loader.Load(t.Context()); err != nil || f.readCount() != reads {
 		t.Fatal("validated source cache refetched")
 	}
 	// A valid parent must not authorize a missing child signature.
 	var childRepository, signatureTag string
-	for name := range f.manifests {
+	for _, name := range f.manifestKeys() {
 		if strings.HasPrefix(name, "charts/") && strings.HasSuffix(name, ".sig") {
 			childRepository, signatureTag, _ = strings.Cut(name, "/sha256-")
 			break
 		}
 	}
 	missingKey := childRepository + "/sha256-" + signatureTag
-	saved := f.manifests[missingKey]
-	delete(f.manifests, missingKey)
+	saved := f.removeManifest(missingKey)
 	fresh, _ := New(options)
 	if _, err := fresh.Load(t.Context()); err == nil || fresh.cached != nil {
 		t.Fatal("parent signature authorized unsigned child")
 	}
-	f.manifests[missingKey] = saved
+	f.setManifest(missingKey, saved)
 	// Changed archive bytes at an identical chart version/manifest cannot be consumed.
-	f.corruptBlob = contentDigest(chartFixture(t, catalog.Components[0].Slug))
+	f.setCorrupt(contentDigest(chartFixture(t, catalog.Components[0].Slug)))
 	fresh, _ = New(options)
 	if _, err := fresh.Load(t.Context()); err == nil || fresh.cached != nil {
 		t.Fatal("changed child payload accepted")
 	}
-	f.corruptBlob = ""
+	f.setCorrupt("")
 	// Wrong mounted QA key rejects the signature before reading parent payload.
 	other, _, err := signature.NewDefaultECDSASignerVerifier()
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.sign(t, "distribution", subject, other)
-	before := f.payloadReads
+	before := f.readCount()
 	fresh, _ = New(options)
-	if _, err := fresh.Load(t.Context()); err == nil || fresh.cached != nil || f.payloadReads != before+1 {
+	if _, err := fresh.Load(t.Context()); err == nil || fresh.cached != nil || f.readCount() != before+1 {
 		t.Fatal("wrong identity reached parent archive")
 	}
-	if f.externalRequests != 0 {
+	if f.externalCount() != 0 {
 		t.Fatal("verification fetched public trust material")
 	}
 }
@@ -276,11 +280,14 @@ func TestSelectedCosignProducerToVerifiedLoader(t *testing.T) {
 		}
 	})
 	subject := f.addArtifact("distribution", MediaType, parent)
-	f.blobs[digest.FromString("{}").String()] = []byte("{}")
+	f.setBlob(digest.FromString("{}").String(), []byte("{}"))
 	server := httptest.NewServer(f)
 	defer server.Close()
-	externalRequests := 0
-	trap := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { externalRequests++; w.WriteHeader(http.StatusForbidden) }))
+	var externalRequests atomic.Int64
+	trap := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		externalRequests.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
 	defer trap.Close()
 	temporary := t.TempDir()
 	random := make([]byte, 24)
@@ -301,10 +308,7 @@ func TestSelectedCosignProducerToVerifiedLoader(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("selected producer version: %s", versionBytes)
-	keys := make([]string, 0, len(f.manifests))
-	for key := range f.manifests {
-		keys = append(keys, key)
-	}
+	keys := f.manifestKeys()
 	for _, key := range keys {
 		repository, subject, found := strings.Cut(key, "/sha256:")
 		if !found {
@@ -368,7 +372,54 @@ func TestSelectedCosignProducerToVerifiedLoader(t *testing.T) {
 			t.Fatal("HTTP-only agent accepted immutable OCI source")
 		}
 	}
-	if externalRequests != 0 || f.externalRequests != 0 {
-		t.Fatalf("QA producer/verifier attempted external service: %d", externalRequests)
+	if externalRequests.Load() != 0 || f.externalCount() != 0 {
+		t.Fatalf("QA producer/verifier attempted external service: %d", externalRequests.Load())
 	}
+}
+
+func (f *registryFixture) manifestKeys() []string {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	keys := make([]string, 0, len(f.manifests))
+	for key := range f.manifests {
+		keys = append(keys, key)
+	}
+	return keys
+}
+func (f *registryFixture) readCount() int {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	return f.payloadReads
+}
+func (f *registryFixture) externalCount() int {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	return f.externalRequests
+}
+func (f *registryFixture) recordExternal() {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.externalRequests++
+}
+func (f *registryFixture) setCorrupt(value string) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.corruptBlob = value
+}
+func (f *registryFixture) setManifest(key string, value []byte) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.manifests[key] = bytes.Clone(value)
+}
+func (f *registryFixture) setBlob(key string, value []byte) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.blobs[key] = bytes.Clone(value)
+}
+func (f *registryFixture) removeManifest(key string) []byte {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	data := bytes.Clone(f.manifests[key])
+	delete(f.manifests, key)
+	return data
 }

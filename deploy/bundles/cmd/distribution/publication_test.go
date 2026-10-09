@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -39,12 +40,12 @@ type publicationRegistry struct {
 type publicationRoutingTransport struct {
 	base       http.RoundTripper
 	target     *url.URL
-	unexpected int
+	unexpected atomic.Int64
 }
 
 func (transport *publicationRoutingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	if request.URL.Host != "1.1.1.1" {
-		transport.unexpected++
+		transport.unexpected.Add(1)
 		return nil, errors.New("QA client refused unrelated destination")
 	}
 	clone := request.Clone(request.Context())
@@ -89,9 +90,9 @@ func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testin
 	t.Setenv("HOME", directory)
 	t.Setenv("DOCKER_CONFIG", directory)
 	t.Setenv("COSIGN_PASSWORD", hex.EncodeToString(random))
-	publicRequests := 0
+	var publicRequests atomic.Int64
 	trap := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		publicRequests++
+		publicRequests.Add(1)
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer trap.Close()
@@ -102,10 +103,10 @@ func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testin
 		t.Fatal(err)
 	}
 	_ = response.Body.Close()
-	if publicRequests != 1 {
+	if publicRequests.Load() != 1 {
 		t.Fatal("external trap negative control did not work")
 	}
-	publicRequests = 0
+	publicRequests.Store(0)
 	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
 		t.Setenv(name, trap.URL)
 	}
@@ -132,13 +133,13 @@ func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testin
 		}
 		for _, child := range index.Children {
 			repository := strings.TrimPrefix(child.Repository, "1.1.1.1/")
-			if sha(fixture.manifests[repository+"/"+child.Digest]) != child.Digest {
+			if fixture.manifestDigest(repository+"/"+child.Digest) != child.Digest {
 				t.Fatal("child original subject digest changed")
 			}
 		}
 	}
-	if signed != 2*(len(index.Children)+1) || publicRequests != 0 || transport.unexpected != 0 {
-		t.Fatalf("signed=%d public=%d unexpected=%d", signed, publicRequests, transport.unexpected)
+	if signed != 2*(len(index.Children)+1) || publicRequests.Load() != 0 || transport.unexpected.Load() != 0 {
+		t.Fatalf("signed=%d public=%d unexpected=%d", signed, publicRequests.Load(), transport.unexpected.Load())
 	}
 	verifyActualOfflinePublication(t, fixture, index, options.Trust, directory)
 	offlineOptions := distribution.OfflineOptions{Repository: index.Repository, Digest: index.Digest, CatalogDigest: index.CatalogDigest, Release: index.Release, Profile: "builtins", TrustDirectory: directory, Policy: options.Trust}
@@ -149,7 +150,7 @@ func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testin
 	if _, _, err := readOfflineTransfer(t.Context(), transfer, offlineOptions); err != nil {
 		t.Fatalf("captured actual graph cannot verify offline: %v", err)
 	}
-	if publicRequests != 0 {
+	if publicRequests.Load() != 0 {
 		t.Fatal("offline verification contacted external proxy")
 	}
 	// Successful write/sign cannot cover a missing vendor signature after import.
@@ -172,23 +173,24 @@ func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testin
 
 func verifyActualOfflinePublication(t *testing.T, fixture *publicationRegistry, index subjectIndex, policy model.TrustPolicy, trustDirectory string) {
 	t.Helper()
+	manifests, registryBlobs := fixture.snapshot()
 	var stored []distribution.StoredSubject
 	graph := map[string][]byte{}
 	subjects := append([]publishedSubject{}, index.Children...)
 	subjects = append(subjects, publishedSubject{Repository: index.Repository, Digest: index.Digest})
 	for _, subject := range subjects {
 		repository := strings.TrimPrefix(subject.Repository, "1.1.1.1/")
-		signature := fixture.manifests[repository+"/sha256-"+subject.Digest[7:]+".sig"]
+		signature := manifests[repository+"/sha256-"+subject.Digest[7:]+".sig"]
 		stored = append(stored, distribution.StoredSubject{Repository: subject.Repository, Digest: subject.Digest, SignatureDigest: sha(signature)})
-		for _, data := range [][]byte{fixture.manifests[repository+"/"+subject.Digest], signature} {
+		for _, data := range [][]byte{manifests[repository+"/"+subject.Digest], signature} {
 			var manifest ocispec.Manifest
 			if closedJSON(data, &manifest) != nil {
 				t.Fatal("actual registry manifest invalid")
 			}
 			graph[sha(data)] = data
-			graph[manifest.Config.Digest.String()] = fixture.blobs[manifest.Config.Digest.String()]
+			graph[manifest.Config.Digest.String()] = registryBlobs[manifest.Config.Digest.String()]
 			for _, layer := range manifest.Layers {
-				graph[layer.Digest.String()] = fixture.blobs[layer.Digest.String()]
+				graph[layer.Digest.String()] = registryBlobs[layer.Digest.String()]
 			}
 		}
 	}
@@ -368,4 +370,22 @@ func (f *publicationRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if r.Method != "HEAD" {
 		_, _ = w.Write(data)
 	}
+}
+
+func (f *publicationRegistry) manifestDigest(key string) string {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	return sha(f.manifests[key])
+}
+func (f *publicationRegistry) snapshot() (map[string][]byte, map[string][]byte) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	manifests, blobs := map[string][]byte{}, map[string][]byte{}
+	for key, data := range f.manifests {
+		manifests[key] = append([]byte(nil), data...)
+	}
+	for key, data := range f.blobs {
+		blobs[key] = append([]byte(nil), data...)
+	}
+	return manifests, blobs
 }

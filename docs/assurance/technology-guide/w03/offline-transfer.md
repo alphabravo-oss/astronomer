@@ -56,3 +56,12 @@ W03 owns the closed offline-transfer schema and readers. Existing `writeJSON`
 is reused for the transport index and derived standard OCI indexes; no new
 direct production JSON serializer was introduced. The index grants no trust
 without the canonical parent/child verifier and independent caller pins.
+
+The [fixture race review](offline-fixture-race-review.json) records a further
+root race failure after the first handler-only mutex correction. Direct test
+map reads could overlap final Cosign requests. All fixture map/counter accesses
+now use locked helpers or copied snapshots, with locks released before network,
+signer and verifier calls; proxy counters are atomic. The exact frozen offline
+production source and these two test changes pass both packages under `-race`
+with actual Cosign 3.1.3. Root retains its initial review failure separately;
+the local receipt distinguishes that reported failure from the local raw pass.
