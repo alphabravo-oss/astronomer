@@ -753,6 +753,10 @@ type Querier interface {
 	// enqueue but before acknowledgement can safely replay without producing a
 	// duplicate destination row.
 	EnqueueSIEMEventDeduped(ctx context.Context, arg EnqueueSIEMEventDedupedParams) (SiemForwardQueue, error)
+	EnsureCatalogApplicationBundle(ctx context.Context, arg EnsureCatalogApplicationBundleParams) error
+	EnsureCatalogApplicationBundleVersion(ctx context.Context, arg EnsureCatalogApplicationBundleVersionParams) error
+	EnsureCatalogApplicationSource(ctx context.Context, arg EnsureCatalogApplicationSourceParams) error
+	EnsureCatalogApplicationTarget(ctx context.Context, arg EnsureCatalogApplicationTargetParams) (int64, error)
 	EnsureCharlieAutomationBinding(ctx context.Context, arg EnsureCharlieAutomationBindingParams) (GlobalRoleBinding, error)
 	// Idempotently create-or-return the singleton "local" cluster row that
 	// represents the Kubernetes cluster the server itself runs in. Uses a CTE
@@ -821,6 +825,12 @@ type Querier interface {
 	GetBackupScheduleByID(ctx context.Context, id uuid.UUID) (BackupSchedule, error)
 	// Backup Storage Configs
 	GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (BackupStorageConfig, error)
+	GetCatalogApplicationDeletionStatus(ctx context.Context, id uuid.UUID) (string, error)
+	GetCatalogApplicationDeploymentStatus(ctx context.Context, id uuid.UUID) (GetCatalogApplicationDeploymentStatusRow, error)
+	GetCatalogApplicationRollbackRevision(ctx context.Context, arg GetCatalogApplicationRollbackRevisionParams) (uuid.UUID, error)
+	GetCatalogApplicationRolloutStatus(ctx context.Context, arg GetCatalogApplicationRolloutStatusParams) (GetCatalogApplicationRolloutStatusRow, error)
+	GetCatalogApplicationTargetForDeletion(ctx context.Context, id uuid.UUID) (GetCatalogApplicationTargetForDeletionRow, error)
+	GetCatalogApplicationTargetForRollback(ctx context.Context, id uuid.UUID) (GetCatalogApplicationTargetForRollbackRow, error)
 	GetCatalogOperation(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	GetCharlieActionApprovalByApprovalID(ctx context.Context, approvalID string) (CharlieActionApproval, error)
 	GetCharlieActionReceipt(ctx context.Context, charlieActionID string) (CharlieActionReceipt, error)
@@ -1220,6 +1230,7 @@ type Querier interface {
 	// "ORDER BY created_at DESC LIMIT 1" selection but batched across the
 	// whole fleet for the compliance-posture rollup.
 	LatestCISScanPerCluster(ctx context.Context) ([]LatestCISScanPerClusterRow, error)
+	LinkCatalogApplicationTarget(ctx context.Context, arg LinkCatalogApplicationTargetParams) error
 	// Every API token row with user identity LEFT-JOINed in and the hash
 	// + raw secret material stripped. `is_revoked = false` is NOT
 	// filtered — auditors need the historical record of issued
@@ -1315,6 +1326,7 @@ type Querier interface {
 	ListBackups(ctx context.Context, arg ListBackupsParams) ([]Backup, error)
 	ListBackupsByStorage(ctx context.Context, arg ListBackupsByStorageParams) ([]Backup, error)
 	ListCRDOwnedClusters(ctx context.Context, limit int32) ([]ListCRDOwnedClustersRow, error)
+	ListCatalogApplicationRevisions(ctx context.Context, id uuid.UUID) ([]ListCatalogApplicationRevisionsRow, error)
 	ListCatalogOperationEvents(ctx context.Context, operationID uuid.UUID) ([]CatalogOperationEvent, error)
 	ListCatalogOperations(ctx context.Context, arg ListCatalogOperationsParams) ([]CatalogOperation, error)
 	ListCatalogOperationsForScopes(ctx context.Context, arg ListCatalogOperationsForScopesParams) ([]CatalogOperation, error)
@@ -1971,6 +1983,8 @@ type Querier interface {
 	MarkAuditOutboxFailed(ctx context.Context, arg MarkAuditOutboxFailedParams) (AuditOutbox, error)
 	MarkAuthoredConstraintDeleted(ctx context.Context, arg MarkAuthoredConstraintDeletedParams) (AuthoredConstraint, error)
 	MarkAuthoredConstraintReconcileResult(ctx context.Context, arg MarkAuthoredConstraintReconcileResultParams) (int64, error)
+	MarkCatalogApplicationRollingBack(ctx context.Context, arg MarkCatalogApplicationRollingBackParams) error
+	MarkCatalogApplicationUninstalling(ctx context.Context, id uuid.UUID) error
 	MarkCatalogOperationCompleted(ctx context.Context, id uuid.UUID) (CatalogOperation, error)
 	MarkCatalogOperationFailed(ctx context.Context, arg MarkCatalogOperationFailedParams) (CatalogOperation, error)
 	// Atomic claim (CORR-R01): pending or stale running only — see tool_operations.
@@ -2125,6 +2139,7 @@ type Querier interface {
 	// from advancing liveness after another replica has replaced its session.
 	RecordAgentHeartbeat(ctx context.Context, arg RecordAgentHeartbeatParams) (bool, error)
 	RecordApplicationCatalogSyncFailure(ctx context.Context, arg RecordApplicationCatalogSyncFailureParams) error
+	RecordCatalogApplicationVersion(ctx context.Context, arg RecordCatalogApplicationVersionParams) error
 	RecordCatalogChartView(ctx context.Context, arg RecordCatalogChartViewParams) error
 	// Race-safe lockout transition. The increment and threshold decision run
 	// against the row-locked current count, so concurrent bad passwords cannot
@@ -2170,6 +2185,10 @@ type Querier interface {
 	// failed-attempt cycle starts from a clean state.
 	ResetFailedLoginCount(ctx context.Context, id uuid.UUID) error
 	ResetRetryableDeliveryRolloutClusters(ctx context.Context, rolloutID uuid.UUID) (int64, error)
+	// Fixed catalog application statements. Serializable mutations bind these
+	// generated queries to the existing physical transaction; planners retain
+	// their existing post-commit audit/outbox ownership.
+	ResolveCatalogApplicationProject(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	ResolveComponentBundleVersion(ctx context.Context, arg ResolveComponentBundleVersionParams) (ComponentBundleVersion, error)
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (RestoreDexSSOForGenerationRow, error)
@@ -2268,6 +2287,7 @@ type Querier interface {
 	SetProjectDefaultVaultConnection(ctx context.Context, arg SetProjectDefaultVaultConnectionParams) error
 	SetProjectOwnership(ctx context.Context, arg SetProjectOwnershipParams) (SetProjectOwnershipRow, error)
 	SetUserTableViewDefault(ctx context.Context, arg SetUserTableViewDefaultParams) (UserTableView, error)
+	StageCatalogApplicationRollbackTarget(ctx context.Context, arg StageCatalogApplicationRollbackTargetParams) (int64, error)
 	// All logical connector mutations stage a new runtime generation and disable
 	// SSO under the same transaction-scoped advisory lock used by activation.
 	StageCreateDexConnector(ctx context.Context, arg StageCreateDexConnectorParams) (StageCreateDexConnectorRow, error)

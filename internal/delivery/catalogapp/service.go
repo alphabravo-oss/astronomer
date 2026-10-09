@@ -100,12 +100,11 @@ func (s *Service) Install(ctx context.Context, request InstallRequest) (InstallR
 // advances its target to a new immutable bundle version.
 func (s *Service) Upgrade(ctx context.Context, request InstallRequest) (InstallResult, error) {
 	if request.ProjectID == uuid.Nil {
-		if err := s.pool.QueryRow(ctx, `
-			SELECT dt.project_id FROM installed_charts ic
-			JOIN delivery_targets dt ON dt.id=ic.request_id
-			WHERE ic.id=$1`, request.InstallationID).Scan(&request.ProjectID); err != nil {
+		projectID, err := sqlc.New(s.pool).ResolveCatalogApplicationProject(ctx, request.InstallationID)
+		if err != nil {
 			return InstallResult{}, fmt.Errorf("resolve catalog application ownership: %w", err)
 		}
+		request.ProjectID = projectID
 	}
 	return s.apply(ctx, request, "upgrading")
 }
@@ -142,12 +141,10 @@ func (s *Service) apply(ctx context.Context, request InstallRequest, pendingStat
 		return InstallResult{}, fmt.Errorf("start catalog application rollout: %w", err)
 	}
 	result.RolloutID = plan.ID
-	if _, err := s.pool.Exec(ctx, `
-		UPDATE installed_charts
-		SET request_id=$2,status=$3,
-			revision=revision+CASE WHEN $4 THEN 1 ELSE 0 END,
-			updated_at=now()
-		WHERE id=$1`, request.InstallationID, result.TargetID, pendingStatus, advancesInstallationRevision(pendingStatus)); err != nil {
+	if err := sqlc.New(s.pool).LinkCatalogApplicationTarget(ctx, sqlc.LinkCatalogApplicationTargetParams{
+		ID: request.InstallationID, RequestID: pgtype.UUID{Bytes: result.TargetID, Valid: true},
+		Status: pendingStatus, AdvanceRevision: advancesInstallationRevision(pendingStatus),
+	}); err != nil {
 		return InstallResult{}, fmt.Errorf("link catalog installation to delivery target: %w", err)
 	}
 	return result, nil
@@ -163,20 +160,11 @@ func (s *Service) Status(ctx context.Context, targetID uuid.UUID) (Status, error
 	if s == nil || s.pool == nil || targetID == uuid.Nil {
 		return Status{}, errors.New("catalog application target is required")
 	}
-	var deletionState, deploymentPhase, lastErrorCode string
-	err := s.pool.QueryRow(ctx, `
-		SELECT t.deletion_state,COALESCE(d.phase,''),COALESCE(d.last_error_code,'')
-		FROM delivery_targets t
-		LEFT JOIN LATERAL (
-			SELECT phase,last_error_code FROM cluster_deployments
-			WHERE target_id=t.id ORDER BY updated_at DESC,id DESC LIMIT 1
-		) d ON true
-		WHERE t.id=$1`, targetID).
-		Scan(&deletionState, &deploymentPhase, &lastErrorCode)
+	row, err := sqlc.New(s.pool).GetCatalogApplicationDeploymentStatus(ctx, targetID)
 	if err != nil {
 		return Status{}, err
 	}
-	return projectStatus(deletionState, deploymentPhase, lastErrorCode), nil
+	return projectStatus(row.DeletionState, row.DeploymentPhase, row.LastErrorCode), nil
 }
 
 func projectStatus(deletionState, deploymentPhase, lastErrorCode string) Status {
@@ -203,21 +191,17 @@ func (s *Service) Uninstall(ctx context.Context, installationID uuid.UUID, actor
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var targetID, projectID uuid.UUID
-	var resourceVersion int64
-	if err := tx.QueryRow(ctx, `
-		SELECT dt.id,dt.project_id,dt.resource_version
-		FROM installed_charts ic JOIN delivery_targets dt ON dt.id=ic.request_id
-		WHERE ic.id=$1 FOR UPDATE OF dt`, installationID).
-		Scan(&targetID, &projectID, &resourceVersion); err != nil {
+	q := sqlc.New(tx)
+	target, err := q.GetCatalogApplicationTargetForDeletion(ctx, installationID)
+	if err != nil {
 		return fmt.Errorf("resolve catalog application target: %w", err)
 	}
-	if _, err := sqlc.New(tx).RequestDeliveryTargetDeletionCAS(ctx, sqlc.RequestDeliveryTargetDeletionCASParams{
-		UpdatedBy: actorID, ID: targetID, ProjectID: projectID, ExpectedResourceVersion: resourceVersion,
+	if _, err := q.RequestDeliveryTargetDeletionCAS(ctx, sqlc.RequestDeliveryTargetDeletionCASParams{
+		UpdatedBy: actorID, ID: target.ID, ProjectID: target.ProjectID, ExpectedResourceVersion: target.ResourceVersion,
 	}); err != nil {
 		return fmt.Errorf("request catalog application deletion: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE installed_charts SET status='uninstalling',updated_at=now() WHERE id=$1`, installationID); err != nil {
+	if err := q.MarkCatalogApplicationUninstalling(ctx, installationID); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -231,41 +215,35 @@ func (s *Service) Rollback(ctx context.Context, installationID uuid.UUID, target
 		return InstallResult{}, errors.New("catalog installation, target revision, and idempotency key are required")
 	}
 	var result InstallResult
-	var projectID, clusterID uuid.UUID
-	var releaseName string
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return result, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err := tx.QueryRow(ctx, `
-		SELECT dt.id,dt.project_id,ic.cluster_id,ic.release_name
-		FROM installed_charts ic
-		JOIN delivery_targets dt ON dt.id=ic.request_id
-		WHERE ic.id=$1 FOR UPDATE OF dt`, installationID).
-		Scan(&result.TargetID, &projectID, &clusterID, &releaseName); err != nil {
+	q := sqlc.New(tx)
+	target, err := q.GetCatalogApplicationTargetForRollback(ctx, installationID)
+	if err != nil {
 		return result, fmt.Errorf("resolve catalog rollback target: %w", err)
 	}
-	if err := tx.QueryRow(ctx, `
-		SELECT to_bundle_version_id FROM delivery_rollouts
-		WHERE target_id=$1 AND target_generation=$2
-		ORDER BY created_at DESC,id DESC LIMIT 1`, result.TargetID, targetRevision).
-		Scan(&result.BundleVersionID); err != nil {
+	result.TargetID = target.ID
+	result.BundleVersionID, err = q.GetCatalogApplicationRollbackRevision(ctx, sqlc.GetCatalogApplicationRollbackRevisionParams{
+		TargetID: result.TargetID, TargetGeneration: targetRevision,
+	})
+	if err != nil {
 		return result, fmt.Errorf("resolve catalog rollback revision %d: %w", targetRevision, err)
 	}
-	var generation int64
-	if err := tx.QueryRow(ctx, `
-		UPDATE delivery_targets SET bundle_version_id=$2,generation=generation+1,
-			resource_version=resource_version+1,updated_by=$3,updated_at=now()
-		WHERE id=$1 AND deletion_state='active' RETURNING generation`,
-		result.TargetID, result.BundleVersionID, actorID).Scan(&generation); err != nil {
+	generation, err := q.StageCatalogApplicationRollbackTarget(ctx, sqlc.StageCatalogApplicationRollbackTargetParams{
+		ID: result.TargetID, BundleVersionID: result.BundleVersionID, UpdatedBy: actorID,
+	})
+	if err != nil {
 		return result, fmt.Errorf("stage catalog rollback target: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE installed_charts SET status='rolling_back',revision=revision+1,
-			values_override=COALESCE((SELECT (renderer_spec #> '{helm,values}')::text
-				FROM component_bundle_versions WHERE id=$2),values_override),updated_at=now()
-		WHERE id=$1`, installationID, result.BundleVersionID); err != nil {
+	if generation < 1 {
+		return result, errors.New("catalog rollback generation is invalid")
+	}
+	if err := q.MarkCatalogApplicationRollingBack(ctx, sqlc.MarkCatalogApplicationRollingBackParams{
+		ID: installationID, BundleVersionID: result.BundleVersionID,
+	}); err != nil {
 		return result, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -275,7 +253,7 @@ func (s *Service) Rollback(ctx context.Context, installationID uuid.UUID, target
 	if err != nil {
 		return result, err
 	}
-	if snapshot.ProjectID != projectID || snapshot.TargetGeneration != uint64(generation) || preview.SelectedCount != 1 {
+	if snapshot.ProjectID != target.ProjectID || snapshot.TargetGeneration != uint64(generation) || preview.SelectedCount != 1 {
 		return result, errors.New("catalog rollback placement changed unexpectedly")
 	}
 	strategy := model.RolloutStrategy{
@@ -286,7 +264,7 @@ func (s *Service) Rollback(ctx context.Context, installationID uuid.UUID, target
 	plan, err := s.planner.Create(ctx, rollout.CreateRequest{
 		TargetID: result.TargetID, ExpectedTargetGeneration: uint64(generation), PreviewDigest: preview.PreviewDigest,
 		Strategy: strategy, Actor: actor(actorID), IdempotencyKey: "catalog-rollback:" + idempotencyKey,
-		Audit: catalogRollbackAuditIntent(installationID, projectID, clusterID, result.TargetID, actorID, idempotencyKey, releaseName),
+		Audit: catalogRollbackAuditIntent(installationID, target.ProjectID, target.ClusterID, result.TargetID, actorID, idempotencyKey, target.ReleaseName),
 	})
 	if err != nil {
 		return result, err
@@ -303,18 +281,10 @@ func (s *Service) Revisions(ctx context.Context, installationID uuid.UUID) ([]Re
 	if s == nil || s.pool == nil || installationID == uuid.Nil {
 		return nil, errors.New("catalog installation is required")
 	}
-	rows, err := s.pool.Query(ctx, `
-		SELECT r.target_generation,r.updated_at,r.state,bv.requested_revision,ic.release_name,
-			r.from_bundle_version_id IS NULL,r.idempotency_key
-		FROM installed_charts ic
-		JOIN delivery_targets dt ON dt.id=ic.request_id
-		JOIN delivery_rollouts r ON r.target_id=dt.id
-		JOIN component_bundle_versions bv ON bv.id=r.to_bundle_version_id
-		WHERE ic.id=$1 ORDER BY r.target_generation,r.created_at,r.id`, installationID)
+	rows, err := sqlc.New(s.pool).ListCatalogApplicationRevisions(ctx, installationID)
 	if err != nil {
 		return nil, fmt.Errorf("list catalog application revisions: %w", err)
 	}
-	defer rows.Close()
 	type rolloutRevision struct {
 		Revision int64
 		Updated  time.Time
@@ -326,18 +296,14 @@ func (s *Service) Revisions(ctx context.Context, installationID uuid.UUID) ([]Re
 	}
 	rollouts := make([]rolloutRevision, 0)
 	latestSucceededIndex := -1
-	for rows.Next() {
-		var item rolloutRevision
-		if err := rows.Scan(&item.Revision, &item.Updated, &item.State, &item.Version, &item.Release, &item.Install, &item.Key); err != nil {
-			return nil, fmt.Errorf("scan catalog application revision: %w", err)
-		}
+	for _, row := range rows {
+		item := rolloutRevision{Revision: row.TargetGeneration, Updated: row.UpdatedAt,
+			State: row.State, Version: row.RequestedRevision, Release: row.ReleaseName,
+			Install: row.IsInstall, Key: row.IdempotencyKey}
 		if item.State == string(model.RolloutSucceeded) {
 			latestSucceededIndex = len(rollouts)
 		}
 		rollouts = append(rollouts, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list catalog application revisions: %w", err)
 	}
 	revisions := make([]Revision, 0, len(rollouts))
 	for index, item := range rollouts {
@@ -370,6 +336,8 @@ func (s *Service) ensureAssets(ctx context.Context, request InstallRequest, forc
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	q := sqlc.New(tx)
+
 	result := InstallResult{
 		SourceID: stableID("source", request.ProjectID.String(), request.RepositoryURL),
 		BundleID: stableID("bundle", request.ProjectID.String(), request.InstallationID.String()),
@@ -378,20 +346,17 @@ func (s *Service) ensureAssets(ctx context.Context, request InstallRequest, forc
 	trust := model.TrustPolicy{AllowUnsigned: true}
 	trustJSON, _ := json.Marshal(trust)
 	sourceName := boundedName("catalog-" + request.ChartName + "-" + result.SourceID.String()[:8])
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO delivery_sources
-			(id,project_id,name,description,source_type,url,auth_mode,trust_policy,status,last_resolved_at,created_by,updated_by)
-		VALUES ($1,$2,$3,$4,'helm_http',$5,'none',$6,'ready',now(),$7,$7)
-		ON CONFLICT (id) DO UPDATE SET last_resolved_at=now(),status='ready',last_error_code=''`,
-		result.SourceID, request.ProjectID, sourceName, "Upstream Helm source for catalog applications",
-		request.RepositoryURL, trustJSON, request.ActorID); err != nil {
+	if err := q.EnsureCatalogApplicationSource(ctx, sqlc.EnsureCatalogApplicationSourceParams{
+		ID: result.SourceID, ProjectID: request.ProjectID, Name: sourceName,
+		Description: "Upstream Helm source for catalog applications", Url: request.RepositoryURL,
+		TrustPolicy: trustJSON, CreatedBy: request.ActorID,
+	}); err != nil {
 		return InstallResult{}, 0, fmt.Errorf("ensure catalog delivery source: %w", err)
 	}
 	bundleName := boundedName("app-" + request.ReleaseName + "-" + request.InstallationID.String()[:8])
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO component_bundles (id,project_id,name,description,created_by,updated_by)
-		VALUES ($1,$2,$3,$4,$5,$5) ON CONFLICT (id) DO NOTHING`,
-		result.BundleID, request.ProjectID, bundleName, request.Description, request.ActorID); err != nil {
+	if err := q.EnsureCatalogApplicationBundle(ctx, sqlc.EnsureCatalogApplicationBundleParams{
+		ID: result.BundleID, ProjectID: request.ProjectID, Name: bundleName, Description: request.Description, CreatedBy: request.ActorID,
+	}); err != nil {
 		return InstallResult{}, 0, fmt.Errorf("ensure catalog application: %w", err)
 	}
 
@@ -440,52 +405,35 @@ func (s *Service) ensureAssets(ctx context.Context, request InstallRequest, forc
 	reconciliationJSON, _ := json.Marshal(reconciliation)
 	requirementsJSON, _ := json.Marshal(draft.RequiredCapabilities)
 	versionLabel := boundedVersion(request.ChartVersion + "+" + specDigest.String()[7:19])
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO component_bundle_versions (
-			id,bundle_id,source_id,version,renderer,scope,requested_revision,resolved_revision,
-			artifact_digest,source_spec,renderer_spec,reconciliation_policy,health_policy,
-			requirements,dependency_bundle_ids,spec_digest,verification_status,verification_identity,state,created_by
-		) VALUES ($1,$2,$3,$4,'helm','platform',$5,$5,$6,$7,$8,$9,'{}',$10,'[]',$11,'unsigned','upstream-catalog','ready',$12)
-		ON CONFLICT (id) DO NOTHING`, result.BundleVersionID, result.BundleID, result.SourceID,
-		versionLabel, request.ChartVersion, normalizeDigest(request.ChartDigest), sourceJSON, rendererJSON,
-		reconciliationJSON, requirementsJSON, specDigest.String(), request.ActorID); err != nil {
+	if err := q.EnsureCatalogApplicationBundleVersion(ctx, sqlc.EnsureCatalogApplicationBundleVersionParams{
+		ID: result.BundleVersionID, BundleID: result.BundleID, SourceID: result.SourceID,
+		Version: versionLabel, RequestedRevision: request.ChartVersion, ArtifactDigest: normalizeDigest(request.ChartDigest),
+		SourceSpec: sourceJSON, RendererSpec: rendererJSON, ReconciliationPolicy: reconciliationJSON,
+		Requirements: requirementsJSON, SpecDigest: specDigest.String(), CreatedBy: request.ActorID,
+	}); err != nil {
 		return InstallResult{}, 0, fmt.Errorf("ensure catalog application version: %w", err)
 	}
 	valuesDigest := sha256.Sum256(values)
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO delivery_application_versions (
-			installation_id,chart_version_id,bundle_version_id,catalog_slug,
-			version,artifact_digest,values_digest,verification_status
-		)
-		SELECT $1,$2,$3,b.slug,$4,$5,$6,b.verification_status
-		FROM helm_chart_versions v
-		JOIN helm_charts c ON c.id=v.chart_id
-		JOIN helm_repositories r ON r.id=c.repository_id
-		JOIN catalog_blessed_charts b
-		  ON b.repo_url=r.url AND b.chart_name=c.name AND b.source='catalog-v1'
-		WHERE v.id=$2
-		ON CONFLICT (installation_id,chart_version_id,values_digest) DO NOTHING`,
-		request.InstallationID, request.ChartVersionID, result.BundleVersionID,
-		request.ChartVersion, normalizeDigest(request.ChartDigest),
-		fmt.Sprintf("sha256:%x", valuesDigest)); err != nil {
+	if err := q.RecordCatalogApplicationVersion(ctx, sqlc.RecordCatalogApplicationVersionParams{
+		InstallationID: request.InstallationID, ChartVersionID: request.ChartVersionID,
+		BundleVersionID: pgtype.UUID{Bytes: result.BundleVersionID, Valid: true}, Version: request.ChartVersion,
+		ArtifactDigest: normalizeDigest(request.ChartDigest), ValuesDigest: fmt.Sprintf("sha256:%x", valuesDigest),
+	}); err != nil {
 		return InstallResult{}, 0, fmt.Errorf("record immutable catalog application version: %w", err)
 	}
 
 	placementJSON, _ := json.Marshal(model.Placement{ProjectIDs: []uuid.UUID{request.ProjectID}, ClusterIDs: []uuid.UUID{request.ClusterID}})
 	rolloutPolicyJSON := json.RawMessage(`{"approval_required":false}`)
-	var generation int64
-	if err := tx.QueryRow(ctx, `
-		INSERT INTO delivery_targets (
-			id,project_id,name,description,bundle_version_id,placement,rollout_policy,
-			reconciliation_policy,maintenance_window_policy,suspended,created_by,updated_by
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'{}',false,$9,$9)
-		ON CONFLICT (id) DO UPDATE SET
-			bundle_version_id=EXCLUDED.bundle_version_id,
-			generation=delivery_targets.generation + CASE WHEN delivery_targets.bundle_version_id<>EXCLUDED.bundle_version_id OR $10 THEN 1 ELSE 0 END,
-			resource_version=delivery_targets.resource_version + 1,updated_at=now(),updated_by=EXCLUDED.updated_by
-		RETURNING generation`, result.TargetID, request.ProjectID, bundleName, request.Description,
-		result.BundleVersionID, placementJSON, rolloutPolicyJSON, reconciliationJSON, request.ActorID, forceGeneration).Scan(&generation); err != nil {
+	generation, err := q.EnsureCatalogApplicationTarget(ctx, sqlc.EnsureCatalogApplicationTargetParams{
+		ID: result.TargetID, ProjectID: request.ProjectID, Name: bundleName, Description: request.Description,
+		BundleVersionID: result.BundleVersionID, Placement: placementJSON, RolloutPolicy: rolloutPolicyJSON,
+		ReconciliationPolicy: reconciliationJSON, CreatedBy: request.ActorID, ForceGeneration: forceGeneration,
+	})
+	if err != nil {
 		return InstallResult{}, 0, fmt.Errorf("ensure catalog application target: %w", err)
+	}
+	if generation < 1 {
+		return InstallResult{}, 0, errors.New("catalog application generation is invalid")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return InstallResult{}, 0, err

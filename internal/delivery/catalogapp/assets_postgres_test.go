@@ -39,7 +39,7 @@ func catalogAssetsFixture(t *testing.T) (*Service, InstallRequest) {
 		t.Fatal("cannot create catalog test pool")
 	}
 	t.Cleanup(pool.Close)
-	for _, table := range []string{"delivery_sources", "component_bundles", "component_bundle_versions", "delivery_application_versions", "delivery_targets", "helm_chart_versions", "helm_charts", "helm_repositories", "catalog_blessed_charts", "installed_charts"} {
+	for _, table := range []string{"delivery_sources", "component_bundles", "component_bundle_versions", "delivery_application_versions", "delivery_targets", "helm_chart_versions", "helm_charts", "helm_repositories", "catalog_blessed_charts", "installed_charts", "cluster_deployments"} {
 		if _, err := pool.Exec(t.Context(), "CREATE TABLE "+pgx.Identifier{table}.Sanitize()+" (LIKE public."+pgx.Identifier{table}.Sanitize()+" INCLUDING ALL)"); err != nil {
 			t.Fatal(err)
 		}
