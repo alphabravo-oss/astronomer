@@ -176,7 +176,7 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 		}
 		closedAssets = append(closedAssets, closedAsset)
 	}
-	if err := distribution.ValidateAssetClosure(closedAssets, kinds, assets.Capabilities); err != nil {
+	if err := distribution.ValidateAssetClosure(distribution.EmbeddedAssetContract, closedAssets, kinds, assets.Capabilities); err != nil {
 		return empty, err
 	}
 	bom := distribution.BOM{SchemaVersion: 1, AssetContractVersion: 1, Assets: closedAssets, Release: result.Catalog.Release, CatalogDigest: sha(catalog), Profiles: []distribution.Profile{{Name: "builtins", Qualification: "qualified", ValuesPath: "profiles/builtins.values.json", InventoryPath: "profiles/builtins.images.json", RequiredCategories: assets.RequiredCategories, BlockedCategories: []string{}, Capabilities: assets.Capabilities}}}

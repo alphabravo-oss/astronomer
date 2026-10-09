@@ -1,0 +1,2 @@
+{"time":"2026-10-09T23:35:55.140088712Z","level":"ERROR","msg":"migration command failed","error":"connect to migration database: pq: database \"plan032_w07_cursor17\" does not exist (3D000)"}
+{"time":"2026-10-09T23:35:55.156590043Z","level":"ERROR","msg":"migration command failed","error":"connect to migration database: pq: database \"plan032_w07_cursor17\" does not exist (3D000)"}

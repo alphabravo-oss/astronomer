@@ -1,0 +1,18 @@
+# W07 chart qualification on CNPG17 and18
+
+The production producer/migration source is53162d7d. The EXPLAIN DTO fixture correction is72c2fb75; it changes numeric decoding only, not the query or bound. Dedicated databases `plan032_w07_cursor17` and `plan032_w07_cursor18` are in the owned `plan032-recovery` fixture. Namespace owner, exact Cluster UID, selected primary ownership and connected server/database identity were checked before migration. Credentials stay in private0600 references outside the repository. The17 qualification service has its own explicit owner label/UID and selector; it is not a CNPG-owned Service object.
+
+| Actual command                                                                                             | Result                                     |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Native migrator `-path internal/db/migrations -database <private-reference> up`, fresh17.11                | PASS clean73                               |
+| Same native migrator, fresh18.6                                                                            | PASS clean73                               |
+| `go test -count=1 -v -p 2 ./internal/handler -run '^TestCatalogCursor(PostgresTraversalBeyondLegacyCeiling | PostgresDeletedAnchorMutationAndRevocation | RejectsAuthenticatedWrongPositionBeforeSQL)$'`,17 and18 | Three parents PASS each, zero skips |
+| Same three parents after18 index recovery, `go test -race -count=1 -v -p 1`                                | PASS, zero skips                           |
+| Owned18 concurrent-build cancellation, dirty retry, inspected exact drop/force72/up                        | PASS; recovered clean73/index valid/ready  |
+| Existing `TestExpectedSchemaVersionMatchesMigrations` before authority fix                                 | FAIL: expected71 vs actual73               |
+| Entire `go test -count=1 -p 1 ./internal/db` atbd5efe79                                                    | PASS                                       |
+| `python3 scripts/compatibility-contract.py check` atbd5efe79                                               | PASS; paired contract already73/floor66    |
+
+Initial failures remain separate: the17 template referenced the18 qualification endpoint and returned missing database; a corrected native CLI invocation omitted required `-path` and failed before mutation; the18 numeric EXPLAIN DTO rejected `201.00` before the test-only fix. None is represented as a passing qualification. The working17 connector was derived privately from the original17 descriptor and the actual connected server170011/database ownership was verified. The fresh18 server was180006.
+
+Raw command logs, structured receipts and their exact SHA256 hashes are listed in [the artifact packet](cnpg-chart-qualification-artifacts.json). The compiled migrator SHA is retained in the migration/recovery receipts. The chart plan remains a representative authorized dataset measurement; this packet does not qualify unfinished control-plane routes, other catalog lists, generated clients, or the whole W07 scope.

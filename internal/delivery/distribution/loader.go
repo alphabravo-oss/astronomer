@@ -18,14 +18,16 @@ import (
 
 // Status contains bounded operational metadata, never URL credentials or keys.
 type Status struct {
-	Mode               string    `json:"mode"`
-	Release            string    `json:"release"`
-	SourceDigest       string    `json:"source_digest"`
-	Location           string    `json:"location"`
-	Verification       string    `json:"verification"`
-	InventoryComplete  bool      `json:"inventory_complete"`
-	LastSuccessfulSync time.Time `json:"last_successful_sync"`
-	BlockedCategory    string    `json:"blocked_category"`
+	Mode                        string    `json:"mode"`
+	Release                     string    `json:"release"`
+	SourceDigest                string    `json:"source_digest"`
+	Location                    string    `json:"location"`
+	Verification                string    `json:"verification"`
+	DatabasePayloadVerification string    `json:"database_payload_verification,omitempty"`
+	DatabaseFreshness           string    `json:"database_freshness,omitempty"`
+	InventoryComplete           bool      `json:"inventory_complete"`
+	LastSuccessfulSync          time.Time `json:"last_successful_sync"`
+	BlockedCategory             string    `json:"blocked_category"`
 }
 type Options struct {
 	Development    bool
@@ -41,15 +43,17 @@ type Options struct {
 	MirrorPlan     *MirrorPlan
 }
 type Loader struct {
-	mutex   sync.Mutex
-	options Options
-	cached  *builtinbundles.Catalog
-	status  Status
-	fetch   artifactFetcher
+	mutex         sync.Mutex
+	options       Options
+	cached        *builtinbundles.Catalog
+	status        Status
+	fetchMetadata metadataArtifactFetcher
+	fetch         artifactFetcher
 	// Only VerifyOfflineStore installs this closed in-memory transport. It is
 	// never selected by runtime configuration or distribution document fields.
 	offline *offlineRegistry
 }
+type metadataArtifactFetcher func(context.Context, *http.Client, string, string, string, model.TrustPolicy, string, int64) (resolver.ArtifactMetadata, resolver.Verification, error)
 type artifactFetcher func(context.Context, *http.Client, string, string, string, model.TrustPolicy, string, int64) ([]byte, resolver.Verification, error)
 
 // New creates one immutable loader identity for the process. Successful bytes
@@ -62,7 +66,7 @@ func New(options Options) (*Loader, error) {
 		copyPlan.Rewrites = append([]Rewrite(nil), copyPlan.Rewrites...)
 		options.MirrorPlan = &copyPlan
 	}
-	loader := &Loader{options: options, fetch: resolver.FetchVerifiedOCIArtifact, status: Status{Mode: "verified-release", Release: options.Release, SourceDigest: options.Digest, Verification: "pending"}}
+	loader := &Loader{options: options, fetch: resolver.FetchVerifiedOCIArtifact, fetchMetadata: resolver.FetchVerifiedOCIArtifactMetadata, status: Status{Mode: "verified-release", Release: options.Release, SourceDigest: options.Digest, Verification: "pending"}}
 	if options.Development {
 		if options.Repository != "" || options.Digest != "" || options.Network.Restricted {
 			return nil, errors.New("development catalog cannot claim release or disconnected identity")

@@ -1,0 +1,11 @@
+=== RUN   TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL
+--- PASS: TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL (0.00s)
+=== RUN   TestCatalogCursorPostgresTraversalBeyondLegacyCeiling
+    pagination_postgres_test.go:126: failed to connect to `user=astronomer database=plan032_w07_cursor17`: 172.20.0.2:30433 (172.20.0.2): server error: FATAL: database "plan032_w07_cursor17" does not exist (SQLSTATE 3D000)
+--- FAIL: TestCatalogCursorPostgresTraversalBeyondLegacyCeiling (0.01s)
+=== RUN   TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation
+    pagination_postgres_test.go:213: failed to connect to `user=astronomer database=plan032_w07_cursor17`: 172.20.0.2:30433 (172.20.0.2): server error: FATAL: database "plan032_w07_cursor17" does not exist (SQLSTATE 3D000)
+--- FAIL: TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation (0.01s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/handler	0.070s
+FAIL

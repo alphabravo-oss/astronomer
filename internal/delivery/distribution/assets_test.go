@@ -21,7 +21,7 @@ func TestPrerequisiteCapabilitiesRequireExactRoles(t *testing.T) {
 		}
 		assets = append(assets, Asset{ID: role, MemberPath: path, Images: images})
 	}
-	if err := ValidateAssetClosure(assets, members, []string{"platform-core", "application-catalog", "distribution-registry"}); err != nil {
+	if err := ValidateAssetClosure(EmbeddedAssetContract, assets, members, []string{"platform-core", "application-catalog", "distribution-registry"}); err != nil {
 		t.Fatal(err)
 	}
 	for index, asset := range assets {
@@ -30,18 +30,18 @@ func TestPrerequisiteCapabilitiesRequireExactRoles(t *testing.T) {
 		}
 		missing := append([]Asset{}, assets[:index]...)
 		missing = append(missing, assets[index+1:]...)
-		if ValidateAssetClosure(missing, members, []string{"platform-core"}) == nil {
+		if ValidateAssetClosure(EmbeddedAssetContract, missing, members, []string{"platform-core"}) == nil {
 			t.Fatalf("missing exact role %s accepted through category presence", asset.ID)
 		}
 	}
 	for _, capabilities := range [][]string{nil, {"unknown"}, {"database-cnpg", "database-cnpg"}} {
-		if ValidateAssetClosure(assets, members, capabilities) == nil {
+		if ValidateAssetClosure(EmbeddedAssetContract, assets, members, capabilities) == nil {
 			t.Fatal("invalid capability declaration accepted")
 		}
 	}
 	malformed := append([]Asset{}, assets...)
 	malformed[0].ID = "some-other-operator"
-	if ValidateAssetClosure(malformed, members, []string{}) == nil {
+	if ValidateAssetClosure(EmbeddedAssetContract, malformed, members, []string{}) == nil {
 		t.Fatal("unclassified prerequisite role accepted")
 	}
 }
@@ -52,7 +52,7 @@ func TestDatabaseArtifactBindsExactManifestAndPayload(t *testing.T) {
 	manifest, _ := json.Marshal(map[string]any{"schemaVersion": 2, "config": map[string]any{"mediaType": "application/vnd.oci.empty.v1+json", "digest": contentDigest(config), "size": len(config)}, "layers": []any{map[string]any{"mediaType": "application/vnd.aquasec.trivy.db.layer.v1.tar+gzip", "digest": contentDigest(payload), "size": len(payload)}}})
 	asset := Asset{ID: "trivy-database", MemberPath: "db/archive.tgz", ArtifactSubject: "registry.example.test/db@" + contentDigest(manifest), ArtifactManifestPath: "db/manifest.json", ArtifactConfigPath: "db/config.json", Images: []string{}}
 	members := map[string][]byte{asset.MemberPath: payload, asset.ArtifactManifestPath: manifest, asset.ArtifactConfigPath: config}
-	if err := validateArtifactAssets([]Asset{asset}, members); err != nil {
+	if err := validateArtifactAssets(EmbeddedAssetContract, []Asset{asset}, members); err != nil {
 		t.Fatal(err)
 	}
 	for _, change := range []func(){func() { members[asset.MemberPath] = []byte("changed payload") }, func() { members[asset.ArtifactManifestPath] = append(manifest, []byte("{}")...) }, func() { delete(members, asset.ArtifactConfigPath) }, func() { members[asset.ArtifactConfigPath] = []byte("changed config") }, func() { asset.ArtifactSubject = "registry.example.test/db@sha256:" + strings.Repeat("f", 64) }} {
@@ -60,7 +60,7 @@ func TestDatabaseArtifactBindsExactManifestAndPayload(t *testing.T) {
 		members[asset.ArtifactManifestPath] = manifest
 		members[asset.ArtifactConfigPath] = config
 		change()
-		if validateArtifactAssets([]Asset{asset}, members) == nil {
+		if validateArtifactAssets(EmbeddedAssetContract, []Asset{asset}, members) == nil {
 			t.Fatal("changed database identity accepted")
 		}
 	}
@@ -82,7 +82,7 @@ func TestDatabaseArtifactBindsExactManifestAndPayload(t *testing.T) {
 			members[asset.ArtifactConfigPath] = config
 			members[asset.MemberPath] = payload
 			asset.ArtifactSubject = "registry.example.test/db@" + contentDigest(changed)
-			if validateArtifactAssets([]Asset{asset}, members) == nil {
+			if validateArtifactAssets(EmbeddedAssetContract, []Asset{asset}, members) == nil {
 				t.Fatalf("authentic manifest accepted %s %s", descriptor, field)
 			}
 		}

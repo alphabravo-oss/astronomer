@@ -1,6 +1,7 @@
 package distribution
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -38,10 +39,13 @@ func projectArtifactValues(catalog *builtinbundles.Catalog, bom BOM) error {
 }
 
 func (loader *Loader) verifyPublishedAssets(ctx context.Context, bom BOM, members map[string][]byte) error {
+	hasDatabase := false
+	payloadState := "verified-payload-bytes"
 	for _, asset := range bom.Assets {
 		if asset.ArtifactSubject == "" {
 			continue
 		}
+		hasDatabase = true
 		subject := asset.PublishedSubject
 		if loader.options.MirrorPlan != nil {
 			found := false
@@ -64,6 +68,14 @@ func (loader *Loader) verifyPublishedAssets(ctx context.Context, bom BOM, member
 		if decodeClosed(members[asset.ArtifactManifestPath], &manifest) != nil || len(manifest.Layers) != 1 {
 			return blocked("vulnerability_database", "database child manifest invalid")
 		}
+		if bom.AssetContractVersion == DescriptorAssetContract {
+			metadata, verification, err := loader.fetchMetadata(ctx, loader.options.Client, repository, digest, manifest.Layers[0].MediaType, loader.options.Policy, loader.options.TrustDirectory, MaximumDatabaseLayerBytes)
+			if err != nil || verification.Status != "verified" || !bytes.Equal(metadata.Manifest, members[asset.ArtifactManifestPath]) || !bytes.Equal(metadata.Config, members[asset.ArtifactConfigPath]) || !asset.DatabaseDescriptor.matches(metadata.Layer) {
+				return blocked("vulnerability_database", "database child metadata signature/content differs from signed claim")
+			}
+			payloadState = "descriptor-only"
+			continue
+		}
 		payload, verification, err := loader.fetch(ctx, loader.options.Client, repository, digest, manifest.Layers[0].MediaType, loader.options.Policy, loader.options.TrustDirectory, MaximumArchiveBytes)
 		if err != nil || verification.Status != "verified" {
 			clear(payload)
@@ -74,6 +86,10 @@ func (loader *Loader) verifyPublishedAssets(ctx context.Context, bom BOM, member
 		if actual != contentDigest(members[asset.MemberPath]) {
 			return blocked("vulnerability_database", "database child differs from signed upstream archive")
 		}
+	}
+	if hasDatabase {
+		loader.status.DatabasePayloadVerification = payloadState
+		loader.status.DatabaseFreshness = "not-assessed"
 	}
 	return nil
 }
