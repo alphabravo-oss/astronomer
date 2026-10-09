@@ -64,7 +64,7 @@ func recordInhibitionIntegrity(ctx context.Context, q audit.OutboxQuerier, row s
 	// Neither the payload nor this hash enters the diagnostic or audit detail.
 	revision := sha256.New()
 	for _, field := range []string{row.ID.String(), category, row.UpdatedAt.UTC().Format(time.RFC3339Nano), string(row.SourceMatchers), string(row.TargetMatchers), string(row.EqualLabels)} {
-		fmt.Fprintf(revision, "%d:", len(field))
+		_, _ = fmt.Fprintf(revision, "%d:", len(field))
 		revision.Write([]byte(field))
 	}
 	_, err := audit.RecordOutbox(ctx, q, audit.Event{
