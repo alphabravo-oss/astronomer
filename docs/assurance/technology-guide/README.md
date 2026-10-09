@@ -23,3 +23,5 @@ Three application deployments were ready. Flux source-controller was 1/2 ready, 
 GitHub's latest release remains v1.2.1 with 38 assets. Successful historical run `37845920964` reports source `3b378ef16141b9eaac35a1e5fe292e061b69f5f1`; the local tag points to a different commit, recorded in `baseline.json`. This distinguishes tag/build identities without claiming newly verified provenance. W17 must inspect the signed manifest/provenance before selecting artifacts; released bytes remain immutable.
 
 W00 prepares evidence and a render-level contract. It does not close W01–W17, qualify latest versions, or attribute historical browser/cloud/restore results to this candidate. The integration reviewer owns plan/index changes and completion verdicts.
+
+[W02 security enforcement](w02/README.md) retains the implemented policy, scanner compatibility experiment, unresolved source findings and proposed external ruleset.

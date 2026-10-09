@@ -1,0 +1,310 @@
+{
+  "schema_version": "triage-finding/v0",
+  "repository": {
+    "path": "/root/astronomer-all/astronomer",
+    "revision": "2867346d1c657c1973dbcdff9b005f2ec1a5bd1b"
+  },
+  "findings": [
+    {
+      "triage_item_id": "triage-001",
+      "input_id": "sha256:63d427f99030dc5b8a6560bd5c69d4a22b3da388e65fc419d8ba2ec9863ab0f8",
+      "source_type": "scanner_ticket",
+      "title": "G404 non-cryptographic random generator",
+      "normalized_input": {
+        "vulnerable_component": "internal/server/middleware/read_audit.go",
+        "claimed_source": "math/rand output",
+        "claimed_sink": "read-audit sampling decision",
+        "claimed_control": "cryptographic randomness required",
+        "affected_version_or_path": "internal/server/middleware/read_audit.go",
+        "preconditions": [
+          "intermediate read-audit sampling policy enabled"
+        ],
+        "impact": "predictable random output",
+        "references": [
+          "internal/server/middleware/read_audit.go:78:10",
+          "sha256:63d427f99030dc5b8a6560bd5c69d4a22b3da388e65fc419d8ba2ec9863ab0f8"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "scanner location",
+          "path": "internal/server/middleware/read_audit.go",
+          "lines": "78",
+          "detail": "Sample rates >=1 always emit before touching RNG; rates <=0 never emit; intermediate rates intentionally sample. Match selects the highest rate, including the incident tier's 1.0 floor."
+        }
+      ],
+      "reachable_path": [
+        "Authenticated router attaches ReadAudit",
+        "Match selects highest configured/tier sample rate",
+        "Sample bypasses RNG for full coverage, otherwise applies intentional statistical sampling",
+        "Selected event is queued"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "trusted_operator",
+        "boundary_crossed": false,
+        "policy_basis": "No applicable SECURITY.md returned by resolver. Decisions use inspected product source controls and documented function contracts."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Positive source controls defeat this specific scanner claim.",
+        "drivers": []
+      },
+      "evidence": [
+        "Sample rates >=1 always emit before touching RNG; rates <=0 never emit; intermediate rates intentionally sample. Match selects the highest rate, including the incident tier's 1.0 floor.",
+        "Reviewed at source revision 2867346d1c657c1973dbcdff9b005f2ec1a5bd1b; input source digest sha256:1c6fa6174a70f1f3cf9eea772141ed12ba346182c09f781fbb745b27d8d89b2b."
+      ],
+      "counterevidence": [
+        "Full audit coverage policies do not use RNG; diagnostic 0.1 is explicitly statistical sampling. Queue loss is independently documented and is outside this RNG claim."
+      ],
+      "proof_gaps": [
+        "Static triage only; no dynamic validation or exhaustive scan claimed."
+      ],
+      "recommended_next_step": "Retain an exact source-bound, expiring false-positive exception; reassess when the affected file or control changes.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "triage-002",
+      "input_id": "sha256:80e294b92f4ecaac074e06633a7f0e0c14368526b3674774b93e15a9b446d20e",
+      "source_type": "scanner_ticket",
+      "title": "G404 non-cryptographic random generator",
+      "normalized_input": {
+        "vulnerable_component": "internal/agent/tunnel.go",
+        "claimed_source": "math/rand output",
+        "claimed_sink": "retry timing",
+        "claimed_control": "cryptographic randomness required",
+        "affected_version_or_path": "internal/agent/tunnel.go",
+        "preconditions": [
+          "agent reconnect"
+        ],
+        "impact": "predictable random output",
+        "references": [
+          "internal/agent/tunnel.go:585:7",
+          "sha256:80e294b92f4ecaac074e06633a7f0e0c14368526b3674774b93e15a9b446d20e"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "scanner location",
+          "path": "internal/agent/tunnel.go",
+          "lines": "585",
+          "detail": "RNG output is used only as a reconnect scheduling duration; the reconnect loop subsequently calls dial with normal authentication."
+        }
+      ],
+      "reachable_path": [
+        "reconnectLoop chooses InitialReconnectSpread or BackoffDurationWithJitter",
+        "computed duration delays retry",
+        "dial independently establishes authenticated connection"
+      ],
+      "boundary_assessment": {
+        "product_surface": "agent",
+        "source_trust": "local_only",
+        "boundary_crossed": false,
+        "policy_basis": "No applicable SECURITY.md returned by resolver. Decisions use inspected product source controls and documented function contracts."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Positive source controls defeat this specific scanner claim.",
+        "drivers": []
+      },
+      "evidence": [
+        "RNG output is used only as a reconnect scheduling duration; the reconnect loop subsequently calls dial with normal authentication.",
+        "Reviewed at source revision 2867346d1c657c1973dbcdff9b005f2ec1a5bd1b; input source digest sha256:e9e1c875218f2e4dc8ecc20336438ea582ebf8566b48948e253cf9202465cb9e."
+      ],
+      "counterevidence": [
+        "No password, token, key, authorization decision or nonce is derived from this RNG output."
+      ],
+      "proof_gaps": [
+        "Static triage only; no dynamic validation or exhaustive scan claimed."
+      ],
+      "recommended_next_step": "Retain an exact source-bound, expiring false-positive exception; reassess when the affected file or control changes.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "triage-003",
+      "input_id": "sha256:80213192308b497d467447c3961375d137ab0c53996cb5ac2c9e2b0c519909c5",
+      "source_type": "scanner_ticket",
+      "title": "G404 non-cryptographic random generator",
+      "normalized_input": {
+        "vulnerable_component": "internal/agent/tunnel.go",
+        "claimed_source": "math/rand output",
+        "claimed_sink": "retry timing",
+        "claimed_control": "cryptographic randomness required",
+        "affected_version_or_path": "internal/agent/tunnel.go",
+        "preconditions": [
+          "agent reconnect"
+        ],
+        "impact": "predictable random output",
+        "references": [
+          "internal/agent/tunnel.go:544:9",
+          "sha256:80213192308b497d467447c3961375d137ab0c53996cb5ac2c9e2b0c519909c5"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "scanner location",
+          "path": "internal/agent/tunnel.go",
+          "lines": "544",
+          "detail": "RNG output is used only as a reconnect scheduling duration; the reconnect loop subsequently calls dial with normal authentication."
+        }
+      ],
+      "reachable_path": [
+        "reconnectLoop chooses InitialReconnectSpread or BackoffDurationWithJitter",
+        "computed duration delays retry",
+        "dial independently establishes authenticated connection"
+      ],
+      "boundary_assessment": {
+        "product_surface": "agent",
+        "source_trust": "local_only",
+        "boundary_crossed": false,
+        "policy_basis": "No applicable SECURITY.md returned by resolver. Decisions use inspected product source controls and documented function contracts."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Positive source controls defeat this specific scanner claim.",
+        "drivers": []
+      },
+      "evidence": [
+        "RNG output is used only as a reconnect scheduling duration; the reconnect loop subsequently calls dial with normal authentication.",
+        "Reviewed at source revision 2867346d1c657c1973dbcdff9b005f2ec1a5bd1b; input source digest sha256:e9e1c875218f2e4dc8ecc20336438ea582ebf8566b48948e253cf9202465cb9e."
+      ],
+      "counterevidence": [
+        "No password, token, key, authorization decision or nonce is derived from this RNG output."
+      ],
+      "proof_gaps": [
+        "Static triage only; no dynamic validation or exhaustive scan claimed."
+      ],
+      "recommended_next_step": "Retain an exact source-bound, expiring false-positive exception; reassess when the affected file or control changes.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "triage-004",
+      "input_id": "sha256:ca57b9a6f0fa3becabd5d5b0f55ca9804b26d1a5f8976373906f89f44bf6a3ef",
+      "source_type": "scanner_ticket",
+      "title": "G404 non-cryptographic random generator",
+      "normalized_input": {
+        "vulnerable_component": "internal/agent/tunnel.go",
+        "claimed_source": "math/rand output",
+        "claimed_sink": "retry timing",
+        "claimed_control": "cryptographic randomness required",
+        "affected_version_or_path": "internal/agent/tunnel.go",
+        "preconditions": [
+          "agent reconnect"
+        ],
+        "impact": "predictable random output",
+        "references": [
+          "internal/agent/tunnel.go:528:19",
+          "sha256:ca57b9a6f0fa3becabd5d5b0f55ca9804b26d1a5f8976373906f89f44bf6a3ef"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "scanner location",
+          "path": "internal/agent/tunnel.go",
+          "lines": "528",
+          "detail": "RNG output is used only as a reconnect scheduling duration; the reconnect loop subsequently calls dial with normal authentication."
+        }
+      ],
+      "reachable_path": [
+        "reconnectLoop chooses InitialReconnectSpread or BackoffDurationWithJitter",
+        "computed duration delays retry",
+        "dial independently establishes authenticated connection"
+      ],
+      "boundary_assessment": {
+        "product_surface": "agent",
+        "source_trust": "local_only",
+        "boundary_crossed": false,
+        "policy_basis": "No applicable SECURITY.md returned by resolver. Decisions use inspected product source controls and documented function contracts."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Positive source controls defeat this specific scanner claim.",
+        "drivers": []
+      },
+      "evidence": [
+        "RNG output is used only as a reconnect scheduling duration; the reconnect loop subsequently calls dial with normal authentication.",
+        "Reviewed at source revision 2867346d1c657c1973dbcdff9b005f2ec1a5bd1b; input source digest sha256:e9e1c875218f2e4dc8ecc20336438ea582ebf8566b48948e253cf9202465cb9e."
+      ],
+      "counterevidence": [
+        "No password, token, key, authorization decision or nonce is derived from this RNG output."
+      ],
+      "proof_gaps": [
+        "Static triage only; no dynamic validation or exhaustive scan claimed."
+      ],
+      "recommended_next_step": "Retain an exact source-bound, expiring false-positive exception; reassess when the affected file or control changes.",
+      "fix_finding_handoff": null
+    },
+    {
+      "triage_item_id": "triage-005",
+      "input_id": "sha256:2d95a864a22eea2a35e7c34618eaaa192ac14d389222dcf8899e21e1c7f8f883",
+      "source_type": "scanner_ticket",
+      "title": "G109 integer narrowing after Atoi",
+      "normalized_input": {
+        "vulnerable_component": "internal/handler/audit.go",
+        "claimed_source": "HTTP query status_code",
+        "claimed_sink": "int32 conversion",
+        "claimed_control": "missing range guard",
+        "affected_version_or_path": "internal/handler/audit.go",
+        "preconditions": [
+          "authenticated audit filter request"
+        ],
+        "impact": "integer overflow",
+        "references": [
+          "internal/handler/audit.go:682:23",
+          "sha256:2d95a864a22eea2a35e7c34618eaaa192ac14d389222dcf8899e21e1c7f8f883"
+        ]
+      },
+      "verdict": "not_actionable",
+      "confidence": "high",
+      "affected_locations": [
+        {
+          "label": "scanner location",
+          "path": "internal/handler/audit.go",
+          "lines": "682",
+          "detail": "Atoi errors and values outside 0..599 are rejected before int32 conversion."
+        }
+      ],
+      "reachable_path": [
+        "auditFilterFromRequest reads status_code",
+        "Atoi then bounds check",
+        "int32 only receives 0..599"
+      ],
+      "boundary_assessment": {
+        "product_surface": "hosted service",
+        "source_trust": "untrusted",
+        "boundary_crossed": false,
+        "policy_basis": "No applicable SECURITY.md returned by resolver. Decisions use inspected product source controls and documented function contracts."
+      },
+      "exploitability_stack_rank": {
+        "rank_queue": null,
+        "rank": null,
+        "rationale": "Positive source controls defeat this specific scanner claim.",
+        "drivers": []
+      },
+      "evidence": [
+        "Atoi errors and values outside 0..599 are rejected before int32 conversion.",
+        "Reviewed at source revision 2867346d1c657c1973dbcdff9b005f2ec1a5bd1b; input source digest sha256:bf0cb33a5a425bff8da19f1239b00576c76401601e08296c07eabf5fbbf620c2."
+      ],
+      "counterevidence": [
+        "Out-of-range values return before conversion."
+      ],
+      "proof_gaps": [
+        "Static triage only; no dynamic validation or exhaustive scan claimed."
+      ],
+      "recommended_next_step": "Retain an exact source-bound, expiring false-positive exception; reassess when the affected file or control changes.",
+      "fix_finding_handoff": null
+    }
+  ]
+}

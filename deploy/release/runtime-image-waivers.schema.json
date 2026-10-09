@@ -13,6 +13,10 @@
         "category": {"enum": ["vulnerability", "license"]},
         "ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
         "reason": {"type": "string", "minLength": 1}, "approved_by": {"type": "string", "minLength": 1},
+        "owner": {"type": "string", "minLength": 1},
+        "verification_evidence": {"type": "string", "minLength": 1},
+        "availability_checked_at": {"type": "string", "format": "date-time"},
+        "upstream_fix_status": {"enum": ["no_fixed_upstream_available", "fixed_upstream_incompatible_with_retained_evidence"]},
         "expires_at": {"type": "string", "format": "date-time"}
       }
     }}

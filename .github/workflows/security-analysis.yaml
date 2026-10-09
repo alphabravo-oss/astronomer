@@ -17,9 +17,9 @@ concurrency:
 
 jobs:
   source-security:
-    name: gosec SARIF and full-history secret scan
+    name: source security policy gate
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -30,18 +30,60 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Run pinned gosec and retain SARIF
+      - name: Verify policy fixtures
         run: |
-          mapfile -t packages < <(go list ./... | grep -v '/frontend/node_modules/')
-          go run github.com/securego/gosec/v2/cmd/gosec@v2.22.10 \
-            -no-fail -fmt sarif -out gosec.sarif "${packages[@]}"
+          python3 scripts/tests/gosec_tool_contract_test.py
+          python3 scripts/tests/security_source_policy_test.py
+          python3 scripts/tests/security_policy_contract_test.py
 
-      - name: Upload gosec findings
+      - name: Collect source scans (enforcement follows)
+        run: |
+          mkdir -p security-raw security-reports
+          set +e
+          scripts/build-gosec.sh "$RUNNER_TEMP/astronomer-gosec" >security-raw/gosec-build.log 2>&1
+          build_status=$?
+          if [ "$build_status" -eq 0 ]; then
+            "$RUNNER_TEMP/astronomer-gosec" -no-fail -fmt json -out security-raw/gosec.json ./... >security-raw/gosec.log 2>&1
+            gosec_status=$?
+          else
+            gosec_status=$build_status
+          fi
+          vuln_version=$(sed -n 's/^GOVULNCHECK_VERSION[[:space:]]*[:?]*=[[:space:]]*//p' Makefile)
+          go run golang.org/x/vuln/cmd/govulncheck@"$vuln_version" -format sarif -scan symbol ./... \
+            >security-raw/govulncheck.sarif 2>security-raw/govulncheck.log
+          vuln_status=$?
+          printf '{"gosec":%s,"govulncheck":%s}\n' "$gosec_status" "$vuln_status" >security-raw/statuses.json
+
+      - name: Enforce source security policy
         if: ${{ always() }}
-        uses: github/codeql-action/upload-sarif@c20e34f438d671fc35777cc9820dd7adf8252874 # v3
-        with:
-          sarif_file: gosec.sarif
-          category: gosec
+        run: |
+          python3 scripts/security-source-policy.py \
+            --gosec security-raw/gosec.json --govulncheck security-raw/govulncheck.sarif \
+            --statuses security-raw/statuses.json --exceptions deploy/security/source-exceptions.json \
+            --scope first-party-source-policy --output security-reports
 
       - name: Scan complete Git history without printing secret values
-        run: go run github.com/zricethezav/gitleaks/v8@v8.27.2 git --config=.gitleaks.toml --redact=100 --no-banner --log-opts=--all .
+        if: ${{ always() }}
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.27.2
+          export GITLEAKS_BIN="$(go env GOPATH)/bin/gitleaks"
+          python3 scripts/tests/security_policy_contract_test.py
+          "$GITLEAKS_BIN" git --config=.gitleaks.toml --redact=100 --no-banner --log-opts=--all .
+
+      - name: Retain sanitized findings even when enforcement fails
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: source-security-policy-${{ github.run_id }}
+          path: security-reports/
+          if-no-files-found: error
+
+      - name: Upload source findings to code scanning when permitted
+        if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        # Code scanning is an optional presentation surface; the enforced gate and
+        # mandatory report artifact remain authoritative when this feature is unavailable.
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@c20e34f438d671fc35777cc9820dd7adf8252874 # v3
+        with:
+          sarif_file: security-reports/
+          category: source-security

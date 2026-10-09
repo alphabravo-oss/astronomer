@@ -36,3 +36,20 @@ id = "private-key"
   regexTarget = "match"
   paths = ['''^frontend/src/components/resources/__tests__/guided-resource-access-sections\.test\.tsx$''']
   regexes = ['''expect\(manifest\)\.toMatchObject''']
+
+[[rules]]
+id = "sourcegraph-access-token"
+
+  [[rules.allowlists]]
+  description = "W00 inventory contains a public Git commit identity, not an access token"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^docs/assurance/technology-guide/components\.json$''']
+  regexes = ['''^\s*"sourceCommit": "[0-9a-f]{40}",?\s*$''']
+
+  [[rules.allowlists]]
+  description = "W00 retains a literal verifier command with public commit and shell variable placeholder"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^docs/assurance/technology-guide/components\.json$''']
+  regexes = ['''^\s*"input":\ "\-\-rancher\-commit\ [0-9a-f]{40}\ \-\-rancher\-image\-digest\ \\"\$RANCHER_IMAGE_DIGEST\\"\ \\\\",\s*$''']

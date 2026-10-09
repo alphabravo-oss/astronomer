@@ -1,0 +1,172 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "govulncheck",
+          "rules": []
+        }
+      },
+      "results": [
+        {
+          "ruleId": "GO-2026-5932",
+          "level": "note",
+          "message": {
+            "text": "Retained source security finding; consult policy summary for acceptance and reachability."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "go.mod"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "sourcePolicy/v1": "sha256:14d4e9ef7016d90ffde090a1703fa4bfe446798bfac55a3c841b61f970d2336b"
+          },
+          "properties": {
+            "policyAccepted": false
+          }
+        },
+        {
+          "ruleId": "GO-2026-6603",
+          "level": "error",
+          "message": {
+            "text": "Retained source security finding; consult policy summary for acceptance and reachability."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "go.mod"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "sourcePolicy/v1": "sha256:fd89c6ab8ccced78816ea9de7fbd3aafdaf3dbcfffda61d1c8a6ab60e5b660a6"
+          },
+          "properties": {
+            "policyAccepted": false
+          }
+        },
+        {
+          "ruleId": "GO-2026-6610",
+          "level": "error",
+          "message": {
+            "text": "Retained source security finding; consult policy summary for acceptance and reachability."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "go.mod"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "sourcePolicy/v1": "sha256:73932922d8d499b3c124ebcefe032a48b7bb0a9bf4d4e455e3032b105651ac16"
+          },
+          "properties": {
+            "policyAccepted": false
+          }
+        },
+        {
+          "ruleId": "GO-2026-6611",
+          "level": "error",
+          "message": {
+            "text": "Retained source security finding; consult policy summary for acceptance and reachability."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "go.mod"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "sourcePolicy/v1": "sha256:4d124fb3a1ad5f32903086f331639a6d2c7348f578ba23db7aa6b5a5d00705cc"
+          },
+          "properties": {
+            "policyAccepted": false
+          }
+        },
+        {
+          "ruleId": "GO-2026-6612",
+          "level": "error",
+          "message": {
+            "text": "Retained source security finding; consult policy summary for acceptance and reachability."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "go.mod"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "sourcePolicy/v1": "sha256:3d2f32b659e56e88f2a10e5806c9b938f93f759dd2d2837fe14f8470af57bf46"
+          },
+          "properties": {
+            "policyAccepted": false
+          }
+        },
+        {
+          "ruleId": "GO-2026-6617",
+          "level": "error",
+          "message": {
+            "text": "Retained source security finding; consult policy summary for acceptance and reachability."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "go.mod"
+                },
+                "region": {
+                  "startLine": 1,
+                  "startColumn": 1
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "sourcePolicy/v1": "sha256:7fa6a806ec4f9743541bcdb8d9f9826e98f47ddf594257ebdf4a2e0222e053bb"
+          },
+          "properties": {
+            "policyAccepted": false
+          }
+        }
+      ]
+    }
+  ]
+}

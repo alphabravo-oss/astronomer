@@ -19,6 +19,10 @@ spec = importlib.util.spec_from_file_location("metadata", Path(__file__).with_na
 metadata = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(metadata)
 
+spec = importlib.util.spec_from_file_location("publication", Path(__file__).with_name("release-publication-policy.py"))
+publication_policy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(publication_policy)
+
 
 def validate_waivers(runtime, directory, tag, now):
     # Recovery may reuse signed scans, but approval must still be valid when
@@ -46,8 +50,7 @@ def validate_waivers(runtime, directory, tag, now):
 
 
 def validate(args, directory=Path("."), now=None):
-    if args.tag not in {"v1.2.0", "v1.2.1"}:
-        raise ValueError("automated publication exception applies only to v1.2.0 and v1.2.1")
+    publication_policy.require_historical_automated(args.tag)
     if not approval.COMMIT.fullmatch(args.source_commit) or any(
         not approval.RUN_ID.fullmatch(run) for run in (args.source_run_id, args.producer_run_id)
     ):

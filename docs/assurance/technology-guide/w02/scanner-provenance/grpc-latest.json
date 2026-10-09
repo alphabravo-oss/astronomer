@@ -1,0 +1,8 @@
+{
+	"Path": "google.golang.org/grpc",
+	"Version": "v1.84.0",
+	"Query": "latest",
+	"Time": "2026-09-17T20:03:25Z",
+	"GoMod": "/root/go/pkg/mod/cache/download/google.golang.org/grpc/@v/v1.84.0.mod",
+	"GoVersion": "1.25.0"
+}
