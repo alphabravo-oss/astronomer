@@ -46,6 +46,9 @@ if [[ ! -x frontend/node_modules/.bin/playwright ]]; then
   exit 2
 fi
 
+[[ -z "${K3S_IMAGE:-}" ]] || { echo 'test-live-browser: arbitrary Kubernetes image overrides are not allowed' >&2; exit 2; }
+qualification_k3s_image="$(python3 scripts/qualification-kubernetes.py)"
+
 suffix="$$-$(date +%s)-$(openssl rand -hex 4)"
 artifact_dir="${LIVE_BROWSER_ARTIFACT_DIR:-${TMPDIR:-/tmp}/astronomer-live-browser-$suffix}"
 mkdir -p "$artifact_dir/bin" "$artifact_dir/playwright-report" "$artifact_dir/test-results"
@@ -458,7 +461,7 @@ GIT_SSL_CAINFO="$flux_tls_cert" git ls-remote \
 	"https://${DOCKER_TEST_CONNECT_HOST}:$flux_fixture_port/git/repository.git" refs/heads/main >/dev/null
 
 k3d cluster create "$flux_cluster" --servers 1 --agents 0 --no-lb \
-	--image "${K3S_IMAGE:-rancher/k3s:v1.35.0-k3s1}" \
+	--image "$qualification_k3s_image" \
 	--api-port "$direct_api_host:$direct_api_port" \
 	--k3s-arg '--disable=traefik@server:0' \
 	--k3s-arg "--tls-san=$direct_api_host@server:0" \

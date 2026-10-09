@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-09T22:59:59.776778+00:00",
+  "owner": "Plan032 release-owner / QA-accessibility",
+  "reviewBy": "2026-10-16",
+  "status": "targets_identified_NOT_RUN",
+  "targets": [
+    {
+      "browser": "Safari 27",
+      "releaseDate": "2026-09-14",
+      "platforms": [
+        "macOS Golden Gate 27.0.1",
+        "macOS Tahoe 26.7.1",
+        "iOS 27.0.1",
+        "iPadOS 27.0.1"
+      ],
+      "osPatchReleaseDate": "2026-09-28",
+      "hardwareProposal": [
+        "Apple-silicon Mac",
+        "physical compatible iPhone",
+        "physical compatible iPad"
+      ],
+      "source": "https://support.apple.com/en-us/149039",
+      "note": "Safari 27 final platform availability verified in Apple Developer JSON. OS patch 27.0.1 is not asserted to equal Safari app patch number; record actual About/UA/WebKit/devicebuild at execution."
+    },
+    {
+      "browser": "Safari 26.6.1",
+      "releaseDate": "2026-08-18",
+      "platforms": [
+        "macOS Sonoma 14.8.9"
+      ],
+      "source": "https://support.apple.com/en-us/148286",
+      "note": "Previous shipping Safari branch on a separately owned compatible Mac; macOS Sonoma 14.8.9 is the latest Sonoma patch listed in the observed Apple release table (2026-08-06). Do not install this older Safari into a newer OS with an unsupported downgrade."
+    },
+    {
+      "browser": "Safari integrated with previous iOS/iPadOS 26 branch",
+      "platforms": [
+        "iOS 26.7.1",
+        "iPadOS 26.7.1"
+      ],
+      "osPatchReleaseDate": "2026-09-28",
+      "source": "https://support.apple.com/en-us/100100",
+      "note": "Capture actual Safari UA/WebKit build; do not infer standalone macOS Safari 26.6.1 patch identity from OS version 26.7.1."
+    }
+  ],
+  "limits": [
+    "Apple Developer search snippets still described Safari 27 beta; actual final release JSON and Apple Support dated release table take precedence.",
+    "Named targets are a funded-campaign proposal, not evidence of device availability, browser execution or human accessibility certification.",
+    "Matching Playwright WebKit/emulated iPhone projects remain separate automated evidence."
+  ],
+  "sourceDigests": [
+    {
+      "url": "https://support.apple.com/en-us/100100",
+      "sha256": "ea0c1b7c1d707064141a5bd3d44346cc55a131d0fa962c1ba496d4f1506209ee",
+      "bytes": 319648
+    },
+    {
+      "url": "https://support.apple.com/en-us/149039",
+      "sha256": "6dfae52e86aeaaac20a736df7df4e445bf132d0967506c65ec17215caa53f31a",
+      "bytes": 166055
+    },
+    {
+      "url": "https://support.apple.com/en-us/148286",
+      "sha256": "16b9426dc37c544b6f786a6325f17c6b0fe1f06a31b436452778e0baa16e08b8",
+      "bytes": 181386
+    },
+    {
+      "url": "https://developer.apple.com/tutorials/data/documentation/safari-release-notes/safari-27-release-notes.json",
+      "sha256": "749e03bbf6a46d33d9e41b92b6528d9a94390112ad740f50866d3d734d3ab131",
+      "bytes": 258562
+    },
+    {
+      "url": "https://developer.apple.com/tutorials/data/documentation/safari-release-notes/safari-26_6-release-notes.json",
+      "sha256": "8b056e87295cce80907af34ac9b7453b0148a97859c5ac2dd9e6fa5c41cbc46a",
+      "bytes": 9447
+    }
+  ]
+}

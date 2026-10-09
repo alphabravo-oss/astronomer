@@ -21,6 +21,9 @@ PATH="$WORK_DIR:/usr/bin:/bin" "$RUNNER" --validate-only >/dev/null
 # shellcheck disable=SC2016
 required_patterns=(
   'qualification_postgres_run'
+  'qualification_k3s_image="$(python3 scripts/qualification-kubernetes.py)"'
+  '--image "$qualification_k3s_image"'
+  'arbitrary Kubernetes image overrides are not allowed'
   'qualification_valkey_run'
   'qualification_postgres_ready'
   'qualification_valkey_ready'

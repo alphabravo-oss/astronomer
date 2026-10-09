@@ -4162,6 +4162,12 @@
           "path": "deploy/qualification/runtime.json",
           "selector": "kubernetes/lanes/1.37/image",
           "value": "{reference}"
+        },
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.schema.json",
+          "selector": "properties/kubernetes/properties/lanes/properties/1.37/properties/version/const",
+          "value": "{version}"
         }
       ],
       "discovery": {
@@ -4214,6 +4220,12 @@
           "path": "deploy/qualification/runtime.json",
           "selector": "kubernetes/lanes/1.36/image",
           "value": "{reference}"
+        },
+        {
+          "kind": "json",
+          "path": "deploy/qualification/runtime.schema.json",
+          "selector": "properties/kubernetes/properties/lanes/properties/1.36/properties/version/const",
+          "value": "{version}"
         }
       ],
       "discovery": {
@@ -7103,6 +7115,18 @@
           "kind": "json",
           "path": "deploy/qualification/runtime.json",
           "selector": "valkey/version",
+          "value": "{version}"
+        },
+        {
+          "kind": "regex",
+          "path": "internal/worker/process_restart_qualification_integration_test.go",
+          "selector": "valkey_version:([0-9.]+)\\\\r\\\\n",
+          "value": "{version}"
+        },
+        {
+          "kind": "regex",
+          "path": "internal/worker/redis_outage_recovery_integration_test.go",
+          "selector": "valkey_version:([0-9.]+)\\\\r\\\\n",
           "value": "{version}"
         }
       ],

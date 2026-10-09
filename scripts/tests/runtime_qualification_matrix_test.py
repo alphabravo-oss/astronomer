@@ -72,6 +72,18 @@ class MatrixTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "attributable"):
             m.validate(self.doc, now=self.now)
 
+    def test_all_stateful_race_variants_bind_actual_script_switches(self):
+        for name, key in {
+            "process-restart": "PROCESS_RESTART_QUALIFICATION_RACE",
+            "redis-outage": "REDIS_OUTAGE_RECOVERY_RACE",
+            "postgres-outage": "POSTGRES_OUTAGE_QUALIFICATION_RACE",
+            "streaming": "POSTGRES_FAILOVER_CERTIFICATION_RACE",
+        }.items():
+            for major in ("17", "18"):
+                command, env = m.commands()[name + major + "-race"]
+                self.assertEqual(env, {"POSTGRES_QUALIFICATION_MAJOR": major, key: "1"})
+                self.assertIn(key, (m.ROOT / command[1]).read_text())
+
     def test_no_commands_come_from_mutable_document(self):
         command, env = m.commands()["postgres18-race"]
         self.assertEqual(command, ["bash", "scripts/test-postgres-integration.sh"])

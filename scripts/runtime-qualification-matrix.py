@@ -19,10 +19,10 @@ def commands():
     definitions = {
         "postgres": ("test-postgres-integration.sh", "POSTGRES_INTEGRATION_RACE"),
         "worker": ("test-worker-runtime-integration.sh", "WORKER_INTEGRATION_RACE"),
-        "process-restart": ("test-process-restart-qualification.sh", None),
-        "redis-outage": ("test-redis-outage-recovery.sh", None),
-        "postgres-outage": ("test-postgres-outage-qualification.sh", None),
-        "streaming": ("test-postgres-failover-certification.sh", None),
+        "process-restart": ("test-process-restart-qualification.sh", "PROCESS_RESTART_QUALIFICATION_RACE"),
+        "redis-outage": ("test-redis-outage-recovery.sh", "REDIS_OUTAGE_RECOVERY_RACE"),
+        "postgres-outage": ("test-postgres-outage-qualification.sh", "POSTGRES_OUTAGE_QUALIFICATION_RACE"),
+        "streaming": ("test-postgres-failover-certification.sh", "POSTGRES_FAILOVER_CERTIFICATION_RACE"),
     }
     for name, (script, race_key) in definitions.items():
         for major in ("17", "18"):
