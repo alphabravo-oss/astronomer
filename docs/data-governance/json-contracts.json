@@ -19518,6 +19518,11 @@
       "path": "pkg/protocol/delivery_system.go",
       "owner": "/protocol",
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
+    },
+    {
+      "path": "internal/pagination/signed_cursor.go",
+      "owner": "pagination",
+      "scope": "Owned signed opaque Cursor envelope; canonical output and authenticated strict bounded reader"
     }
   ],
   "json_sites": [
@@ -29909,6 +29914,24 @@
       "owner": "/delivery/resolver",
       "schema": "Cosign simple-signing JSON; vendor identity and optional fields remain additive",
       "reader_behavior": "Canonical bounded JSON rejects duplicate keys, depth and trailing input before existing partial claims reader binds image digest/type; unknown vendor fields preserved"
+    },
+    {
+      "path": "internal/pagination/signed_cursor.go",
+      "function": "*CursorCodec.Encode",
+      "operation": "json.Marshal",
+      "arguments": ["cursor"],
+      "owner": "pagination",
+      "schema": "Canonical pagination.Cursor signed position envelope versions1(timestamp/ID) and2(text/group/ID), HMAC p1 domain and bounded2h issue time",
+      "reader_behavior": "Domain-separated derived JWT key ring authenticates before canonical bounded JSON decode; exact current actor/scope/filter/order binding, stale/tamper/key-removal failure is a safe invalid cursor; no unsigned emission"
+    },
+    {
+      "path": "internal/pagination/signed_cursor.go",
+      "function": "*CursorCodec.Decode",
+      "operation": "jsoncontract.Decode",
+      "arguments": ["raw", "&cursor"],
+      "owner": "pagination",
+      "schema": "Canonical pagination.Cursor signed position envelope versions1(timestamp/ID) and2(text/group/ID), HMAC p1 domain and bounded2h issue time",
+      "reader_behavior": "Domain-separated derived JWT key ring authenticates before canonical bounded JSON decode; exact current actor/scope/filter/order binding, stale/tamper/key-removal failure is a safe invalid cursor; no unsigned emission"
     }
   ]
 }
