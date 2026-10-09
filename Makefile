@@ -120,8 +120,8 @@ test-postgres-failover-certification: ## Measure PostgreSQL streaming failover R
 test-postgres-failover-static: ## Validate the PostgreSQL failover certification runner contract
 	./scripts/tests/postgres-failover-runner-test.sh
 
-test-live-browser: ## Run live Playwright against disposable PostgreSQL, Redis, server, worker, and preview
-	./scripts/test-live-browser.sh
+test-live-browser: ## Run three browser engines against a fresh owned PostgreSQL/Valkey app stack per engine
+	./scripts/test-live-browser-matrix.sh
 
 test-live-browser-static: ## Validate the disposable live-browser runner without starting dependencies
 	./scripts/tests/live-browser-runner-test.sh

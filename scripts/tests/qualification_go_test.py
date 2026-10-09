@@ -42,6 +42,11 @@ class ContractTests(unittest.TestCase):
         with patch.dict(module.os.environ, {"TEST_DATABASE_URL": "postgres://test:private-fixture-secret@127.0.0.1/test"}):
             self.assertEqual(module.redact("error private-fixture-secret"), "error [REDACTED]")
 
+    def test_standalone_primary_password_redacted(self):
+        from unittest.mock import patch
+        with patch.dict(module.os.environ, {"ASTRONOMER_POSTGRES_FAILOVER_PRIMARY_URL": "postgres://test:private-fixture-secret@127.0.0.1/test"}):
+            self.assertEqual(module.redact("error private-fixture-secret"), "error [REDACTED]")
+
     def test_tags_keep_separate_and_equals_values(self):
         self.assertEqual(module.build_tags(["-tags", "integration fixture", "-tags=fixture,local"]), ["fixture", "integration", "local"])
 

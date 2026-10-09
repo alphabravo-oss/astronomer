@@ -17,6 +17,13 @@ if [[ $# -ne 0 ]]; then
   exit 2
 fi
 
+browser_engine="${LIVE_BROWSER_ENGINE:-chromium}"
+case "$browser_engine" in
+  chromium) browser_project=live ;;
+  firefox|webkit) browser_project="live-$browser_engine" ;;
+  *) echo 'test-live-browser: engine must be chromium, firefox or webkit' >&2; exit 2 ;;
+esac
+
 trivy_enabled="${LIVE_BROWSER_TRIVY_ENABLED:-0}"
 if [[ "$trivy_enabled" != 0 && "$trivy_enabled" != 1 ]]; then
 	echo "test-live-browser: LIVE_BROWSER_TRIVY_ENABLED must be 0 or 1" >&2
@@ -309,7 +316,7 @@ assert_stack() {
   process_alive "$frontend_pid" || { echo "test-live-browser: frontend not alive ($phase)" >&2; return 1; }
   process_alive "$fixture_pid" || { echo "test-live-browser: agent fixture not alive ($phase)" >&2; return 1; }
   docker exec "$postgres_container" pg_isready -U "$postgres_user" -d "$postgres_database" >/dev/null
-  docker exec "$redis_container" redis-cli ping | grep -qx PONG
+  docker exec "$redis_container" valkey-cli ping | grep -qx PONG
 	curl -fsS --max-time 3 "http://127.0.0.1:$server_port/health/" >/dev/null
 	curl -fsS --max-time 3 "http://127.0.0.1:$server_metrics_port/metrics" >/dev/null
 	curl -fsS --max-time 3 "http://127.0.0.1:$worker_metrics_port/healthz" >/dev/null
@@ -335,20 +342,17 @@ while [[ "$server_metrics_port" == "$frontend_port" || "$worker_metrics_port" ==
 	worker_metrics_port="$(choose_port)"
 done
 
-docker run -d --rm --name "$postgres_container" \
-  -e POSTGRES_USER="$postgres_user" \
-  -e POSTGRES_PASSWORD="$postgres_credential" \
-  -e POSTGRES_DB="$postgres_database" \
-  -p "${DOCKER_TEST_BIND_HOST}::5432" postgres:16-alpine >/dev/null
-docker run -d --rm --name "$redis_container" \
-  -p "${DOCKER_TEST_BIND_HOST}::6379" redis:7-alpine >/dev/null
-wait_container_ready "$postgres_container" pg_isready -U "$postgres_user" -d "$postgres_database"
-wait_container_ready "$redis_container" redis-cli ping
+# The same official immutable operands and extension preflight serve browser and Go lanes.
+. scripts/lib/qualification-runtime.sh
+qualification_postgres_run "$postgres_container" "$postgres_user" "$postgres_credential" "$postgres_database"
+qualification_valkey_run "$redis_container" "$postgres_credential"
+qualification_postgres_ready "$postgres_container" "$postgres_user" "$postgres_database"
+qualification_valkey_ready "$redis_container"
 
 postgres_port="$(docker port "$postgres_container" 5432/tcp | awk -F: 'NR==1 {print $NF}')"
 redis_port="$(docker port "$redis_container" 6379/tcp | awk -F: 'NR==1 {print $NF}')"
 database_url="postgres://$postgres_user:$postgres_credential@${DOCKER_TEST_CONNECT_HOST}:$postgres_port/$postgres_database?sslmode=disable"
-redis_url="redis://${DOCKER_TEST_CONNECT_HOST}:$redis_port/0"
+redis_url="redis://:$postgres_credential@${DOCKER_TEST_CONNECT_HOST}:$redis_port/0"
 
 direct_api_host="$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
 [[ -n "$direct_api_host" ]] || {
@@ -777,7 +781,7 @@ set +e
   PLAYWRIGHT_REUSE_EXISTING_SERVER=1 \
   PLAYWRIGHT_OUTPUT_DIR="$artifact_dir/test-results" \
   PLAYWRIGHT_HTML_OUTPUT_DIR="$artifact_dir/playwright-report" \
-    npx playwright test --project=live
+    npx playwright test --project="$browser_project" --workers=1 --retries=0
 ) 2>&1 | tee "$artifact_dir/playwright.log"
 playwright_status=${PIPESTATUS[0]}
 set -e

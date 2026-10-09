@@ -40,7 +40,7 @@ def check_events(lines, expected):
 def redact(text):
     values = set()
     for key, value in os.environ.items():
-        if key.endswith(("DATABASE_URL", "REDIS_URL")):
+        if key.endswith("_URL"):
             try:
                 password = urlsplit(value).password
                 if password:

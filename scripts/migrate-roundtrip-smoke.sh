@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Apply every ordered migration, exercise every reversible down/up edge, reverse
 # the disposable schema completely, and re-apply it. With Docker, the same
-# contract runs on PostgreSQL 16 and 17 and compares a normalized catalog + seed
+# contract runs on PostgreSQL 18 and 17 and compares a normalized catalog + seed
 # signature across both supported majors.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-. scripts/lib/docker-test-endpoint.sh
+. scripts/lib/qualification-runtime.sh
 
 mapfile -t UP_FILES < <(find internal/db/migrations -maxdepth 1 -name '*.up.sql' -type f | sort)
 mapfile -t DOWN_FILES < <(find internal/db/migrations -maxdepth 1 -name '*.down.sql' -type f | sort)
@@ -25,16 +25,19 @@ done
 latest_name="${UP_FILES[${#UP_FILES[@]}-1]##*/}"
 EXPECTED_VERSION="$((10#${latest_name%%_*}))"
 
-if [[ -z "${DATABASE_URL:-}" ]] && ! command -v docker >/dev/null 2>&1; then
-  echo "SKIP: Docker or DATABASE_URL is required for the live round-trip" >&2
-  exit 0
+if [[ -n "${DATABASE_URL:-}" ]]; then
+  echo "migrate-roundtrip-smoke: external database overrides are not allowed; this gate owns disposable databases" >&2
+  exit 2
 fi
+for tool in docker go openssl python3; do
+  command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 2; }
+done
 
 ARTIFACT_DIR="$(mktemp -d)"
 ACTIVE_CONTAINERS=()
 cleanup() {
   for container in "${ACTIVE_CONTAINERS[@]}"; do
-    docker stop "$container" >/dev/null 2>&1 || true
+    docker rm -f "$container" >/dev/null 2>&1 || true
   done
   rm -rf "$ARTIFACT_DIR"
 }
@@ -45,15 +48,6 @@ trap cleanup EXIT
 MIGRATE_BIN="$ARTIFACT_DIR/astronomer-migrate"
 go build -trimpath -o "$MIGRATE_BIN" ./cmd/migrator
 
-if [[ -n "${DATABASE_URL:-}" ]]; then
-  echo "migrate all up/latest down/up against supplied DATABASE_URL"
-  "$MIGRATE_BIN" -database "$DATABASE_URL" -path internal/db/migrations up
-  [[ "$("$MIGRATE_BIN" -database "$DATABASE_URL" -path internal/db/migrations version 2>/dev/null | awk '{print $1}')" == "$EXPECTED_VERSION" ]]
-  "$MIGRATE_BIN" -database "$DATABASE_URL" -path internal/db/migrations down 1
-  "$MIGRATE_BIN" -database "$DATABASE_URL" -path internal/db/migrations up 1
-  echo "migrate-roundtrip-smoke: supplied database OK"
-  exit 0
-fi
 
 schema_signature_sql="
 WITH catalog AS (
@@ -89,19 +83,15 @@ run_major() {
   local container="astronomer-migration-pg${major}-$$"
   local database_url port first_schema first_seeds second_schema second_seeds remaining_tables version
 
-  docker run -d --rm --name "$container" \
-    -e POSTGRES_PASSWORD=astro -e POSTGRES_USER=astro -e POSTGRES_DB=astro \
-    -p "${DOCKER_TEST_BIND_HOST}::5432" "pgvector/pgvector:pg${major}" >/dev/null
+  local credential
+  credential="$(openssl rand -hex 24)"
+  qualification_postgres_major="$major"
+  qualification_postgres_image="$(qualification_runtime_value postgres "$major" image)"
+  qualification_postgres_run "$container" astro "$credential" astro
   ACTIVE_CONTAINERS+=("$container")
-  for _ in $(seq 1 60); do
-    if docker exec "$container" pg_isready -U astro -d astro >/dev/null 2>&1; then
-      break
-    fi
-    sleep 1
-  done
-  docker exec "$container" pg_isready -U astro -d astro >/dev/null
+  qualification_postgres_ready "$container" astro astro
   port="$(docker port "$container" 5432/tcp | awk -F: 'NR == 1 {print $NF}')"
-  database_url="postgres://astro:astro@${DOCKER_TEST_CONNECT_HOST}:${port}/astro?sslmode=disable"
+  database_url="postgres://astro:${credential}@${DOCKER_TEST_CONNECT_HOST}:${port}/astro?sslmode=disable"
 
   echo "PostgreSQL ${major}: up"
   "$MIGRATE_BIN" -database "$database_url" -path internal/db/migrations up
@@ -113,8 +103,10 @@ run_major() {
   docker exec -i "$container" psql -X -q -U astro -d astro \
     < scripts/testdata/audit-outbox-postgres-smoke.sql
   echo "PostgreSQL ${major}: durable audit-to-SIEM fan-out/replay smoke"
-  AUDIT_OUTBOX_TEST_DATABASE_URL="$database_url" \
-    go test ./internal/db/sqlc -run 'Test(AuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders|LoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted)$' -count=1
+  AUDIT_OUTBOX_TEST_DATABASE_URL="$database_url" POSTGRES_QUALIFICATION_MAJOR="$major" \
+    python3 scripts/qualification-go.py --name "migration-outbox-pg${major}" \
+    --expected TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders \
+    --expected TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted -- -p=1 ./internal/db/sqlc -run 'Test(AuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders|LoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted)$' -count=1
   first_schema="$(docker exec "$container" psql -X -U astro -d astro -Atc "$schema_signature_sql")"
   first_seeds="$(docker exec "$container" psql -X -U astro -d astro -Atc "$seed_signature_sql")"
 
@@ -150,12 +142,12 @@ run_major() {
   printf '%s\n' "$first_schema" >"$ARTIFACT_DIR/schema-${major}"
   printf '%s\n' "$first_seeds" >"$ARTIFACT_DIR/seeds-${major}"
 
-  docker stop "$container" >/dev/null
+  docker rm -f "$container" >/dev/null
   ACTIVE_CONTAINERS=("${ACTIVE_CONTAINERS[@]/$container}")
 }
 
-run_major 16
+run_major 18
 run_major 17
-diff -u "$ARTIFACT_DIR/schema-16" "$ARTIFACT_DIR/schema-17"
-diff -u "$ARTIFACT_DIR/seeds-16" "$ARTIFACT_DIR/seeds-17"
-echo "migrate-roundtrip-smoke: PostgreSQL 16/17 schema and seed signatures match"
+diff -u "$ARTIFACT_DIR/schema-18" "$ARTIFACT_DIR/schema-17"
+diff -u "$ARTIFACT_DIR/seeds-18" "$ARTIFACT_DIR/seeds-17"
+echo "migrate-roundtrip-smoke: PostgreSQL 18/17 schema and seed signatures match"

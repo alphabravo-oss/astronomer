@@ -3,7 +3,8 @@ set -Eeuo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
-. scripts/lib/docker-test-endpoint.sh
+# shellcheck source=scripts/lib/qualification-runtime.sh
+. scripts/lib/qualification-runtime.sh
 
 for tool in docker go openssl python3 tee; do
   command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }
@@ -19,7 +20,9 @@ network="astronomer-postgres-failover-$suffix"
 primary_volume="astronomer-postgres-failover-primary-$suffix"
 replica_volume="astronomer-postgres-failover-replica-$suffix"
 credential="$(openssl rand -hex 18)"
-postgres_image="${POSTGRES_FAILOVER_IMAGE:-pgvector/pgvector:pg16}"
+[[ -z "${POSTGRES_FAILOVER_IMAGE:-}" ]] || { echo "qualification: arbitrary image overrides are prohibited" >&2; exit 2; }
+postgres_image="$qualification_postgres_image"
+entrypoint="$(docker_test_host_path "$root/scripts/testdata/qualification/postgres-entrypoint.sh")"
 pg_hba_host_path="$(docker_test_host_path "$root/scripts/testdata/postgres-failover/pg_hba.conf")"
 artifact_dir="${POSTGRES_FAILOVER_ARTIFACT_DIR:-${TMPDIR:-/tmp}/astronomer-postgres-failover-$suffix}"
 work_dir="$(mktemp -d)"
@@ -90,8 +93,8 @@ PY
   fi
   docker logs "$primary_container" >"$artifact_dir/postgres-primary.log" 2>&1 || true
   docker logs "$replica_container" >"$artifact_dir/postgres-replica.log" 2>&1 || true
-  docker inspect "$primary_container" >"$artifact_dir/postgres-primary-inspect.json" 2>/dev/null || true
-  docker inspect "$replica_container" >"$artifact_dir/postgres-replica-inspect.json" 2>/dev/null || true
+  docker inspect --format '{"Id":{{json .Id}},"Image":{{json .Image}},"State":{{json .State}},"Mounts":{{json .Mounts}}}' "$primary_container" >"$artifact_dir/postgres-primary-inspect.json" 2>/dev/null || true
+  docker inspect --format '{"Id":{{json .Id}},"Image":{{json .Image}},"State":{{json .State}},"Mounts":{{json .Mounts}}}' "$replica_container" >"$artifact_dir/postgres-replica-inspect.json" 2>/dev/null || true
   docker rm -f "$primary_container" "$replica_container" >/dev/null 2>&1 || true
   docker volume rm -f "$primary_volume" "$replica_volume" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
@@ -112,13 +115,16 @@ docker volume create --label astronomer.qualification=postgres-failover "$replic
 docker run -d --name "$primary_container" \
   --label astronomer.qualification=postgres-failover \
   --network "$network" --network-alias primary \
+  --user 0 --entrypoint /bin/bash \
+  -e QUALIFICATION_POSTGRES_MAJOR="$qualification_postgres_major" -e QUALIFICATION_PGDATA=/var/lib/postgresql/data \
+  -v "$entrypoint:/qualification/postgres-entrypoint.sh:ro" \
   -e POSTGRES_USER=postgres_failover \
   -e POSTGRES_PASSWORD="$credential" \
   -e POSTGRES_DB=postgres_failover \
   -v "$primary_volume:/var/lib/postgresql/data" \
   -v "$pg_hba_host_path:/qualification/pg_hba.conf:ro" \
   -p "${DOCKER_TEST_BIND_HOST}::5432" \
-  "$postgres_image" \
+  "$postgres_image" /qualification/postgres-entrypoint.sh \
   -c wal_level=replica \
   -c max_wal_senders=8 \
   -c max_replication_slots=8 \
@@ -126,16 +132,7 @@ docker run -d --name "$primary_container" \
   -c hot_standby=on \
   -c hba_file=/qualification/pg_hba.conf >/dev/null
 
-for attempt in $(seq 1 90); do
-  if docker exec "$primary_container" pg_isready -U postgres_failover -d postgres_failover >/dev/null 2>&1; then
-    break
-  fi
-  if [[ "$attempt" == 90 ]]; then
-    echo "primary PostgreSQL did not become ready" >&2
-    exit 1
-  fi
-  sleep 0.5
-done
+qualification_postgres_ready "$primary_container" postgres_failover postgres_failover
 
 primary_port="$(docker port "$primary_container" 5432/tcp | awk -F: 'NR == 1 {print $NF}')"
 primary_url="postgres://postgres_failover:${credential}@${DOCKER_TEST_CONNECT_HOST}:${primary_port}/postgres_failover?sslmode=disable"
@@ -162,19 +159,22 @@ docker run --rm --user postgres --network "$network" \
 docker run -d --name "$replica_container" \
   --label astronomer.qualification=postgres-failover \
   --network "$network" --network-alias replica \
+  --user 0 --entrypoint /bin/bash \
+  -e QUALIFICATION_POSTGRES_MAJOR="$qualification_postgres_major" -e QUALIFICATION_PGDATA=/var/lib/postgresql/data \
+  -v "$entrypoint:/qualification/postgres-entrypoint.sh:ro" \
   -e POSTGRES_USER=postgres_failover \
   -e POSTGRES_PASSWORD="$credential" \
   -e POSTGRES_DB=postgres_failover \
   -v "$replica_volume:/var/lib/postgresql/data" \
   -v "$pg_hba_host_path:/qualification/pg_hba.conf:ro" \
   -p "${DOCKER_TEST_BIND_HOST}::5432" \
-  "$postgres_image" \
+  "$postgres_image" /qualification/postgres-entrypoint.sh \
   -c hot_standby=on \
   -c hba_file=/qualification/pg_hba.conf >/dev/null
 
 bootstrap_stage="replica_streaming"
 for attempt in $(seq 1 90); do
-  if docker exec "$replica_container" pg_isready -U postgres_failover -d postgres_failover >/dev/null 2>&1 && \
+  if docker exec "$replica_container" pg_isready -h 127.0.0.1 -U postgres_failover -d postgres_failover >/dev/null 2>&1 && \
      [[ "$(docker exec "$replica_container" psql -U postgres_failover -d postgres_failover -Atqc 'SELECT pg_is_in_recovery()' 2>/dev/null)" == "t" ]]; then
     break
   fi
@@ -241,7 +241,8 @@ if [[ "${POSTGRES_FAILOVER_CERTIFICATION_RACE:-0}" == "1" ]]; then
 fi
 
 set +e
-go test "${race_args[@]}" ./internal/server \
+python3 scripts/qualification-go.py --name postgres-streaming-failover \
+  --expected TestPostgresFailoverRecoveryCertification -- "${race_args[@]}" -p=1 ./internal/server \
   -run '^TestPostgresFailoverRecoveryCertification$' -count=1 -timeout=3m -v \
   2>&1 | tee "$artifact_dir/certification.log"
 test_status=${PIPESTATUS[0]}

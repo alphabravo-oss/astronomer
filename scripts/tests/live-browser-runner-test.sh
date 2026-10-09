@@ -20,8 +20,10 @@ PATH="$WORK_DIR:/usr/bin:/bin" "$RUNNER" --validate-only >/dev/null
 # this static runner test.
 # shellcheck disable=SC2016
 required_patterns=(
-  'postgres:16-alpine'
-  'redis:7-alpine'
+  'qualification_postgres_run'
+  'qualification_valkey_run'
+  'qualification_postgres_ready'
+  'qualification_valkey_ready'
   'MANAGEMENT_BACKUP_ENABLED=false'
   'DELIVERY_ENABLED=true'
 	'./scripts/testdata/live-browser-fixture'
@@ -29,7 +31,8 @@ required_patterns=(
 	'admin-api.curl'
 	'LIVE_FIXTURE_AGENT_TOKEN="$agent_token"'
 	'agent_connections WHERE cluster_id='
-  'npx playwright test --project=live'
+  'npx playwright test --project="$browser_project" --workers=1 --retries=0'
+  'firefox|webkit) browser_project="live-$browser_engine"'
   'assert_stack before-playwright'
   'assert_stack after-playwright'
 	'PLAYWRIGHT_REUSE_EXISTING_SERVER=1'
