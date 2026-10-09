@@ -746,23 +746,23 @@ Expected: typed generated interfaces, no unintended transaction behavior change,
 
 **Ordered tasks:**
 
-- [ ] W12.1 List published support claims and classify each as implemented, exercised locally, externally qualified, deferred, unsupported, or unknown. “Chrome passed” must not become “Safari supported and tested.”
-- [ ] W12.2 Align default integration PostgreSQL with the selected production major and retain a compatibility lane for the supported previous major. PostgreSQL 16 fixtures must not remain the sole proof for CNPG-managed PostgreSQL 17/18.
-- [ ] W12.3 Preserve extensions used by integration tests; select maintained images and verify extension availability before changing major.
-- [ ] W12.4 Isolate tests by disposable database/schema/resource names and explicit ownership. Preserve expected-test inventories, build tags, and unexpected-skip failures.
+- [x] W12.1 List published support claims and classify each as implemented, exercised locally, externally qualified, deferred, unsupported, or unknown. “Chrome passed” must not become “Safari supported and tested.”
+- [x] W12.2 Align default integration PostgreSQL with the selected production major and retain a compatibility lane for the supported previous major. PostgreSQL 16 fixtures must not remain the sole proof for CNPG-managed PostgreSQL 17/18.
+- [x] W12.3 Preserve extensions used by integration tests; select maintained images and verify extension availability before changing major.
+- [x] W12.4 Isolate tests by disposable database/schema/resource names and explicit ownership. Preserve expected-test inventories, build tags, and unexpected-skip failures.
 - [ ] W12.5 Use real databases for transactions, advisory locks, idempotency, JSON constraints, key rotation, outbox ordering, row counts, tenant scope, query plans, and migration compatibility. Keep mocks where they test adapter behavior efficiently.
-- [ ] W12.6 Add or standardize structured Go test results and JUnit using a qualified latest stable tool such as gotestsum. Keep original logs and exit status; record race and build-tag configuration.
+- [x] W12.6 Add or standardize structured Go test results and JUnit using a qualified latest stable tool such as gotestsum. Keep original logs and exit status; record race and build-tag configuration.
 - [ ] W12.7 Qualify actual CNPG: three production-mode instances, failover under writes, application reconnect, replicated state, operator/Barman plugin compatibility, physical backup, restore to a fresh cluster, and PITR when claimed.
 - [ ] W12.8 Verify recovery of encryption master keys, key IDs, agent/Charlie credentials, tenant identity, audit chains, and delivery generations. A PostgreSQL restore without the ability to decrypt stored credentials is incomplete.
-- [ ] W12.9 Label standalone streaming failover evidence separately from CNPG operator failover. They exercise different ownership and recovery paths.
+- [x] W12.9 Label standalone streaming failover evidence separately from CNPG operator failover. They exercise different ownership and recovery paths.
 - [ ] W12.10 Add Firefox and WebKit projects for critical authenticated workflows and responsive layouts; install matching browser binaries in CI. Keep Chromium route/visual breadth where appropriate.
 - [ ] W12.11 Exercise login, refresh rotation, logout/revocation, mutations, validation, recovery, keyboard focus, dialogs, tables, uploads/downloads, streaming and terminal cancellation in the cross-browser lane.
 - [ ] W12.12 Identify the actual Safari/OS versions needed for a Safari claim. Playwright WebKit is useful coverage but does not by itself certify every shipping Safari build.
 - [ ] W12.13 Expand Kubernetes qualification to current stable 1.37 and maintain the declared older range only where actually tested. Include 1.36 as a transition lane and verify kubectl/client-go/Flux/CNPG version-skew support from upstream.
 - [ ] W12.14 Reuse two-cluster and offerings inventories from Plans 028–029 instead of inventing another incomplete list. Verify optional Charlie/provider features only when their services are available.
 - [ ] W12.15 Run axe/semantic component checks and record automated accessibility coverage. Preserve the distinction from human accessibility certification.
-- [ ] W12.16 Preserve existing v1.2.0/v1.2.1 cloud/scale/Rancher/human-accessibility deferrals. Write a funded future qualification proposal with environment, owner, workload, success criteria, and evidence format; do not silently assert completion.
-- [ ] W12.17 Publish observed RPO/RTO, workload, fault, dates, versions, sample size, and uncertainties. Do not claim a target solely because a script exited zero.
+- [x] W12.16 Preserve existing v1.2.0/v1.2.1 cloud/scale/Rancher/human-accessibility deferrals. Write a funded future qualification proposal with environment, owner, workload, success criteria, and evidence format; do not silently assert completion.
+- [x] W12.17 Publish observed RPO/RTO, workload, fault, dates, versions, sample size, and uncertainties. Do not claim a target solely because a script exited zero.
 
 **Verification:** `make test-postgres-integration`; `POSTGRES_INTEGRATION_RACE=1 make test-postgres-integration`; `make test-worker-runtime-integration`; `WORKER_INTEGRATION_RACE=1 make test-worker-runtime-integration`; outage/restart/failover targets in section 10; `make test-live-browser`; frontend component and cross-browser projects; signed candidate CNPG restore drill.
 
