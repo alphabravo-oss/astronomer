@@ -141,7 +141,7 @@ func (c *OIDCDiscoveryClient) FetchDiscovery(ctx context.Context, issuer string)
 		return nil, fmt.Errorf("oidc discovery: read body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("oidc discovery: %s returned %d: %s", url, resp.StatusCode, string(body))
+		return nil, fmt.Errorf("oidc discovery returned HTTP status %d", resp.StatusCode)
 	}
 
 	var doc OIDCDiscovery
@@ -212,7 +212,7 @@ func (c *OIDCDiscoveryClient) fetchJWKS(ctx context.Context, jwksURI string) (ma
 		return nil, fmt.Errorf("jwks: read body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("jwks: %s returned %d: %s", jwksURI, resp.StatusCode, string(body))
+		return nil, fmt.Errorf("JWKS endpoint returned HTTP status %d", resp.StatusCode)
 	}
 
 	keys, err := parseJWKS(body)

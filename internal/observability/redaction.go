@@ -66,7 +66,7 @@ func NewJSONHandler(writer io.Writer, options *slog.HandlerOptions) *slog.JSONHa
 			attr.Value = slog.StringValue(ScrubDiagnosticText(attr.Value.String()))
 		case slog.KindAny:
 			if err, ok := attr.Value.Any().(error); ok {
-				attr.Value = slog.StringValue(ScrubDiagnosticText(err.Error()))
+				attr.Value = diagnosticError(err)
 			} else {
 				attr.Value = slog.StringValue("[OMITTED structured diagnostic]")
 			}

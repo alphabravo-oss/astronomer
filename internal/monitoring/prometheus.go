@@ -156,8 +156,7 @@ func (c *Client) HealthCheck(ctx context.Context) error {
 			return nil
 		}
 		if resp.StatusCode != http.StatusNotFound {
-			body, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("prometheus backend health returned %d: %s", resp.StatusCode, string(body))
+			return fmt.Errorf("prometheus backend health returned HTTP status %d", resp.StatusCode)
 		}
 	}
 	_, err = c.QueryScalar(ctx, "vector(1)")
@@ -195,14 +194,14 @@ func (c *Client) doQuery(ctx context.Context, path string, values url.Values) (p
 		return promResponseData{}, err
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		return promResponseData{}, fmt.Errorf("prometheus backend returned %d: %s", resp.StatusCode, string(body))
+		return promResponseData{}, fmt.Errorf("prometheus backend returned HTTP status %d", resp.StatusCode)
 	}
 	var payload promResponse
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return promResponseData{}, err
 	}
 	if payload.Status != "success" {
-		return promResponseData{}, fmt.Errorf("prometheus query failed: %s", payload.Error)
+		return promResponseData{}, fmt.Errorf("prometheus query failed (upstream error body omitted)")
 	}
 	return payload.Data, nil
 }
