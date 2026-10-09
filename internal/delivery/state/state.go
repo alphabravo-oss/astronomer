@@ -70,17 +70,19 @@ var rolloutTransitions = transitionTable[model.RolloutState]{
 }
 
 var rolloutClusterTransitions = transitionTable[model.RolloutClusterState]{
-	model.RolloutClusterPending:       set(model.RolloutClusterReleased, model.RolloutClusterBlocked, model.RolloutClusterSkipped),
-	model.RolloutClusterBlocked:       set(model.RolloutClusterPending, model.RolloutClusterSkipped),
-	model.RolloutClusterReleased:      set(model.RolloutClusterAcknowledged, model.RolloutClusterReconciling, model.RolloutClusterReady, model.RolloutClusterTimedOut, model.RolloutClusterFailed, model.RolloutClusterRollingBack),
-	model.RolloutClusterAcknowledged:  set(model.RolloutClusterReconciling, model.RolloutClusterReady, model.RolloutClusterTimedOut, model.RolloutClusterFailed, model.RolloutClusterRollingBack),
-	model.RolloutClusterReconciling:   set(model.RolloutClusterReady, model.RolloutClusterTimedOut, model.RolloutClusterFailed, model.RolloutClusterRollingBack),
-	model.RolloutClusterReady:         set(model.RolloutClusterReconciling, model.RolloutClusterFailed, model.RolloutClusterRollingBack),
-	model.RolloutClusterTimedOut:      set(model.RolloutClusterPending, model.RolloutClusterRollingBack),
-	model.RolloutClusterFailed:        set(model.RolloutClusterPending, model.RolloutClusterRollingBack),
-	model.RolloutClusterRollingBack:   set(model.RolloutClusterReadyPrevious, model.RolloutClusterFailed),
-	model.RolloutClusterSkipped:       set[model.RolloutClusterState](),
-	model.RolloutClusterReadyPrevious: set(model.RolloutClusterRollingBack, model.RolloutClusterFailed),
+	model.RolloutClusterPending:        set(model.RolloutClusterReleased, model.RolloutClusterBlocked, model.RolloutClusterSkipped),
+	model.RolloutClusterBlocked:        set(model.RolloutClusterPending, model.RolloutClusterSkipped),
+	model.RolloutClusterReleased:       set(model.RolloutClusterAcknowledged, model.RolloutClusterReconciling, model.RolloutClusterReady, model.RolloutClusterTimedOut, model.RolloutClusterFailed, model.RolloutClusterRollingBack),
+	model.RolloutClusterAcknowledged:   set(model.RolloutClusterReconciling, model.RolloutClusterReady, model.RolloutClusterTimedOut, model.RolloutClusterFailed, model.RolloutClusterRollingBack),
+	model.RolloutClusterReconciling:    set(model.RolloutClusterReady, model.RolloutClusterTimedOut, model.RolloutClusterFailed, model.RolloutClusterRollingBack),
+	model.RolloutClusterReady:          set(model.RolloutClusterReconciling, model.RolloutClusterFailed, model.RolloutClusterRollingBack),
+	model.RolloutClusterTimedOut:       set(model.RolloutClusterPending, model.RolloutClusterRollingBack),
+	model.RolloutClusterFailed:         set(model.RolloutClusterPending, model.RolloutClusterRollingBack),
+	model.RolloutClusterRollingBack:    set(model.RolloutClusterReadyPrevious, model.RolloutClusterFailed),
+	model.RolloutClusterSkipped:        set[model.RolloutClusterState](),
+	model.RolloutClusterAborted:        set[model.RolloutClusterState](),
+	model.RolloutClusterRollbackFailed: set[model.RolloutClusterState](),
+	model.RolloutClusterReadyPrevious:  set(model.RolloutClusterRollingBack, model.RolloutClusterFailed),
 }
 
 var deploymentTransitions = transitionTable[model.DeploymentPhase]{
@@ -192,11 +194,11 @@ func DeriveRolloutCounters(states []model.RolloutClusterState) (RolloutCounters,
 			counters.Active++
 		case model.RolloutClusterReady:
 			counters.Ready++
-		case model.RolloutClusterFailed, model.RolloutClusterTimedOut:
+		case model.RolloutClusterFailed, model.RolloutClusterTimedOut, model.RolloutClusterRollbackFailed:
 			counters.Failed++
 		case model.RolloutClusterBlocked:
 			counters.Blocked++
-		case model.RolloutClusterSkipped:
+		case model.RolloutClusterSkipped, model.RolloutClusterAborted:
 			counters.Skipped++
 		case model.RolloutClusterReadyPrevious:
 			counters.RollbackReady++

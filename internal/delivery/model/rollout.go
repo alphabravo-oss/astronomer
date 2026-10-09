@@ -236,6 +236,9 @@ const (
 	RolloutClusterSkipped       RolloutClusterState = "skipped"
 	RolloutClusterRollingBack   RolloutClusterState = "rolling_back"
 	RolloutClusterReadyPrevious RolloutClusterState = "ready_previous"
+	// Persisted terminal states are retained for historical row compatibility.
+	RolloutClusterRollbackFailed RolloutClusterState = "rollback_failed"
+	RolloutClusterAborted        RolloutClusterState = "aborted"
 )
 
 var AllRolloutClusterStates = []RolloutClusterState{
@@ -243,6 +246,7 @@ var AllRolloutClusterStates = []RolloutClusterState{
 	RolloutClusterReconciling, RolloutClusterReady, RolloutClusterBlocked,
 	RolloutClusterTimedOut, RolloutClusterFailed, RolloutClusterSkipped,
 	RolloutClusterRollingBack, RolloutClusterReadyPrevious,
+	RolloutClusterRollbackFailed, RolloutClusterAborted,
 }
 
 func (s RolloutClusterState) Valid() bool { return contains(AllRolloutClusterStates, s) }
