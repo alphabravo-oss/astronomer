@@ -31,5 +31,6 @@
   "sha256": {
     "/root/.cache/astronomer-032/qualification/cnpg36/w08-systemrollout-root/pg17-integration.jsonl": "12a029a96fc1bfff57032a1da4fe99abcbe63a50efe3c0bcbc913d81636a60d1"
   },
-  "scope": "Fresh dedicated database on owned three-instance CNPG 1.30.1/K3s 1.36.5; TLS transport; System rollout characterization on already migrated schema 72 with isolated randomized owned fixture schemas; no full app, failover, or historical restore claim"
+  "scope": "Fresh dedicated database on owned three-instance CNPG 1.30.1/K3s 1.36.5; TLS transport; System rollout characterization on already migrated schema 72 with isolated randomized owned fixture schemas; no full app, failover, or historical restore claim",
+  "retention_note": "Original root14-parent budget run passed as observed in session output. Reused temporary cache path later overwrote its raw log with canonical7b14d41b15-parent run. Original raw-log digest is historical and no longer resolvable at that cache path. Canonical successor raw JSON is independently retained in advisor-plans/032-evidence; agent immutable pre/after/race budget logs remain tracked."
 }
