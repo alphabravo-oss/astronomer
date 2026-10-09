@@ -32,7 +32,7 @@ func TestDestinationPolicyClosedOrigins(t *testing.T) {
 			t.Fatalf("accepted %s", raw)
 		}
 	}
-	for _, address := range []string{"10.43.0.1", "127.0.0.1", "::1", "169.254.169.254", "fe80::1", "::ffff:127.0.0.1", "224.0.0.1", "::"} {
+	for _, address := range []string{"10.43.0.1", "127.0.0.1", "::1", "169.254.169.254", "fe80::1", "::ffff:127.0.0.1", "fd00:ec2::254", "100.100.100.200", "224.0.0.1", "::"} {
 		mixed := func(_ context.Context, _, _ string) ([]netip.Addr, error) {
 			return []netip.Addr{netip.MustParseAddr("10.42.1.1"), netip.MustParseAddr(address)}, nil
 		}
@@ -40,7 +40,7 @@ func TestDestinationPolicyClosedOrigins(t *testing.T) {
 			t.Fatalf("accepted DNS answer %s", address)
 		}
 	}
-	for _, raw := range []string{`{"restricted":true,"origins":[]}`, `{"origins":[],"allow_private":true}`, `{"origins":[{"url":"https://registry.corp/path","cidrs":["10.0.0.0/8"]}]}`, `{"origins":[{"url":"http://registry.corp","cidrs":["0.0.0.0/0"]}]}`, valid + `{}`} {
+	for _, raw := range []string{`{"restricted":true,"origins":[]}`, `{"origins":[],"allow_private":true}`, `{"origins":[{"url":"https://registry.corp/path","cidrs":["10.0.0.0/8"]}]}`, `{"origins":[{"url":"http://registry.corp","cidrs":["0.0.0.0/0"]}]}`, valid + `{}`, `null`, `{"origins":[{"url":"http://registry.corp","cidrs":["10.0.0.0/7"]}]}`, `{"origins":[{"url":"http://registry.corp","cidrs":["172.16.0.0/11"]}]}`, `{"origins":[{"url":"http://registry.corp","cidrs":["192.168.0.0/15"]}]}`, `{"origins":[{"url":"http://registry.corp","cidrs":["fc00::/6"]}]}`} {
 		if _, err := ParseDestinationPolicy(raw); err == nil {
 			t.Fatalf("accepted invalid policy %s", raw)
 		}
@@ -113,3 +113,50 @@ func TestDestinationRedirectStripsCredentialsAndDeniesNewOrigin(t *testing.T) {
 	// A caller cannot widen the constructed client's copied policy later.
 	policy.Origins[0].CIDRs[0] = netip.MustParsePrefix("0.0.0.0/0")
 }
+
+func TestDestinationClientCopiesAuthorityAndBlocksPrivateMetadata(t *testing.T) {
+	for _, prefix := range []string{"10.42.1.0/24", "172.16.2.0/24", "192.168.7.0/24", "fd00:1234::/64"} {
+		raw := `{"restricted":true,"origins":[{"url":"http://storage.corp:9000","cidrs":["` + prefix + `"]}]}`
+		if _, err := ParseDestinationPolicy(raw); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, ip := range []string{"fd00:ec2::254", "100.100.100.200"} {
+		policy, err := ParseDestinationPolicy(`{"restricted":true,"origins":[{"url":"https://metadata.corp","cidrs":["fc00::/7","100.64.0.0/10"]}]}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lookup := func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr(ip)}, nil
+		}
+		if err = policy.validateURL(context.Background(), "https://metadata.corp", lookup); err == nil {
+			t.Fatalf("approved origin permitted cloud metadata %s", ip)
+		}
+	}
+	policy, err := ParseDestinationPolicy(`{"restricted":true,"origins":[{"url":"http://storage.corp:9000","cidrs":["10.42.1.0/24"]}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	lookup := func(context.Context, string, string) ([]netip.Addr, error) {
+		return []netip.Addr{netip.MustParseAddr("10.43.1.7")}, nil
+	}
+	// Use the production copying constructor with a literal origin; mutate the
+	// caller's slices and assert the constructed transport retains the old rule.
+	policy.Origins[0].URL = "http://10.43.1.7:9000"
+	client, err := NewDestinationClient(policy, DestinationOptions{Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy.Origins[0].CIDRs[0] = netip.MustParsePrefix("10.0.0.0/8")
+	transport := client.Transport.(*responseLimitTransport).base.(*destinationTransport)
+	transport.lookup = lookup
+	transport.base = roundTripFixture(func(*http.Request) (*http.Response, error) { calls++; return nil, errors.New("unexpected connection") })
+	if _, err = client.Get("http://10.43.1.7:9000/bucket"); err == nil || calls != 0 {
+		t.Fatal("caller mutation widened immutable client policy")
+	}
+}
+
+type roundTripFixture func(*http.Request) (*http.Response, error)
+
+func (f roundTripFixture) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }

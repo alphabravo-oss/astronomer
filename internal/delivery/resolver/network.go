@@ -65,22 +65,7 @@ func resolveAllowedAddresses(ctx context.Context, policy NetworkPolicy, host str
 }
 
 func (p NetworkPolicy) allows(host string, address netip.Addr) bool {
-	address = address.Unmap()
-	if !address.IsValid() || address.IsUnspecified() || address.IsLoopback() || address.IsLinkLocalUnicast() || address.IsMulticast() {
-		return false
-	}
-	if !address.IsPrivate() && !isCGNATAddress(address) {
-		return true
-	}
-	if !hostAllowed(host, p.AllowedPrivateHosts) {
-		return false
-	}
-	for _, prefix := range p.AllowedPrivateCIDRs {
-		if prefix.IsValid() && prefix.Contains(address) {
-			return true
-		}
-	}
-	return false
+	return (httpclient.DestinationPolicy{PrivateHosts: p.AllowedPrivateHosts, PrivateCIDRs: p.AllowedPrivateCIDRs}).AllowsAddress(host, address)
 }
 
 func hostAllowed(host string, patterns []string) bool {

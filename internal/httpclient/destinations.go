@@ -38,6 +38,9 @@ func ParseDestinationPolicy(raw string) (DestinationPolicy, error) {
 	if raw == "" {
 		return policy, nil
 	}
+	if !strings.HasPrefix(strings.TrimSpace(raw), "{") {
+		return policy, errors.New("destination policy must be a JSON object")
+	}
 	if len(raw) > 64<<10 {
 		return policy, errors.New("destination policy exceeds size limit")
 	}
@@ -75,7 +78,7 @@ func (p DestinationPolicy) Validate() error {
 				return errors.New("trusted destination CIDR is invalid")
 			}
 			// Plaintext origins are confined to explicitly private networks.
-			if parsed.Scheme == "http" && !prefix.Addr().IsPrivate() {
+			if parsed.Scheme == "http" && !entirelyPrivatePrefix(prefix) {
 				return errors.New("plaintext destination must use private CIDRs")
 			}
 		}
@@ -154,7 +157,7 @@ func (p DestinationPolicy) AllowsAddress(host string, address netip.Addr) bool {
 }
 
 func safeDestinationAddress(address netip.Addr) bool {
-	return address.IsValid() && !address.IsUnspecified() && !address.IsLoopback() && !address.IsLinkLocalUnicast() && !address.IsMulticast()
+	return address.IsValid() && address.IsGlobalUnicast() && !address.IsUnspecified() && !address.IsLoopback() && !address.IsLinkLocalUnicast() && !address.IsMulticast() && address != netip.MustParseAddr("fd00:ec2::254") && address != netip.MustParseAddr("100.100.100.200")
 }
 
 func (p DestinationPolicy) allows(value *url.URL, address netip.Addr) bool {
@@ -327,3 +330,13 @@ type destinationSchemeKey struct{}
 
 // Clone freezes operator authority when composing a long-lived consumer.
 func (p DestinationPolicy) Clone() DestinationPolicy { return cloneDestinationPolicy(p) }
+
+func entirelyPrivatePrefix(prefix netip.Prefix) bool {
+	for _, raw := range []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"} {
+		approved := netip.MustParsePrefix(raw)
+		if prefix.Bits() >= approved.Bits() && approved.Contains(prefix.Addr()) {
+			return true
+		}
+	}
+	return false
+}
