@@ -43,7 +43,7 @@ func (h *BackupHandler) CreateRestoreByBackup(w http.ResponseWriter, r *http.Req
 	}
 
 	var req CreateRestoreRequest
-	if r.Body != nil && r.ContentLength != 0 {
+	if r.Body != nil {
 		if err := decodeV1JSONBody(r, &req); err != nil && err != io.EOF {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 			return

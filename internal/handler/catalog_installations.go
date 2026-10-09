@@ -304,7 +304,7 @@ func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req catalogUninstallRequest
-	if r.Body != nil && r.ContentLength != 0 && !decodeAndValidate(w, r, &req) {
+	if !decodeOptionalJSON(w, r, &req) {
 		return
 	}
 	_, chart, _, resolveErr := h.resolveInstalledChartRelease(r.Context(), installation)

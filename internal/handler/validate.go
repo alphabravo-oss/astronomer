@@ -78,6 +78,11 @@ type fieldError struct {
 // and writes nothing.
 func decodeAndValidate[T any](w http.ResponseWriter, r *http.Request, out *T) bool {
 	if err := decodeStrictJSONBody(r, out); err != nil {
+		var schemaErr *jsoncontract.Error
+		if errors.As(err, &schemaErr) && (schemaErr.Field == "source_matchers" || schemaErr.Field == "target_matchers" || schemaErr.Field == "equal_labels") {
+			writeJSONFieldErrors(w, r, []fieldError{{Field: schemaErr.Field, Rule: schemaErr.Category, Message: "Invalid " + schemaErr.Field}})
+			return false
+		}
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return false
 	}
@@ -133,6 +138,10 @@ func writeValidationError(w http.ResponseWriter, r *http.Request, err error) {
 		})
 	}
 
+	writeJSONFieldErrors(w, r, fields)
+}
+
+func writeJSONFieldErrors(w http.ResponseWriter, r *http.Request, fields []fieldError) {
 	errObj := map[string]any{
 		"code":    apierror.ValidationError,
 		"message": "Request failed validation",

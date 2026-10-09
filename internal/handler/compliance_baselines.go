@@ -27,6 +27,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -279,8 +280,8 @@ func (h *ComplianceBaselinesHandler) Apply(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var req ApplyRequest
-	if r.ContentLength > 0 {
-		if err := decodeV1JSONBody(r, &req); err != nil {
+	if r.Body != nil {
+		if err := decodeV1JSONBody(r, &req); err != nil && !errors.Is(err, io.EOF) {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 			return
 		}
