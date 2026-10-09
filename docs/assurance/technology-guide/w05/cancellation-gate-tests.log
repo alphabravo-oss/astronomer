@@ -1,0 +1,14 @@
+✔ rejects anonymous and direct query functions that drop cancellation (10.994807ms)
+✔ accepts query functions that consume a signal (2.106326ms)
+✔ rejects a declared but dropped signal and multiline function expressions (2.054859ms)
+✔ discovers read hooks in dash-prefixed components and adapters without a filename allowlist (1.632086ms)
+✔ rejects unrelated signals, logging, and nested shadow bindings (3.571808ms)
+✔ accepts the actual query binding, destructuring aliases and context.signal (1.016494ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 295.444075

@@ -1,0 +1,725 @@
+npm notice run astronomer-frontend@1.2.1 test
+npm notice run vitest run --maxWorkers=1
+
+ RUN  v5.0.0 /root/astronomer-all/astronomer-032-w05/frontend
+
+ ❯ src/components/charlie/__tests__/charlie-shell.test.tsx (20 tests | 3 failed) 5684ms
+   ❯ Charlie global shell accessibility (20)
+     × restores active-thread history on open instead of starting blank 69ms
+     × clears working state when persisted assistant history arrives without a terminal event 1026ms
+     × clears working state from remote failure when the terminal stream event is missed 1060ms
+ ❯ src/components/monitoring/__tests__/hooks.test.tsx (21 tests | 1 failed) 177ms
+   ❯ useMonitoringOperationTracker (10)
+     × adopts an operation that was already in flight when the page loaded 34ms
+Not implemented: Window's scrollTo() method
+Not implemented: Window's scrollTo() method
+ ❯ src/components/rbac/paged-selection.test.tsx (11 tests | 2 failed) 3968ms
+   × sends user search to the server and resets pagination 1147ms
+   × pages backup storage and selects a later configuration 184ms
+ ❯ src/components/extensions/DeclarativeWidget.test.tsx (7 tests | 1 failed) 292ms
+   ❯ DeclarativeWidget — table (3)
+     × fetches via the data proxy and renders projected, formatted rows 126ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/extensions/DeclarativeWidget.test.tsx > DeclarativeWidget — table > fetches via the data proxy and renders projected, formatted rows
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'cost', 'podCost', …(1) ]
+
+Received:
+
+  1st vi.fn() call:
+
+@@ -4,6 +4,17 @@
+    {
+      "context": {
+        "clusterId": "c1",
+      },
+    },
++   {
++     "signal": AbortSignal {
++       Symbol(kEvents): undefined,
++       Symbol(events.maxEventTargetListeners): 0,
++       Symbol(events.maxEventTargetListenersWarned): false,
++       Symbol(kHandlers): undefined,
++       Symbol(kAborted): false,
++       Symbol(kReason): undefined,
++       Symbol(kComposite): false,
++     },
++   },
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/components/extensions/DeclarativeWidget.test.tsx:64:25
+     62|     expect(screen.getByText("$12.50")).toBeInTheDocument();
+     63|     expect(screen.getByText("Namespace")).toBeInTheDocument();
+     64|     expect(mockedFetch).toHaveBeenCalledWith(
+       |                         ^
+     65|       "cost",
+     66|       "podCost",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/components/rbac/paged-selection.test.tsx > sends user search to the server and resets pagination
+AssertionError: expected last "vi.fn()" call to have been called with [ { page: 2, pageSize: 25, …(1) } ]
+
+Ignored nodes: comments, script, style
+<html>
+  <head />
+  <body
+    style=""
+  >
+    <div>
+      <div
+        class="space-y-3"
+      >
+        <div
+          class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div
+            class="flex flex-1 flex-wrap items-center gap-2"
+          >
+            <div
+              class="relative max-w-sm flex-1"
+            >
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-search absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                fill="none"
+                height="24"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m21 21-4.34-4.34"
+                />
+                <circle
+                  cx="11"
+                  cy="11"
+                  r="8"
+                />
+              </svg>
+              <input
+                class="h-9 w-full rounded-md border border-border bg-background pl-9 pr-8 text-sm
+                  placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                data-table-search=""
+                placeholder="Search users..."
+                type="text"
+                value=""
+              />
+            </div>
+          </div>
+          <div
+            class="flex items-center gap-2 self-end sm:self-auto"
+          >
+            <div
+              class="relative"
+            >
+              <button
+                aria-expanded="false"
+                class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3
+              text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                type="button"
+              >
+                <svg
+                  aria-hidden="true"
+                  class="lucide lucide-sliders-horizontal h-4 w-4"
+                  fill="none"
+                  height="24"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                  width="24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M10 5H3"
+                  />
+                  <path
+                    d="M12 19H3"
+                  />
+                  <path
+                    d="M14 3v4"
+                  />
+                  <path
+                    d="M16 17v4"
+                  />
+                  <path
+                    d="M21 12h-9"
+                  />
+                  <path
+                    d="M21 19h-5"
+                  />
+                  <path
+                    d="M21 5h-7"
+                  />
+                  <path
+                    d="M8 10v4"
+                  />
+                  <path
+                    d="M8 12H3"
+                  />
+                </svg>
+                Columns
+              </button>
+            </div>
+          </div>
+        </div>
+        <div
+          class="rounded-lg border border-border overflow-hidden"
+        >
+          <div
+            aria-label="Data table"
+            class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring overflow-x-auto"
+            data-table-region=""
+            role="region"
+            tabindex="0"
+          >
+            <table
+              class="app-data-table app-data-table-fit table-fixed max-w-full w-full text-sm"
+              data-layout="fit"
+              style="min-width: 949px;"
+            >
+              <thead
+                class="border-b border-border"
+              >
+                <tr
+                  class="transition-colors hover:bg-[var(--table-row-hover)] border-b border-border bg-muted/50"
+                >
+                  <th
+                    class="h-10 text-ellipsis whitespace-nowrap text-left text-meta px-4 py-[var(--row-py,0.75rem)] min-w-0 overflow-hidden font-medium text-muted-foreground"
+                    scope="col"
+                    style="min-width: 160px;"
+                  >
+                    <div
+                      class="flex items-center gap-1"
+                    >
+                      <span
+                        class="whitespace-nowrap"
+                      >
+                        User
+                      </span>
+                    </div>
+                  </th>
+                  <th
+                    class="h-10 text-ellipsis whitespace-nowrap text-left text-meta px-4 py-[var(--row-py,0.75rem)] min-w-0 overflow-hidden font-medium text-muted-foreground"
+               ...
+
+- Expected
++ Received
+
+@@ -2,6 +2,15 @@
+    {
+      "page": 2,
+      "pageSize": 25,
+      "search": "",
+    },
++   AbortSignal {
++     Symbol(kEvents): undefined,
++     Symbol(events.maxEventTargetListeners): 0,
++     Symbol(events.maxEventTargetListenersWarned): false,
++     Symbol(kHandlers): undefined,
++     Symbol(kAborted): false,
++     Symbol(kReason): undefined,
++     Symbol(kComposite): false,
++   },
+  ]
+
+ ❯ src/components/rbac/paged-selection.test.tsx:142:22
+    140|   fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    141|   await waitFor(() =>
+    142|     expect(getUsers).toHaveBeenLastCalledWith(
+       |                      ^
+    143|       {
+    144|         page: 2,
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/components/rbac/paged-selection.test.tsx > pages backup storage and selects a later configuration
+AssertionError: expected last "vi.fn()" call to have been called with [ { page: 2, page_size: 25 } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "page": 2,
+      "page_size": 25,
+    },
++   AbortSignal {
++     Symbol(kEvents): undefined,
++     Symbol(events.maxEventTargetListeners): 0,
++     Symbol(events.maxEventTargetListenersWarned): false,
++     Symbol(kHandlers): undefined,
++     Symbol(kAborted): false,
++     Symbol(kReason): undefined,
++     Symbol(kComposite): false,
++   },
+  ]
+
+ ❯ src/components/rbac/paged-selection.test.tsx:196:34
+    194|   );
+    195|   await waitFor(() =>
+    196|     expect(screen.getByRole("button", { name: "Next page" })).toBeEnab…
+       |                                  ^
+    197|   );
+    198|   fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  src/components/charlie/__tests__/charlie-shell.test.tsx > Charlie global shell accessibility > restores active-thread history on open instead of starting blank
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'thread-1' ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+    "thread-1",
++   {
++     "signal": AbortSignal {
++       Symbol(kEvents): undefined,
++       Symbol(events.maxEventTargetListeners): 0,
++       Symbol(events.maxEventTargetListenersWarned): false,
++       Symbol(kHandlers): undefined,
++       Symbol(kAborted): false,
++       Symbol(kReason): undefined,
++       Symbol(kComposite): false,
++     },
++   },
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/components/charlie/__tests__/charlie-shell.test.tsx:487:37
+    485|       await screen.findByText("Kubernetes v1.36.2+k3s1"),
+    486|     ).toBeInTheDocument();
+    487|     expect(getCharlieThreadHistory).toHaveBeenCalledWith("thread-1", {
+       |                                     ^
+    488|       signal: expect.any(AbortSignal),
+    489|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  src/components/charlie/__tests__/charlie-shell.test.tsx > Charlie global shell accessibility > clears working state when persisted assistant history arrives without a terminal event
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'thread-1' ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+    "thread-1",
++   {
++     "signal": AbortSignal {
++       Symbol(kEvents): undefined,
++       Symbol(events.maxEventTargetListeners): 0,
++       Symbol(events.maxEventTargetListenersWarned): false,
++       Symbol(kHandlers): undefined,
++       Symbol(kAborted): false,
++       Symbol(kReason): undefined,
++       Symbol(kComposite): false,
++     },
++   },
+  ]
+
+
+Number of calls: 1
+
+
+Ignored nodes: comments, script, style
+<html>
+  <head />
+  <body
+    style="pointer-events: none;"
+  >
+    <span
+      aria-hidden="true"
+      data-aria-hidden="true"
+      data-radix-focus-guard=""
+      style="outline: none; opacity: 0; position: fixed; pointer-events: none;"
+      tabindex="0"
+    />
+    <div
+      aria-hidden="true"
+      data-aria-hidden="true"
+    >
+      <main>
+        Dashboard
+      </main>
+      <button
+        aria-controls="charlie-assistant-drawer"
+        aria-expanded="true"
+        aria-label="Open Charlie assistant"
+        class="shrink-0 justify-center whitespace-nowrap font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+        data-state="closed"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-sparkles lucide-stars h-5 w-5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+          />
+          <path
+            d="M20 2v4"
+          />
+          <path
+            d="M22 4h-4"
+          />
+          <circle
+            cx="4"
+            cy="20"
+            r="2"
+          />
+        </svg>
+        <span
+          class="hidden sm:inline"
+        >
+          Charlie
+        </span>
+      </button>
+    </div>
+    <div
+      aria-labelledby="radix-_r_5l_"
+      class="fixed inset-0 z-overlay flex outline-none justify-end"
+      data-overlay-root="true"
+      data-state="open"
+      id="radix-_r_5k_"
+      role="dialog"
+      style="pointer-events: auto;"
+      tabindex="-1"
+    >
+      <button
+        aria-hidden="true"
+        aria-label="Close overlay"
+        class="absolute inset-0 border-0 p-0 backdrop-blur-xs bg-black/40 backdrop-blur-0"
+        tabindex="-1"
+        type="button"
+      />
+      <div
+        class="relative flex h-full w-full flex-col border-l border-border bg-background shadow-xl max-w-xl max-sm:max-w-none"
+      >
+        <div
+          class="flex items-center justify-between gap-4 border-b border-border px-5 py-4"
+        >
+          <div
+            class="min-w-0"
+          >
+            <h2
+              class="truncate text-base font-semibold text-foreground"
+              id="radix-_r_5l_"
+            >
+              Charlie
+            </h2>
+            <div
+              class="mt-1 text-xs text-muted-foreground"
+            >
+              <span
+                class="flex flex-wrap items-center gap-2"
+              >
+                <span>
+                  AI assistance within your authorized Astronomer scope
+                </span>
+                <span
+                  aria-label="Current Charlie mode: Read only"
+                  class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold border-status-info/40 bg-status-info/10 text-status-info"
+                  data-mode="read_only"
+                  data-settling="false"
+                  data-testid="charlie-mode-badge"
+                >
+                  Mode:
+                  Read only
+                </span>
+                <span
+                  class="basis-full text-xs text-muted-foreground"
+                >
+                  Investigation and findings only. Charlie cannot change cluster state; write requests become guidance.
+                </span>
+              </span>
+            </div>
+          </div>
+          <div
+            class="flex shrink-0 items-center gap-2"
+          >
+            <div
+              class="flex items-center gap-1"
+            >
+              <button
+                aria-describedby="radix-_r_5n_"
+                aria-expanded="false"
+                class="shrink-0 justify-center whitespace-nowrap font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+                data-state="instant-open"
+                type="button"
+              >
+                <svg
+                  aria-hidden="true"
+                  class="lucide lucide-rotate-ccw-clock lucide-history h-3 w-3"
+                  fill="none"
+                  height="24"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  st...
+ ❯ src/components/charlie/__tests__/charlie-shell.test.tsx:701:39
+    699|       screen.getByRole("button", { name: "Open Charlie assistant" }),
+    700|     );
+    701|     const composer = await screen.findByLabelText("Message Charlie");
+       |                                       ^
+    702|     await waitFor(() =>
+    703|       expect(getCharlieThreadHistory).toHaveBeenCalledWith("thread-1",…
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  src/components/charlie/__tests__/charlie-shell.test.tsx > Charlie global shell accessibility > clears working state from remote failure when the terminal stream event is missed
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'session-1' ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+    "session-1",
++   {
++     "signal": AbortSignal {
++       Symbol(kEvents): undefined,
++       Symbol(events.maxEventTargetListeners): 0,
++       Symbol(events.maxEventTargetListenersWarned): false,
++       Symbol(kHandlers): undefined,
++       Symbol(kAborted): false,
++       Symbol(kReason): undefined,
++       Symbol(kComposite): false,
++     },
++   },
+  ]
+
+
+Number of calls: 1
+
+
+Ignored nodes: comments, script, style
+<html>
+  <head />
+  <body
+    style="pointer-events: none;"
+  >
+    <span
+      aria-hidden="true"
+      data-aria-hidden="true"
+      data-radix-focus-guard=""
+      style="outline: none; opacity: 0; position: fixed; pointer-events: none;"
+      tabindex="0"
+    />
+    <div
+      aria-hidden="true"
+      data-aria-hidden="true"
+    >
+      <main>
+        Dashboard
+      </main>
+      <button
+        aria-controls="charlie-assistant-drawer"
+        aria-expanded="true"
+        aria-label="Open Charlie assistant"
+        class="shrink-0 justify-center whitespace-nowrap font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 fixed bottom-5 right-5 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-primary-foreground shadow-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+        data-state="closed"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class="lucide lucide-sparkles lucide-stars h-5 w-5"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+          />
+          <path
+            d="M20 2v4"
+          />
+          <path
+            d="M22 4h-4"
+          />
+          <circle
+            cx="4"
+            cy="20"
+            r="2"
+          />
+        </svg>
+        <span
+          class="hidden sm:inline"
+        >
+          Charlie
+        </span>
+      </button>
+    </div>
+    <div
+      aria-labelledby="radix-_r_61_"
+      class="fixed inset-0 z-overlay flex outline-none justify-end"
+      data-overlay-root="true"
+      data-state="open"
+      id="radix-_r_60_"
+      role="dialog"
+      style="pointer-events: auto;"
+      tabindex="-1"
+    >
+      <button
+        aria-hidden="true"
+        aria-label="Close overlay"
+        class="absolute inset-0 border-0 p-0 backdrop-blur-xs bg-black/40 backdrop-blur-0"
+        tabindex="-1"
+        type="button"
+      />
+      <div
+        class="relative flex h-full w-full flex-col border-l border-border bg-background shadow-xl max-w-xl max-sm:max-w-none"
+      >
+        <div
+          class="flex items-center justify-between gap-4 border-b border-border px-5 py-4"
+        >
+          <div
+            class="min-w-0"
+          >
+            <h2
+              class="truncate text-base font-semibold text-foreground"
+              id="radix-_r_61_"
+            >
+              Charlie
+            </h2>
+            <div
+              class="mt-1 text-xs text-muted-foreground"
+            >
+              <span
+                class="flex flex-wrap items-center gap-2"
+              >
+                <span>
+                  AI assistance within your authorized Astronomer scope
+                </span>
+                <span
+                  aria-label="Current Charlie mode: Read only"
+                  class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold border-status-info/40 bg-status-info/10 text-status-info"
+                  data-mode="read_only"
+                  data-settling="false"
+                  data-testid="charlie-mode-badge"
+                >
+                  Mode:
+                  Read only
+                </span>
+                <span
+                  class="basis-full text-xs text-muted-foreground"
+                >
+                  Investigation and findings only. Charlie cannot change cluster state; write requests become guidance.
+                </span>
+              </span>
+            </div>
+          </div>
+          <div
+            class="flex shrink-0 items-center gap-2"
+          >
+            <div
+              class="flex items-center gap-1"
+            >
+              <button
+                aria-describedby="radix-_r_63_"
+                aria-expanded="false"
+                class="shrink-0 justify-center whitespace-nowrap font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+                data-state="instant-open"
+                type="button"
+              >
+                <svg
+                  aria-hidden="true"
+                  class="lucide lucide-rotate-ccw-clock lucide-history h-3 w-3"
+                  fill="none"
+                  height="24"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  st...
+ ❯ src/components/charlie/__tests__/charlie-shell.test.tsx:729:33
+    727|       screen.getByRole("button", { name: "Open Charlie assistant" }),
+    728|     );
+    729|     const composer = await screen.findByLabelText("Message Charlie");
+       |                                 ^
+    730|     fireEvent.change(composer, { target: { value: "assess health" } });
+    731|     fireEvent.click(screen.getByRole("button", { name: "Send" }));
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  src/components/monitoring/__tests__/hooks.test.tsx > useMonitoringOperationTracker > adopts an operation that was already in flight when the page loaded
+AssertionError: expected "vi.fn()" to be called with arguments: [ { …(3) } ]
+
+Received:
+
+  1st vi.fn() call:
+
+@@ -2,6 +2,15 @@
+    {
+      "limit": 5,
+      "targetKey": "cluster-1",
+      "targetType": "cluster_stack",
+    },
++   AbortSignal {
++     Symbol(kEvents): undefined,
++     Symbol(events.maxEventTargetListeners): 0,
++     Symbol(events.maxEventTargetListenersWarned): false,
++     Symbol(kHandlers): undefined,
++     Symbol(kAborted): false,
++     Symbol(kReason): undefined,
++     Symbol(kComposite): false,
++   },
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/components/monitoring/__tests__/hooks.test.tsx:296:28
+    294|     await tick();
+    295|
+    296|     expect(listOperations).toHaveBeenCalledWith(
+       |                            ^
+    297|       {
+    298|         targetType: "cluster_stack",
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  4 failed | 332 passed (336)
+      Tests  7 failed | 2332 passed (2339)
+   Start at  19:06:29
+   Duration  638.93s (environment 38%, import 38%, tests 16%, setup 4%, transform 3%)
+
+Environment  jsdom was created 336 times · 229.87s total, 38% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments

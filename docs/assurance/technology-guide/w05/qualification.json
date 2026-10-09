@@ -1,0 +1,85 @@
+{
+  "runtime": "Node v26.11.1/npm12.2.0 compatibility preflight against unchanged Node24 source manifest/lock",
+  "checks": [
+    {
+      "name": "type-check",
+      "command": "npm run type-check",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 26.01,
+      "log": "type-check.log"
+    },
+    {
+      "name": "lint",
+      "command": "npm run lint",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 42.95,
+      "log": "lint.log"
+    },
+    {
+      "name": "code-health",
+      "command": "npm run code-health",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 12.54,
+      "log": "code-health.log"
+    },
+    {
+      "name": "cancellation-gate-tests",
+      "command": "node --test scripts/check-frontend-query-cancellation.test.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "duration_seconds": 0.34,
+      "log": "cancellation-gate-tests.log"
+    },
+    {
+      "name": "complexity",
+      "command": "node scripts/check-complexity-budget.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "duration_seconds": 0.32,
+      "log": "complexity.log"
+    },
+    {
+      "name": "targeted",
+      "command": "npm test -- src/lib/api/transport-auth.test.ts src/lib/api/transport-query.test.ts src/lib/api/read-cancellation.test.ts src/lib/api/auth.test.ts src/lib/api/account-security.test.ts src/routes/dashboard/settings/siem/forwarder-modal.test.tsx src/routes/dashboard/alerting/inhibition-panel.test.tsx src/components/ui/__tests__/form-adoption.test.ts src/components/form/__tests__/error-summary.test.tsx",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 6.3,
+      "log": "targeted.log"
+    },
+    {
+      "name": "full-suite",
+      "command": "npm test -- --maxWorkers=1",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 617.7,
+      "log": "full-suite.log"
+    },
+    {
+      "name": "build",
+      "command": "npm run build",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 11.6,
+      "log": "build.log"
+    },
+    {
+      "name": "bundle-check",
+      "command": "npm run bundle:check",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 0.52,
+      "log": "bundle-check.log"
+    },
+    {
+      "name": "browser-components",
+      "command": "npm run test:browser-components",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 19.85,
+      "log": "browser-components.log"
+    }
+  ]
+}

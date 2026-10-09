@@ -1,0 +1,42 @@
+npm notice run astronomer-frontend@1.2.1 test
+npm notice run vitest run src/lib/api/read-cancellation.test.ts
+
+ RUN  v5.0.0 /root/astronomer-all/astronomer-032-w05/frontend
+
+ ❯ src/lib/api/read-cancellation.test.ts (3 tests | 2 failed) 10039ms
+   × cancels an actual generated read socket through Query ownership 5017ms
+   × closing observation does not cancel a committed tool installation 5002ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/api/read-cancellation.test.ts > cancels an actual generated read socket through Query ownership
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/lib/api/read-cancellation.test.ts:49:37
+     47|   await new Promise<void>((resolve) => server.close(() => resolve()));
+     48| });
+     49| it.each(["generated", "kubernetes"])(
+       |                                     ^
+     50|   "cancels an actual %s read socket through Query ownership",
+     51|   async (kind) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/lib/api/read-cancellation.test.ts > closing observation does not cancel a committed tool installation
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/lib/api/read-cancellation.test.ts:80:1
+     78|   },
+     79| );
+     80| it("closing observation does not cancel a committed tool installation"…
+       | ^
+     81|   await installTool("logging", { cluster_id: "cluster-1", preset: "def…
+     82|   const controller = new AbortController();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  19:02:44
+   Duration  12.10s (tests 84%, environment 9%, transform 3%, import 2%, setup 1%)

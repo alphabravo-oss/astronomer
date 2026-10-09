@@ -1,0 +1,351 @@
+{
+  "status": "COMPLETE",
+  "scope": "Plan032 W05 only; entire-plan parent integration remains separate",
+  "source_base": "dfe6b65c102ac17a98d9ad631b1953fd020d5f63",
+  "full_qualification_source_head": "bdf054b39ec47d6fe2dae98c96869f801732039c",
+  "followup_source_head": "0fd1eddd75a1db37fa8044c037daa4926278fcc3",
+  "runtime": "Node v26.11.1/npm12.2.0 compatibility preflight against unchanged Node24 source manifest/lock",
+  "tasks": {
+    "W05.1": {
+      "status": "COMPLETE",
+      "evidence": "Shared session-owned controller, explicit 30,000 ms settling deadline and Axios timeout; cookies, CSRF, singleflight, redirect and one-retry preserved."
+    },
+    "W05.2": {
+      "status": "COMPLETE",
+      "evidence": "Deadline/failure releases every waiter; owner cleanup and logout revocation are deterministic; later recovery tested."
+    },
+    "W05.3": {
+      "status": "COMPLETE",
+      "evidence": "Original Axios cancellation identity survives transport enrichment; aborted/pre-aborted/all-aborted waiter tests pass."
+    },
+    "W05.4": {
+      "status": "COMPLETE",
+      "evidence": "295 production queryFn properties and 735 exported non-generated API function declarations inventoried; missing read signals forwarded through generated operations and Kubernetes adapters."
+    },
+    "W05.5": {
+      "status": "COMPLETE",
+      "evidence": "Mutation requests retain their lifetime; real HTTP committed-install observation cancellation and pending-dialog-close browser tests pass."
+    },
+    "W05.6": {
+      "status": "COMPLETE",
+      "evidence": "Binding-aware AST gate discovers 916 production modules, rejects unrelated/local/shadowed/logged signals and accepts context/aliases; six gate fixtures pass. No filename exceptions; streams keep separate subscription lifetimes."
+    },
+    "W05.7": {
+      "status": "COMPLETE",
+      "evidence": "SIEM, alerting and related modal footer buttons submit semantic forms through existing ModalShell/FormShell, with no second form library or nested forms."
+    },
+    "W05.8": {
+      "status": "COMPLETE",
+      "evidence": "Persistent shared error summaries, required-field focus and labels/description association; SIEM blank credential edit sentinel preserved. Actual browser Enter and focus tested."
+    },
+    "W05.9": {
+      "status": "COMPLETE",
+      "evidence": "Adoption parser includes dash-prefixed interactive components and requires summary JSX plus semantic submission in scoped colocated modal forms."
+    },
+    "W05.10": {
+      "status": "COMPLETE",
+      "evidence": "Successful saves clear errors and close; mutation ownership retained; Vault delete/test await cache invalidation; repeat Enter does not duplicate saves."
+    }
+  },
+  "stable_checks": [
+    {
+      "name": "type-check",
+      "command": "npm run type-check",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 26.01,
+      "log": "type-check.log"
+    },
+    {
+      "name": "lint",
+      "command": "npm run lint",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 42.95,
+      "log": "lint.log"
+    },
+    {
+      "name": "code-health",
+      "command": "npm run code-health",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 12.54,
+      "log": "code-health.log"
+    },
+    {
+      "name": "cancellation-gate-tests",
+      "command": "node --test scripts/check-frontend-query-cancellation.test.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "duration_seconds": 0.34,
+      "log": "cancellation-gate-tests.log"
+    },
+    {
+      "name": "complexity",
+      "command": "node scripts/check-complexity-budget.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "duration_seconds": 0.32,
+      "log": "complexity.log"
+    },
+    {
+      "name": "targeted",
+      "command": "npm test -- src/lib/api/transport-auth.test.ts src/lib/api/transport-query.test.ts src/lib/api/read-cancellation.test.ts src/lib/api/auth.test.ts src/lib/api/account-security.test.ts src/routes/dashboard/settings/siem/forwarder-modal.test.tsx src/routes/dashboard/alerting/inhibition-panel.test.tsx src/components/ui/__tests__/form-adoption.test.ts src/components/form/__tests__/error-summary.test.tsx",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 6.3,
+      "log": "targeted.log"
+    },
+    {
+      "name": "full-suite",
+      "command": "npm test -- --maxWorkers=1",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 617.7,
+      "log": "full-suite.log"
+    },
+    {
+      "name": "build",
+      "command": "npm run build",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 11.6,
+      "log": "build.log"
+    },
+    {
+      "name": "bundle-check",
+      "command": "npm run bundle:check",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 0.52,
+      "log": "bundle-check.log"
+    },
+    {
+      "name": "browser-components",
+      "command": "npm run test:browser-components",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 19.85,
+      "log": "browser-components.log"
+    }
+  ],
+  "followup_checks": [
+    {
+      "name": "type-check",
+      "command": "npm run type-check",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 21.71,
+      "log": "followup-type-check.log"
+    },
+    {
+      "name": "lint",
+      "command": "npm run lint",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 38.85,
+      "log": "followup-lint.log"
+    },
+    {
+      "name": "code-health",
+      "command": "npm run code-health",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 12.06,
+      "log": "followup-code-health.log"
+    },
+    {
+      "name": "cancellation-gate-tests",
+      "command": "node --test scripts/check-frontend-query-cancellation.test.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "duration_seconds": 0.33,
+      "log": "followup-cancellation-gate-tests.log"
+    },
+    {
+      "name": "complexity",
+      "command": "node scripts/check-complexity-budget.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "duration_seconds": 0.34,
+      "log": "followup-complexity.log"
+    },
+    {
+      "name": "targeted",
+      "command": "npm test -- src/lib/api/transport-auth.test.ts src/lib/api/transport-query.test.ts src/lib/api/read-cancellation.test.ts src/lib/api/monitoring-stack.test.ts src/lib/api/alerting.test.ts src/lib/api/alerting-inhibitions.test.ts src/lib/api/public-settings.test.ts src/components/monitoring/__tests__/hooks.test.tsx",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 3.89,
+      "log": "followup-targeted.log"
+    }
+  ],
+  "integration_status": "Combined W01+W05 full integration suite is owned by parent and pending final package acceptance.",
+  "source_and_gate_files": [
+    "docs/architecture/complexity-baseline.json",
+    "docs/rancher-quality-phase0-code-health-inventory.md",
+    "frontend/src/components/auth/hooks.ts",
+    "frontend/src/components/backups/hooks.ts",
+    "frontend/src/components/backups/remote-storage-picker.tsx",
+    "frontend/src/components/charlie/__tests__/charlie-shell.test.tsx",
+    "frontend/src/components/charlie/charlie-drawer-scope.tsx",
+    "frontend/src/components/charlie/settings/automation-tab.tsx",
+    "frontend/src/components/charlie/use-charlie-conversation.ts",
+    "frontend/src/components/clusters/registration-connect-step.tsx",
+    "frontend/src/components/clusters/tool-install-modal.tsx",
+    "frontend/src/components/clusters/use-app-install-preview.ts",
+    "frontend/src/components/clusters/use-tool-install-preview.ts",
+    "frontend/src/components/extensions/DeclarativeWidget.test.tsx",
+    "frontend/src/components/extensions/DeclarativeWidget.tsx",
+    "frontend/src/components/layout/topbar.tsx",
+    "frontend/src/components/monitoring/__tests__/hooks.test.tsx",
+    "frontend/src/components/monitoring/hooks.ts",
+    "frontend/src/components/monitoring/shared-stacks-page.tsx",
+    "frontend/src/components/monitoring/use-cluster-stack-status.ts",
+    "frontend/src/components/projects/hooks.ts",
+    "frontend/src/components/rbac/paged-selection.test.tsx",
+    "frontend/src/components/security/hooks.ts",
+    "frontend/src/components/settings/hooks.ts",
+    "frontend/src/components/ui/__tests__/form-adoption.test.ts",
+    "frontend/src/lib/api/account-security.ts",
+    "frontend/src/lib/api/alerting-inhibitions.ts",
+    "frontend/src/lib/api/alerting.ts",
+    "frontend/src/lib/api/authentication-refresh.ts",
+    "frontend/src/lib/api/backups.ts",
+    "frontend/src/lib/api/catalog-recommendations.ts",
+    "frontend/src/lib/api/catalog.ts",
+    "frontend/src/lib/api/cluster-apps.ts",
+    "frontend/src/lib/api/dashboards.ts",
+    "frontend/src/lib/api/dex.ts",
+    "frontend/src/lib/api/gatekeeper-constraints.ts",
+    "frontend/src/lib/api/gitops.ts",
+    "frontend/src/lib/api/kubernetes-resources.ts",
+    "frontend/src/lib/api/logging.ts",
+    "frontend/src/lib/api/monitoring-data.ts",
+    "frontend/src/lib/api/monitoring-operation-reads.ts",
+    "frontend/src/lib/api/monitoring-stack-previews.ts",
+    "frontend/src/lib/api/monitoring-stack.ts",
+    "frontend/src/lib/api/platform-settings.ts",
+    "frontend/src/lib/api/public-settings.ts",
+    "frontend/src/lib/api/quotas.ts",
+    "frontend/src/lib/api/rbac.ts",
+    "frontend/src/lib/api/read-cancellation.test.ts",
+    "frontend/src/lib/api/scim-tokens.ts",
+    "frontend/src/lib/api/security-scans.ts",
+    "frontend/src/lib/api/settings-compliance-export.ts",
+    "frontend/src/lib/api/settings-email.ts",
+    "frontend/src/lib/api/settings-group-mappings.ts",
+    "frontend/src/lib/api/settings-network-policy-templates.ts",
+    "frontend/src/lib/api/tools.ts",
+    "frontend/src/lib/api/transport-auth.test.ts",
+    "frontend/src/lib/api/transport.ts",
+    "frontend/src/lib/api/user-settings.ts",
+    "frontend/src/lib/extensions/registry.ts",
+    "frontend/src/lib/hooks/catalog.ts",
+    "frontend/src/lib/hooks/kubernetes-resources.ts",
+    "frontend/src/lib/hooks/logging.ts",
+    "frontend/src/lib/hooks/public-settings.ts",
+    "frontend/src/lib/hooks/tools.ts",
+    "frontend/src/lib/hooks/user-settings.ts",
+    "frontend/src/routes/dashboard/account/security/-dialogs.tsx",
+    "frontend/src/routes/dashboard/account/security/-enrollment-wizard.tsx",
+    "frontend/src/routes/dashboard/account/security/-page.tsx",
+    "frontend/src/routes/dashboard/admin/users/$id/index.tsx",
+    "frontend/src/routes/dashboard/alerting/-alert-investigation.tsx",
+    "frontend/src/routes/dashboard/alerting/-channel-modal.tsx",
+    "frontend/src/routes/dashboard/alerting/-inhibition-hooks.ts",
+    "frontend/src/routes/dashboard/alerting/-inhibition-panel.tsx",
+    "frontend/src/routes/dashboard/alerting/-rule-modal.tsx",
+    "frontend/src/routes/dashboard/alerting/-silence-modal.tsx",
+    "frontend/src/routes/dashboard/catalog/-add-repository-modal.tsx",
+    "frontend/src/routes/dashboard/charlie/-approvals.tsx",
+    "frontend/src/routes/dashboard/charlie/-conversations.tsx",
+    "frontend/src/routes/dashboard/charlie/-findings.tsx",
+    "frontend/src/routes/dashboard/charlie/-investigations.tsx",
+    "frontend/src/routes/dashboard/charlie/index.tsx",
+    "frontend/src/routes/dashboard/clusters/$id/-page.tsx",
+    "frontend/src/routes/dashboard/clusters/$id/delivery/index.tsx",
+    "frontend/src/routes/dashboard/clusters/$id/delivery/system-components/$componentId/index.tsx",
+    "frontend/src/routes/dashboard/clusters/$id/delivery/system-components/index.tsx",
+    "frontend/src/routes/dashboard/clusters/$id/gatekeeper/-hooks.ts",
+    "frontend/src/routes/dashboard/clusters/$id/image-scans/-use-image-scans.ts",
+    "frontend/src/routes/dashboard/clusters/$id/network-access/index.tsx",
+    "frontend/src/routes/dashboard/clusters/$id/registries/-registry-dialog.tsx",
+    "frontend/src/routes/dashboard/clusters/$id/registries/-registry-form.ts",
+    "frontend/src/routes/dashboard/clusters/$id/registries/index.tsx",
+    "frontend/src/routes/dashboard/clusters/$id/resources/index.tsx",
+    "frontend/src/routes/dashboard/clusters/$id/service-mesh/index.tsx",
+    "frontend/src/routes/dashboard/clusters/$id/service-mesh/mtls/index.tsx",
+    "frontend/src/routes/dashboard/extensions/index.tsx",
+    "frontend/src/routes/dashboard/logging/-output-modal.tsx",
+    "frontend/src/routes/dashboard/logging/-pipeline-form.ts",
+    "frontend/src/routes/dashboard/logging/-pipeline-modal.tsx",
+    "frontend/src/routes/dashboard/monitoring/index.tsx",
+    "frontend/src/routes/dashboard/rbac/-user-modal.tsx",
+    "frontend/src/routes/dashboard/security/-assign-template-modal.tsx",
+    "frontend/src/routes/dashboard/security/-psa-template-modal.tsx",
+    "frontend/src/routes/dashboard/settings/auth/scim-tokens/-hooks.ts",
+    "frontend/src/routes/dashboard/settings/backup/-destination-modal.tsx",
+    "frontend/src/routes/dashboard/settings/general/-general-edit-modal.tsx",
+    "frontend/src/routes/dashboard/settings/siem/-forwarder-form.ts",
+    "frontend/src/routes/dashboard/settings/siem/-forwarder-modal.tsx",
+    "frontend/src/routes/dashboard/settings/siem/forwarder-modal.test.tsx",
+    "frontend/src/routes/dashboard/settings/vault/-hooks.ts",
+    "frontend/src/routes/dashboard/settings/vault/hooks.test.tsx",
+    "frontend/src/routes/dashboard/settings/vault/index.tsx",
+    "frontend/src/routes/dashboard/settings/widgets/-use-datasources-admin.ts",
+    "frontend/src/routes/dashboard/settings/widgets/-use-widgets-admin.ts",
+    "frontend/src/routes/dashboard/settings/widgets/-widgets-section.tsx",
+    "frontend/tests/browser-components/modal.spec.ts",
+    "frontend/tests/browser-components/modal.tsx",
+    "frontend/tests/browser-components/table.tsx",
+    "scripts/check-frontend-query-cancellation.mjs",
+    "scripts/check-frontend-query-cancellation.test.mjs",
+    "scripts/check-frontend-raw-transport.mjs"
+  ],
+  "baseline_regressions": [
+    {
+      "log": "transport-auth-baseline.log",
+      "production_file_restored_from_base": "frontend/src/lib/api/transport.ts",
+      "result": "Two selected regressions fail: two hanging-refresh callers remain unsettled beyond the deadline; cancellation identity is replaced by an enriched Error."
+    },
+    {
+      "log": "read-cancellation-baseline.log",
+      "production_file_restored_from_base": "frontend/src/lib/api/tools.ts",
+      "result": "Generated read and committed-operation observation do not abort their socket; two tests fail unchanged 5,000 ms deadline; existing Kubernetes case passes."
+    },
+    {
+      "log": "modal-browser-baseline.log",
+      "production_file_restored_from_base": "frontend/src/routes/dashboard/settings/siem/-forwarder-modal.tsx",
+      "result": "Actual desktop Enter does not submit/display persistent server summary; baseline browser regression fails."
+    }
+  ],
+  "first_full_attempt": {
+    "log": "full-suite-first-attempt.log",
+    "result": "2,332 passed, 7 failed / 2,339 tests in 336 files; seven old exact-call expectations lacked the new signal argument, all corrected. Final full-suite is an independent clean run; no test skips, retry masking, or increased deadlines."
+  },
+  "generated_ratchets": {
+    "complexity_command": "node scripts/check-complexity-budget.mjs --write-baseline",
+    "inventory_command": "node scripts/code-health-inventory.mjs --write",
+    "complexity_diff": "Five decreases only: monitoring hooks 775 to 773; monitoring-stack 853 to 768; AlertRuleModal 420 to 419; RegistryDialog 253 to 250; VaultConnectionsPage 372 to 364. No increases.",
+    "source_inventory": "1,243 files / 230,438 lines to 1,255 files / 231,677 lines"
+  },
+  "followup": "24 additional bounded-observation exports accept optional signals; includes real HTTP detail/POST-preview/signed-artifact cancellation tests. Monitoring preview exports preserved via re-export; envelope helper shared. Existing raw-download marker updated exactly, without a wider exception.",
+  "inventory_command": "node docs/assurance/technology-guide/w05/generate-read-inventory.mjs",
+  "formatting": "Prettier touched files before staging; npm run format:check and git diff --check pass for bounded commits. Final evidence formatted separately.",
+  "qualification_limits": [
+    "Unchanged baseline manifest expects Node24; Node26/npm12 results are compatibility preflight. W01 owns selected-runtime qualification and manifest/lock changes.",
+    "Full suite/build/bundle/browser results bind to bdf054b3. Later bounded adapter follow-up passed type/lint/code-health/AST/complexity plus transport/adapter/hook tests. A redundant standalone full rerun was deferred by parent in favor of one combined W01+W05 integration suite before package acceptance.",
+    "AST gate checks bounded binding and read-call forwarding; it does not prove a typed whole-callgraph. Representative generated and Kubernetes sockets provide runtime evidence.",
+    "Browser components use Chromium desktop/tablet/mobile synthetic fixtures with production components/hooks/transport; no live customer/authentication/cluster or cross-browser release rehearsal.",
+    "Product T3 preview keyboard/focus preflight passed via direct executor host; screenshot tool failed. See product-preview-attempt.json.",
+    "Client ownership tests prove observation/dialog closure does not abort durable HTTP saves; no backend worker/outbox changes or live durable-worker rehearsal claimed.",
+    "No Go, manifest/lock, node-version, deployment, workflow or advisor-plan edits; no pushes, PRs, publication or deployment."
+  ],
+  "log_normalization": "Recorded command output preserves messages/results; ANSI color sequences, trailing whitespace and redundant final blank lines removed for readable repository evidence.",
+  "browser_toolchain": {
+    "playwright": "1.63.0 from unchanged source lock",
+    "browser_registry_revision": "Chromium1243 defaultcache",
+    "chromium_executable_path_reported": "/root/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+    "qualification": "Updated W01 Playwright1.64.0/Chromium1248 must be qualified by the combined toolchain lane; no newer-browser receipt is claimed here."
+  }
+}
