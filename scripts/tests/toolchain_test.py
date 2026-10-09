@@ -103,6 +103,42 @@ class ToolchainTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "contradiction"):
             toolchain.validate(self.document, self.now)
 
+    def test_artifact_version_is_exact_and_platform_map_matches(self):
+        for tag in ['1.27.20-alpine', '1.27.2-malicious', None]:
+            self.setUp()
+            c = next(c for c in self.document['components'] if c['id'] == 'go')
+            a = c['artifacts'][0]
+            a['reference'] = 'golang' + (':' + tag if tag else '') + '@' + a['digest']
+            with self.assertRaisesRegex(ValueError, 'exactly identify'):
+                toolchain.validate(self.document, self.now)
+        self.setUp()
+        c = next(c for c in self.document['components'] if c['artifacts'])
+        c['artifacts'][0]['platformDigests'] = {'linux/amd64': 'sha256:' + 'a' * 64}
+        with self.assertRaisesRegex(ValueError, 'platform-map'):
+            toolchain.validate(self.document, self.now)
+
+    def test_postgres_support_table_ignores_beta_and_independently_dates_final(self):
+        c = next(c for c in self.document['components'] if c['id'] == 'postgres')
+        table = b'<tr><td>17</td><td>17.11</td><td>Yes</td></tr><tr><td>19</td><td>19 Beta4</td><td>Yes</td></tr><tr><td>18</td><td>18.6</td><td>Yes</td></tr>'
+        dated = b'<strong>Release date:&nbsp;</strong>2026-08-13'
+        with patch.object(toolchain, 'fetch_bytes', side_effect=[(table, 'digest'), (dated, 'digest')]):
+            self.assertEqual(toolchain.resolve(c, self.now)['upstreamStable'], '18.6')
+        with patch.object(toolchain, 'fetch_bytes', side_effect=[(table, 'digest'), (b'<strong>Release date:&nbsp;</strong>2027-01-01', 'digest')]):
+            with self.assertRaisesRegex(ValueError, 'future'):
+                toolchain.resolve(c, self.now)
+
+    def test_source_closure_hash_rejects_changed_tool_graph(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            path = root / 'go.mod'
+            path.write_text('qualified')
+            import hashlib
+            document = {'components': [{'id': 'scanner', 'selected': '2.29.0', 'consumers': [], 'sourceBindings': [{'path': 'go.mod', 'digest': 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()}]}]}
+            toolchain.align(document, root)
+            path.write_text('different dependency graph')
+            with self.assertRaisesRegex(ValueError, 'closure digest'):
+                toolchain.align(document, root)
+
     def test_unsafe_consumer(self):
         c = next(c for c in self.document["components"] if c["consumers"])
         c["consumers"][0]["path"] = "../outside"
@@ -128,7 +164,7 @@ class ToolchainTests(unittest.TestCase):
 
     def test_unavailable_and_rate_limited(self):
         with patch.object(toolchain, "fetch_json", side_effect=toolchain.urllib.error.HTTPError("https://api.github.com", 429, "rate limited", {}, None)):
-            report = toolchain.discover({"components": self.document["components"][:1]})
+            report = toolchain.discover({"components": [next(c for c in self.document["components"] if c["upstream"]["kind"] == "npm")]})
         self.assertEqual(report[0]["status"], "unavailable")
 
     def test_incomplete_and_malicious_metadata(self):

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
 )
@@ -90,7 +91,11 @@ CREATE TABLE cluster_deployments(target_id uuid, cluster_id uuid, phase text, la
 				t.Fatal(err)
 			}
 			plans, registration := &scanningRollouts{pool: pool}, &scanningRegistration{}
-			p := &Provisioner{pool: pool, previewer: plans, planner: plans, registration: registration}
+			development, err := distribution.New(distribution.Options{Development: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := &Provisioner{pool: pool, previewer: plans, planner: plans, registration: registration, catalog: development}
 			for i := 0; i < 2; i++ {
 				if err := p.Reconcile(ctx, id); err != nil {
 					t.Fatal(err)

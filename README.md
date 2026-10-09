@@ -207,7 +207,7 @@ hosted collector.
 | Command | What it proves | Requirements / exclusions |
 |---|---|---|
 | `make verify-enterprise VERIFY_SCOPE=backend` | Go formatting, build, vet, unit/race tests, architecture and generated-document contracts. | Go and the tools checked by the script; not stateful failure qualification. |
-| `make verify-enterprise VERIFY_SCOPE=frontend` | TypeScript, zero-warning lint, unit behavior tests, dependency audit and production bundle budgets. | Node 24.21.0 and `npm ci`; no browser or live-cluster acceptance. |
+| `make verify-enterprise VERIFY_SCOPE=frontend` | TypeScript, zero-warning lint, unit behavior tests, dependency audit and production bundle budgets. | Node 26.11.1 Current, npm 12.2.0 and `npm ci`; no browser or live-cluster acceptance. |
 | `make verify-enterprise VERIFY_SCOPE=helm` | Chart lint/render, release artifacts and deployment contracts. | Helm and the script's deployment-tool prerequisites; no live installation. |
 | `make verify-enterprise VERIFY_SCOPE=api-contract` | OpenAPI quality, route/request coverage and generated-client freshness. | Go and Node; focused contract diagnostics. |
 | `make verify-enterprise VERIFY_SCOPE=all` | All static backend, frontend and Helm scopes. | Does **not** substitute for the stateful/browser lanes below. |

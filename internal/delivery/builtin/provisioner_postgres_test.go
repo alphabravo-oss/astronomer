@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -130,6 +131,81 @@ func TestProvisionerPostgresMultiSourceAssets(t *testing.T) {
 			t.Fatal("conflicting deterministic source was accepted")
 		}
 		assertBuiltinProjectCounts(t, ctx, pool, projectID, 1, 0, 0, 0)
+	})
+
+	t.Run("verified mirror transition retains accepted history and stable ownership", func(t *testing.T) {
+		catalog := loadBuiltinTestCatalog(t)
+		clusterID := uuid.New()
+		initial, err := provisioner.ensureAssets(ctx, clusterID, catalog)
+		if err != nil {
+			t.Fatal(err)
+		}
+		projectID := stableID("project", clusterID.String())
+		catalog.DistributionIdentity = "sha256:" + strings.Repeat("a", 64) + ";mirror:sha256:" + strings.Repeat("b", 64)
+		catalog.VerificationProvider = string(model.SignatureCosignKey)
+		catalog.VerificationKeyRef = "local-qa"
+		// Key mode has no OIDC identity/issuer; the mounted key_ref is its authority.
+		catalog.VerificationIdentity = ""
+		for index := range catalog.Components {
+			c := &catalog.Components[index]
+			c.Source.OriginalURL = c.Source.URL
+			c.Source.OriginalArchiveDigest = c.Source.ChartDigest
+			c.Source.URL = "oci://registry.corp.local/charts"
+			c.Source.Kind = "helm_oci"
+			c.Source.ChartDigest = "sha256:" + strings.Repeat(fmt.Sprint(index+1), 64)
+		}
+		transitioned, err := provisioner.ensureAssets(ctx, clusterID, catalog)
+		if err != nil {
+			t.Fatal(err)
+		}
+		retry, err := provisioner.ensureAssets(ctx, clusterID, catalog)
+		if err != nil || !reflect.DeepEqual(retry, transitioned) {
+			t.Fatalf("retry did not converge: %v", err)
+		}
+		for index := range initial {
+			if initial[index].id != transitioned[index].id || transitioned[index].generation != initial[index].generation+1 {
+				t.Fatal("mirror transition changed ownership or failed generation fence")
+			}
+		}
+		assertBuiltinProjectCounts(t, ctx, pool, projectID, 2, 2, 4, 2)
+		rows, err := pool.Query(ctx, `SELECT s.url,s.source_type,v.source_spec,v.renderer_spec,v.verification_status,v.verification_identity FROM delivery_targets t JOIN component_bundle_versions v ON v.id=t.bundle_version_id JOIN delivery_sources s ON s.id=v.source_id WHERE t.project_id=$1`, projectID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		count := 0
+		for rows.Next() {
+			var location, kind, status, identity string
+			var sourceJSON, rendererJSON []byte
+			if err := rows.Scan(&location, &kind, &sourceJSON, &rendererJSON, &status, &identity); err != nil {
+				t.Fatal(err)
+			}
+			var source model.ResolvedSourceSpec
+			var renderer model.RendererSpec
+			if json.Unmarshal(sourceJSON, &source) != nil || json.Unmarshal(rendererJSON, &renderer) != nil {
+				t.Fatal("persisted contract is invalid")
+			}
+			if location != "oci://registry.corp.local/charts" || kind != "helm_oci" || source.Type != model.SourceHelmOCI || source.URL != location || source.Trust.AllowUnsigned || source.Trust.KeyRef != "local-qa" || source.Revision.ArtifactDigest.String() == "" || renderer.Helm == nil || status != "verified" || !strings.Contains(identity, ";upstream:https://") || !strings.Contains(identity, ";archive:sha256:") {
+				t.Fatal("actual persisted source/renderer lost digest/trust/audit projection")
+			}
+			count++
+		}
+		if rows.Err() != nil || count != 2 {
+			t.Fatal("missing projected assets")
+		}
+		// A later signed distribution at the same chart versions creates new history,
+		// never silently overwrites the previous immutable source/version identities.
+		catalog.DistributionIdentity = "sha256:" + strings.Repeat("c", 64) + ";mirror:sha256:" + strings.Repeat("b", 64)
+		next, err := provisioner.ensureAssets(ctx, clusterID, catalog)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for index := range next {
+			if next[index].id != initial[index].id || next[index].generation != transitioned[index].generation+1 {
+				t.Fatal("later distribution escaped durable generation fencing")
+			}
+		}
+		assertBuiltinProjectCounts(t, ctx, pool, projectID, 3, 2, 6, 2)
 	})
 
 	t.Run("concurrent retries converge", func(t *testing.T) {

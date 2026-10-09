@@ -33,9 +33,20 @@ def waiver_map(document, now, release_version=None):
     if document["schema_version"] != 1 or not isinstance(document["waivers"],list): raise ValueError("invalid waiver document")
     result={}
     exact={"reference","category","ids","reason","approved_by","expires_at"}
+    future_fields={"owner","verification_evidence","availability_checked_at","upstream_fix_status"}
     for waiver in document["waivers"]:
-        if not isinstance(waiver,dict) or set(waiver) not in (exact, exact | {"release_version"}) or not REF.fullmatch(waiver["reference"]): raise ValueError("waiver violates closed exact-reference schema")
+        if not isinstance(waiver,dict) or set(waiver) not in (exact, exact | {"release_version"}, exact | {"release_version"} | future_fields) or not REF.fullmatch(waiver["reference"]): raise ValueError("waiver violates closed exact-reference schema")
         if "release_version" in waiver and (not isinstance(waiver["release_version"],str) or not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+",waiver["release_version"]) or waiver["release_version"] != release_version): raise ValueError("waiver release version does not match the manifest")
+        if release_version and release_version not in {"v1.2.0", "v1.2.1"}:
+            if not future_fields.issubset(waiver) or waiver.get("release_version") != release_version:
+                raise ValueError("future waiver requires exact tag, owner, evidence and upstream availability")
+            if any(not isinstance(waiver[k], str) or not waiver[k].strip() for k in future_fields):
+                raise ValueError("future waiver metadata missing")
+            checked=dt.datetime.fromisoformat(waiver["availability_checked_at"].replace("Z","+00:00"))
+            if checked.tzinfo is None or checked > now or now-checked > dt.timedelta(days=7):
+                raise ValueError("upstream availability check is stale or invalid")
+            if waiver["upstream_fix_status"] not in {"no_fixed_upstream_available", "fixed_upstream_incompatible_with_retained_evidence"}:
+                raise ValueError("adopt available compatible upstream fixes instead of waiving")
         if waiver["category"] not in {"vulnerability","license"} or not waiver["ids"] or not all(isinstance(x,str) and x for x in waiver["ids"]): raise ValueError("waiver category/ids invalid")
         if not waiver["reason"].strip() or not waiver["approved_by"].strip(): raise ValueError("waiver requires reason and approver")
         expiry=dt.datetime.fromisoformat(waiver["expires_at"].replace("Z","+00:00"))

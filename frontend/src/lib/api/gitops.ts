@@ -86,9 +86,9 @@ export async function syncGitOpsSource(id: string) {
   );
 }
 
-export async function previewGitOpsSource(id: string) {
+export async function previewGitOpsSource(id: string, signal?: AbortSignal) {
   return requireData(
-    await getAdminGitopsSourcesByIdPreview({ path: { id } }),
+    await getAdminGitopsSourcesByIdPreview({ signal, path: { id } }),
     "previewGitOpsSource",
   );
 }

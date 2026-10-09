@@ -94,8 +94,14 @@ export async function listInhibitions(
   return response.data.map(mapInhibition);
 }
 
-export async function getInhibition(id: string): Promise<AlertInhibition> {
-  const response = await getAdminAlertingInhibitionsById({ path: { id } });
+export async function getInhibition(
+  id: string,
+  signal?: AbortSignal,
+): Promise<AlertInhibition> {
+  const response = await getAdminAlertingInhibitionsById({
+    signal,
+    path: { id },
+  });
   return mapInhibition(response.data);
 }
 

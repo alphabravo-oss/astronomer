@@ -40,8 +40,13 @@ func (c *productionComposition) initializeDelivery(ctx context.Context, cfg *con
 		return err
 	}
 	c.catalogHandler.SetApplicationDelivery(catalogApplicationDelivery)
+	catalogLoader, err := newDistributionLoader(cfg)
+	if err != nil {
+		database.Close()
+		return err
+	}
 	builtinProvisioner, err := deliverybuiltin.NewProvisioner(
-		database.Pool(), deliveryPlanningStore, deliveryPlanner, clusterRegistrationHandler.Service(),
+		database.Pool(), deliveryPlanningStore, deliveryPlanner, clusterRegistrationHandler.Service(), catalogLoader,
 	)
 	if err != nil {
 		database.Close()

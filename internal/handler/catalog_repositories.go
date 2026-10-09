@@ -15,7 +15,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/go-chi/chi/v5"
@@ -468,7 +467,7 @@ type chartVersionIngestRow struct {
 func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.HelmRepository) (chartCount, versionCount int, err error) {
 	indexURL := strings.TrimRight(repo.Url, "/") + "/index.yaml"
 	// SEC-02: same SSRF posture as the worker catalog_sync path.
-	if err := httpclient.GuardPublicHost(indexURL); err != nil {
+	if err := h.guardCatalogURL(ctx, indexURL); err != nil {
 		return 0, 0, fmt.Errorf("catalog repository host is not a permitted public address")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
@@ -476,7 +475,7 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 		return 0, 0, fmt.Errorf("build index request: %w", err)
 	}
 	h.applyRepoIndexAuth(req, repo)
-	client := httpclient.SafeClientWithLimit(30*time.Second, catalog.MaxIndexBytes)
+	client := h.catalogClient(30*time.Second, catalog.MaxIndexBytes)
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, 0, fmt.Errorf("fetch index: %w", err)

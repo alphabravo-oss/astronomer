@@ -1,14 +1,10 @@
+import { requireMonitoringData as requireData } from "./monitoring-data";
 import * as generated from "@/lib/api/generated/client";
 import type {
   MonitoringOperation,
   MonitoringOperationStatus,
   MonitoringOperationTargetType,
 } from "./monitoring-stack";
-function requireData<T>(response: { data?: T }, operation: string): T {
-  if (response.data === undefined)
-    throw new Error(`${operation} returned no data payload`);
-  return response.data;
-}
 
 export interface MonitoringOperationListParams {
   targetType?: MonitoringOperationTargetType;

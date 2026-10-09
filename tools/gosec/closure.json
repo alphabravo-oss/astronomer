@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "compiler": "1.27.2",
+  "scanner_module": "github.com/securego/gosec/v2",
+  "scanner_version": "v2.29.0",
+  "x_tools_version": "v0.51.0",
+  "go_mod_sha256": "sha256:adf8d9ff2f8f6ad365976031c6782f64082b7f5f84724e505591673f55a9257a",
+  "go_sum_sha256": "sha256:446590a95b6703e175b3bdc3b84701566e9e381f29048cabf9b3c1325f4e7c9d",
+  "review_until": "2026-10-16T00:00:00Z",
+  "purpose": "released_upstream_build_tool_dependency_compatibility",
+  "exit_condition": "Recheck official stable gosec release for Go1.27 export-version5 support; retire isolated override closure when official release passes same complete scan. No source security finding is waived."
+}

@@ -2,13 +2,16 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
 
@@ -81,8 +84,26 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 			return err
 		}
 	}
-	kickFirstBootCatalogSync(foundation.ctx, logger, c.queries, c.queue)
+	return c.startApplicationCatalog(foundation.ctx, cfg, logger)
+}
+
+func (c *productionComposition) startApplicationCatalog(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+	networkPolicy, err := httpclient.ParseDestinationPolicy(cfg.DistributionDestinationPolicy)
+	if err != nil {
+		return err
+	}
+	if networkPolicy.Restricted && cfg.CatalogURL != "" && (!strings.HasPrefix(cfg.CatalogURL, "oci://") || !strings.Contains(cfg.CatalogURL, "@sha256:") || cfg.CatalogDigest == "" || !cfg.CatalogSignatureRequired) {
+		return errors.New("disconnected application catalog requires an immutable authenticated source or disabled-unavailable configuration")
+	}
+	if !networkPolicy.Restricted && cfg.CatalogURL != "" {
+		kickFirstBootCatalogSync(ctx, logger, c.queries, c.queue)
+	}
+	if networkPolicy.Restricted && cfg.CatalogURL == "" {
+		logger.Info("application catalog unavailable in disconnected mode", "blocked_category", "application_catalog")
+		return nil
+	}
 	catalogClients, catalogClientErr := catalog.NewSourceClients(catalog.SourceClientOptions{
+		DestinationPolicy:   &networkPolicy,
 		Timeout:             15 * time.Second,
 		ProxyURL:            cfg.CatalogProxyURL,
 		CAFile:              cfg.CatalogCAFile,
@@ -102,7 +123,7 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 		}
 		catalogTrust = &policy
 	}
-	if count, err := catalog.LoadSource(foundation.ctx, c.queries, catalog.SourceOptions{
+	if count, err := catalog.LoadSource(ctx, c.queries, catalog.SourceOptions{
 		URL:            cfg.CatalogURL,
 		ExpectedDigest: cfg.CatalogDigest,
 		MirrorsJSON:    cfg.CatalogMirrors,
@@ -110,9 +131,9 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 		TrustPolicy:    catalogTrust,
 		TrustDirectory: cfg.CatalogTrustDirectory,
 	}); err != nil {
-		logger.Warn("blessed catalog reconcile failed; keeping existing rows", "url", cfg.CatalogURL, "error", err)
+		logger.Warn("blessed catalog reconcile failed; keeping existing rows", "error", err)
 	} else if count > 0 {
-		logger.Info("blessed catalog reconciled", "entries", count, "url", cfg.CatalogURL)
+		logger.Info("blessed catalog reconciled", "entries", count)
 	}
 	return nil
 }

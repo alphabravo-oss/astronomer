@@ -1,0 +1,53 @@
+{
+  "runtime": "Node v26.11.1/npm12.2.0 compatibility preflight against unchanged Node24 source manifest/lock",
+  "checks": [
+    {
+      "name": "type-check",
+      "command": "npm run type-check",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 21.71,
+      "log": "followup-type-check.log"
+    },
+    {
+      "name": "lint",
+      "command": "npm run lint",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 38.85,
+      "log": "followup-lint.log"
+    },
+    {
+      "name": "code-health",
+      "command": "npm run code-health",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 12.06,
+      "log": "followup-code-health.log"
+    },
+    {
+      "name": "cancellation-gate-tests",
+      "command": "node --test scripts/check-frontend-query-cancellation.test.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "duration_seconds": 0.33,
+      "log": "followup-cancellation-gate-tests.log"
+    },
+    {
+      "name": "complexity",
+      "command": "node scripts/check-complexity-budget.mjs",
+      "cwd": ".",
+      "exit_code": 0,
+      "duration_seconds": 0.34,
+      "log": "followup-complexity.log"
+    },
+    {
+      "name": "targeted",
+      "command": "npm test -- src/lib/api/transport-auth.test.ts src/lib/api/transport-query.test.ts src/lib/api/read-cancellation.test.ts src/lib/api/monitoring-stack.test.ts src/lib/api/alerting.test.ts src/lib/api/alerting-inhibitions.test.ts src/lib/api/public-settings.test.ts src/components/monitoring/__tests__/hooks.test.tsx",
+      "cwd": "frontend",
+      "exit_code": 0,
+      "duration_seconds": 3.89,
+      "log": "followup-targeted.log"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "source_commit": "d4274b07edf5623c15546591751d641322116dac",
+  "observed_at": "2026-10-09T20:20:37.556102+00:00",
+  "database": "owned plan032_integration_retry in CNPG17.11 three-instance synchronous cluster",
+  "cluster": "astro032-cnpg36-20261009",
+  "namespace": "plan032-recovery",
+  "endpoint": "owned private-node NodePort30432; no port-forward",
+  "kubectl": "1.37.1; officialHTTPSchecksumverified",
+  "cases": [
+    {
+      "name": "migrate",
+      "exit_code": 0,
+      "seconds": 1.514,
+      "log_digest": "sha256:ff08c4d0363149cd0b578477f3120837d39da7bc3b492119168773c5f2ea9447"
+    },
+    {
+      "name": "tests",
+      "exit_code": 0,
+      "seconds": 22.417,
+      "log_digest": "sha256:131f9a25b0c9c4825ebe8add7d560bd17ad4a2f94e03258159d17080833ee35f"
+    }
+  ],
+  "expected_tests": [
+    "TestCatalogSearchFiltersScopeBeforePaginationAndCounts",
+    "TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders",
+    "TestCatalogOperationStatusReadsExactRolloutAndDeletion",
+    "TestClusterRestoreHistoryFiltersSourceBeforePagination",
+    "TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted",
+    "TestUpsertCharlieAlertPolicyRevisionSemantics",
+    "TestCharlieAlertReconcileCandidatesRequireFindingScope",
+    "TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore",
+    "TestMarkRunningAgentUpgradeSucceededByVersion_NormalizesTheMatch",
+    "TestMarkRunningAgentUpgradeSucceededByVersion_MatchesAcrossVersionSpellings",
+    "TestAdminVisibilityQueriesAgainstMigratedPostgres",
+    "TestProvisionerPostgresMultiSourceAssets",
+    "TestPostgresPlanningTransactionAndHAFencing",
+    "TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses",
+    "TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease",
+    "TestRecordAgentHeartbeatAtomicWrite",
+    "TestDeactivateInactiveUsersPostgresSemantics",
+    "TestRefreshSessionConcurrentRotationAndReplayRevokesFamily",
+    "TestTableViewsPostgresConcurrentCreatesRespectTheCap",
+    "TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner",
+    "TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault"
+  ],
+  "terminal": {
+    "TestMarkRunningAgentUpgradeSucceededByVersion_NormalizesTheMatch": "pass",
+    "TestMarkRunningAgentUpgradeSucceededByVersion_MatchesAcrossVersionSpellings": "pass",
+    "TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders": "pass",
+    "TestCatalogSearchFiltersScopeBeforePaginationAndCounts": "pass",
+    "TestUpsertCharlieAlertPolicyRevisionSemantics": "pass",
+    "TestCharlieAlertReconcileCandidatesRequireFindingScope": "pass",
+    "TestClusterRestoreHistoryFiltersSourceBeforePagination": "pass",
+    "TestDexLifecycleAdvisoryLockRejectsStaleEnableAndRestore": "pass",
+    "TestRecordAgentHeartbeatAtomicWrite": "pass",
+    "TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted": "pass",
+    "TestRefreshSessionConcurrentRotationAndReplayRevokesFamily": "pass",
+    "TestDeactivateInactiveUsersPostgresSemantics": "pass",
+    "TestAdminVisibilityQueriesAgainstMigratedPostgres": "pass",
+    "TestProvisionerPostgresMultiSourceAssets": "pass",
+    "TestPostgresPlanningTransactionAndHAFencing": "pass",
+    "TestCatalogOperationStatusReadsExactRolloutAndDeletion": "pass",
+    "TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses": "pass",
+    "TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease": "pass",
+    "TestTableViewsPostgresConcurrentCreatesRespectTheCap": "pass",
+    "TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner": "pass",
+    "TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault": "pass"
+  },
+  "missing": [],
+  "not_passed": [],
+  "limits": [
+    "Connected previous-major integration characterization only; race not enabled.",
+    "No PostgreSQL18 adoption, application failover, physicalrestore, encryptionrecovery, signed application candidate or disconnected qualification claimed.",
+    "Prior portforward failure retained separately."
+  ],
+  "all_structured_skipped_events": []
+}

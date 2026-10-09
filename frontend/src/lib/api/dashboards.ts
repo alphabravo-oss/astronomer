@@ -168,10 +168,13 @@ export async function listWidgets(signal?: AbortSignal): Promise<Widget[]> {
   return page.data.map(mapWidget);
 }
 
-export async function getWidget(id: string): Promise<Widget> {
+export async function getWidget(
+  id: string,
+  signal?: AbortSignal,
+): Promise<Widget> {
   return mapWidget(
     requireData(
-      await getAdminDashboardWidgetsById({ path: { id } }),
+      await getAdminDashboardWidgetsById({ signal, path: { id } }),
       "getWidget",
     ),
   );

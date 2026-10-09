@@ -9,11 +9,13 @@ import pathlib
 import re
 import subprocess
 import sys
+import shutil
 import urllib.error
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 from toolchain_images import resolve_image
+import toolchain_inventory
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 AUTHORITY = ROOT / "deploy/toolchain/versions.json"
@@ -61,10 +63,12 @@ def validate(document, now=None, release=False):
         if selected is not None and not STABLE.fullmatch(selected):
             if component["ecosystem"] != "gomod" or not re.fullmatch(r"v\d+\.\d+\.\d+-\d{14}-[a-f0-9]{12}", selected):
                 raise ValueError(f"{name}: non-final selected version")
-        if exception and any(not isinstance(exception.get(key), str) or not exception[key].strip() for key in ("owner", "reason", "evidence", "reviewBy", "exitCondition")):
+        if exception and any(not isinstance(exception.get(key), str) or not exception[key].strip() for key in ("owner", "reason", "evidence", "reviewBy", "exitCondition", "createdAt")):
             raise ValueError(f"{name}: incomplete owned exception")
         if component["selected"] != discovery["version"] and not exception:
             raise ValueError(f"{name}: lagging selection without owned exception")
+        if exception and timestamp(exception["createdAt"]) > now:
+            raise ValueError(f"{name}: future compatibility exception")
         if exception and timestamp(exception["reviewBy"]) <= now:
             raise ValueError(f"{name}: expired compatibility exception")
         if release and (now - timestamp(discovery["observedAt"])).days >= document["policy"]["maxDiscoveryAgeDays"]:
@@ -72,24 +76,59 @@ def validate(document, now=None, release=False):
         for artifact in component["artifacts"]:
             if not set(component["platforms"]).issubset(artifact["platforms"]):
                 raise ValueError(f"{name}: unsupported artifact platform")
+            platform_digests = artifact.get("platformDigests")
+            if platform_digests is not None and set(platform_digests) != set(artifact["platforms"]):
+                raise ValueError(f"{name}: artifact platform-map contradiction")
+            if selected:
+                named_reference = artifact["reference"].rsplit("@", 1)[0]
+                leaf = named_reference.rsplit("/", 1)[-1]
+                tag = leaf.rsplit(":", 1)[-1] if ":" in leaf else None
+                allowed_tags = {selected, "v" + selected}
+                if name in ("go", "node"):
+                    allowed_tags = {selected + "-alpine"}
+                elif name == "postgres":
+                    if tag and re.fullmatch(re.escape(selected) + r"-\d{12}-standard-trixie", tag):
+                        allowed_tags.add(tag)
+                elif name == "nginx":
+                    alpine = next(c["selected"] for c in document["components"] if c["id"] == "alpine")
+                    allowed_tags = {selected + "-alpine" + ".".join(alpine.split(".")[:2]) + "-slim"}
+                if tag not in allowed_tags:
+                    raise ValueError(f"{name}: artifact does not exactly identify selected version/variant; digest alone cannot prove its semantic version")
             if timestamp(artifact["verifiedAt"]) > now:
                 raise ValueError(f"{name}: future artifact verification")
             if not artifact["reference"].endswith("@" + artifact["digest"]):
                 raise ValueError(f"{name}: reference/digest contradiction")
+        for binding in component.get("sourceBindings", []):
+            path = pathlib.PurePosixPath(binding["path"])
+            if path.is_absolute() or ".." in path.parts:
+                raise ValueError(f"{name}: source binding escapes repository")
         for consumer in component["consumers"]:
             path = pathlib.PurePosixPath(consumer["path"])
             if path.is_absolute() or ".." in path.parts:
                 raise ValueError(f"{name}: consumer escapes repository")
+    for row in document.get("inventory", []):
+        path = pathlib.PurePosixPath(row["path"])
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("inventory source escapes repository")
+        if row["state"] == "leased":
+            if any(not row.get(key, "").strip() for key in ("reviewBy", "evidence", "owner", "reason")):
+                raise ValueError("inventory lease lacks owned evidence/review")
+            if timestamp(row["reviewBy"]) <= now:
+                raise ValueError("expired source consumer lease")
     return document
 
 
 def align(document, root=ROOT, write=False):
     failures = []
     for component in document["components"]:
+        for binding in component.get("sourceBindings", []):
+            digest = "sha256:" + hashlib.sha256((root / binding["path"]).read_bytes()).hexdigest()
+            if digest != binding["digest"]:
+                raise ValueError(f"{component['id']}: source closure digest mismatch: {binding['path']}")
         for consumer in component["consumers"]:
             path = root / consumer["path"]
             source = path.read_text()
-            expected = consumer["value"].replace("{version}", component["selected"])
+            expected = consumer["value"].replace("{version}", component["selected"] or "")
             if component["artifacts"]:
                 expected = expected.replace("{reference}", component["artifacts"][0]["reference"])
             if consumer["kind"] == "json":
@@ -119,7 +158,8 @@ def align(document, root=ROOT, write=False):
 
 
 def fetch_bytes(url):
-    request = urllib.request.Request(url, headers={"User-Agent": "Astronomer-version-discovery", "Accept": "application/json"})
+    accept = "text/html, application/atom+xml" if url.startswith("https://github.com/") else "application/json"
+    request = urllib.request.Request(url, headers={"User-Agent": "Astronomer-version-discovery", "Accept": accept})
     with urllib.request.urlopen(request, timeout=30) as response:
         if response.status != 200:
             raise ValueError(f"upstream HTTP status {response.status}")
@@ -130,7 +170,19 @@ def fetch_bytes(url):
 
 
 def fetch_json(url):
-    raw, digest = fetch_bytes(url)
+    try:
+        raw, digest = fetch_bytes(url)
+    except urllib.error.HTTPError as error:
+        # The authenticated official GitHub CLI is an optional read-only
+        # fallback for shared-IP limits. Ordinary offline checks never use it.
+        parsed = urllib.parse.urlparse(url)
+        if error.code != 403 or parsed.hostname != "api.github.com" or not re.fullmatch(r"/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases", parsed.path) or not shutil.which("gh"):
+            raise
+        result = subprocess.run(["gh", "api", parsed.path.removeprefix("/")], capture_output=True, timeout=30)
+        if result.returncode != 0:
+            raise ValueError("official GitHub metadata unavailable after authenticated read-only fallback") from error
+        raw = result.stdout
+        digest = "sha256:" + hashlib.sha256(raw).hexdigest()
     return json.loads(raw), digest
 
 
@@ -161,18 +213,18 @@ def github_feed(url, now):
         if STABLE.fullmatch(version):
             candidates.append((tuple(map(int, version.split("."))), version, page_url))
     for _, version, page_url in sorted(candidates, reverse=True):
-        if not page_url.startswith(url.removesuffix(".atom") + "/tag/"):
+        if not page_url.lower().startswith(url.removesuffix(".atom").lower() + "/tag/"):
             raise ValueError("GitHub feed links outside declared release repository")
         page, page_digest = fetch_bytes(page_url)
         html = page.decode()
         if re.search(r">\s*Pre-release\s*</span>", html):
             continue
-        # Release publication uses GitHub's UTC display format; the ISO time
-        # elsewhere on this page records its last edit, not publication.
-        dates = re.findall(r'<relative-time datetime="(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC)"', html)
+        # Bind the publication timestamp to the release event. Other times
+        # on this page describe included commits and must not be accepted.
+        dates = re.findall(r'released this\s*<relative-time\b[^>]*datetime="([^"]+)"', html)
         if len(dates) != 1:
             raise ValueError("GitHub release lacks unambiguous publication date")
-        date = dt.datetime.strptime(dates[0], "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=dt.timezone.utc).isoformat()
+        date = timestamp(dates[0]).isoformat()
         final_candidates([(version, date, True)], now)
         return version, date, digest + "; " + page_digest
     raise ValueError("GitHub feed lacks independently dated final release")
@@ -182,7 +234,19 @@ def resolve(component, now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
     upstream = component["upstream"]
     kind = upstream["kind"]
-    if kind == "github-feed":
+    if kind == "postgres":
+        raw, digest = fetch_bytes(upstream["url"])
+        versions = re.findall(r"<tr>\s*<td>\d+</td>\s*<td>(\d+\.\d+)</td>\s*<td>Yes</td>", raw.decode())
+        if not versions:
+            raise ValueError("PostgreSQL support table lacks stable supported releases")
+        version = max(versions, key=lambda v: tuple(map(int, v.split("."))))
+        release, release_digest = fetch_bytes("https://www.postgresql.org/docs/release/" + version + "/")
+        dates = re.findall(r"Release date:[^<]*</strong>\s*(\d{4}-\d{2}-\d{2})", release.decode())
+        if len(dates) != 1:
+            raise ValueError("PostgreSQL final release lacks independent publication date")
+        rows, metadata = [(version, dates[0], True)], None
+        digest += "; " + release_digest
+    elif kind == "github-feed":
         version, date, digest = github_feed(upstream["url"], now)
         rows = [(version, date, True)]
         metadata = None
@@ -199,7 +263,7 @@ def resolve(component, now=None):
         metadata = json.loads(subprocess.check_output(["go", "run", "./deploy/toolchain/check", "--yaml-json"], input=raw, cwd=ROOT))
     else:
         metadata, digest = fetch_json(upstream["url"])
-    if kind in ("image", "github-feed"):
+    if kind in ("image", "github-feed", "postgres"):
         pass
     elif kind == "alpine":
         branch = next(branch for branch in metadata["release_branches"] if branch["rel_branch"] == metadata["latest_stable"])
@@ -287,9 +351,10 @@ def main():
     if source != serialized(document):
         raise ValueError("version authority is not deterministically serialized")
     align(document, write=args.write)
+    toolchain_inventory.check(document, ROOT)
     if args.report:
         now = dt.datetime.now(dt.timezone.utc)
-        rows = [{"id": c["id"], "selected": c["selected"], "upstreamStable": c["discovery"]["version"], "owner": c["owner"], "discoveryAgeDays": (now - timestamp(c["discovery"]["observedAt"])).days, "reviewDeadline": c.get("exception", {}).get("reviewBy"), "exception": c.get("exception"), "qualification": c["qualification"]} for c in document["components"]]
+        rows = [{"id": c["id"], "selected": c["selected"], "upstreamStable": c["discovery"]["version"], "owner": c["owner"], "discoveryAgeDays": (now - timestamp(c["discovery"]["observedAt"])).days, "exceptionAgeDays": (now - timestamp(c["exception"]["createdAt"])).days if "exception" in c else None, "reviewDeadline": c.get("exception", {}).get("reviewBy"), "exception": c.get("exception"), "qualification": c["qualification"]} for c in document["components"]]
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(serialized({"schemaVersion": 1, "authorityDigest": "sha256:" + hashlib.sha256(source.encode()).hexdigest(), "components": rows}))
     if args.discover:

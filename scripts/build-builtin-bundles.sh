@@ -6,15 +6,35 @@ catalog="${BUNDLE_CATALOG:-$root_dir/deploy/bundles/catalog.json}"
 output=""
 check=""
 publish=""
+v2=""
+charts_directory=""
+asset_index=""
+platform_evidence=""
+repository=""
+layout_output=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --v2) v2=true; shift ;;
+    --charts-directory) charts_directory="${2:?missing reviewed charts directory}"; shift 2 ;;
+    --asset-index) asset_index="${2:?missing closed asset index}"; shift 2 ;;
+    --platform-evidence) platform_evidence="${2:?missing image platform evidence directory}"; shift 2 ;;
+    --repository) repository="${2:?missing future OCI repository identity}"; shift 2 ;;
+    --layout-output) layout_output="${2:?missing new layout directory}"; shift 2 ;;
     --output) output="${2:?missing output path}"; shift 2 ;;
     --check) check="${2:?missing artifact path}"; shift 2 ;;
     --publish) publish="${2:?missing OCI reference}"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+if [[ -n "$v2" ]]; then
+  [[ -n "$charts_directory$asset_index$platform_evidence$repository$layout_output" && -n "$charts_directory" && -n "$asset_index" && -n "$platform_evidence" && -n "$repository" && -n "$layout_output" ]] || { echo 'v2 requires reviewed charts, closed assets, platform evidence, repository and new layout output' >&2; exit 2; }
+  [[ -z "$publish$check$output" ]] || { echo 'v2 preparation emits an OCI layout; publication is a separate signed producer operation' >&2; exit 2; }
+  cd "$root_dir"
+  exec go run ./deploy/bundles/cmd/distribution --catalog "$catalog" --charts "$charts_directory" --asset-index "$asset_index" --platform-evidence "$platform_evidence" --repository "$repository" --output-directory "$layout_output"
+fi
+[[ -z "$charts_directory$asset_index$platform_evidence$repository$layout_output" ]] || { echo 'v2 options require --v2' >&2; exit 2; }
 
 for tool in go jq helm sha256sum tar gzip; do
   command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }

@@ -21,6 +21,10 @@ def bindings(document):
 
 def verify_binding(receipt, document, authority, now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
+    if receipt.get("schemaVersion") != 1:
+        raise ValueError("unsupported resolution schema")
+    if toolchain.timestamp(receipt["expiresAt"]) <= toolchain.timestamp(receipt["generatedAt"]):
+        raise ValueError("signed resolution expiry precedes generation")
     if receipt["authorityDigest"] != "sha256:" + hashlib.sha256(authority).hexdigest():
         raise ValueError("signed resolution authority digest mismatch")
     if receipt["components"] != bindings(document):
@@ -52,7 +56,7 @@ def main():
         return
     if not args.bundle:
         raise ValueError("release requires a signed Sigstore resolution bundle")
-    subprocess.run(["cosign", "verify-blob", "--offline", "--bundle", str(args.bundle), "--certificate-identity-regexp", IDENTITY, "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com", str(args.record)], check=True)
+    subprocess.run(["cosign", "verify-blob", "--offline", "--trusted-root", str(ROOT / "deploy/toolchain/trust/trusted_root.json"), "--bundle", str(args.bundle), "--certificate-identity-regexp", IDENTITY, "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com", str(args.record)], check=True)
     subprocess.run(["go", "run", "./deploy/toolchain/check", "deploy/toolchain/resolution.schema.json", str(args.record.resolve())], cwd=ROOT, check=True)
     receipt = json.loads(args.record.read_text())
     verify_binding(receipt, document, authority)

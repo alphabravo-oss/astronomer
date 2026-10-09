@@ -38,7 +38,7 @@ const INTENTIONAL_NON_JSON_ADAPTERS = [
   ],
   [
     "frontend/src/lib/api/settings-compliance-export.ts",
-    "fetch(downloadUrl)",
+    "fetch(downloadUrl, { signal })",
     "pre-signed compliance export download",
   ],
 ];

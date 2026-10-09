@@ -1,0 +1,502 @@
+{
+  "schema_version": 1,
+  "reviews": [
+    {
+      "fingerprint": "sha256:045fb15ce9afffc1e6501f9982259fb9728766f46af2878deeb01bd24d1928f0",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:d38de1b75aefbbfdebfd7772f5f2441795a42367b0f4944a850686379860d209",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:c818d2aa9f7f222f9f56be0e328e9443379abb04a756154c74289a69a86d4183",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:0c483b7304a2b3756b581e4b43fe7348967a36a064f26aaaffc051dd4f8f4f46",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:dfe7ae6696e8d345decdcfbffffcfd5ffac373c192cbed6ce62d78249e45731e",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:51a06164bbd7ce365d7737663e5916e0d2a14e9a6f49c8b267fe5e675658b867",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:388ef0d2aa2e6bb6d972321f4284bed9bb025d43d0fdf81b8c21b70660b637f4",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:2509b1016c9611e45c4dd58d8ab75a640fbf2238286e10649510cbf438a849a4",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:a61ffaaf75a422ffafac3503f8f3a817d4d26dff44c7185ca3501eb5c8d72859",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:a991ab79597ec9b804f0e8695eda3e2127772eb070b8067d9c03ef1b830cf20a",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:4eb0e14d40243622a13ac135f3bb55ecac690cda8c5ab0fb8e5428e203598b67",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:1415a43e675ae81fe5e1de65cfc45b302cbdc6aa68712c722c3ad4b8a14babd5",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:8991ad2cd6869dbdabb8390fdf20b1d1650d2ccf1d5a4dfc9a29c721758b869b",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:6d6d7619fd0e6ff91f9c857393f9389b37381850a3bb7df445c223069a205c95",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:9e7bf828e767742e28eda9c2a26bf1ff89783483aaccefc5c3c38f4c386859da",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:f18a463cb9ca59fb40c82c87ee002c4e6ff5b2c3214197e8077d82c8d2f57f2a",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:bfe89d708dda61a6bd65665c37bfaf2424559df90a40055d7458601bc266b8b8",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:2679005ea59b27b4d2ddffc2cb177a67d0fa5429529de9cb442c91957b58bc97",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:716ce3271cb718a9a069fa24d5cad6f0893844028774223980fb744a7c44bc3c",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:96ac4d05d2f9bc25ef15b696a9245316906d51ffea6a615068b73810872c21b4",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:424ca6864b191bdbc1a0f67285badbade2c8ac5fb66836f0e9800955317785f2",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:70afd7ce573ed51e61ca2bb3ebf8df0ce0a05417b5ed54675cd2713e1b57c974",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:0e5045a92b074dea0774f2cb935f659ca3634fe0f62bcc78e720aa2cff76fd48",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:03c0c5ae531c429d291ed4837b4413e3c1a998ef0a47285147b18aab85d49346",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:10f16f1cb672b49a80e755bd23b4b00e002b55e97260135d1a73e8ed8ceb2211",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:23367c324377f3a6d10416b65af02a32e6069b2f82c605d124c5c31a9053bb7e",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:621662e4a13e17a1a085677fd86fa546d25c7f85e54533484e31df8c7474ae5c",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:0280cbe6fee130e6c7aa0891e40cbcf2caeb774b0c7464aa16ad8765050f1bec",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:233c934a43d47481522ae54d4f2fd16a2eeddffbb8a413b3dfb9d54caa9802f8",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:147268f828a085979734e2680ec12aae5c8bfea7f122f3624f6a1fb168fb66c8",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:65155a4dfb4dc5d1b2662a1cc3848e1cd00a43202c3acad416f5861887419824",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:1404234d535b1c7e050d269b45ca317cdb602bc7bc26d9e272615a3273b37132",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:7e1817276cf5875b85d0b0798ef1a13b9d27e4c98dd529164d61d9138d710043",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:577e70f03eb286d888ca88cbf22e008b0db9580f6b3325431740bbbb7ffabe9b",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:3885014cf90a3ac46284b5ccd1291dd232e4a87bb278c3b2716bf16d118b06df",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:b555c6b672baaed4b22dbcd741443d58736945200d89e0b3171b3a66805a8d9e",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:214d4fd73e120625396989e51b5bc2eeca087e610bae9d7dba252bc70aac79d7",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:d6ee122b5b3182658460d68647a150451aa433d62ba738bbae207d59092013a4",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:d8a0a2eb24d98d11f6b25e8b1c56f27c5983c841c4aa583af1929d17419460c2",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:5e3eece6e3f6b4cc417009894d18471ddf40a444873624995b09e1ef265c2959",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:27940a25c3f14136bb10037c21e22edc68b25a1095851e14f0d7e11211457c75",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:cbcfb6b2ef72b4113dd9dc8ea791124aa667f0404063c40fe900ac667f08f4f0",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:bf3835c236ae8b6f79f0fd126f499cb626bcd0c09dbdac0b7f4f3de761a572cb",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:1938ccacac16fa7125bbb9135e649b79159f27a2349bf5275a62b5710ae0b8e5",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:48ebadd4aa7c5fb903a758a6b80331d51170a8c4e6dcc39467c0dce13fdcd012",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:9719af977d84278aebb60457c396e8c680d7e581009015ad67ab33afe411d66d",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:a99273b1a36377296b8f57e5ba4f9950902c4bd6cda8817b540f66fa96b05981",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:236d99409a638b2b3496b05749081319d3105e48f943d45a76868893b1eeed7c",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:36f71cdc66df682703c76dfc50ad324891b9fb064756bb6df0b080b3e5d78097",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:5eb36b0f63d341c1e0369f05a4a4eb137bb0300bbeef820eb18d498d3c8dfd8c",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:93bc23600dcdf2d9128b21e0462ac2d969a65f848f1f1abf5ac9a7efd2460e02",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:c52eb6fbf3a05ca765590b914ead19638a930baac48d374eca0a14c70e7f7b36",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:99cbfd4806642bec04eead023574ef29339a18dd28288157747baeacb7e6f62e",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:c703ab364e4f18e6951e13feea9f59eae45b634d969e35ea9de4cc0cd3112fa2",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:ae222d2894c01a4a75d26d48c1de0ed521383a75b299628a28163ebfcc021d00",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:2b54247eb5f2d7e80505af38050d922b666b7f02b4a4a81ba91851818d6069e4",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:e41d0b77f81462d4bdf466aa9484e2965e774ce5c66e3cdda9efb7dc7332af26",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:3bf20729da5b295e6008c3401860541dbaa3ee258644d0e2fb50c6acafce59a5",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:1ae3f003b41fe65bbd2bc210ddb8ead34b7cfb20d002da4fd6be988ee5383b5b",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:3885d412b20f0d49a625e0098bff4e6549620d32cf744af4c443469151503e24",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:dbdb6515afa19bfcae992da431be42da4d97260ac3e10d3bbeeb5615d259ee85",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:7c15f63808f5162c9103c9208768a068a9c384c57cc63c6c7d277caac3df4425",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:83a30d624206cfffcdaf9f71f90ce06cdba527655fb56893218c6bf9737e2d5e",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:b0b16a3727d7d088b3a6aafe6f2c422704f1f673daa9a37b628245e61cdd73e9",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:6cf4db44d683aa402542165ef57b70209017565adba5fa363197474ca1b81567",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:8d4d1c8b160625cbd12744da56b56a0c3ff1761cad5523a52c756f402f6366cc",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:22ef4f7971e2ec0b832023d059526fab385745fe804721e9f28111f0440e385a",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:5c206fb8f9c9fa8d921dbe0230832dec08ae804c683d73cb72968aab38704d5b",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:215a1d02944a05d175acbebe80850d5f20e258d8ebadf318dfa823fe095f489a",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:1875097b569c347f458a2c33dd232a8954263041d1d274a590af41738d1d72a4",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:fac5e1cdb7bffff62dbb42e0ac15203e2f6f406c4dc3702c5ad1084e2536537d",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "pending",
+      "evidence": ""
+    }
+  ]
+}

@@ -139,5 +139,61 @@ class ReleaseManifestTest(unittest.TestCase):
             GENERATOR.build(args)
 
 
+
+
+class EmittedDistributionManifestTest(ReleaseManifestTest):
+    @classmethod
+    def setUpClass(cls):
+        import sys
+        sys.path.insert(0, str(ROOT / "scripts/tests"))
+        from distribution_fixture import prepare_layout
+        cls.fixture = tempfile.TemporaryDirectory()
+        cls.layout = prepare_layout(Path(cls.fixture.name))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.fixture.cleanup()
+
+    def v2_args(self):
+        args = self.args()
+        metadata = json.loads((self.layout / "subjects.json").read_text())
+        args.bundle_distribution_metadata = self.layout / "subjects.json"
+        args.bundles_archive = self.layout / "distribution.tar.gz"
+        args.bundles_reference = metadata["repository"] + "@" + metadata["digest"]
+        # A missing legacy source proves the consumer cannot recompute/fallback.
+        args.bundle_catalog = self.root / "missing-legacy-catalog.json"
+        return args
+
+    def test_v2_consumes_exact_emitted_subject_and_catalog(self):
+        args = self.v2_args()
+        value = GENERATOR.build(args)
+        metadata = json.loads(args.bundle_distribution_metadata.read_text())
+        self.assertEqual(value["built_in_bundles"]["artifact"]["reference"], args.bundles_reference)
+        self.assertEqual(value["built_in_bundles"]["artifact"]["content_digest"], metadata["archive_digest"])
+        self.assertEqual(value["built_in_bundles"]["catalog_digest"], metadata["catalog_digest"])
+        self.assertNotEqual(metadata["catalog_digest"], GENERATOR.sha256_file(ROOT / "deploy/bundles/catalog.json"))
+        self.assertEqual(value["built_in_bundles"]["components"][0]["images"], json.loads((self.layout / "catalog.json").read_text())["components"][0]["images"])
+
+    def test_v2_rejects_unknown_missing_or_changed_metadata(self):
+        import shutil
+        for mutation in ("unknown", "missing digest", "wrong subject", "changed catalog"):
+            with self.subTest(mutation=mutation):
+                local = self.root / mutation.replace(" ", "-")
+                shutil.copytree(self.layout, local)
+                metadata = json.loads((local / "subjects.json").read_text())
+                if mutation == "unknown":
+                    metadata["allowUnsigned"] = True
+                elif mutation == "missing digest":
+                    del metadata["digest"]
+                elif mutation == "wrong subject":
+                    metadata["digest"] = digest("f")
+                else:
+                    (local / "catalog.json").write_text("changed catalog")
+                (local / "subjects.json").write_text(json.dumps(metadata))
+                args = self.v2_args()
+                args.bundle_distribution_metadata = local / "subjects.json"
+                with self.assertRaises(GENERATOR.ManifestError):
+                    GENERATOR.build(args)
+
 if __name__ == "__main__":
     unittest.main()

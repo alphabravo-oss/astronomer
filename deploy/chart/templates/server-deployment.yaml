@@ -138,6 +138,16 @@ spec:
                   name: {{ include "astronomer.secretsSecretName" . }}
                   key: {{ .Values.secrets.internalPSKPreviousKey | quote }}
                   optional: true
+            - name: DELIVERY_SOURCE_TRUST_DIRECTORY
+              value: /etc/astronomer/delivery-trust
+            {{- if .Values.delivery.sourceResolution.ca.existingSecret }}
+            - name: DELIVERY_SOURCE_CA_FILE
+              value: /var/run/secrets/astronomer/delivery-source-ca/ca.pem
+            {{- end }}
+            {{- if .Values.managementBackup.s3.ca.existingSecret }}
+            - name: BACKUP_S3_CA_FILE
+              value: /var/run/secrets/astronomer/backup-s3-ca/ca.pem
+            {{- end }}
             {{- if .Values.catalog.proxy.enabled }}
             - name: ASTRONOMER_CATALOG_PROXY_URL
               valueFrom:
@@ -242,6 +252,14 @@ spec:
               value: {{ .Values.crds.watchNamespace | quote }}
             {{- end }}
             {{- if .Values.release.manifest }}
+            {{- if .Values.delivery.distribution.mirrorEndorsement.plan }}
+            - name: DISTRIBUTION_MIRROR_PLAN_PATH
+              value: /etc/astronomer/release/distribution-mirror.json
+            - name: DISTRIBUTION_MIRROR_SIGNATURE_PATH
+              value: /etc/astronomer/release/distribution-mirror.sig
+            - name: DISTRIBUTION_MIRROR_KEY_REF
+              value: {{ .Values.delivery.distribution.mirrorEndorsement.keyRef | quote }}
+            {{- end }}
             - name: RELEASE_MANIFEST_PATH
               value: /etc/astronomer/release/release-manifest.json
             {{- if .Values.release.mirrorMapping }}
@@ -258,6 +276,21 @@ spec:
               value: /etc/ssl/certs:/astronomer/trust/extra
             {{- end }}
           volumeMounts:
+            {{- if .Values.delivery.sourceResolution.ca.existingSecret }}
+            - name: delivery-source-ca
+              mountPath: /var/run/secrets/astronomer/delivery-source-ca
+              readOnly: true
+            {{- end }}
+            {{- if .Values.delivery.sourceResolution.trustKeys.existingSecret }}
+            - name: delivery-source-trust
+              mountPath: /etc/astronomer/delivery-trust
+              readOnly: true
+            {{- end }}
+            {{- if .Values.managementBackup.s3.ca.existingSecret }}
+            - name: backup-s3-ca
+              mountPath: /var/run/secrets/astronomer/backup-s3-ca
+              readOnly: true
+            {{- end }}
             - name: tmp
               mountPath: /tmp
               readOnly: false
@@ -333,6 +366,28 @@ spec:
           secret:
             secretName: astronomer-charlie-bridge-client-tls
             optional: true
+        {{- if .Values.delivery.sourceResolution.ca.existingSecret }}
+        - name: delivery-source-ca
+          secret:
+            secretName: {{ .Values.delivery.sourceResolution.ca.existingSecret | quote }}
+            items:
+              - key: {{ .Values.delivery.sourceResolution.ca.key | quote }}
+                path: ca.pem
+        {{- end }}
+        {{- if .Values.delivery.sourceResolution.trustKeys.existingSecret }}
+        - name: delivery-source-trust
+          secret:
+            secretName: {{ .Values.delivery.sourceResolution.trustKeys.existingSecret | quote }}
+            defaultMode: 0444
+        {{- end }}
+        {{- if .Values.managementBackup.s3.ca.existingSecret }}
+        - name: backup-s3-ca
+          secret:
+            secretName: {{ .Values.managementBackup.s3.ca.existingSecret | quote }}
+            items:
+              - key: {{ .Values.managementBackup.s3.ca.key | quote }}
+                path: ca.pem
+        {{- end }}
         {{- if .Values.catalog.ca.existingSecret }}
         - name: catalog-ca
           secret:
@@ -351,6 +406,12 @@ spec:
           configMap:
             name: {{ include "astronomer.releaseManifestConfigMapName" . }}
             items:
+              {{- if .Values.delivery.distribution.mirrorEndorsement.plan }}
+              - key: distribution-mirror.json
+                path: distribution-mirror.json
+              - key: distribution-mirror.sig
+                path: distribution-mirror.sig
+              {{- end }}
               - key: release-manifest.json
                 path: release-manifest.json
               {{- if .Values.release.mirrorMapping }}

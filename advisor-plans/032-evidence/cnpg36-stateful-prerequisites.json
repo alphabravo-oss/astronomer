@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-10-09T20:20:51.352067+00:00",
+  "source_commit": "e6233fa37fbae5a8a0801b0d821e43acbef3c580",
+  "qualification": "connected_previous_major_workload_prerequisites",
+  "cluster": "astro032-cnpg36-20261009",
+  "namespace": "plan032-recovery",
+  "cnpg": {
+    "name": "plan032-postgres",
+    "uid": "2f83aaff-dbbf-40ef-8880-542225fec0b4",
+    "image": "ghcr.io/cloudnative-pg/postgresql:17.11-202610050823-standard-trixie@sha256:d456fe7392b0b2147b4cea0dc124d51aee7ad3ec522c57f3177799e01f29a2d1",
+    "instances": 3,
+    "ready_instances": 3,
+    "phase": "Cluster in healthy state",
+    "primary": "plan032-postgres-1",
+    "synchronous": {
+      "dataDurability": "required",
+      "failoverQuorum": false,
+      "method": "any",
+      "number": 1
+    },
+    "storage_size": "2Gi",
+    "plugin": [
+      {
+        "enabled": true,
+        "isWALArchiver": true,
+        "name": "barman-cloud.cloudnative-pg.io",
+        "parameters": {
+          "barmanObjectName": "plan032-backups"
+        }
+      }
+    ]
+  },
+  "pods": [
+    {
+      "name": "plan032-postgres-1",
+      "uid": "54c4d313-d4fe-4280-b7b4-cd29bf2654ff",
+      "phase": "Running",
+      "containers": [
+        {
+          "name": "postgres",
+          "ready": true,
+          "image": "sha256:b7d4a30d7ab6dd10f09dcca5e2a1ce41dd690ab17cd94823c824ef6037e6c8bd",
+          "image_id": "ghcr.io/cloudnative-pg/postgresql@sha256:d456fe7392b0b2147b4cea0dc124d51aee7ad3ec522c57f3177799e01f29a2d1",
+          "restarts": 0
+        }
+      ]
+    },
+    {
+      "name": "plan032-postgres-2",
+      "uid": "88b221f1-e60e-4a24-a68a-8e7a92920cef",
+      "phase": "Running",
+      "containers": [
+        {
+          "name": "postgres",
+          "ready": true,
+          "image": "sha256:b7d4a30d7ab6dd10f09dcca5e2a1ce41dd690ab17cd94823c824ef6037e6c8bd",
+          "image_id": "ghcr.io/cloudnative-pg/postgresql@sha256:d456fe7392b0b2147b4cea0dc124d51aee7ad3ec522c57f3177799e01f29a2d1",
+          "restarts": 0
+        }
+      ]
+    },
+    {
+      "name": "plan032-postgres-3",
+      "uid": "a404d4d0-8890-4974-9483-72fd020058c3",
+      "phase": "Running",
+      "containers": [
+        {
+          "name": "postgres",
+          "ready": true,
+          "image": "sha256:b7d4a30d7ab6dd10f09dcca5e2a1ce41dd690ab17cd94823c824ef6037e6c8bd",
+          "image_id": "ghcr.io/cloudnative-pg/postgresql@sha256:d456fe7392b0b2147b4cea0dc124d51aee7ad3ec522c57f3177799e01f29a2d1",
+          "restarts": 0
+        }
+      ]
+    },
+    {
+      "name": "plan032-rustfs-657db7796d-qcvds",
+      "uid": "ac73e352-4995-46bb-9381-4d87edd0e861",
+      "phase": "Running",
+      "containers": [
+        {
+          "name": "rustfs",
+          "ready": true,
+          "image": "sha256:f6b22807f10db2aee80b8a9ed1e36bd12c2fba25ac2d98dc3b0332a23f1a5c4d",
+          "image_id": "docker.io/rustfs/rustfs@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c",
+          "restarts": 0
+        }
+      ]
+    }
+  ],
+  "operator_storage_source": "https://cloudnative-pg.io/plugin-barman-cloud/docs/object_stores/",
+  "rustfs_authenticated_operations": {
+    "authenticated_bucket_create": "PASS",
+    "put_get_bytes": "PASS",
+    "list": "PASS",
+    "delete_and_absence": "PASS"
+  },
+  "prerequisite_manifest_digest": "sha256:a50fbe0484f163842dbcdd4e76bd9e8532899840b07f7c3f2c2ce438fbe07dc4",
+  "limits": [
+    "Standalone owned workloads; full application chart validation was not bypassed or claimed. Helm4 template of incomplete application values correctly rejected missing production prerequisites; separate workload fixtures used for baseline characterization.",
+    "Storage2Gi/replica and RustFS4Gi PVC are bounded fixture capacity, not production storage sizing.",
+    "No PostgreSQL18 adoption, failover, physical backup/restore, PITR, restored keys, full application/Charlie/Flux or disconnected candidate qualification yet.",
+    "Credential values exist only in Kubernetes Secrets/protected local file, excluded from this receipt."
+  ]
+}

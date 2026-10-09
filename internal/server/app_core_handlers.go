@@ -119,6 +119,9 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	toolHandler.SetLogger(logger)
 	toolHandler.SetEventBus(bus)
 	catalogHandler := handler.NewCatalogHandlerWithHelm(queries, helmRequester)
+	if err := configureCatalogHandlerNetwork(catalogHandler, cfg); err != nil {
+		return err
+	}
 	catalogHandler.SetK8sRequester(requester)
 	catalogHandler.SetRunTx(sqlcMutationTxRunner[handler.CatalogMutationTx](database))
 	catalogHandler.SetLogger(logger)
@@ -127,6 +130,9 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	// P4.9 — catalog_release.changed liveness events on installed-chart writes.
 	catalogHandler.SetEventBus(bus)
 	backupHandler := handler.NewBackupHandler(queries)
+	if err := configureBackupNetwork(backupHandler, cfg); err != nil {
+		return err
+	}
 	backupHandler.SetRunTx(sqlcMutationTxRunner[handler.BackupMutationTx](database))
 	// Phase B2 — Velero backup engine wiring. Handler degrades cleanly when
 	// these aren't set; we set them here so the running stack uses real Velero

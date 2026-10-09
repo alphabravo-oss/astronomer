@@ -87,6 +87,9 @@ data:
   AGENT_IMAGE_TAG: {{ .Values.config.agentImageTag | default .Values.image.agent.tag | quote }}
   # Flux-native delivery v2 is unconditional in v1. These are bounded runtime
   # controls and immutable artifact references, never inline credentials.
+  DISTRIBUTION_DESTINATION_POLICY: {{ toJson .Values.delivery.distribution.destinationPolicy | quote }}
+  BACKUP_S3_DESTINATION_POLICY: {{ toJson .Values.managementBackup.s3.destinationPolicy | quote }}
+  DELIVERY_BUNDLE_CATALOG_DIGEST: ""
   DELIVERY_ENABLED: {{ .Values.delivery.enabled | quote }}
   DELIVERY_LOCAL_FLUX_BOOTSTRAP: {{ .Values.delivery.localFluxBootstrap | quote }}
   DELIVERY_KUBERNETES_MIN_MINOR: {{ .Values.delivery.compatibility.kubernetes.minimumMinor | quote }}

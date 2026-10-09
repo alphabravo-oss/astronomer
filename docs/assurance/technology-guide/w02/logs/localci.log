@@ -1,0 +1,3 @@
+[Local CI] Running security-analysis.yaml:source-security in degraded mode: job resource hints exceed the available host capacity. Use a larger host or adjust the workflow resource hints to fit the available machine.
+[Local CI] Starting runner local-ci-100-j1 [degraded] (security-analysis.yaml > source-security)
+  Logs: /root/.local/state/local-ci/logs/local-ci-100-j1

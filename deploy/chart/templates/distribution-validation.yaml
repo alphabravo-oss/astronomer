@@ -1,0 +1,14 @@
+{{- $endorsement := .Values.delivery.distribution.mirrorEndorsement -}}
+{{- if or $endorsement.plan $endorsement.signature $endorsement.keyRef -}}
+{{- if not (and $endorsement.plan $endorsement.signature $endorsement.keyRef .Values.release.manifest .Values.delivery.sourceResolution.trustKeys.existingSecret) -}}
+{{- fail "distribution mirror endorsement requires plan, signature, keyRef, release.manifest and mounted delivery trust keys" -}}
+{{- end -}}
+{{- end -}}
+{{- if .Values.delivery.distribution.destinationPolicy.restricted -}}
+{{- if not (and .Values.release.manifest $endorsement.plan (gt (len .Values.delivery.distribution.destinationPolicy.origins) 0)) -}}
+{{- fail "restricted distribution requires a release manifest, signed mirror endorsement and finite approved origins" -}}
+{{- end -}}
+{{- if and .Values.catalog.enabled (not (and (hasPrefix "oci://" .Values.catalog.sourceURL) .Values.catalog.digest .Values.catalog.signature.required)) -}}
+{{- fail "disconnected application catalog must be disabled-unavailable or use an immutable authenticated local source" -}}
+{{- end -}}
+{{- end -}}

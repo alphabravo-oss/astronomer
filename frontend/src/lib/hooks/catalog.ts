@@ -79,7 +79,8 @@ export function useSetCatalogChartFavorite() {
 
 export function usePreviewCatalogInstallation() {
   return useMutation({
-    mutationFn: previewCatalogInstallation,
+    mutationFn: (body: Parameters<typeof previewCatalogInstallation>[0]) =>
+      previewCatalogInstallation(body),
     onError: (error: Error) =>
       toastApiError("Failed to preview installation", error),
   });

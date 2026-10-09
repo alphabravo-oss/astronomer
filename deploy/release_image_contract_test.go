@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"regexp"
@@ -421,7 +422,7 @@ func TestReleaseManifestConfigMapIsContentAddressed(t *testing.T) {
 			t.Errorf("%s does not consume the content-addressed manifest name", path)
 		}
 	}
-	if !bytes.Contains(configMap, []byte("immutable: true")) || !bytes.Contains(helpers, []byte(`sha256sum .Values.release.manifest`)) {
+	if !bytes.Contains(configMap, []byte("immutable: true")) || !bytes.Contains(helpers, []byte(`sha256sum (printf`)) {
 		t.Fatal("release manifest ConfigMap must remain immutable and content-addressed")
 	}
 	if bytes.Contains(configMap, []byte(`fullname" . }}-release-manifest`)) {
@@ -648,8 +649,50 @@ func TestFrontendVersionIsBakedIntoShippedStaticOutput(t *testing.T) {
 		"ENV VERSION=$VERSION",
 		"RUN npm run build",
 		`grep -R -F -q -- "${VERSION}" dist`,
-		"FROM nginx:",
+		" AS nginx-base",
+		"FROM nginx-base",
 		"COPY --from=build /app/dist /usr/share/nginx/html",
+	}
+	// The shipped stage must inherit the independently pinned upstream runtime
+	// stage, rather than accidentally copying the SPA into the Node builder.
+	runtimeBase := regexp.MustCompile(`(?m)^FROM (docker\.io/library/nginx:[^\s]+@sha256:[a-f0-9]{64}) AS nginx-base$`).FindStringSubmatch(dockerfile)
+	if len(runtimeBase) != 2 || strings.Count(dockerfile, "\nFROM nginx-base\n") != 1 {
+		t.Fatal("frontend final stage does not inherit a digest-pinned nginx runtime")
+	}
+	nginxDockerfile, err := os.ReadFile("nginx/Dockerfile.nginx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(nginxDockerfile), "FROM "+runtimeBase[1]+" AS nginx-base") {
+		t.Fatal("frontend runtime and independently shipped nginx image select different authority bases")
+	}
+	authorityBytes, err := os.ReadFile("toolchain/versions.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var authority struct {
+		Components []struct {
+			ID        string `json:"id"`
+			Artifacts []struct {
+				Reference string `json:"reference"`
+			} `json:"artifacts"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(authorityBytes, &authority); err != nil {
+		t.Fatal(err)
+	}
+	matched := false
+	for _, tool := range authority.Components {
+		if tool.ID == "nginx" {
+			for _, artifact := range tool.Artifacts {
+				if artifact.Reference == runtimeBase[1] {
+					matched = true
+				}
+			}
+		}
+	}
+	if !matched {
+		t.Fatal("frontend nginx base is absent from the selected tool authority")
 	}
 	last := -1
 	for _, required := range ordered {

@@ -152,13 +152,16 @@ export async function setCatalogChartFavorite(
   };
 }
 
-export async function previewCatalogInstallation(data: {
-  cluster_id: string;
-  chart_version_id: string;
-  namespace: string;
-  values_override?: string;
-}): Promise<CatalogInstallationPreview> {
-  const response = await postCatalogApplicationsPreview({ body: data });
+export async function previewCatalogInstallation(
+  data: {
+    cluster_id: string;
+    chart_version_id: string;
+    namespace: string;
+    values_override?: string;
+  },
+  signal?: AbortSignal,
+): Promise<CatalogInstallationPreview> {
+  const response = await postCatalogApplicationsPreview({ signal, body: data });
   return requireData(response, "previewCatalogInstallation");
 }
 
@@ -618,8 +621,10 @@ export async function rateChart(
 export async function getChartRatings(
   chartId: string,
   params?: { limit?: number; offset?: number },
+  signal?: AbortSignal,
 ): Promise<ChartRating[]> {
   const response = await getChartsByChartIdRatings({
+    signal,
     path: { chart_id: chartId },
     query: params,
   });
@@ -628,8 +633,10 @@ export async function getChartRatings(
 
 export async function getChartRatingAggregate(
   chartId: string,
+  signal?: AbortSignal,
 ): Promise<ChartRatingAggregate> {
   const response = await getChartsByChartIdRatingsAggregate({
+    signal,
     path: { chart_id: chartId },
   });
   return mapChartRatingAggregate(
@@ -639,9 +646,11 @@ export async function getChartRatingAggregate(
 
 export async function getMyChartRating(
   chartId: string,
+  signal?: AbortSignal,
 ): Promise<ChartRating | null> {
   try {
     const response = await getChartsByChartIdRatingsMine({
+      signal,
       path: { chart_id: chartId },
     });
     return mapChartRating(requireData(response, "getMyChartRating"));

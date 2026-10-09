@@ -1,0 +1,26 @@
+{
+  "tool": "mcp__t3_code__preview_navigate",
+  "target": {
+    "kind": "environment-port",
+    "port": 3105,
+    "path": "/?modal"
+  },
+  "result": "Preview navigation failed; browser snapshot reports net::ERR_CONNECTION_REFUSED to localhost:3105 while fixture Vite server was ready in executor environment.",
+  "qualification": "First environment-port navigation failed; direct executor-host retry succeeded. Repository browser component target remains independent automated verification.",
+  "server": "Synthetic component fixture server stopped after attempt; no live cluster or customer data.",
+  "retry": {
+    "binding": "0.0.0.0",
+    "target": "direct executor host address /?modal",
+    "navigation": "passed",
+    "snapshot": "failed twice with PreviewAutomationExecutionError; DOM inspection via product preview_evaluate worked",
+    "keyboard": "Product preview_type inserted whitespace into Name/Endpoint, then preview_press Enter; shared alert summary displayed Name is required and focused itself.",
+    "summaryLink": "Product preview_click Name is required focused input[name=name]; summary remained visible.",
+    "DOM": {
+      "forms": 1,
+      "footerButtonType": "submit",
+      "focusedSummaryAfterEnter": true,
+      "focusedFieldAfterSummaryLink": "name"
+    },
+    "qualification": "Synthetic production SIEM component fixture; no backend request or live authentication/cluster. Product preview browser keyboard and focus qualified; screenshot capture not qualified."
+  }
+}
