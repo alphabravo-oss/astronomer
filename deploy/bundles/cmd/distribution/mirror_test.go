@@ -109,13 +109,14 @@ func verifyActualMirrorPublication(t *testing.T, fixture *publicationRegistry, t
 	execution := mirrorExecutionOptions{Vendor: options, TargetBase: target, ReleaseManifestDigest: manifestDigest, Endorsement: endorsement, Signature: []byte(base64.StdEncoding.EncodeToString(raw)), OperatorKeyRef: "operator", OperatorTrustDirectory: operatorTrust, Client: client, Network: httpclient.DestinationPolicy{Restricted: true, Origins: []httpclient.TrustedOrigin{{URL: "https://1.1.1.1", CIDRs: []netip.Prefix{netip.MustParsePrefix("1.1.1.1/32")}}}}}
 	// Changed complete plan/signature cannot perform even one upload.
 	beforeManifests, beforeBlobs := fixture.snapshot()
+	beforeWrites := fixture.writes()
 	changed := execution
 	changed.Endorsement = append(bytes.Clone(endorsement), byte('x'))
 	if _, err := copyOfflineMirror(t.Context(), transfer, changed); err == nil {
 		t.Fatal("tampered endorsement accepted")
 	}
 	afterManifests, afterBlobs := fixture.snapshot()
-	if len(beforeManifests) != len(afterManifests) || len(beforeBlobs) != len(afterBlobs) {
+	if len(beforeManifests) != len(afterManifests) || len(beforeBlobs) != len(afterBlobs) || fixture.writes() != beforeWrites {
 		t.Fatal("invalid endorsement mutated registry")
 	}
 	// An authentically signed incomplete plan also fails before mutation.
@@ -127,6 +128,9 @@ func verifyActualMirrorPublication(t *testing.T, fixture *publicationRegistry, t
 	changed.Signature = []byte(base64.StdEncoding.EncodeToString(missingSignature))
 	if _, err := copyOfflineMirror(t.Context(), transfer, changed); err == nil {
 		t.Fatal("signed incomplete mirror plan accepted")
+	}
+	if fixture.writes() != beforeWrites {
+		t.Fatal("authentically signed incomplete mirror plan performed registry writes")
 	}
 	result, err := copyOfflineMirror(t.Context(), transfer, execution)
 	if err != nil {

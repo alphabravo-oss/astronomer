@@ -142,7 +142,7 @@ func mirrorRepository(base, source string) string {
 	host, repository, _ := strings.Cut(source, "/")
 	// Different upstream hosts can use the same path; preserve both identities
 	// without credential-bearing or mutable location substitutions.
-	return base + "/r-" + strings.TrimPrefix(sha([]byte(host)), "sha256:")[:16] + "/" + repository
+	return base + "/r-" + strings.TrimPrefix(sha([]byte(host)), "sha256:") + "/" + repository
 }
 func contentSubject(reference string) (string, string, error) {
 	parsed, err := ociregistry.ParseReference(reference)

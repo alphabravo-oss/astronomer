@@ -34,6 +34,7 @@ type publicationRegistry struct {
 	blobs        map[string][]byte
 	uploads      map[string][]byte
 	uploadCount  int
+	writeCount   int
 	payloadReads int
 	corruptBlob  string
 }
@@ -350,6 +351,9 @@ func verifyActualOfflinePublication(t *testing.T, fixture *publicationRegistry, 
 func (f *publicationRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
+	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+		f.writeCount++
+	}
 	if r.URL.Path == "/v2/" {
 		w.WriteHeader(200)
 		return
@@ -452,4 +456,10 @@ func (f *publicationRegistry) snapshot() (map[string][]byte, map[string][]byte) 
 		blobs[key] = append([]byte(nil), data...)
 	}
 	return manifests, blobs
+}
+
+func (f *publicationRegistry) writes() int {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	return f.writeCount
 }
