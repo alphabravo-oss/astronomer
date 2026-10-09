@@ -6,11 +6,12 @@
   "status": "targets_identified_NOT_RUN",
   "targets": [
     {
-      "browser": "Safari 27",
+      "browser": "Safari 27.0",
       "releaseDate": "2026-09-14",
       "platforms": [
         "macOS Golden Gate 27.0.1",
         "macOS Tahoe 26.7.1",
+        "macOS Sequoia 15.8.1",
         "iOS 27.0.1",
         "iPadOS 27.0.1"
       ],
@@ -21,7 +22,8 @@
         "physical compatible iPad"
       ],
       "source": "https://support.apple.com/en-us/149039",
-      "note": "Safari 27 final platform availability verified in Apple Developer JSON. OS patch 27.0.1 is not asserted to equal Safari app patch number; record actual About/UA/WebKit/devicebuild at execution."
+      "note": "Apple Developer final release notes identify Safari27.0 (20625.1.29) and availability on macOS27/26/Sequoia and iOS/iPadOS27. Capture the installed browser/WebKit/device build separately for each OS; do not assume all platform builds equal the release-note build or OS patch27.0.1.",
+      "releaseNoteBuild": "20625.1.29"
     },
     {
       "browser": "Safari 26.6.1",
