@@ -1,0 +1,4 @@
+test-live-browser: creating isolated Flux member cluster test-run-live-217936-1552
+Cloning into bare repository '/root/.cache/astronomer-032/qualification/w12-frozen-08f-live-chromium/browser/flux-fixture/git/repository.git'...
+done.
+test-live-browser: artifacts: /root/.cache/astronomer-032/qualification/w12-frozen-08f-live-chromium/browser
