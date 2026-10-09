@@ -28,7 +28,6 @@ import (
 	remoteauth "oras.land/oras-go/v2/registry/remote/auth"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 // MaxOCIChartVersionsPerChart caps how many tags per chart the OCI ingest
@@ -127,7 +126,7 @@ func IngestOCIRepo(ctx context.Context, q OCIQuerier, repo sqlc.HelmRepository, 
 		chartRef := base + "/" + chartName
 		tags, tagErr := ListOCIRegistryTags(ctx, chartRef, cfg)
 		if tagErr != nil {
-			log.Warn("OCI tags fetch failed", "chart", chartRef, "error", tagErr)
+			log.Warn("OCI tags fetch failed", "repository_id", repo.ID, "blocked_category", "chart_tags")
 			continue
 		}
 		tags = SelectOCITags(tags, MaxOCIChartVersionsPerChart)
@@ -142,7 +141,7 @@ func IngestOCIRepo(ctx context.Context, q OCIQuerier, repo sqlc.HelmRepository, 
 			registry.PullOptIgnoreMissingProv(true),
 		)
 		if latestErr != nil {
-			log.Warn("OCI pull (latest) failed", "ref", chartRef+":"+tags[0], "error", latestErr)
+			log.Warn("OCI pull (latest) failed", "repository_id", repo.ID, "blocked_category", "chart_archive")
 			continue
 		}
 		meta := OCIMetadataFromPull(latest)
@@ -196,7 +195,7 @@ func IngestOCIRepo(ctx context.Context, q OCIQuerier, repo sqlc.HelmRepository, 
 					registry.PullOptIgnoreMissingProv(true),
 				)
 				if perr != nil {
-					log.Warn("OCI pull failed", "ref", chartRef+":"+tag, "error", perr)
+					log.Warn("OCI pull failed", "repository_id", repo.ID, "blocked_category", "chart_archive")
 					continue
 				}
 				pulled = p
@@ -242,11 +241,13 @@ func ListOCIRegistryTags(ctx context.Context, chartReference string, cfg OCIAuth
 	if host == "" || !strings.Contains(chartReference, "/") {
 		return nil, errors.New("OCI chart reference is invalid")
 	}
-	if err := httpclient.GuardPublicHost("https://" + host); err != nil {
+	if err := catalogNetworkGuard(ctx, "https://"+host); err != nil {
 		return nil, fmt.Errorf("OCI registry URL blocked: %w", err)
 	}
-	client := httpclient.SafeClientWithLimit(60*time.Second, ociMetadataMaxBytes)
-	client.Transport = &catalogContextTransport{ctx: ctx, base: client.Transport}
+	client := catalogNetworkClient(ctx, 60*time.Second, ociMetadataMaxBytes)
+	copyClient := *client
+	copyClient.Transport = &catalogContextTransport{ctx: ctx, base: client.Transport}
+	client = &copyClient
 	return listOCIRegistryTags(ctx, chartReference, cfg, client)
 }
 
@@ -289,14 +290,16 @@ func NewOCIRegistryClient(ctx context.Context, repoURL string, cfg OCIAuthConfig
 	if err != nil {
 		return nil, err
 	}
-	if err := httpclient.GuardPublicHost("https://" + host); err != nil {
+	if err := catalogNetworkGuard(ctx, "https://"+host); err != nil {
 		return nil, fmt.Errorf("OCI registry URL blocked: %w", err)
 	}
 	if maximum <= 0 || maximum > MaxOCIResponseBytes {
 		maximum = MaxOCIResponseBytes
 	}
-	client := httpclient.SafeClientWithLimit(60*time.Second, maximum)
-	client.Transport = &catalogContextTransport{ctx: ctx, base: client.Transport}
+	client := catalogNetworkClient(ctx, 60*time.Second, maximum)
+	copyClient := *client
+	copyClient.Transport = &catalogContextTransport{ctx: ctx, base: client.Transport}
+	client = &copyClient
 	clientOpts := []registry.ClientOption{
 		registry.ClientOptWriter(io.Discard),
 		registry.ClientOptHTTPClient(client),
@@ -444,7 +447,7 @@ func probeOCICatalog(ctx context.Context, repoURL, username, password string) ([
 	if username != "" || password != "" {
 		req.SetBasicAuth(username, password)
 	}
-	client := httpclient.SafeClientWithLimit(15*time.Second, 4<<20)
+	client := catalogNetworkClient(ctx, 15*time.Second, 4<<20)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("call /v2/_catalog: %w", err)

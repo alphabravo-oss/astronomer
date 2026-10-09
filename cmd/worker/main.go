@@ -102,12 +102,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// C-01: enforce the same production fail-fast the server runs. Without this
-	// the worker stays Running with a typo'd ASTRONOMER_ENCRYPTION_KEY / bad
-	// secret / plaintext DSN — silently no-op'ing its credential-migration
-	// and email tasks — hiding exactly the misconfiguration
-	// the check exists to surface. warn-only in dev (ValidateProductionSecurity
-	// is a no-op outside production).
+	// Apply the server production security contract before starting any task.
 	encryptorReady := false
 	// Retained (not just probed) because the catalog:sync sweep needs it to
 	// unwrap helm_repositories.auth_config_encrypted — migration 145. The
@@ -262,6 +257,10 @@ func main() {
 		ManagementBackup:              backupExecutor,
 		AlertNotificationRunTx:        alertNotificationTxRunner(database),
 	}}
+	if err := tasks.ConfigureCatalogNetwork(&coreRuntime.Deps, cfg); err != nil {
+		log.Error("catalog network policy is invalid", "error", err)
+		os.Exit(1)
+	}
 	allowlistQueries := sqlc.New(database.Pool())
 	var allowlistMaterializer allowlistproviders.CloudCredentialMaterializer
 	if platformEncryptor != nil {

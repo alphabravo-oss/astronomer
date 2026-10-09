@@ -15,6 +15,12 @@ metadata:
     {{- include "astronomer.labels" . | nindent 4 }}
 immutable: true
 data:
+  {{- if .Values.delivery.distribution.mirrorEndorsement.plan }}
+  distribution-mirror.json: |
+    {{- .Values.delivery.distribution.mirrorEndorsement.plan | nindent 4 }}
+  distribution-mirror.sig: |
+    {{- .Values.delivery.distribution.mirrorEndorsement.signature | nindent 4 }}
+  {{- end }}
   release-manifest.json: |
     {{- .Values.release.manifest | nindent 4 }}
   {{- if .Values.release.mirrorMapping }}

@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -178,6 +180,8 @@ type CatalogHandler struct {
 	// group only prevents an in-flight download stampede.
 	chartHydration        singleflight.Group
 	chartHydrationTimeout time.Duration
+	catalogPolicy         *httpclient.DestinationPolicy
+	catalogHTTPClient     *http.Client
 }
 
 // SetK8sRequester wires the adopted-cluster API path used for lifecycle

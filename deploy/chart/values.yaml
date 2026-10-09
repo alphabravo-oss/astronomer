@@ -678,6 +678,17 @@ delivery:
         certificateIdentity: ""
         oidcIssuer: "https://token.actions.githubusercontent.com"
 
+  # Operator authority is independent of signed artifact locations.
+  distribution:
+    destinationPolicy:
+      restricted: false
+      origins: []
+    # Public signed metadata only; private signing keys never enter Helm values.
+    mirrorEndorsement:
+      plan: ""
+      signature: ""
+      keyRef: ""
+
   sourceResolution:
     workerConcurrency: 8
     maxArtifactBytes: 536870912
@@ -700,7 +711,7 @@ delivery:
     # Optional Secret whose keys are <trust-policy key_ref>.pub for Cosign
     # key verification, <key_ref>.asc for armored OpenPGP, and
     # trusted_root.json for offline keyless (Fulcio + Rekor) verification.
-    # It is mounted read-only only in resolver workers and is never exposed
+    # It is mounted read-only in the server and resolver workers and is never exposed
     # through the API.
     trustKeys:
       existingSecret: ""
@@ -1142,6 +1153,12 @@ managementBackup:
       name: ""
       key: "credentials"
   s3:
+    destinationPolicy:
+      restricted: false
+      origins: []
+    ca:
+      existingSecret: ""
+      key: ca.crt
     # Required when enabled=true.
     bucket: ""
     region: "us-east-1"
