@@ -60,7 +60,7 @@ so local alias variables and shadowed request names in unrelated nested callback
 are excluded. It understands generic canonical helper calls. The gate is bounded
 syntax discovery, not whole-program or runtime-generated SQL proof.
 
-Verification includes five Go AST fixtures and nine negative gate fixtures.
+Verification includes six Go AST fixtures and ten negative gate fixtures.
 Real PostgreSQL tests independently check runtime constraints, existing-v1 shape,
 audit dedupe, expand/validation refusal and new malformed writes. The row inventory
 and reviewed repair policy are in durable-json-repair.md. Column/site counts alone

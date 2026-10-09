@@ -19,14 +19,14 @@ CLASSES = {"strict_product", "versioned_internal", "raw_kubernetes", "extension_
 
 
 def validate(actual: dict, policy: dict) -> tuple[int, int]:
-    if policy.get("schema_version") != 1:
+    if type(policy.get("schema_version")) is not int or policy["schema_version"] != 1:
         raise ValueError("JSON contract inventory requires schema_version=1")
     declared = {}
     for row in policy["columns"]:
         key = (row["model"], row["column"])
         if key in declared:
             raise ValueError(f"duplicate JSON column contract: {key}")
-        if row["classification"] not in CLASSES or (not isinstance(row["schema_version"],int) or row["schema_version"]<1):
+        if row["classification"] not in CLASSES or (type(row["schema_version"]) is not int or row["schema_version"]<1):
             raise ValueError(f"invalid JSON column classification/version: {key}")
         for field in ("owner", "schema", "reader_behavior"):
             if not isinstance(row.get(field), str) or not row[field].strip():
