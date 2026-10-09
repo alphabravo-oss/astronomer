@@ -34,3 +34,4 @@ jobs:
           name: toolchain-resolution-${{ github.sha }}
           path: .artifacts/toolchain-resolution*
           if-no-files-found: error
+          include-hidden-files: true

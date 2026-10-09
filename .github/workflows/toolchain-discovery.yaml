@@ -19,6 +19,8 @@ jobs:
       - name: Validate authority
         run: make versions-check
       - name: Discover stable updates for weekly triage
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: make updates
       - name: Retain current targets and unavailable upstreams
         if: always()
@@ -27,3 +29,4 @@ jobs:
           name: toolchain-discovery-${{ github.sha }}
           path: .artifacts/toolchain-updates.json
           if-no-files-found: error
+          include-hidden-files: true

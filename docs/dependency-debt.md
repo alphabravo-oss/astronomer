@@ -64,11 +64,11 @@ The tooling blockers were retried, not inferred from application compile errors:
   Its published tags contain only `latest` and `v5-backport`; there is no
   ESLint 10-compatible release or prerelease.
 
-Recheck these exact registry commands before changing the two retained tooling
+W01 rechecked official registry metadata on2026-10-09: newest stable typescript-eslint8.71.1 still requires TypeScript<6.1.0; jsx-a11y6.10.2 still supports ESLint through9. Newest compatible selections remain TypeScript6.0.3 and ESLint9.39.5. The earlier observations above are historical. The selected versions, upstream targets and review deadlines now live in `deploy/toolchain/versions.json`. Recheck these exact registry commands before changing the two retained tooling
 majors. Accessibility and typed lint remain enabled; bypassing their peer
 contracts is not an upgrade.
 
-The supported Node 24 floor is `24.21.0`; `frontend/.nvmrc`, package engines,
+The current Node Current build floor is `26.11.1` with npm `12.2.0`; `frontend/.nvmrc`, package engines,
 the digest-pinned Docker builder, and active workflows agree. A lower patch
 version is not a supported verification environment.
 

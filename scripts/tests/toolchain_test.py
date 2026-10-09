@@ -128,7 +128,7 @@ class ToolchainTests(unittest.TestCase):
 
     def test_unavailable_and_rate_limited(self):
         with patch.object(toolchain, "fetch_json", side_effect=toolchain.urllib.error.HTTPError("https://api.github.com", 429, "rate limited", {}, None)):
-            report = toolchain.discover({"components": self.document["components"][:1]})
+            report = toolchain.discover({"components": [next(c for c in self.document["components"] if c["upstream"]["kind"] == "npm")]})
         self.assertEqual(report[0]["status"], "unavailable")
 
     def test_incomplete_and_malicious_metadata(self):

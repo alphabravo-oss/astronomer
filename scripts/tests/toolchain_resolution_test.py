@@ -99,6 +99,9 @@ class ResolutionTests(unittest.TestCase):
         job = document["jobs"]["resolution"]
         self.assertEqual(job["permissions"], {"contents": "read", "id-token": "write"})
         self.assertEqual(job["if"], "github.repository == 'alphabravo-oss/astronomer' && github.ref == 'refs/heads/main'")
+        uploader = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/upload-artifact@"))
+        self.assertIs(uploader["with"]["include-hidden-files"], True)
+        self.assertEqual(uploader["with"]["path"], ".artifacts/toolchain-resolution*")
         runs = [step.get("run", "") for step in job["steps"]]
         self.assertTrue(any("cosign sign-blob --yes --bundle" in run for run in runs))
         self.assertTrue(any("versions-release-check" in run for run in runs))

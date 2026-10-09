@@ -9,11 +9,13 @@ import pathlib
 import re
 import subprocess
 import sys
+import shutil
 import urllib.error
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 from toolchain_images import resolve_image
+import toolchain_inventory
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 AUTHORITY = ROOT / "deploy/toolchain/versions.json"
@@ -85,6 +87,15 @@ def validate(document, now=None, release=False):
             path = pathlib.PurePosixPath(consumer["path"])
             if path.is_absolute() or ".." in path.parts:
                 raise ValueError(f"{name}: consumer escapes repository")
+    for row in document.get("inventory", []):
+        path = pathlib.PurePosixPath(row["path"])
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("inventory source escapes repository")
+        if row["state"] == "leased":
+            if any(not row.get(key, "").strip() for key in ("reviewBy", "evidence", "owner", "reason")):
+                raise ValueError("inventory lease lacks owned evidence/review")
+            if timestamp(row["reviewBy"]) <= now:
+                raise ValueError("expired source consumer lease")
     return document
 
 
@@ -136,7 +147,19 @@ def fetch_bytes(url):
 
 
 def fetch_json(url):
-    raw, digest = fetch_bytes(url)
+    try:
+        raw, digest = fetch_bytes(url)
+    except urllib.error.HTTPError as error:
+        # The authenticated official GitHub CLI is an optional read-only
+        # fallback for shared-IP limits. Ordinary offline checks never use it.
+        parsed = urllib.parse.urlparse(url)
+        if error.code != 403 or parsed.hostname != "api.github.com" or not re.fullmatch(r"/repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases", parsed.path) or not shutil.which("gh"):
+            raise
+        result = subprocess.run(["gh", "api", parsed.path.removeprefix("/")], capture_output=True, timeout=30)
+        if result.returncode != 0:
+            raise ValueError("official GitHub metadata unavailable after authenticated read-only fallback") from error
+        raw = result.stdout
+        digest = "sha256:" + hashlib.sha256(raw).hexdigest()
     return json.loads(raw), digest
 
 
@@ -293,6 +316,7 @@ def main():
     if source != serialized(document):
         raise ValueError("version authority is not deterministically serialized")
     align(document, write=args.write)
+    toolchain_inventory.check(document, ROOT)
     if args.report:
         now = dt.datetime.now(dt.timezone.utc)
         rows = [{"id": c["id"], "selected": c["selected"], "upstreamStable": c["discovery"]["version"], "owner": c["owner"], "discoveryAgeDays": (now - timestamp(c["discovery"]["observedAt"])).days, "reviewDeadline": c.get("exception", {}).get("reviewBy"), "exception": c.get("exception"), "qualification": c["qualification"]} for c in document["components"]]

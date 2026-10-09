@@ -251,6 +251,68 @@
       "minItems": 1,
       "type": "array"
     },
+    "inventory": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "evidence": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reviewBy": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "managed",
+              "leased",
+              "fixture",
+              "release-identity"
+            ]
+          },
+          "value": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "workPackage": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "kind",
+          "value",
+          "state",
+          "owner",
+          "workPackage",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
     "policy": {
       "additionalProperties": false,
       "properties": {
@@ -284,7 +346,8 @@
   "required": [
     "schemaVersion",
     "policy",
-    "components"
+    "components",
+    "inventory"
   ],
   "type": "object"
 }
