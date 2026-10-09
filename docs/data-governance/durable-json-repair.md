@@ -24,7 +24,10 @@ categories; `diagnostics_truncated` does not mean remaining rows were skipped.
 The command has a ten-minute bound and returns an error if it cannot finish.
 
 The validators are the application readers for inhibition, task envelopes,
-audit detail, label maps, placement, frozen plans and system rollout strategy.
+audit detail, label maps, placement, frozen plans, the separate indexed rollout
+strategy and system rollout strategy. Indexed rollout inventory checks both
+`frozen_plan` and `strategy`; a valid frozen plan cannot mask a corrupt separate
+strategy column before the expand constraints are installed.
 The scope is deliberately visible in `rowSpecs`. It does not decrypt credential
 slots, infer schemas for external provider objects, interpret arbitrary
 Kubernetes resources, or claim to inventory every opaque field for nested
