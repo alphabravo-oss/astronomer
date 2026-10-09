@@ -166,8 +166,11 @@ export async function getTools(signal?: AbortSignal): Promise<ClusterTool[]> {
   return (response.data ?? []).map(mapClusterTool);
 }
 
-export async function getTool(slug: string): Promise<ClusterTool> {
-  const response = await getToolsBySlug({ path: { slug } });
+export async function getTool(
+  slug: string,
+  signal?: AbortSignal,
+): Promise<ClusterTool> {
+  const response = await getToolsBySlug({ signal, path: { slug } });
   return mapClusterTool(requireData(response, "getTool"));
 }
 

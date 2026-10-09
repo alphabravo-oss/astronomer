@@ -103,9 +103,9 @@ function networkPolicyApplicationFromWire(
 }
 
 /** GET /admin/network-policy-templates/ */
-export async function listNetworkPolicyTemplates(signal?: AbortSignal): Promise<
-  NetworkPolicyTemplate[]
-> {
+export async function listNetworkPolicyTemplates(
+  signal?: AbortSignal,
+): Promise<NetworkPolicyTemplate[]> {
   const response = await getAdminNetworkPolicyTemplates({ signal });
   return (response.data ?? []).map(networkPolicyTemplateFromWire);
 }
@@ -113,8 +113,12 @@ export async function listNetworkPolicyTemplates(signal?: AbortSignal): Promise<
 /** GET /admin/network-policy-templates/{id}/ */
 export async function getNetworkPolicyTemplate(
   id: string,
+  signal?: AbortSignal,
 ): Promise<NetworkPolicyTemplate> {
-  const response = await getAdminNetworkPolicyTemplatesById({ path: { id } });
+  const response = await getAdminNetworkPolicyTemplatesById({
+    signal,
+    path: { id },
+  });
   return networkPolicyTemplateFromWire(response.data ?? {});
 }
 

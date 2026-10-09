@@ -1,3 +1,12 @@
+import { requireMonitoringData as requireData } from "./monitoring-data";
+export {
+  previewClusterStack,
+  previewSharedThanos,
+  previewSharedAlertmanager,
+  previewSharedGrafana,
+  previewSharedLoki,
+  previewStack,
+} from "./monitoring-stack-previews";
 /**
  * Generated monitoring-stack lifecycle boundary for cluster Prometheus and
  * the shared Thanos, Alertmanager, Grafana, and Loki families.
@@ -45,7 +54,6 @@ import { idempotencyHeaderParams } from "@/lib/api/idempotency";
 import type {
   MonitoringOperation,
   MonitoringSizerResponse,
-  MonitoringStackPreview,
   OpenAPIComponents,
 } from "@/types/openapi.generated";
 
@@ -58,13 +66,6 @@ export type {
 } from "@/types/openapi.generated";
 
 type Schemas = OpenAPIComponents["schemas"];
-
-function requireData<T>(response: { data?: T }, operation: string): T {
-  if (response.data === undefined) {
-    throw new Error(`${operation} returned no data payload`);
-  }
-  return response.data;
-}
 
 // ─────────────────────────────────────────────────────────────────────
 // Operation queue
@@ -227,19 +228,6 @@ export async function getClusterStackStatus(
   );
 }
 
-export async function previewClusterStack(
-  clusterId: string,
-  body: ClusterStackRequest = {},
-): Promise<MonitoringStackPreview> {
-  return requireData(
-    await generated.postClustersByIdMonitoringStackPreview({
-      path: { id: clusterId },
-      body,
-    }),
-    "previewClusterStack",
-  );
-}
-
 export async function installClusterStack(
   clusterId: string,
   body: ClusterStackRequest = {},
@@ -311,15 +299,6 @@ export async function getSharedThanosStatus(
   );
 }
 
-export async function previewSharedThanos(
-  body: SharedThanosRequest,
-): Promise<MonitoringStackPreview> {
-  return requireData(
-    await generated.postSettingsMonitoringThanosPreview({ body }),
-    "previewSharedThanos",
-  );
-}
-
 export async function installSharedThanos(
   body: SharedThanosRequest,
 ): Promise<MonitoringOperation> {
@@ -387,15 +366,6 @@ export async function getSharedAlertmanagerStatus(
   );
 }
 
-export async function previewSharedAlertmanager(
-  body: SharedAlertmanagerRequest,
-): Promise<MonitoringStackPreview> {
-  return requireData(
-    await generated.postSettingsMonitoringAlertmanagerPreview({ body }),
-    "previewSharedAlertmanager",
-  );
-}
-
 export async function installSharedAlertmanager(
   body: SharedAlertmanagerRequest,
 ): Promise<MonitoringOperation> {
@@ -455,15 +425,6 @@ export async function getSharedGrafanaStatus(
   return requireData(
     await generated.getSettingsMonitoringGrafanaStatus({ signal }),
     "getSharedGrafanaStatus",
-  );
-}
-
-export async function previewSharedGrafana(
-  body: SharedGrafanaRequest,
-): Promise<MonitoringStackPreview> {
-  return requireData(
-    await generated.postSettingsMonitoringGrafanaPreview({ body }),
-    "previewSharedGrafana",
   );
 }
 
@@ -535,15 +496,6 @@ export async function getSharedLokiStatus(
   return requireData(
     await generated.getSettingsMonitoringLokiStatus({ signal }),
     "getSharedLokiStatus",
-  );
-}
-
-export async function previewSharedLoki(
-  body: SharedLokiRequest,
-): Promise<MonitoringStackPreview> {
-  return requireData(
-    await generated.postSettingsMonitoringLokiPreview({ body }),
-    "previewSharedLoki",
   );
 }
 
@@ -709,24 +661,6 @@ export async function getStackStatus(
       return getSharedGrafanaStatus(signal);
     case "loki":
       return getSharedLokiStatus(signal);
-  }
-}
-
-export async function previewStack(
-  target: MonitoringStackTarget,
-  body: MonitoringStackRequestBody,
-): Promise<MonitoringStackPreview> {
-  switch (target.kind) {
-    case "cluster":
-      return previewClusterStack(target.clusterId, body as ClusterStackRequest);
-    case "thanos":
-      return previewSharedThanos(body as SharedThanosRequest);
-    case "alertmanager":
-      return previewSharedAlertmanager(body as SharedAlertmanagerRequest);
-    case "grafana":
-      return previewSharedGrafana(body as SharedGrafanaRequest);
-    case "loki":
-      return previewSharedLoki(body as SharedLokiRequest);
   }
 }
 

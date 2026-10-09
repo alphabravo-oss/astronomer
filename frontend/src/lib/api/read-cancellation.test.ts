@@ -4,8 +4,10 @@ import axios from "axios";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import api from "./transport";
 import { queryKeys } from "@/lib/query-keys";
-import { getToolOperation, installTool } from "./tools";
+import { getTool, getToolOperation, installTool } from "./tools";
 import { k8sGet } from "./kubernetes-proxy";
+import { previewStack } from "./monitoring-stack";
+import { downloadComplianceExportBlob } from "./settings-compliance-export";
 
 let server: Server;
 let baseURL: string | undefined;
@@ -18,7 +20,7 @@ beforeEach(async () => {
   baseURL = api.defaults.baseURL;
   adapter = api.defaults.adapter;
   server = createServer((req, res) => {
-    if (req.method === "POST") {
+    if (req.method === "POST" && req.url?.endsWith("/install/")) {
       committed++;
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify({ data: { id: "operation-1" } }));
@@ -38,6 +40,50 @@ beforeEach(async () => {
     config.baseURL = origin;
     return config;
   });
+});
+it.each([
+  ["detail", (signal: AbortSignal) => getTool("logging", signal)],
+  [
+    "bounded POST preview",
+    (signal: AbortSignal) => previewStack({ kind: "thanos" }, {}, signal),
+  ],
+] as const)("aborts an actual %s adapter socket", async (_kind, read) => {
+  let arrived!: () => void;
+  const request = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  let disconnected!: Promise<void>;
+  observe = (_path, closed) => {
+    disconnected = closed;
+    arrived();
+  };
+  const controller = new AbortController();
+  const pending = read(controller.signal).catch((error: unknown) => error);
+  await request;
+  controller.abort();
+  expect(axios.isCancel(await pending)).toBe(true);
+  await disconnected;
+});
+it("aborts an actual signed artifact read", async () => {
+  let arrived!: () => void;
+  const request = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  let disconnected!: Promise<void>;
+  observe = (_path, closed) => {
+    disconnected = closed;
+    arrived();
+  };
+  const controller = new AbortController();
+  const pending = downloadComplianceExportBlob(
+    `${api.defaults.baseURL}/artifact`,
+    controller.signal,
+  ).catch((error: unknown) => error);
+  await request;
+  controller.abort();
+  expect(await pending).toMatchObject({ name: "AbortError" });
+  await disconnected;
+  expect(committed).toBe(0);
 });
 afterEach(async () => {
   api.interceptors.request.eject(interceptor);

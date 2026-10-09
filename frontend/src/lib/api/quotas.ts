@@ -207,6 +207,6 @@ export async function getProjectEffectiveQuota(
   );
 }
 
-export async function getMyQuota() {
-  return requireData(await getAuthMeQuota(), "getMyQuota");
+export async function getMyQuota(signal?: AbortSignal) {
+  return requireData(await getAuthMeQuota({ signal }), "getMyQuota");
 }

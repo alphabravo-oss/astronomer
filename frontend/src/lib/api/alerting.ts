@@ -304,9 +304,10 @@ export async function getNotificationChannels(
 
 export async function getNotificationChannel(
   id: string,
+  signal?: AbortSignal,
 ): Promise<NotificationChannel> {
   return requireData(
-    await getAlertingChannelsById({ path: { id } }),
+    await getAlertingChannelsById({ signal, path: { id } }),
     "getNotificationChannel",
   );
 }

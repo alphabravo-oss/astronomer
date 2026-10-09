@@ -221,8 +221,10 @@ export function mapLoggingSavedSearch(
 
 export async function getLoggingSavedSearches(
   outputId: string,
+  signal?: AbortSignal,
 ): Promise<LoggingSavedSearch[]> {
   const response = await listLoggingSavedSearchesOperation({
+    signal,
     query: { output_id: outputId },
   });
   return response.data.map(mapLoggingSavedSearch);

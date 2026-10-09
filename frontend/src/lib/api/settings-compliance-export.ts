@@ -32,8 +32,9 @@ export async function requestComplianceExport(params: {
 
 export async function downloadComplianceExportBlob(
   downloadUrl: string,
+  signal?: AbortSignal,
 ): Promise<Blob> {
-  const res = await fetch(downloadUrl);
+  const res = await fetch(downloadUrl, { signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.blob();
 }

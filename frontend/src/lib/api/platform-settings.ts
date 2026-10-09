@@ -90,10 +90,11 @@ export async function listPlatformSettings(
 
 export async function getPlatformSetting(
   key: string,
+  signal?: AbortSignal,
 ): Promise<PlatformSettingView> {
   return mapPlatformSetting(
     requireData(
-      await getAdminSettingsByKey({ path: { key } }),
+      await getAdminSettingsByKey({ signal, path: { key } }),
       "getPlatformSetting",
     ),
   );

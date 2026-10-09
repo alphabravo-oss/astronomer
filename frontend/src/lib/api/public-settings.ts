@@ -56,6 +56,8 @@ export async function getRegistrationTLS(signal?: AbortSignal): Promise<{
   };
 }
 
-export async function getSSOPresets(): Promise<SSOPresetDefinition[]> {
-  return requireData(await getSettingsSsoPresets(), "getSSOPresets");
+export async function getSSOPresets(
+  signal?: AbortSignal,
+): Promise<SSOPresetDefinition[]> {
+  return requireData(await getSettingsSsoPresets({ signal }), "getSSOPresets");
 }

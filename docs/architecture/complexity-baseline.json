@@ -7,7 +7,7 @@
     "frontend/src/components/monitoring/hooks.ts": 773,
     "frontend/src/components/monitoring/stack-spec.ts": 792,
     "frontend/src/lib/api/charlie.ts": 960,
-    "frontend/src/lib/api/monitoring-stack.ts": 834,
+    "frontend/src/lib/api/monitoring-stack.ts": 768,
     "frontend/src/lib/api/project-detail.ts": 987,
     "internal/agent/state_subscriber.go": 1017,
     "internal/agent/tunnel.go": 1055,
