@@ -161,3 +161,122 @@ func TestStartMetricsServerServesMetrics(t *testing.T) {
 		t.Fatal("metrics server did not shut down")
 	}
 }
+
+func TestWorkerMetricsShutdownBoundsBlockedScrape(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	defer close(release)
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { close(entered); <-release })}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	var logs strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	go func() { result <- serveWorkerMetrics(ctx, srv, listener, logger, 40*time.Millisecond) }()
+	clientDone := make(chan struct{})
+	go func() {
+		defer close(clientDone)
+		response, _ := http.Get("http://" + listener.Addr().String())
+		if response != nil {
+			_ = response.Body.Close()
+		}
+	}()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("scrape did not enter handler")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("blocked scrape retained shutdown")
+	}
+	select {
+	case <-clientDone:
+	case <-time.After(time.Second):
+		t.Fatal("deadline did not close scrape connection")
+	}
+	if !strings.Contains(logs.String(), "context deadline exceeded") {
+		t.Fatal("bounded shutdown failure not observable")
+	}
+}
+
+func TestWorkerMetricsShutdownDrainsCompletedScrape(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-release
+		_, _ = w.Write([]byte("complete"))
+	})}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		result <- serveWorkerMetrics(ctx, srv, listener, slog.New(slog.NewTextHandler(io.Discard, nil)), time.Second)
+	}()
+	body := make(chan string, 1)
+	go func() {
+		response, err := http.Get("http://" + listener.Addr().String())
+		if err != nil {
+			body <- "error"
+			return
+		}
+		defer response.Body.Close()
+		data, _ := io.ReadAll(response.Body)
+		body <- string(data)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("scrape did not start")
+	}
+	cancel()
+	close(release)
+	select {
+	case got := <-body:
+		if got != "complete" {
+			t.Fatal("graceful drain lost completed response")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("request did not drain")
+	}
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not join shutdown")
+	}
+}
+
+func TestWorkerMetricsServeFailureDoesNotWaitForCancellation(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = listener.Close()
+	result := make(chan error, 1)
+	go func() {
+		result <- serveWorkerMetrics(context.Background(), &http.Server{}, listener, slog.New(slog.NewTextHandler(io.Discard, nil)), time.Second)
+	}()
+	select {
+	case err := <-result:
+		if err == nil {
+			t.Fatal("closed listener failure was lost")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("listener failure leaked shutdown waiter")
+	}
+}

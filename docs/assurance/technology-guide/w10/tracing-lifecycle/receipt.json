@@ -1,0 +1,92 @@
+{
+  "artifacts": [
+    {
+      "path": "docs/assurance/technology-guide/w10/tracing-lifecycle/complexity.log",
+      "sha256": "5320a0e9e21d9c225f596695861d52c2c607dcdfc493e261628ec6866f8fd76d"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/tracing-lifecycle/composite-baseline.log",
+      "sha256": "8238047b02c04e8ed890c66ff377c6934803a86ee784dcbc6751fa72ca973cc2"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/tracing-lifecycle/otel-frozen-baseline.log",
+      "sha256": "68d4d9ce7b487b6f08567cc508e72b91eb3abe96a6b6a71f222c487d4e728fa6"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/tracing-lifecycle/otel-race.log",
+      "sha256": "a80b3ba5c0972ea9f1930de91d6d139800e928a5fe90c5856a1e62efb82ecc6e"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/tracing-lifecycle/source-gates.jsonl",
+      "sha256": "a1798705da11b9c41ab1fe7730e1d1ad4a9698017baa42de59ec1d147d9c0bd0"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/tracing-lifecycle/tracer-metrics-race.log",
+      "sha256": "b6482e431c2a96d147c4bc9b02f7dd7b2239d48f38523e184bd53aad86c148e0"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w10/tracing-lifecycle/vet.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "baseline": "99b3353c97bccd863bdd87b8c68fa0dae7305a9e",
+  "baselineFailures": {
+    "composite": "Four used optional interfaces discarded. Original baseline log retained.",
+    "otel": "Exact original99b OTel source overlay fails malformed endpoint, disabled provider and real OTLP collector path tests. Overlay original source SHA256=db3ea499bbbcdb7f05e1cc26b300ed9385eba11f728334c6ad582d709e189a1e"
+  },
+  "compiler": "go1.27.2",
+  "gates": {
+    "complexity": "pass; no ceilings changed",
+    "focusedRace": {
+      "failures": 0,
+      "packages": 3,
+      "skips": 0,
+      "testCases": 24
+    },
+    "fullObservabilityRace": "pass",
+    "vetDbWorkerObservability": "pass"
+  },
+  "notClaimed": [
+    "Actual production pgx optional-interface spans on PostgreSQL; dedicated owned fixture pending",
+    "Collector stack migrations/whole API-task-tunnel trace",
+    "Redaction/cardinality/runbook/overhead acceptance",
+    "Runtime tracing reload or automatic shutdown of a preexisting provider"
+  ],
+  "observedAt": "2026-10-09T23:31:44.563988+00:00",
+  "schemaVersion": 1,
+  "scope": [
+    "W10.5 source and callback order/context/payload contract tests",
+    "W10.6 actual loopback OTLP protobuf export, resource identity, shutdown flushing/budget, startup URL validation and disabled no-op",
+    "Worker metrics bounded real HTTP graceful drain/deadline close/join"
+  ],
+  "sourceFiles": [
+    {
+      "path": "internal/db/composite_tracer.go",
+      "sha256": "d781ac334af069839ea7da0d708f79cea2450cae0d992b173551bf733be55df7"
+    },
+    {
+      "path": "internal/db/composite_tracer_test.go",
+      "sha256": "3562b8c577c22f291d8ba67a798c4f4989d1c887d697813e353733e560f6950a"
+    },
+    {
+      "path": "internal/worker/metrics_server.go",
+      "sha256": "e302d46c3de1e595a7ae5b0ce645d6ebe1ec8f9264b221ea584547dba8716853"
+    },
+    {
+      "path": "internal/worker/metrics_server_test.go",
+      "sha256": "689da1e18bf1f3efac99af9f5d68547301b33050950cf6d062f1fb807bd4c74f"
+    },
+    {
+      "path": "internal/observability/otel_tracing.go",
+      "sha256": "fd8f8d2f6dbf9db21b35fa8292a7250feb1a6af2764199dfc1a6d34613074845"
+    },
+    {
+      "path": "internal/observability/otel_tracing_test.go",
+      "sha256": "ca5a8fca5417cadd93a91bf7a3842e2916662a1516f53a361aff5625176e023f"
+    },
+    {
+      "path": "internal/observability/otel_pipeline_test.go",
+      "sha256": "1c88bfc4cc76a0363e13ea36385cbaaaca8e76e1a19638f4e878f6c54f06ebfa"
+    }
+  ]
+}

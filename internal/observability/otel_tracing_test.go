@@ -11,11 +11,11 @@ import (
 )
 
 // When the OTLP endpoint is unset, InitTracing
-// must be a clean no-op — no background goroutines, no global side
-// effects beyond installing the W3C propagator, and a Shutdown that
+// must install a no-op provider and W3C propagator without exporter
+// goroutines or egress, and return a Shutdown that
 // returns nil immediately.
 func TestInitTracing_DisabledByDefault(t *testing.T) {
-	t.Parallel()
+	preserveTracingGlobals(t)
 
 	cfg := TracingConfig{}
 	if cfg.Endpoint != "" {
@@ -35,8 +35,7 @@ func TestInitTracing_DisabledByDefault(t *testing.T) {
 	}
 
 	// Propagator must still be installed so an upstream traceparent
-	// header isn't dropped — when tracing is later enabled, no redeploy
-	// is needed for connected traces.
+	// header is not dropped. Enabling export requires a process restart.
 	if got := otel.GetTextMapPropagator(); got == nil {
 		t.Error("propagator not set; W3C traceparent would be dropped")
 	}
