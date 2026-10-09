@@ -1,0 +1,12 @@
+=== RUN   TestPostgresRecoveryFixtureProductionReaders
+    postgres_integration_test.go:48: seed rejected SQLSTATE=42P08 table= constraint=
+--- FAIL: TestPostgresRecoveryFixtureProductionReaders (0.07s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/scripts/cnpg-recovery-fixture	0.108s
+
+=== Failed
+=== FAIL: scripts/cnpg-recovery-fixture TestPostgresRecoveryFixtureProductionReaders (0.07s)
+    postgres_integration_test.go:48: seed rejected SQLSTATE=42P08 table= constraint=
+
+DONE 1 tests, 1 failure in 0.109s
+qualification evidence: /root/.cache/astronomer-032/qualification/w12-recovery-draft2/recovery-readers/evidence.json
