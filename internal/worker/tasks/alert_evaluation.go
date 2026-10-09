@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"regexp"
 	"strings"
 	"time"
 
@@ -77,7 +76,7 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 		}
 		// P-03 — enabled inhibition rules are identical for the whole tick, so
 		// load them once and evaluate in-memory against the firing set below.
-		inhibitions, err := listEnabledInhibitions(ctx)
+		inhibitions, integrityErr, err := listEnabledInhibitions(ctx)
 		if err != nil {
 			return err
 		}
@@ -150,7 +149,7 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 		}
 
 		slog.InfoContext(ctx, "alert evaluation complete")
-		return nil
+		return integrityErr
 	})
 }
 
@@ -349,7 +348,7 @@ func publishAlertEventChanged(ctx context.Context, clusterID pgtype.UUID, eventI
 // otherwise fires a fresh event (subject to cooldown). Events are keyed by
 // (rule, cluster) via filterActiveEventsForCluster / cooldownElapsed, so a
 // global rule's clusters never clobber one another.
-func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleClusterEval, existingEvents []sqlc.AlertEvent, silences []sqlc.AlertSilence, inhibitions []sqlc.AlertInhibition, firing []map[string]string) error {
+func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleClusterEval, existingEvents []sqlc.AlertEvent, silences []sqlc.AlertSilence, inhibitions []preparedInhibition, firing []map[string]string) error {
 	targetClusterID := eval.clusterID
 	message := eval.message
 	details := eval.details
@@ -407,7 +406,7 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 	// fresh and re-dispatches on the next tick (natural release). Silenced
 	// alerts already skip dispatch, so inhibition only applies to the firing
 	// path.
-	if silence == nil && alertInhibited(inhibitions, firing, alertLabelSet(rule, eval)) {
+	if silence == nil && preparedAlertInhibited(inhibitions, firing, alertLabelSet(rule, eval)) {
 		runtimeLogger(ctx).InfoContext(ctx, "alert suppressed by inhibition rule", "rule_id", rule.ID.String())
 		return nil
 	}
@@ -793,24 +792,6 @@ func matchActiveSilence(silences []sqlc.AlertSilence, rule sqlc.AlertRule, clust
 	return nil
 }
 
-// inhibitionMatcher mirrors the handler's InhibitionMatcher wire shape as
-// stored in the source_matchers / target_matchers JSONB columns.
-type inhibitionMatcher struct {
-	Label   string `json:"label"`
-	Value   string `json:"value"`
-	IsRegex bool   `json:"is_regex"`
-}
-
-// listEnabledInhibitions loads the enabled inhibition rule set once per tick.
-// A nil runtime querier (unconfigured worker) yields no inhibitions so the
-// suppression path is simply inert.
-func listEnabledInhibitions(ctx context.Context) ([]sqlc.AlertInhibition, error) {
-	if runtimeDependencies(ctx).Queries == nil {
-		return nil, nil
-	}
-	return runtimeDependencies(ctx).Queries.ListEnabledAlertInhibitions(ctx)
-}
-
 // alertLabelSet builds the label set an inhibition matcher evaluates a firing
 // (rule, cluster) alert against. Mirrors renderRulerRules' label construction:
 // the rule's configured labels plus alertname / severity / cluster identifiers.
@@ -832,94 +813,6 @@ func alertLabelSet(rule sqlc.AlertRule, eval ruleClusterEval) map[string]string 
 		labels["cluster_id"] = uuid.UUID(rule.ClusterID.Bytes).String()
 	}
 	return labels
-}
-
-// inhibitionMatcherMatches reports whether a single matcher matches the alert's
-// labels. A regex matcher is fully anchored; an uncompilable pattern fails
-// closed (no match) so a malformed rule can never suppress an alert.
-func inhibitionMatcherMatches(m inhibitionMatcher, labels map[string]string) bool {
-	val, ok := labels[m.Label]
-	if !ok {
-		return false
-	}
-	if m.IsRegex {
-		re, err := regexp.Compile("^(?:" + m.Value + ")$")
-		if err != nil {
-			return false
-		}
-		return re.MatchString(val)
-	}
-	return val == m.Value
-}
-
-// inhibitionMatchersMatch requires every matcher in a non-empty set to match.
-func inhibitionMatchersMatch(ms []inhibitionMatcher, labels map[string]string) bool {
-	if len(ms) == 0 {
-		return false
-	}
-	for _, m := range ms {
-		if !inhibitionMatcherMatches(m, labels) {
-			return false
-		}
-	}
-	return true
-}
-
-// equalLabelsMatch requires each named label to be present on BOTH alerts and
-// carry the same value. A label missing on either side is a mismatch (never
-// suppress on absent labels).
-func equalLabelsMatch(equal []string, source, target map[string]string) bool {
-	for _, l := range equal {
-		sv, sok := source[l]
-		tv, tok := target[l]
-		if !sok || !tok || sv != tv {
-			return false
-		}
-	}
-	return true
-}
-
-func sameLabelSet(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, v := range a {
-		if b[k] != v {
-			return false
-		}
-	}
-	return true
-}
-
-// alertInhibited reports whether the target alert should be suppressed: some
-// enabled inhibition matches the target with its target_matchers AND a DISTINCT
-// currently-firing alert matches its source_matchers AND both share equal values
-// on every equal-label.
-func alertInhibited(inhibitions []sqlc.AlertInhibition, firing []map[string]string, targetLabels map[string]string) bool {
-	for _, inh := range inhibitions {
-		var source, target []inhibitionMatcher
-		var equal []string
-		_ = json.Unmarshal(inh.SourceMatchers, &source)
-		_ = json.Unmarshal(inh.TargetMatchers, &target)
-		_ = json.Unmarshal(inh.EqualLabels, &equal)
-		if !inhibitionMatchersMatch(target, targetLabels) {
-			continue
-		}
-		for _, src := range firing {
-			if sameLabelSet(src, targetLabels) {
-				// An alert never inhibits itself.
-				continue
-			}
-			if !inhibitionMatchersMatch(source, src) {
-				continue
-			}
-			if !equalLabelsMatch(equal, src, targetLabels) {
-				continue
-			}
-			return true
-		}
-	}
-	return false
 }
 
 func evaluateClusterRule(rule sqlc.AlertRule, config map[string]any, cluster sqlc.Cluster, lastHeartbeat pgtype.Timestamptz, health sqlc.ClusterHealthStatus, healthKnown bool, details map[string]any) (bool, string, []byte, pgtype.UUID, error) {
