@@ -1,0 +1,177 @@
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+)
+
+type controlPlaneSQLCapture struct {
+	sqlc.DBTX
+	statement string
+	args      []any
+	queryName string
+}
+
+func (c *controlPlaneSQLCapture) Query(ctx context.Context, statement string, args ...any) (pgx.Rows, error) {
+	if c.statement == "" && strings.Contains(statement, "-- name: "+c.queryName) {
+		c.statement = statement
+		c.args = append([]any(nil), args...)
+	}
+	return c.DBTX.Query(ctx, statement, args...)
+}
+
+type controlPlanePageRow struct {
+	ID         uuid.UUID `json:"id"`
+	FiredAt    time.Time `json:"firedAt"`
+	CreatedAt  time.Time `json:"createdAt"`
+	Controller string    `json:"controller"`
+}
+
+func controlPlaneCursorPage(t *testing.T, h *ControlPlaneHandler, actor uuid.UUID, collection string, values url.Values) paging.Response[controlPlanePageRow] {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/controllers/"+collection+"/?"+values.Encode(), nil)
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: actor.String()}))
+	rec := httptest.NewRecorder()
+	if collection == "alerts" {
+		h.ListAlerts(rec, req)
+	} else {
+		h.ListSilences(rec, req)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("%s page status%d: %s", collection, rec.Code, rec.Body.String())
+	}
+	var page paging.Response[controlPlanePageRow]
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if page.Pagination.Total != nil {
+		t.Fatal("signed control-plane page fabricated a total")
+	}
+	return page
+}
+func assertControlPlanePlan(t *testing.T, nodes []paginationPlanNode, index string) bool {
+	t.Helper()
+	found := false
+	for _, n := range nodes {
+		if n.NodeType == "Sort" || n.NodeType == "Incremental Sort" || n.NodeType == "Seq Scan" {
+			t.Fatalf("control-plane keyset scanned/sorted remaining dataset: %s", n.NodeType)
+		}
+		if n.IndexName == index {
+			found = true
+			if n.ActualRows < 0 || n.ActualLoops <= 0 || n.ActualRows*n.ActualLoops > 201 {
+				t.Fatalf("ordering index read%g rows for201-row page", n.ActualRows*n.ActualLoops)
+			}
+		}
+		found = assertControlPlanePlan(t, n.Plans, index) || found
+	}
+	return found
+}
+func TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor(t *testing.T) {
+	for _, collection := range []string{"alerts", "silences"} {
+		t.Run(collection, func(t *testing.T) {
+			ctx, tx := paginationPostgresTx(t)
+			controller := "p-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
+			if collection == "alerts" {
+				paginationExec(t, ctx, tx, `INSERT INTO control_plane_alerts(controller,condition_type,status,message,fired_at) SELECT $1,'fixture','resolved','fixture',TIMESTAMPTZ '2020-01-01' + (n/2)*INTERVAL '1 second' FROM generate_series(1,10042)n`, controller)
+				paginationExec(t, ctx, tx, `ANALYZE control_plane_alerts`)
+			} else {
+				paginationExec(t, ctx, tx, `INSERT INTO control_plane_silences(controller,reason,starts_at,ends_at,created_at) SELECT $1,'fixture',TIMESTAMPTZ '2020-01-01',TIMESTAMPTZ '2020-01-02',TIMESTAMPTZ '2020-01-01' + (n/2)*INTERVAL '1 second' FROM generate_series(1,10042)n`, controller)
+				paginationExec(t, ctx, tx, `ANALYZE control_plane_silences`)
+			}
+			capture := &controlPlaneSQLCapture{DBTX: tx, queryName: "ListControlPlaneAlertsAfter"}
+			index := "idx_control_plane_alerts_keyset"
+			if collection == "silences" {
+				capture.queryName = "ListControlPlaneSilencesAfter"
+				index = "idx_control_plane_silences_keyset"
+			}
+			h := NewControlPlaneHandler(sqlc.New(capture), nil)
+			codec, err := paging.NewCursorCodec("fixture-cursor-authority")
+			if err != nil {
+				t.Fatal(err)
+			}
+			h.SetCursorCodec(codec)
+			actor := uuid.New()
+			values := url.Values{"limit": {"200"}}
+			if collection == "alerts" {
+				values.Set("status", "resolved")
+				values.Set("controller", controller)
+			}
+			seen := map[uuid.UUID]bool{}
+			lastTime := time.Time{}
+			lastID := ""
+			deleted := uuid.Nil
+			pages := 0
+			for {
+				page := controlPlaneCursorPage(t, h, actor, collection, values)
+				pages++
+				if pages > 60 {
+					t.Fatal("cursor did not terminate")
+				}
+				for _, row := range page.Data {
+					timestamp := row.FiredAt
+					if collection == "silences" {
+						timestamp = row.CreatedAt
+					}
+					if row.Controller != controller {
+						t.Fatal("control-plane filter leaked another controller")
+					}
+					if seen[row.ID] {
+						t.Fatal("cursor repeated a row")
+					}
+					if !lastTime.IsZero() && (timestamp.After(lastTime) || timestamp.Equal(lastTime) && row.ID.String() >= lastID) {
+						t.Fatal("timestamp/ID order did not progress through ties")
+					}
+					seen[row.ID] = true
+					lastTime = timestamp
+					lastID = row.ID.String()
+				}
+				if pages == 1 {
+					anchor := page.Data[len(page.Data)-1].ID
+					deleted = anchor
+					if collection == "alerts" {
+						paginationExec(t, ctx, tx, `DELETE FROM control_plane_alerts WHERE id=$1`, anchor)
+					} else {
+						paginationExec(t, ctx, tx, `DELETE FROM control_plane_silences WHERE id=$1`, anchor)
+					}
+				}
+				if !page.Pagination.HasMore {
+					if page.Pagination.NextCursor != nil {
+						t.Fatal("final page advertises continuation")
+					}
+					break
+				}
+				if page.Pagination.NextCursor == nil || len(page.Data) != 200 {
+					t.Fatal("actual sentinel continuation missing")
+				}
+				values.Set("cursor", *page.Pagination.NextCursor)
+			}
+			if len(seen) != 10042 || !seen[deleted] {
+				t.Fatalf("traversed%d rows, want10042 including previously read deleted anchor", len(seen))
+			}
+			var plan json.RawMessage
+			if err := tx.QueryRow(ctx, "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) "+capture.statement, capture.args...).Scan(&plan); err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("%s generated keyset plan: %s", collection, plan)
+			var measured []paginationQueryPlan
+			if err := json.Unmarshal(plan, &measured); err != nil {
+				t.Fatal(err)
+			}
+			if len(measured) != 1 || !assertControlPlanePlan(t, measured[0].Plan.Plans, index) {
+				t.Fatal("control-plane continuation lacks complete ordering index")
+			}
+		})
+	}
+}
