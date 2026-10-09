@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"oras.land/oras-go/v2/content/oci"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -137,6 +140,18 @@ func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testin
 	if signed != 2*(len(index.Children)+1) || publicRequests != 0 || transport.unexpected != 0 {
 		t.Fatalf("signed=%d public=%d unexpected=%d", signed, publicRequests, transport.unexpected)
 	}
+	verifyActualOfflinePublication(t, fixture, index, options.Trust, directory)
+	offlineOptions := distribution.OfflineOptions{Repository: index.Repository, Digest: index.Digest, CatalogDigest: index.CatalogDigest, Release: index.Release, Profile: "builtins", TrustDirectory: directory, Policy: options.Trust}
+	transfer, err := captureOfflineTransfer(t.Context(), layout, offlineOptions, client, options.Network)
+	if err != nil {
+		t.Fatalf("actual authenticated registry capture failed: %v", err)
+	}
+	if _, _, err := readOfflineTransfer(t.Context(), transfer, offlineOptions); err != nil {
+		t.Fatalf("captured actual graph cannot verify offline: %v", err)
+	}
+	if publicRequests != 0 {
+		t.Fatal("offline verification contacted external proxy")
+	}
 	// Successful write/sign cannot cover a missing vendor signature after import.
 	fixture.mutex.Lock()
 	for name := range fixture.manifests {
@@ -152,6 +167,122 @@ func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testin
 	options.Mode = "production"
 	if err := publishLayout(t.Context(), options); err == nil {
 		t.Fatal("QA key masqueraded as production vendor publisher")
+	}
+}
+
+func verifyActualOfflinePublication(t *testing.T, fixture *publicationRegistry, index subjectIndex, policy model.TrustPolicy, trustDirectory string) {
+	t.Helper()
+	var stored []distribution.StoredSubject
+	graph := map[string][]byte{}
+	subjects := append([]publishedSubject{}, index.Children...)
+	subjects = append(subjects, publishedSubject{Repository: index.Repository, Digest: index.Digest})
+	for _, subject := range subjects {
+		repository := strings.TrimPrefix(subject.Repository, "1.1.1.1/")
+		signature := fixture.manifests[repository+"/sha256-"+subject.Digest[7:]+".sig"]
+		stored = append(stored, distribution.StoredSubject{Repository: subject.Repository, Digest: subject.Digest, SignatureDigest: sha(signature)})
+		for _, data := range [][]byte{fixture.manifests[repository+"/"+subject.Digest], signature} {
+			var manifest ocispec.Manifest
+			if closedJSON(data, &manifest) != nil {
+				t.Fatal("actual registry manifest invalid")
+			}
+			graph[sha(data)] = data
+			graph[manifest.Config.Digest.String()] = fixture.blobs[manifest.Config.Digest.String()]
+			for _, layer := range manifest.Layers {
+				graph[layer.Digest.String()] = fixture.blobs[layer.Digest.String()]
+			}
+		}
+	}
+	options := distribution.OfflineOptions{Repository: index.Repository, Digest: index.Digest, CatalogDigest: index.CatalogDigest, Release: index.Release, Profile: "builtins", TrustDirectory: trustDirectory, Policy: policy}
+	catalog, status, err := distribution.VerifyOfflineStore(t.Context(), options, stored, graph)
+	if err != nil || status.Verification != "verified" || len(catalog.Components) != len(index.Children) {
+		t.Fatalf("actual offline graph authentication failed: %v", err)
+	}
+	transfer, err := packOfflineTransfer(t.Context(), options, stored, graph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertOfflineTransferRejectsUnsafeMembers(t, transfer, options)
+	archive := filepath.Join(t.TempDir(), "transfer.tar.gz")
+	if err := os.WriteFile(archive, transfer, 0600); err != nil {
+		t.Fatal(err)
+	}
+	imported := filepath.Join(t.TempDir(), "verified-import")
+	if err := importOfflineTransfer(t.Context(), archive, imported, options); err != nil {
+		t.Fatalf("actual signed graph import: %v", err)
+	}
+	store, err := oci.New(imported)
+	if err != nil {
+		t.Fatal("verified import is not a standard OCI store")
+	}
+	for _, subject := range stored {
+		if descriptor, err := store.Resolve(t.Context(), subject.Digest); err != nil || descriptor.Digest.String() != subject.Digest {
+			t.Fatalf("import lost exact original OCI subject: %v", err)
+		}
+		if descriptor, err := store.Resolve(t.Context(), subject.SignatureDigest); err != nil || descriptor.Digest.String() != subject.SignatureDigest {
+			t.Fatalf("import lost exact original legacy signature manifest: %v", err)
+		}
+		original := graph[subject.SignatureDigest]
+		copied, err := os.ReadFile(filepath.Join(imported, "blobs", "sha256", subject.SignatureDigest[7:]))
+		if err != nil || string(copied) != string(original) {
+			t.Fatal("import erased or replaced original vendor signature bytes")
+		}
+	}
+	wrongRelease := options
+	wrongRelease.Release = "v99.99.99"
+	denied := filepath.Join(t.TempDir(), "denied-import")
+	if err := importOfflineTransfer(t.Context(), archive, denied, wrongRelease); err == nil {
+		t.Fatal("transfer bypassed caller release pin")
+	}
+	if _, err := os.Stat(denied); !os.IsNotExist(err) {
+		t.Fatal("unverified transfer wrote destination")
+	}
+	for _, mutation := range []string{"missing-config", "changed-blob", "orphan-blob", "extra-subject", "wrong-key", "tampered-signature", "duplicate-json"} {
+		t.Run("offline-"+mutation, func(t *testing.T) {
+			changed := map[string][]byte{}
+			for digest, data := range graph {
+				changed[digest] = append([]byte(nil), data...)
+			}
+			subjects := append([]distribution.StoredSubject(nil), stored...)
+			changedOptions := options
+			var manifest ocispec.Manifest
+			if closedJSON(changed[subjects[0].Digest], &manifest) != nil {
+				t.Fatal("fixture missing manifest")
+			}
+			switch mutation {
+			case "missing-config":
+				delete(changed, manifest.Config.Digest.String())
+			case "changed-blob":
+				changed[manifest.Layers[0].Digest.String()] = []byte("changed payload")
+			case "orphan-blob":
+				changed[sha([]byte("orphan"))] = []byte("orphan")
+			case "extra-subject":
+				extra := subjects[0]
+				extra.Repository += "/unconsumed"
+				subjects = append(subjects, extra)
+			case "wrong-key":
+				changedOptions.Policy.KeyRef = "not-mounted"
+			case "tampered-signature", "duplicate-json":
+				original := subjects[0].SignatureDigest
+				var signature ocispec.Manifest
+				if closedJSON(changed[original], &signature) != nil {
+					t.Fatal("fixture missing signature")
+				}
+				signature.Layers[0].Annotations["dev.cosignproject.cosign/signature"] = "AA=="
+				data, err := json.Marshal(signature)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if mutation == "duplicate-json" {
+					data = append([]byte(`{"schemaVersion":2,`), data[1:]...)
+				}
+				delete(changed, original)
+				subjects[0].SignatureDigest = sha(data)
+				changed[sha(data)] = data
+			}
+			if _, _, err := distribution.VerifyOfflineStore(t.Context(), changedOptions, subjects, changed); err == nil {
+				t.Fatal("changed/unclosed offline graph authenticated")
+			}
+		})
 	}
 }
 func (f *publicationRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
@@ -30,6 +31,7 @@ import (
 )
 
 type registryFixture struct {
+	mutex            sync.Mutex
 	manifests        map[string][]byte
 	blobs            map[string][]byte
 	payloadReads     int
@@ -62,6 +64,10 @@ func (f *registryFixture) sign(t *testing.T, repository, subject string, signer 
 	f.manifests[repository+"/sha256-"+strings.TrimPrefix(subject, "sha256:")+".sig"] = data
 }
 func (f *registryFixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Actual Cosign may upload a config/blob while another registry request
+	// resolves a manifest. The owned test registry must serialize its maps.
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
 	if r.URL.Path == "/v2/" {
 		w.WriteHeader(200)
 		return

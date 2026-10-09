@@ -58,7 +58,21 @@ func main() {
 	qaKey := flag.String("qa-signing-key", "", "QA-only local key file; never used by production OIDC mode")
 	networkFile := flag.String("destination-policy", "", "bounded operator destination policy JSON file")
 	caFile := flag.String("registry-ca-file", "", "operator-provided registry CA PEM file")
+	exportLayout := flag.String("export-published-layout", "", "capture original signed parent/children and legacy signatures from an exact prepared layout")
+	transferOutput := flag.String("transfer-output", "", "new closed offline transfer archive")
+	offlineArchive := flag.String("verify-offline-transfer", "", "verify a closed offline graph without any network transport")
+	importDirectory := flag.String("offline-import-directory", "", "optional new private graph directory, written only after complete verification")
+	expectedDigest := flag.String("expected-distribution-digest", "", "caller-pinned original signed parent subject digest")
+	expectedCatalog := flag.String("expected-catalog-digest", "", "caller-pinned signed catalog digest")
 	flag.Parse()
+	if *exportLayout != "" || *offlineArchive != "" {
+		if err := offlineTransferFromFlags(*exportLayout, *transferOutput, *offlineArchive, *importDirectory, *repository, *expectedDigest, *expectedCatalog, *expectedRelease, *trustDirectory, *provider, *keyRef, *identity, *issuer, *networkFile, *caFile); err != nil {
+			fmt.Fprintln(os.Stderr, "offline distribution transfer blocked:", err)
+			os.Exit(1)
+		}
+		fmt.Println("original signed offline distribution graph verified")
+		return
+	}
 	if *publishDirectory != "" {
 		if err := publishFromFlags(*publishDirectory, *expectedRelease, *publisherMode, *cosignBinary, *qaKey, *trustDirectory, *provider, *keyRef, *identity, *issuer, *networkFile, *caFile); err != nil {
 			fmt.Fprintln(os.Stderr, "verified immutable distribution publication blocked:", err)
