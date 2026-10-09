@@ -17,7 +17,6 @@
     "internal/charlie/management_kubernetes_adapter.go": 1214,
     "internal/charliequalification/driver.go": 2210,
     "internal/compliance/apply.go": 856,
-    "internal/delivery/systemrollout/service.go": 801,
     "internal/handler/auth.go": 805,
     "internal/handler/clusters_inventory.go": 844,
     "internal/handler/delivery/source.go": 917,

@@ -621,18 +621,6 @@ func releaseNextCohort(ctx context.Context, tx pgx.Tx, id uuid.UUID, now time.Ti
 // slot until it reports Ready. Failed assignments keep consuming availability,
 // preventing a controller from compounding an outage below the configured
 // failure threshold.
-func systemReleaseSlots(strategy model.RolloutStrategy, total int32, current counts) int32 {
-	concurrency := min(int32(strategy.MaxConcurrent), total) - current.inFlight - current.immatureReady
-	availabilityLimit := total
-	switch strategy.MaxUnavailable.Type {
-	case model.AmountCount:
-		availabilityLimit = min(int32(strategy.MaxUnavailable.Value), total)
-	case model.AmountPercent:
-		availabilityLimit = int32(uint64(total) * uint64(strategy.MaxUnavailable.Value) / 100)
-	}
-	availability := availabilityLimit - current.inFlight - current.immatureReady - current.failed
-	return max(0, min(concurrency, availability))
-}
 
 func rollbackComplete(current counts) bool {
 	return current.rollbackFailed == 0 && current.rollbackTargets > 0 && current.rolledBack == current.rollbackTargets
