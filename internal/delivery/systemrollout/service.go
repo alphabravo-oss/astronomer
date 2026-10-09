@@ -760,7 +760,7 @@ func scanView(row rowScanner) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	if err := json.Unmarshal(strategy, &value.Strategy); err != nil {
+	if value.Strategy, err = model.ReadRolloutStrategyV1(strategy); err != nil {
 		return View{}, fmt.Errorf("decode persisted system strategy: %w", err)
 	}
 	if previous.Valid {

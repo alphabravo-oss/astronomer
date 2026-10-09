@@ -1,6 +1,8 @@
 package systemrollout
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -138,5 +140,40 @@ func TestPartialCanaryRollbackCompletionUsesOnlyRollbackTargets(t *testing.T) {
 	current.rollbackFailed = 1
 	if rollbackComplete(current) {
 		t.Fatal("failed rollback must not be classified as complete")
+	}
+}
+
+type strategyFixtureRow []byte
+
+func (row strategyFixtureRow) Scan(destinations ...any) error {
+	*destinations[3].(*[]byte) = append([]byte(nil), row...)
+	return nil
+}
+
+func TestScanViewRejectsMalformedStoredStrategyWithoutLeakingData(t *testing.T) {
+	for _, raw := range []string{`null`, `{"type":"rolling","max_concurrent":0,"private-fixture":true}`, `{"max_concurrent":"private-fixture"}`} {
+		if _, err := scanView(strategyFixtureRow(raw)); err == nil {
+			t.Error("malformed stored strategy became a valid system rollout")
+		} else if strings.Contains(err.Error(), "private-fixture") {
+			t.Error("stored strategy leaked into reader error")
+		}
+	}
+}
+
+func TestScanViewRetainsValidAdditiveV1Strategy(t *testing.T) {
+	raw, err := json.Marshal(model.RolloutStrategy{
+		Type: model.StrategyRolling, MaxConcurrent: 1,
+		MaxUnavailable:   model.Amount{Type: model.AmountCount, Value: 0},
+		ProgressDeadline: model.Duration(60000000000),
+		FailureThreshold: model.Amount{Type: model.AmountCount, Value: 1},
+		OnFailure:        model.FailurePause,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = append(raw[:len(raw)-1], []byte(`,"future_v1":true}`)...)
+	view, err := scanView(strategyFixtureRow(raw))
+	if err != nil || view.Strategy.MaxConcurrent != 1 {
+		t.Fatalf("valid additive strategy lost: %v", err)
 	}
 }
