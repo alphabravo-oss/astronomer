@@ -347,7 +347,8 @@ func isUniqueViolation(err error) bool {
 	return strings.Contains(err.Error(), "SQLSTATE 23505")
 }
 
-// isFKRestrictViolation returns true for PostgreSQL 23503 when a deliberate
+// isFKRestrictViolation recognizes PostgreSQL foreign-key (23503) and
+// PG18+ restrict (23001) violations when a deliberate
 // ON DELETE RESTRICT policy requires the caller to detach dependants first.
 func isFKRestrictViolation(err error) bool {
 	if err == nil {
@@ -355,7 +356,7 @@ func isFKRestrictViolation(err error) bool {
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		return pgErr.Code == "23503"
+		return pgErr.Code == "23503" || pgErr.Code == "23001"
 	}
 	return false
 }

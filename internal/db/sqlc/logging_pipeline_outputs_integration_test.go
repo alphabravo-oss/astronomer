@@ -24,6 +24,20 @@ func TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted(
 	}
 	defer pool.Close()
 
+	var serverVersion int
+	if err := pool.QueryRow(ctx, `SELECT current_setting('server_version_num')::integer`).Scan(&serverVersion); err != nil {
+		t.Fatal("cannot inspect selected PostgreSQL major")
+	}
+	expectedRestrictCode := ""
+	switch serverVersion / 10000 {
+	case 16, 17:
+		expectedRestrictCode = "23503"
+	case 18:
+		expectedRestrictCode = "23001"
+	default:
+		t.Fatalf("PostgreSQL major %d has no qualified RESTRICT SQLSTATE", serverVersion/10000)
+	}
+
 	clusterID := uuid.New()
 	foreignClusterID := uuid.New()
 	outputID := uuid.New()
@@ -99,8 +113,8 @@ func TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted(
 	}
 	_, err = tx.Exec(ctx, `DELETE FROM logging_outputs WHERE id=$1`, outputID)
 	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) || pgErr.Code != "23503" {
-		t.Fatalf("delete error=%v, want PostgreSQL 23503", err)
+	if !errors.As(err, &pgErr) || pgErr.Code != expectedRestrictCode || pgErr.ConstraintName != "logging_pipeline_outputs_logging_output_id_fkey" {
+		t.Fatalf("delete error=%v, want selected-major SQLSTATE %s on owned output association", err, expectedRestrictCode)
 	}
 }
 
