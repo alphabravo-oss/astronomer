@@ -634,13 +634,13 @@ Expected: tests include ceiling case and full traversal; every page progresses o
 
 **Ordered tasks:**
 
-- [ ] W08.1 Inventory domain SQL outside canonical queries, distinguishing fixed statements, dynamic K8s/extension queries, advisory locks, schema/test setup, and explicit low-level runtime operations.
+- [x] W08.1 Inventory domain SQL outside canonical queries, distinguishing fixed statements, dynamic K8s/extension queries, advisory locks, schema/test setup, and explicit low-level runtime operations.
 - [x] W08.2 Capture transactional behavior before movement: isolation, row/advisory locks, held connection, idempotency keys, affected row checks, audit outbox, operation/outbox write ordering, and error translation.
 - [x] W08.3 Move one bounded service's fixed SQL into annotated sqlc source, inject transaction-bound generated query interfaces, and retain parameterization. Do not replace a tx query with pool query accidentally.
 - [x] W08.4 Keep PostgreSQL advisory locks on the same physical transaction/session where required; distinguish session locks from transaction locks.
-- [ ] W08.5 Classify dynamic queries with named allowlisted construction patterns; preserve identifier quoting and value binding. No generic raw SQL bypass.
-- [ ] W08.6 Expand governance discovery across runtime SQL locations so destructive operations cannot escape by moving into Go. Require explicit ownership/audit/retention policy for relevant deletes.
-- [ ] W08.7 Add a no-new-unowned SQL gate; reduce existing approved exceptions per package without a growing baseline.
+- [x] W08.5 Classify dynamic queries with named allowlisted construction patterns; preserve identifier quoting and value binding. No generic raw SQL bypass.
+- [x] W08.6 Expand governance discovery across runtime SQL locations so destructive operations cannot escape by moving into Go. Require explicit ownership/audit/retention policy for relevant deletes.
+- [x] W08.7 Add a no-new-unowned SQL gate; reduce existing approved exceptions per package without a growing baseline.
 - [x] W08.8 Generate queries and review both canonical SQL and generated API changes. Do not hand edit generated methods.
 - [x] W08.9 Prove concurrency fencing, rollback, errors, and audit intents with real PostgreSQL before moving the next service.
 
@@ -757,10 +757,10 @@ Expected: typed generated interfaces, no unintended transaction behavior change,
 - [x] W12.9 Label standalone streaming failover evidence separately from CNPG operator failover. They exercise different ownership and recovery paths.
 - [ ] W12.10 Add Firefox and WebKit projects for critical authenticated workflows and responsive layouts; install matching browser binaries in CI. Keep Chromium route/visual breadth where appropriate.
 - [ ] W12.11 Exercise login, refresh rotation, logout/revocation, mutations, validation, recovery, keyboard focus, dialogs, tables, uploads/downloads, streaming and terminal cancellation in the cross-browser lane.
-- [ ] W12.12 Identify the actual Safari/OS versions needed for a Safari claim. Playwright WebKit is useful coverage but does not by itself certify every shipping Safari build.
+- [x] W12.12 Identify the actual Safari/OS versions needed for a Safari claim. Playwright WebKit is useful coverage but does not by itself certify every shipping Safari build.
 - [ ] W12.13 Expand Kubernetes qualification to current stable 1.37 and maintain the declared older range only where actually tested. Include 1.36 as a transition lane and verify kubectl/client-go/Flux/CNPG version-skew support from upstream.
 - [ ] W12.14 Reuse two-cluster and offerings inventories from Plans 028–029 instead of inventing another incomplete list. Verify optional Charlie/provider features only when their services are available.
-- [ ] W12.15 Run axe/semantic component checks and record automated accessibility coverage. Preserve the distinction from human accessibility certification.
+- [x] W12.15 Run axe/semantic component checks and record automated accessibility coverage. Preserve the distinction from human accessibility certification.
 - [x] W12.16 Preserve existing v1.2.0/v1.2.1 cloud/scale/Rancher/human-accessibility deferrals. Write a funded future qualification proposal with environment, owner, workload, success criteria, and evidence format; do not silently assert completion.
 - [x] W12.17 Publish observed RPO/RTO, workload, fault, dates, versions, sample size, and uncertainties. Do not claim a target solely because a script exited zero.
 
