@@ -6,7 +6,10 @@ set -Eeuo pipefail
 }
 case "${QUALIFICATION_POSTGRES_MAJOR:-}" in 17|18) ;; *) exit 2 ;; esac
 export PATH="/usr/lib/postgresql/$QUALIFICATION_POSTGRES_MAJOR/bin:$PATH"
-export PGDATA=/var/lib/postgresql/qualification-data
+case "${QUALIFICATION_PGDATA:-/var/lib/postgresql/qualification-data}" in
+  /var/lib/postgresql/qualification-data|/var/lib/postgresql/data) export PGDATA="${QUALIFICATION_PGDATA:-/var/lib/postgresql/qualification-data}" ;;
+  *) echo "qualification PostgreSQL: data path is not declared" >&2; exit 2 ;;
+esac
 install -d -m 0700 -o postgres -g postgres "$PGDATA"
 if [[ ! -f "$PGDATA/PG_VERSION" ]]; then
   password_file="$(mktemp)"

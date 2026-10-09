@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="0" errors="0" time="4.442637">
+	<testsuite tests="1" failures="0" time="4.443000" name="github.com/alphabravocompany/astronomer-go/internal/worker" timestamp="2026-10-09T22:48:46Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/worker" name="TestRedisOutageRecoveryDurableNotification" time="4.370000"></testcase>
+	</testsuite>
+</testsuites>

@@ -1,0 +1,3 @@
+chown: changing ownership of '/var/lib/postgresql/data': Operation not permitted
+test-postgres-failover-certification: FAIL
+test-postgres-failover-certification: artifacts: /root/.cache/astronomer-032/qualification/w12-streaming-pg18/topology

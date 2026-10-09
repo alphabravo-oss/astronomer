@@ -1,0 +1,9 @@
+{"Time":"2026-10-09T22:43:36.313387095Z","Action":"start","Package":"github.com/alphabravocompany/astronomer-go/internal/server"}
+{"Time":"2026-10-09T22:43:36.402907968Z","Action":"run","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Test":"TestPostgresOutageQualification"}
+{"Time":"2026-10-09T22:43:36.40298351Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Test":"TestPostgresOutageQualification","Output":"=== RUN   TestPostgresOutageQualification\n","OutputType":"frame"}
+{"Time":"2026-10-09T22:43:36.421839489Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Test":"TestPostgresOutageQualification","Output":"    postgres_outage_qualification_integration_test.go:75: dedicated PostgreSQL outage container guard failed\n","OutputType":"error"}
+{"Time":"2026-10-09T22:43:36.421887619Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Test":"TestPostgresOutageQualification","Output":"--- FAIL: TestPostgresOutageQualification (0.02s)\n","OutputType":"frame"}
+{"Time":"2026-10-09T22:43:36.421982417Z","Action":"fail","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Test":"TestPostgresOutageQualification","Elapsed":0.02}
+{"Time":"2026-10-09T22:43:36.422229201Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Output":"FAIL\n","OutputType":"frame"}
+{"Time":"2026-10-09T22:43:36.427180534Z","Action":"output","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Output":"FAIL\tgithub.com/alphabravocompany/astronomer-go/internal/server\t0.113s\n","OutputType":"frame"}
+{"Time":"2026-10-09T22:43:36.427332069Z","Action":"fail","Package":"github.com/alphabravocompany/astronomer-go/internal/server","Elapsed":0.114}

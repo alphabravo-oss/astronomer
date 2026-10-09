@@ -41,11 +41,17 @@ test("closing a pending dialog preserves the durable save request", async ({
   page,
 }) => {
   let submissions = 0;
+  let releaseResponse: () => void = () => {};
+  const responseGate = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
   await page.route("**/siem-forwarders/**", async (route) => {
     if (route.request().method() !== "POST")
       return route.fulfill({ json: { data: [] } });
     submissions++;
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    // Keep the request pending until the real Cancel action has completed.
+    // A fixed delay races WebKit animation/actionability and can close on save.
+    await responseGate;
     await route.fulfill({ json: { data: { id: "forwarder-1" } } });
   });
   await page.goto("/?modal");
@@ -62,6 +68,7 @@ test("closing a pending dialog preserves the durable save request", async ({
   ).toBeDisabled();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByText("Saved and closed")).toBeVisible();
+  releaseResponse();
   expect((await committed).ok()).toBe(true);
   expect(submissions).toBe(1);
   expect(await page.pageErrors()).toEqual([]);

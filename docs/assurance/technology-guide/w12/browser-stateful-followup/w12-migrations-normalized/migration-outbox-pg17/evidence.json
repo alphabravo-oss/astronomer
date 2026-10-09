@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "name": "migration-outbox-pg17",
+  "sourceCommit": "e04a2171e5e71d3091a2acf5fc60ae45b75b5cd8",
+  "sourceDirty": false,
+  "sourceBefore": {
+    "schema_version": 2,
+    "source_file_count": 5880,
+    "source_tree_sha256": "a82cac9b2ded7e044fa2cb29c7edf96847b6bbae18f3c50f8ae25437cd1bf0c2"
+  },
+  "sourceAfter": {
+    "schema_version": 2,
+    "source_file_count": 5880,
+    "source_tree_sha256": "a82cac9b2ded7e044fa2cb29c7edf96847b6bbae18f3c50f8ae25437cd1bf0c2"
+  },
+  "sourceStable": true,
+  "startedAt": "2026-10-09T22:47:45.592914+00:00",
+  "completedAt": "2026-10-09T22:47:46.766879+00:00",
+  "durationSeconds": 1.173965,
+  "exitCode": 0,
+  "status": "pass",
+  "goVersion": "go version go1.27.2 linux/amd64",
+  "gotestsumVersion": "gotestsum version v1.13.0",
+  "goArguments": [
+    "-p=1",
+    "./internal/db/sqlc",
+    "-run",
+    "Test(AuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders|LoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted)$",
+    "-count=1"
+  ],
+  "race": false,
+  "buildTags": [],
+  "postgresMajor": "17",
+  "operands": {
+    "schemaVersion": 1,
+    "defaultPostgresMajor": "18",
+    "postgres": {
+      "18": {
+        "version": "18.6",
+        "image": "ghcr.io/cloudnative-pg/postgresql:18.6-202610050823-standard-trixie@sha256:79be0d10e78b7ac4520cf6c5db199a8bb7f6de53b3229f47e90cab5865528a0d",
+        "lane": "current-major qualification candidate"
+      },
+      "17": {
+        "version": "17.11",
+        "image": "ghcr.io/cloudnative-pg/postgresql:17.11-202610050823-standard-trixie@sha256:d456fe7392b0b2147b4cea0dc124d51aee7ad3ec522c57f3177799e01f29a2d1",
+        "lane": "previous production major"
+      }
+    },
+    "valkey": {
+      "version": "9.1.2",
+      "image": "valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11"
+    },
+    "gotestsum": "1.13.0",
+    "requiredExtensions": [
+      "citext",
+      "pgcrypto",
+      "uuid-ossp",
+      "vector"
+    ],
+    "sourceEvidence": "advisor-plans/032-evidence/cnpg18-prerequisites.json",
+    "limits": [
+      "These immutable operands qualify disposable test databases; they do not switch the production chart major.",
+      "Standalone Docker fixtures do not qualify CloudNativePG operator failover, backup or recovery."
+    ]
+  },
+  "testContract": {
+    "expected": [
+      "TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders",
+      "TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted"
+    ],
+    "terminal": {
+      "TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders": "pass",
+      "TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted": "pass"
+    },
+    "missing": [],
+    "skipped": [],
+    "failed": [],
+    "complete": true
+  },
+  "privateOriginalDirectory": "/tmp/astronomer-private-go-evidence-6tao1w9p",
+  "originalDigests": {
+    "console.log": "sha256:94700ed2cf58711563509a5db4d0e4ec8573bee06cb031163a215d6777d35f6e",
+    "junit.xml": "sha256:8c8f9b27df434f6f670641ab0858aa33fdfede632627dae81844217c7b61db42",
+    "go-test.json": "sha256:e0c6802a55f4f1701fd56ff8973a3f5a8a57923eadc17cfd780e527b1d7bf392"
+  },
+  "publicDigests": {
+    "junit.xml": "sha256:8c8f9b27df434f6f670641ab0858aa33fdfede632627dae81844217c7b61db42",
+    "console.log": "sha256:94700ed2cf58711563509a5db4d0e4ec8573bee06cb031163a215d6777d35f6e",
+    "go-test.json": "sha256:e0c6802a55f4f1701fd56ff8973a3f5a8a57923eadc17cfd780e527b1d7bf392"
+  }
+}

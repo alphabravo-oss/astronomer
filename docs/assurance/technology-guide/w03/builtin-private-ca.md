@@ -2,7 +2,8 @@
 
 Server startup reads the operator's mounted registry CA once, as a regular file
 bounded to 1 MiB. The distribution HTTP client and delivery provider use the
-same captured bytes. The provider rejects malformed PEM, non-certificate
+same captured bytes. Delivery also respects the existing protocol limit of
+256 KiB per credential value. The provider rejects malformed PEM, non-certificate
 blocks, trailing data, non-CA certificates and bundles exceeding 64 certificates.
 TLS verification remains enabled. This CA is public certificate material;
 registry credentials and vendor signing trust remain separate.
@@ -45,5 +46,7 @@ External Flux DNS/network enforcement and private-registry operation remain
 part of the disconnected live qualification.
 
 No public API, database schema, root dependency graph or version pin changed.
-The only JSON shape addition is `public_ca` in the existing internal credential
-receipt projection; its existing canonical serializer remains the owner.
+The internal credential receipt projection retains public trust identities
+through its existing canonical serializer. The later constructor-only
+[keyed QA consumer](keyed-qa-consumer.md) adds its own captured public signing-key
+identity without changing production OIDC configuration.

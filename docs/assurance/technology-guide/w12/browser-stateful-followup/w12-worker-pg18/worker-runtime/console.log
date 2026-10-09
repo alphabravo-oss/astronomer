@@ -1,0 +1,23 @@
+=== RUN   TestWorkerPostgresRedisIntegration
+2026/10/09 22:40:11 INFO worker job started operation_id=webhook task_id=da2f37d7-aab3-43b0-bf5b-3278122aaa68 retry_count=0 max_retry=2 event=worker_job_started job=webhook:dispatch
+2026/10/09 22:40:11 INFO worker job completed operation_id=webhook task_id=da2f37d7-aab3-43b0-bf5b-3278122aaa68 retry_count=0 max_retry=2 event=worker_job_completed job=webhook:dispatch status=success duration_ms=6
+2026/10/09 22:40:11 INFO worker job started operation_id=siem task_id=69de5439-d6c1-4d15-8f07-0d171c97b7f1 retry_count=0 max_retry=2 event=worker_job_started job=siem:dispatch
+2026/10/09 22:40:11 INFO worker job completed operation_id=siem task_id=69de5439-d6c1-4d15-8f07-0d171c97b7f1 retry_count=0 max_retry=2 event=worker_job_completed job=siem:dispatch status=success duration_ms=3
+2026/10/09 22:40:11 INFO worker job started operation_id=gitops task_id=36300a22-4e95-4acc-af43-74b5a4bd5fd8 retry_count=0 max_retry=2 event=worker_job_started job=gitops:sync
+2026/10/09 22:40:11 INFO worker job started operation_id=cluster_registry task_id=a8a084b2-a7ab-415c-b3c4-6a162e6a3237 retry_count=0 max_retry=2 event=worker_job_started job=cluster:apply_registry_secret
+2026/10/09 22:40:11 INFO worker job completed operation_id=gitops task_id=36300a22-4e95-4acc-af43-74b5a4bd5fd8 retry_count=0 max_retry=2 event=worker_job_completed job=gitops:sync status=success duration_ms=4
+2026/10/09 22:40:11 INFO worker job completed operation_id=cluster_registry task_id=a8a084b2-a7ab-415c-b3c4-6a162e6a3237 retry_count=0 max_retry=2 event=worker_job_completed job=cluster:apply_registry_secret status=success duration_ms=12
+2026/10/09 22:40:11 INFO worker job started operation_id=cloud_credential task_id=a28528ff-1847-4bcb-a461-0a6609c18b56 retry_count=0 max_retry=2 event=worker_job_started job=cloud_credentials:materialize
+2026/10/09 22:40:11 INFO worker job completed operation_id=cloud_credential task_id=a28528ff-1847-4bcb-a461-0a6609c18b56 retry_count=0 max_retry=2 event=worker_job_completed job=cloud_credentials:materialize status=success duration_ms=3
+2026/10/09 22:40:11 INFO worker job started operation_id=network_policy task_id=85072311-a487-407f-afd0-0d3e5957e147 retry_count=0 max_retry=2 event=worker_job_started job=network_policy:apply
+2026/10/09 22:40:11 INFO worker job completed operation_id=network_policy task_id=85072311-a487-407f-afd0-0d3e5957e147 retry_count=0 max_retry=2 event=worker_job_completed job=network_policy:apply status=success duration_ms=4
+2026/10/09 22:40:11 INFO worker job started operation_id=cluster_snapshot task_id=4d7b889d-5e47-493c-9727-0476bd22521e retry_count=0 max_retry=2 event=worker_job_started job=cluster_snapshot:apply_operation
+2026/10/09 22:40:11 INFO worker job completed operation_id=cluster_snapshot task_id=4d7b889d-5e47-493c-9727-0476bd22521e retry_count=0 max_retry=2 event=worker_job_completed job=cluster_snapshot:apply_operation status=success duration_ms=4
+2026/10/09 22:40:11 INFO worker job started operation_id=kubectl_session task_id=fd878ea2-ef5e-4c35-be81-bc52bf09e51b retry_count=0 max_retry=2 event=worker_job_started job=kubectl:session_reap
+2026/10/09 22:40:11 INFO worker job completed operation_id=kubectl_session task_id=fd878ea2-ef5e-4c35-be81-bc52bf09e51b retry_count=0 max_retry=2 event=worker_job_completed job=kubectl:session_reap status=success duration_ms=4
+    worker_postgres_redis_integration_test.go:176: production business handler coverage=85/91 descriptors
+--- PASS: TestWorkerPostgresRedisIntegration (106.77s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker	106.824s
+
+DONE 1 tests in 106.824s

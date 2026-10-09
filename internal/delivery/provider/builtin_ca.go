@@ -34,7 +34,7 @@ func NewWithBuiltinCA(queries Querier, decryptor Decryptor, ca []byte, authorize
 }
 
 func validBuiltinCA(ca []byte) bool {
-	if len(ca) == 0 || len(ca) > 1<<20 {
+	if len(ca) == 0 || len(ca) > protocol.MaxDeliveryCredentialValue {
 		return false
 	}
 	count := 0
@@ -66,6 +66,9 @@ func builtinCAEligible(row sqlc.ListClusterDeliveryAssignmentsRow) bool {
 
 func (p *Provider) applyBuiltinCAMetadata(ctx context.Context, row sqlc.ListClusterDeliveryAssignmentsRow, assignment *protocol.DeliveryAssignmentV2) (string, error) {
 	if len(p.builtinCA) == 0 || !builtinCAEligible(row) {
+		return "", nil
+	}
+	if len(p.builtinSigningKey) != 0 && !p.builtinSigningPolicyMatches(row) {
 		return "", nil
 	}
 	approved, err := p.authorizeBuiltinCA(ctx, row.ClusterID, row.ProjectID, row.SourceID, *assignment)

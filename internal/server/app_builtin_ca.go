@@ -5,8 +5,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/builtin"
@@ -19,20 +17,7 @@ import (
 func builtinCAAuthorizer(loader builtin.CatalogLoader, policy httpclient.DestinationPolicy) provider.BuiltinCAAuthorizer {
 	policy = policy.Clone()
 	return func(ctx context.Context, cluster, project, source uuid.UUID, assignment protocol.DeliveryAssignmentV2) (bool, error) {
-		catalog, err := loader.Load(ctx)
-		if err != nil {
-			return false, errors.New("verified builtin catalog unavailable")
-		}
-		if !builtin.AuthorizesCatalogAssignment(catalog, cluster, project, source, assignment) {
-			return false, nil
-		}
-		endpoint := "https://" + strings.TrimPrefix(assignment.Source.URL, "oci://")
-		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		if err := policy.ValidateURL(checkCtx, endpoint); err != nil {
-			return false, errors.New("builtin registry destination is not approved")
-		}
-		return true, nil
+		return builtin.AuthorizeCatalogSource(ctx, loader, policy, cluster, project, source, assignment)
 	}
 }
 

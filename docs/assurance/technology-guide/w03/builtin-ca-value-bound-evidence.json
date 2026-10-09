@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "workPackage": "W03",
+  "slice": "builtin-ca-protocol-value-bound",
+  "baselineCommit": "f8fee9b6",
+  "implementationStatus": "READY_FOR_REVIEW",
+  "packageStatus": "IN_PROGRESS",
+  "authoritativeQualification": false,
+  "change": "CA constructor additionally respects existing protocol.MaxDeliveryCredentialValue (256 KiB); file-read ceiling remains 1 MiB. Oversized valid certificates fail before a delivery receipt can advance.",
+  "sourceSha256": {
+    "internal/delivery/provider/builtin_ca.go": "77eea2bd4fdd2ab9e6df89a2a79a2fe580b48aeb4d1eff7fe69a586f8f969373",
+    "internal/delivery/provider/builtin_ca_test.go": "27cbe72d4ab87279392d3bf1b1dd71f0374b0cf1fa80a31f1cac2d9bfe6dd8ea",
+    "docs/assurance/technology-guide/w03/builtin-private-ca.md": "a888de793d1d11b0b16c33b1979a0d2eebab2b339a41c7eb116480176569448e"
+  },
+  "baseline": {
+    "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 go test -overlay=/tmp/plan032-w03-ca-bound-overlay.json ./internal/delivery/provider -run TestBuiltinCAHonorsProtocolValueLimit -count=1",
+    "overlay": "Only builtin_ca.go from immutable f8fee9b6, new regression fixture unchanged",
+    "result": "FAIL",
+    "exitCode": 1,
+    "diagnostic": "CA exceeding protocol credential value bound accepted at construction",
+    "logSha256": "7b66443b3e6abeb2575dd0ab3ae571e233af2dd095f9bb35bf87f6e4129ec6f7"
+  },
+  "verification": {
+    "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 go test -race ./internal/delivery/provider -count=1",
+    "result": "PASS",
+    "seconds": 1.149,
+    "logSha256": "e9e58aa043136a945386a6edc0bf9bd965c214b05b6cae88233a1173e465624a"
+  },
+  "limits": [
+    "Public x509 certificate fixture, no credential or private-key diagnostic",
+    "No protocol limit expansion, DB schema, root module/version pin, publication or deployment",
+    "Earlier f8 packet retains historical source hashes; this receipt binds the tightening",
+    "Unsigned evidence is not package/release qualification"
+  ]
+}

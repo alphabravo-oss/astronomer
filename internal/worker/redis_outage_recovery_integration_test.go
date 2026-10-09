@@ -69,8 +69,12 @@ func TestRedisOutageRecoveryDurableNotification(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SHOW server_version`).Scan(&postgresVersion); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(postgresVersion, "16.") {
-		t.Fatalf("PostgreSQL version = %q, want 16.x", postgresVersion)
+	major := os.Getenv("POSTGRES_QUALIFICATION_MAJOR")
+	if major != "17" && major != "18" {
+		t.Fatal("qualification requires an explicit owned PostgreSQL17/18 lane")
+	}
+	if !strings.HasPrefix(postgresVersion, major+".") {
+		t.Fatalf("PostgreSQL version = %q, want %s.x", postgresVersion, major)
 	}
 
 	redisOptions, err := redis.ParseURL(redisURL)
@@ -184,8 +188,8 @@ func TestRedisOutageRecoveryDurableNotification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(info, "redis_version:7.") {
-		t.Fatalf("Redis server is not version 7.x: %s", info)
+	if !strings.Contains(info, "\r\nvalkey_version:9.1.2\r\n") {
+		t.Fatal("Valkey server is not version9.1.2")
 	}
 	recoveredAsynqOptions, err := asynq.ParseRedisURI(recoveredRedisURL)
 	if err != nil {

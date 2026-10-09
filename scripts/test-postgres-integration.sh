@@ -44,8 +44,17 @@ export TABLE_VIEWS_TEST_DATABASE_URL="$database_url"
 export ASTRONOMER_JSON_TEST_DATABASE_URL="$database_url"
 export ASTRONOMER_SYSTEM_RELEASE_TEST_DATABASE_URL="$database_url"
 export ASTRONOMER_CATALOG_APPLICATION_TEST_DATABASE_URL="$database_url"
+export ASTRONOMER_SYSTEM_ROLLOUT_TEST_DATABASE_URL="$database_url"
 
 expected=(
+  TestAutomaticScanningPostgres
+  TestPostgresBuiltinCanceledTransactionReleasesSessionLock
+  TestPostgresBuiltinRegistrationRetryPresenceAndOrdering
+  TestPostgresSystemRolloutStartIdempotencyAndEligibility
+  TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction
+  TestPostgresSystemRolloutConcurrentFenceHasOneWinner
+  TestPostgresSystemRolloutCohortPromotionAndRollback
+  TestPostgresSystemRolloutPromotionConflictRollsBackRetirement
   TestPostgresCatalogUninstallCommitsFencedTargetAndInstallationTogether
   TestPostgresCatalogInstallRetryAndUpgradeKeepActorAndRevisionOwnership
   TestPostgresCatalogRollbackStagesBeforePlanningAndKeepsRevisionHistory
@@ -94,6 +103,6 @@ expected_args=()
 for expected_test in "${expected[@]}"; do expected_args+=(--expected "$expected_test"); done
 python3 scripts/qualification-go.py --name postgres-integrations "${expected_args[@]}" -- \
   "${race_args[@]}" -p=1 -count=1 -timeout=10m -run "$pattern" \
-  ./internal/db/sqlc ./internal/charlie ./internal/delivery/builtin \
+  ./internal/db/sqlc ./internal/charlie ./internal/delivery/builtin ./internal/delivery/systemrollout \
   ./internal/delivery/rollout ./internal/delivery/catalogapp ./internal/delivery/systemrelease ./internal/worker/tasks \
   ./internal/handler ./internal/jsoncontract

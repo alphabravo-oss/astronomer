@@ -23,12 +23,16 @@ import (
 )
 
 func fixtureCA(t *testing.T) []byte {
+	return fixtureCAWithName(t, "owned fixture CA")
+}
+
+func fixtureCAWithName(t *testing.T, name string) []byte {
 	t.Helper()
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "owned fixture CA"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: name}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, public, private)
 	if err != nil {
 		t.Fatal(err)
@@ -162,5 +166,18 @@ func TestBuiltinCADenialsAndParseBoundary(t *testing.T) {
 		if err != nil || response.Assignments[0].Credential != nil || response.Assignments[0].Source.CredentialSecret != "" {
 			t.Fatal("unapproved source received CA")
 		}
+	}
+}
+
+func TestBuiltinCAHonorsProtocolValueLimit(t *testing.T) {
+	ca := fixtureCAWithName(t, strings.Repeat("x", protocol.MaxDeliveryCredentialValue))
+	if len(ca) <= protocol.MaxDeliveryCredentialValue || len(ca) > 1<<20 {
+		t.Fatal("oversized valid certificate fixture missed intended boundary")
+	}
+	authorize := func(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, protocol.DeliveryAssignmentV2) (bool, error) {
+		return true, nil
+	}
+	if _, err := NewWithBuiltinCA(&fakeQueries{}, nil, ca, authorize); err == nil {
+		t.Fatal("CA exceeding protocol credential value bound accepted at construction")
 	}
 }

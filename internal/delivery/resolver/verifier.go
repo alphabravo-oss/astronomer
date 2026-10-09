@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -281,7 +282,16 @@ func (v *ExecVerifier) readTrustKey(reference, suffix string) ([]byte, string, e
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() <= 0 || info.Size() > maxTrustKeyBytes {
 		return nil, "", errors.New("referenced signature verification key is unavailable")
 	}
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, "", errors.New("referenced signature verification key is unavailable")
+	}
+	defer func() { _ = file.Close() }()
+	opened, err := file.Stat()
+	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+		return nil, "", errors.New("referenced signature verification key changed")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxTrustKeyBytes+1))
 	if err != nil || len(data) == 0 || len(data) > maxTrustKeyBytes {
 		clearBytes(data)
 		return nil, "", errors.New("referenced signature verification key is unavailable")
