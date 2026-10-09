@@ -477,6 +477,10 @@ func (s *Service) ReconcileOne(ctx context.Context, id uuid.UUID) error {
 		if released > 0 {
 			current.State = "progressing"
 			current.ReleasedClusters += released
+			// Later cohort checks must include assignments released by this
+			// transaction, rather than the counts from before its first write.
+			counts.inFlight += released
+			counts.pending -= released
 			if err := appendEvent(ctx, tx, current.ID, current.ReleaseID, current.FencingGeneration+1,
 				"cohort_released", "queued", "progressing", "", current.StrategyDigest, now); err != nil {
 				return err
