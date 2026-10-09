@@ -49,7 +49,7 @@ WHERE (
 ) AND (
     sqlc.narg(controller)::text IS NULL OR controller = sqlc.narg(controller)::text
 )
-ORDER BY fired_at DESC
+ORDER BY fired_at DESC, id DESC
 LIMIT $1 OFFSET $2;
 
 -- name: GetActiveControlPlaneAlert :one
@@ -101,7 +101,7 @@ RETURNING *;
 
 -- name: ListControlPlaneSilences :many
 SELECT * FROM control_plane_silences
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2;
 
 -- name: GetActiveControlPlaneSilences :many

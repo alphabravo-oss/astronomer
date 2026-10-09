@@ -1559,7 +1559,9 @@ type Querier interface {
 	ListComponentBundles(ctx context.Context, arg ListComponentBundlesParams) ([]ComponentBundle, error)
 	ListConnectionsByCluster(ctx context.Context, arg ListConnectionsByClusterParams) ([]AgentConnection, error)
 	ListControlPlaneAlerts(ctx context.Context, arg ListControlPlaneAlertsParams) ([]ControlPlaneAlert, error)
+	ListControlPlaneAlertsAfter(ctx context.Context, arg ListControlPlaneAlertsAfterParams) ([]ControlPlaneAlert, error)
 	ListControlPlaneSilences(ctx context.Context, arg ListControlPlaneSilencesParams) ([]ControlPlaneSilence, error)
+	ListControlPlaneSilencesAfter(ctx context.Context, arg ListControlPlaneSilencesAfterParams) ([]ControlPlaneSilence, error)
 	ListControlPlaneSnapshotsByCluster(ctx context.Context, arg ListControlPlaneSnapshotsByClusterParams) ([]ControlPlaneSnapshot, error)
 	// Dashboard widgets + Prometheus datasources (migration 058).
 	//
@@ -1629,6 +1631,7 @@ type Querier interface {
 	// keeps this scan cheap as the table grows.
 	ListExpiredTombstones(ctx context.Context, tombstonedAt pgtype.Timestamptz) ([]GitopsRegisteredCluster, error)
 	ListFilteredHelmCharts(ctx context.Context, arg ListFilteredHelmChartsParams) ([]HelmChart, error)
+	ListFilteredHelmChartsAfter(ctx context.Context, arg ListFilteredHelmChartsAfterParams) ([]HelmChart, error)
 	// Registered clusters --------------------------------------------------
 	ListGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) ([]GitopsRegisteredCluster, error)
 	// Admin list projection joins display metadata in the same bounded query,

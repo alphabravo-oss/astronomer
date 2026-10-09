@@ -10,9 +10,9 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 - Frontend source files: 1262
 - Frontend source lines: 238130
-- Go source files under `internal/` excluding generated sqlc and tests: 1021
-- Go source files scanned for sqlc query references excluding generated sqlc: 2307
-- sqlc query declarations: 1327
+- Go source files under `internal/` excluding generated sqlc and tests: 1034
+- Go source files scanned for sqlc query references excluding generated sqlc: 2328
+- sqlc query declarations: 1330
 - Component files scanned: 457
 - Helm top-level values scanned: 35
 
@@ -105,13 +105,13 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `decisionDigest` in [`internal/delivery/rollout/scheduler.go:572`](internal/delivery/rollout/scheduler.go:572), [`internal/delivery/systemrollout/service.go:626`](internal/delivery/systemrollout/service.go:626)
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
 - `decodeRoleRules` in [`internal/handler/rbac_guards.go:251`](internal/handler/rbac_guards.go:251), [`internal/server/middleware/rbac_queries.go:244`](internal/server/middleware/rbac_queries.go:244)
-- `decodeStrict` in [`internal/delivery/provider/provider.go:497`](internal/delivery/provider/provider.go:497), [`internal/delivery/rollout/postgres_store.go:507`](internal/delivery/rollout/postgres_store.go:507)
+- `decodeStrict` in [`internal/delivery/provider/provider.go:512`](internal/delivery/provider/provider.go:512), [`internal/delivery/rollout/postgres_store.go:507`](internal/delivery/rollout/postgres_store.go:507)
 - `defaultString` in [`internal/handler/resource_presenters.go:703`](internal/handler/resource_presenters.go:703), [`internal/helmruntime/config.go:109`](internal/helmruntime/config.go:109)
 - `denied` in [`internal/charlie/action_guard.go:806`](internal/charlie/action_guard.go:806), [`internal/delivery/resolver/network.go:141`](internal/delivery/resolver/network.go:141)
 - `digestBytes` in [`internal/charlie/action_guard.go:801`](internal/charlie/action_guard.go:801), [`internal/delivery/resolver/service.go:171`](internal/delivery/resolver/service.go:171)
 - `intValue` in [`internal/controlplane/service.go:177`](internal/controlplane/service.go:177), [`internal/handler/resource_presenters.go:598`](internal/handler/resource_presenters.go:598)
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
-- `isUniqueViolation` in [`internal/handler/cluster_templates_registry.go:336`](internal/handler/cluster_templates_registry.go:336), [`internal/projects/service.go:571`](internal/projects/service.go:571)
+- `isUniqueViolation` in [`internal/handler/cluster_templates_registry.go:340`](internal/handler/cluster_templates_registry.go:340), [`internal/projects/service.go:571`](internal/projects/service.go:571)
 - `missingCapabilities` in [`internal/agentcompat/compat.go:119`](internal/agentcompat/compat.go:119), [`internal/delivery/placement/placement.go:392`](internal/delivery/placement/placement.go:392)
 - `mustJSON` in [`internal/handler/delivery/target.go:712`](internal/handler/delivery/target.go:712), [`internal/worker/tasks/catalog_sync.go:683`](internal/worker/tasks/catalog_sync.go:683)
 - `normalizeDigest` in [`internal/charlie/admin_diagnostics.go:198`](internal/charlie/admin_diagnostics.go:198), [`internal/delivery/catalogapp/service.go:484`](internal/delivery/catalogapp/service.go:484)

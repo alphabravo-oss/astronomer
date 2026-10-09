@@ -394,7 +394,7 @@ WHERE (
 ) AND (
     $4::text IS NULL OR controller = $4::text
 )
-ORDER BY fired_at DESC
+ORDER BY fired_at DESC, id DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -445,7 +445,7 @@ func (q *Queries) ListControlPlaneAlerts(ctx context.Context, arg ListControlPla
 
 const listControlPlaneSilences = `-- name: ListControlPlaneSilences :many
 SELECT id, controller, condition_type, reason, starts_at, ends_at, created_by_id, created_at, updated_at FROM control_plane_silences
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2
 `
 
