@@ -153,10 +153,15 @@
       "command": "python3 scripts/tests/security_evidence_test.py",
       "exit_code": 0,
       "result": "4 tests; retained binding positive and changed artifact/unsigned DONE/rebound false source input negatives"
+    },
+    {
+      "command": "GOMAXPROCS=4 /tmp/plan032-w02-bin/gitleaks git --config=.gitleaks.toml --redact=100 --no-banner --log-opts=--all --report-format=json --report-path=/tmp/plan032-w02-gitleaks-complete.json .",
+      "exit_code": 0,
+      "result": "full W02 committed history included; initial public SDK checksum false-positive verified against lock and exact allowlist;0 findings"
     }
   ],
   "artifacts": {
-    "README.md": "sha256:124a4d4aa2df49022c2cf649736d5b9773d493cf6c7dbd466dd9fbd553be4a3a",
+    "README.md": "sha256:ee2a26903115048eee4b925b8dd52a6f635bb5af2d253318a23977483c6b6e66",
     "github-ruleset-readback.json": "sha256:b6cea69f881bd16d7b0a4c7234e41ab083207be8992a4a2939fc5ff89cc453c7",
     "gosec.sarif": "sha256:ff891f04cdef6401d658ab3000726dfd8e0e5ca274758ce6666a89e2efad4e86",
     "govulncheck.sarif": "sha256:72299ac6bd332fa1b5c50bba5478f4a4c30c5a9935542f1e3f17773f9bb4ca87",

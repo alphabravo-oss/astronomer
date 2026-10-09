@@ -145,14 +145,14 @@ def main():
     try:
         summary = evaluate(read_report(args.gosec), read_report(args.govulncheck),
                            json.loads(args.exceptions.read_text()), json.loads(args.statuses.read_text()), args.scope)
-    except (ValueError, KeyError, TypeError, OSError, json.JSONDecodeError):
+    except (ValueError, KeyError, TypeError, AttributeError, OSError, json.JSONDecodeError):
         # Never echo malformed report/exception content or scanner source snippets.
         try:
             summary = evaluate(read_report(args.gosec), read_report(args.govulncheck),
                                {'schema_version':1,'exceptions':[]}, json.loads(args.statuses.read_text()), args.scope)
             summary['passed'] = False
             summary['failures'].append('invalid or unavailable exception/security evidence')
-        except (ValueError, KeyError, TypeError, OSError):
+        except (ValueError, KeyError, TypeError, AttributeError, OSError):
             summary = dict(schema_version=1, release_scope=args.scope, passed=False, failures=['invalid or unavailable security evidence'], findings=[])
     (args.output/'summary.json').write_text(json.dumps(summary, indent=2)+'\n')
     for tool in ('gosec','govulncheck'):

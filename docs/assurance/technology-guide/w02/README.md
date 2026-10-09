@@ -20,7 +20,7 @@ The isolated [tool module](../../../../tools/gosec/go.mod) builds unchanged gose
 
 `make vulncheck` actually fails for GO-2026-6617, GO-2026-6612, GO-2026-6611, GO-2026-6610 and GO-2026-6603 in x/net 0.58.0, fixed upstream in 0.60.0. W01 owns that update; no waiver was added. Re-scan the integrated source rather than transferring this baseline result to the newer dependency graph.
 
-Full-history Gitleaks initially reported four public Git identities in the W00 inventory across two commits. Two allowlists constrain the exact `components.json` path and complete public commit/recorded-command fields; an arbitrary token or other path remains scanned. The final history scan exits zero with no findings. The synthetic reverted-marker fixture passes.
+Full-history Gitleaks initially reported four public Git identities in the W00 inventory across two commits. Two allowlists constrain the exact `components.json` path and complete public commit/recorded-command fields; an arbitrary token or other path remains scanned. The initial final history scan exits zero with no findings. A postcommit scan additionally identified the public Go checksum for `cloud.google.com/go/auth` in retained build metadata; it was checked against the locked `go.sum` and covered by one exact path and complete dependency-checksum line allowlist. The synthetic reverted-marker fixture passes.
 
 ## Release policy and external ruleset
 

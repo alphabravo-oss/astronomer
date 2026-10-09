@@ -27,6 +27,13 @@ id = "generic-api-key"
   paths = ['''^docs/rancher-astronomer-comparison\.md$''']
   regexes = ['''^<!-- api-contract-evidence: operations=[0-9]+ mounted_routes=[0-9]+/[0-9]+ request_bindings=[0-9]+ provisional_request_shapes=[0-9]+ actionable_202=[0-9]+ async_202_exceptions=[0-9]+ -->$''']
 
+  [[rules.allowlists]]
+  description = "Retained go version-m metadata contains the verified public Go module checksum for cloud authentication SDK"
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^docs/assurance/technology-guide/w02/scanner-provenance/build-metadata\.txt$''']
+  regexes = ['''^\s*dep\tcloud\.google\.com/go/auth\tv0\.23\.2\th1:[A-Za-z0-9+/]{43}=\s*$''']
+
 [[rules]]
 id = "private-key"
 
