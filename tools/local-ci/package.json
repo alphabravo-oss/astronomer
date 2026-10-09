@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Lockfile-pinned tooling for running GitHub Actions locally",
   "engines": {
-    "node": ">=22"
+    "node": ">=26.11.1 <27",
+    "npm": ">=12.2.0 <13"
   },
   "scripts": {
     "postinstall": "node apply-runner-patch.mjs",
@@ -12,5 +13,6 @@
   },
   "devDependencies": {
     "run-local-ci": "0.18.1"
-  }
+  },
+  "packageManager": "npm@12.2.0"
 }

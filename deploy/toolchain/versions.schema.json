@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "components": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "digest": {
+                  "pattern": "^sha256:[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "platformDigests": {
+                  "additionalProperties": {
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "platforms": {
+                  "items": {
+                    "enum": [
+                      "linux/amd64",
+                      "linux/arm64",
+                      "darwin/amd64",
+                      "darwin/arm64",
+                      "windows/amd64"
+                    ]
+                  },
+                  "minItems": 1,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "provenance": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "reference": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "verifiedAt": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "reference",
+                "digest",
+                "platforms",
+                "provenance",
+                "verifiedAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "consumers": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "kind": {
+                  "enum": [
+                    "regex",
+                    "json"
+                  ]
+                },
+                "path": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "selector": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "value": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "kind",
+                "selector",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "discovery": {
+            "additionalProperties": false,
+            "properties": {
+              "observedAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "provenance": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "releasedAt": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "stable": {
+                "const": true
+              },
+              "version": {
+                "pattern": "^(?:v|go)?[0-9]+(?:\\.[0-9]+){1,2}(?:[+.-][0-9A-Za-z.-]+)?$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "version",
+              "releasedAt",
+              "observedAt",
+              "stable",
+              "provenance"
+            ],
+            "type": "object"
+          },
+          "ecosystem": {
+            "enum": [
+              "go",
+              "node",
+              "npm",
+              "gomod",
+              "github",
+              "image",
+              "chart",
+              "contract"
+            ]
+          },
+          "exception": {
+            "additionalProperties": false,
+            "properties": {
+              "evidence": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "exitCondition": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "owner": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "reviewBy": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason",
+              "owner",
+              "evidence",
+              "reviewBy",
+              "exitCondition"
+            ],
+            "type": "object"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "owner": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "platforms": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "qualification": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "selected": {
+            "pattern": "^(?:v|go)?[0-9]+(?:\\.[0-9]+){1,2}(?:[+.-][0-9A-Za-z.-]+)?$",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "upstream": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "go",
+                  "node",
+                  "npm",
+                  "github",
+                  "gomod",
+                  "helm-index",
+                  "image",
+                  "contract",
+                  "alpine",
+                  "github-feed"
+                ]
+              },
+              "locator": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "url": {
+                "pattern": "^https://[A-Za-z0-9.-]+(?:/[^\\s]*)?$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "url"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "ecosystem",
+          "owner",
+          "selected",
+          "upstream",
+          "discovery",
+          "platforms",
+          "artifacts",
+          "consumers",
+          "qualification"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "policy": {
+      "additionalProperties": false,
+      "properties": {
+        "discoveryCadence": {
+          "const": "daily"
+        },
+        "maxDiscoveryAgeDays": {
+          "maximum": 31,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "productionDiscovery": {
+          "const": false
+        },
+        "triageCadence": {
+          "const": "weekly"
+        }
+      },
+      "required": [
+        "maxDiscoveryAgeDays",
+        "triageCadence",
+        "discoveryCadence",
+        "productionDiscovery"
+      ],
+      "type": "object"
+    },
+    "schemaVersion": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "policy",
+    "components"
+  ],
+  "type": "object"
+}

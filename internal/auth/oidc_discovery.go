@@ -324,11 +324,19 @@ func jwkToPublicKey(k jwk) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("ec y: %w", err)
 		}
-		return &ecdsa.PublicKey{
-			Curve: curve,
-			X:     new(big.Int).SetBytes(xBytes),
-			Y:     new(big.Int).SetBytes(yBytes),
-		}, nil
+		coordinateSize := (curve.Params().BitSize + 7) / 8
+		if len(xBytes) != coordinateSize || len(yBytes) != coordinateSize {
+			return nil, errors.New("ec coordinate length does not match curve")
+		}
+		point := make([]byte, 1, 1+2*coordinateSize)
+		point[0] = 4 // SEC 1 uncompressed point encoding used by JWK x/y.
+		point = append(point, xBytes...)
+		point = append(point, yBytes...)
+		key, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+		if err != nil {
+			return nil, fmt.Errorf("ec public key: %w", err)
+		}
+		return key, nil
 	default:
 		return nil, fmt.Errorf("unsupported kty %q", k.Kty)
 	}

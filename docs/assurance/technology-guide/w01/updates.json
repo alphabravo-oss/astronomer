@@ -1,0 +1,1456 @@
+{
+  "authorityDigest": "sha256:6ee19a38a04d0347e6d7b83046727754c03c97aacf7aa97fcdb4a6469d073404",
+  "components": [
+    {
+      "id": "alloy",
+      "metadataDigest": "sha256:d091c500448a583b53fed5e8c50f083dee96f64a8249c734c0b635cad1476afb",
+      "observedAt": "2026-10-09T19:09:19.171545Z",
+      "releasedAt": "2026-09-28T17:54:43Z",
+      "selected": null,
+      "source": "https://api.github.com/repos/grafana/alloy/releases",
+      "status": "review-required",
+      "upstreamStable": "1.20.1"
+    },
+    {
+      "id": "barman-plugin",
+      "metadataDigest": "sha256:be1d232acf18cb7d385c3e617db6251fc5d25567a7a4114e74976f025a3eb4cc",
+      "observedAt": "2026-10-09T19:09:19.172432Z",
+      "releasedAt": "2026-09-30T13:34:15Z",
+      "selected": null,
+      "source": "https://api.github.com/repos/cloudnative-pg/plugin-barman-cloud/releases",
+      "status": "review-required",
+      "upstreamStable": "0.15.1"
+    },
+    {
+      "id": "chart:kube-state-metrics",
+      "metadataDigest": "sha256:fa36f6399c08ea0b990552de48e99cd4f54cc8b3bb12ab908504d97d5e32826c",
+      "observedAt": "2026-10-09T19:09:19.173036Z",
+      "releasedAt": "2026-09-26T02:09:17.04084284Z",
+      "selected": "8.6.0",
+      "source": "https://prometheus-community.github.io/helm-charts/index.yaml",
+      "status": "current",
+      "upstreamStable": "8.6.0"
+    },
+    {
+      "id": "chart:prometheus-node-exporter",
+      "metadataDigest": "sha256:fa36f6399c08ea0b990552de48e99cd4f54cc8b3bb12ab908504d97d5e32826c",
+      "observedAt": "2026-10-09T19:09:19.173553Z",
+      "releasedAt": "2026-09-27T20:07:05.297816713Z",
+      "selected": "4.56.1",
+      "source": "https://prometheus-community.github.io/helm-charts/index.yaml",
+      "status": "review-required",
+      "upstreamStable": "4.59.0"
+    },
+    {
+      "id": "chart:trivy-operator",
+      "metadataDigest": "sha256:1de0adda69072fc8311b7ba1450a2dd9e16231e68b3bc1c3e75ddc9087eb84d3",
+      "observedAt": "2026-10-09T19:09:19.174163Z",
+      "releasedAt": "2026-10-06T06:49:35.309914051Z",
+      "selected": "0.37.0",
+      "source": "https://aquasecurity.github.io/helm-charts/index.yaml",
+      "status": "current",
+      "upstreamStable": "0.37.0"
+    },
+    {
+      "id": "cnpg",
+      "metadataDigest": "sha256:0531ef0833b94be02c99f6d791858f43c9e2b1b4d33e151a8ff2c37f9fef8e8a",
+      "observedAt": "2026-10-09T19:09:19.174773Z",
+      "releasedAt": "2026-09-23T13:35:42Z",
+      "selected": null,
+      "source": "https://api.github.com/repos/cloudnative-pg/cloudnative-pg/releases",
+      "status": "review-required",
+      "upstreamStable": "1.30.1"
+    },
+    {
+      "id": "flux",
+      "metadataDigest": "sha256:85d3048912be8d91e88febada309f896ca42c2d70736bf75fb218867e961244d",
+      "observedAt": "2026-10-09T19:09:19.175524Z",
+      "releasedAt": "2026-10-01T09:56:48Z",
+      "selected": "2.9.6",
+      "source": "https://api.github.com/repos/fluxcd/flux2/releases",
+      "status": "current",
+      "upstreamStable": "2.9.6"
+    },
+    {
+      "id": "gitleaks",
+      "metadataDigest": "sha256:128182d3c1f091d923c5b4648782fc2383e482cde25a64d2ee381057bd3f3e70",
+      "observedAt": "2026-10-09T19:09:19.176192Z",
+      "releasedAt": "2026-03-21T02:17:58Z",
+      "selected": "8.27.2",
+      "source": "https://api.github.com/repos/gitleaks/gitleaks/releases",
+      "status": "review-required",
+      "upstreamStable": "8.30.1"
+    },
+    {
+      "id": "go",
+      "metadataDigest": "sha256:1c4adcd4a38044b2ee040eb1a640c06f8d76b3afa59fd117f5fb633ba6651f78; sha256:640388567ddc4442288c4c57a29c693cc5bf6c5a0296cf710040c4ca9c022565",
+      "observedAt": "2026-10-09T19:09:20.424674Z",
+      "releasedAt": "2026-10-08",
+      "selected": "1.27.2",
+      "source": "https://go.dev/dl/?mode=json",
+      "status": "current",
+      "upstreamStable": "1.27.2"
+    },
+    {
+      "id": "golangci-lint",
+      "metadataDigest": "sha256:38299a8915f84f135cba78076f6251405b7f65258c66bdecebf8e75db41cba86",
+      "observedAt": "2026-10-09T19:09:20.788645Z",
+      "releasedAt": "2026-09-24T11:27:54Z",
+      "selected": "2.14.0",
+      "source": "https://api.github.com/repos/golangci/golangci-lint/releases",
+      "status": "current",
+      "upstreamStable": "2.14.0"
+    },
+    {
+      "id": "gomod:github.com/Masterminds/semver/v3",
+      "metadataDigest": "sha256:61fc48d19fed94346152c628e2cf290ad1c8f0a9b6524c363828b09df8564417",
+      "observedAt": "2026-10-09T19:09:21.138253Z",
+      "releasedAt": "2026-04-30T15:39:17Z",
+      "selected": "v3.5.0",
+      "source": "https://proxy.golang.org/github.com/!masterminds/semver/v3/@latest",
+      "status": "current",
+      "upstreamStable": "v3.5.0"
+    },
+    {
+      "id": "gomod:github.com/ProtonMail/go-crypto",
+      "metadataDigest": "sha256:e1c3981bdadaa6b9c1b2dda3afe37b2018d496edb56d98889430b2b11b45ee78",
+      "observedAt": "2026-10-09T19:09:21.181379Z",
+      "releasedAt": "2026-09-25T16:16:17Z",
+      "selected": "v1.5.2",
+      "source": "https://proxy.golang.org/github.com/!proton!mail/go-crypto/@latest",
+      "status": "current",
+      "upstreamStable": "v1.5.2"
+    },
+    {
+      "id": "gomod:github.com/alicebob/miniredis/v2",
+      "metadataDigest": "sha256:5732989eca06611c7d93bef774f992a7c08ee04e563c71f552e156de0f470243",
+      "observedAt": "2026-10-09T19:09:21.213734Z",
+      "releasedAt": "2026-09-02T11:51:18Z",
+      "selected": "v2.39.0",
+      "source": "https://proxy.golang.org/github.com/alicebob/miniredis/v2/@latest",
+      "status": "current",
+      "upstreamStable": "v2.39.0"
+    },
+    {
+      "id": "gomod:github.com/aws/aws-sdk-go-v2",
+      "metadataDigest": "sha256:d7d87a01dbf0a77aa64d6e10412544a5547575f1e4a405965020bc177c725bb9",
+      "observedAt": "2026-10-09T19:09:21.218080Z",
+      "releasedAt": "2026-10-08T18:23:06Z",
+      "selected": "v1.47.2",
+      "source": "https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/@latest",
+      "status": "current",
+      "upstreamStable": "v1.47.2"
+    },
+    {
+      "id": "gomod:github.com/coder/websocket",
+      "metadataDigest": "sha256:ea771df7db01fd05cfa2763c01367e85ae8f94e47e533f2ba7efd5228c23a8ac",
+      "observedAt": "2026-10-09T19:09:21.244696Z",
+      "releasedAt": "2026-06-15T03:25:28Z",
+      "selected": "v1.8.15",
+      "source": "https://proxy.golang.org/github.com/coder/websocket/@latest",
+      "status": "current",
+      "upstreamStable": "v1.8.15"
+    },
+    {
+      "id": "gomod:github.com/evanphx/json-patch/v5",
+      "metadataDigest": "sha256:3c67f2f75a53868f0f04ffb1ece2f98d871a7edc0e800a8e8779fe32fd60297f",
+      "observedAt": "2026-10-09T19:09:21.255520Z",
+      "releasedAt": "2025-01-28T17:43:52Z",
+      "selected": "v5.9.11",
+      "source": "https://proxy.golang.org/github.com/evanphx/json-patch/v5/@latest",
+      "status": "current",
+      "upstreamStable": "v5.9.11"
+    },
+    {
+      "id": "gomod:github.com/exaring/otelpgx",
+      "metadataDigest": "sha256:ec5e86d8fe5c348941aa393ee1405a1e2ea21e7fd72e0eaf52a2b3240b4e29f1",
+      "observedAt": "2026-10-09T19:09:21.281289Z",
+      "releasedAt": "2026-10-08T09:33:03Z",
+      "selected": "v0.13.0",
+      "source": "https://proxy.golang.org/github.com/exaring/otelpgx/@latest",
+      "status": "current",
+      "upstreamStable": "v0.13.0"
+    },
+    {
+      "id": "gomod:github.com/fernet/fernet-go",
+      "metadataDigest": "sha256:ce2d1d8820203e4631c48ca02dddaca9ed12f2a6d3d9f6118f57cf2ee33484bb",
+      "observedAt": "2026-10-09T19:09:21.291316Z",
+      "releasedAt": "2024-01-19T01:11:08Z",
+      "selected": "v0.0.0-20240119011108-303da6aec611",
+      "source": "https://proxy.golang.org/github.com/fernet/fernet-go/@latest",
+      "status": "current",
+      "upstreamStable": "v0.0.0-20240119011108-303da6aec611"
+    },
+    {
+      "id": "gomod:github.com/go-chi/chi/v5",
+      "metadataDigest": "sha256:1fcad8d2b95df816e39a9cbc6175554cdd8864199a181476c2d9e55150c417a7",
+      "observedAt": "2026-10-09T19:09:21.327305Z",
+      "releasedAt": "2026-08-20T09:37:52Z",
+      "selected": "v5.3.2",
+      "source": "https://proxy.golang.org/github.com/go-chi/chi/v5/@latest",
+      "status": "current",
+      "upstreamStable": "v5.3.2"
+    },
+    {
+      "id": "gomod:github.com/go-chi/cors",
+      "metadataDigest": "sha256:e501ceac74e864ca3b88d91df9513ee20c8d9c05db18177acb22875f152379cb",
+      "observedAt": "2026-10-09T19:09:21.327866Z",
+      "releasedAt": "2025-07-01T14:06:42Z",
+      "selected": "v1.2.2",
+      "source": "https://proxy.golang.org/github.com/go-chi/cors/@latest",
+      "status": "current",
+      "upstreamStable": "v1.2.2"
+    },
+    {
+      "id": "gomod:github.com/go-git/go-git/v5",
+      "metadataDigest": "sha256:d18d897af6eafdbba1f4b9cad513cf65ceded58054d6ef495de2ace651bc32c2",
+      "observedAt": "2026-10-09T19:09:21.366832Z",
+      "releasedAt": "2026-10-04T13:39:40Z",
+      "selected": "v5.19.3",
+      "source": "https://proxy.golang.org/github.com/go-git/go-git/v5/@latest",
+      "status": "current",
+      "upstreamStable": "v5.19.3"
+    },
+    {
+      "id": "gomod:github.com/go-ldap/ldap/v3",
+      "metadataDigest": "sha256:e7a719f4cfe485128988222d4eed13fcb7cea35e23d5bc673e3f199ffb732311",
+      "observedAt": "2026-10-09T19:09:21.367694Z",
+      "releasedAt": "2026-10-07T18:42:58Z",
+      "selected": "v3.4.15",
+      "source": "https://proxy.golang.org/github.com/go-ldap/ldap/v3/@latest",
+      "status": "current",
+      "upstreamStable": "v3.4.15"
+    },
+    {
+      "id": "gomod:github.com/go-playground/validator/v10",
+      "metadataDigest": "sha256:89f97cc3011b036be53ca06eecb1f8750c1b7732a6740a6bf91723066fd5f10b",
+      "observedAt": "2026-10-09T19:09:21.394476Z",
+      "releasedAt": "2026-09-20T18:18:55Z",
+      "selected": "v10.30.5",
+      "source": "https://proxy.golang.org/github.com/go-playground/validator/v10/@latest",
+      "status": "current",
+      "upstreamStable": "v10.30.5"
+    },
+    {
+      "id": "gomod:github.com/go-viper/mapstructure/v2",
+      "metadataDigest": "sha256:4e1a7e3bda29449cf91fcfdeff08d452fa63ba72bb8fe500792db839b7c2420d",
+      "observedAt": "2026-10-09T19:09:21.411210Z",
+      "releasedAt": "2026-01-12T17:24:26Z",
+      "selected": "v2.5.0",
+      "source": "https://proxy.golang.org/github.com/go-viper/mapstructure/v2/@latest",
+      "status": "current",
+      "upstreamStable": "v2.5.0"
+    },
+    {
+      "id": "gomod:github.com/golang-jwt/jwt/v5",
+      "metadataDigest": "sha256:232ad36211bcd6be8342aa763f68ec07c6ae19bc503ec483e5622bb8d4c7ef8c",
+      "observedAt": "2026-10-09T19:09:21.413000Z",
+      "releasedAt": "2026-01-28T19:58:13Z",
+      "selected": "v5.3.1",
+      "source": "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@latest",
+      "status": "current",
+      "upstreamStable": "v5.3.1"
+    },
+    {
+      "id": "gomod:github.com/golang-migrate/migrate/v4",
+      "metadataDigest": "sha256:a51eb6a50d9b4aec000fa4b45f1ed4880cf8ae9814c04da60c745e8da170d652",
+      "observedAt": "2026-10-09T19:09:21.434717Z",
+      "releasedAt": "2026-09-09T04:57:20Z",
+      "selected": "v4.20.1",
+      "source": "https://proxy.golang.org/github.com/golang-migrate/migrate/v4/@latest",
+      "status": "current",
+      "upstreamStable": "v4.20.1"
+    },
+    {
+      "id": "gomod:github.com/google/uuid",
+      "metadataDigest": "sha256:d87bbbc4753d56dc51be553f939421d2da5cdfd3c733c888cddbafaef56d7060",
+      "observedAt": "2026-10-09T19:09:21.450593Z",
+      "releasedAt": "2024-01-23T18:54:04Z",
+      "selected": "v1.6.0",
+      "source": "https://proxy.golang.org/github.com/google/uuid/@latest",
+      "status": "current",
+      "upstreamStable": "v1.6.0"
+    },
+    {
+      "id": "gomod:github.com/gowebpki/jcs",
+      "metadataDigest": "sha256:527d663879e89616efe212ad45a1e51c26bec544690820a4a26e74cdfb496e05",
+      "observedAt": "2026-10-09T19:09:21.452956Z",
+      "releasedAt": "2026-09-21T01:59:38Z",
+      "selected": "v1.0.2",
+      "source": "https://proxy.golang.org/github.com/gowebpki/jcs/@latest",
+      "status": "current",
+      "upstreamStable": "v1.0.2"
+    },
+    {
+      "id": "gomod:github.com/hashicorp/vault/api",
+      "metadataDigest": "sha256:b91c2ed3c92b40924c68bd69b3a4ae4f5bf30e2b719ad7bcdc7e9bea763e2576",
+      "observedAt": "2026-10-09T19:09:21.472154Z",
+      "releasedAt": "2026-03-23T15:20:01Z",
+      "selected": "v1.23.0",
+      "source": "https://proxy.golang.org/github.com/hashicorp/vault/api/@latest",
+      "status": "current",
+      "upstreamStable": "v1.23.0"
+    },
+    {
+      "id": "gomod:github.com/hibiken/asynq",
+      "metadataDigest": "sha256:051fc46a4e269f15d203a87cb40bd21b508c1246519783df745805c4e3765710",
+      "observedAt": "2026-10-09T19:09:21.480182Z",
+      "releasedAt": "2026-02-03T06:36:26Z",
+      "selected": "v0.26.0",
+      "source": "https://proxy.golang.org/github.com/hibiken/asynq/@latest",
+      "status": "current",
+      "upstreamStable": "v0.26.0"
+    },
+    {
+      "id": "gomod:github.com/jackc/pgx/v5",
+      "metadataDigest": "sha256:4c76a02e712c2801bb83ee49ed15acf432667e2f6365cb591e852adb59dee40f",
+      "observedAt": "2026-10-09T19:09:21.491298Z",
+      "releasedAt": "2026-09-07T23:39:32Z",
+      "selected": "v5.11.0",
+      "source": "https://proxy.golang.org/github.com/jackc/pgx/v5/@latest",
+      "status": "current",
+      "upstreamStable": "v5.11.0"
+    },
+    {
+      "id": "gomod:github.com/oapi-codegen/runtime",
+      "metadataDigest": "sha256:8bb0175cd0f5a81d5a5c6cd385d1e344650e74d52f9e63967663b3a6f8992a3f",
+      "observedAt": "2026-10-09T19:09:21.512040Z",
+      "releasedAt": "2026-08-16T05:30:18Z",
+      "selected": "v1.7.0",
+      "source": "https://proxy.golang.org/github.com/oapi-codegen/runtime/@latest",
+      "status": "current",
+      "upstreamStable": "v1.7.0"
+    },
+    {
+      "id": "gomod:github.com/opencontainers/go-digest",
+      "metadataDigest": "sha256:38e2187cf8b5583ca240efee88162eb8b5bfc19b92a4e390cc142dd4b591167c",
+      "observedAt": "2026-10-09T19:09:21.520449Z",
+      "releasedAt": "2020-05-14T01:46:00Z",
+      "selected": "v1.0.0",
+      "source": "https://proxy.golang.org/github.com/opencontainers/go-digest/@latest",
+      "status": "current",
+      "upstreamStable": "v1.0.0"
+    },
+    {
+      "id": "gomod:github.com/opencontainers/image-spec",
+      "metadataDigest": "sha256:879785e29bc2dbfc57302ca81fb6b881c356124831ad71ff2737ef56f486f0ba",
+      "observedAt": "2026-10-09T19:09:21.540700Z",
+      "releasedAt": "2025-02-24T17:26:57Z",
+      "selected": "v1.1.1",
+      "source": "https://proxy.golang.org/github.com/opencontainers/image-spec/@latest",
+      "status": "current",
+      "upstreamStable": "v1.1.1"
+    },
+    {
+      "id": "gomod:github.com/pquerna/otp",
+      "metadataDigest": "sha256:81a9799705723a0f1dfd0806a6a1e0b4b286cd4c166456dde133d64b18c9ba04",
+      "observedAt": "2026-10-09T19:09:21.549163Z",
+      "releasedAt": "2024-12-31T23:15:27Z",
+      "selected": "v1.5.0",
+      "source": "https://proxy.golang.org/github.com/pquerna/otp/@latest",
+      "status": "current",
+      "upstreamStable": "v1.5.0"
+    },
+    {
+      "id": "gomod:github.com/prometheus/client_golang",
+      "metadataDigest": "sha256:204f51933525bb14885b0925beee6fe01e21e5ceb5358c82e2e0612320f1ff3c",
+      "observedAt": "2026-10-09T19:09:21.559708Z",
+      "releasedAt": "2026-10-08T13:00:24Z",
+      "selected": "v1.25.0",
+      "source": "https://proxy.golang.org/github.com/prometheus/client_golang/@latest",
+      "status": "current",
+      "upstreamStable": "v1.25.0"
+    },
+    {
+      "id": "gomod:github.com/prometheus/client_model",
+      "metadataDigest": "sha256:b3df073d82bc90efba18d855be14b766744dabb063e6f43244c97cb3a07e16af",
+      "observedAt": "2026-10-09T19:09:21.584179Z",
+      "releasedAt": "2026-08-31T09:02:46Z",
+      "selected": "v0.6.3",
+      "source": "https://proxy.golang.org/github.com/prometheus/client_model/@latest",
+      "status": "current",
+      "upstreamStable": "v0.6.3"
+    },
+    {
+      "id": "gomod:github.com/prometheus/common",
+      "metadataDigest": "sha256:9809e74f13c6ebbb9383f84280ab3b450c5cabca78419eb299b486bea6ecbd69",
+      "observedAt": "2026-10-09T19:09:21.588840Z",
+      "releasedAt": "2026-09-28T08:33:06Z",
+      "selected": "v0.72.0",
+      "source": "https://proxy.golang.org/github.com/prometheus/common/@latest",
+      "status": "current",
+      "upstreamStable": "v0.72.0"
+    },
+    {
+      "id": "gomod:github.com/redis/go-redis/v9",
+      "metadataDigest": "sha256:aba499bdbfb1f009e1fd2bd71c987427ddd2ac7a9c8183b094ea49a26ee48380",
+      "observedAt": "2026-10-09T19:09:21.599484Z",
+      "releasedAt": "2026-10-05T14:51:38Z",
+      "selected": "v9.23.0",
+      "source": "https://proxy.golang.org/github.com/redis/go-redis/v9/@latest",
+      "status": "current",
+      "upstreamStable": "v9.23.0"
+    },
+    {
+      "id": "gomod:github.com/robfig/cron/v3",
+      "metadataDigest": "sha256:d77bb3a69e5ec2f9973c97c94247338a00bceae56e96cbe6c70b6fa6aace6157",
+      "observedAt": "2026-10-09T19:09:21.620112Z",
+      "releasedAt": "2020-01-04T01:05:08Z",
+      "selected": "v3.0.1",
+      "source": "https://proxy.golang.org/github.com/robfig/cron/v3/@latest",
+      "status": "current",
+      "upstreamStable": "v3.0.1"
+    },
+    {
+      "id": "gomod:github.com/santhosh-tekuri/jsonschema/v6",
+      "metadataDigest": "sha256:2413e7c7ae30a8ea52c46a65c85f44a5e154cc2da9fd11d9b0bb92b61e11f7b0",
+      "observedAt": "2026-10-09T19:09:21.626272Z",
+      "releasedAt": "2026-06-28T17:38:00Z",
+      "selected": "v6.0.3",
+      "source": "https://proxy.golang.org/github.com/santhosh-tekuri/jsonschema/v6/@latest",
+      "status": "current",
+      "upstreamStable": "v6.0.3"
+    },
+    {
+      "id": "gomod:github.com/sigstore/protobuf-specs",
+      "metadataDigest": "sha256:17c68599134ec993086826a988ccacb494bc40f755108e1237a8e87581df0e3e",
+      "observedAt": "2026-10-09T19:09:21.641277Z",
+      "releasedAt": "2026-08-21T18:00:24Z",
+      "selected": "v0.5.2",
+      "source": "https://proxy.golang.org/github.com/sigstore/protobuf-specs/@latest",
+      "status": "current",
+      "upstreamStable": "v0.5.2"
+    },
+    {
+      "id": "gomod:github.com/sigstore/sigstore",
+      "metadataDigest": "sha256:1d400f42776a3051db89cf2b975dffa5cc13c8352aec5a57019d72fe0fd57d78",
+      "observedAt": "2026-10-09T19:09:21.658653Z",
+      "releasedAt": "2026-09-11T17:22:32Z",
+      "selected": "v1.11.0",
+      "source": "https://proxy.golang.org/github.com/sigstore/sigstore/@latest",
+      "status": "current",
+      "upstreamStable": "v1.11.0"
+    },
+    {
+      "id": "gomod:github.com/sigstore/sigstore-go",
+      "metadataDigest": "sha256:179ae3dfd15b2b3cc50da1e3ebcc75b87f2e25437539ed33685f3e5a8b591542",
+      "observedAt": "2026-10-09T19:09:21.659862Z",
+      "releasedAt": "2026-07-30T14:45:40Z",
+      "selected": "v1.3.0",
+      "source": "https://proxy.golang.org/github.com/sigstore/sigstore-go/@latest",
+      "status": "current",
+      "upstreamStable": "v1.3.0"
+    },
+    {
+      "id": "gomod:github.com/spf13/cobra",
+      "metadataDigest": "sha256:8e90f3ebbe4fb2976cd00cba616e6377664023c9ee2a65ac9fe839e1e3b045ea",
+      "observedAt": "2026-10-09T19:09:21.675143Z",
+      "releasedAt": "2025-12-03T23:51:15Z",
+      "selected": "v1.10.2",
+      "source": "https://proxy.golang.org/github.com/spf13/cobra/@latest",
+      "status": "current",
+      "upstreamStable": "v1.10.2"
+    },
+    {
+      "id": "gomod:github.com/spf13/viper",
+      "metadataDigest": "sha256:f63c14c30431577d79231cdcb11feaa3f898744e2a064e1da2e6ad48d25fa48c",
+      "observedAt": "2026-10-09T19:09:21.692613Z",
+      "releasedAt": "2025-09-08T16:56:14Z",
+      "selected": "v1.21.0",
+      "source": "https://proxy.golang.org/github.com/spf13/viper/@latest",
+      "status": "current",
+      "upstreamStable": "v1.21.0"
+    },
+    {
+      "id": "gomod:go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+      "metadataDigest": "sha256:25c94982f77ba092ec61eb9becc5a94dd282a81adde7f9ca450224c5ada7646a",
+      "observedAt": "2026-10-09T19:09:21.697028Z",
+      "releasedAt": "2026-10-02T16:25:28Z",
+      "selected": "v0.72.0",
+      "source": "https://proxy.golang.org/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/@latest",
+      "status": "current",
+      "upstreamStable": "v0.72.0"
+    },
+    {
+      "id": "gomod:go.opentelemetry.io/otel",
+      "metadataDigest": "sha256:fb8851400e57291f48e16b1a9e5ba0d4f62d34b35f04b4d04016a624bf784c30",
+      "observedAt": "2026-10-09T19:09:21.699491Z",
+      "releasedAt": "2026-10-02T08:10:46Z",
+      "selected": "v1.47.0",
+      "source": "https://proxy.golang.org/go.opentelemetry.io/otel/@latest",
+      "status": "current",
+      "upstreamStable": "v1.47.0"
+    },
+    {
+      "id": "gomod:go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "metadataDigest": "sha256:f9d7fbc11f4af3c5df6d456835e8952020ba6b7ec01f1af04830e8c474f70240",
+      "observedAt": "2026-10-09T19:09:21.716732Z",
+      "releasedAt": "2026-10-02T08:10:46Z",
+      "selected": "v1.47.0",
+      "source": "https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/@latest",
+      "status": "current",
+      "upstreamStable": "v1.47.0"
+    },
+    {
+      "id": "gomod:go.opentelemetry.io/otel/sdk",
+      "metadataDigest": "sha256:f09a9490e7e55d98a7b5815242a255a95c0be7e74489dd516f7c0c8291b23608",
+      "observedAt": "2026-10-09T19:09:21.731746Z",
+      "releasedAt": "2026-10-02T08:10:46Z",
+      "selected": "v1.47.0",
+      "source": "https://proxy.golang.org/go.opentelemetry.io/otel/sdk/@latest",
+      "status": "current",
+      "upstreamStable": "v1.47.0"
+    },
+    {
+      "id": "gomod:go.opentelemetry.io/otel/trace",
+      "metadataDigest": "sha256:93dc4ed5382dcfb5e93f65e7ab51215be654d79d4eeaf33518b2956655fef8ae",
+      "observedAt": "2026-10-09T19:09:21.732436Z",
+      "releasedAt": "2026-10-02T08:10:46Z",
+      "selected": "v1.47.0",
+      "source": "https://proxy.golang.org/go.opentelemetry.io/otel/trace/@latest",
+      "status": "current",
+      "upstreamStable": "v1.47.0"
+    },
+    {
+      "id": "gomod:golang.org/x/crypto",
+      "metadataDigest": "sha256:b11aa615962a25256853dcf67838352d2f5523f6719a8d75181ebcbb7ce615ec",
+      "observedAt": "2026-10-09T19:09:21.734251Z",
+      "releasedAt": "2026-10-09T16:24:17Z",
+      "selected": "v0.58.0",
+      "source": "https://proxy.golang.org/golang.org/x/crypto/@latest",
+      "status": "current",
+      "upstreamStable": "v0.58.0"
+    },
+    {
+      "id": "gomod:golang.org/x/oauth2",
+      "metadataDigest": "sha256:8af344a798d61de417123dd01b35f91559c31fd3c0de7670bd44a3f3658c1b10",
+      "observedAt": "2026-10-09T19:09:21.761531Z",
+      "releasedAt": "2026-08-25T21:41:43Z",
+      "selected": "v0.37.0",
+      "source": "https://proxy.golang.org/golang.org/x/oauth2/@latest",
+      "status": "current",
+      "upstreamStable": "v0.37.0"
+    },
+    {
+      "id": "gomod:golang.org/x/sync",
+      "metadataDigest": "sha256:d12e1a2d422a79235baceab349c3c55ab3de707214338884cade9af3bb1a5b70",
+      "observedAt": "2026-10-09T19:09:21.762251Z",
+      "releasedAt": "2026-09-23T16:28:17Z",
+      "selected": "v0.24.0",
+      "source": "https://proxy.golang.org/golang.org/x/sync/@latest",
+      "status": "current",
+      "upstreamStable": "v0.24.0"
+    },
+    {
+      "id": "gomod:golang.org/x/term",
+      "metadataDigest": "sha256:cb0fa8a9dcf9f9ab5849f254e285d0465691f97825b19d0eda8e82bdad64bb23",
+      "observedAt": "2026-10-09T19:09:21.768308Z",
+      "releasedAt": "2026-10-09T15:22:17Z",
+      "selected": "v0.47.0",
+      "source": "https://proxy.golang.org/golang.org/x/term/@latest",
+      "status": "current",
+      "upstreamStable": "v0.47.0"
+    },
+    {
+      "id": "gomod:golang.org/x/time",
+      "metadataDigest": "sha256:644bb8175706aed7a640d4a67fb5d34c79a27d536b431066196ddb6660ee82ce",
+      "observedAt": "2026-10-09T19:09:21.774199Z",
+      "releasedAt": "2026-08-19T17:16:18Z",
+      "selected": "v0.16.0",
+      "source": "https://proxy.golang.org/golang.org/x/time/@latest",
+      "status": "current",
+      "upstreamStable": "v0.16.0"
+    },
+    {
+      "id": "gomod:gopkg.in/yaml.v2",
+      "metadataDigest": "sha256:d45d4b251ff7c94c64ba44afca5bac45e0ae5c1b317b50ec6bbc8671cd2788a5",
+      "observedAt": "2026-10-09T19:09:21.789718Z",
+      "releasedAt": "2020-11-17T15:46:20Z",
+      "selected": "v2.4.0",
+      "source": "https://proxy.golang.org/gopkg.in/yaml.v2/@latest",
+      "status": "current",
+      "upstreamStable": "v2.4.0"
+    },
+    {
+      "id": "gomod:gopkg.in/yaml.v3",
+      "metadataDigest": "sha256:0cdb0c9ac8c3b25dbd420a86ab27debfa469a8b48ee10560224704c2852ac6c0",
+      "observedAt": "2026-10-09T19:09:21.809244Z",
+      "releasedAt": "2022-05-27T08:35:30Z",
+      "selected": "v3.0.1",
+      "source": "https://proxy.golang.org/gopkg.in/yaml.v3/@latest",
+      "status": "current",
+      "upstreamStable": "v3.0.1"
+    },
+    {
+      "id": "gomod:helm.sh/helm/v3",
+      "metadataDigest": "sha256:c3476c63096394a35589adeac19b4caf355d65c70ca3d725c5178dc00495699c",
+      "observedAt": "2026-10-09T19:09:21.813426Z",
+      "releasedAt": "2026-09-09T22:21:05Z",
+      "selected": "v3.21.4",
+      "source": "https://proxy.golang.org/helm.sh/helm/v3/@latest",
+      "status": "review-required",
+      "upstreamStable": "v3.22.0"
+    },
+    {
+      "id": "gomod:k8s.io/api",
+      "metadataDigest": "sha256:f360ca5de50a723deaabe698bdf00c578663c884d31305511eae0d6a6f9a8da0",
+      "observedAt": "2026-10-09T19:09:21.814213Z",
+      "releasedAt": "2026-09-23T20:45:45Z",
+      "selected": "v0.37.1",
+      "source": "https://proxy.golang.org/k8s.io/api/@latest",
+      "status": "current",
+      "upstreamStable": "v0.37.1"
+    },
+    {
+      "id": "gomod:k8s.io/apimachinery",
+      "metadataDigest": "sha256:c8f14a86a4ebe4afdb01f8a1abda3a4d010b50f4e37b895ba39d3e2e05597949",
+      "observedAt": "2026-10-09T19:09:21.830914Z",
+      "releasedAt": "2026-09-23T20:28:20Z",
+      "selected": "v0.37.1",
+      "source": "https://proxy.golang.org/k8s.io/apimachinery/@latest",
+      "status": "current",
+      "upstreamStable": "v0.37.1"
+    },
+    {
+      "id": "gomod:k8s.io/client-go",
+      "metadataDigest": "sha256:ee335e6e5aa714f5583d991e0ccf5834e8645ff73144f86a9650556c3650858f",
+      "observedAt": "2026-10-09T19:09:21.847925Z",
+      "releasedAt": "2026-09-23T21:10:43Z",
+      "selected": "v0.37.1",
+      "source": "https://proxy.golang.org/k8s.io/client-go/@latest",
+      "status": "current",
+      "upstreamStable": "v0.37.1"
+    },
+    {
+      "id": "gomod:k8s.io/metrics",
+      "metadataDigest": "sha256:e5419d3fb8edae792f838e9fd574390549f8bf50c18189137d225333d5b3daba",
+      "observedAt": "2026-10-09T19:09:21.853881Z",
+      "releasedAt": "2026-09-23T23:18:38Z",
+      "selected": "v0.37.1",
+      "source": "https://proxy.golang.org/k8s.io/metrics/@latest",
+      "status": "current",
+      "upstreamStable": "v0.37.1"
+    },
+    {
+      "id": "gomod:k8s.io/utils",
+      "metadataDigest": "sha256:bd65d0566e67c671851788476265c4a1e6124d69361295ecf70a9d9c469f5fef",
+      "observedAt": "2026-10-09T19:09:21.856198Z",
+      "releasedAt": "2026-07-07T02:38:25Z",
+      "selected": "v0.0.0-20260707023825-cf1189d6abe3",
+      "source": "https://proxy.golang.org/k8s.io/utils/@latest",
+      "status": "current",
+      "upstreamStable": "v0.0.0-20260707023825-cf1189d6abe3"
+    },
+    {
+      "id": "gomod:oras.land/oras-go/v2",
+      "metadataDigest": "sha256:bb9a2169941856a10287e8d9968c7a558ee9b5a6cb483f4859bea81c7583ae55",
+      "observedAt": "2026-10-09T19:09:21.860453Z",
+      "releasedAt": "2026-07-10T14:50:25Z",
+      "selected": "v2.6.2",
+      "source": "https://proxy.golang.org/oras.land/oras-go/v2/@latest",
+      "status": "current",
+      "upstreamStable": "v2.6.2"
+    },
+    {
+      "id": "gomod:sigs.k8s.io/controller-runtime",
+      "metadataDigest": "sha256:d21e0ad3b514f108b3f8563bd564f89b358be1613bbaceea3ce0f0fbc7866457",
+      "observedAt": "2026-10-09T19:09:21.883217Z",
+      "releasedAt": "2026-09-30T23:29:52Z",
+      "selected": "v0.25.2",
+      "source": "https://proxy.golang.org/sigs.k8s.io/controller-runtime/@latest",
+      "status": "current",
+      "upstreamStable": "v0.25.2"
+    },
+    {
+      "id": "gomod:sigs.k8s.io/yaml",
+      "metadataDigest": "sha256:616c8885363abb8663dbc10fb73e639de92a9f0ce06444bc6f7cfedb1b50179c",
+      "observedAt": "2026-10-09T19:09:21.884526Z",
+      "releasedAt": "2025-07-24T18:12:28Z",
+      "selected": "v1.6.0",
+      "source": "https://proxy.golang.org/sigs.k8s.io/yaml/@latest",
+      "status": "current",
+      "upstreamStable": "v1.6.0"
+    },
+    {
+      "id": "gosec",
+      "metadataDigest": "sha256:36a3ac7bf6d87a5a90a0900e5fea6bd48a62c0f277dd53e30c94a88da7709c7b",
+      "observedAt": "2026-10-09T19:09:21.898365Z",
+      "releasedAt": "2026-08-26T08:34:58Z",
+      "selected": "2.22.10",
+      "source": "https://api.github.com/repos/securego/gosec/releases",
+      "status": "review-required",
+      "upstreamStable": "2.29.0"
+    },
+    {
+      "id": "govulncheck",
+      "metadataDigest": "sha256:1c5132bd17f74870fad0e227a81ef157c8b689ca83a3bbab518bf8f8ece98c37",
+      "observedAt": "2026-10-09T19:09:21.906064Z",
+      "releasedAt": "2026-09-08T20:52:42Z",
+      "selected": "v1.8.0",
+      "source": "https://proxy.golang.org/golang.org/x/vuln/@latest",
+      "status": "current",
+      "upstreamStable": "v1.8.0"
+    },
+    {
+      "id": "grafana",
+      "metadataDigest": "sha256:d89d47ef472f54b370f378fd4f1871033db6df511a2950e05f5aeff2e5e3635a",
+      "observedAt": "2026-10-09T19:09:21.924758Z",
+      "releasedAt": "2026-09-29T09:02:18Z",
+      "selected": "11.5.2",
+      "source": "https://api.github.com/repos/grafana/grafana/releases",
+      "status": "review-required",
+      "upstreamStable": "13.2.3"
+    },
+    {
+      "id": "helm",
+      "metadataDigest": "sha256:80c2becb89800f569f4878b8d82106b75cc066d83178bfadad0cfe526ce4902a",
+      "observedAt": "2026-10-09T19:09:21.926282Z",
+      "releasedAt": "2026-09-09T23:51:48Z",
+      "selected": null,
+      "source": "https://api.github.com/repos/helm/helm/releases",
+      "status": "review-required",
+      "upstreamStable": "4.3.0"
+    },
+    {
+      "id": "helm-cli-ci",
+      "metadataDigest": "sha256:80c2becb89800f569f4878b8d82106b75cc066d83178bfadad0cfe526ce4902a",
+      "observedAt": "2026-10-09T19:09:21.944407Z",
+      "releasedAt": "2026-09-09T23:51:48Z",
+      "selected": "3.21.0",
+      "source": "https://api.github.com/repos/helm/helm/releases",
+      "status": "review-required",
+      "upstreamStable": "4.3.0"
+    },
+    {
+      "id": "helm-cli-release",
+      "metadataDigest": "sha256:80c2becb89800f569f4878b8d82106b75cc066d83178bfadad0cfe526ce4902a",
+      "observedAt": "2026-10-09T19:09:23.477680Z",
+      "releasedAt": "2026-09-09T23:51:48Z",
+      "selected": "3.16.2",
+      "source": "https://api.github.com/repos/helm/helm/releases",
+      "status": "review-required",
+      "upstreamStable": "4.3.0"
+    },
+    {
+      "id": "helm-cli-release-preflight",
+      "metadataDigest": "sha256:80c2becb89800f569f4878b8d82106b75cc066d83178bfadad0cfe526ce4902a",
+      "observedAt": "2026-10-09T19:09:23.660678Z",
+      "releasedAt": "2026-09-09T23:51:48Z",
+      "selected": "3.16.4",
+      "source": "https://api.github.com/repos/helm/helm/releases",
+      "status": "review-required",
+      "upstreamStable": "4.3.0"
+    },
+    {
+      "id": "k3d",
+      "metadataDigest": "sha256:1ac4308734f765690b4baf46be36ae6408395f4e14c4b53a4beaf919270caade",
+      "observedAt": "2026-10-09T19:09:23.916932Z",
+      "releasedAt": "2026-06-02T14:41:12Z",
+      "selected": "5.8.3",
+      "source": "https://api.github.com/repos/k3d-io/k3d/releases",
+      "status": "review-required",
+      "upstreamStable": "5.9.0"
+    },
+    {
+      "id": "loki",
+      "metadataDigest": "sha256:a18e8641c2b8dfd2f2800b01bfe7d91d60795db9c95c39567f623c03a6cd67b2",
+      "observedAt": "2026-10-09T19:09:24.431087Z",
+      "releasedAt": "2026-09-17T15:51:10Z",
+      "selected": "3.4.2",
+      "source": "https://api.github.com/repos/grafana/loki/releases",
+      "status": "review-required",
+      "upstreamStable": "3.7.8"
+    },
+    {
+      "id": "node",
+      "metadataDigest": "sha256:c7005c9dd6c35ded6bab489597ab51094dc3e923e19b6236014e652b7cf5a7cb",
+      "observedAt": "2026-10-09T19:09:24.529514Z",
+      "releasedAt": "2026-10-07",
+      "selected": "26.11.1",
+      "source": "https://nodejs.org/dist/index.json",
+      "status": "current",
+      "upstreamStable": "26.11.1"
+    },
+    {
+      "id": "npm",
+      "metadataDigest": "sha256:d069deb8084e525e8e5efca24aa1ae12b7915f22c56aa7ff1b8376811574cdae",
+      "observedAt": "2026-10-09T19:09:24.566137Z",
+      "releasedAt": "2026-09-30T16:46:11.700Z",
+      "selected": "12.2.0",
+      "source": "https://registry.npmjs.org/npm",
+      "status": "current",
+      "upstreamStable": "12.2.0"
+    },
+    {
+      "id": "npm:@axe-core/playwright",
+      "metadataDigest": "sha256:db8e3d37e21288733701103213453c019f6106aa187898058e83d0024f64ce02",
+      "observedAt": "2026-10-09T19:09:25.042809Z",
+      "releasedAt": "2026-08-11T17:07:40.763Z",
+      "selected": "4.13.0",
+      "source": "https://registry.npmjs.org/@axe-core/playwright",
+      "status": "current",
+      "upstreamStable": "4.13.0"
+    },
+    {
+      "id": "npm:@eslint/js",
+      "metadataDigest": "sha256:3d7344b316f5f81963892882010213ad3279e6290c70193bdd9e66259efde713",
+      "observedAt": "2026-10-09T19:09:25.066222Z",
+      "releasedAt": "2026-02-06T22:34:56.290Z",
+      "selected": "9.39.5",
+      "source": "https://registry.npmjs.org/@eslint/js",
+      "status": "review-required",
+      "upstreamStable": "10.0.1"
+    },
+    {
+      "id": "npm:@fontsource-variable/inter",
+      "metadataDigest": "sha256:925849de9a8e7d848f56bdcbd068a6e9294611afe7b82bc6cf4fb182f478ab77",
+      "observedAt": "2026-10-09T19:09:25.119111Z",
+      "releasedAt": "2026-07-19T03:50:25.793Z",
+      "selected": "5.3.0",
+      "source": "https://registry.npmjs.org/@fontsource-variable/inter",
+      "status": "current",
+      "upstreamStable": "5.3.0"
+    },
+    {
+      "id": "npm:@fontsource-variable/jetbrains-mono",
+      "metadataDigest": "sha256:911b157567e05ec9749bd545d43053d8238ee387711ce96741c953715a69f6ca",
+      "observedAt": "2026-10-09T19:09:25.123273Z",
+      "releasedAt": "2026-07-19T03:50:26.648Z",
+      "selected": "5.3.0",
+      "source": "https://registry.npmjs.org/@fontsource-variable/jetbrains-mono",
+      "status": "current",
+      "upstreamStable": "5.3.0"
+    },
+    {
+      "id": "npm:@monaco-editor/react",
+      "metadataDigest": "sha256:6d3a65ffb0f6a05c178bda1202cba04826eb7ceb163b11bcb29566b24fd267c3",
+      "observedAt": "2026-10-09T19:09:25.146651Z",
+      "releasedAt": "2025-02-13T16:13:41.390Z",
+      "selected": "4.7.0",
+      "source": "https://registry.npmjs.org/@monaco-editor/react",
+      "status": "current",
+      "upstreamStable": "4.7.0"
+    },
+    {
+      "id": "npm:@playwright/test",
+      "metadataDigest": "sha256:1dc36aad54e6ee9c3aa9da70ab7080ed6e5ba60d1257bfa82088fa7041e60cb7",
+      "observedAt": "2026-10-09T19:09:25.171272Z",
+      "releasedAt": "2026-10-07T20:44:27.702Z",
+      "selected": "1.64.0",
+      "source": "https://registry.npmjs.org/@playwright/test",
+      "status": "current",
+      "upstreamStable": "1.64.0"
+    },
+    {
+      "id": "npm:@stoplight/spectral-core",
+      "metadataDigest": "sha256:21014e3ff152dbbc972dcf3b85169e8e2b0ee313cc1aebefd5451053c405e5ae",
+      "observedAt": "2026-10-09T19:09:25.182918Z",
+      "releasedAt": "2026-10-01T12:38:35.021Z",
+      "selected": "1.24.0",
+      "source": "https://registry.npmjs.org/@stoplight/spectral-core",
+      "status": "current",
+      "upstreamStable": "1.24.0"
+    },
+    {
+      "id": "npm:@stoplight/spectral-parsers",
+      "metadataDigest": "sha256:31063b7ea96f99ce8d3084245387389a930272a40b0b4fa8c6c6ec0a62157e42",
+      "observedAt": "2026-10-09T19:09:25.222092Z",
+      "releasedAt": "2024-11-13T20:47:38.890Z",
+      "selected": "1.0.5",
+      "source": "https://registry.npmjs.org/@stoplight/spectral-parsers",
+      "status": "current",
+      "upstreamStable": "1.0.5"
+    },
+    {
+      "id": "npm:@stoplight/spectral-rulesets",
+      "metadataDigest": "sha256:5b37b0cbc0bb5ccb877a739a2cef03cf81e1bf78591a050aceb15a89152f50b9",
+      "observedAt": "2026-10-09T19:09:25.334788Z",
+      "releasedAt": "2026-10-01T10:54:12.018Z",
+      "selected": "1.23.0",
+      "source": "https://registry.npmjs.org/@stoplight/spectral-rulesets",
+      "status": "current",
+      "upstreamStable": "1.23.0"
+    },
+    {
+      "id": "npm:@tailwindcss/forms",
+      "metadataDigest": "sha256:84ea16f460f6be121fb17770478fa11676e1553b1db417a6c4e0b64dcc920b8c",
+      "observedAt": "2026-10-09T19:09:25.335455Z",
+      "releasedAt": "2025-12-17T19:22:39.875Z",
+      "selected": "0.5.11",
+      "source": "https://registry.npmjs.org/@tailwindcss/forms",
+      "status": "current",
+      "upstreamStable": "0.5.11"
+    },
+    {
+      "id": "npm:@tailwindcss/vite",
+      "metadataDigest": "sha256:7da236e4b0db769c0c912d2a0e516513f02542ed794f50e66d02f7a017f3c26e",
+      "observedAt": "2026-10-09T19:09:25.366623Z",
+      "releasedAt": "2026-07-16T12:04:06.316Z",
+      "selected": "4.3.3",
+      "source": "https://registry.npmjs.org/@tailwindcss/vite",
+      "status": "current",
+      "upstreamStable": "4.3.3"
+    },
+    {
+      "id": "npm:@tanstack/eslint-plugin-query",
+      "metadataDigest": "sha256:a2caf1e65719964da5ec7c769baae9d418551cf021bdf74670a4c1149319cda9",
+      "observedAt": "2026-10-09T19:09:25.370355Z",
+      "releasedAt": "2026-10-02T10:07:42.181Z",
+      "selected": "5.104.1",
+      "source": "https://registry.npmjs.org/@tanstack/eslint-plugin-query",
+      "status": "current",
+      "upstreamStable": "5.104.1"
+    },
+    {
+      "id": "npm:@tanstack/react-form",
+      "metadataDigest": "sha256:f8730ee585e16e3e77e6b5a364afac97b1dede57faa9b50e0e0743af1ded1b24",
+      "observedAt": "2026-10-09T19:09:25.374394Z",
+      "releasedAt": "2026-08-11T12:45:38.642Z",
+      "selected": "1.33.5",
+      "source": "https://registry.npmjs.org/@tanstack/react-form",
+      "status": "current",
+      "upstreamStable": "1.33.5"
+    },
+    {
+      "id": "npm:@tanstack/react-pacer",
+      "metadataDigest": "sha256:69c1b32e857e558e759d38fb9c9f94a6c404ca6be1004e427d497eea7fc50eef",
+      "observedAt": "2026-10-09T19:09:25.421815Z",
+      "releasedAt": "2026-10-05T13:51:43.719Z",
+      "selected": "0.24.1",
+      "source": "https://registry.npmjs.org/@tanstack/react-pacer",
+      "status": "current",
+      "upstreamStable": "0.24.1"
+    },
+    {
+      "id": "npm:@tanstack/react-query",
+      "metadataDigest": "sha256:ce9fd049808b493558caca8adbe77fad72e45942a0288c12196560816b8c2c74",
+      "observedAt": "2026-10-09T19:09:25.434933Z",
+      "releasedAt": "2026-10-02T10:04:57.020Z",
+      "selected": "5.104.1",
+      "source": "https://registry.npmjs.org/@tanstack/react-query",
+      "status": "current",
+      "upstreamStable": "5.104.1"
+    },
+    {
+      "id": "npm:@tanstack/react-query-devtools",
+      "metadataDigest": "sha256:18d54af3cf71cb13e10d79afeba8b0456a82af236c6d5ff9a7d2f8abecf9018d",
+      "observedAt": "2026-10-09T19:09:25.435121Z",
+      "releasedAt": "2026-10-02T10:04:46.756Z",
+      "selected": "5.104.1",
+      "source": "https://registry.npmjs.org/@tanstack/react-query-devtools",
+      "status": "current",
+      "upstreamStable": "5.104.1"
+    },
+    {
+      "id": "npm:@tanstack/react-router",
+      "metadataDigest": "sha256:e8f6a790927bb9c77e9b1cdfff4a14bbd2d9c1ba9a37875ac0030ffee8200735",
+      "observedAt": "2026-10-09T19:09:25.487290Z",
+      "releasedAt": "2026-09-30T17:48:34.218Z",
+      "selected": "1.170.41",
+      "source": "https://registry.npmjs.org/@tanstack/react-router",
+      "status": "current",
+      "upstreamStable": "1.170.41"
+    },
+    {
+      "id": "npm:@tanstack/react-table",
+      "metadataDigest": "sha256:0a66185fb58ac442dc9c2507b64a023ea52adc73bad554a9c034c6ca746cccef",
+      "observedAt": "2026-10-09T19:09:25.504774Z",
+      "releasedAt": "2026-10-08T21:40:53.324Z",
+      "selected": "9.2.8",
+      "source": "https://registry.npmjs.org/@tanstack/react-table",
+      "status": "current",
+      "upstreamStable": "9.2.8"
+    },
+    {
+      "id": "npm:@tanstack/react-virtual",
+      "metadataDigest": "sha256:09627cdf7fa3842fa8e0c57e2c6b79380d35c7a209e3bb081c386f12ddc345d1",
+      "observedAt": "2026-10-09T19:09:25.538705Z",
+      "releasedAt": "2026-10-09T14:59:39.273Z",
+      "selected": "3.14.14",
+      "source": "https://registry.npmjs.org/@tanstack/react-virtual",
+      "status": "current",
+      "upstreamStable": "3.14.14"
+    },
+    {
+      "id": "npm:@tanstack/router-plugin",
+      "metadataDigest": "sha256:5d1ea98704f6b886237bf1a05edf15d41ae57d4462468d74c9605494d8175614",
+      "observedAt": "2026-10-09T19:09:25.579930Z",
+      "releasedAt": "2026-09-30T17:48:34.007Z",
+      "selected": "1.168.42",
+      "source": "https://registry.npmjs.org/@tanstack/router-plugin",
+      "status": "current",
+      "upstreamStable": "1.168.42"
+    },
+    {
+      "id": "npm:@testing-library/dom",
+      "metadataDigest": "sha256:905ac718f879b290da0de98f7a23e9471c8452e77ffa4501ea36858c808895ed",
+      "observedAt": "2026-10-09T19:09:25.590633Z",
+      "releasedAt": "2026-09-13T18:08:36.116Z",
+      "selected": "10.4.2",
+      "source": "https://registry.npmjs.org/@testing-library/dom",
+      "status": "current",
+      "upstreamStable": "10.4.2"
+    },
+    {
+      "id": "npm:@testing-library/jest-dom",
+      "metadataDigest": "sha256:a15bf8b1246a448908d76ddd23357eb3e3a9f8442eeaaa5153d2499d55f6fb23",
+      "observedAt": "2026-10-09T19:09:25.663124Z",
+      "releasedAt": "2026-08-09T23:44:33.598Z",
+      "selected": "7.0.1",
+      "source": "https://registry.npmjs.org/@testing-library/jest-dom",
+      "status": "current",
+      "upstreamStable": "7.0.1"
+    },
+    {
+      "id": "npm:@testing-library/react",
+      "metadataDigest": "sha256:3ed8c1478fbea0a6f07f9995595a86e848238f3868f02fff04faf4f7aef2592f",
+      "observedAt": "2026-10-09T19:09:25.692731Z",
+      "releasedAt": "2026-08-27T17:41:18.735Z",
+      "selected": "16.3.3",
+      "source": "https://registry.npmjs.org/@testing-library/react",
+      "status": "current",
+      "upstreamStable": "16.3.3"
+    },
+    {
+      "id": "npm:@types/node",
+      "metadataDigest": "sha256:ca6bd5e530819935a1ada29877fc227e3869367e433dd33460fa00d9355890f4",
+      "observedAt": "2026-10-09T19:09:25.701275Z",
+      "releasedAt": "2026-10-09T18:46:47.657Z",
+      "selected": "26.6.5",
+      "source": "https://registry.npmjs.org/@types/node",
+      "status": "current",
+      "upstreamStable": "26.6.5"
+    },
+    {
+      "id": "npm:@types/react",
+      "metadataDigest": "sha256:fa6601ce3bd3ef9a01c1a0ac9cc3f332dfb8c2c1129fe292fd74459ec275784f",
+      "observedAt": "2026-10-09T19:09:25.712874Z",
+      "releasedAt": "2026-09-09T18:08:49.750Z",
+      "selected": "19.3.0",
+      "source": "https://registry.npmjs.org/@types/react",
+      "status": "current",
+      "upstreamStable": "19.3.0"
+    },
+    {
+      "id": "npm:@types/react-dom",
+      "metadataDigest": "sha256:8a72e8b6bbaaed672a276acc45e10400f73d9aefb2769c1d32a8b9051a7e3c0e",
+      "observedAt": "2026-10-09T19:09:25.757531Z",
+      "releasedAt": "2026-09-09T18:07:51.886Z",
+      "selected": "19.3.0",
+      "source": "https://registry.npmjs.org/@types/react-dom",
+      "status": "current",
+      "upstreamStable": "19.3.0"
+    },
+    {
+      "id": "npm:@vitejs/plugin-react",
+      "metadataDigest": "sha256:5d496493417652fe866e99e600466d9a31e75ad172fa77607f772475b356abf6",
+      "observedAt": "2026-10-09T19:09:25.805135Z",
+      "releasedAt": "2026-10-05T10:08:27.143Z",
+      "selected": "6.1.2",
+      "source": "https://registry.npmjs.org/@vitejs/plugin-react",
+      "status": "current",
+      "upstreamStable": "6.1.2"
+    },
+    {
+      "id": "npm:@wterm/core",
+      "metadataDigest": "sha256:72672329cb3c8d5ae35723da6be62ba1ae0a0d5eea31bc6b7cbe06a88d0073df",
+      "observedAt": "2026-10-09T19:09:25.812677Z",
+      "releasedAt": "2026-09-29T03:18:31.009Z",
+      "selected": "0.5.4",
+      "source": "https://registry.npmjs.org/@wterm/core",
+      "status": "current",
+      "upstreamStable": "0.5.4"
+    },
+    {
+      "id": "npm:@wterm/dom",
+      "metadataDigest": "sha256:042a933b5969475e3f2265ffe044a3f2c5420f8057b178ed97d308c20186dfe4",
+      "observedAt": "2026-10-09T19:09:25.962134Z",
+      "releasedAt": "2026-09-29T03:17:46.946Z",
+      "selected": "0.5.4",
+      "source": "https://registry.npmjs.org/@wterm/dom",
+      "status": "current",
+      "upstreamStable": "0.5.4"
+    },
+    {
+      "id": "npm:@wterm/react",
+      "metadataDigest": "sha256:07b816489ab91c0d9ebd22f9e591868183dfc89aaf827643884bc3e3b7f868d9",
+      "observedAt": "2026-10-09T19:09:25.964925Z",
+      "releasedAt": "2026-09-29T03:18:44.184Z",
+      "selected": "0.5.4",
+      "source": "https://registry.npmjs.org/@wterm/react",
+      "status": "current",
+      "upstreamStable": "0.5.4"
+    },
+    {
+      "id": "npm:axios",
+      "metadataDigest": "sha256:bafc1a73bf5dbc906620d6e4d50ded0d4abedbecf71cb7bef70a370187104e5d",
+      "observedAt": "2026-10-09T19:09:25.969199Z",
+      "releasedAt": "2026-08-26T08:20:14.517Z",
+      "selected": "1.20.0",
+      "source": "https://registry.npmjs.org/axios",
+      "status": "current",
+      "upstreamStable": "1.20.0"
+    },
+    {
+      "id": "npm:class-variance-authority",
+      "metadataDigest": "sha256:c60a30df6b08a1b09b501ea4ad1032144647a49b6e089c657589499948c571dd",
+      "observedAt": "2026-10-09T19:09:26.006766Z",
+      "releasedAt": "2024-11-26T08:20:34.604Z",
+      "selected": "0.7.1",
+      "source": "https://registry.npmjs.org/class-variance-authority",
+      "status": "current",
+      "upstreamStable": "0.7.1"
+    },
+    {
+      "id": "npm:clsx",
+      "metadataDigest": "sha256:78df97b9ca2d29a6d0b02929271d141a32e17d6f9390af626ca386352a090837",
+      "observedAt": "2026-10-09T19:09:26.027517Z",
+      "releasedAt": "2024-04-23T05:26:04.645Z",
+      "selected": "2.1.1",
+      "source": "https://registry.npmjs.org/clsx",
+      "status": "current",
+      "upstreamStable": "2.1.1"
+    },
+    {
+      "id": "npm:cmdk",
+      "metadataDigest": "sha256:aeb425a2077281b082ce6c0cbaa2e66df4198eec0f8b71fe6723eebd85de5bad",
+      "observedAt": "2026-10-09T19:09:26.045745Z",
+      "releasedAt": "2025-03-14T19:21:16.194Z",
+      "selected": "1.1.1",
+      "source": "https://registry.npmjs.org/cmdk",
+      "status": "current",
+      "upstreamStable": "1.1.1"
+    },
+    {
+      "id": "npm:date-fns",
+      "metadataDigest": "sha256:3ca183c267be10057496ef45e2c7a7842de05802871c5373b60ad80eb6876fda",
+      "observedAt": "2026-10-09T19:09:26.076869Z",
+      "releasedAt": "2026-05-29T23:23:42.628Z",
+      "selected": "4.4.0",
+      "source": "https://registry.npmjs.org/date-fns",
+      "status": "current",
+      "upstreamStable": "4.4.0"
+    },
+    {
+      "id": "npm:dompurify",
+      "metadataDigest": "sha256:3a9ef4b8aa483ecf0291db325470e7e21d34d44c4abccec994f4785f144afd8f",
+      "observedAt": "2026-10-09T19:09:26.146664Z",
+      "releasedAt": "2026-09-23T15:29:57.247Z",
+      "selected": "3.4.16",
+      "source": "https://registry.npmjs.org/dompurify",
+      "status": "current",
+      "upstreamStable": "3.4.16"
+    },
+    {
+      "id": "npm:eslint",
+      "metadataDigest": "sha256:6567075f90c2b74fce6ec49655c388cbeb04c43302ac387d9bd2e4d30acf62ad",
+      "observedAt": "2026-10-09T19:09:26.188380Z",
+      "releasedAt": "2026-10-02T20:08:19.213Z",
+      "selected": "9.39.5",
+      "source": "https://registry.npmjs.org/eslint",
+      "status": "review-required",
+      "upstreamStable": "10.12.0"
+    },
+    {
+      "id": "npm:eslint-plugin-jsx-a11y",
+      "metadataDigest": "sha256:76697948c9693323db1a27e73c45675b0660ea0cbd67c769f824ff410b70b20a",
+      "observedAt": "2026-10-09T19:09:26.191356Z",
+      "releasedAt": "2024-10-26T04:45:18.067Z",
+      "selected": "6.10.2",
+      "source": "https://registry.npmjs.org/eslint-plugin-jsx-a11y",
+      "status": "current",
+      "upstreamStable": "6.10.2"
+    },
+    {
+      "id": "npm:eslint-plugin-react-hooks",
+      "metadataDigest": "sha256:ec7cfc8bd10275e8fb61c09e834f0519b7551051001a07d0b8e202f1a4032107",
+      "observedAt": "2026-10-09T19:09:26.218425Z",
+      "releasedAt": "2026-04-17T18:03:19.591Z",
+      "selected": "7.1.1",
+      "source": "https://registry.npmjs.org/eslint-plugin-react-hooks",
+      "status": "current",
+      "upstreamStable": "7.1.1"
+    },
+    {
+      "id": "npm:globals",
+      "metadataDigest": "sha256:e0ec1d8e8bd3a8e8fb0633144e3d8d3cddcd4f248e4b84f182e6b75743a9fe4c",
+      "observedAt": "2026-10-09T19:09:26.225882Z",
+      "releasedAt": "2026-10-01T03:57:11.938Z",
+      "selected": "17.13.0",
+      "source": "https://registry.npmjs.org/globals",
+      "status": "current",
+      "upstreamStable": "17.13.0"
+    },
+    {
+      "id": "npm:js-yaml",
+      "metadataDigest": "sha256:b14717cde20900c2d8d4cc5cefa89e113dd3adf2ee95cb88413e7d27561feb2b",
+      "observedAt": "2026-10-09T19:09:26.250168Z",
+      "releasedAt": "2026-10-05T22:13:55.389Z",
+      "selected": "5.4.3",
+      "source": "https://registry.npmjs.org/js-yaml",
+      "status": "current",
+      "upstreamStable": "5.4.3"
+    },
+    {
+      "id": "npm:jsdom",
+      "metadataDigest": "sha256:b38b0196e6c8bfd4f8865726de217be0ba2140916f4754a545ce43ea9e21de32",
+      "observedAt": "2026-10-09T19:09:26.254844Z",
+      "releasedAt": "2026-10-04T09:15:00.333Z",
+      "selected": "30.1.2",
+      "source": "https://registry.npmjs.org/jsdom",
+      "status": "current",
+      "upstreamStable": "30.1.2"
+    },
+    {
+      "id": "npm:lucide-react",
+      "metadataDigest": "sha256:6072bb6f3c7131cb850b259df1309e409f66728120854747dd5728f82c323f93",
+      "observedAt": "2026-10-09T19:09:26.267705Z",
+      "releasedAt": "2026-10-09T06:18:19.433Z",
+      "selected": "1.54.0",
+      "source": "https://registry.npmjs.org/lucide-react",
+      "status": "current",
+      "upstreamStable": "1.54.0"
+    },
+    {
+      "id": "npm:nanoid",
+      "metadataDigest": "sha256:caee9c9b46d6f8df0b4887b7620058355830591fbc85a1c4fe743b527f969c79",
+      "observedAt": "2026-10-09T19:09:26.280613Z",
+      "releasedAt": "2026-10-05T21:23:00.134Z",
+      "selected": "3.3.20",
+      "source": "https://registry.npmjs.org/nanoid",
+      "status": "review-required",
+      "upstreamStable": "6.0.2"
+    },
+    {
+      "id": "npm:postcss",
+      "metadataDigest": "sha256:9a298a2548e9bc23f42f3bc95969f079415416bef2c02434ae6e7f3b70404086",
+      "observedAt": "2026-10-09T19:09:26.301107Z",
+      "releasedAt": "2026-10-05T09:28:55.780Z",
+      "selected": "8.5.29",
+      "source": "https://registry.npmjs.org/postcss",
+      "status": "current",
+      "upstreamStable": "8.5.29"
+    },
+    {
+      "id": "npm:prettier",
+      "metadataDigest": "sha256:a35ba25d1687d3c21ed3e585ec8157fe122c30e1381eed24e9c51ab08928f67d",
+      "observedAt": "2026-10-09T19:09:26.373912Z",
+      "releasedAt": "2026-09-23T06:31:34.693Z",
+      "selected": "3.9.9",
+      "source": "https://registry.npmjs.org/prettier",
+      "status": "current",
+      "upstreamStable": "3.9.9"
+    },
+    {
+      "id": "npm:radix-ui",
+      "metadataDigest": "sha256:c1ff6550d7240496a7cf5b4be8e13859bce135e200aa3cb75c16fa86b7e067aa",
+      "observedAt": "2026-10-09T19:09:26.390734Z",
+      "releasedAt": "2026-10-05T23:09:03.272Z",
+      "selected": "1.7.0",
+      "source": "https://registry.npmjs.org/radix-ui",
+      "status": "current",
+      "upstreamStable": "1.7.0"
+    },
+    {
+      "id": "npm:react",
+      "metadataDigest": "sha256:6337881574d2d2b135c10563817f9ac213e2f7378cbceafad30c876e74c3d986",
+      "observedAt": "2026-10-09T19:09:26.397787Z",
+      "releasedAt": "2026-09-09T17:21:30.071Z",
+      "selected": "19.3.0",
+      "source": "https://registry.npmjs.org/react",
+      "status": "current",
+      "upstreamStable": "19.3.0"
+    },
+    {
+      "id": "npm:react-dom",
+      "metadataDigest": "sha256:8f4e10557aeca0cef7382536db232d628194b8c370cfd66e8672e3c568893889",
+      "observedAt": "2026-10-09T19:09:26.436870Z",
+      "releasedAt": "2026-09-09T17:17:39.744Z",
+      "selected": "19.3.0",
+      "source": "https://registry.npmjs.org/react-dom",
+      "status": "current",
+      "upstreamStable": "19.3.0"
+    },
+    {
+      "id": "npm:react-markdown",
+      "metadataDigest": "sha256:f6819af6f0e8bd15bbe841ab80d592440260a4d72c83e093c6c915fab5898092",
+      "observedAt": "2026-10-09T19:09:26.438357Z",
+      "releasedAt": "2025-03-07T10:32:53.222Z",
+      "selected": "10.1.0",
+      "source": "https://registry.npmjs.org/react-markdown",
+      "status": "current",
+      "upstreamStable": "10.1.0"
+    },
+    {
+      "id": "npm:recharts",
+      "metadataDigest": "sha256:700de3f696c94ed02da8165fa8f444d9e851197b573f83b6943ca8a456f55cb0",
+      "observedAt": "2026-10-09T19:09:26.464679Z",
+      "releasedAt": "2026-07-25T15:23:05.240Z",
+      "selected": "3.10.1",
+      "source": "https://registry.npmjs.org/recharts",
+      "status": "current",
+      "upstreamStable": "3.10.1"
+    },
+    {
+      "id": "npm:remark-gfm",
+      "metadataDigest": "sha256:2de399254aa97e200e08d6b6c357861ad42291a0a38df53ce0eee95829673672",
+      "observedAt": "2026-10-09T19:09:26.487910Z",
+      "releasedAt": "2025-02-10T12:43:10.735Z",
+      "selected": "4.0.1",
+      "source": "https://registry.npmjs.org/remark-gfm",
+      "status": "current",
+      "upstreamStable": "4.0.1"
+    },
+    {
+      "id": "npm:sonner",
+      "metadataDigest": "sha256:01392b5fa2a5408f606fad637cc958ceab8e7260b5a21e375f3b2273c8816884",
+      "observedAt": "2026-10-09T19:09:26.511930Z",
+      "releasedAt": "2026-08-09T08:46:10.174Z",
+      "selected": "2.0.8",
+      "source": "https://registry.npmjs.org/sonner",
+      "status": "current",
+      "upstreamStable": "2.0.8"
+    },
+    {
+      "id": "npm:tailwind-merge",
+      "metadataDigest": "sha256:d334ada0b2ca5cbe51cd5d1700a1a440b75e932ddc080c94a6d0c657ebc13129",
+      "observedAt": "2026-10-09T19:09:26.581738Z",
+      "releasedAt": "2026-09-12T20:10:15.257Z",
+      "selected": "3.7.0",
+      "source": "https://registry.npmjs.org/tailwind-merge",
+      "status": "current",
+      "upstreamStable": "3.7.0"
+    },
+    {
+      "id": "npm:tailwindcss",
+      "metadataDigest": "sha256:6b4e8f56b1b79bafaec603a4f790c0b74ee0ac5497d069727cb804ed541dacad",
+      "observedAt": "2026-10-09T19:09:26.586354Z",
+      "releasedAt": "2026-07-16T12:03:35.267Z",
+      "selected": "4.3.3",
+      "source": "https://registry.npmjs.org/tailwindcss",
+      "status": "current",
+      "upstreamStable": "4.3.3"
+    },
+    {
+      "id": "npm:typescript",
+      "metadataDigest": "sha256:bc758c413bd51b4722b1705298978e9c1cff5c1e70885131d1528f1d59ec794a",
+      "observedAt": "2026-10-09T19:09:26.731873Z",
+      "releasedAt": "2026-07-08T15:55:18.431Z",
+      "selected": "6.0.3",
+      "source": "https://registry.npmjs.org/typescript",
+      "status": "review-required",
+      "upstreamStable": "7.0.2"
+    },
+    {
+      "id": "npm:typescript-eslint",
+      "metadataDigest": "sha256:b31f94c1452775ef02d30b817f0a6ac3b035fc73ffbb34c75d595b30c1029c88",
+      "observedAt": "2026-10-09T19:09:26.736522Z",
+      "releasedAt": "2026-10-05T17:08:41.691Z",
+      "selected": "8.71.1",
+      "source": "https://registry.npmjs.org/typescript-eslint",
+      "status": "current",
+      "upstreamStable": "8.71.1"
+    },
+    {
+      "id": "npm:vite",
+      "metadataDigest": "sha256:d6121df12481dca3457a8b1b904d6ffdff0b04f574576d2641a7e6c81aa67b92",
+      "observedAt": "2026-10-09T19:09:26.754513Z",
+      "releasedAt": "2026-10-08T12:07:04.441Z",
+      "selected": "8.3.4",
+      "source": "https://registry.npmjs.org/vite",
+      "status": "current",
+      "upstreamStable": "8.3.4"
+    },
+    {
+      "id": "npm:vitest",
+      "metadataDigest": "sha256:cfc2a0eaea48c7affd67d93516edd9c194cc61fabdcb96a6dae8a8c1bfffe1d4",
+      "observedAt": "2026-10-09T19:09:26.947201Z",
+      "releasedAt": "2026-09-30T11:30:42.429Z",
+      "selected": "5.0.3",
+      "source": "https://registry.npmjs.org/vitest",
+      "status": "current",
+      "upstreamStable": "5.0.3"
+    },
+    {
+      "id": "oapi-codegen",
+      "metadataDigest": "sha256:76d32a27e0a02d848b8fa10c60f6158b1efdeb43203f4456f8cad4e93aa31e59",
+      "observedAt": "2026-10-09T19:09:26.947489Z",
+      "releasedAt": "2026-07-17T14:01:16Z",
+      "selected": "v2.5.0",
+      "source": "https://proxy.golang.org/github.com/oapi-codegen/oapi-codegen/v2/@latest",
+      "status": "review-required",
+      "upstreamStable": "v2.8.0"
+    },
+    {
+      "id": "oasdiff",
+      "metadataDigest": "sha256:6e2b36c4a1ae879bce5b948996425ffb0b250ec6761e84802832d855097bacb9",
+      "observedAt": "2026-10-09T19:09:27.003716Z",
+      "releasedAt": "2026-09-16T21:15:58Z",
+      "selected": "v1.33.0",
+      "source": "https://proxy.golang.org/github.com/oasdiff/oasdiff/@latest",
+      "status": "current",
+      "upstreamStable": "v1.33.0"
+    },
+    {
+      "id": "prometheus",
+      "metadataDigest": "sha256:b8c780d41e6278b590e7fede00b493dcb2a92c1ebcfa0100b68862a6f27b4dd6",
+      "observedAt": "2026-10-09T19:09:27.128138Z",
+      "releasedAt": "2026-09-25T08:56:22Z",
+      "selected": "3.2.1",
+      "source": "https://api.github.com/repos/prometheus/prometheus/releases",
+      "status": "review-required",
+      "upstreamStable": "3.15.0"
+    },
+    {
+      "id": "rustfs",
+      "metadataDigest": "sha256:da52b46d43a507c2674a459d13f6fe47884daa04309fe678a23048cf0c8ad538",
+      "observedAt": "2026-10-09T19:09:27.146721Z",
+      "releasedAt": "2026-10-03T04:58:30Z",
+      "selected": null,
+      "source": "https://api.github.com/repos/rustfs/rustfs/releases",
+      "status": "review-required",
+      "upstreamStable": "1.0.1"
+    },
+    {
+      "id": "sqlc",
+      "metadataDigest": "sha256:b87bf7dbb22573cfb19659c150aa57805722ad9734b84364857a19ba9ddb6bcf",
+      "observedAt": "2026-10-09T19:09:27.182808Z",
+      "releasedAt": "2026-04-22T14:55:41Z",
+      "selected": "1.31.1",
+      "source": "https://api.github.com/repos/sqlc-dev/sqlc/releases",
+      "status": "current",
+      "upstreamStable": "1.31.1"
+    },
+    {
+      "id": "tempo",
+      "metadataDigest": "sha256:3538971446331f023be54b589c01f913272c90f875ff19fb60970b7f2810e69b",
+      "observedAt": "2026-10-09T19:09:27.506653Z",
+      "releasedAt": "2026-09-29T17:06:39Z",
+      "selected": "2.7.2",
+      "source": "https://api.github.com/repos/grafana/tempo/releases",
+      "status": "review-required",
+      "upstreamStable": "3.1.0"
+    },
+    {
+      "id": "trivy",
+      "metadataDigest": "sha256:223cbf05e0f4be0951be4da650a0a412dd513bf425de8d76ea31a43917eb8a2c",
+      "observedAt": "2026-10-09T19:09:27.831011Z",
+      "releasedAt": "2026-10-01T13:34:13Z",
+      "selected": "0.75.0",
+      "source": "https://api.github.com/repos/aquasecurity/trivy/releases",
+      "status": "current",
+      "upstreamStable": "0.75.0"
+    },
+    {
+      "id": "valkey",
+      "metadataDigest": "sha256:9fa198fbf0b5222aaf85bdce43a2bea792b430722ddfa783589a86fcca15e15b",
+      "observedAt": "2026-10-09T19:09:27.869402Z",
+      "releasedAt": "2026-09-01T00:01:31Z",
+      "selected": null,
+      "source": "https://api.github.com/repos/valkey-io/valkey/releases",
+      "status": "review-required",
+      "upstreamStable": "9.1.2"
+    }
+  ],
+  "schemaVersion": 1
+}

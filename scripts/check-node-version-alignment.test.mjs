@@ -4,11 +4,11 @@ import test from "node:test";
 import { findNodeVersionDrift } from "./check-node-version-alignment.mjs";
 
 const aligned = {
-  version: "24.21.0",
-  packageMetadata: { engines: { node: ">=24.21.0 <25" } },
-  dockerfile: "FROM node:24-alpine@sha256:abc AS build",
+  version: "26.11.1",
+  packageMetadata: { engines: { node: ">=26.11.1 <27" } },
+  dockerfile: "FROM node:26.11.1-alpine@sha256:abc AS build",
   workflows: [
-    ["ci.yaml", "uses: actions/setup-node@sha\nwith:\n  node-version: 24.21.0"],
+    ["ci.yaml", "uses: actions/setup-node@sha\nwith:\n  node-version: 26.11.1"],
   ],
 };
 

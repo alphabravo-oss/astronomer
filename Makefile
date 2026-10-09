@@ -20,11 +20,11 @@ SQLC         ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 
 # Pinned golangci-lint — mirrors the sqlc pinned-tool pattern. Kept in sync with
 # the default in scripts/check-go-lint.sh, which is what CI actually invokes.
-GOLANGCI_LINT_VERSION ?= v2.12.2
+GOLANGCI_LINT_VERSION ?= v2.14.0
 GOVULNCHECK_VERSION   ?= v1.8.0
 
 # Pinned oapi-codegen (Go SDK generator) — mirrors the sqlc pinned-tool pattern.
-OAPI_CODEGEN_VERSION ?= v2.5.0
+OAPI_CODEGEN_VERSION ?= v2.5.1
 OAPI_CODEGEN         ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
 
 # Local CI executes the real PR workflow with the official GitHub runner. The
@@ -275,6 +275,21 @@ sqlc-extensions-check: ## Verify isolated legacy sqlc extension adapters
 
 data-governance-check: ## Verify JSON writer and destructive-delete ownership inventories
 	python3 ./scripts/check-data-governance.py
+
+.PHONY: versions-check versions-generate versions-release-check updates
+versions-check: ## Validate selected versions and all generated consumers offline
+	python3 scripts/toolchain.py --check
+	python3 -m unittest discover -s scripts/tests -p 'toolchain*test.py'
+
+versions-generate: ## Explicitly regenerate version consumers from reviewed authority
+	python3 scripts/toolchain.py --write
+
+versions-release-check: ## Reject missing or stale discovery and expired exceptions
+	test -n "$(TOOLCHAIN_RESOLUTION)" && test -n "$(TOOLCHAIN_RESOLUTION_BUNDLE)"
+	python3 scripts/toolchain-resolution.py --verify --record "$(TOOLCHAIN_RESOLUTION)" --bundle "$(TOOLCHAIN_RESOLUTION_BUNDLE)"
+
+updates: ## Discover final upstream releases without changing selected versions
+	python3 scripts/toolchain.py --discover --output .artifacts/toolchain-updates.json
 
 sdk: ## Generate the typed Go SDK (pkg/astroclient) from docs/openapi.yaml via oapi-codegen
 	$(OAPI_CODEGEN) -config oapi-codegen.yaml docs/openapi.yaml

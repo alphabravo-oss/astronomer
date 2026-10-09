@@ -1,0 +1,5077 @@
+{
+  "components": [
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:fd35f57147c937a3a68bcd670d24cb44e8637138d6b8132db9b67eab89cd47c4",
+        "releasedAt": "2026-09-28T17:54:43Z",
+        "stable": true,
+        "version": "1.20.1"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Discovery target only; actual production/development selected asset graph and stateful/configuration migration qualification are owned by W03/W10/W11/W12; no image replacement performed",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "alloy",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "No exact selected deployed artifact in W00 baseline; external operator/storage qualification belongs to W03/W11/W12. Source Valkey uses unresolved 8-alpine, which is not a qualified patch selection.",
+      "selected": null,
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/grafana/alloy/releases"
+      }
+    },
+    {
+      "artifacts": [
+        {
+          "digest": "sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6",
+          "platformDigests": {
+            "linux/amd64": "sha256:d56c381f961d307a21b3ca004cf1e3910f106644aefb1f43e654c8a56c4fd395",
+            "linux/arm64": "sha256:260479a1cfaf304c4c20da7f8405d3ce313513dcd534bb743257bdd2fe0f3e2d"
+          },
+          "platforms": [
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "provenance": "Official registry manifest/config SHA256 and linux/amd64,arm64 digests verified; docs/assurance/technology-guide/w01/image-resolution.json",
+          "reference": "docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6",
+          "verifiedAt": "2026-10-09T19:12:31.202849Z"
+        }
+      ],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.server",
+          "selector": "^FROM (docker.io/library/alpine:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.dr",
+          "selector": "^FROM (docker.io/library/alpine:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 2,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.shell",
+          "selector": "^FROM (docker.io/library/alpine:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.migrate",
+          "selector": "^FROM (docker.io/library/alpine:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.worker",
+          "selector": "^FROM (docker.io/library/alpine:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.agent",
+          "selector": "^FROM (docker.io/library/alpine:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "scripts/fixtures/flux/server/Dockerfile.runtime",
+          "selector": "^FROM (docker.io/library/alpine:\\S+)",
+          "value": "{reference}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T19:12:31.202849Z",
+        "provenance": "https://alpinelinux.org/releases.json",
+        "releasedAt": "2026-09-17",
+        "stable": true,
+        "version": "3.24.2"
+      },
+      "ecosystem": "image",
+      "id": "alpine",
+      "owner": "platform/runtime",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "First-party candidate image builds and runtime preflight; not published image/security qualification",
+      "selected": "3.24.2",
+      "upstream": {
+        "kind": "alpine",
+        "url": "https://alpinelinux.org/releases.json"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:7a99759b6275ecf7ca48b00ffbd69d557dd37be5e954168e18fe9414915066a6",
+        "releasedAt": "2026-09-30T13:34:15Z",
+        "stable": true,
+        "version": "0.15.1"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Discovery target only; actual production/development selected asset graph and stateful/configuration migration qualification are owned by W03/W10/W11/W12; no image replacement performed",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "barman-plugin",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "No exact selected deployed artifact in W00 baseline; external operator/storage qualification belongs to W03/W11/W12. Source Valkey uses unresolved 8-alpine, which is not a qualified patch selection.",
+      "selected": null,
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/cloudnative-pg/plugin-barman-cloud/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "deploy/bundles/catalog.json",
+          "selector": "components/1/source/version",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T19:04:03.069105Z",
+        "provenance": "Official index https://prometheus-community.github.io/helm-charts/index.yaml sha256:fa36f6399c08ea0b990552de48e99cd4f54cc8b3bb12ab908504d97d5e32826c",
+        "releasedAt": "2026-09-26T02:09:17.04084284Z",
+        "stable": true,
+        "version": "8.6.0"
+      },
+      "ecosystem": "chart",
+      "exception": {
+        "evidence": "deploy/bundles/catalog.json",
+        "exitCondition": "W03 resolves official chart index and W11/12 qualify exact chart/image platform graph",
+        "owner": "platform/delivery",
+        "reason": "Existing signed built-in source/digest remains pinned; official chart stable metadata and recursively rendered image closure are required before target replacement",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "chart:kube-state-metrics",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "W03/W11 render and full mirrored asset closure before changing runtime chart",
+      "selected": "8.6.0",
+      "upstream": {
+        "kind": "helm-index",
+        "locator": "kube-state-metrics",
+        "url": "https://prometheus-community.github.io/helm-charts/index.yaml"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "deploy/bundles/catalog.json",
+          "selector": "components/2/source/version",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T19:04:03.069105Z",
+        "provenance": "Official index https://prometheus-community.github.io/helm-charts/index.yaml sha256:fa36f6399c08ea0b990552de48e99cd4f54cc8b3bb12ab908504d97d5e32826c",
+        "releasedAt": "2026-09-27T20:07:05.297816713Z",
+        "stable": true,
+        "version": "4.59.0"
+      },
+      "ecosystem": "chart",
+      "exception": {
+        "evidence": "deploy/bundles/catalog.json",
+        "exitCondition": "W03 resolves official chart index and W11/12 qualify exact chart/image platform graph",
+        "owner": "platform/delivery",
+        "reason": "Existing signed built-in source/digest remains pinned; official chart stable metadata and recursively rendered image closure are required before target replacement",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "chart:prometheus-node-exporter",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "W03/W11 render and full mirrored asset closure before changing runtime chart",
+      "selected": "4.56.1",
+      "upstream": {
+        "kind": "helm-index",
+        "locator": "prometheus-node-exporter",
+        "url": "https://prometheus-community.github.io/helm-charts/index.yaml"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "deploy/bundles/catalog.json",
+          "selector": "components/0/source/version",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T19:04:03.069105Z",
+        "provenance": "Official index https://aquasecurity.github.io/helm-charts/index.yaml sha256:1de0adda69072fc8311b7ba1450a2dd9e16231e68b3bc1c3e75ddc9087eb84d3",
+        "releasedAt": "2026-10-06T06:49:35.309914051Z",
+        "stable": true,
+        "version": "0.37.0"
+      },
+      "ecosystem": "chart",
+      "exception": {
+        "evidence": "deploy/bundles/catalog.json",
+        "exitCondition": "W03 resolves official chart index and W11/12 qualify exact chart/image platform graph",
+        "owner": "platform/delivery",
+        "reason": "Existing signed built-in source/digest remains pinned; official chart stable metadata and recursively rendered image closure are required before target replacement",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "chart:trivy-operator",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "W03/W11 render and full mirrored asset closure before changing runtime chart",
+      "selected": "0.37.0",
+      "upstream": {
+        "kind": "helm-index",
+        "locator": "trivy-operator",
+        "url": "https://aquasecurity.github.io/helm-charts/index.yaml"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:371982229d616c2ba8373e6fa33f88ac0ed9592de9b7c8c9574243475c662d3b",
+        "releasedAt": "2026-09-23T13:35:42Z",
+        "stable": true,
+        "version": "1.30.1"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Discovery target only; actual production/development selected asset graph and stateful/configuration migration qualification are owned by W03/W10/W11/W12; no image replacement performed",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "cnpg",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "No exact selected deployed artifact in W00 baseline; external operator/storage qualification belongs to W03/W11/W12. Source Valkey uses unresolved 8-alpine, which is not a qualified patch selection.",
+      "selected": null,
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/cloudnative-pg/cloudnative-pg/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:b6b40f3e5239d76c5e250d502affefbb8110605570212f5aad0f74b2201e9d02",
+        "releasedAt": "2026-10-01T09:56:48Z",
+        "stable": true,
+        "version": "2.9.6"
+      },
+      "ecosystem": "github",
+      "id": "flux",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "2.9.6",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/fluxcd/flux2/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/security-analysis.yaml",
+          "selector": "github.com/zricethezav/gitleaks/v8@v([^\\s]+)",
+          "value": "8.27.2"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:ac542625b6afb1f567020dee9df35796f7c5925bb2737a92244209e2ec3b56a3",
+        "releasedAt": "2026-03-21T02:17:58Z",
+        "stable": true,
+        "version": "8.30.1"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "W02 scanner compatibility and enforcement tests pass on latest official release",
+        "owner": "security/platform",
+        "reason": "W02 owns scanner/policy compatibility qualification; existing exact scanner pin checked until latest tool produces reliable complete output under Go1.27.2",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "gitleaks",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "8.27.2",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/gitleaks/gitleaks/releases"
+      }
+    },
+    {
+      "artifacts": [
+        {
+          "digest": "sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673",
+          "platforms": [
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "provenance": "advisor-plans/032-evidence/toolchain-discovery.json: Docker Registry v2 manifest list verified for linux/amd64 and linux/arm64",
+          "reference": "golang:1.27.2-alpine@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673",
+          "verifiedAt": "2026-10-09T18:39:13Z"
+        }
+      ],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^go (\\S+)$",
+          "value": "{version}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.server",
+          "selector": "^FROM (golang:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.shell",
+          "selector": "^FROM (golang:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.migrate",
+          "selector": "^FROM (golang:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.worker",
+          "selector": "^FROM (golang:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/docker/Dockerfile.agent",
+          "selector": "^FROM (golang:\\S+)",
+          "value": "{reference}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://go.dev/dl/?mode=json",
+        "releasedAt": "2026-10-07",
+        "stable": true,
+        "version": "1.27.2"
+      },
+      "ecosystem": "go",
+      "id": "go",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.27.2",
+      "upstream": {
+        "kind": "go",
+        "url": "https://go.dev/dl/?mode=json"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "Makefile",
+          "selector": "^GOLANGCI_LINT_VERSION \\?= v(\\S+)",
+          "value": "{version}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "scripts/check-go-lint.sh",
+          "selector": "GOLANGCI_LINT_VERSION=\"\\$\\{GOLANGCI_LINT_VERSION:-v([^}]+)",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:46b4fb6debff93e2ae491a06d68f07d8287a335f6bb1ea7d7506e068cf741fb6",
+        "releasedAt": "2026-09-24T11:27:54Z",
+        "stable": true,
+        "version": "2.14.0"
+      },
+      "ecosystem": "github",
+      "id": "golangci-lint",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "2.14.0",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/golangci/golangci-lint/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/Masterminds/semver/v3 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:61fc48d19fed94346152c628e2cf290ad1c8f0a9b6524c363828b09df8564417",
+        "releasedAt": "2026-04-30T15:39:17Z",
+        "stable": true,
+        "version": "v3.5.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/Masterminds/semver/v3",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v3.5.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/!masterminds/semver/v3/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/ProtonMail/go\\-crypto (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:e1c3981bdadaa6b9c1b2dda3afe37b2018d496edb56d98889430b2b11b45ee78",
+        "releasedAt": "2026-09-25T16:16:17Z",
+        "stable": true,
+        "version": "v1.5.2"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/ProtonMail/go-crypto",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.5.2",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/!proton!mail/go-crypto/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/alicebob/miniredis/v2 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:5732989eca06611c7d93bef774f992a7c08ee04e563c71f552e156de0f470243",
+        "releasedAt": "2026-09-02T11:51:18Z",
+        "stable": true,
+        "version": "v2.39.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/alicebob/miniredis/v2",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v2.39.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/alicebob/miniredis/v2/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/aws/aws\\-sdk\\-go\\-v2 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:d7d87a01dbf0a77aa64d6e10412544a5547575f1e4a405965020bc177c725bb9",
+        "releasedAt": "2026-10-08T18:23:06Z",
+        "stable": true,
+        "version": "v1.47.2"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/aws/aws-sdk-go-v2",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.47.2",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/aws/aws-sdk-go-v2/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/coder/websocket (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:ea771df7db01fd05cfa2763c01367e85ae8f94e47e533f2ba7efd5228c23a8ac",
+        "releasedAt": "2026-06-15T03:25:28Z",
+        "stable": true,
+        "version": "v1.8.15"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/coder/websocket",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.8.15",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/coder/websocket/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/evanphx/json\\-patch/v5 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:3c67f2f75a53868f0f04ffb1ece2f98d871a7edc0e800a8e8779fe32fd60297f",
+        "releasedAt": "2025-01-28T17:43:52Z",
+        "stable": true,
+        "version": "v5.9.11"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/evanphx/json-patch/v5",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v5.9.11",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/evanphx/json-patch/v5/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/exaring/otelpgx (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:ec5e86d8fe5c348941aa393ee1405a1e2ea21e7fd72e0eaf52a2b3240b4e29f1",
+        "releasedAt": "2026-10-08T09:33:03Z",
+        "stable": true,
+        "version": "v0.13.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/exaring/otelpgx",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.13.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/exaring/otelpgx/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/fernet/fernet\\-go (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:ce2d1d8820203e4631c48ca02dddaca9ed12f2a6d3d9f6118f57cf2ee33484bb",
+        "releasedAt": "2024-01-19T01:11:08Z",
+        "stable": true,
+        "version": "v0.0.0-20240119011108-303da6aec611"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/fernet/fernet-go",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.0.0-20240119011108-303da6aec611",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/fernet/fernet-go/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/go\\-chi/chi/v5 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:1fcad8d2b95df816e39a9cbc6175554cdd8864199a181476c2d9e55150c417a7",
+        "releasedAt": "2026-08-20T09:37:52Z",
+        "stable": true,
+        "version": "v5.3.2"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/go-chi/chi/v5",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v5.3.2",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/go-chi/chi/v5/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/go\\-chi/cors (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:e501ceac74e864ca3b88d91df9513ee20c8d9c05db18177acb22875f152379cb",
+        "releasedAt": "2025-07-01T14:06:42Z",
+        "stable": true,
+        "version": "v1.2.2"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/go-chi/cors",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.2.2",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/go-chi/cors/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/go\\-git/go\\-git/v5 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:d18d897af6eafdbba1f4b9cad513cf65ceded58054d6ef495de2ace651bc32c2",
+        "releasedAt": "2026-10-04T13:39:40Z",
+        "stable": true,
+        "version": "v5.19.3"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/go-git/go-git/v5",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v5.19.3",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/go-git/go-git/v5/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/go\\-ldap/ldap/v3 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:e7a719f4cfe485128988222d4eed13fcb7cea35e23d5bc673e3f199ffb732311",
+        "releasedAt": "2026-10-07T18:42:58Z",
+        "stable": true,
+        "version": "v3.4.15"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/go-ldap/ldap/v3",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v3.4.15",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/go-ldap/ldap/v3/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/go\\-playground/validator/v10 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:89f97cc3011b036be53ca06eecb1f8750c1b7732a6740a6bf91723066fd5f10b",
+        "releasedAt": "2026-09-20T18:18:55Z",
+        "stable": true,
+        "version": "v10.30.5"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/go-playground/validator/v10",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v10.30.5",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/go-playground/validator/v10/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/go\\-viper/mapstructure/v2 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:4e1a7e3bda29449cf91fcfdeff08d452fa63ba72bb8fe500792db839b7c2420d",
+        "releasedAt": "2026-01-12T17:24:26Z",
+        "stable": true,
+        "version": "v2.5.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/go-viper/mapstructure/v2",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v2.5.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/go-viper/mapstructure/v2/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/golang\\-jwt/jwt/v5 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:232ad36211bcd6be8342aa763f68ec07c6ae19bc503ec483e5622bb8d4c7ef8c",
+        "releasedAt": "2026-01-28T19:58:13Z",
+        "stable": true,
+        "version": "v5.3.1"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/golang-jwt/jwt/v5",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v5.3.1",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/golang-jwt/jwt/v5/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/golang\\-migrate/migrate/v4 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:a51eb6a50d9b4aec000fa4b45f1ed4880cf8ae9814c04da60c745e8da170d652",
+        "releasedAt": "2026-09-09T04:57:20Z",
+        "stable": true,
+        "version": "v4.20.1"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/golang-migrate/migrate/v4",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v4.20.1",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/golang-migrate/migrate/v4/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/google/uuid (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:d87bbbc4753d56dc51be553f939421d2da5cdfd3c733c888cddbafaef56d7060",
+        "releasedAt": "2024-01-23T18:54:04Z",
+        "stable": true,
+        "version": "v1.6.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/google/uuid",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.6.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/google/uuid/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/gowebpki/jcs (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:527d663879e89616efe212ad45a1e51c26bec544690820a4a26e74cdfb496e05",
+        "releasedAt": "2026-09-21T01:59:38Z",
+        "stable": true,
+        "version": "v1.0.2"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/gowebpki/jcs",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.0.2",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/gowebpki/jcs/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/hashicorp/vault/api (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:b91c2ed3c92b40924c68bd69b3a4ae4f5bf30e2b719ad7bcdc7e9bea763e2576",
+        "releasedAt": "2026-03-23T15:20:01Z",
+        "stable": true,
+        "version": "v1.23.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/hashicorp/vault/api",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.23.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/hashicorp/vault/api/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/hibiken/asynq (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:051fc46a4e269f15d203a87cb40bd21b508c1246519783df745805c4e3765710",
+        "releasedAt": "2026-02-03T06:36:26Z",
+        "stable": true,
+        "version": "v0.26.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/hibiken/asynq",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.26.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/hibiken/asynq/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/jackc/pgx/v5 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:4c76a02e712c2801bb83ee49ed15acf432667e2f6365cb591e852adb59dee40f",
+        "releasedAt": "2026-09-07T23:39:32Z",
+        "stable": true,
+        "version": "v5.11.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/jackc/pgx/v5",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v5.11.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/jackc/pgx/v5/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/oapi\\-codegen/runtime (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:8bb0175cd0f5a81d5a5c6cd385d1e344650e74d52f9e63967663b3a6f8992a3f",
+        "releasedAt": "2026-08-16T05:30:18Z",
+        "stable": true,
+        "version": "v1.7.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/oapi-codegen/runtime",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.7.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/oapi-codegen/runtime/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/opencontainers/go\\-digest (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:38e2187cf8b5583ca240efee88162eb8b5bfc19b92a4e390cc142dd4b591167c",
+        "releasedAt": "2020-05-14T01:46:00Z",
+        "stable": true,
+        "version": "v1.0.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/opencontainers/go-digest",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.0.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/opencontainers/go-digest/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/opencontainers/image\\-spec (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:879785e29bc2dbfc57302ca81fb6b881c356124831ad71ff2737ef56f486f0ba",
+        "releasedAt": "2025-02-24T17:26:57Z",
+        "stable": true,
+        "version": "v1.1.1"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/opencontainers/image-spec",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.1.1",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/opencontainers/image-spec/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/pquerna/otp (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:81a9799705723a0f1dfd0806a6a1e0b4b286cd4c166456dde133d64b18c9ba04",
+        "releasedAt": "2024-12-31T23:15:27Z",
+        "stable": true,
+        "version": "v1.5.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/pquerna/otp",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.5.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/pquerna/otp/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/prometheus/client_golang (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:204f51933525bb14885b0925beee6fe01e21e5ceb5358c82e2e0612320f1ff3c",
+        "releasedAt": "2026-10-08T13:00:24Z",
+        "stable": true,
+        "version": "v1.25.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/prometheus/client_golang",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.25.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/prometheus/client_golang/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/prometheus/client_model (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:b3df073d82bc90efba18d855be14b766744dabb063e6f43244c97cb3a07e16af",
+        "releasedAt": "2026-08-31T09:02:46Z",
+        "stable": true,
+        "version": "v0.6.3"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/prometheus/client_model",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.6.3",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/prometheus/client_model/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/prometheus/common (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:9809e74f13c6ebbb9383f84280ab3b450c5cabca78419eb299b486bea6ecbd69",
+        "releasedAt": "2026-09-28T08:33:06Z",
+        "stable": true,
+        "version": "v0.72.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/prometheus/common",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.72.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/prometheus/common/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/redis/go\\-redis/v9 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:aba499bdbfb1f009e1fd2bd71c987427ddd2ac7a9c8183b094ea49a26ee48380",
+        "releasedAt": "2026-10-05T14:51:38Z",
+        "stable": true,
+        "version": "v9.23.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/redis/go-redis/v9",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v9.23.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/redis/go-redis/v9/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/robfig/cron/v3 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:d77bb3a69e5ec2f9973c97c94247338a00bceae56e96cbe6c70b6fa6aace6157",
+        "releasedAt": "2020-01-04T01:05:08Z",
+        "stable": true,
+        "version": "v3.0.1"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/robfig/cron/v3",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v3.0.1",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/robfig/cron/v3/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/santhosh\\-tekuri/jsonschema/v6 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:2413e7c7ae30a8ea52c46a65c85f44a5e154cc2da9fd11d9b0bb92b61e11f7b0",
+        "releasedAt": "2026-06-28T17:38:00Z",
+        "stable": true,
+        "version": "v6.0.3"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/santhosh-tekuri/jsonschema/v6",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v6.0.3",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/santhosh-tekuri/jsonschema/v6/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/sigstore/protobuf\\-specs (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:17c68599134ec993086826a988ccacb494bc40f755108e1237a8e87581df0e3e",
+        "releasedAt": "2026-08-21T18:00:24Z",
+        "stable": true,
+        "version": "v0.5.2"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/sigstore/protobuf-specs",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.5.2",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/sigstore/protobuf-specs/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/sigstore/sigstore (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:1d400f42776a3051db89cf2b975dffa5cc13c8352aec5a57019d72fe0fd57d78",
+        "releasedAt": "2026-09-11T17:22:32Z",
+        "stable": true,
+        "version": "v1.11.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/sigstore/sigstore",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.11.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/sigstore/sigstore/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/sigstore/sigstore\\-go (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:179ae3dfd15b2b3cc50da1e3ebcc75b87f2e25437539ed33685f3e5a8b591542",
+        "releasedAt": "2026-07-30T14:45:40Z",
+        "stable": true,
+        "version": "v1.3.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/sigstore/sigstore-go",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.3.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/sigstore/sigstore-go/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/spf13/cobra (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:8e90f3ebbe4fb2976cd00cba616e6377664023c9ee2a65ac9fe839e1e3b045ea",
+        "releasedAt": "2025-12-03T23:51:15Z",
+        "stable": true,
+        "version": "v1.10.2"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/spf13/cobra",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.10.2",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/spf13/cobra/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+github\\.com/spf13/viper (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:f63c14c30431577d79231cdcb11feaa3f898744e2a064e1da2e6ad48d25fa48c",
+        "releasedAt": "2025-09-08T16:56:14Z",
+        "stable": true,
+        "version": "v1.21.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/spf13/viper",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.21.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/spf13/viper/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+go\\.opentelemetry\\.io/contrib/instrumentation/net/http/otelhttp (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:25c94982f77ba092ec61eb9becc5a94dd282a81adde7f9ca450224c5ada7646a",
+        "releasedAt": "2026-10-02T16:25:28Z",
+        "stable": true,
+        "version": "v0.72.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.72.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+go\\.opentelemetry\\.io/otel (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:fb8851400e57291f48e16b1a9e5ba0d4f62d34b35f04b4d04016a624bf784c30",
+        "releasedAt": "2026-10-02T08:10:46Z",
+        "stable": true,
+        "version": "v1.47.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:go.opentelemetry.io/otel",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.47.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/go.opentelemetry.io/otel/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+go\\.opentelemetry\\.io/otel/exporters/otlp/otlptrace/otlptracehttp (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:f9d7fbc11f4af3c5df6d456835e8952020ba6b7ec01f1af04830e8c474f70240",
+        "releasedAt": "2026-10-02T08:10:46Z",
+        "stable": true,
+        "version": "v1.47.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.47.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+go\\.opentelemetry\\.io/otel/sdk (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:f09a9490e7e55d98a7b5815242a255a95c0be7e74489dd516f7c0c8291b23608",
+        "releasedAt": "2026-10-02T08:10:46Z",
+        "stable": true,
+        "version": "v1.47.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:go.opentelemetry.io/otel/sdk",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.47.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/go.opentelemetry.io/otel/sdk/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+go\\.opentelemetry\\.io/otel/trace (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:93dc4ed5382dcfb5e93f65e7ab51215be654d79d4eeaf33518b2956655fef8ae",
+        "releasedAt": "2026-10-02T08:10:46Z",
+        "stable": true,
+        "version": "v1.47.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:go.opentelemetry.io/otel/trace",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.47.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/go.opentelemetry.io/otel/trace/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+golang\\.org/x/crypto (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:b11aa615962a25256853dcf67838352d2f5523f6719a8d75181ebcbb7ce615ec",
+        "releasedAt": "2026-10-09T16:24:17Z",
+        "stable": true,
+        "version": "v0.58.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:golang.org/x/crypto",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.58.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/golang.org/x/crypto/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+golang\\.org/x/oauth2 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:8af344a798d61de417123dd01b35f91559c31fd3c0de7670bd44a3f3658c1b10",
+        "releasedAt": "2026-08-25T21:41:43Z",
+        "stable": true,
+        "version": "v0.37.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:golang.org/x/oauth2",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.37.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/golang.org/x/oauth2/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+golang\\.org/x/sync (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:d12e1a2d422a79235baceab349c3c55ab3de707214338884cade9af3bb1a5b70",
+        "releasedAt": "2026-09-23T16:28:17Z",
+        "stable": true,
+        "version": "v0.24.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:golang.org/x/sync",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.24.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/golang.org/x/sync/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+golang\\.org/x/term (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:cb0fa8a9dcf9f9ab5849f254e285d0465691f97825b19d0eda8e82bdad64bb23",
+        "releasedAt": "2026-10-09T15:22:17Z",
+        "stable": true,
+        "version": "v0.47.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:golang.org/x/term",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.47.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/golang.org/x/term/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+golang\\.org/x/time (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:644bb8175706aed7a640d4a67fb5d34c79a27d536b431066196ddb6660ee82ce",
+        "releasedAt": "2026-08-19T17:16:18Z",
+        "stable": true,
+        "version": "v0.16.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:golang.org/x/time",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.16.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/golang.org/x/time/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+gopkg\\.in/yaml\\.v2 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:d45d4b251ff7c94c64ba44afca5bac45e0ae5c1b317b50ec6bbc8671cd2788a5",
+        "releasedAt": "2020-11-17T15:46:20Z",
+        "stable": true,
+        "version": "v2.4.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:gopkg.in/yaml.v2",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v2.4.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/gopkg.in/yaml.v2/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+gopkg\\.in/yaml\\.v3 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:0cdb0c9ac8c3b25dbd420a86ab27debfa469a8b48ee10560224704c2852ac6c0",
+        "releasedAt": "2022-05-27T08:35:30Z",
+        "stable": true,
+        "version": "v3.0.1"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:gopkg.in/yaml.v3",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v3.0.1",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/gopkg.in/yaml.v3/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+helm\\.sh/helm/v3 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:c3476c63096394a35589adeac19b4caf355d65c70ca3d725c5178dc00495699c",
+        "releasedAt": "2026-09-09T22:21:05Z",
+        "stable": true,
+        "version": "v3.22.0"
+      },
+      "ecosystem": "gomod",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Helm4 SDK migration is owned by W11; retain characterized3.21.4 until install/rollback/Flux/CNPG qualification",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "gomod:helm.sh/helm/v3",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v3.21.4",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/helm.sh/helm/v3/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+k8s\\.io/api (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:f360ca5de50a723deaabe698bdf00c578663c884d31305511eae0d6a6f9a8da0",
+        "releasedAt": "2026-09-23T20:45:45Z",
+        "stable": true,
+        "version": "v0.37.1"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:k8s.io/api",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.37.1",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/k8s.io/api/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+k8s\\.io/apimachinery (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:c8f14a86a4ebe4afdb01f8a1abda3a4d010b50f4e37b895ba39d3e2e05597949",
+        "releasedAt": "2026-09-23T20:28:20Z",
+        "stable": true,
+        "version": "v0.37.1"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:k8s.io/apimachinery",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.37.1",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/k8s.io/apimachinery/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+k8s\\.io/client\\-go (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:ee335e6e5aa714f5583d991e0ccf5834e8645ff73144f86a9650556c3650858f",
+        "releasedAt": "2026-09-23T21:10:43Z",
+        "stable": true,
+        "version": "v0.37.1"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:k8s.io/client-go",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.37.1",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/k8s.io/client-go/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+k8s\\.io/metrics (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:e5419d3fb8edae792f838e9fd574390549f8bf50c18189137d225333d5b3daba",
+        "releasedAt": "2026-09-23T23:18:38Z",
+        "stable": true,
+        "version": "v0.37.1"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:k8s.io/metrics",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.37.1",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/k8s.io/metrics/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+k8s\\.io/utils (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:bd65d0566e67c671851788476265c4a1e6124d69361295ecf70a9d9c469f5fef",
+        "releasedAt": "2026-07-07T02:38:25Z",
+        "stable": true,
+        "version": "v0.0.0-20260707023825-cf1189d6abe3"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:k8s.io/utils",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.0.0-20260707023825-cf1189d6abe3",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/k8s.io/utils/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+oras\\.land/oras\\-go/v2 (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:bb9a2169941856a10287e8d9968c7a558ee9b5a6cb483f4859bea81c7583ae55",
+        "releasedAt": "2026-07-10T14:50:25Z",
+        "stable": true,
+        "version": "v2.6.2"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:oras.land/oras-go/v2",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v2.6.2",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/oras.land/oras-go/v2/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+sigs\\.k8s\\.io/controller\\-runtime (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:d21e0ad3b514f108b3f8563bd564f89b358be1613bbaceea3ce0f0fbc7866457",
+        "releasedAt": "2026-09-30T23:29:52Z",
+        "stable": true,
+        "version": "v0.25.2"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:sigs.k8s.io/controller-runtime",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v0.25.2",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/sigs.k8s.io/controller-runtime/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+sigs\\.k8s\\.io/yaml (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:616c8885363abb8663dbc10fb73e639de92a9f0ce06444bc6f7cfedb1b50179c",
+        "releasedAt": "2025-07-24T18:12:28Z",
+        "stable": true,
+        "version": "v1.6.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:sigs.k8s.io/yaml",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "v1.6.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/sigs.k8s.io/yaml/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/security-analysis.yaml",
+          "selector": "github.com/securego/gosec/v2/cmd/gosec@v([^\\s]+)",
+          "value": "2.22.10"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:a55222bba688b83fcd487cb2ae45dc1179257da0eecf882db36a55a9f97fdebe",
+        "releasedAt": "2026-08-26T08:34:58Z",
+        "stable": true,
+        "version": "2.29.0"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "W02 scanner compatibility and enforcement tests pass on latest official release",
+        "owner": "security/platform",
+        "reason": "gosec2.22.10 cannot typecheck Go1.27.2. Latest2.29.0 also encounters x/tools0.49 importer export-data version5 maximumsupported4, producing incomplete error maps. W02 owns official latest binary qualification; no complete scan/clean claim for these failed runs.",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "gosec",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "W02 scanner compatibility and policy gate; incomplete scans must fail closed",
+      "selected": "2.22.10",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/securego/gosec/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "Makefile",
+          "selector": "^GOVULNCHECK_VERSION\\s+\\?= v(\\S+)",
+          "value": "1.8.0"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T19:03:17.977823Z",
+        "provenance": "sha256:1c5132bd17f74870fad0e227a81ef157c8b689ca83a3bbab518bf8f8ece98c37",
+        "releasedAt": "2026-09-08T20:52:42Z",
+        "stable": true,
+        "version": "v1.8.0"
+      },
+      "ecosystem": "gomod",
+      "id": "govulncheck",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "v1.8.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/golang.org/x/vuln/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:d89d47ef472f54b370f378fd4f1871033db6df511a2950e05f5aeff2e5e3635a",
+        "releasedAt": "2026-09-29T09:02:18Z",
+        "stable": true,
+        "version": "13.2.3"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Discovery target only; actual production/development selected asset graph and stateful/configuration migration qualification are owned by W03/W10/W11/W12; no image replacement performed",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "grafana",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "11.5.2",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/grafana/grafana/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:1f90d75243d3741367f2ef3bb91ae9510d8e239260bb45a526c076a5a4abf51e",
+        "releasedAt": "2026-09-09T23:51:48Z",
+        "stable": true,
+        "version": "4.3.0"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "W11 must characterize install/upgrade/uninstall/render/rollback behavior across existing CLI3.16.2/3.16.4/3.21.0 and SDK3.21.4 before selecting4.3.0; Local CI/release consumers are checked at their existing exact pins.",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "helm",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": null,
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/helm/helm/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/local-ci.Dockerfile",
+          "selector": "ARG HELM_VERSION=v([^\\s]+)",
+          "value": "3.21.0"
+        },
+        {
+          "count": 2,
+          "kind": "regex",
+          "path": ".github/workflows/pr-validation.yaml",
+          "selector": "version: v(3\\.21\\.0)",
+          "value": "3.21.0"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/day2-drill-execution.yaml",
+          "selector": "version: v(3\\.21\\.0)",
+          "value": "3.21.0"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:1f90d75243d3741367f2ef3bb91ae9510d8e239260bb45a526c076a5a4abf51e",
+        "releasedAt": "2026-09-09T23:51:48Z",
+        "stable": true,
+        "version": "4.3.0"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "W11 must characterize install/upgrade/uninstall/render/rollback behavior across existing CLI3.16.2/3.16.4/3.21.0 and SDK3.21.4 before selecting4.3.0; Local CI/release consumers are checked at their existing exact pins.",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "helm-cli-ci",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "3.21.0",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/helm/helm/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/release-candidate-rehearsal.yaml",
+          "selector": "version: v(3\\.16\\.2)",
+          "value": "3.16.2"
+        },
+        {
+          "count": 4,
+          "kind": "regex",
+          "path": ".github/workflows/resume-release.yaml",
+          "selector": "version: v(3\\.16\\.2)",
+          "value": "3.16.2"
+        },
+        {
+          "count": 4,
+          "kind": "regex",
+          "path": ".github/workflows/release.yaml",
+          "selector": "version: v(3\\.16\\.2)",
+          "value": "3.16.2"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:1f90d75243d3741367f2ef3bb91ae9510d8e239260bb45a526c076a5a4abf51e",
+        "releasedAt": "2026-09-09T23:51:48Z",
+        "stable": true,
+        "version": "4.3.0"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "W11 must characterize install/upgrade/uninstall/render/rollback behavior across existing CLI3.16.2/3.16.4/3.21.0 and SDK3.21.4 before selecting4.3.0; Local CI/release consumers are checked at their existing exact pins.",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "helm-cli-release",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "3.16.2",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/helm/helm/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/release.yaml",
+          "selector": "version: v(3\\.16\\.4)",
+          "value": "3.16.4"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:1f90d75243d3741367f2ef3bb91ae9510d8e239260bb45a526c076a5a4abf51e",
+        "releasedAt": "2026-09-09T23:51:48Z",
+        "stable": true,
+        "version": "4.3.0"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "W11 must characterize install/upgrade/uninstall/render/rollback behavior across existing CLI3.16.2/3.16.4/3.21.0 and SDK3.21.4 before selecting4.3.0; Local CI/release consumers are checked at their existing exact pins.",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "helm-cli-release-preflight",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "3.16.4",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/helm/helm/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/local-ci.Dockerfile",
+          "selector": "K3D_VERSION[=:]\\s*v?(5\\.8\\.3)",
+          "value": "5.8.3"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/smoke-fresh-cluster.yaml",
+          "selector": "K3D_VERSION[=:]\\s*v?(5\\.8\\.3)",
+          "value": "5.8.3"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/pr-validation.yaml",
+          "selector": "K3D_VERSION[=:]\\s*v?(5\\.8\\.3)",
+          "value": "5.8.3"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/release-candidate-rehearsal.yaml",
+          "selector": "K3D_VERSION[=:]\\s*v?(5\\.8\\.3)",
+          "value": "5.8.3"
+        },
+        {
+          "count": 2,
+          "kind": "regex",
+          "path": ".github/workflows/resume-release.yaml",
+          "selector": "K3D_VERSION[=:]\\s*v?(5\\.8\\.3)",
+          "value": "5.8.3"
+        },
+        {
+          "count": 2,
+          "kind": "regex",
+          "path": ".github/workflows/release.yaml",
+          "selector": "K3D_VERSION[=:]\\s*v?(5\\.8\\.3)",
+          "value": "5.8.3"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:5e60eb2ed8312c1daf986232df96e3b1da1b422801153b3c9faeb80702e14e10",
+        "releasedAt": "2026-06-02T14:41:12Z",
+        "stable": true,
+        "version": "5.9.0"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Latest compatible release requires separate scoped qualification",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "k3d",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "5.8.3",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/k3d-io/k3d/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:e6be33d1381ac7c9bdc1c9ee58251823bdaa9e132f2d97b47a42598d02f74d8a",
+        "releasedAt": "2026-09-17T15:51:10Z",
+        "stable": true,
+        "version": "3.7.8"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Discovery target only; actual production/development selected asset graph and stateful/configuration migration qualification are owned by W03/W10/W11/W12; no image replacement performed",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "loki",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "3.4.2",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/grafana/loki/releases"
+      }
+    },
+    {
+      "artifacts": [
+        {
+          "digest": "sha256:f761b94f2cb9e8e05e2943d5f773609596113ef69b54e2433a996d109a8f78b7",
+          "platformDigests": {
+            "linux/amd64": "sha256:9b58c1e8e776c8f79fca3e56d969b9ee1474ddfcf70d50a617dc85e9882a7bdb",
+            "linux/arm64": "sha256:13af7e69067e55c0776a9510739167f7fc67c212dd709e82c6689c812feba079"
+          },
+          "platforms": [
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "provenance": "Official registry manifest/config SHA256 and linux/amd64,arm64 digests verified; docs/assurance/technology-guide/w01/image-resolution.json",
+          "reference": "docker.io/library/nginx:1.31.6-alpine3.24-slim@sha256:f761b94f2cb9e8e05e2943d5f773609596113ef69b54e2433a996d109a8f78b7",
+          "verifiedAt": "2026-10-09T19:12:31.202849Z"
+        }
+      ],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "frontend/Dockerfile",
+          "selector": "^FROM (docker.io/library/nginx:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "deploy/nginx/Dockerfile.nginx",
+          "selector": "^FROM (docker.io/library/nginx:\\S+)",
+          "value": "{reference}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T19:12:31.202849Z",
+        "provenance": "https://registry-1.docker.io/v2/library/nginx/manifests/alpine-slim",
+        "releasedAt": "2026-09-22T21:19:23.452901308Z",
+        "stable": true,
+        "version": "1.31.6"
+      },
+      "ecosystem": "image",
+      "id": "nginx",
+      "owner": "platform/runtime",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "First-party candidate image builds and runtime preflight; not published image/security qualification",
+      "selected": "1.31.6",
+      "upstream": {
+        "kind": "image",
+        "locator": "docker.io/library/nginx:alpine-slim",
+        "url": "https://registry-1.docker.io/v2/library/nginx/manifests/alpine-slim"
+      }
+    },
+    {
+      "artifacts": [
+        {
+          "digest": "sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a",
+          "platforms": [
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "provenance": "advisor-plans/032-evidence/toolchain-discovery.json: Docker Registry v2 manifest list verified for linux/amd64 and linux/arm64",
+          "reference": "node:26.11.1-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a",
+          "verifiedAt": "2026-10-09T18:39:13Z"
+        }
+      ],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "frontend/.nvmrc",
+          "selector": "^(\\S+)$",
+          "value": "{version}"
+        },
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "engines/node",
+          "value": ">={version} <27"
+        },
+        {
+          "kind": "json",
+          "path": "tools/local-ci/package.json",
+          "selector": "engines/node",
+          "value": ">={version} <27"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "frontend/Dockerfile",
+          "selector": "^FROM (node:\\S+)",
+          "value": "{reference}"
+        },
+        {
+          "count": 4,
+          "kind": "regex",
+          "path": ".github/workflows/pr-validation.yaml",
+          "selector": "node-version:\\s*([^,}\\s]+)",
+          "value": "{version}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/api-contract.yaml",
+          "selector": "node-version:\\s*([^,}\\s]+)",
+          "value": "{version}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/day2-drill-execution.yaml",
+          "selector": "node-version:\\s*([^,}\\s]+)",
+          "value": "{version}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/test-flake-trend.yaml",
+          "selector": "node-version:\\s*([^,}\\s]+)",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://nodejs.org/dist/index.json",
+        "releasedAt": "2026-10-07",
+        "stable": true,
+        "version": "26.11.1"
+      },
+      "ecosystem": "node",
+      "id": "node",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "26.11.1",
+      "upstream": {
+        "kind": "node",
+        "url": "https://nodejs.org/dist/index.json"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "frontend/.npm-version",
+          "selector": "^(\\S+)$",
+          "value": "{version}"
+        },
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "packageManager",
+          "value": "npm@{version}"
+        },
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "engines/npm",
+          "value": ">={version} <13"
+        },
+        {
+          "kind": "json",
+          "path": "tools/local-ci/package.json",
+          "selector": "packageManager",
+          "value": "npm@{version}"
+        },
+        {
+          "kind": "json",
+          "path": "tools/local-ci/package.json",
+          "selector": "engines/npm",
+          "value": ">={version} <13"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "frontend/Dockerfile",
+          "selector": "npm install --global npm@(\\S+)",
+          "value": "{version}"
+        },
+        {
+          "count": 4,
+          "kind": "regex",
+          "path": ".github/workflows/pr-validation.yaml",
+          "selector": "npm install --global npm@(\\S+)",
+          "value": "{version}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/api-contract.yaml",
+          "selector": "npm install --global npm@(\\S+)",
+          "value": "{version}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/day2-drill-execution.yaml",
+          "selector": "npm install --global npm@(\\S+)",
+          "value": "{version}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/test-flake-trend.yaml",
+          "selector": "npm install --global npm@(\\S+)",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/npm",
+        "releasedAt": "2026-09-30T16:46:11.700Z",
+        "stable": true,
+        "version": "12.2.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "12.2.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/npm"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@axe-core~1playwright",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@axe-core/playwright dist.integrity=sha512-6YLx+kxXu5GJceG4ozFg+33a2EMTdjYwWGloJ3sb9Kta5pp+ZNS53uxGVog5JetIY8s++P5UrtX+cri+u0VAVg==",
+        "releasedAt": "2026-08-11T17:07:40.763Z",
+        "stable": true,
+        "version": "4.13.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@axe-core/playwright",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "4.13.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@axe-core/playwright"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@eslint~1js",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@eslint/js dist.integrity=sha512-zeR9k5pd4gxjZ0abRoIaxdc7I3nDktoXZk2qOv9gCNWx3mVwEn32VRhyLaRsDiJjTs0xq/T8mfPtyuXu7GWBcA==",
+        "releasedAt": "2026-02-06T22:34:56.290Z",
+        "stable": true,
+        "version": "10.0.1"
+      },
+      "ecosystem": "npm",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/npm-discovery.json",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/frontend",
+        "reason": "eslint-plugin-jsx-a11y6.10.2 advertises ESLint through9 only; ESLint10.12.0 cannot retain accessibility gate under strict peer resolution",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "npm:@eslint/js",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "9.39.5",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@eslint/js"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@fontsource-variable~1inter",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@fontsource-variable/inter dist.integrity=sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==",
+        "releasedAt": "2026-07-19T03:50:25.793Z",
+        "stable": true,
+        "version": "5.3.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@fontsource-variable/inter",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "5.3.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@fontsource-variable/inter"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@fontsource-variable~1jetbrains-mono",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@fontsource-variable/jetbrains-mono dist.integrity=sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==",
+        "releasedAt": "2026-07-19T03:50:26.648Z",
+        "stable": true,
+        "version": "5.3.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@fontsource-variable/jetbrains-mono",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "5.3.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@fontsource-variable/jetbrains-mono"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@monaco-editor~1react",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@monaco-editor/react dist.integrity=sha512-cyzXQCtO47ydzxpQtCGSQGOC8Gk3ZUeBXFAxD+CWXYFo5OqZyZUonFl0DwUlTyAfRHntBfw2p3w4s9R6oe1eCA==",
+        "releasedAt": "2025-02-13T16:13:41.390Z",
+        "stable": true,
+        "version": "4.7.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@monaco-editor/react",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "4.7.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@monaco-editor/react"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@playwright~1test",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@playwright/test dist.integrity=sha512-oTN9FNYuN6bqQMwiho6jJKLCG2/QOYCixGXuCjRmzOq23eODeukuY2XiAVoVpAECbuezMt1MHQjAiQxK8F+Y+g==",
+        "releasedAt": "2026-10-07T20:44:27.702Z",
+        "stable": true,
+        "version": "1.64.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@playwright/test",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.64.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@playwright/test"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@stoplight~1spectral-core",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@stoplight/spectral-core dist.integrity=sha512-abKt++GFFaqwKiGTfPZ5O3nIv8s+1V7J5awCjWPBtCXn7ZKTEPzEF8tBYsM3ne+RMrQ8ORkHzKFu9QZhenmkPw==",
+        "releasedAt": "2026-10-01T12:38:35.021Z",
+        "stable": true,
+        "version": "1.24.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@stoplight/spectral-core",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.24.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@stoplight/spectral-core"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@stoplight~1spectral-parsers",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@stoplight/spectral-parsers dist.integrity=sha512-ANDTp2IHWGvsQDAY85/jQi9ZrF4mRrA5bciNHX+PUxPr4DwS6iv4h+FVWJMVwcEYdpyoIdyL+SRmHdJfQEPmwQ==",
+        "releasedAt": "2024-11-13T20:47:38.890Z",
+        "stable": true,
+        "version": "1.0.5"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@stoplight/spectral-parsers",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.0.5",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@stoplight/spectral-parsers"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@stoplight~1spectral-rulesets",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@stoplight/spectral-rulesets dist.integrity=sha512-svAajFVBpHScoAAjPcgf0dgC5afkQ+psvjjH/NYBDq/U0QLrn2QvmfRVJiqO0UetMed3Aiu87BvXyFGQA9j54Q==",
+        "releasedAt": "2026-10-01T10:54:12.018Z",
+        "stable": true,
+        "version": "1.23.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@stoplight/spectral-rulesets",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.23.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@stoplight/spectral-rulesets"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@tailwindcss~1forms",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tailwindcss/forms dist.integrity=sha512-h9wegbZDPurxG22xZSoWtdzc41/OlNEUQERNqI/0fOwa2aVlWGu7C35E/x6LDyD3lgtztFSSjKZyuVM0hxhbgA==",
+        "releasedAt": "2025-12-17T19:22:39.875Z",
+        "stable": true,
+        "version": "0.5.11"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tailwindcss/forms",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "0.5.11",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tailwindcss/forms"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@tailwindcss~1vite",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tailwindcss/vite dist.integrity=sha512-yYU8cogLeSh/ms2jh8Fj7jaba/EWa7Ja6GoUqYZaraEuCI5YS6ms6ObZgjjedm+jm6XZjdNRWBpPP6Z86oOxcw==",
+        "releasedAt": "2026-07-16T12:04:06.316Z",
+        "stable": true,
+        "version": "4.3.3"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tailwindcss/vite",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "4.3.3",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tailwindcss/vite"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@tanstack~1eslint-plugin-query",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tanstack/eslint-plugin-query dist.integrity=sha512-7LmiJkxzuy0YrCoL0q5yWz9NsW39h2CeuKjvetjVaFCJ9hrS4UM9TiCEx0rWeLDe6ff1r1KwV+yzclCvzzrnQg==",
+        "releasedAt": "2026-10-02T10:07:42.181Z",
+        "stable": true,
+        "version": "5.104.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tanstack/eslint-plugin-query",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "5.104.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tanstack/eslint-plugin-query"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@tanstack~1react-form",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tanstack/react-form dist.integrity=sha512-LlRB28qJwO/QCGaHvWnbdh4haBgTFiZVmzA2uzxSBS3YA7/IqrQ6HOBK70CkFQ+DbflZ7NawsmSln13h5iIdTA==",
+        "releasedAt": "2026-08-11T12:45:38.642Z",
+        "stable": true,
+        "version": "1.33.5"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tanstack/react-form",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.33.5",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tanstack/react-form"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@tanstack~1react-pacer",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tanstack/react-pacer dist.integrity=sha512-VjztEJmrNtLVdRrRaIsqx/+uX5qLHLp57dk19gVC/wLEu8ykU9twq6SKzhHSsajDEpNMauo7+bsFWAgjd+7Uiw==",
+        "releasedAt": "2026-10-05T13:51:43.719Z",
+        "stable": true,
+        "version": "0.24.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tanstack/react-pacer",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "0.24.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tanstack/react-pacer"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@tanstack~1react-query",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tanstack/react-query dist.integrity=sha512-Zz70EgjahNI7aCz8BZxM3vUGU44ycxEAzMuCUjLeA7SVhhOkg3ZgPjPJPvHjs6Rmky/dtmnu1WzjGHNHmhCoZQ==",
+        "releasedAt": "2026-10-02T10:04:57.020Z",
+        "stable": true,
+        "version": "5.104.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tanstack/react-query",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "5.104.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tanstack/react-query"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@tanstack~1react-query-devtools",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tanstack/react-query-devtools dist.integrity=sha512-0GoLxe08PVxnkbrHFwO+7fkgbc07xEcoBfdYvbTv63e6Fe7uz7PGyOxKeQTOXKGMmTfoniaISOqkjDzKC/66Ng==",
+        "releasedAt": "2026-10-02T10:04:46.756Z",
+        "stable": true,
+        "version": "5.104.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tanstack/react-query-devtools",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "5.104.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tanstack/react-query-devtools"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@tanstack~1react-router",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tanstack/react-router dist.integrity=sha512-Mpvw8Wm5MGDbTqI8Yc9flLKxbOHwoWocv0H2aGKcgw2a017oK5nZWqa954P+DrUx/8fI98YNywnHP5XcD3tQ9w==",
+        "releasedAt": "2026-09-30T17:48:34.218Z",
+        "stable": true,
+        "version": "1.170.41"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tanstack/react-router",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.170.41",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tanstack/react-router"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@tanstack~1react-table",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tanstack/react-table dist.integrity=sha512-cJxgratJm3uMm2sXnmY3PCTvcvIEFleCJ2uSOM2nxCmIY8RWA1KjXt5fsWGlYisL7DODr2w9YpLRQ3i/7MdIsQ==",
+        "releasedAt": "2026-10-08T21:40:53.324Z",
+        "stable": true,
+        "version": "9.2.8"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tanstack/react-table",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "9.2.8",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tanstack/react-table"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@tanstack~1react-virtual",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tanstack/react-virtual dist.integrity=sha512-eo/arVIpYi9rGJXR5y4fDoTiz+BBOc4HKVBKQMoPRswxJtP6HV8iupW/DkBE9TRh+PjzikIDHw2h7aV25g0Z4w==",
+        "releasedAt": "2026-10-09T14:59:39.273Z",
+        "stable": true,
+        "version": "3.14.14"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tanstack/react-virtual",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "3.14.14",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tanstack/react-virtual"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@tanstack~1router-plugin",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@tanstack/router-plugin dist.integrity=sha512-vAR5WXJh/ErseEWQftDhsJcr2c++ucRQ6FbqN3ygMO44+ZxxRfW3sIpZmddHROVSmBk8jc6MrwjTPNjVhd62Vw==",
+        "releasedAt": "2026-09-30T17:48:34.007Z",
+        "stable": true,
+        "version": "1.168.42"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@tanstack/router-plugin",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.168.42",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@tanstack/router-plugin"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@testing-library~1dom",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@testing-library/dom dist.integrity=sha512-yzr2S9HyAIdhz2/6qHgbs665Q7PKVcDF05vsOlHPxG1mo36gKVesdYVeDLnXgfjJ03CrKRk08knc6+E/9m8v2Q==",
+        "releasedAt": "2026-09-13T18:08:36.116Z",
+        "stable": true,
+        "version": "10.4.2"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@testing-library/dom",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "10.4.2",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@testing-library/dom"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@testing-library~1jest-dom",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@testing-library/jest-dom dist.integrity=sha512-oMDTC3oA+6CXSO2JZnvOI7CA6oVub6kij5ggk9ohwye5slmkwxYDXcPOVxgMw/RQlticjtO0C1RZkR97HgrWMw==",
+        "releasedAt": "2026-08-09T23:44:33.598Z",
+        "stable": true,
+        "version": "7.0.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@testing-library/jest-dom",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "7.0.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@testing-library/jest-dom"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@testing-library~1react",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@testing-library/react dist.integrity=sha512-Uo193NgQbPMz6lrrhtRQQFcMC6Re/ELLFbbuVL30WDlZxlpZf9/lMHTAVxPRLw1q1iu9OJmR1c2BLiENRstdBg==",
+        "releasedAt": "2026-08-27T17:41:18.735Z",
+        "stable": true,
+        "version": "16.3.3"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@testing-library/react",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "16.3.3",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@testing-library/react"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@types~1node",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@types/node dist.integrity=sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==",
+        "releasedAt": "2026-10-09T18:46:47.657Z",
+        "stable": true,
+        "version": "26.6.5"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@types/node",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "26.6.5",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@types/node"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@types~1react",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@types/react dist.integrity=sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==",
+        "releasedAt": "2026-09-09T18:08:49.750Z",
+        "stable": true,
+        "version": "19.3.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@types/react",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "19.3.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@types/react"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@types~1react-dom",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@types/react-dom dist.integrity=sha512-ZI7bU42mZXXKHn/qNLEw2IrbiINU7X5+vfgdixBHkCNpYWXjKgfQ/P+uyGb5CjOLB9UcnTeg3rylQtV2hym44Q==",
+        "releasedAt": "2026-09-09T18:07:51.886Z",
+        "stable": true,
+        "version": "19.3.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@types/react-dom",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "19.3.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@types/react-dom"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/@vitejs~1plugin-react",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@vitejs/plugin-react dist.integrity=sha512-fhJNGUdscQa4HkI0xFxwonWyhnVReCPDbXI7FH7jmzpnVCrFQI7PRrhWecO263610vOrs9tr2Y4xcf8uAdFxbw==",
+        "releasedAt": "2026-10-05T10:08:27.143Z",
+        "stable": true,
+        "version": "6.1.2"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@vitejs/plugin-react",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "6.1.2",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@vitejs/plugin-react"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@wterm~1core",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@wterm/core dist.integrity=sha512-yIhbn27ELHDjEDtduDIycHWEEaobJGhqR+WqKgCoSPYReCIrR+skJS67PBk3Wp6+yLImfQ3Fv1CJ4hLXKLa7Fg==",
+        "releasedAt": "2026-09-29T03:18:31.009Z",
+        "stable": true,
+        "version": "0.5.4"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@wterm/core",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "0.5.4",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@wterm/core"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@wterm~1dom",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@wterm/dom dist.integrity=sha512-9zxZq52BFpBtVEkBEbZF5a+9dX+eIADQdlTRq6YgGxHP/G/aDXyRja+tebQtAYqx9KY8qJVm20vNOhQxwBe/FQ==",
+        "releasedAt": "2026-09-29T03:17:46.946Z",
+        "stable": true,
+        "version": "0.5.4"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@wterm/dom",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "0.5.4",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@wterm/dom"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/@wterm~1react",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/@wterm/react dist.integrity=sha512-6piarasJdCddCQMXIoCTQGKfmzu55XFL6U3sb1xXy/AIqFhO/3cgYC/n5XmCtfg9YBT4RhQjekAjtG8ZJL/KGg==",
+        "releasedAt": "2026-09-29T03:18:44.184Z",
+        "stable": true,
+        "version": "0.5.4"
+      },
+      "ecosystem": "npm",
+      "id": "npm:@wterm/react",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "0.5.4",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/@wterm/react"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/axios",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/axios dist.integrity=sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg==",
+        "releasedAt": "2026-08-26T08:20:14.517Z",
+        "stable": true,
+        "version": "1.20.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:axios",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.20.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/axios"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/class-variance-authority",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/class-variance-authority dist.integrity=sha512-Ka+9Trutv7G8M6WT6SeiRWz792K5qEqIGEGzXKhAE6xOWAY6pPH8U+9IY3oCMv6kqTmLsv7Xh/2w2RigkePMsg==",
+        "releasedAt": "2024-11-26T08:20:34.604Z",
+        "stable": true,
+        "version": "0.7.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:class-variance-authority",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "0.7.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/class-variance-authority"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/clsx",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/clsx dist.integrity=sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==",
+        "releasedAt": "2024-04-23T05:26:04.645Z",
+        "stable": true,
+        "version": "2.1.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:clsx",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "2.1.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/clsx"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/cmdk",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/cmdk dist.integrity=sha512-Vsv7kFaXm+ptHDMZ7izaRsP70GgrW9NBNGswt9OZaVBLlE0SNpDq8eu/VGXyF9r7M0azK3Wy7OlYXsuyYLFzHg==",
+        "releasedAt": "2025-03-14T19:21:16.194Z",
+        "stable": true,
+        "version": "1.1.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:cmdk",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.1.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/cmdk"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/date-fns",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/date-fns dist.integrity=sha512-+1UMbeh68lH1SegH83CGWwpb6OHHbpSgr3+s5Eww5M4CAgswBpoWS0AjTOfEJ33HiYKz1hdj/KTFprzXHmq/6w==",
+        "releasedAt": "2026-05-29T23:23:42.628Z",
+        "stable": true,
+        "version": "4.4.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:date-fns",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "4.4.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/date-fns"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "overrides/dompurify",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/dompurify dist.integrity=sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==",
+        "releasedAt": "2026-09-23T15:29:57.247Z",
+        "stable": true,
+        "version": "3.4.16"
+      },
+      "ecosystem": "npm",
+      "id": "npm:dompurify",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "3.4.16",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/dompurify"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/eslint",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/eslint dist.integrity=sha512-npHjrHb2o4ehH3mE+YuxABR+0gyb0aVWCIolgJDArwCiHEIsonBm3ZKjel5b0U5+a+MbEvIyRCGCzD3eKKK2NA==",
+        "releasedAt": "2026-10-02T20:08:19.213Z",
+        "stable": true,
+        "version": "10.12.0"
+      },
+      "ecosystem": "npm",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/npm-discovery.json",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/frontend",
+        "reason": "eslint-plugin-jsx-a11y6.10.2 advertises ESLint through9 only; ESLint10.12.0 cannot retain accessibility gate under strict peer resolution",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "npm:eslint",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "9.39.5",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/eslint"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/eslint-plugin-jsx-a11y",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/eslint-plugin-jsx-a11y dist.integrity=sha512-scB3nz4WmG75pV8+3eRUQOHZlNSUhFNq37xnpgRkCCELU3XMvXAxLk1eqWWyE22Ki4Q01Fnsw9BA3cJHDPgn2Q==",
+        "releasedAt": "2024-10-26T04:45:18.067Z",
+        "stable": true,
+        "version": "6.10.2"
+      },
+      "ecosystem": "npm",
+      "id": "npm:eslint-plugin-jsx-a11y",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "6.10.2",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/eslint-plugin-jsx-a11y"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/eslint-plugin-react-hooks",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/eslint-plugin-react-hooks dist.integrity=sha512-f2I7Gw6JbvCexzIInuSbZpfdQ44D7iqdWX01FKLvrPgqxoE7oMj8clOfto8U6vYiz4yd5oKu39rRSVOe1zRu0g==",
+        "releasedAt": "2026-04-17T18:03:19.591Z",
+        "stable": true,
+        "version": "7.1.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:eslint-plugin-react-hooks",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "7.1.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/eslint-plugin-react-hooks"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/globals",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/globals dist.integrity=sha512-RwMTC61u7hrG3ZJMkZQOK4JLJrKS8QtoTii63EmWvFXHqycY9FObBJQCbsLxSO8kjKhWE5kV1GC+Vb1g3RI0Zg==",
+        "releasedAt": "2026-10-01T03:57:11.938Z",
+        "stable": true,
+        "version": "17.13.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:globals",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "17.13.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/globals"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/js-yaml",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/js-yaml dist.integrity=sha512-yzzNtgczwgoVHNigCyKTXcQJU4Y8t/ikU4UxXW0BvrLfHTGWZhsNcOT2s/a7vn81/4KqVnNmHjaUEPlvWnNwVw==",
+        "releasedAt": "2026-10-05T22:13:55.389Z",
+        "stable": true,
+        "version": "5.4.3"
+      },
+      "ecosystem": "npm",
+      "id": "npm:js-yaml",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "5.4.3",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/js-yaml"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/jsdom",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/jsdom dist.integrity=sha512-0FFE/jE1rppmVfUrJUgxqXjcwolZYIGtAgj1pTussMhNZxIxi7W/PvfWaMNroGi2B36X1IKHbexpZ9DhkoOPiQ==",
+        "releasedAt": "2026-10-04T09:15:00.333Z",
+        "stable": true,
+        "version": "30.1.2"
+      },
+      "ecosystem": "npm",
+      "id": "npm:jsdom",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "30.1.2",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/jsdom"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/lucide-react",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/lucide-react dist.integrity=sha512-kVmnVCBoLztTGe3S76xu8utwxijRLOinknNq9e8btZ0R2fm6WCgxY+weaLiA50odo/yi+apm/4B2A/LsFZhTrw==",
+        "releasedAt": "2026-10-09T06:18:19.433Z",
+        "stable": true,
+        "version": "1.54.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:lucide-react",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.54.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/lucide-react"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "overrides/nanoid",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/nanoid dist.integrity=sha512-hIvVOb9Qr1p/9CNNLOe0OlWvgx/ziTsVwKN/GDSsuArN2K0wDiafP3s0SWmsm7o2BdnyS8Z9Z64NFBUbn6ziBg==",
+        "releasedAt": "2026-10-05T21:23:00.134Z",
+        "stable": true,
+        "version": "6.0.2"
+      },
+      "ecosystem": "npm",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/npm-discovery.json",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/frontend",
+        "reason": "Security override preserves nanoid3 API/CJS compatibility in dependent graph; target6 is separate major qualification",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "npm:nanoid",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "3.3.20",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/nanoid"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "overrides/postcss",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/postcss dist.integrity=sha512-49cGhUbXj8Qenv0iTMxA1cFBzxXoctpC9Ujd77t1WcbJIr6nF/eI7g/8MgxrYldFRuAXvja7xQRwavoW7kgrxQ==",
+        "releasedAt": "2026-10-05T09:28:55.780Z",
+        "stable": true,
+        "version": "8.5.29"
+      },
+      "ecosystem": "npm",
+      "id": "npm:postcss",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "8.5.29",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/postcss"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/prettier",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/prettier dist.integrity=sha512-Z/CJHIkdujO/OtN7nXUii0Rf3VT5SRuhjBA82Xvu2XhBUgX3nhP67T0LHceBdQLex7OOFGTox+Q5Yg8Jk2Qivg==",
+        "releasedAt": "2026-09-23T06:31:34.693Z",
+        "stable": true,
+        "version": "3.9.9"
+      },
+      "ecosystem": "npm",
+      "id": "npm:prettier",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "3.9.9",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/prettier"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/radix-ui",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/radix-ui dist.integrity=sha512-x+z5TV2v6u0QpAQ4dQfNMcvtIdSQ1Op2oqBEyfDXjNldRZbMTP+hcjr5Iie31bep81Axeioa+70Ww7pZDzTEQQ==",
+        "releasedAt": "2026-10-05T23:09:03.272Z",
+        "stable": true,
+        "version": "1.7.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:radix-ui",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "1.7.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/radix-ui"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/react",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/react dist.integrity=sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog==",
+        "releasedAt": "2026-09-09T17:21:30.071Z",
+        "stable": true,
+        "version": "19.3.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:react",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "19.3.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/react"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/react-dom",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/react-dom dist.integrity=sha512-JDk8dgif51OjFoDE70+OT9ICyYr+69HlmihNwp1+Nsfbna3t5sIiCa9ZJktDmQ4/1b/rn26hIAR2uYXDMr5r0Q==",
+        "releasedAt": "2026-09-09T17:17:39.744Z",
+        "stable": true,
+        "version": "19.3.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:react-dom",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "19.3.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/react-dom"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/react-markdown",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/react-markdown dist.integrity=sha512-qKxVopLT/TyA6BX3Ue5NwabOsAzm0Q7kAPwq6L+wWDwisYs7R8vZ0nRXqq6rkueboxpkjvLGU9fWifiX/ZZFxQ==",
+        "releasedAt": "2025-03-07T10:32:53.222Z",
+        "stable": true,
+        "version": "10.1.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:react-markdown",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "10.1.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/react-markdown"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/recharts",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/recharts dist.integrity=sha512-QXFrvt6IVcw7eeZCoyXTwkIJAX3Dv1nyVhMicXJ47GsGDDpcN8z6o644DibE9XjpBTThtsomLKnTV6lc+cVFUA==",
+        "releasedAt": "2026-07-25T15:23:05.240Z",
+        "stable": true,
+        "version": "3.10.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:recharts",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "3.10.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/recharts"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/remark-gfm",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/remark-gfm dist.integrity=sha512-1quofZ2RQ9EWdeN34S79+KExV1764+wCUGop5CPL1WGdD0ocPpu91lzPGbwWMECpEpd42kJGQwzRfyov9j4yNg==",
+        "releasedAt": "2025-02-10T12:43:10.735Z",
+        "stable": true,
+        "version": "4.0.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:remark-gfm",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "4.0.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/remark-gfm"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/sonner",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/sonner dist.integrity=sha512-UM/ByIoFra8yzV75n1o0Puu0bw5U/9UNnDacrJNspekBewIfsQ3D6ez1nvlWpt7aTsO6rujQtifBpycwIivqlg==",
+        "releasedAt": "2026-08-09T08:46:10.174Z",
+        "stable": true,
+        "version": "2.0.8"
+      },
+      "ecosystem": "npm",
+      "id": "npm:sonner",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "2.0.8",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/sonner"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "dependencies/tailwind-merge",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/tailwind-merge dist.integrity=sha512-XPPUyAc+cvspz3lHTcR/QgPfW2A0lv/xQNIjX3HGhLR+Nq2lHaLq5MtTesHn8GUr3W3DguT2KT5x3NVgRtYwmA==",
+        "releasedAt": "2026-09-12T20:10:15.257Z",
+        "stable": true,
+        "version": "3.7.0"
+      },
+      "ecosystem": "npm",
+      "id": "npm:tailwind-merge",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "3.7.0",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/tailwind-merge"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/tailwindcss",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/tailwindcss dist.integrity=sha512-gOhV3P7ufE62QDGg1zVaTgCR+EtPv92k2nIhVcVKcLmxT1sUBsQGhnZj175j+MqRt4zLF7ic+sCYjfhxMxj7YQ==",
+        "releasedAt": "2026-07-16T12:03:35.267Z",
+        "stable": true,
+        "version": "4.3.3"
+      },
+      "ecosystem": "npm",
+      "id": "npm:tailwindcss",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "4.3.3",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/tailwindcss"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/typescript",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/typescript dist.integrity=sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==",
+        "releasedAt": "2026-07-08T15:55:18.431Z",
+        "stable": true,
+        "version": "7.0.2"
+      },
+      "ecosystem": "npm",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/npm-discovery.json",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/frontend",
+        "reason": "typescript-eslint8.71.1 requires TypeScript >=4.8.4 <6.1.0; TS7.0.2 is rejected by strict npm resolver",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "npm:typescript",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "6.0.3",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/typescript"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/typescript-eslint",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/typescript-eslint dist.integrity=sha512-oiNVPC3/NbV1FpaHU07l8O6ynqG9v4PAiW2WvTrAmZdR0f2HI/gE668ElMLCK7Xbsu5k2fK5C4fXNiq05j7/nQ==",
+        "releasedAt": "2026-10-05T17:08:41.691Z",
+        "stable": true,
+        "version": "8.71.1"
+      },
+      "ecosystem": "npm",
+      "id": "npm:typescript-eslint",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "8.71.1",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/typescript-eslint"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/vite",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/vite dist.integrity=sha512-IftLE8phJhdNRIGNEV4JCCvfNScoZQVfcXaN8TQropWGJtOHcu+iAB9pHcuGvmEb/kddw0LBe/jS8ztdC6xdiQ==",
+        "releasedAt": "2026-10-08T12:07:04.441Z",
+        "stable": true,
+        "version": "8.3.4"
+      },
+      "ecosystem": "npm",
+      "id": "npm:vite",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "8.3.4",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/vite"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "kind": "json",
+          "path": "frontend/package.json",
+          "selector": "devDependencies/vitest",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "https://registry.npmjs.org/vitest dist.integrity=sha512-xMw97S3rjdtj5dkVat7jCsqWBpvchs3RlpQctUqwJD0KkERk40vz2fJ77lDwW/Vzh/pk18eItYAzkodhSes3jQ==",
+        "releasedAt": "2026-09-30T11:30:42.429Z",
+        "stable": true,
+        "version": "5.0.3"
+      },
+      "ecosystem": "npm",
+      "id": "npm:vitest",
+      "owner": "platform/frontend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Application build and focused integration gates",
+      "selected": "5.0.3",
+      "upstream": {
+        "kind": "npm",
+        "url": "https://registry.npmjs.org/vitest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "Makefile",
+          "selector": "^OAPI_CODEGEN_VERSION \\?= v(\\S+)",
+          "value": "2.5.1"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "scripts/check-go-sdk-generated.sh",
+          "selector": "version=\"\\$\\{OAPI_CODEGEN_VERSION:-v([^}]+)",
+          "value": "2.5.1"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T19:03:17.977823Z",
+        "provenance": "sha256:76d32a27e0a02d848b8fa10c60f6158b1efdeb43203f4456f8cad4e93aa31e59",
+        "releasedAt": "2026-07-17T14:01:16Z",
+        "stable": true,
+        "version": "v2.8.0"
+      },
+      "ecosystem": "gomod",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/sdk-api-comparison.json",
+        "exitCondition": "New stable generator preserves existing exported SDK and nullable JSON behavior, or an approved v1 compatibility adapter/migration is implemented",
+        "owner": "platform/API",
+        "reason": "Generators2.6/2.7/2.8 change92/101/241 existing exported SDK declarations respectively;2.7/2.8 remove8/11 declarations.2.8 removes nullable pointer types.2.6 changes JSON omission semantics. v1 public source/wire compatibility requires a separate intentional SDK migration; retain2.5.1, which generates/builds with Go1.27.2.2.5.1 has zero exported declaration changes against released2.5.0 output.",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "oapi-codegen",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "v2.5.1",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/oapi-codegen/oapi-codegen/v2/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "scripts/openapi-breaking-change.sh",
+          "selector": "^OASDIFF_VERSION=\"v([^\"]+)",
+          "value": "1.33.0"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T19:03:17.977823Z",
+        "provenance": "sha256:6e2b36c4a1ae879bce5b948996425ffb0b250ec6761e84802832d855097bacb9",
+        "releasedAt": "2026-09-16T21:15:58Z",
+        "stable": true,
+        "version": "v1.33.0"
+      },
+      "ecosystem": "gomod",
+      "id": "oasdiff",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "v1.33.0",
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/oasdiff/oasdiff/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:09da4867d1b714a4c61c981f0ea13106da9ee9bad783b77fdb7e5fb9f690faf9",
+        "releasedAt": "2026-09-25T08:56:22Z",
+        "stable": true,
+        "version": "3.15.0"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Discovery target only; actual production/development selected asset graph and stateful/configuration migration qualification are owned by W03/W10/W11/W12; no image replacement performed",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "prometheus",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "3.2.1",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/prometheus/prometheus/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:860695c50d8ddd364f4f721415612e40fe273d1b01c530eefb529c2bff2c6a61",
+        "releasedAt": "2026-10-03T04:58:30Z",
+        "stable": true,
+        "version": "1.0.1"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Discovery target only; actual production/development selected asset graph and stateful/configuration migration qualification are owned by W03/W10/W11/W12; no image replacement performed",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "rustfs",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "No exact selected deployed artifact in W00 baseline; external operator/storage qualification belongs to W03/W11/W12. Source Valkey uses unresolved 8-alpine, which is not a qualified patch selection.",
+      "selected": null,
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/rustfs/rustfs/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "Makefile",
+          "selector": "^SQLC_VERSION \\?= v(\\S+)",
+          "value": "{version}"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "scripts/check-sqlc-generated.sh",
+          "selector": "SQLC_VERSION=\"\\$\\{SQLC_VERSION:-v([^}]+)",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:59c02ff7eb2f585c24449503828f9546697c7bae69b927b86d4740ba9f57eec3",
+        "releasedAt": "2026-04-22T14:55:41Z",
+        "stable": true,
+        "version": "1.31.1"
+      },
+      "ecosystem": "github",
+      "id": "sqlc",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "1.31.1",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/sqlc-dev/sqlc/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:75297e29bf23defb64f927449b438fcf4894a4dda7139fbb3792377d80d38554",
+        "releasedAt": "2026-09-29T17:06:39Z",
+        "stable": true,
+        "version": "3.1.0"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Discovery target only; actual production/development selected asset graph and stateful/configuration migration qualification are owned by W03/W10/W11/W12; no image replacement performed",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "tempo",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "2.7.2",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/grafana/tempo/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/resume-release.yaml",
+          "selector": "TRIVY_VERSION:\\s*([0-9.]+)",
+          "value": "0.75.0"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": ".github/workflows/release.yaml",
+          "selector": "TRIVY_VERSION:\\s*([0-9.]+)",
+          "value": "0.75.0"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:422612f6cfb9b3ad7710e52942408cc0a64edbd84926d79d37c46dd7109e9fe7",
+        "releasedAt": "2026-10-01T13:34:13Z",
+        "stable": true,
+        "version": "0.75.0"
+      },
+      "ecosystem": "github",
+      "id": "trivy",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
+      "selected": "0.75.0",
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/aquasecurity/trivy/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-09T18:55:59.772731Z",
+        "provenance": "sha256:9fa198fbf0b5222aaf85bdce43a2bea792b430722ddfa783589a86fcca15e15b",
+        "releasedAt": "2026-09-01T00:01:31Z",
+        "stable": true,
+        "version": "9.1.2"
+      },
+      "ecosystem": "github",
+      "exception": {
+        "evidence": "docs/assurance/technology-guide/w01/README.md",
+        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
+        "owner": "platform/backend",
+        "reason": "Discovery target only; actual production/development selected asset graph and stateful/configuration migration qualification are owned by W03/W10/W11/W12; no image replacement performed",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "valkey",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "No exact selected deployed artifact in W00 baseline; external operator/storage qualification belongs to W03/W11/W12. Source Valkey uses unresolved 8-alpine, which is not a qualified patch selection.",
+      "selected": null,
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/valkey-io/valkey/releases"
+      }
+    }
+  ],
+  "policy": {
+    "discoveryCadence": "daily",
+    "maxDiscoveryAgeDays": 7,
+    "productionDiscovery": false,
+    "triageCadence": "weekly"
+  },
+  "schemaVersion": 1
+}

@@ -43,14 +43,17 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.21.0
+          node-version: 26.11.1
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install contract dependencies
         id: install-contract-dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install --global npm@12.2.0 && npm ci
+
+      - name: Verify offline toolchain authority and resolver contracts
+        run: make versions-check
 
       - name: Install ShellCheck and ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep shellcheck
@@ -194,14 +197,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.21.0
+          node-version: 26.11.1
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         id: install-dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install --global npm@12.2.0 && npm ci
 
       - name: Run authoritative frontend gate
         run: ./scripts/verify-enterprise.sh frontend
@@ -235,12 +238,12 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.21.0
+          node-version: 26.11.1
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --global npm@12.2.0 && npm ci
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
@@ -298,13 +301,13 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.21.0
+          node-version: 26.11.1
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install --global npm@12.2.0 && npm ci
 
       - name: Install Playwright browsers
         working-directory: frontend

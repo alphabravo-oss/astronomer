@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASELINE="${1:-${OPENAPI_BASELINE:-HEAD:docs/openapi.yaml}}"
 REVISION="${2:-docs/openapi.yaml}"
 ARTIFACT_DIR="${VERIFY_ARTIFACT_DIR:-${TMPDIR:-/tmp}/astronomer-verify-enterprise}"
-OASDIFF_VERSION="v1.28.0"
+OASDIFF_VERSION="v1.33.0"
 REVIEW_FILE="docs/api-breaking-change-review.md"
 
 mkdir -p "$ARTIFACT_DIR"

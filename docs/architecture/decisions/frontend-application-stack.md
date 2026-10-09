@@ -65,7 +65,7 @@ behavior and the shared field/error primitives.
 
 ### Runtime and package baseline
 
-Node **24.21.0** and npm **11.19.0** are the accepted build baseline. Local
+The runtime selection is superseded by [latest stable build tooling](latest-stable-build-tooling.md). Node **26.11.1 Current** and npm **12.2.0** are the accepted build baseline. Local
 version files, package engines, container builds, active workflows, and docs
 must agree. There is no deliberate Node-version exception. The production
 frontend is static output served by nginx; Node is not a production runtime.

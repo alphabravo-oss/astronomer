@@ -85,6 +85,10 @@ jobs:
             ./scripts/openapi-breaking-change.sh HEAD:docs/openapi.yaml docs/openapi.yaml
           fi
 
+      - name: Validate reviewed toolchain discovery for a new candidate
+        if: github.ref_name != 'v1.2.0' && github.ref_name != 'v1.2.1'
+        run: python3 scripts/toolchain.py --check --freshness
+
       - name: Retain release API compatibility review
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

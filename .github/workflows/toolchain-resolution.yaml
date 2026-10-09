@@ -1,0 +1,36 @@
+name: toolchain-resolution
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  resolution:
+    if: github.repository == 'alphabravo-oss/astronomer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with:
+          cosign-release: v3.16.2
+      - name: Validate reviewed selection and prepare source-bound record
+        run: |
+          make versions-check
+          python3 scripts/toolchain-resolution.py --generate --record .artifacts/toolchain-resolution.json
+      - name: Sign resolution evidence
+        run: cosign sign-blob --yes --bundle .artifacts/toolchain-resolution.sigstore.json .artifacts/toolchain-resolution.json
+      - name: Verify offline signed record
+        run: make versions-release-check TOOLCHAIN_RESOLUTION=.artifacts/toolchain-resolution.json TOOLCHAIN_RESOLUTION_BUNDLE=.artifacts/toolchain-resolution.sigstore.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: toolchain-resolution-${{ github.sha }}
+          path: .artifacts/toolchain-resolution*
+          if-no-files-found: error

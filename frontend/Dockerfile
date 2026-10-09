@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1.6
 
-# Stage 1: build the SPA (Node 24, matching local development and CI).
-FROM node:24-alpine@sha256:50c8e8ca1d27439048670df5883f32d57cf81cff6233222c893fd0d9884cbd81 AS build
+# Stage 1: build the SPA (Node 26, matching local development and CI).
+FROM node:26.11.1-alpine@sha256:143494b1da2945f061539253adc65e4f1569ddf07da2d384c022c791a9d90a4a AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install --global npm@12.2.0 && npm ci
 
 COPY . .
 
@@ -25,7 +25,7 @@ RUN npm run build \
 
 # Stage 2: static nginx. Same base pin as deploy/nginx/Dockerfile.nginx —
 # bump both digests in lockstep (D16).
-FROM nginx:1.29.8-alpine3.23-slim@sha256:04a927892bd65fc7216be7a18bd379ab1987f2fab3ee269bd465d53b1c341b2c AS nginx-base
+FROM docker.io/library/nginx:1.31.6-alpine3.24-slim@sha256:f761b94f2cb9e8e05e2943d5f773609596113ef69b54e2433a996d109a8f78b7 AS nginx-base
 
 # The upstream image is digest pinned, but its Alpine package snapshot can be
 # older than the currently fixed security advisories. Keep the refresh in a
