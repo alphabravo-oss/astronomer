@@ -29,6 +29,9 @@ jobs:
   preflight:
     name: validate immutable release identity
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       image-tag: ${{ steps.identity.outputs.image_tag }}
       chart-version: ${{ steps.identity.outputs.chart_version }}

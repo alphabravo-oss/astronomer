@@ -120,6 +120,10 @@ class ResolutionTests(unittest.TestCase):
         document = json.loads(raw)
         job = document["jobs"]["preflight"]
         self.assertEqual(document["permissions"], {"contents": "read"})
+        self.assertEqual(job["permissions"], {"contents": "read", "actions": "read"})
+        self.assertNotIn("id-token", job["permissions"])
+        self.assertNotIn("packages", job["permissions"])
+        self.assertEqual(document["jobs"]["build-sign"]["permissions"], {"contents": "read", "id-token": "write", "packages": "write"})
         steps = job["steps"]
         consumer = next(s for s in steps if s.get("name") == "Validate offline signed toolchain resolution for a new candidate")
         condition = "github.ref_name != 'v1.2.0' && github.ref_name != 'v1.2.1'"
