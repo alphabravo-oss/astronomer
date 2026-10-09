@@ -1,0 +1,1 @@
+{"time":"2026-10-09T23:45:39.040139589Z","level":"ERROR","msg":"migration command failed","error":"Dirty database version 73. Fix and force version."}
