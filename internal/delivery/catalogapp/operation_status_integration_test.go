@@ -55,20 +55,20 @@ func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
 	}{{oldRollout, "failed"}, {newRollout, "succeeded"}, {pendingRollout, "queued"}} {
 		exec(`INSERT INTO delivery_rollouts(id,target_id,target_generation,to_bundle_version_id,placement_digest,strategy_digest,request_digest,plan_digest,strategy,frozen_plan,state,idempotency_key,last_error_code) VALUES($1,$2,1,$3,$4,$4,$4,$4,$7::jsonb,jsonb_build_object('strategy',$7::jsonb),$5,$6,'original-error')`, fixture.id, target, version, digest, fixture.state, fixture.id.String(), strategy)
 	}
-	status, err := readRolloutStatus(ctx, tx, target, oldRollout)
+	status, err := readRolloutStatus(ctx, sqlc.New(tx), target, oldRollout)
 	if err != nil || status.Phase != "failed" || status.LastErrorCode != "original-error" {
 		t.Fatalf("old rollout borrowed newer success: %+v %v", status, err)
 	}
-	status, err = readRolloutStatus(ctx, tx, target, newRollout)
+	status, err = readRolloutStatus(ctx, sqlc.New(tx), target, newRollout)
 	if err != nil || status.Phase != "ready" {
 		t.Fatalf("new rollout: %+v %v", status, err)
 	}
-	if _, err := readRolloutStatus(ctx, tx, uuid.New(), oldRollout); err == nil {
+	if _, err := readRolloutStatus(ctx, sqlc.New(tx), uuid.New(), oldRollout); err == nil {
 		t.Fatal("foreign target read succeeded")
 	}
 	for _, state := range []string{"active", "deleting", "deleted"} {
 		exec(`UPDATE delivery_targets SET deletion_state=$2 WHERE id=$1`, target, state)
-		status, err = readRolloutStatus(ctx, tx, target, pendingRollout)
+		status, err = readRolloutStatus(ctx, sqlc.New(tx), target, pendingRollout)
 		wantRollout, wantCode := "pending", "original-error"
 		if state != "active" {
 			wantRollout = "failed"
@@ -76,7 +76,7 @@ func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
 		if err != nil || status.Phase != wantRollout || status.LastErrorCode != wantCode {
 			t.Fatalf("pending rollout with target %s: %+v %v", state, status, err)
 		}
-		status, err = readDeletionStatus(ctx, tx, target)
+		status, err = readDeletionStatus(ctx, sqlc.New(tx), target)
 		want := "pending"
 		if state == "deleted" {
 			want = "removed"
@@ -85,7 +85,7 @@ func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
 			t.Fatalf("deletion %s: %+v %v", state, status, err)
 		}
 	}
-	if _, err := readDeletionStatus(ctx, tx, uuid.New()); err == nil {
+	if _, err := readDeletionStatus(ctx, sqlc.New(tx), uuid.New()); err == nil {
 		t.Fatal("missing target claimed removed")
 	}
 	for _, phase := range []string{"", "removed", "ready"} {
@@ -104,7 +104,7 @@ func TestCatalogOperationStatusReadsExactRolloutAndDeletion(t *testing.T) {
 		if err != nil || row.DeletionState != wantState || row.DeploymentCount != wantCount {
 			t.Fatalf("delete target with deployment phase %q: state=%s count=%d error=%v", phase, row.DeletionState, row.DeploymentCount, err)
 		}
-		status, err := readDeletionStatus(ctx, tx, targetID)
+		status, err := readDeletionStatus(ctx, sqlc.New(tx), targetID)
 		if err != nil || status.Phase != wantPhase {
 			t.Fatalf("delete status with deployment phase %q: %+v %v", phase, status, err)
 		}
