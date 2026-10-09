@@ -11,7 +11,7 @@ import (
 // cursor producers use it without rejecting their separately bound cursor.
 func validatePageOffset(w http.ResponseWriter, r *http.Request) bool {
 	if _, err := paging.LegacyOffset(r.URL.Query()); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.OffsetNotSupported, "offset must be one value in the supported range 0..10000; use this collection's opaque cursor for deeper traversal")
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.OffsetNotSupported, "offset must be one value in the supported range 0..10000; this legacy offset cannot continue beyond that range")
 		return false
 	}
 	return true

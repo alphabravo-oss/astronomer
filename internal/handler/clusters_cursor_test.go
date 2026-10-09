@@ -117,6 +117,18 @@ func TestClusterLegacyOffsetIsBoundedBeforeSQL(t *testing.T) {
 	if rejected.Code != http.StatusBadRequest || len(q.offsetCalls) != 0 {
 		t.Fatalf("unsupported offset status%d SQLcalls%+v", rejected.Code, q.offsetCalls)
 	}
+	var rejection struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rejected.Body.Bytes(), &rejection); err != nil {
+		t.Fatal(err)
+	}
+	if rejection.Error.Code != "offset_not_supported" {
+		t.Fatalf("wrong error code%s", rejection.Error.Code)
+	}
+
 	accepted := httptest.NewRecorder()
 	h.List(accepted, httptest.NewRequest(http.MethodGet, "/api/v1/clusters/?limit=20&offset=10000", nil))
 	if accepted.Code != http.StatusOK || len(q.offsetCalls) != 1 || q.offsetCalls[0].Offset != int32(maxPaginationOffset) {
