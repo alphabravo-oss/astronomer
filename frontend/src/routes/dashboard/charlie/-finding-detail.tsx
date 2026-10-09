@@ -27,6 +27,12 @@ export function FindingDetail({
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">{finding.title}</h2>
+      {(finding.state === "unsupported" ||
+        finding.workflowState === "unsupported") && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Finding status is unsupported. Actions are unavailable.
+        </p>
+      )}
       <p className="text-sm text-foreground/70">
         Workflow: {findingWorkflowLabel(finding)}
       </p>

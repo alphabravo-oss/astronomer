@@ -59,7 +59,7 @@ def validate_registry(registry, spec):
                 raise ValueError('duplicate wire binding')
             bound.add(key)
             field = schemas[binding['schema']]['properties'][binding['property']]
-            if field.get('allOf') != [{'$ref': '#/components/schemas/' + name}] or 'enum' in field:
+            if field.get('type') != 'string' or field.get('$ref') != '#/components/schemas/' + name or 'enum' in field or 'allOf' in field:
                 raise ValueError('wire field differs from categorical authority')
         for source in row['database']:
             if set(source) != {'path', 'constraint'}:
@@ -109,7 +109,7 @@ def overlay_source(registry, schemas):
                 continue
             target = '$.components.schemas.' + binding['schema'] + '.properties.' + binding['property']
             document['actions'] += [
-                {'target': target + '.allOf', 'description': 'Retain v1 Go SDK inline enum type identity.', 'remove': True},
+                {'target': target + '.$ref', 'description': 'Retain v1 Go SDK inline enum type identity.', 'remove': True},
                 {'target': target, 'description': 'Generate the existing inline SDK type from canonical enum values.', 'update': {'type': 'string', 'enum': schemas[row['schema']]['enum']}},
             ]
     return json.dumps(document, indent=2) + '\n'
@@ -164,7 +164,7 @@ def response_source(registry, spec):
             return None
         if '$ref' in schema:
             name = schema['$ref'].rsplit('/', 1)[1]
-            return {'ref': name} if name in reachable else None
+            return ({'ref': name, 'nullable': True} if schema.get('nullable') else {'ref': name}) if name in reachable else None
         nodes = []
         if 'allOf' in schema:
             nodes += [p for p in (plan(v) for v in schema['allOf']) if p]

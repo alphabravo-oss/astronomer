@@ -17,7 +17,7 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 - Task constructors: 71
 - Production `asynq.NewTask` call sites: 87
 - Production `.Enqueue(...)` call sites: 5
-- Task-outbox producer call sites: 31
+- Task-outbox producer call sites: 37
 - Durable operation tables: 15
 
 The hard CI behavior keeps this inventory current, requires registered/scheduled task expressions to remain parseable, and fails new direct Redis enqueue call sites until they are classified in `docs/direct-enqueue-classifications.json`.
@@ -167,9 +167,9 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/handler/cloud_credentials.go:70`](internal/handler/cloud_credentials.go:70) - `DeleteCloudCredentialMaterializationWithTaskOutbox(ctx context.Context, arg sqlc.DeleteCloudCredentialMaterializationWithTaskOutboxParams) error`
 - [`internal/handler/cluster_registries.go:668`](internal/handler/cluster_registries.go:668) - `_, err := tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/cluster_snapshots.go:152`](internal/handler/cluster_snapshots.go:152) - `_, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{`
-- [`internal/handler/cluster_template_apply_enqueue.go:20`](internal/handler/cluster_template_apply_enqueue.go:20) - `UpsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams) (sqlc.ClusterTemplateApplication, error)`
-- [`internal/handler/cluster_template_apply_enqueue.go:42`](internal/handler/cluster_template_apply_enqueue.go:42) - `func upsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, q any, outbox tasks.TaskOutboxWriter, app sqlc.UpsertClusterTemplateApplicationParams, task *asynq.Task, opts tasks.TaskOutboxOptions) (sqlc.ClusterTemplateApplication, bool, error) {`
-- [`internal/handler/cluster_template_apply_enqueue.go:60`](internal/handler/cluster_template_apply_enqueue.go:60) - `row, err := atomicQ.UpsertClusterTemplateApplicationWithTaskOutbox(ctx, sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams{`
+- [`internal/handler/cluster_template_apply_enqueue.go:19`](internal/handler/cluster_template_apply_enqueue.go:19) - `UpsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams) (sqlc.ClusterTemplateApplication, error)`
+- [`internal/handler/cluster_template_apply_enqueue.go:41`](internal/handler/cluster_template_apply_enqueue.go:41) - `func upsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, q any, outbox tasks.TaskOutboxWriter, app sqlc.UpsertClusterTemplateApplicationParams, task *asynq.Task, opts tasks.TaskOutboxOptions) (sqlc.ClusterTemplateApplication, bool, error) {`
+- [`internal/handler/cluster_template_apply_enqueue.go:55`](internal/handler/cluster_template_apply_enqueue.go:55) - `row, err := atomicQ.UpsertClusterTemplateApplicationWithTaskOutbox(ctx, sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams{`
 - [`internal/handler/cluster_templates_applications.go:340`](internal/handler/cluster_templates_applications.go:340) - `app, atomic, err := upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), q, q, params, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/clusters_decommission.go:261`](internal/handler/clusters_decommission.go:261) - `_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/control_plane_snapshots.go:119`](internal/handler/control_plane_snapshots.go:119) - `_, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{`
@@ -184,9 +184,15 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/worker/tasks/gitops_sync.go:532`](internal/worker/tasks/gitops_sync.go:532) - `if _, err := EnqueueTaskOutbox(ctx, runtime.Deps.TaskOutbox, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/notification_dispatch.go:120`](internal/worker/tasks/notification_dispatch.go:120) - `_, err = EnqueueTaskOutbox(ctx, q, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/security_scan.go:255`](internal/worker/tasks/security_scan.go:255) - `_, err = EnqueueTaskOutbox(ctx, runtime.Deps.Outbox, task, TaskOutboxOptions{`
-- [`internal/worker/tasks/task_outbox_enqueue.go:17`](internal/worker/tasks/task_outbox_enqueue.go:17) - `UpsertTaskOutbox(ctx context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)`
-- [`internal/worker/tasks/task_outbox_enqueue.go:30`](internal/worker/tasks/task_outbox_enqueue.go:30) - `func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task, opts TaskOutboxOptions) (sqlc.TaskOutbox, error) {`
-- [`internal/worker/tasks/task_outbox_enqueue.go:56`](internal/worker/tasks/task_outbox_enqueue.go:56) - `return q.UpsertTaskOutbox(ctx, sqlc.UpsertTaskOutboxParams{`
+- [`internal/worker/tasks/task_outbox_enqueue.go:18`](internal/worker/tasks/task_outbox_enqueue.go:18) - `UpsertTaskOutbox(ctx context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)`
+- [`internal/worker/tasks/task_outbox_enqueue.go:31`](internal/worker/tasks/task_outbox_enqueue.go:31) - `func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task, opts TaskOutboxOptions) (sqlc.TaskOutbox, error) {`
+- [`internal/worker/tasks/task_outbox_enqueue.go:36`](internal/worker/tasks/task_outbox_enqueue.go:36) - `return q.UpsertTaskOutbox(ctx, params)`
+- [`internal/worker/tasks/task_outbox_enqueue.go:42`](internal/worker/tasks/task_outbox_enqueue.go:42) - `func PrepareTaskOutbox(ctx context.Context, task *asynq.Task, opts TaskOutboxOptions) (sqlc.UpsertTaskOutboxParams, error) {`
+- [`internal/worker/tasks/task_outbox_enqueue.go:44`](internal/worker/tasks/task_outbox_enqueue.go:44) - `return sqlc.UpsertTaskOutboxParams{}, &jsoncontract.Error{Field: "task_payload", Category: "missing_task"}`
+- [`internal/worker/tasks/task_outbox_enqueue.go:48`](internal/worker/tasks/task_outbox_enqueue.go:48) - `return sqlc.UpsertTaskOutboxParams{}, err`
+- [`internal/worker/tasks/task_outbox_enqueue.go:53`](internal/worker/tasks/task_outbox_enqueue.go:53) - `return sqlc.UpsertTaskOutboxParams{}, err`
+- [`internal/worker/tasks/task_outbox_enqueue.go:67`](internal/worker/tasks/task_outbox_enqueue.go:67) - `return sqlc.UpsertTaskOutboxParams{}, &jsoncontract.Error{Field: "task_options", Category: "out_of_range"}`
+- [`internal/worker/tasks/task_outbox_enqueue.go:76`](internal/worker/tasks/task_outbox_enqueue.go:76) - `return sqlc.UpsertTaskOutboxParams{`
 
 ## Durable Operation Tables
 

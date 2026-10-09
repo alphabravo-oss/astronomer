@@ -41,6 +41,22 @@ describe("Charlie finding workflow decisions", () => {
     expect(findingWorkflowLabel(finding)).toBe("manual remediation required");
   });
 
+  it("blocks backend-advertised decisions when state or workflow is unsupported", () => {
+    const finding = fixture("unsupported", [
+      "acknowledge",
+      "start_remediation",
+      "resolve",
+    ]);
+    expect(findingLifecycleDecisions(finding)).toEqual([]);
+    expect(
+      findingLifecycleDecisions({
+        ...finding,
+        state: "unsupported",
+        workflowState: "verification_pending",
+      }),
+    ).toEqual([]);
+  });
+
   it("keeps exact approval decisions out of generic lifecycle controls", () => {
     const finding = fixture("approval_pending", []);
     expect(findingLifecycleDecisions(finding)).toEqual([]);

@@ -160,9 +160,9 @@
     "Baseline71 only: no combined072/073 or PostgreSQL18 migration qualification claimed.",
     "Temporary transaction-only fixtures exercise actual migrated CHECK expressions; no production or recovery database touched."
   ],
-  "observedAt": "2026-10-09T21:09:23.960242+00:00",
+  "observedAt": "2026-10-09T21:27:18.654707+00:00",
   "productionAdapter": {
-    "logDigest": "sha256:bca463e7bbd98f47f1f895307cb6b74f0866604a55d08116d462497487cb94df",
+    "logDigest": "sha256:879c092ed2078eea149141f8565bdc58a33f866f4bf8a48d344508a4be13b20e",
     "status": "pass",
     "test": "TestPostgresPlanningTransactionAndHAFencing"
   },
@@ -170,6 +170,6 @@
   "schemaVersionTested": 71,
   "sourceFiles": {
     "deploy/contracts/categories.json": "sha256:5a963d04d4802887993ffcb93e8d04fc019bdb46ab449931d670b0a8d4d23a57",
-    "docs/openapi.yaml": "sha256:946205bdacdfd900d3bf96f8946c0e61780867310f7fd5175dbeaa8268f3550c"
+    "docs/openapi.yaml": "sha256:90611087d94603dabb5860066e85f2703f4526da4769138dcfe3fefcfdcc27b5"
   }
 }

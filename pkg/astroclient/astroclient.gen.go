@@ -4233,20 +4233,18 @@ type CharlieFindingDetail struct {
 	AvailableDecisions []CharlieFindingDetailAvailableDecisions `json:"available_decisions"`
 
 	// Detail Strict advisory evidence returned only after current product authorization. It cannot contain approval, manifest, signature, action, argument, or authorization fields.
-	Detail              *CharlieFindingAdvisoryDetail `json:"detail,omitempty"`
-	Id                  openapi_types.UUID            `json:"id"`
-	ReasonNoAction      string                        `json:"reason_no_action"`
-	RepeatCount         int                           `json:"repeat_count"`
-	RiskImpact          *string                       `json:"risk_impact,omitempty"`
-	Severity            CharlieFindingDetailSeverity  `json:"severity"`
-	State               CharlieFindingDetailState     `json:"state"`
-	Summary             string                        `json:"summary"`
-	Title               string                        `json:"title"`
-	UpdatedAt           time.Time                     `json:"updated_at"`
-	VerificationSummary *string                       `json:"verification_summary,omitempty"`
-
-	// WorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
-	WorkflowState CharlieFindingDetailWorkflowState `json:"workflow_state"`
+	Detail              *CharlieFindingAdvisoryDetail     `json:"detail,omitempty"`
+	Id                  openapi_types.UUID                `json:"id"`
+	ReasonNoAction      string                            `json:"reason_no_action"`
+	RepeatCount         int                               `json:"repeat_count"`
+	RiskImpact          *string                           `json:"risk_impact,omitempty"`
+	Severity            CharlieFindingDetailSeverity      `json:"severity"`
+	State               CharlieFindingDetailState         `json:"state"`
+	Summary             string                            `json:"summary"`
+	Title               string                            `json:"title"`
+	UpdatedAt           time.Time                         `json:"updated_at"`
+	VerificationSummary *string                           `json:"verification_summary,omitempty"`
+	WorkflowState       CharlieFindingDetailWorkflowState `json:"workflow_state"`
 }
 
 // CharlieFindingDetailAvailableDecisions defines model for CharlieFindingDetail.AvailableDecisions.
@@ -4258,7 +4256,7 @@ type CharlieFindingDetailSeverity string
 // CharlieFindingDetailState defines model for CharlieFindingDetail.State.
 type CharlieFindingDetailState string
 
-// CharlieFindingDetailWorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
+// CharlieFindingDetailWorkflowState defines model for CharlieFindingDetail.WorkflowState.
 type CharlieFindingDetailWorkflowState string
 
 // CharlieFindingManualRemediation defines model for CharlieFindingManualRemediation.
@@ -4297,9 +4295,7 @@ type CharlieFindingSummary struct {
 	Summary            string                                    `json:"summary"`
 	Title              string                                    `json:"title"`
 	UpdatedAt          time.Time                                 `json:"updated_at"`
-
-	// WorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
-	WorkflowState CharlieFindingSummaryWorkflowState `json:"workflow_state"`
+	WorkflowState      CharlieFindingSummaryWorkflowState        `json:"workflow_state"`
 }
 
 // CharlieFindingSummaryAvailableDecisions defines model for CharlieFindingSummary.AvailableDecisions.
@@ -4311,7 +4307,7 @@ type CharlieFindingSummarySeverity string
 // CharlieFindingSummaryState defines model for CharlieFindingSummary.State.
 type CharlieFindingSummaryState string
 
-// CharlieFindingSummaryWorkflowState Product-authorized operator workflow derived from durable finding state; it is not execution authority.
+// CharlieFindingSummaryWorkflowState defines model for CharlieFindingSummary.WorkflowState.
 type CharlieFindingSummaryWorkflowState string
 
 // CharlieFindingSummaryStateValue defines model for CharlieFindingSummaryStateValue.

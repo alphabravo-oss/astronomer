@@ -8,12 +8,12 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 1261
-- Frontend source lines: 237884
+- Frontend source files: 1262
+- Frontend source lines: 238097
 - Go source files under `internal/` excluding generated sqlc and tests: 1014
-- Go source files scanned for sqlc query references excluding generated sqlc: 2252
+- Go source files scanned for sqlc query references excluding generated sqlc: 2253
 - sqlc query declarations: 1267
-- Component files scanned: 456
+- Component files scanned: 457
 - Helm top-level values scanned: 35
 
 ## Hard Gates
@@ -109,7 +109,6 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `defaultString` in [`internal/handler/resource_presenters.go:703`](internal/handler/resource_presenters.go:703), [`internal/helmruntime/config.go:109`](internal/helmruntime/config.go:109)
 - `denied` in [`internal/charlie/action_guard.go:806`](internal/charlie/action_guard.go:806), [`internal/delivery/resolver/network.go:141`](internal/delivery/resolver/network.go:141)
 - `digestBytes` in [`internal/charlie/action_guard.go:801`](internal/charlie/action_guard.go:801), [`internal/delivery/resolver/service.go:171`](internal/delivery/resolver/service.go:171)
-- `ensureJSONEOF` in [`internal/handler/validate.go:110`](internal/handler/validate.go:110), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
 - `intValue` in [`internal/controlplane/service.go:177`](internal/controlplane/service.go:177), [`internal/handler/resource_presenters.go:598`](internal/handler/resource_presenters.go:598)
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
 - `isUniqueViolation` in [`internal/handler/cluster_templates_registry.go:336`](internal/handler/cluster_templates_registry.go:336), [`internal/projects/service.go:571`](internal/projects/service.go:571)
@@ -124,7 +123,8 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `requireSuperuser` in [`internal/handler/authorization.go:90`](internal/handler/authorization.go:90), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
 - `retryAfter` in [`internal/apisvr/allowlist/providers/errors.go:51`](internal/apisvr/allowlist/providers/errors.go:51), [`internal/delivery/builtin/provisioner.go:631`](internal/delivery/builtin/provisioner.go:631)
 - `sortedUUIDs` in [`internal/delivery/model/placement.go:187`](internal/delivery/model/placement.go:187), [`internal/handler/authorization.go:223`](internal/handler/authorization.go:223)
-- ... 9 more
+- `stableID` in [`internal/delivery/builtin/provisioner.go:635`](internal/delivery/builtin/provisioner.go:635), [`internal/delivery/catalogapp/service.go:532`](internal/delivery/catalogapp/service.go:532)
+- ... 8 more
 
 ### Dead-Code Candidates
 
@@ -145,7 +145,7 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 ## Summary
 
 - Hard failures: 0
-- Duplicate-code candidates: 39
+- Duplicate-code candidates: 38
 - Dead-code candidates: 4
 
 ## Definition Of Done For Each Candidate

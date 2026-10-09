@@ -2,16 +2,17 @@
 # oapi-codegen BEFORE generation (see oapi-codegen.yaml -> output-options.overlay).
 #
 # WHY THIS EXISTS
-# docs/openapi.yaml is the source of truth and is owned by another track, so we
-# do not edit it here. Instead this overlay patches three spots that make the
-# *generated Go* fail to compile, without changing the wire contract:
+# docs/openapi.yaml is the canonical wire contract. This Go-only overlay
+# preserves released v1 source identities and pointer layouts while resolving
+# Go field-name collisions. It also retains the released inhibition pointer
+# fields while canonical schemas describe current writer requirements.
 #
 #   1. ResourceSearchResult includes upstream snake_case Kubernetes metadata
 #      alongside the canonical camelCase projection. Both normalize to the
 #      same Go field names, so the wire-specific fields need explicit names.
 #
-# These are codegen-only renames: JSON tags, paths, and request/response bodies
-# are unchanged.
+# These are generator-only Go representation adjustments. Canonical JSON
+# property names and HTTP operations come from docs/openapi.yaml.
 overlay: 1.0.0
 info:
   title: astroclient codegen fixups

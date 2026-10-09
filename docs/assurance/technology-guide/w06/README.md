@@ -17,10 +17,30 @@ The canonical value authority is `docs/openapi.yaml#/components/schemas`. The cl
 
 ## Validation and remaining integration
 
-Bounded validation passes: category negative/parity tests (10), SDK negative tests (4), generated-schema binding tests (2), model/state/rollout/migrations tests, touched Go vet, toolchain drift and its 36 tests, full legacy SDK compilation and pointer/marshal tests, frontend type check and code health. Final full frontend and API gates are recorded separately after completion; earlier combined W01/W05 qualification is not evidence for this later source.
+Bounded validation passes: category negative/parity tests (12), SDK negative tests (4), generated-schema binding tests (2), model/state/rollout/migrations tests, touched Go vet, toolchain drift and its 36 tests, full legacy SDK compilation and pointer/marshal tests, frontend type check and code health. Final full frontend and API gates are recorded separately after completion; earlier combined W01/W05 qualification is not evidence for this later source.
 
 `database-categories.json` binds the dedicated owned CNPG17.11 database proof to canonical source hashes. It proves baseline schema 71 CHECK parity and a real production planning/HAFencing adapter. It does not claim combined W09 schema-72 migration or PostgreSQL18 qualification. No migration 073 is needed: the retained terminal values already exist in the exact production CHECK sets and no new database enum is introduced. Canonical maximum schema must remain 72 after W09’s genuine migration 072 is integrated; no empty migration should advance it.
 
 The Go-only compatibility overlay preserves existing public SDK source layout while canonical inhibition request schemas describe required writer inputs and nullable compatibility defaults. A prior pointer-to-slice break was caught by the real baseline fixture and fixed through the generator source. Canonical schemas and strict browser writes retain these requirements.
 
 Kubernetes dynamic kinds/phases, provider/distribution names and bridge extension maps retain upstream vocabularies. Backup/restore wire statuses remain open to preserve historical records; known `running` and historical `in_progress` are recognized and missing/future statuses render neutral unknown. Ancillary database CHECKs and pre-existing inline enums are inventoried, not falsely described as rewritten into the focused 41 schemas. Charlie approval `rejected`/`dispatched` differs from bridge `denied`; the schemas do not merge those meanings.
+
+The focused unknown-action sweep passes 52 tests across six files. Unsupported
+finding state/workflow blocks advertised lifecycle decisions; unsupported
+sessions expose read-only history and block send, retry, abort and keyboard
+submission; registration cannot retry/confirm or report ready; deployment
+mutations stay disabled even with update permission. Unknown agent replica
+state cannot imply mode readiness, and unknown visibility state cannot permit
+configuration mutations. System component neutral states expose no mutation
+controls. The response vocabulary uses direct canonical references with
+explicit string types to preserve semantic compatibility-tool resolution.
+
+The raw released-v1.2.1 diff remains a retained **76-warning failure**. Fifty-four
+exact response field/value triples refine previously unconstrained strings to
+existing writer/database vocabularies; technical disposition and narrow review
+entries have an October 16 deadline. W09 separately owns the other 22 inhibition
+request differences, including intentional malformed JSON hardening. No broad
+enum ignore or historical specification edit is used. A mutable-source API
+verification rerun passed its component checks but failed its source stability
+guard while review followups changed files; it is not a frozen green receipt.
+The combined immutable integration rerun remains the authoritative final gate.

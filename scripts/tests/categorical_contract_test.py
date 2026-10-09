@@ -49,6 +49,9 @@ class CategoricalContractTests(unittest.TestCase):
     def test_go_string_alias_required_for_previous_string_consumers(self):
         self.reject(edit_spec=lambda s: s['components']['schemas']['DeliveryRolloutState'].pop('x-go-type'))
 
+    def test_contradictory_wire_type_is_rejected(self):
+        self.reject(edit_spec=lambda s: s['components']['schemas']['DeliveryRollout']['properties']['state'].update(type='object'))
+
     def test_independent_wire_enum_is_rejected(self):
         self.reject(edit_spec=lambda s: s['components']['schemas']['DeliveryRollout']['properties']['state'].update(enum=['succeeded']))
 
@@ -60,6 +63,12 @@ class CategoricalContractTests(unittest.TestCase):
         spec['components']['schemas']['DeliveryRollout']['properties']['state'] = {'oneOf': [{'$ref': '#/components/schemas/DeliveryRolloutState'}, {'type': 'string'}]}
         with self.assertRaisesRegex(ValueError, 'checked adapter'):
             contract.response_source(self.registry, spec)
+
+    def test_nullable_reference_retains_null_boundary(self):
+        spec = copy.deepcopy(self.spec)
+        spec['components']['schemas']['DeliveryRollout']['properties']['state']['nullable'] = True
+        result = contract.response_source(self.registry, spec)
+        self.assertIn('"nullable": true', result)
 
     def test_documented_success_without_category_retains_null_plan(self):
         spec = copy.deepcopy(self.spec)

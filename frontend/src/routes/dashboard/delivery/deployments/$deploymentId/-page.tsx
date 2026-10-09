@@ -144,7 +144,7 @@ export function DeploymentDetailPage() {
                   <ActionButton
                     intent="default"
                     type="button"
-                    disabled={!canUpdate}
+                    disabled={!canUpdate || deployment.phase === "unsupported"}
                     onClick={() => setAction("suspend")}
                   >
                     <Pause className="h-4 w-4" /> Suspend
@@ -152,7 +152,7 @@ export function DeploymentDetailPage() {
                   <ActionButton
                     intent="primary"
                     type="button"
-                    disabled={!canUpdate}
+                    disabled={!canUpdate || deployment.phase === "unsupported"}
                     onClick={() => setAction("reconcile")}
                   >
                     <RefreshCw className="h-4 w-4" /> Reconcile
@@ -257,7 +257,7 @@ export function DeploymentDetailPage() {
           </PageSection>
         </PageShell>
       </DeliveryProjectGate>
-      {deployment && action && (
+      {deployment && deployment.phase !== "unsupported" && action && (
         <DeploymentActionDialog
           projectId={projectId}
           deploymentId={deploymentId}

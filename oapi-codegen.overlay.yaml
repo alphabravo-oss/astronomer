@@ -48,7 +48,7 @@
       }
     },
     {
-      "target": "$.components.schemas.ClusterDeployment.properties.phase.allOf",
+      "target": "$.components.schemas.ClusterDeployment.properties.phase.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -72,7 +72,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliverySource.properties.type.allOf",
+      "target": "$.components.schemas.DeliverySource.properties.type.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -90,7 +90,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliverySourceWrite.properties.type.allOf",
+      "target": "$.components.schemas.DeliverySourceWrite.properties.type.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -108,7 +108,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryResolvedSource.properties.type.allOf",
+      "target": "$.components.schemas.DeliveryResolvedSource.properties.type.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -126,7 +126,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryRendererSpec.properties.kind.allOf",
+      "target": "$.components.schemas.DeliveryRendererSpec.properties.kind.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -142,7 +142,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryBundleVersion.properties.renderer.allOf",
+      "target": "$.components.schemas.DeliveryBundleVersion.properties.renderer.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -158,7 +158,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryConfigurationTemplate.properties.renderer.allOf",
+      "target": "$.components.schemas.DeliveryConfigurationTemplate.properties.renderer.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -174,7 +174,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryConfigurationTemplateWrite.properties.renderer.allOf",
+      "target": "$.components.schemas.DeliveryConfigurationTemplateWrite.properties.renderer.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -190,7 +190,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryRolloutApproval.properties.decision.allOf",
+      "target": "$.components.schemas.DeliveryRolloutApproval.properties.decision.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -206,7 +206,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryRolloutApprovalRecord.properties.decision.allOf",
+      "target": "$.components.schemas.DeliveryRolloutApprovalRecord.properties.decision.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -222,7 +222,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliverySource.properties.auth_mode.allOf",
+      "target": "$.components.schemas.DeliverySource.properties.auth_mode.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -241,7 +241,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliverySourceWrite.properties.auth_mode.allOf",
+      "target": "$.components.schemas.DeliverySourceWrite.properties.auth_mode.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -260,7 +260,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryResolvedSource.properties.auth_mode.allOf",
+      "target": "$.components.schemas.DeliveryResolvedSource.properties.auth_mode.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -279,7 +279,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliverySource.properties.status.allOf",
+      "target": "$.components.schemas.DeliverySource.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -297,7 +297,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryBundleVersion.properties.state.allOf",
+      "target": "$.components.schemas.DeliveryBundleVersion.properties.state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -315,7 +315,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryBundleVersion.properties.verification_status.allOf",
+      "target": "$.components.schemas.DeliveryBundleVersion.properties.verification_status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -333,7 +333,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryRolloutStrategy.properties.type.allOf",
+      "target": "$.components.schemas.DeliveryRolloutStrategy.properties.type.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -351,7 +351,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryRolloutStrategyInput.properties.type.allOf",
+      "target": "$.components.schemas.DeliveryRolloutStrategyInput.properties.type.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -369,7 +369,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryRolloutStrategy.properties.on_failure.allOf",
+      "target": "$.components.schemas.DeliveryRolloutStrategy.properties.on_failure.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -386,7 +386,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DeliveryRolloutStrategyInput.properties.on_failure.allOf",
+      "target": "$.components.schemas.DeliveryRolloutStrategyInput.properties.on_failure.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -403,7 +403,7 @@
       }
     },
     {
-      "target": "$.components.schemas.Cluster.properties.registration_phase.allOf",
+      "target": "$.components.schemas.Cluster.properties.registration_phase.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -423,7 +423,7 @@
       }
     },
     {
-      "target": "$.components.schemas.RegistrationStatus.properties.phase.allOf",
+      "target": "$.components.schemas.RegistrationStatus.properties.phase.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -443,7 +443,7 @@
       }
     },
     {
-      "target": "$.components.schemas.AdminQueueOperation.properties.status.allOf",
+      "target": "$.components.schemas.AdminQueueOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -462,7 +462,7 @@
       }
     },
     {
-      "target": "$.components.schemas.AuditExportOperation.properties.status.allOf",
+      "target": "$.components.schemas.AuditExportOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -481,7 +481,7 @@
       }
     },
     {
-      "target": "$.components.schemas.DexOperation.properties.status.allOf",
+      "target": "$.components.schemas.DexOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -500,7 +500,7 @@
       }
     },
     {
-      "target": "$.components.schemas.ResourceOperation.properties.status.allOf",
+      "target": "$.components.schemas.ResourceOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -519,7 +519,7 @@
       }
     },
     {
-      "target": "$.components.schemas.SupportBundleOperation.properties.status.allOf",
+      "target": "$.components.schemas.SupportBundleOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -538,7 +538,7 @@
       }
     },
     {
-      "target": "$.components.schemas.AgentLifecycleOperation.properties.status.allOf",
+      "target": "$.components.schemas.AgentLifecycleOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -557,7 +557,7 @@
       }
     },
     {
-      "target": "$.components.schemas.NodeOperation.properties.status.allOf",
+      "target": "$.components.schemas.NodeOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -577,7 +577,7 @@
       }
     },
     {
-      "target": "$.components.schemas.LoggingOperation.properties.status.allOf",
+      "target": "$.components.schemas.LoggingOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -596,7 +596,7 @@
       }
     },
     {
-      "target": "$.components.schemas.MonitoringOperation.properties.status.allOf",
+      "target": "$.components.schemas.MonitoringOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -615,7 +615,7 @@
       }
     },
     {
-      "target": "$.components.schemas.ToolOperation.properties.status.allOf",
+      "target": "$.components.schemas.ToolOperation.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -634,7 +634,7 @@
       }
     },
     {
-      "target": "$.components.schemas.Cluster.properties.status.allOf",
+      "target": "$.components.schemas.Cluster.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -652,7 +652,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CISScan.properties.status.allOf",
+      "target": "$.components.schemas.CISScan.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -671,7 +671,7 @@
       }
     },
     {
-      "target": "$.components.schemas.ClusterSecurityPolicy.properties.sync_status.allOf",
+      "target": "$.components.schemas.ClusterSecurityPolicy.properties.sync_status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -689,7 +689,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieSessionMetadata.properties.state.allOf",
+      "target": "$.components.schemas.CharlieSessionMetadata.properties.state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -709,7 +709,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieFindingSummary.properties.state.allOf",
+      "target": "$.components.schemas.CharlieFindingSummary.properties.state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -728,7 +728,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieFindingSummary.properties.workflow_state.allOf",
+      "target": "$.components.schemas.CharlieFindingSummary.properties.workflow_state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -750,7 +750,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieAdminTriggerEvent.properties.state.allOf",
+      "target": "$.components.schemas.CharlieAdminTriggerEvent.properties.state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -771,7 +771,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieTriggerRetryReceipt.properties.status.allOf",
+      "target": "$.components.schemas.CharlieTriggerRetryReceipt.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -792,7 +792,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieApprovalSummary.properties.state.allOf",
+      "target": "$.components.schemas.CharlieApprovalSummary.properties.state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -810,7 +810,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieAdminAgentReplica.properties.state.allOf",
+      "target": "$.components.schemas.CharlieAdminAgentReplica.properties.state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -828,7 +828,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieAdminAlertDeliveryProof.properties.status.allOf",
+      "target": "$.components.schemas.CharlieAdminAlertDeliveryProof.properties.status.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -848,7 +848,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieAdminDiagnosticCheck.properties.state.allOf",
+      "target": "$.components.schemas.CharlieAdminDiagnosticCheck.properties.state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -868,7 +868,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieKubernetesVisibility.properties.state.allOf",
+      "target": "$.components.schemas.CharlieKubernetesVisibility.properties.state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -885,7 +885,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieOnboardingStatus.properties.state.allOf",
+      "target": "$.components.schemas.CharlieOnboardingStatus.properties.state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },
@@ -901,7 +901,7 @@
       }
     },
     {
-      "target": "$.components.schemas.CharlieThreadMetadata.properties.state.allOf",
+      "target": "$.components.schemas.CharlieThreadMetadata.properties.state.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
     },

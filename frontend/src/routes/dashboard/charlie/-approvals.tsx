@@ -131,7 +131,13 @@ export function Approvals({ selected }: { selected: string | null }) {
             </div>
             <div>
               <dt className="text-foreground/70">Eligibility</dt>
-              <dd>{a.eligible ? "Confirmed" : (a.reason ?? "Not eligible")}</dd>
+              <dd>
+                {a.state === "unsupported"
+                  ? "Unsupported approval state"
+                  : a.eligible
+                    ? "Confirmed"
+                    : (a.reason ?? "Not eligible")}
+              </dd>
             </div>
           </dl>
           {a.eligible && a.state === "pending" && canApprove ? (
