@@ -72,3 +72,13 @@ func TestRecordOutboxRejectsMissingStoreAndInvalidEnvelope(t *testing.T) {
 		})
 	}
 }
+
+func TestRecordOutboxRejectsUnencodableDetailBeforeWrite(t *testing.T) {
+	for _, detail := range []map[string]any{{"value": make(chan string)}, {"value": json.RawMessage(`{"private-fixture"`)}} {
+		q := &outboxCapture{}
+		_, err := RecordOutbox(t.Context(), q, Event{Action: "cluster.update", ResourceType: "cluster", Detail: detail}, "safe-key", OutboxOptions{})
+		if !errors.Is(err, ErrInvalidOutbox) || q.arg.ID != uuid.Nil {
+			t.Fatalf("unencodable detail lost before durable write: err=%v wrote=%v", err, q.arg.ID != uuid.Nil)
+		}
+	}
+}

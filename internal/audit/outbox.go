@@ -4,15 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 const (
@@ -132,9 +133,10 @@ func RecordOutbox(ctx context.Context, q OutboxQuerier, event Event, dedupeKey s
 // DeliverAuditOutbox has atomically inserted audit_log and acknowledged the
 // outbox row. The stable UUID lets downstream queues deduplicate a replay.
 func PublishOutboxDelivery(row sqlc.DeliverAuditOutboxRow) {
-	detail := map[string]any{}
-	if len(row.Detail) > 0 {
-		_ = json.Unmarshal(row.Detail, &detail)
+	detail, err := jsoncontract.ReadAuditDetailV1(row.Detail)
+	if err != nil {
+		slog.Error("invalid persisted audit detail", "id", row.ID.String(), "category", err)
+		return
 	}
 	event := Event{
 		Source: row.Source, CorrelationID: row.CorrelationID, UserID: row.UserID,
