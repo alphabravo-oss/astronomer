@@ -71,7 +71,7 @@ func producerFixture(t *testing.T, template string) (string, string, string, str
 	catalogFile := filepath.Join(root, "catalog.json")
 	_ = writeJSON(catalogFile, catalog)
 	assets := filepath.Join(root, "assets.json")
-	_ = writeJSON(assets, assetIndex{SchemaVersion: 1, RequiredCategories: []string{"catalog", "chart", "values", "image_inventory"}, Assets: []assetInput{}})
+	_ = writeJSON(assets, assetIndex{SchemaVersion: 2, Capabilities: []string{}, RequiredCategories: []string{"catalog", "chart", "values", "image_inventory"}, Assets: []assetInput{}})
 	return catalogFile, charts, assets, platforms
 }
 func TestProducerRendersAndClosesImmutableOCIChildren(t *testing.T) {
@@ -135,7 +135,7 @@ func TestProducerFailsBeforeQualifiedOutput(t *testing.T) {
 				path := filepath.Join(fixturePlatforms, strings.TrimPrefix(subject, "sha256:")+".json")
 				_ = os.WriteFile(path, []byte("changed"), 0600)
 			case "missing category":
-				_ = writeJSON(fixtureAssets, assetIndex{SchemaVersion: 1, RequiredCategories: []string{"catalog", "chart", "values", "image_inventory", "plugin"}, Assets: []assetInput{}})
+				_ = writeJSON(fixtureAssets, assetIndex{SchemaVersion: 2, Capabilities: []string{}, RequiredCategories: []string{"catalog", "chart", "values", "image_inventory", "plugin"}, Assets: []assetInput{}})
 			case "changed chart":
 				_ = os.WriteFile(filepath.Join(fixtureCharts, output.Catalog.Components[0].Slug+".tgz"), []byte("changed"), 0600)
 			}

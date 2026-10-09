@@ -97,8 +97,8 @@ def export(args: argparse.Namespace) -> None:
             members[path], categories[path] = data, category
         profiles.append({"name": name, "qualification": "qualified", "values_path": values_path,
                          "inventory_path": inventory_path, "required_categories": ["catalog", "chart", "values", "image_inventory"],
-                         "blocked_categories": []})
-    bom = {"schema_version": 1, "release": args.release, "catalog_digest": sha(catalog), "charts": [], "profiles": profiles,
+                         "blocked_categories": [], "capabilities": []})
+    bom = {"schema_version": 1, "asset_contract_version": 1, "assets": [], "release": args.release, "catalog_digest": sha(catalog), "charts": [], "profiles": profiles,
            "members": [{"path": name, "digest": sha(data), "size": len(data), "category": categories[name]}
                        for name, data in sorted(members.items())]}
     members["bom.json"] = encoded(bom)

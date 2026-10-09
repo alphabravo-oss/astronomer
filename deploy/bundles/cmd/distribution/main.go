@@ -262,7 +262,7 @@ func walkImageFields(value any, images map[string]bool) error {
 	switch typed := value.(type) {
 	case map[string]any:
 		for key, child := range typed {
-			if key == "image" {
+			if key == "image" || key == "imageName" {
 				if raw, ok := child.(string); ok {
 					image, err := pinnedImage(raw)
 					if err != nil {

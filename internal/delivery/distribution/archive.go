@@ -108,6 +108,9 @@ func ReadClosedArchive(payload []byte, release, catalogDigest string) (map[strin
 	if validateJSON(members["catalog.json"]) != nil {
 		return nil, BOM{}, errors.New("distribution catalog has ambiguous JSON")
 	}
+	if err := validateArtifactAssets(bom.Assets, members); err != nil {
+		return nil, BOM{}, err
+	}
 	return members, bom, nil
 }
 
@@ -137,6 +140,20 @@ func validateProfile(bom BOM, members map[string][]byte, catalog builtinbundles.
 			return errors.New("distribution image inventory is invalid")
 		}
 		images := map[string]bool{}
+		imageScopes := map[string]map[string]bool{}
+		allowedScopes := map[string]map[string]bool{}
+		for _, component := range catalog.Components {
+			allowedScopes[component.Slug] = map[string]bool{}
+			for _, image := range component.Images {
+				allowedScopes[component.Slug][image] = true
+			}
+		}
+		for _, asset := range bom.Assets {
+			allowedScopes[asset.MemberPath] = map[string]bool{}
+			for _, image := range asset.Images {
+				allowedScopes[asset.MemberPath][image] = true
+			}
+		}
 		for _, image := range inventory.Images {
 			if len(image.Workloads) == 0 || len(image.Platforms) != 2 || image.Platforms[0] != "linux/amd64" || image.Platforms[1] != "linux/arm64" || images[image.Reference] {
 				return errors.New("distribution image platform/workload inventory is incomplete")
@@ -146,6 +163,13 @@ func validateProfile(bom BOM, members map[string][]byte, catalog builtinbundles.
 				return errors.New("distribution image is mutable")
 			}
 			images[image.Reference] = true
+			imageScopes[image.Reference] = map[string]bool{}
+			for _, workload := range image.Workloads {
+				if imageScopes[image.Reference][workload] || !allowedScopes[workload][image.Reference] {
+					return errors.New("distribution inventory image scope is unclassified or duplicated")
+				}
+				imageScopes[image.Reference][workload] = true
+			}
 		}
 		var values map[string]map[string]any
 		if decodeClosed(members[profile.ValuesPath], &values) != nil || len(values) != len(catalog.Components) {
@@ -161,7 +185,7 @@ func validateProfile(bom BOM, members map[string][]byte, catalog builtinbundles.
 				return errors.New("distribution values profile differs from catalog")
 			}
 			for _, image := range component.Images {
-				if !images[image] {
+				if !images[image] || !imageScopes[image][component.Slug] {
 					return errors.New("distribution inventory omits component image")
 				}
 			}
@@ -174,6 +198,25 @@ func validateProfile(bom BOM, members map[string][]byte, catalog builtinbundles.
 			if !chartFound {
 				return errors.New("distribution omits component chart archive")
 			}
+		}
+		for _, asset := range bom.Assets {
+			for _, image := range asset.Images {
+				if !images[image] || !imageScopes[image][asset.MemberPath] {
+					return blocked("image_inventory", "distribution inventory omits exact prerequisite image")
+				}
+			}
+		}
+		declared := map[string]bool{}
+		for _, capability := range profile.Capabilities {
+			declared[capability] = true
+		}
+		for _, capability := range RequiredBuiltinCapabilities(catalog) {
+			if !declared[capability] {
+				return blocked("vulnerability_database", "effective scanner values lack declared database capability")
+			}
+		}
+		if err := validateScannerDatabaseBindings(catalog, bom.Assets); err != nil {
+			return err
 		}
 		return nil
 	}

@@ -24,12 +24,14 @@ var digestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 // recursive chart archives, inventory evidence, and external prerequisites.
 // Profiles with unresolved assets remain explicitly unqualified.
 type BOM struct {
-	SchemaVersion int            `json:"schema_version"`
-	Release       string         `json:"release"`
-	CatalogDigest string         `json:"catalog_digest"`
-	Members       []Member       `json:"members"`
-	Profiles      []Profile      `json:"profiles"`
-	Charts        []ChartSubject `json:"charts"`
+	SchemaVersion        int            `json:"schema_version"`
+	AssetContractVersion int            `json:"asset_contract_version"`
+	Release              string         `json:"release"`
+	CatalogDigest        string         `json:"catalog_digest"`
+	Members              []Member       `json:"members"`
+	Profiles             []Profile      `json:"profiles"`
+	Charts               []ChartSubject `json:"charts"`
+	Assets               []Asset        `json:"assets"`
 }
 type Member struct {
 	Path     string `json:"path"`
@@ -44,6 +46,7 @@ type Profile struct {
 	InventoryPath      string   `json:"inventory_path"`
 	RequiredCategories []string `json:"required_categories"`
 	BlockedCategories  []string `json:"blocked_categories"`
+	Capabilities       []string `json:"capabilities"`
 }
 type Image struct {
 	Reference string   `json:"reference"`
@@ -65,7 +68,7 @@ func memberPath(value string) bool {
 func contentDigest(data []byte) string { return fmt.Sprintf("sha256:%x", sha256.Sum256(data)) }
 
 func (b BOM) validate(release, catalogDigest string) error {
-	if b.SchemaVersion != 1 || b.Release != release || !digestPattern.MatchString(b.CatalogDigest) || b.CatalogDigest != catalogDigest || len(b.Members) == 0 || len(b.Members) >= MaximumMembers || len(b.Profiles) == 0 {
+	if b.SchemaVersion != 1 || b.AssetContractVersion != 1 || b.Assets == nil || b.Release != release || !digestPattern.MatchString(b.CatalogDigest) || b.CatalogDigest != catalogDigest || len(b.Members) == 0 || len(b.Members) >= MaximumMembers || len(b.Profiles) == 0 {
 		return errors.New("distribution BOM is not bound to release catalog")
 	}
 	seen := map[string]bool{}
@@ -89,6 +92,9 @@ func (b BOM) validate(release, catalogDigest string) error {
 	memberKinds := map[string]string{}
 	for _, member := range b.Members {
 		memberKinds[member.Path] = member.Category
+	}
+	if err := validateAssetDeclarations(b.Assets, memberKinds); err != nil {
+		return err
 	}
 	profiles := map[string]bool{}
 	for _, profile := range b.Profiles {
@@ -116,6 +122,9 @@ func (b BOM) validate(release, catalogDigest string) error {
 		}
 		if profile.Qualification == "qualified" && len(profile.BlockedCategories) > 0 {
 			return errors.New("qualified distribution has blocked assets")
+		}
+		if err := validateCapabilityAssets(profile.Capabilities, b.Assets); err != nil {
+			return err
 		}
 		for _, category := range append(append([]string(nil), profile.RequiredCategories...), profile.BlockedCategories...) {
 			if !categories[category] {

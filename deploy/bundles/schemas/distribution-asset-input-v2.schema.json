@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Reviewed distribution prerequisite input v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "required_categories",
+    "capabilities",
+    "assets"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "required_categories": {
+      "type": "array",
+      "minItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "database-cnpg",
+          "vulnerability-scanning",
+          "cache-valkey",
+          "identity-dex",
+          "logs-fluent-bit",
+          "charlie",
+          "application-catalog",
+          "distribution-registry",
+          "platform-core"
+        ]
+      }
+    },
+    "assets": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "path",
+          "file",
+          "category",
+          "images",
+          "digest",
+          "artifact_subject",
+          "artifact_manifest_file"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "cnpg-operator",
+              "cnpg-crds",
+              "postgres-server",
+              "barman-cloud-plugin",
+              "barman-cloud-tools",
+              "object-store",
+              "dr-shell",
+              "valkey",
+              "dex",
+              "fluent-bit",
+              "charlie",
+              "trivy-database",
+              "trivy-java-database",
+              "application-catalog",
+              "distribution-registry"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096
+          },
+          "category": {
+            "enum": [
+              "crd",
+              "tool",
+              "operator",
+              "plugin",
+              "database",
+              "vulnerability_database",
+              "application_catalog",
+              "runtime_image"
+            ]
+          },
+          "images": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[^@\\s]+/[^@\\s]+@sha256:[a-f0-9]{64}$"
+            }
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "artifact_subject": {
+            "type": "string"
+          },
+          "artifact_manifest_file": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
