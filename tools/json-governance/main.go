@@ -68,7 +68,7 @@ func main() {
 func discover(root string) (inventory, error) {
 	result := inventory{SchemaVersion: 1, Requests: []site{}, JSONCalls: []site{}, Columns: []column{}}
 	var err error
-	for _, directory := range []string{"internal", "cmd", "pkg"} {
+	for _, directory := range []string{"internal", "cmd", "pkg", "deploy/bundles"} {
 		err = filepath.WalkDir(filepath.Join(root, directory), func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -197,6 +197,9 @@ func discoverSites(path, relative string) ([]site, []site, error) {
 				item.Arguments = append(item.Arguments, expression(set, arg))
 			}
 			jsonCall := false
+			if qualified(call.Fun, aliases, "github.com/alphabravocompany/astronomer-go/internal/jsoncontract", "Decode") {
+				jsonCall = true
+			}
 			for _, method := range []string{"Marshal", "Unmarshal", "NewDecoder", "NewEncoder", "Valid"} {
 				if qualified(call.Fun, aliases, "encoding/json", method) {
 					jsonCall = true
