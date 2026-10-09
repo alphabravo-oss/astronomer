@@ -36,3 +36,12 @@ separate incomplete qualifications. W03 is active.
 No new JSON serializer is introduced by this slice. Typed metadata and OCI
 layout readers reuse the existing bounded strict distribution reader; W03 owns
 those schemas and their publisher/runtime consumers.
+
+The [private CA review receipt](publication-ca-review-evidence.json) exercises
+the actual signer adapter against an owned TLS registry. Without its approved
+CA signing fails; `--registry-cacert` with the owned immutable CA snapshot makes
+signing succeed, and the canonical verifier authenticates readback. The CLI
+composition supplies the same captured CA bytes to ORAS/readback and signing.
+An absolute regular executable is checked before layout preparation or the
+first write. This closes the earlier adapter coverage gap: the initial publisher
+fixture injected a QA signer to route its logical origin to an owned listener.

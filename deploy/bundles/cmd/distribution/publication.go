@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -29,6 +30,7 @@ type publicationOptions struct {
 	Trust           model.TrustPolicy
 	Network         httpclient.DestinationPolicy
 	Client          *http.Client
+	RegistryCAFile  string
 	// Only tests inject a signer that addresses their owned loopback registry;
 	// production signs the exact emitted repository@digest without rewriting it.
 	sign func(context.Context, string) error
@@ -50,6 +52,17 @@ func publishLayout(ctx context.Context, options publicationOptions) error {
 	if options.Mode == "qa" && (options.Trust.Provider != model.SignatureCosignKey || options.QAKeyFile == "") {
 		return errors.New("QA publication requires distinct mounted key policy")
 	}
+	if options.sign == nil {
+		if err := preflightSigner(options.CosignBinary); err != nil {
+			return err
+		}
+	}
+	ca, removeCA, err := snapshotRegistryCA(options.RegistryCAFile)
+	if err != nil {
+		return err
+	}
+	defer removeCA()
+	options.RegistryCAFile = ca
 	snapshot, cleanup, err := snapshotPreparedLayout(options.Directory)
 	if err != nil {
 		return err
@@ -126,10 +139,13 @@ func (transport registryAuthenticationTransport) RoundTrip(request *http.Request
 }
 
 func signPublishedSubject(ctx context.Context, options publicationOptions, reference string) error {
-	if options.CosignBinary == "" || !filepath.IsAbs(options.CosignBinary) {
-		return errors.New("qualified signer binary required")
+	if err := preflightSigner(options.CosignBinary); err != nil {
+		return err
 	}
 	arguments := []string{"sign", "--yes", "--new-bundle-format=false", "--registry-referrers-mode=legacy", "--use-signing-config=false"}
+	if options.RegistryCAFile != "" {
+		arguments = append(arguments, "--registry-cacert", options.RegistryCAFile)
+	}
 	if options.Mode == "qa" {
 		arguments = append(arguments, "--key", options.QAKeyFile, "--tlog-upload=false")
 	}
@@ -145,7 +161,48 @@ func signPublishedSubject(ctx context.Context, options publicationOptions, refer
 	return nil
 }
 
+func preflightSigner(binary string) error {
+	info, err := os.Lstat(binary)
+	if !filepath.IsAbs(binary) || err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+		return errors.New("absolute qualified signer executable required before publication")
+	}
+	return nil
+}
+
+func snapshotRegistryCA(name string) (string, func(), error) {
+	if name == "" {
+		return "", func() {}, nil
+	}
+	data, err := boundedFile(name, 1<<20)
+	if err != nil {
+		return "", nil, errors.New("bounded registry CA unavailable")
+	}
+	directory, err := os.MkdirTemp("", "astronomer-registry-ca-")
+	if err != nil {
+		return "", nil, errors.New("owned registry CA snapshot unavailable")
+	}
+	cleanup := func() { _ = os.RemoveAll(directory) }
+	snapshot := filepath.Join(directory, "registry-ca.pem")
+	if err := os.WriteFile(snapshot, data, 0600); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	if _, err := httpclient.TLSForCA(snapshot); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	return snapshot, cleanup, nil
+}
+
 func publishFromFlags(directory, expectedRelease, mode, cosignBinary, qaKey, trustDirectory, provider, keyRef, identity, issuer, networkFile, caFile string) error {
+	if err := preflightSigner(cosignBinary); err != nil {
+		return err
+	}
+	caFile, cleanupCA, err := snapshotRegistryCA(caFile)
+	if err != nil {
+		return err
+	}
+	defer cleanupCA()
 	network := httpclient.DestinationPolicy{}
 	if networkFile != "" {
 		data, err := boundedFile(networkFile, 64<<10)
@@ -174,5 +231,5 @@ func publishFromFlags(directory, expectedRelease, mode, cosignBinary, qaKey, tru
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	return publishLayout(ctx, publicationOptions{Directory: directory, ExpectedRelease: expectedRelease, Mode: mode, CosignBinary: cosignBinary, QAKeyFile: qaKey, TrustDirectory: trustDirectory, Trust: policy, Network: network, Client: client})
+	return publishLayout(ctx, publicationOptions{Directory: directory, ExpectedRelease: expectedRelease, Mode: mode, CosignBinary: cosignBinary, QAKeyFile: qaKey, TrustDirectory: trustDirectory, Trust: policy, Network: network, Client: client, RegistryCAFile: caFile})
 }
