@@ -1,0 +1,34 @@
+{
+  "time": "2026-10-09T21:32:34.009899+00:00",
+  "scope": "Task-owned completed ignored build outputs; sources and qualification receipts retained",
+  "removed": [
+    {
+      "path": "/root/astronomer-all/astronomer-032-w01/.artifacts/toolchain/bin",
+      "allocated_bytes": 802492416
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-032-w01/frontend/node_modules",
+      "allocated_bytes": 609181696
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-032-w01/frontend/dist",
+      "allocated_bytes": 31035392
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-032-w06/frontend/node_modules",
+      "allocated_bytes": 609136640
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-032-frontend-qualified-source/frontend/node_modules",
+      "allocated_bytes": 609169408
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-032-frontend-qualified-source/frontend/dist",
+      "allocated_bytes": 31035392
+    },
+    {
+      "path": "/root/astronomer-all/astronomer-032-form-review/frontend/node_modules",
+      "allocated_bytes": 609144832
+    }
+  ]
+}
