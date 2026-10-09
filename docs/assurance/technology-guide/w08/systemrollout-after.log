@@ -1,0 +1,108 @@
+=== RUN   TestServiceRejectsMissingAuditBeforeOpeningDatabase
+--- PASS: TestServiceRejectsMissingAuditBeforeOpeningDatabase (0.00s)
+=== RUN   TestPostgresSystemRolloutStartIdempotencyAndEligibility
+--- PASS: TestPostgresSystemRolloutStartIdempotencyAndEligibility (0.12s)
+=== RUN   TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction
+=== RUN   TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction/start
+=== RUN   TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction/action
+--- PASS: TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction (0.24s)
+    --- PASS: TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction/start (0.10s)
+    --- PASS: TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction/action (0.14s)
+=== RUN   TestPostgresSystemRolloutConcurrentFenceHasOneWinner
+--- PASS: TestPostgresSystemRolloutConcurrentFenceHasOneWinner (0.12s)
+=== RUN   TestPostgresSystemRolloutCohortPromotionAndRollback
+=== RUN   TestPostgresSystemRolloutCohortPromotionAndRollback/promotion
+=== RUN   TestPostgresSystemRolloutCohortPromotionAndRollback/partial_rollback
+--- PASS: TestPostgresSystemRolloutCohortPromotionAndRollback (0.23s)
+    --- PASS: TestPostgresSystemRolloutCohortPromotionAndRollback/promotion (0.12s)
+    --- PASS: TestPostgresSystemRolloutCohortPromotionAndRollback/partial_rollback (0.11s)
+=== RUN   TestPostgresSystemRolloutPromotionConflictRollsBackRetirement
+--- PASS: TestPostgresSystemRolloutPromotionConflictRollsBackRetirement (0.11s)
+=== RUN   TestActionTransitionIsClosedAndRequiresPreviousRelease
+=== PAUSE TestActionTransitionIsClosedAndRequiresPreviousRelease
+=== RUN   TestFailureThresholdUsesCountOrInclusivePercentage
+=== PAUSE TestFailureThresholdUsesCountOrInclusivePercentage
+=== RUN   TestCanonicalStrategyIsStableForExplicitCanaryOrder
+=== PAUSE TestCanonicalStrategyIsStableForExplicitCanaryOrder
+=== RUN   TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets
+=== PAUSE TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets
+=== RUN   TestSystemReleaseSlotsSupportsPercentageAndZeroUnavailable
+=== PAUSE TestSystemReleaseSlotsSupportsPercentageAndZeroUnavailable
+=== RUN   TestPartialCanaryRollbackCompletionUsesOnlyRollbackTargets
+=== PAUSE TestPartialCanaryRollbackCompletionUsesOnlyRollbackTargets
+=== RUN   TestScanViewRejectsMalformedStoredStrategyWithoutLeakingData
+--- PASS: TestScanViewRejectsMalformedStoredStrategyWithoutLeakingData (0.00s)
+=== RUN   TestScanViewRetainsValidAdditiveV1Strategy
+--- PASS: TestScanViewRetainsValidAdditiveV1Strategy (0.00s)
+=== RUN   TestSystemReleaseSlotsBoundsUnsignedBudgetsBeforeNarrowing
+--- PASS: TestSystemReleaseSlotsBoundsUnsignedBudgetsBeforeNarrowing (0.00s)
+=== CONT  TestActionTransitionIsClosedAndRequiresPreviousRelease
+=== RUN   TestActionTransitionIsClosedAndRequiresPreviousRelease/awaiting_approval_approve
+=== PAUSE TestActionTransitionIsClosedAndRequiresPreviousRelease/awaiting_approval_approve
+=== RUN   TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_pause
+=== PAUSE TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_pause
+=== RUN   TestActionTransitionIsClosedAndRequiresPreviousRelease/paused_resume
+=== PAUSE TestActionTransitionIsClosedAndRequiresPreviousRelease/paused_resume
+=== RUN   TestActionTransitionIsClosedAndRequiresPreviousRelease/queued_abort
+=== PAUSE TestActionTransitionIsClosedAndRequiresPreviousRelease/queued_abort
+=== CONT  TestSystemReleaseSlotsSupportsPercentageAndZeroUnavailable
+=== RUN   TestActionTransitionIsClosedAndRequiresPreviousRelease/failed_retry
+=== PAUSE TestActionTransitionIsClosedAndRequiresPreviousRelease/failed_retry
+=== RUN   TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_rollback
+=== PAUSE TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_rollback
+=== RUN   TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_rollback#01
+=== PAUSE TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_rollback#01
+=== RUN   TestActionTransitionIsClosedAndRequiresPreviousRelease/succeeded_resume
+=== CONT  TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets
+--- PASS: TestSystemReleaseSlotsSupportsPercentageAndZeroUnavailable (0.00s)
+=== CONT  TestPartialCanaryRollbackCompletionUsesOnlyRollbackTargets
+--- PASS: TestPartialCanaryRollbackCompletionUsesOnlyRollbackTargets (0.00s)
+=== CONT  TestFailureThresholdUsesCountOrInclusivePercentage
+--- PASS: TestFailureThresholdUsesCountOrInclusivePercentage (0.00s)
+=== CONT  TestCanonicalStrategyIsStableForExplicitCanaryOrder
+=== PAUSE TestActionTransitionIsClosedAndRequiresPreviousRelease/succeeded_resume
+=== RUN   TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/empty_fleet_budget
+=== RUN   TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_inject
+=== PAUSE TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/empty_fleet_budget
+=== RUN   TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/in_flight_reserves_both_budgets
+=== PAUSE TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/in_flight_reserves_both_budgets
+=== RUN   TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/failed_member_reserves_availability
+=== PAUSE TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/failed_member_reserves_availability
+=== RUN   TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/immature_ready_reserves_until_soak
+=== PAUSE TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_inject
+=== CONT  TestActionTransitionIsClosedAndRequiresPreviousRelease/awaiting_approval_approve
+=== CONT  TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_rollback
+=== CONT  TestActionTransitionIsClosedAndRequiresPreviousRelease/failed_retry
+=== PAUSE TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/immature_ready_reserves_until_soak
+=== RUN   TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/availability_exhausted
+--- PASS: TestCanonicalStrategyIsStableForExplicitCanaryOrder (0.00s)
+=== CONT  TestActionTransitionIsClosedAndRequiresPreviousRelease/queued_abort
+=== CONT  TestActionTransitionIsClosedAndRequiresPreviousRelease/succeeded_resume
+=== CONT  TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_pause
+=== CONT  TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_inject
+=== CONT  TestActionTransitionIsClosedAndRequiresPreviousRelease/paused_resume
+=== PAUSE TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/availability_exhausted
+=== CONT  TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_rollback#01
+=== CONT  TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/empty_fleet_budget
+--- PASS: TestActionTransitionIsClosedAndRequiresPreviousRelease (0.00s)
+    --- PASS: TestActionTransitionIsClosedAndRequiresPreviousRelease/awaiting_approval_approve (0.00s)
+    --- PASS: TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_rollback (0.00s)
+    --- PASS: TestActionTransitionIsClosedAndRequiresPreviousRelease/failed_retry (0.00s)
+    --- PASS: TestActionTransitionIsClosedAndRequiresPreviousRelease/succeeded_resume (0.00s)
+    --- PASS: TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_pause (0.00s)
+    --- PASS: TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_inject (0.00s)
+    --- PASS: TestActionTransitionIsClosedAndRequiresPreviousRelease/queued_abort (0.00s)
+    --- PASS: TestActionTransitionIsClosedAndRequiresPreviousRelease/paused_resume (0.00s)
+    --- PASS: TestActionTransitionIsClosedAndRequiresPreviousRelease/progressing_rollback#01 (0.00s)
+=== CONT  TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/immature_ready_reserves_until_soak
+=== CONT  TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/availability_exhausted
+=== CONT  TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/failed_member_reserves_availability
+=== CONT  TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/in_flight_reserves_both_budgets
+--- PASS: TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets (0.00s)
+    --- PASS: TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/empty_fleet_budget (0.00s)
+    --- PASS: TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/availability_exhausted (0.00s)
+    --- PASS: TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/in_flight_reserves_both_budgets (0.00s)
+    --- PASS: TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/failed_member_reserves_availability (0.00s)
+    --- PASS: TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets/immature_ready_reserves_until_soak (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout	0.826s

@@ -14,10 +14,12 @@ import (
 
 type Querier interface {
 	AbortCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error)
+	AbortSystemRolloutPendingAssignments(ctx context.Context, rolloutID pgtype.UUID) error
 	AcceptDeliveryStatusInventory(ctx context.Context, arg AcceptDeliveryStatusInventoryParams) (AcceptDeliveryStatusInventoryRow, error)
 	AcknowledgeAlertEvent(ctx context.Context, arg AcknowledgeAlertEventParams) error
 	AcknowledgeControlPlaneAlert(ctx context.Context, arg AcknowledgeControlPlaneAlertParams) (ControlPlaneAlert, error)
 	AcknowledgeDeliveryAssignmentSnapshot(ctx context.Context, arg AcknowledgeDeliveryAssignmentSnapshotParams) (DeliveryAssignmentReceipt, error)
+	ActSystemRollout(ctx context.Context, arg ActSystemRolloutParams) (DeliverySystemRollout, error)
 	ActivateCharlieConnection(ctx context.Context, arg ActivateCharlieConnectionParams) (CharlieConnection, error)
 	// Alert Rule Channels (M2M)
 	AddAlertRuleChannel(ctx context.Context, arg AddAlertRuleChannelParams) error
@@ -35,6 +37,7 @@ type Querier interface {
 	// in one pass. Batched equivalent of AggregateClusterVulnerabilities so
 	// the compliance-posture rollup avoids one query per cluster.
 	AggregateVulnerabilitiesPerCluster(ctx context.Context) ([]AggregateVulnerabilitiesPerClusterRow, error)
+	AppendSystemRolloutEvent(ctx context.Context, arg AppendSystemRolloutEventParams) error
 	ApplyDeliveryRolloutClusterTransitionCAS(ctx context.Context, arg ApplyDeliveryRolloutClusterTransitionCASParams) (DeliveryRolloutCluster, error)
 	ApplyDeliveryRolloutTransitionCAS(ctx context.Context, arg ApplyDeliveryRolloutTransitionCASParams) (DeliveryRollout, error)
 	// Materialize an immutable catalog template and bind it to a user in one
@@ -69,6 +72,7 @@ type Querier interface {
 	// entry has passed the registry/type checks, so one bad write can never leave
 	// an operator with a partially saved configuration.
 	BatchUpsertPlatformSettings(ctx context.Context, arg BatchUpsertPlatformSettingsParams) ([]PlatformSetting, error)
+	BeginSystemRolloutAssignmentRollback(ctx context.Context, arg BeginSystemRolloutAssignmentRollbackParams) error
 	BindCharlieSessionCentralID(ctx context.Context, arg BindCharlieSessionCentralIDParams) (CharlieSession, error)
 	BindCharlieSessionThread(ctx context.Context, arg BindCharlieSessionThreadParams) (CharlieSession, error)
 	BuiltinCatalogSourceMatches(ctx context.Context, arg BuiltinCatalogSourceMatchesParams) (bool, error)
@@ -176,6 +180,7 @@ type Querier interface {
 	CountActiveAlertsByRules(ctx context.Context, ruleIds []uuid.UUID) ([]CountActiveAlertsByRulesRow, error)
 	CountActiveDeliveryRollouts(ctx context.Context) (int64, error)
 	CountActiveKubectlSessionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	CountActiveSystemRollouts(ctx context.Context) (int64, error)
 	CountActiveTokensForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Drives the startup-time deprecation warning (migration 045). Counts
 	// enabled sso_configurations rows that have NOT been stamped as migrated
@@ -527,6 +532,7 @@ type Querier interface {
 	// ingest forever, since auth rejects tokens whose owner is inactive.
 	CreateServiceUser(ctx context.Context, arg CreateServiceUserParams) (User, error)
 	CreateSupportBundleOperation(ctx context.Context, arg CreateSupportBundleOperationParams) (CreateSupportBundleOperationRow, error)
+	CreateSystemRollout(ctx context.Context, arg CreateSystemRolloutParams) (DeliverySystemRollout, error)
 	CreateToolOperation(ctx context.Context, arg CreateToolOperationParams) (ToolOperation, error)
 	CreateToolOperationEvent(ctx context.Context, arg CreateToolOperationEventParams) (ToolOperationEvent, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
@@ -771,6 +777,7 @@ type Querier interface {
 	// the ON CONFLICT branch reachable; if the conflicting row was inserted by a
 	// concurrent server replica, the SELECT in the UNION returns it.
 	EnsureLocalCluster(ctx context.Context, arg EnsureLocalClusterParams) (EnsureLocalClusterRow, error)
+	EnsureSystemRolloutAssignment(ctx context.Context, arg EnsureSystemRolloutAssignmentParams) error
 	ExpireCharlieFindings(ctx context.Context, asOf pgtype.Timestamptz) (int64, error)
 	FailComponentBundleVersion(ctx context.Context, arg FailComponentBundleVersionParams) (ComponentBundleVersion, error)
 	FailCreatingCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error)
@@ -785,6 +792,7 @@ type Querier interface {
 	// state. Retry cleanup above is intentionally "superseded by retry"; normal
 	// success/failure must record the task's real outcome instead.
 	FinishRunningStepsForCluster(ctx context.Context, arg FinishRunningStepsForClusterParams) error
+	FinishSystemRollout(ctx context.Context, arg FinishSystemRolloutParams) error
 	FinishToolOperation(ctx context.Context, arg FinishToolOperationParams) (ToolOperation, error)
 	// API Tokens
 	GetAPITokenByID(ctx context.Context, id uuid.UUID) (ApiToken, error)
@@ -950,6 +958,7 @@ type Querier interface {
 	GetComponentBundleVersion(ctx context.Context, arg GetComponentBundleVersionParams) (ComponentBundleVersion, error)
 	GetControlPlaneSnapshotByID(ctx context.Context, id uuid.UUID) (ControlPlaneSnapshot, error)
 	GetCurrentDeliverySystemRollout(ctx context.Context) (DeliverySystemRollout, error)
+	GetCurrentSystemRolloutRelease(ctx context.Context) (uuid.UUID, error)
 	GetDashboardWidgetByID(ctx context.Context, id uuid.UUID) (DashboardWidget, error)
 	GetDefaultControlPlanePolicy(ctx context.Context) (ControlPlanePolicy, error)
 	GetDefaultMonitoringBackend(ctx context.Context) (MonitoringBackend, error)
@@ -1152,6 +1161,11 @@ type Querier interface {
 	GetSupportBundleArtifact(ctx context.Context, id uuid.UUID) (GetSupportBundleArtifactRow, error)
 	GetSupportBundleOperation(ctx context.Context, id uuid.UUID) (GetSupportBundleOperationRow, error)
 	GetSystemLoggingOutputByCluster(ctx context.Context, clusterID pgtype.UUID) (LoggingOutput, error)
+	GetSystemRollout(ctx context.Context, id uuid.UUID) (DeliverySystemRollout, error)
+	GetSystemRolloutAssignmentCounts(ctx context.Context, arg GetSystemRolloutAssignmentCountsParams) (GetSystemRolloutAssignmentCountsRow, error)
+	GetSystemRolloutByIdempotency(ctx context.Context, idempotencyKey string) (DeliverySystemRollout, error)
+	GetSystemRolloutForUpdate(ctx context.Context, id uuid.UUID) (DeliverySystemRollout, error)
+	GetSystemRolloutReleaseStateForUpdate(ctx context.Context, id uuid.UUID) (string, error)
 	GetTokenByHash(ctx context.Context, tokenHash string) (ApiToken, error)
 	GetToolBySlug(ctx context.Context, slug string) (ClusterTool, error)
 	GetToolOperation(ctx context.Context, id uuid.UUID) (ToolOperation, error)
@@ -1866,6 +1880,7 @@ type Querier interface {
 	ListQueuedEmails(ctx context.Context, limit int32) ([]EmailMessage, error)
 	// Quota plans CRUD --------------------------------------------------------
 	ListQuotaPlansPage(ctx context.Context, arg ListQuotaPlansPageParams) ([]QuotaPlan, error)
+	ListReconcilableSystemRollouts(ctx context.Context, dollar_1 int32) ([]uuid.UUID, error)
 	ListRecoverableAuthoredConstraints(ctx context.Context, limit int32) ([]AuthoredConstraint, error)
 	// Recover rows whose initial delivery was lost, whose consumer crashed while
 	// holding a lease, or whose durable next-poll timestamp is now due.
@@ -1920,6 +1935,8 @@ type Querier interface {
 	ListSecurityScanResults(ctx context.Context, arg ListSecurityScanResultsParams) ([]SecurityScanResult, error)
 	ListSecurityScanResultsForScopes(ctx context.Context, arg ListSecurityScanResultsForScopesParams) ([]SecurityScanResult, error)
 	ListSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput, error)
+	ListSystemRolloutAssignments(ctx context.Context, rolloutID pgtype.UUID) ([]ListSystemRolloutAssignmentsRow, error)
+	ListSystemRolloutEligibleClusters(ctx context.Context) ([]uuid.UUID, error)
 	ListTokensByUser(ctx context.Context, arg ListTokensByUserParams) ([]ApiToken, error)
 	ListToolOperationEvents(ctx context.Context, operationID uuid.UUID) ([]ToolOperationEvent, error)
 	ListToolOperations(ctx context.Context, arg ListToolOperationsParams) ([]ToolOperation, error)
@@ -1984,6 +2001,9 @@ type Querier interface {
 	// does not exist yet. This transaction-scoped advisory lock gives each
 	// canonical provider key a stable lock before the transaction re-reads it.
 	LockSSOProviderKey(ctx context.Context, providerKey string) error
+	// System-rollout mutation methods run on the existing Serializable transaction.
+	// The global advisory lock is transactional, never acquired through a pool.
+	LockSystemRolloutTransaction(ctx context.Context, dollar_1 string) error
 	LockUser(ctx context.Context, arg LockUserParams) error
 	// Serializes the per-table view cap for one user and table.
 	LockUserTableViewScope(ctx context.Context, dollar_1 string) error
@@ -2113,6 +2133,7 @@ type Querier interface {
 	NextCharlieThreadSessionSequence(ctx context.Context, threadID uuid.UUID) (int32, error)
 	ObserveDeliverySystemAssignment(ctx context.Context, arg ObserveDeliverySystemAssignmentParams) (ObserveDeliverySystemAssignmentRow, error)
 	PromoteDeliverySystemBootstrapRelease(ctx context.Context, releaseID string) error
+	PromoteSystemRolloutRelease(ctx context.Context, arg PromoteSystemRolloutReleaseParams) (int64, error)
 	// Retain live sessions regardless of age. Terminal connection rows are useful
 	// operational history, but must not grow forever on reconnect-heavy estates.
 	PruneAgentConnectionHistoryBefore(ctx context.Context, cutoff time.Time) (int64, error)
@@ -2174,6 +2195,7 @@ type Querier interface {
 	ReleaseDeliveryRolloutClusterCAS(ctx context.Context, arg ReleaseDeliveryRolloutClusterCASParams) (DeliveryRolloutCluster, error)
 	ReleaseDeliveryRolloutLease(ctx context.Context, arg ReleaseDeliveryRolloutLeaseParams) (DeliveryRollout, error)
 	ReleaseInstalledChartDriftClaim(ctx context.Context, arg ReleaseInstalledChartDriftClaimParams) (int64, error)
+	ReleaseSystemRolloutNextCohort(ctx context.Context, arg ReleaseSystemRolloutNextCohortParams) (int64, error)
 	RemoveAlertRuleChannel(ctx context.Context, arg RemoveAlertRuleChannelParams) error
 	// Long-running side effects renew ownership in the background. A zero row
 	// count means the lease was superseded and the runner must stop.
@@ -2209,9 +2231,11 @@ type Querier interface {
 	ResolveComponentBundleVersion(ctx context.Context, arg ResolveComponentBundleVersionParams) (ComponentBundleVersion, error)
 	ResolveControlPlaneAlert(ctx context.Context, arg ResolveControlPlaneAlertParams) (ControlPlaneAlert, error)
 	RestoreDexSSOForGeneration(ctx context.Context, arg RestoreDexSSOForGenerationParams) (RestoreDexSSOForGenerationRow, error)
+	RetirePreviousSystemRolloutReleases(ctx context.Context, arg RetirePreviousSystemRolloutReleasesParams) error
 	RetryDeadCharlieTriggerEventWithOutbox(ctx context.Context, arg RetryDeadCharlieTriggerEventWithOutboxParams) (RetryDeadCharlieTriggerEventWithOutboxRow, error)
 	RetryDeliverySourceResolution(ctx context.Context, arg RetryDeliverySourceResolutionParams) (DeliverySourceResolution, error)
 	RetryManagementBackupDestinationGeneration(ctx context.Context, arg RetryManagementBackupDestinationGenerationParams) (ManagementBackupDestination, error)
+	RetrySystemRolloutAssignments(ctx context.Context, rolloutID pgtype.UUID) error
 	// Admin-triggered re-dispatch. Resets the row so the next dispatcher
 	// tick picks it up immediately, regardless of where it was in the
 	// backoff schedule.
@@ -2479,6 +2503,7 @@ type Querier interface {
 	// pattern, analogous to webhook_subscriptions.secret_encrypted).
 	UpdateSIEMForwarder(ctx context.Context, arg UpdateSIEMForwarderParams) (SiemForwarder, error)
 	UpdateSSOConfiguration(ctx context.Context, arg UpdateSSOConfigurationParams) (SsoConfiguration, error)
+	UpdateSystemRolloutCounters(ctx context.Context, arg UpdateSystemRolloutCountersParams) error
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error

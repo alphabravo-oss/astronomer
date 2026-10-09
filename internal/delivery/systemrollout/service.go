@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -142,7 +143,8 @@ func (s *Service) Start(ctx context.Context, request StartRequest) (View, error)
 		return View{}, fmt.Errorf("begin system rollout: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, advisoryLockName); err != nil {
+	q := sqlc.New(tx)
+	if err := q.LockSystemRolloutTransaction(ctx, advisoryLockName); err != nil {
 		return View{}, fmt.Errorf("lock system rollout: %w", err)
 	}
 
@@ -158,8 +160,8 @@ func (s *Service) Start(ctx context.Context, request StartRequest) (View, error)
 		return View{}, err
 	}
 
-	var releaseState string
-	if err := tx.QueryRow(ctx, `SELECT state FROM delivery_system_releases WHERE id=$1 FOR UPDATE`, request.ReleaseID).Scan(&releaseState); err != nil {
+	releaseState, err := q.GetSystemRolloutReleaseStateForUpdate(ctx, request.ReleaseID)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return View{}, fmt.Errorf("%w: release does not exist", ErrNotFound)
 		}
@@ -168,47 +170,32 @@ func (s *Service) Start(ctx context.Context, request StartRequest) (View, error)
 	if releaseState != "draft" {
 		return View{}, fmt.Errorf("%w: system release must be draft", ErrPrecondition)
 	}
-	var active int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM delivery_system_rollouts WHERE state IN ('awaiting_approval','queued','progressing','paused','rolling_back')`).Scan(&active); err != nil {
+	active, err := q.CountActiveSystemRollouts(ctx)
+	if err != nil {
 		return View{}, fmt.Errorf("count active system rollouts: %w", err)
 	}
 	if active != 0 {
 		return View{}, fmt.Errorf("%w: another system rollout is active", ErrConflict)
 	}
 
-	var previous pgtype.UUID
-	if err := tx.QueryRow(ctx, `SELECT id FROM delivery_system_releases WHERE state='released'`).Scan(&previous); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	previousID, err := q.GetCurrentSystemRolloutRelease(ctx)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return View{}, fmt.Errorf("load current system release: %w", err)
 	}
-	if !previous.Valid {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return View{}, fmt.Errorf("%w: no current system release exists", ErrPrecondition)
 	}
 
-	rows, err := tx.Query(ctx, `
-		SELECT c.id
-		FROM clusters c
-		WHERE c.decommissioned_at IS NULL
-		  AND c.is_local = false
-		  AND c.registration_phase = 'ready'
-		  AND EXISTS (SELECT 1 FROM cluster_agent_tokens t WHERE t.cluster_id=c.id AND t.revoked_at IS NULL)
-		ORDER BY c.id`)
+	previous := pgtype.UUID{Bytes: previousID, Valid: true}
+	ids, err := q.ListSystemRolloutEligibleClusters(ctx)
 	if err != nil {
 		return View{}, fmt.Errorf("snapshot managed clusters: %w", err)
 	}
 	var candidates []placement.Candidate
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return View{}, fmt.Errorf("scan managed cluster: %w", err)
-		}
+	for _, id := range ids {
 		candidates = append(candidates, placement.Candidate{ID: id})
 	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return View{}, fmt.Errorf("snapshot managed clusters: %w", err)
-	}
-	rows.Close()
+
 	if len(candidates) == 0 {
 		return View{}, fmt.Errorf("%w: no enrolled managed clusters are eligible", ErrPrecondition)
 	}
@@ -228,36 +215,23 @@ func (s *Service) Start(ctx context.Context, request StartRequest) (View, error)
 	if request.ActorID != uuid.Nil {
 		initiatedBy = pgtype.UUID{Bytes: request.ActorID, Valid: true}
 	}
-	row := tx.QueryRow(ctx, `
-		INSERT INTO delivery_system_rollouts (
-			id,release_id,previous_release_id,strategy,strategy_digest,state,total_clusters,
-			idempotency_key,progress_deadline,initiated_by
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-		RETURNING id,release_id,previous_release_id,strategy,strategy_digest,state,fencing_generation,
-			total_clusters,ready_clusters,failed_clusters,released_clusters,progress_deadline,
-			started_at,completed_at,last_error_code,created_at,updated_at`,
-		rolloutID, request.ReleaseID, previous, strategyJSON, strategyDigest, state,
-		len(planned), key, deadline, initiatedBy)
-	view, err := scanView(row)
+	if len(planned) > math.MaxInt32 {
+		return View{}, fmt.Errorf("%w: managed cluster count exceeds supported range", ErrPrecondition)
+	}
+	record, err := q.CreateSystemRollout(ctx, sqlc.CreateSystemRolloutParams{ID: rolloutID, ReleaseID: request.ReleaseID, PreviousReleaseID: previous, Strategy: strategyJSON, StrategyDigest: strategyDigest, State: state, TotalClusters: int32(len(planned)), IdempotencyKey: key, ProgressDeadline: timestamp(deadline), InitiatedBy: initiatedBy})
+	view, err := viewFromRecord(record, err)
 	if err != nil {
 		return View{}, fmt.Errorf("insert system rollout: %w", err)
 	}
 	for _, item := range planned {
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO delivery_system_cluster_assignments (
-				cluster_id,desired_release_id,previous_release_id,rollout_id,generation,cohort,release_order,phase,deadline
-			) VALUES ($1,$2,$3,$4,COALESCE((SELECT generation+1 FROM delivery_system_cluster_assignments WHERE cluster_id=$1),1),$5,$6,'pending',$7)
-			ON CONFLICT (cluster_id) DO UPDATE SET
-				desired_release_id=EXCLUDED.desired_release_id, previous_release_id=EXCLUDED.previous_release_id,
-				rollout_id=EXCLUDED.rollout_id, generation=delivery_system_cluster_assignments.generation+1,
-				cohort=EXCLUDED.cohort, release_order=EXCLUDED.release_order, phase='pending',
-				fence=delivery_system_cluster_assignments.fence+1, released_at=NULL,
-				acknowledged_at=NULL, ready_at=NULL, deadline=EXCLUDED.deadline,
-				observed_distribution_digest='', observed_agent_version='', last_error_code=''`,
-			item.ClusterID, request.ReleaseID, previous, rolloutID, item.Cohort, item.Order, deadline); err != nil {
+		if item.Cohort < 0 || item.Cohort > math.MaxInt32 || item.Order < 0 || item.Order > math.MaxInt32 {
+			return View{}, fmt.Errorf("%w: cohort index exceeds supported range", ErrPrecondition)
+		}
+		if err := q.EnsureSystemRolloutAssignment(ctx, sqlc.EnsureSystemRolloutAssignmentParams{ClusterID: item.ClusterID, DesiredReleaseID: request.ReleaseID, PreviousReleaseID: previous, RolloutID: uuidValue(rolloutID), Cohort: int32(item.Cohort), ReleaseOrder: int32(item.Order), Deadline: timestamp(deadline)}); err != nil {
 			return View{}, fmt.Errorf("insert system assignment: %w", err)
 		}
 	}
+
 	if err := appendEvent(ctx, tx, rolloutID, request.ReleaseID, 1, "rollout_created", "", state, "approval_required", strategyDigest, now); err != nil {
 		return View{}, err
 	}
@@ -271,7 +245,7 @@ func (s *Service) Start(ctx context.Context, request StartRequest) (View, error)
 }
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (View, error) {
-	view, err := getView(ctx, s.pool, id)
+	view, err := viewFromRecord(sqlc.New(s.pool).GetSystemRollout(ctx, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return View{}, ErrNotFound
 	}
@@ -279,28 +253,15 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (View, error) {
 }
 
 func (s *Service) Assignments(ctx context.Context, id uuid.UUID) ([]Assignment, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT cluster_id,generation,cohort,release_order,phase,observed_distribution_digest,
-		       observed_agent_version,last_error_code,last_observed_at
-		FROM delivery_system_cluster_assignments WHERE rollout_id=$1
-		ORDER BY cohort,release_order,cluster_id`, id)
+	rows, err := sqlc.New(s.pool).ListSystemRolloutAssignments(ctx, uuidValue(id))
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	items := make([]Assignment, 0)
-	for rows.Next() {
-		var item Assignment
-		var observed pgtype.Timestamptz
-		if err := rows.Scan(&item.ClusterID, &item.Generation, &item.Cohort, &item.ReleaseOrder,
-			&item.Phase, &item.ObservedDistributionDigest, &item.ObservedAgentVersion,
-			&item.LastErrorCode, &observed); err != nil {
-			return nil, err
-		}
-		item.LastObservedAt = timePointer(observed)
-		items = append(items, item)
+	items := make([]Assignment, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, Assignment{ClusterID: row.ClusterID, Generation: row.Generation, Cohort: row.Cohort, ReleaseOrder: row.ReleaseOrder, Phase: row.Phase, ObservedDistributionDigest: row.ObservedDistributionDigest, ObservedAgentVersion: row.ObservedAgentVersion, LastErrorCode: row.LastErrorCode, LastObservedAt: timePointer(row.LastObservedAt)})
 	}
-	return items, rows.Err()
+	return items, nil
 }
 
 // Act performs a user-requested CAS transition. The periodic reconciler owns
@@ -321,7 +282,8 @@ func (s *Service) Act(ctx context.Context, id uuid.UUID, expectedFence int64, ac
 		return View{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, advisoryLockName); err != nil {
+	q := sqlc.New(tx)
+	if err := q.LockSystemRolloutTransaction(ctx, advisoryLockName); err != nil {
 		return View{}, err
 	}
 	current, err := getViewForUpdate(ctx, tx, id)
@@ -345,30 +307,21 @@ func (s *Service) Act(ctx context.Context, id uuid.UUID, expectedFence int64, ac
 		}
 	}
 	if action == ActionRetry {
-		if _, err := tx.Exec(ctx, `UPDATE delivery_system_cluster_assignments SET phase='pending',last_error_code='',released_at=NULL,acknowledged_at=NULL,ready_at=NULL,fence=fence+1 WHERE rollout_id=$1 AND phase='failed'`, id); err != nil {
+		if err := q.RetrySystemRolloutAssignments(ctx, uuidValue(id)); err != nil {
 			return View{}, err
 		}
 	}
 	if action == ActionAbort {
-		if _, err := tx.Exec(ctx, `UPDATE delivery_system_cluster_assignments SET phase='aborted',fence=fence+1 WHERE rollout_id=$1 AND phase='pending'`, id); err != nil {
+		if err := q.AbortSystemRolloutPendingAssignments(ctx, uuidValue(id)); err != nil {
 			return View{}, err
 		}
 	}
-	var completed any
+	var completed pgtype.Timestamptz
 	if next == "aborted" {
-		completed = now
+		completed = timestamp(now)
 	}
-	row := tx.QueryRow(ctx, `
-		UPDATE delivery_system_rollouts SET state=$2::text,fencing_generation=fencing_generation+1,
-			lease_owner='',lease_expires_at=NULL,last_error_code=$3,
-			started_at=CASE WHEN $2::text IN ('queued','progressing','rolling_back') THEN COALESCE(started_at,$4) ELSE started_at END,
-			completed_at=COALESCE($5::timestamptz,completed_at)
-		WHERE id=$1 AND fencing_generation=$6
-		RETURNING id,release_id,previous_release_id,strategy,strategy_digest,state,fencing_generation,
-			total_clusters,ready_clusters,failed_clusters,released_clusters,progress_deadline,
-			started_at,completed_at,last_error_code,created_at,updated_at`,
-		id, next, errorCode, now, completed, expectedFence)
-	updated, err := scanView(row)
+	updated, err := viewFromRecord(q.ActSystemRollout(ctx, sqlc.ActSystemRolloutParams{ID: id, State: next, LastErrorCode: errorCode, StartedAt: timestamp(now), CompletedAt: completed, FencingGeneration: expectedFence}))
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return View{}, ErrConflict
@@ -433,7 +386,8 @@ func (s *Service) ReconcileOne(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, advisoryLockName); err != nil {
+	q := sqlc.New(tx)
+	if err := q.LockSystemRolloutTransaction(ctx, advisoryLockName); err != nil {
 		return err
 	}
 	current, err := getViewForUpdate(ctx, tx, id)
@@ -517,12 +471,12 @@ func (s *Service) ReconcileOne(ctx context.Context, id uuid.UUID) error {
 		}
 	}
 	if current.State == "progressing" && current.ReadyClusters == current.TotalClusters {
-		if _, err := tx.Exec(ctx, `UPDATE delivery_system_releases SET state='retired',retired_at=$2 WHERE state='released' AND id<>$1`, current.ReleaseID, now); err != nil {
+		if err := q.RetirePreviousSystemRolloutReleases(ctx, sqlc.RetirePreviousSystemRolloutReleasesParams{ID: current.ReleaseID, RetiredAt: timestamp(now)}); err != nil {
 			return err
 		}
-		if tag, err := tx.Exec(ctx, `UPDATE delivery_system_releases SET state='released',released_at=COALESCE(released_at,$2),retired_at=NULL WHERE id=$1 AND state='draft'`, current.ReleaseID, now); err != nil {
+		if affected, err := q.PromoteSystemRolloutRelease(ctx, sqlc.PromoteSystemRolloutReleaseParams{ID: current.ReleaseID, ReleasedAt: timestamp(now)}); err != nil {
 			return err
-		} else if tag.RowsAffected() != 1 {
+		} else if affected != 1 {
 			return fmt.Errorf("promote system release: %w", ErrConflict)
 		}
 		return finish(ctx, tx, current, "succeeded", "", now)
@@ -546,20 +500,11 @@ func (s *Service) Sweep(ctx context.Context, limit int) error {
 	if limit < 1 || limit > 100 {
 		limit = 16
 	}
-	rows, err := s.pool.Query(ctx, `SELECT id FROM delivery_system_rollouts WHERE state IN ('queued','progressing','rolling_back') ORDER BY created_at LIMIT $1`, limit)
+	ids, err := sqlc.New(s.pool).ListReconcilableSystemRollouts(ctx, int32(limit))
 	if err != nil {
 		return err
 	}
-	var ids []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-		ids = append(ids, id)
-	}
-	rows.Close()
+
 	for _, id := range ids {
 		if err := s.ReconcileOne(ctx, id); err != nil {
 			return err
@@ -575,49 +520,24 @@ type counts struct {
 }
 
 func assignmentCounts(ctx context.Context, tx pgx.Tx, id uuid.UUID, minReady time.Duration) (counts, error) {
-	var c counts
-	err := tx.QueryRow(ctx, `
-		SELECT
-			count(*) FILTER (WHERE phase='ready'),
-			count(*) FILTER (WHERE phase='failed'),
-			count(*) FILTER (WHERE phase<>'pending'),
-			count(*) FILTER (WHERE phase='pending'),
-			count(*) FILTER (WHERE phase IN ('released','applying')),
-			count(*) FILTER (WHERE phase='ready' AND ready_at > now() - ($2 * interval '1 millisecond')),
-			count(*) FILTER (WHERE phase='rolled_back'),
-			count(*) FILTER (WHERE phase='rollback_failed'),
-			count(*) FILTER (WHERE phase IN ('rolling_back','rolled_back','rollback_failed')),
-			count(*) FILTER (WHERE phase='pending' AND cohort=0),
-			COALESCE(max(cohort) FILTER (WHERE phase='ready'),-1)
-		FROM delivery_system_cluster_assignments WHERE rollout_id=$1`, id, minReady.Milliseconds()).
-		Scan(&c.ready, &c.failed, &c.released, &c.pending, &c.inFlight, &c.immatureReady,
-			&c.rolledBack, &c.rollbackFailed, &c.rollbackTargets, &c.pendingCanary, &c.maxReadyCohort)
-	return c, err
+	row, err := sqlc.New(tx).GetSystemRolloutAssignmentCounts(ctx, sqlc.GetSystemRolloutAssignmentCountsParams{RolloutID: uuidValue(id), MinReadyMs: minReady.Milliseconds()})
+	if err != nil {
+		return counts{}, err
+	}
+	return counts{ready: row.Ready, failed: row.Failed, released: row.Released, pending: row.Pending, inFlight: row.InFlight, immatureReady: row.ImmatureReady, rolledBack: row.RolledBack, rollbackFailed: row.RollbackFailed, rollbackTargets: row.RollbackTargets, pendingCanary: row.PendingCanary, maxReadyCohort: row.MaxReadyCohort}, nil
 }
-
 func releaseNextCohort(ctx context.Context, tx pgx.Tx, id uuid.UUID, now time.Time, limit int32) (int32, error) {
 	if limit <= 0 {
 		return 0, nil
 	}
-	tag, err := tx.Exec(ctx, `
-		WITH next_assignments AS (
-			SELECT cluster_id
-			FROM delivery_system_cluster_assignments
-			WHERE rollout_id=$1
-			  AND cohort=(SELECT min(cohort) FROM delivery_system_cluster_assignments WHERE rollout_id=$1 AND phase='pending')
-			  AND phase='pending'
-			ORDER BY release_order,cluster_id
-			LIMIT $3
-			FOR UPDATE
-		)
-		UPDATE delivery_system_cluster_assignments AS assignment
-		SET phase='released',released_at=$2,fence=assignment.fence+1
-		FROM next_assignments
-		WHERE assignment.cluster_id=next_assignments.cluster_id`, id, now, limit)
+	affected, err := sqlc.New(tx).ReleaseSystemRolloutNextCohort(ctx, sqlc.ReleaseSystemRolloutNextCohortParams{RolloutID: uuidValue(id), ReleasedAt: timestamp(now), ReleaseLimit: limit})
 	if err != nil {
 		return 0, err
 	}
-	return int32(tag.RowsAffected()), nil
+	if affected < 0 || affected > int64(limit) {
+		return 0, errors.New("system rollout release count exceeds requested limit")
+	}
+	return int32(affected), nil
 }
 
 func rollbackComplete(current counts) bool {
@@ -628,14 +548,10 @@ func beginRollback(ctx context.Context, tx pgx.Tx, current View, reason string, 
 	if current.PreviousReleaseID == nil {
 		return fmt.Errorf("%w: previous release is unavailable", ErrPrecondition)
 	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE delivery_system_cluster_assignments SET
-			desired_release_id=$2,previous_release_id=$3,generation=generation+1,phase='rolling_back',
-			fence=fence+1,released_at=$4,acknowledged_at=NULL,ready_at=NULL,
-			observed_distribution_digest='',observed_agent_version='',last_error_code=''
-		WHERE rollout_id=$1 AND phase NOT IN ('pending','aborted')`, current.ID, *current.PreviousReleaseID, current.ReleaseID, now); err != nil {
+	if err := sqlc.New(tx).BeginSystemRolloutAssignmentRollback(ctx, sqlc.BeginSystemRolloutAssignmentRollbackParams{RolloutID: uuidValue(current.ID), DesiredReleaseID: *current.PreviousReleaseID, PreviousReleaseID: uuidValue(current.ReleaseID), ReleasedAt: timestamp(now)}); err != nil {
 		return err
 	}
+
 	return appendEvent(ctx, tx, current.ID, current.ReleaseID, current.FencingGeneration+1,
 		"rollback_started", current.State, "rolling_back", reason, current.StrategyDigest, now)
 }
@@ -667,13 +583,10 @@ func finish(ctx context.Context, tx pgx.Tx, current View, state, code string, no
 	from := current.State
 	current.State = state
 	current.LastErrorCode = code
-	if _, err := tx.Exec(ctx, `
-		UPDATE delivery_system_rollouts SET state=$2::text,fencing_generation=fencing_generation+1,
-			ready_clusters=$3,failed_clusters=$4,released_clusters=$5,last_error_code=$6,
-			completed_at=$7,lease_owner='',lease_expires_at=NULL WHERE id=$1`, current.ID, state,
-		current.ReadyClusters, current.FailedClusters, current.ReleasedClusters, code, now); err != nil {
+	if err := sqlc.New(tx).FinishSystemRollout(ctx, sqlc.FinishSystemRolloutParams{ID: current.ID, State: state, ReadyClusters: current.ReadyClusters, FailedClusters: current.FailedClusters, ReleasedClusters: current.ReleasedClusters, LastErrorCode: code, CompletedAt: timestamp(now)}); err != nil {
 		return err
 	}
+
 	if err := appendEvent(ctx, tx, current.ID, current.ReleaseID, current.FencingGeneration+1,
 		"rollout_"+state, from, state, code, current.StrategyDigest, now); err != nil {
 		return err
@@ -682,14 +595,10 @@ func finish(ctx context.Context, tx pgx.Tx, current View, state, code string, no
 }
 
 func updateCountersAndCommit(ctx context.Context, tx pgx.Tx, current View) error {
-	if _, err := tx.Exec(ctx, `
-		UPDATE delivery_system_rollouts SET state=$2::text,fencing_generation=fencing_generation+1,
-			ready_clusters=$3,failed_clusters=$4,released_clusters=$5,last_error_code=$6,
-			started_at=CASE WHEN $2::text IN ('progressing','rolling_back') THEN COALESCE(started_at,now()) ELSE started_at END,
-			lease_owner='',lease_expires_at=NULL WHERE id=$1`, current.ID, current.State,
-		current.ReadyClusters, current.FailedClusters, current.ReleasedClusters, current.LastErrorCode); err != nil {
+	if err := sqlc.New(tx).UpdateSystemRolloutCounters(ctx, sqlc.UpdateSystemRolloutCountersParams{ID: current.ID, State: current.State, ReadyClusters: current.ReadyClusters, FailedClusters: current.FailedClusters, ReleasedClusters: current.ReleasedClusters, LastErrorCode: current.LastErrorCode}); err != nil {
 		return err
 	}
+
 	return tx.Commit(ctx)
 }
 
@@ -726,56 +635,36 @@ func decisionDigest(action Action, actor uuid.UUID, reason string, fence int64) 
 }
 
 func appendEvent(ctx context.Context, tx pgx.Tx, rolloutID, releaseID uuid.UUID, generation int64, eventType, from, to, reason, digest string, now time.Time) error {
-	_, err := tx.Exec(ctx, `
-		INSERT INTO delivery_system_events (rollout_id,release_id,generation,event_type,from_phase,to_phase,reason_code,decision_digest,occurred_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, rolloutID, releaseID, generation, eventType, from, to, reason, digest, now)
-	return err
+	return sqlc.New(tx).AppendSystemRolloutEvent(ctx, sqlc.AppendSystemRolloutEventParams{RolloutID: uuidValue(rolloutID), ReleaseID: releaseID, Generation: generation, EventType: eventType, FromPhase: from, ToPhase: to, ReasonCode: reason, DecisionDigest: digest, OccurredAt: now})
 }
 
-type rowScanner interface{ Scan(...any) error }
-
-func scanView(row rowScanner) (View, error) {
-	var value View
-	var previous pgtype.UUID
-	var strategy []byte
-	var deadline, started, completed pgtype.Timestamptz
-	err := row.Scan(&value.ID, &value.ReleaseID, &previous, &strategy, &value.StrategyDigest,
-		&value.State, &value.FencingGeneration, &value.TotalClusters, &value.ReadyClusters,
-		&value.FailedClusters, &value.ReleasedClusters, &deadline, &started, &completed,
-		&value.LastErrorCode, &value.CreatedAt, &value.UpdatedAt)
+func viewFromRecord(row sqlc.DeliverySystemRollout, err error) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	if value.Strategy, err = model.ReadRolloutStrategyV1(strategy); err != nil {
+	value := View{ID: row.ID, ReleaseID: row.ReleaseID, StrategyDigest: row.StrategyDigest, State: row.State, FencingGeneration: row.FencingGeneration, TotalClusters: row.TotalClusters, ReadyClusters: row.ReadyClusters, FailedClusters: row.FailedClusters, ReleasedClusters: row.ReleasedClusters, LastErrorCode: row.LastErrorCode, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	if value.Strategy, err = model.ReadRolloutStrategyV1(row.Strategy); err != nil {
 		return View{}, fmt.Errorf("decode persisted system strategy: %w", err)
 	}
-	if previous.Valid {
-		id := uuid.UUID(previous.Bytes)
+	if row.PreviousReleaseID.Valid {
+		id := uuid.UUID(row.PreviousReleaseID.Bytes)
 		value.PreviousReleaseID = &id
 	}
-	value.ProgressDeadline = timePointer(deadline)
-	value.StartedAt = timePointer(started)
-	value.CompletedAt = timePointer(completed)
+	value.ProgressDeadline = timePointer(row.ProgressDeadline)
+	value.StartedAt = timePointer(row.StartedAt)
+	value.CompletedAt = timePointer(row.CompletedAt)
 	return value, nil
 }
-
-const viewColumns = `id,release_id,previous_release_id,strategy,strategy_digest,state,fencing_generation,
-	total_clusters,ready_clusters,failed_clusters,released_clusters,progress_deadline,
-	started_at,completed_at,last_error_code,created_at,updated_at`
-
-func getView(ctx context.Context, db interface {
-	QueryRow(context.Context, string, ...any) pgx.Row
-}, id uuid.UUID) (View, error) {
-	return scanView(db.QueryRow(ctx, `SELECT `+viewColumns+` FROM delivery_system_rollouts WHERE id=$1`, id))
-}
-
 func getViewForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (View, error) {
-	return scanView(tx.QueryRow(ctx, `SELECT `+viewColumns+` FROM delivery_system_rollouts WHERE id=$1 FOR UPDATE`, id))
+	return viewFromRecord(sqlc.New(tx).GetSystemRolloutForUpdate(ctx, id))
 }
-
 func getByIdempotency(ctx context.Context, tx pgx.Tx, key string) (View, error) {
-	return scanView(tx.QueryRow(ctx, `SELECT `+viewColumns+` FROM delivery_system_rollouts WHERE idempotency_key=$1`, key))
+	return viewFromRecord(sqlc.New(tx).GetSystemRolloutByIdempotency(ctx, key))
 }
+func timestamp(value time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: value, Valid: true}
+}
+func uuidValue(value uuid.UUID) pgtype.UUID { return pgtype.UUID{Bytes: value, Valid: true} }
 
 func timePointer(value pgtype.Timestamptz) *time.Time {
 	if !value.Valid {
