@@ -23,15 +23,17 @@ case "$qualification_postgres_major" in
   17|18) ;;
   *) echo 'qualification: only declared PostgreSQL 17/18 lanes are allowed' >&2; return 2 ;;
 esac
+export POSTGRES_QUALIFICATION_MAJOR="$qualification_postgres_major"
 qualification_postgres_image="$(qualification_runtime_value postgres "$qualification_postgres_major" image)"
 qualification_valkey_image="$(qualification_runtime_value valkey image)"
 
 qualification_postgres_run() {
-  local container="$1" user="$2" password="$3" database="$4" port="${5:-}"
+  local container="$1" user="$2" password="$3" database="$4" port="${5:-}" role="${6:-runtime}"
+  case "$role" in runtime|postgres-outage) ;; *) echo "qualification: unowned fixture role" >&2; return 2 ;; esac
   local entrypoint
   entrypoint="$(docker_test_host_path "$qualification_root/scripts/testdata/qualification/postgres-entrypoint.sh")"
   docker run -d --name "$container" \
-    --label astronomer.qualification=disposable-runtime \
+    --label astronomer.qualification=disposable-runtime --label "astronomer.qualification.role=$role" \
     --user 0 --entrypoint /bin/bash \
     -e POSTGRES_USER="$user" -e POSTGRES_PASSWORD="$password" -e POSTGRES_DB="$database" \
     -e QUALIFICATION_POSTGRES_MAJOR="$qualification_postgres_major" \

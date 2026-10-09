@@ -28,7 +28,7 @@ postgres_port=""
 for _ in $(seq 1 20); do
   port_seed="$(openssl rand -hex 2)"
   candidate_port=$((20000 + 16#$port_seed % 40000))
-  if qualification_postgres_run "$postgres_container" postgres_outage "$credential" postgres_outage "$candidate_port" 2>/dev/null; then
+  if qualification_postgres_run "$postgres_container" postgres_outage "$credential" postgres_outage "$candidate_port" postgres-outage 2>/dev/null; then
     postgres_port="$candidate_port"
     break
   fi

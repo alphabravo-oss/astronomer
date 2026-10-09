@@ -58,6 +58,9 @@ WITH catalog AS (
   SELECT 'constraint|' || c.relname || '|' || con.conname || '|' || pg_get_constraintdef(con.oid, true)
   FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public'
+    -- PostgreSQL18 records validated/enforced NOT NULL twice: here and in
+    -- information_schema.is_nullable above. Keep NOT VALID/unenforced rows.
+    AND NOT (con.contype='n' AND con.convalidated AND COALESCE((to_jsonb(con)->>'conenforced')::boolean, true))
   UNION ALL
   SELECT 'index|' || tablename || '|' || indexname || '|' || indexdef
   FROM pg_indexes WHERE schemaname = 'public'
