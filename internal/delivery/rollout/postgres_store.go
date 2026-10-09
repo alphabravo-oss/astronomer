@@ -491,18 +491,15 @@ func (tx *postgresPlanningTransaction) EnqueueRollout(ctx context.Context, rollo
 }
 
 func decodeFrozenPlan(row sqlc.DeliveryRollout) (FrozenRollout, error) {
-	var plan FrozenRollout
-	if err := decodeStrict(row.FrozenPlan, &plan); err != nil {
-		return FrozenRollout{}, fail(CodeInvariant, "frozen_plan", "stored plan is invalid")
+	plan, err := ReadFrozenRolloutV1(row.FrozenPlan)
+	if err != nil {
+		return FrozenRollout{}, err
 	}
 	if plan.ID != row.ID || plan.TargetID != row.TargetID || int64(plan.TargetGeneration) != row.TargetGeneration ||
 		plan.Desired.BundleVersionID != row.ToBundleVersionID || plan.PlacementDigest.String() != row.PlacementDigest ||
 		plan.StrategyDigest.String() != row.StrategyDigest || plan.PlanDigest.String() != row.PlanDigest ||
 		plan.RequestDigest.String() != row.RequestDigest || plan.IdempotencyKey != row.IdempotencyKey {
 		return FrozenRollout{}, fail(CodeInvariant, "frozen_plan", "does not match indexed rollout identity")
-	}
-	if err := plan.Validate(); err != nil {
-		return FrozenRollout{}, &Error{Code: CodeInvariant, Field: "frozen_plan", Cause: err}
 	}
 	return plan, nil
 }

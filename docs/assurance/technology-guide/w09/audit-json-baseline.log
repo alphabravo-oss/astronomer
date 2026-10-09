@@ -1,0 +1,30 @@
+=== RUN   TestRecordOutboxRejectsUnencodableDetailBeforeWrite
+    outbox_test.go:81: unencodable detail lost before durable write: err=<nil> wrote=true
+--- FAIL: TestRecordOutboxRejectsUnencodableDetailBeforeWrite (0.00s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/audit	0.010s
+=== RUN   TestDispatchAuditOutboxCorruptDetailContinuesValidRows
+=== RUN   TestDispatchAuditOutboxCorruptDetailContinuesValidRows/null
+2026/10/09 20:28:14 INFO audit event recorded event=audit_recorded source=service action=cluster.delete resource_type=cluster resource_id=""
+2026/10/09 20:28:14 INFO audit event recorded event=audit_recorded source=service action=cluster.delete resource_type=cluster resource_id=""
+    audit_outbox_dispatch_test.go:133: invalid audit detail delivered or valid row lost: delivered=2 failed=0
+=== RUN   TestDispatchAuditOutboxCorruptDetailContinuesValidRows/[]
+2026/10/09 20:28:14 INFO audit event recorded event=audit_recorded source=service action=cluster.delete resource_type=cluster resource_id=""
+2026/10/09 20:28:14 INFO audit event recorded event=audit_recorded source=service action=cluster.delete resource_type=cluster resource_id=""
+    audit_outbox_dispatch_test.go:133: invalid audit detail delivered or valid row lost: delivered=2 failed=0
+=== RUN   TestDispatchAuditOutboxCorruptDetailContinuesValidRows/{"private-fixture"
+2026/10/09 20:28:14 INFO audit event recorded event=audit_recorded source=service action=cluster.delete resource_type=cluster resource_id=""
+2026/10/09 20:28:14 INFO audit event recorded event=audit_recorded source=service action=cluster.delete resource_type=cluster resource_id=""
+    audit_outbox_dispatch_test.go:133: invalid audit detail delivered or valid row lost: delivered=2 failed=0
+=== RUN   TestDispatchAuditOutboxCorruptDetailContinuesValidRows/{}_{}
+2026/10/09 20:28:14 INFO audit event recorded event=audit_recorded source=service action=cluster.delete resource_type=cluster resource_id=""
+2026/10/09 20:28:14 INFO audit event recorded event=audit_recorded source=service action=cluster.delete resource_type=cluster resource_id=""
+    audit_outbox_dispatch_test.go:133: invalid audit detail delivered or valid row lost: delivered=2 failed=0
+--- FAIL: TestDispatchAuditOutboxCorruptDetailContinuesValidRows (0.00s)
+    --- FAIL: TestDispatchAuditOutboxCorruptDetailContinuesValidRows/null (0.00s)
+    --- FAIL: TestDispatchAuditOutboxCorruptDetailContinuesValidRows/[] (0.00s)
+    --- FAIL: TestDispatchAuditOutboxCorruptDetailContinuesValidRows/{"private-fixture" (0.00s)
+    --- FAIL: TestDispatchAuditOutboxCorruptDetailContinuesValidRows/{}_{} (0.00s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	0.044s
+FAIL

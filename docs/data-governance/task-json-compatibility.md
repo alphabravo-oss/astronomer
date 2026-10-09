@@ -26,3 +26,12 @@ reader. The PostgreSQL `InsertRollout` boundary now invokes that validator befor
 any SQL call, including nested strategy, membership, indexed identity and
 immutable digest checks. This check supplements the planner's validation and
 does not grant tenant authorization.
+
+Audit JSON v1 uses a bounded object envelope containing sanitized additive
+domain values. `before`/`after` snapshots and historically domain-owned `tags`
+values remain opaque. The reader preserves arbitrary JSON numbers instead of
+converting them to `float64`. A marshal failure now rejects the audit intent
+before a write, rather than replacing its detail with `{}`. The dispatcher
+validates detail before atomic delivery, retries corrupt rows with a bounded
+category, and continues valid rows. The publisher also refuses corrupt detail
+instead of emitting an apparently valid empty event.

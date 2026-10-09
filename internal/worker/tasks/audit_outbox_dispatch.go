@@ -10,6 +10,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 const (
@@ -68,9 +69,13 @@ func DispatchAuditOutboxOnce(ctx context.Context, deps AuditOutboxDispatchDeps) 
 
 func dispatchAuditOutboxRow(ctx context.Context, deps AuditOutboxDispatchDeps, row sqlc.AuditOutbox, nowFn func() time.Time) error {
 	deliveredAt := nowFn().UTC()
-	delivered, err := deps.Queries.DeliverAuditOutbox(ctx, sqlc.DeliverAuditOutboxParams{
-		OutboxID: row.ID, DeliveredAt: pgtype.Timestamptz{Time: deliveredAt, Valid: true},
-	})
+	_, err := jsoncontract.ReadAuditDetailV1(row.Detail)
+	var delivered sqlc.DeliverAuditOutboxRow
+	if err == nil {
+		delivered, err = deps.Queries.DeliverAuditOutbox(ctx, sqlc.DeliverAuditOutboxParams{
+			OutboxID: row.ID, DeliveredAt: pgtype.Timestamptz{Time: deliveredAt, Valid: true},
+		})
+	}
 	if err == nil {
 		audit.PublishOutboxDelivery(delivered)
 		return nil

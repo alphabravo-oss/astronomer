@@ -289,9 +289,10 @@ func buildRow(event Event) (sqlc.CreateAuditLogV1Params, bool) {
 	}
 	if len(payload) > 0 {
 		buf, err := json.Marshal(payload)
-		if err == nil {
-			raw = buf
+		if err != nil {
+			return sqlc.CreateAuditLogV1Params{}, false
 		}
+		raw = buf
 	}
 
 	if event.Source == "" {
