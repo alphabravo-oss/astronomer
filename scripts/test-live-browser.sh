@@ -53,6 +53,7 @@ qualification_k3s_image="$(python3 scripts/qualification-kubernetes.py)"
 suffix="$$-$(date +%s)-$(openssl rand -hex 4)"
 artifact_dir="${LIVE_BROWSER_ARTIFACT_DIR:-${TMPDIR:-/tmp}/astronomer-live-browser-$suffix}"
 mkdir -p "$artifact_dir/bin" "$artifact_dir/playwright-report" "$artifact_dir/test-results"
+bash scripts/check-build-capacity.sh --json >"$artifact_dir/capacity-before.json"
 artifact_dir="$(cd "$artifact_dir" && pwd)"
 if [[ "${LIVE_BROWSER_ENGINEERING:-0}" != "1" ]]; then
   cat >"$artifact_dir/engineering-not-run.json" <<'JSON'
@@ -433,7 +434,6 @@ qualification_kubectl_version="$(kubectl version --client=true -o json | python3
 docker build --pull=false --build-arg "KUBECTL_VERSION=$qualification_kubectl_version" \
   --build-arg "GIT_COMMIT=$(git rev-parse HEAD)" -t "$shell_fixture_image" \
   -f deploy/docker/Dockerfile.shell . >"$artifact_dir/build-shell.log" 2>&1
-k3d image import -c "$flux_cluster" "$shell_fixture_image" >"$artifact_dir/import-shell.log" 2>&1
 docker image inspect "$shell_fixture_image" --format '{{.Id}}' >"$artifact_dir/shell-image-id.log"
 docker pull "$rustfs_image" >"$artifact_dir/pull-rustfs.log" 2>&1
 # k3d imports local image tags; the source bytes remain pinned above.
@@ -482,6 +482,9 @@ k3d cluster create "$flux_cluster" --servers 1 --agents 0 --no-lb \
 flux_created=1
 k3d kubeconfig get "$flux_cluster" >"$flux_kubeconfig"
 chmod 0600 "$flux_kubeconfig"
+shell_platform="$(docker image inspect "$shell_fixture_image" --format '{{.Os}}/{{.Architecture}}')"
+docker save --platform "$shell_platform" "$shell_fixture_image" >"$artifact_dir/shell-fixture-image.tar"
+k3d image import "$artifact_dir/shell-fixture-image.tar" -c "$flux_cluster" >"$artifact_dir/import-shell.log" 2>&1
 # Export only this host platform: a pulled multi-platform index may reference
 # architectures Docker has not downloaded, which containerd cannot import.
 rustfs_platform="$(docker image inspect "$rustfs_fixture_image" --format '{{.Os}}/{{.Architecture}}')"

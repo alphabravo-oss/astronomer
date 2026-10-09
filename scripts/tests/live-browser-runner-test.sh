@@ -22,7 +22,7 @@ PATH="$WORK_DIR:/usr/bin:/bin" "$RUNNER" --validate-only >/dev/null
 required_patterns=(
   'qualification_postgres_run'
   'KUBECTL_SHELL_IMAGE=$shell_fixture_image'
-  'k3d image import -c "$flux_cluster" "$shell_fixture_image"'
+  'k3d image import "$artifact_dir/shell-fixture-image.tar" -c "$flux_cluster"'
   'qualification_k3s_image="$(python3 scripts/qualification-kubernetes.py)"'
   '--image "$qualification_k3s_image"'
   'arbitrary Kubernetes image overrides are not allowed'
@@ -95,6 +95,18 @@ for pattern in "${required_patterns[@]}"; do
     exit 1
   }
 done
+
+# A real initial candidate exposed import-before-create. Reject that ordering
+# for both first-party shell and S3 fixture images before a new stack is run.
+python3 - "$RUNNER" <<'PYORDER'
+from pathlib import Path
+import sys
+source = Path(sys.argv[1]).read_text()
+created = source.index('flux_created=1')
+for import_statement in ('k3d image import "$artifact_dir/shell-fixture-image.tar"', 'k3d image import "$artifact_dir/s3-fixture-images.tar"'):
+    if source.index(import_statement) < created:
+        raise SystemExit("live fixture images must be imported after owned cluster creation")
+PYORDER
 
 if grep -Eq 'localhost:(5433|6380)|k3d cluster delete \$|kubectl config use-context|member-a|member-b' "$RUNNER"; then
   echo "live-browser runner must not use existing compose endpoints or mutable Kubernetes context" >&2
