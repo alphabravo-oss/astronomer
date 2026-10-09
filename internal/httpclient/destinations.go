@@ -38,20 +38,19 @@ func ParseDestinationPolicy(raw string) (DestinationPolicy, error) {
 	if raw == "" {
 		return policy, nil
 	}
-	if !strings.HasPrefix(strings.TrimSpace(raw), "{") {
-		return policy, errors.New("destination policy must be a JSON object")
-	}
 	if len(raw) > 64<<10 {
 		return policy, errors.New("destination policy exceeds size limit")
 	}
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&policy); err != nil {
+	var decoded *DestinationPolicy
+	if err := decoder.Decode(&decoded); err != nil || decoded == nil {
 		return policy, errors.New("destination policy is invalid")
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return policy, errors.New("destination policy has trailing input")
 	}
+	policy = *decoded
 	if err := policy.Validate(); err != nil {
 		return policy, err
 	}

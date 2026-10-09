@@ -14,7 +14,7 @@
     "internal/handler/backups_helpers.go": "69772e4fc181929da4288cefd5c3f99f693e3f82624753741a3193955d5b80b8",
     "internal/handler/backups_network.go": "cc8dfd5d72074c3fe62dfd389122fe56a13bfbe138ddaf26eea434abc956d063",
     "internal/handler/backups_network_test.go": "2fa313f9e3c7046bf4ecd2657797541e9ea6c8836c3793852da44f039da76197",
-    "internal/httpclient/destinations.go": "5723cb339264ce40406a436b7ae3d29205d287ba9c9cd44e225d6419e6f3280b",
+    "internal/httpclient/destinations.go": "502911f46ddef020be452e7c2f4775e20192003fc08f31bb54a663ad31643982",
     "internal/httpclient/destinations_test.go": "e79159cfdc79227c138fab68ead445afd007e801e79cb8793cb9ecb80d1e1388",
     "internal/httpclient/trust.go": "ad22e6ad43dc8ba643acb780674e7c0bf170885a2b012c0a18ad95b138f8574b",
     "internal/server/app_backup_network.go": "89eb5d9d3b3f6a4ab3f69f51ca53585d4c38082b34e798bcb2c673fecaf07746",
