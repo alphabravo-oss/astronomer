@@ -91,7 +91,7 @@ type safeClientFactory struct{}
 
 func (safeClientFactory) Client(policy NetworkPolicy, tlsConfig *tls.Config, proxyRaw string, limits Limits) (*http.Client, error) {
 	limits = limits.withDefaults()
-	client, err := httpclient.NewDestinationClient(httpclient.DestinationPolicy{PrivateHosts: policy.AllowedPrivateHosts, PrivateCIDRs: policy.AllowedPrivateCIDRs}, httpclient.DestinationOptions{TLSConfig: tlsConfig, ProxyURL: proxyRaw, Timeout: limits.Timeout, MaxRedirects: limits.MaxRedirects, MaxResponseBytes: limits.MaxArtifactBytes})
+	client, err := httpclient.NewDestinationClient(httpclient.DestinationPolicy{PrivateHosts: policy.AllowedPrivateHosts, PrivateCIDRs: policy.AllowedPrivateCIDRs}, httpclient.DestinationOptions{AllowPublicCrossOriginRedirects: true, SensitiveHeaders: []string{"Private-Token", "X-Gitlab-Token", "X-Auth-Token", "X-Api-Key"}, TLSConfig: tlsConfig, ProxyURL: proxyRaw, Timeout: limits.Timeout, MaxRedirects: limits.MaxRedirects, MaxResponseBytes: limits.MaxArtifactBytes})
 	if err != nil {
 		return nil, denied("source client policy is invalid")
 	}

@@ -32,7 +32,7 @@ func TestDestinationPolicyClosedOrigins(t *testing.T) {
 			t.Fatalf("accepted %s", raw)
 		}
 	}
-	for _, address := range []string{"10.43.0.1", "127.0.0.1", "::1", "169.254.169.254", "fe80::1", "::ffff:127.0.0.1", "fd00:ec2::254", "100.100.100.200", "224.0.0.1", "::"} {
+	for _, address := range []string{"10.43.0.1", "127.0.0.1", "::1", "169.254.169.254", "fe80::1", "::ffff:127.0.0.1", "fd00:ec2::254", "fd20:ce::254", "100.100.100.200", "224.0.0.1", "::"} {
 		mixed := func(_ context.Context, _, _ string) ([]netip.Addr, error) {
 			return []netip.Addr{netip.MustParseAddr("10.42.1.1"), netip.MustParseAddr(address)}, nil
 		}
@@ -121,7 +121,7 @@ func TestDestinationClientCopiesAuthorityAndBlocksPrivateMetadata(t *testing.T) 
 			t.Fatal(err)
 		}
 	}
-	for _, ip := range []string{"fd00:ec2::254", "100.100.100.200"} {
+	for _, ip := range []string{"fd00:ec2::254", "fd20:ce::254", "100.100.100.200"} {
 		policy, err := ParseDestinationPolicy(`{"restricted":true,"origins":[{"url":"https://metadata.corp","cidrs":["fc00::/7","100.64.0.0/10"]}]}`)
 		if err != nil {
 			t.Fatal(err)
@@ -160,3 +160,78 @@ func TestDestinationClientCopiesAuthorityAndBlocksPrivateMetadata(t *testing.T) 
 type roundTripFixture func(*http.Request) (*http.Response, error)
 
 func (f roundTripFixture) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
+
+func TestPublicCDNRedirectConnectsWithoutCredentialsAndBlocksPrivate(t *testing.T) {
+	received := 0
+	destination := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received++
+		for _, header := range []string{"Authorization", "Proxy-Authorization", "Cookie", "X-Internal-Credential"} {
+			if r.Header.Get(header) != "" {
+				t.Errorf("credential header %s crossed origin", header)
+			}
+		}
+		_, _ = io.WriteString(w, "verified fixture payload")
+	}))
+	defer destination.Close()
+	destinationPort := strings.Split(strings.TrimPrefix(destination.URL, "https://"), ":")[1]
+	redirectTo := "https://example.com:" + destinationPort + "/chart"
+	source := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, redirectTo, http.StatusFound) }))
+	defer source.Close()
+	sourcePort := strings.Split(strings.TrimPrefix(source.URL, "https://"), ":")[1]
+	lookup := func(_ context.Context, _, host string) ([]netip.Addr, error) {
+		if host == "private.corp" {
+			return []netip.Addr{netip.MustParseAddr("10.42.1.7")}, nil
+		}
+		return []netip.Addr{netip.MustParseAddr("203.0.113.7")}, nil
+	}
+	dials := 0
+	dial := func(ctx context.Context, network, address string) (net.Conn, error) {
+		dials++
+		host, port, _ := net.SplitHostPort(address)
+		if host != "203.0.113.7" {
+			t.Fatalf("unchecked/private connected IP %s", host)
+		}
+		var local string
+		if port == sourcePort {
+			local = strings.TrimPrefix(source.URL, "https://")
+		} else if port == destinationPort {
+			local = strings.TrimPrefix(destination.URL, "https://")
+		} else {
+			t.Fatal("unexpected port")
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, local)
+	}
+	trust := source.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+	trust.ServerName = "example.com"
+	policy := DestinationPolicy{PrivateHosts: []string{"private.corp"}, PrivateCIDRs: []netip.Prefix{netip.MustParsePrefix("10.42.1.0/24")}}
+	client, err := newDestinationClient(policy, DestinationOptions{Timeout: time.Second, TLSConfig: trust, AllowPublicCrossOriginRedirects: true, SensitiveHeaders: []string{"X-Internal-Credential"}}, lookup, dial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, _ := http.NewRequest("GET", "https://example.com:"+sourcePort+"/chart", nil)
+	for _, header := range []string{"Authorization", "Proxy-Authorization", "Cookie", "X-Internal-Credential"} {
+		request.Header.Set(header, "nonsecret-fixture-marker")
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if err != nil || string(body) != "verified fixture payload" || received != 1 || dials != 2 {
+		t.Fatalf("redirect result body=%q received=%d dials=%d error=%v", body, received, dials, err)
+	}
+	redirectTo = "https://private.corp:" + destinationPort + "/metadata"
+	if _, err = client.Get("https://example.com:" + sourcePort + "/chart"); err == nil || received != 1 || dials != 2 {
+		t.Fatalf("private redirect reached socket/destination: err=%v received=%d dials=%d", err, received, dials)
+	}
+	// Strict distribution/S3 defaults still deny even a public CDN redirect.
+	strict, err := newDestinationClient(DestinationPolicy{}, DestinationOptions{Timeout: time.Second, TLSConfig: trust}, lookup, dial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	redirectTo = "https://example.com:" + destinationPort + "/chart"
+	if _, err = strict.Get("https://example.com:" + sourcePort + "/chart"); err == nil || received != 1 {
+		t.Fatal("strict consumer silently accepted cross-origin fallback")
+	}
+}

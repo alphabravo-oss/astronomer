@@ -157,7 +157,7 @@ func (p DestinationPolicy) AllowsAddress(host string, address netip.Addr) bool {
 }
 
 func safeDestinationAddress(address netip.Addr) bool {
-	return address.IsValid() && address.IsGlobalUnicast() && !address.IsUnspecified() && !address.IsLoopback() && !address.IsLinkLocalUnicast() && !address.IsMulticast() && address != netip.MustParseAddr("fd00:ec2::254") && address != netip.MustParseAddr("100.100.100.200")
+	return address.IsValid() && address.IsGlobalUnicast() && !address.IsUnspecified() && !address.IsLoopback() && !address.IsLinkLocalUnicast() && !address.IsMulticast() && address != netip.MustParseAddr("fd00:ec2::254") && address != netip.MustParseAddr("fd20:ce::254") && address != netip.MustParseAddr("100.100.100.200")
 }
 
 func (p DestinationPolicy) allows(value *url.URL, address netip.Addr) bool {
@@ -210,6 +210,10 @@ type DestinationOptions struct {
 	MaxResponseBytes int64
 	MaxRedirects     int
 	ProxyURL         string
+	// AllowPublicCrossOriginRedirects preserves reviewed public CDN resolver behavior.
+	// Redirects always become public-only and lose credential-bearing headers.
+	AllowPublicCrossOriginRedirects bool
+	SensitiveHeaders                []string
 }
 
 // NewDestinationClient validates on every request and redirect, resolves every
@@ -220,6 +224,10 @@ func NewDestinationClient(policy DestinationPolicy, options DestinationOptions) 
 	if err := policy.Validate(); err != nil {
 		return nil, err
 	}
+	if options.AllowPublicCrossOriginRedirects && policy.Restricted {
+		return nil, errors.New("restricted destinations cannot allow public redirects")
+	}
+	options.SensitiveHeaders = append([]string(nil), options.SensitiveHeaders...)
 	if options.MaxResponseBytes > 512<<20 || options.Timeout > 5*time.Minute || options.MaxRedirects > 10 {
 		return nil, errors.New("destination client bounds are invalid")
 	}
@@ -268,10 +276,20 @@ func newDestinationClient(policy DestinationPolicy, options DestinationOptions, 
 		}
 
 		value := &url.URL{Scheme: scheme, Host: net.JoinHostPort(host, port)}
-		if !policy.permitsURL(value) {
+		activePolicy := policy
+		if restricted, _ := ctx.Value(publicRedirectKey{}).(bool); restricted {
+			activePolicy = DestinationPolicy{}
+		}
+		if options.ProxyURL != "" {
+			proxy, _ := parseOrigin(options.ProxyURL)
+			if proxy != nil && originIdentity(proxy) == originIdentity(value) {
+				activePolicy = policy
+			}
+		}
+		if !activePolicy.permitsURL(value) {
 			return nil, errors.New("destination connection is not permitted")
 		}
-		addresses, err := policy.addresses(ctx, value, lookup)
+		addresses, err := activePolicy.addresses(ctx, value, lookup)
 		if err != nil {
 			return nil, err
 		}
@@ -306,7 +324,15 @@ func newDestinationClient(policy DestinationPolicy, options DestinationOptions, 
 		if len(via) > 0 && originIdentity(via[0].URL) != originIdentity(request.URL) {
 			request.Header.Del("Authorization")
 			request.Header.Del("Proxy-Authorization")
-			return errors.New("cross-origin destination redirect is not permitted")
+			request.Header.Del("Cookie")
+			for _, header := range options.SensitiveHeaders {
+				request.Header.Del(header)
+			}
+			if !options.AllowPublicCrossOriginRedirects || policy.Restricted || request.URL.Scheme != "https" {
+				return errors.New("cross-origin destination redirect is not permitted")
+			}
+			*request = *request.WithContext(context.WithValue(request.Context(), publicRedirectKey{}, true))
+			return (DestinationPolicy{}).validateURL(request.Context(), request.URL.String(), lookup)
 		}
 		return policy.validateURL(request.Context(), request.URL.String(), lookup)
 	}
@@ -320,7 +346,11 @@ type destinationTransport struct {
 }
 
 func (t *destinationTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if err := t.policy.validateURL(request.Context(), request.URL.String(), t.lookup); err != nil {
+	policy := t.policy
+	if restricted, _ := request.Context().Value(publicRedirectKey{}).(bool); restricted {
+		policy = DestinationPolicy{}
+	}
+	if err := policy.validateURL(request.Context(), request.URL.String(), t.lookup); err != nil {
 		return nil, err
 	}
 	return t.base.RoundTrip(request.WithContext(context.WithValue(request.Context(), destinationSchemeKey{}, request.URL.Scheme)))
@@ -340,3 +370,5 @@ func entirelyPrivatePrefix(prefix netip.Prefix) bool {
 	}
 	return false
 }
+
+type publicRedirectKey struct{}
