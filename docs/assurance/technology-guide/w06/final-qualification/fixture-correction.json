@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "frozenFailedSource": "b2d3fd294b846d81cbbcafb01f2384d37b5ba5ce",
+  "runtimeValidationChanged": false,
+  "failures": [
+    {
+      "file": "frontend/src/lib/api/monitoring-stack.test.ts",
+      "count": 7,
+      "finding": "Mocked Axios responses omitted the HTTP status. Real handlers send status200 for reads/preview and202 for durable lifecycle/retry. The validator now rejects absent/undeclared statuses before adapters; missing-data assertion now checks the safe malformed-response error."
+    },
+    {
+      "file": "frontend/src/lib/api/read-cancellation.test.ts",
+      "count": 1,
+      "finding": "Socket fixture POST install sent default200 and an id-only receipt. Canonical tool install returns202 and a typed pending operation; fixture now supplies full required fields. The subsequent GET socket still blocks until cancellation and committed effect count remains1."
+    }
+  ],
+  "productionProofs": [
+    "internal/handler/monitoring_stack_cluster.go: RespondJSON(http.StatusAccepted) for lifecycle",
+    "internal/handler/monitoring_stack_shared.go: RespondAcceptedOperation for shared lifecycle",
+    "internal/handler/monitoring_operations.go: GET detail/list200; retry RespondAcceptedOperation",
+    "docs/openapi.yaml: monitoring read/preview200; lifecycle/retry202; tools install202 and ToolOperation schema"
+  ],
+  "focusedResult": {
+    "files": 2,
+    "tests": 17,
+    "status": "pass",
+    "logDigest": "sha256:71c3d1dc53c71381f77c69b254262da41b6a0fcb035ebd237b3bc1b2aabb0348"
+  },
+  "addedNegative": "A mocked synchronous200 for durable install is rejected; category validation remains unchanged.",
+  "limits": [
+    "Focused correction proof does not replace a clean frozen full-suite/build/browser rerun."
+  ]
+}

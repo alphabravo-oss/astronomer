@@ -293,6 +293,7 @@ verify_contract_artifacts() {
   run_logged openapi-spectral node scripts/openapi-spectral.mjs
 
   step "OpenAPI breaking-change review"
+  run_logged openapi-current-review-tests python3 scripts/tests/openapi_current_reviews_test.py
   run_logged openapi-breaking ./scripts/openapi-breaking-change.sh
 
   step "OpenAPI request-schema fields vs Go request structs"

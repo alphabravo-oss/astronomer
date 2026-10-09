@@ -1,0 +1,14 @@
+npm notice run astronomer-frontend@1.2.1 test
+npm notice run vitest run --maxWorkers=1 src/lib/api/monitoring-stack.test.ts src/lib/api/read-cancellation.test.ts
+
+ RUN  v5.0.3 /root/astronomer-all/astronomer-032-w12/frontend
+
+
+ Test Files  2 passed (2)
+      Tests  17 passed (17)
+   Start at  21:49:56
+   Duration  2.39s (environment 51%, transform 30%, import 8%, setup 6%, tests 4%, worker 1%)
+
+    Isolate  2 workers spawned · ~658ms startup each (spawn + environment, per file)
+             at least ~658ms faster with isolate: false — reuses workers across files instead of one per file
+
