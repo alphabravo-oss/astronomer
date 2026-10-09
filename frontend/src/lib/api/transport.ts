@@ -6,6 +6,7 @@ import axios, {
 
 import { clearLegacyTokenStorage } from "@/lib/auth/session";
 import { API_BASE } from "@/lib/env";
+import { refreshSession, waitForRefresh } from "./authentication-refresh";
 
 const CSRF_COOKIE = "astronomer_csrf";
 const CSRF_HEADER = "X-CSRF-Token";
@@ -70,20 +71,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: () => void;
-  reject: (error: unknown) => void;
-}> = [];
-
-function processQueue(error: unknown, ok: boolean) {
-  for (const pending of failedQueue) {
-    if (ok) pending.resolve();
-    else pending.reject(error);
-  }
-  failedQueue = [];
-}
-
 api.interceptors.response.use(
   (response) => response,
   async (
@@ -93,10 +80,12 @@ api.interceptors.response.use(
       code?: string;
     }>,
   ) => {
+    if (axios.isCancel(error)) return Promise.reject(error);
     const originalRequest = error.config as AstronomerRequestConfig;
     const isSessionEndpoint =
       originalRequest?.url?.includes("/auth/login") ||
-      originalRequest?.url?.includes("/auth/refresh");
+      originalRequest?.url?.includes("/auth/refresh") ||
+      originalRequest?.url?.includes("/auth/logout");
     if (
       error.response?.status === 401 &&
       !originalRequest?._retry &&
@@ -106,33 +95,18 @@ api.interceptors.response.use(
       // Mark queued followers as well as the refresh owner. A second 401 must
       // surface to the caller instead of re-entering the refresh flow.
       originalRequest._retry = true;
-      if (isRefreshing) {
-        return new Promise<void>((resolve, reject) =>
-          failedQueue.push({ resolve, reject }),
-        ).then(() => api(originalRequest));
-      }
-      isRefreshing = true;
-      try {
-        await axios.post(
-          `${API_BASE}/auth/refresh/`,
-          {},
-          {
-            headers: { "Content-Type": "application/json", ...csrfHeaders() },
-            withCredentials: true,
-          },
-        );
-        processQueue(null, true);
-        return api(originalRequest);
-      } catch (refreshError) {
-        processQueue(refreshError, false);
-        clearLegacyTokenStorage();
-        if (!window.location.pathname.startsWith("/auth")) {
-          window.location.href = `/auth/login?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`;
-        }
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
-      }
+      const refresh = refreshSession(
+        `${API_BASE}/auth/refresh/`,
+        { "Content-Type": "application/json", ...csrfHeaders() },
+        () => {
+          clearLegacyTokenStorage();
+          if (!window.location.pathname.startsWith("/auth")) {
+            window.location.href = `/auth/login?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+          }
+        },
+      );
+      await waitForRefresh(refresh, originalRequest.signal);
+      return api(originalRequest);
     }
 
     const message =
