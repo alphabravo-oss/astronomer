@@ -7253,7 +7253,7 @@
       "reader_bindings": [
         {
           "path": "internal/delivery/systemrollout/service.go",
-          "function": "scanView",
+          "function": "viewFromRecord",
           "operation": "model.ReadRolloutStrategyV1",
           "error_handling": "returned_typed_integrity_error"
         }
@@ -7468,7 +7468,7 @@
       "owner": "delivery",
       "schema_version": 1,
       "schema": "delivery-model-v1",
-      "reader_behavior": "ReadRolloutStrategyV1: bounded additive object + canonical model validation; scanView returns content-free integrity error",
+      "reader_behavior": "ReadRolloutStrategyV1: bounded additive object + canonical model validation; viewFromRecord returns content-free integrity error",
       "storage": "json_slot",
       "table": "delivery_system_rollouts",
       "sql_type": "jsonb",
@@ -7481,7 +7481,7 @@
       "reader_bindings": [
         {
           "path": "internal/delivery/systemrollout/service.go",
-          "function": "scanView",
+          "function": "viewFromRecord",
           "operation": "model.ReadRolloutStrategyV1",
           "error_handling": "returned_typed_integrity_error"
         }

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
@@ -143,16 +144,9 @@ func TestPartialCanaryRollbackCompletionUsesOnlyRollbackTargets(t *testing.T) {
 	}
 }
 
-type strategyFixtureRow []byte
-
-func (row strategyFixtureRow) Scan(destinations ...any) error {
-	*destinations[3].(*[]byte) = append([]byte(nil), row...)
-	return nil
-}
-
 func TestScanViewRejectsMalformedStoredStrategyWithoutLeakingData(t *testing.T) {
 	for _, raw := range []string{`null`, `{"type":"rolling","max_concurrent":0,"private-fixture":true}`, `{"max_concurrent":"private-fixture"}`} {
-		if _, err := scanView(strategyFixtureRow(raw)); err == nil {
+		if _, err := viewFromRecord(sqlc.DeliverySystemRollout{Strategy: []byte(raw)}, nil); err == nil {
 			t.Error("malformed stored strategy became a valid system rollout")
 		} else if strings.Contains(err.Error(), "private-fixture") {
 			t.Error("stored strategy leaked into reader error")
@@ -172,7 +166,7 @@ func TestScanViewRetainsValidAdditiveV1Strategy(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw = append(raw[:len(raw)-1], []byte(`,"future_v1":true}`)...)
-	view, err := scanView(strategyFixtureRow(raw))
+	view, err := viewFromRecord(sqlc.DeliverySystemRollout{Strategy: []byte(raw)}, nil)
 	if err != nil || view.Strategy.MaxConcurrent != 1 {
 		t.Fatalf("valid additive strategy lost: %v", err)
 	}

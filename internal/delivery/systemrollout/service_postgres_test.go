@@ -302,3 +302,42 @@ func TestPostgresSystemRolloutCohortPromotionAndRollback(t *testing.T) {
 		})
 	}
 }
+
+func TestPostgresSystemRolloutPromotionConflictRollsBackRetirement(t *testing.T) {
+	s, request := systemRolloutFixture(t)
+	request.Strategy.MaxConcurrent = 3
+	request.Strategy.MaxUnavailable.Value = 3
+	view, err := s.Start(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err = s.Act(t.Context(), view.ID, view.FencingGeneration, ActionApprove, request.ActorID, "approve", systemAudit("approve"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReconcileOne(t.Context(), view.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.pool.Exec(t.Context(), `UPDATE delivery_system_releases SET state='revoked' WHERE id=$1;`, request.ReleaseID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.pool.Exec(t.Context(), `UPDATE delivery_system_cluster_assignments SET phase='ready',ready_at=now()-interval '1 hour' WHERE rollout_id=$1`, view.ID); err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.Get(t.Context(), view.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReconcileOne(t.Context(), view.ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("zero-row promotion error=%v", err)
+	}
+	after, err := s.Get(t.Context(), view.ID)
+	if err != nil || after.State != before.State || after.FencingGeneration != before.FencingGeneration || after.ReadyClusters != before.ReadyClusters {
+		t.Fatal("promotion conflict committed rollout counters/fence")
+	}
+	var previousState string
+	if err := s.pool.QueryRow(t.Context(), `SELECT state FROM delivery_system_releases WHERE id=$1`, *view.PreviousReleaseID).Scan(&previousState); err != nil || previousState != "released" {
+		t.Fatal("zero-row promotion committed prior release retirement")
+	}
+	countRows(t, s, "delivery_system_events", 3)
+}
