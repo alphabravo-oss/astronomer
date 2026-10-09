@@ -11,13 +11,14 @@ import (
 // immutable OCI subjects used by that role. The signed member is the reviewed
 // manifest/configuration/tool archive, not a substitute for its runtime image.
 type Asset struct {
-	ID                   string   `json:"id"`
-	MemberPath           string   `json:"member_path"`
-	Images               []string `json:"images"`
-	ArtifactSubject      string   `json:"artifact_subject"`
-	PublishedSubject     string   `json:"published_subject"`
-	ArtifactManifestPath string   `json:"artifact_manifest_path"`
-	ArtifactConfigPath   string   `json:"artifact_config_path"`
+	DatabaseDescriptor   *DatabaseDescriptor `json:"database_descriptor,omitempty"`
+	ID                   string              `json:"id"`
+	MemberPath           string              `json:"member_path"`
+	Images               []string            `json:"images"`
+	ArtifactSubject      string              `json:"artifact_subject"`
+	PublishedSubject     string              `json:"published_subject"`
+	ArtifactManifestPath string              `json:"artifact_manifest_path"`
+	ArtifactConfigPath   string              `json:"artifact_config_path"`
 }
 
 var assetRoles = map[string]string{
@@ -35,7 +36,10 @@ var capabilityRoles = map[string][]string{
 	"platform-core": {"cnpg-operator", "cnpg-crds", "postgres-server", "barman-cloud-plugin", "barman-cloud-tools", "object-store", "dr-shell", "valkey", "dex", "fluent-bit", "charlie"},
 }
 
-func validateAssetDeclarations(assets []Asset, members map[string]string) error {
+func validateAssetDeclarations(version int, assets []Asset, members map[string]string) error {
+	if version != EmbeddedAssetContract && version != DescriptorAssetContract {
+		return errors.New("unsupported asset contract version")
+	}
 	seen := map[string]bool{}
 	for _, asset := range assets {
 		category, ok := assetRoles[asset.ID]
@@ -44,10 +48,20 @@ func validateAssetDeclarations(assets []Asset, members map[string]string) error 
 		}
 		seen[asset.ID] = true
 		database := asset.ID == "trivy-database" || asset.ID == "trivy-java-database"
+		if (!database || version == EmbeddedAssetContract) && asset.DatabaseDescriptor != nil {
+			return errors.New("descriptor is not allowed by asset role/contract")
+		}
 		if database {
 			repository, digest, ok := strings.Cut(asset.ArtifactSubject, "@")
-			if !ok || !digestPattern.MatchString(digest) || members[asset.ArtifactManifestPath] != "vulnerability_database" || members[asset.ArtifactConfigPath] != "vulnerability_database" || asset.ArtifactConfigPath == asset.ArtifactManifestPath || asset.ArtifactConfigPath == asset.MemberPath || asset.ArtifactManifestPath == asset.MemberPath || len(asset.Images) != 0 {
+			if !ok || !digestPattern.MatchString(digest) || members[asset.ArtifactManifestPath] != "vulnerability_database" || members[asset.ArtifactConfigPath] != "vulnerability_database" || asset.ArtifactConfigPath == asset.ArtifactManifestPath || len(asset.Images) != 0 {
 				return errors.New("distribution database artifact identity incomplete")
+			}
+			if version == EmbeddedAssetContract {
+				if asset.ArtifactConfigPath == asset.MemberPath || asset.ArtifactManifestPath == asset.MemberPath {
+					return errors.New("embedded database members collide")
+				}
+			} else if asset.MemberPath != asset.ArtifactManifestPath || asset.DatabaseDescriptor.validate(asset.ID) != nil {
+				return errors.New("descriptor-only database role/member claim invalid")
 			}
 			if _, err := builtinbundles.NormalizeOCISourceURL("oci://" + repository); err != nil {
 				return errors.New("distribution database repository invalid")
@@ -102,8 +116,8 @@ func validateCapabilityAssets(capabilities []string, assets []Asset) error {
 }
 
 // ValidateAssetClosure is the producer/consumer shared prerequisite contract.
-func ValidateAssetClosure(assets []Asset, members map[string]string, capabilities []string) error {
-	if err := validateAssetDeclarations(assets, members); err != nil {
+func ValidateAssetClosure(version int, assets []Asset, members map[string]string, capabilities []string) error {
+	if err := validateAssetDeclarations(version, assets, members); err != nil {
 		return err
 	}
 	return validateCapabilityAssets(capabilities, assets)
@@ -166,7 +180,7 @@ func ScannerValues(values map[string]any) (bool, map[string]any, error) {
 	return false, trivy, nil
 }
 
-func validateArtifactAssets(assets []Asset, members map[string][]byte) error {
+func validateArtifactAssets(version int, assets []Asset, members map[string][]byte) error {
 	for _, asset := range assets {
 		if asset.ArtifactSubject == "" {
 			continue
@@ -185,6 +199,16 @@ func validateArtifactAssets(assets []Asset, members map[string][]byte) error {
 		config := members[asset.ArtifactConfigPath]
 		if len(config) == 0 || len(config) > 1<<20 || manifest.Config.Digest.String() != contentDigest(config) || manifest.Config.Size != int64(len(config)) || len(manifest.Config.URLs) != 0 || len(manifest.Config.Data) != 0 {
 			return blocked("vulnerability_database", "database OCI configuration binding invalid")
+		}
+		if version == DescriptorAssetContract {
+			if manifest.Subject != nil || asset.DatabaseDescriptor.validate(asset.ID) != nil || !asset.DatabaseDescriptor.matches(layer) {
+				return blocked("vulnerability_database", "database descriptor differs from authenticated manifest")
+			}
+			var object map[string]any
+			if decodeClosed(config, &object) != nil || object == nil {
+				return blocked("vulnerability_database", "database configuration has ambiguous or invalid JSON")
+			}
+			continue
 		}
 		if layer.Digest.String() != contentDigest(payload) || layer.Size != int64(len(payload)) || len(layer.URLs) != 0 || len(layer.Data) != 0 {
 			return blocked("vulnerability_database", "database OCI payload binding invalid")

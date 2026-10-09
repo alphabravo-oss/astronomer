@@ -29,13 +29,13 @@ func TestEndorsedDatabaseSubjectPreservesOriginalDigest(t *testing.T) {
 	digest := "sha256:" + strings.Repeat("a", 64)
 	asset := Asset{ID: "trivy-database", MemberPath: "assets/db", ArtifactManifestPath: "assets/manifest", ArtifactConfigPath: "assets/config", ArtifactSubject: "supplier.example.test/db@" + digest, PublishedSubject: "vendor.example.test/assets/db@" + digest, Images: []string{}}
 	members := map[string]string{"assets/db": "vulnerability_database", "assets/manifest": "vulnerability_database", "assets/config": "vulnerability_database"}
-	if err := validateAssetDeclarations([]Asset{asset}, members); err != nil {
+	if err := validateAssetDeclarations(EmbeddedAssetContract, []Asset{asset}, members); err != nil {
 		t.Fatal(err)
 	}
 	for _, subject := range []string{"", "vendor.example.test/assets/db@sha256:" + strings.Repeat("b", 64), "invalid?target@" + digest} {
 		changed := asset
 		changed.PublishedSubject = subject
-		if err := validateAssetDeclarations([]Asset{changed}, members); err == nil {
+		if err := validateAssetDeclarations(EmbeddedAssetContract, []Asset{changed}, members); err == nil {
 			t.Fatal("missing/changed/invalid endorsed subject accepted")
 		}
 	}

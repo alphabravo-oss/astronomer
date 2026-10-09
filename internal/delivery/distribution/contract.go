@@ -68,7 +68,7 @@ func memberPath(value string) bool {
 func contentDigest(data []byte) string { return fmt.Sprintf("sha256:%x", sha256.Sum256(data)) }
 
 func (b BOM) validate(release, catalogDigest string) error {
-	if b.SchemaVersion != 1 || b.AssetContractVersion != 1 || b.Assets == nil || b.Release != release || !digestPattern.MatchString(b.CatalogDigest) || b.CatalogDigest != catalogDigest || len(b.Members) == 0 || len(b.Members) >= MaximumMembers || len(b.Profiles) == 0 {
+	if b.SchemaVersion != 1 || (b.AssetContractVersion != EmbeddedAssetContract && b.AssetContractVersion != DescriptorAssetContract) || b.Assets == nil || b.Release != release || !digestPattern.MatchString(b.CatalogDigest) || b.CatalogDigest != catalogDigest || len(b.Members) == 0 || len(b.Members) >= MaximumMembers || len(b.Profiles) == 0 {
 		return errors.New("distribution BOM is not bound to release catalog")
 	}
 	seen := map[string]bool{}
@@ -93,7 +93,7 @@ func (b BOM) validate(release, catalogDigest string) error {
 	for _, member := range b.Members {
 		memberKinds[member.Path] = member.Category
 	}
-	if err := validateAssetDeclarations(b.Assets, memberKinds); err != nil {
+	if err := validateAssetDeclarations(b.AssetContractVersion, b.Assets, memberKinds); err != nil {
 		return err
 	}
 	profiles := map[string]bool{}
