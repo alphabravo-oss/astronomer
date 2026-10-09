@@ -52,7 +52,21 @@ func main() {
 	applicationArchive := flag.String("verify-application-archive", "", "authenticate and verify a closed application archive before extraction")
 	releaseManifest := flag.String("validate-release-manifest", "", "authenticate and run the canonical release contract validator")
 	expectedRelease := flag.String("expected-release", "", "exact expected vX.Y.Z release identity")
+	publishDirectory := flag.String("publish-layout", "", "publish and canonically verify every immutable prepared OCI subject")
+	publisherMode := flag.String("publisher-mode", "production", "production vendor OIDC or distinct qa key identity")
+	cosignBinary := flag.String("cosign-bin", "", "absolute qualified signer binary path")
+	qaKey := flag.String("qa-signing-key", "", "QA-only local key file; never used by production OIDC mode")
+	networkFile := flag.String("destination-policy", "", "bounded operator destination policy JSON file")
+	caFile := flag.String("registry-ca-file", "", "operator-provided registry CA PEM file")
 	flag.Parse()
+	if *publishDirectory != "" {
+		if err := publishFromFlags(*publishDirectory, *expectedRelease, *publisherMode, *cosignBinary, *qaKey, *trustDirectory, *provider, *keyRef, *identity, *issuer, *networkFile, *caFile); err != nil {
+			fmt.Fprintln(os.Stderr, "verified immutable distribution publication blocked:", err)
+			os.Exit(1)
+		}
+		fmt.Println("verified immutable distribution publication")
+		return
+	}
 	if *releaseManifest != "" {
 		if err := validateReleaseManifest(*releaseManifest, *detachedSignature, *trustDirectory, *provider, *keyRef, *identity, *issuer, *expectedRelease); err != nil {
 			fmt.Fprintln(os.Stderr, "authenticated release contract rejected")

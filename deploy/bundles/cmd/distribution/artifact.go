@@ -401,6 +401,29 @@ func validateLayout(directory string) error {
 	if err := validateSubjectBlob(directory, index.Digest, index.ArchiveDigest, distribution.MediaType); err != nil {
 		return err
 	}
+	indexData, err := boundedFile(filepath.Join(directory, "index.json"), 1<<20)
+	var layoutIndex ocispec.Index
+	if err != nil || closedJSON(indexData, &layoutIndex) != nil || layoutIndex.SchemaVersion != 2 || len(layoutIndex.Manifests) != len(index.Children)+1 {
+		return errors.New("OCI layout index does not close declared subjects")
+	}
+	expectedReferences := map[string]string{"distribution": index.Digest}
+	for _, child := range index.Children {
+		expectedReferences[child.LayoutReference] = child.Digest
+	}
+	for _, descriptor := range layoutIndex.Manifests {
+		name := descriptor.Annotations[ocispec.AnnotationRefName]
+		if expectedReferences[name] == "" || descriptor.Digest.String() != expectedReferences[name] || descriptor.MediaType != ocispec.MediaTypeImageManifest || len(descriptor.URLs) != 0 || len(descriptor.Data) != 0 {
+			return errors.New("OCI layout reference differs from declared immutable subject")
+		}
+		data, err := boundedFile(filepath.Join(directory, "blobs", "sha256", descriptor.Digest.Encoded()), 1<<20)
+		if err != nil || descriptor.Size != int64(len(data)) {
+			return errors.New("OCI layout subject descriptor size differs")
+		}
+		delete(expectedReferences, name)
+	}
+	if len(expectedReferences) != 0 {
+		return errors.New("OCI layout reference omitted")
+	}
 	seen := map[string]bool{}
 	for _, child := range index.Children {
 		if seen[child.Component] || child.LayoutReference != "chart_"+child.Component {
@@ -436,8 +459,16 @@ func validateSubjectBlob(directory, subject, archiveDigest, media string) error 
 		return errors.New("emitted OCI subject identity changed")
 	}
 	var manifest ocispec.Manifest
-	if closedJSON(manifestBytes, &manifest) != nil || manifest.SchemaVersion != 2 || len(manifest.Layers) != 1 || manifest.Layers[0].Digest.String() != archiveDigest || manifest.Layers[0].MediaType != media || len(manifest.Layers[0].URLs) > 0 {
+	if closedJSON(manifestBytes, &manifest) != nil || manifest.SchemaVersion != 2 || len(manifest.Layers) != 1 || manifest.Layers[0].Digest.String() != archiveDigest || manifest.Layers[0].MediaType != media || len(manifest.Layers[0].URLs) > 0 || len(manifest.Layers[0].Data) > 0 {
 		return errors.New("emitted OCI payload descriptor changed")
+	}
+	configuration := manifest.Config
+	if configuration.Digest.Algorithm() != digest.SHA256 || configuration.Size <= 0 || configuration.Size > 1<<20 || len(configuration.URLs) != 0 || len(configuration.Data) != 0 {
+		return errors.New("OCI layout config descriptor invalid")
+	}
+	config, err := boundedFile(filepath.Join(directory, "blobs", "sha256", configuration.Digest.Encoded()), 1<<20)
+	if err != nil || sha(config) != configuration.Digest.String() || int64(len(config)) != configuration.Size {
+		return errors.New("OCI layout configuration missing or changed")
 	}
 	layer := manifest.Layers[0]
 	if layer.Digest.Algorithm() != digest.SHA256 {
