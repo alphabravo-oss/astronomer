@@ -64,17 +64,27 @@ func DecodeCursor(value, binding string) (Cursor, error) {
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	var cursor Cursor
+	// Keep the original closed wire format: signed-only fields are unknown
+	// even when their values would decode to zero values in Cursor.
+	var cursor struct {
+		Version int       `json:"v"`
+		Time    time.Time `json:"t"`
+		ID      uuid.UUID `json:"id"`
+		Binding string    `json:"b"`
+		Seen    int       `json:"n"`
+	}
 	if err := decoder.Decode(&cursor); err != nil {
 		return Cursor{}, ErrInvalidCursor
 	}
 	if err := ensureCursorEOF(decoder); err != nil {
 		return Cursor{}, ErrInvalidCursor
 	}
-	if err := validateCursor(cursor, binding); err != nil {
+	position := NewCursor(cursor.Time, cursor.ID, cursor.Binding, cursor.Seen)
+	position.Version = cursor.Version
+	if err := validateCursor(position, binding); err != nil {
 		return Cursor{}, err
 	}
-	return cursor, nil
+	return position, nil
 }
 
 func validateCursor(cursor Cursor, binding string) error {

@@ -1,6 +1,7 @@
 package pagination
 
 import (
+	"encoding/base64"
 	"errors"
 	"strings"
 	"testing"
@@ -8,6 +9,27 @@ import (
 
 	"github.com/google/uuid"
 )
+
+func TestLegacyCursorRejectsSignedOnlyFieldsEvenWhenEmpty(t *testing.T) {
+	binding := Binding("clusters")
+	position := NewCursor(time.Now(), uuid.New(), binding, 0)
+	token, err := EncodeCursor(position)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"k":null`, `"g":null`, `"iat":0`} {
+		t.Run(field, func(t *testing.T) {
+			extended := append(append([]byte{}, raw[:len(raw)-1]...), []byte(","+field+"}")...)
+			if _, err := DecodeCursor(base64.RawURLEncoding.EncodeToString(extended), binding); !errors.Is(err, ErrInvalidCursor) {
+				t.Fatalf("legacy cursor accepted signed-only field: %v", err)
+			}
+		})
+	}
+}
 
 func TestCursorRoundTripAndBinding(t *testing.T) {
 	binding := Binding("clusters", "status=active", "scope=all")
