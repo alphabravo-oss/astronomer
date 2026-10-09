@@ -1,0 +1,35 @@
+{
+  "source_commit": "42a8f8f28fc9e729b9ce18b9c983a6ee759b6e20",
+  "started_at": "2026-10-09T22:33:17.197894+00:00",
+  "completed_at": "2026-10-09T22:33:21.293740+00:00",
+  "postgres_major": 18,
+  "cluster": "plan032-postgres18",
+  "database": "plan032_w09_review18",
+  "schema": "72|f",
+  "race": true,
+  "expected": 14,
+  "terminal": {
+    "TestServiceRejectsMissingAuditBeforeOpeningDatabase": "pass",
+    "TestPostgresSystemRolloutStartIdempotencyAndEligibility": "pass",
+    "TestPostgresSystemRolloutAuditFailureRollsBackStartAndAction": "pass",
+    "TestPostgresSystemRolloutConcurrentFenceHasOneWinner": "pass",
+    "TestPostgresSystemRolloutCohortPromotionAndRollback": "pass",
+    "TestScanViewRejectsMalformedStoredStrategyWithoutLeakingData": "pass",
+    "TestScanViewRetainsValidAdditiveV1Strategy": "pass",
+    "TestSystemReleaseSlotsBoundsUnsignedBudgetsBeforeNarrowing": "pass",
+    "TestSystemReleaseSlotsSupportsPercentageAndZeroUnavailable": "pass",
+    "TestFailureThresholdUsesCountOrInclusivePercentage": "pass",
+    "TestPartialCanaryRollbackCompletionUsesOnlyRollbackTargets": "pass",
+    "TestCanonicalStrategyIsStableForExplicitCanaryOrder": "pass",
+    "TestSystemReleaseSlotsEnforcesConcurrencyAndUnavailableBudgets": "pass",
+    "TestActionTransitionIsClosedAndRequiresPreviousRelease": "pass"
+  },
+  "missing": [],
+  "failed": [],
+  "all_structured_skips": [],
+  "test_exit_code": 0,
+  "sha256": {
+    "/root/.cache/astronomer-032/qualification/cnpg36/w08-systemrollout-root/pg18-integration.jsonl": "7812c1c08c7d75b4f5d94275235c06eb6876d1d8b7296b054dc31004c7c3cdef"
+  },
+  "scope": "Fresh dedicated database on owned three-instance CNPG 1.30.1/K3s 1.36.5; TLS transport; System rollout characterization on already migrated schema 72 with isolated randomized owned fixture schemas; no full app, failover, or historical restore claim"
+}

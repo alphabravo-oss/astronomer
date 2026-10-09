@@ -1,0 +1,72 @@
+{
+  "observed_at": "2026-10-09T22:21:10.343786+00:00",
+  "scope": "Closed historical source copies with executor leases, clean-state and process-CWD checks; commits/branches/receipts retained, no force removal; exact ignored W09 output only; active W08/W12/category, unrelated sources and live clusters retained",
+  "worktrees": [
+    {
+      "worktree": "/root/astronomer-all/astronomer-032-w00",
+      "head": "941b0fd064b6ff475d3b0dc3cee481e6d9038354",
+      "removed": true,
+      "exit_code": 0,
+      "error": ""
+    },
+    {
+      "worktree": "/root/astronomer-all/astronomer-032-w01",
+      "head": "04c91a6d70a2d8cba478ff829e97e57348df0d4a",
+      "removed": true,
+      "exit_code": 0,
+      "error": ""
+    },
+    {
+      "worktree": "/root/astronomer-all/astronomer-032-w02",
+      "head": "a3796f4256eda03b00dcabe08dcb541d3364ba3b",
+      "removed": true,
+      "exit_code": 0,
+      "error": ""
+    },
+    {
+      "worktree": "/root/astronomer-all/astronomer-032-w05",
+      "head": "e0bde8558fe91c3da853e8b4d527ac9b26f9d697",
+      "removed": true,
+      "exit_code": 0,
+      "error": ""
+    },
+    {
+      "worktree": "/root/astronomer-all/astronomer-032-w06",
+      "head": "ec029d8298585f9ab196276287983c9df1fc48bd",
+      "removed": true,
+      "exit_code": 0,
+      "error": ""
+    },
+    {
+      "worktree": "/root/astronomer-all/astronomer-032-w09-released-characterization",
+      "head": "a1fc7b5bbf62605ec770e12bda72f80e8f04c1ad",
+      "removed": false,
+      "reason": "uncommitted source or process CWD present"
+    },
+    {
+      "worktree": "/root/astronomer-all/astronomer-032-toolchain-integration",
+      "head": "f5c3cf87b4a96a6ebe160dfb013a5540c0566a05",
+      "removed": true,
+      "exit_code": 0,
+      "error": ""
+    },
+    {
+      "worktree": "/root/astronomer-all/astronomer-032-frontend-qualified-source",
+      "head": "07c9f9081eb47d952dab3405d03d0fa01629793f",
+      "removed": true,
+      "exit_code": 0,
+      "error": ""
+    },
+    {
+      "worktree": "/root/astronomer-all/astronomer-032-form-review",
+      "head": "5f88e5720e2abb195f7577f5d3adfabedae11ebf",
+      "removed": true,
+      "exit_code": 0,
+      "error": ""
+    }
+  ],
+  "removed_ignored_outputs": [
+    "/root/astronomer-all/astronomer-032-w09/frontend/node_modules",
+    "/root/astronomer-all/astronomer-032-w09/frontend/dist"
+  ]
+}
