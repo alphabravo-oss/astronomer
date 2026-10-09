@@ -47,7 +47,10 @@ func rowSpecs() []rowSpec {
 			_, err := model.ReadPlacementV1(v[0])
 			return err
 		}},
-		{"delivery_rollouts", []string{"frozen_plan"}, func(v [][]byte) error {
+		{"delivery_rollouts", []string{"frozen_plan", "strategy"}, func(v [][]byte) error {
+			if _, err := model.ReadRolloutStrategyV1(v[1]); err != nil {
+				return err
+			}
 			_, err := rollout.ReadFrozenRolloutV1(v[0])
 			return err
 		}},
