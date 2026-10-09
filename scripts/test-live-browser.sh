@@ -64,7 +64,7 @@ fi
 postgres_container="astronomer-live-browser-pg-$suffix"
 redis_container="astronomer-live-browser-redis-$suffix"
 flux_fixture_container="astronomer-live-browser-flux-$suffix"
-flux_fixture_runtime_image="astronomer-flux-fixture-runtime:alpine-3.22-git-2.49.1"
+flux_fixture_runtime_image="astronomer-flux-fixture-runtime:alpine-3.24-git-2.54.0-r0"
 rustfs_fixture_image="astronomer-rustfs-fixture:$suffix"
 s3_client_image="astronomer-s3-client-fixture:$suffix"
 shell_fixture_image="astronomer-live-browser-shell:$suffix"
