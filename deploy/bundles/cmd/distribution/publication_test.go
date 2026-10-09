@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -33,6 +34,7 @@ type publicationRegistry struct {
 	blobs        map[string][]byte
 	uploads      map[string][]byte
 	uploadCount  int
+	writeCount   int
 	payloadReads int
 	corruptBlob  string
 }
@@ -77,6 +79,16 @@ func actualPublisherFixture(t *testing.T, scanner bool) {
 	catalog, charts, assets, platforms := producerFixture(t, "apiVersion: v1\nkind: Pod\nspec:\n  containers:\n  - image: {{ .Values.image }}\n")
 	if scanner {
 		configureScannerDatabaseFixture(t, catalog, assets)
+	}
+	catalogBytes, err := os.ReadFile(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(catalog, bytes.ReplaceAll(catalogBytes, []byte("registry.example.test/fixture"), []byte("1.1.1.1/fixture")), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if scanner {
+		configureMirrorRoleFixture(t, catalog, assets)
 	}
 	output, err := produce(catalog, charts)
 	if err != nil {
@@ -162,8 +174,9 @@ func actualPublisherFixture(t *testing.T, scanner bool) {
 	if _, _, err := readOfflineTransfer(t.Context(), transfer, offlineOptions); err != nil {
 		t.Fatalf("captured actual graph cannot verify offline: %v", err)
 	}
+	verifyActualMirrorPublication(t, fixture, transfer, offlineOptions, client, platforms)
 	if publicRequests.Load() != 0 {
-		t.Fatal("offline verification contacted external proxy")
+		t.Fatal("offline verification/mirror contacted external proxy")
 	}
 	if scanner {
 		asset := index.Assets[0]
@@ -338,6 +351,9 @@ func verifyActualOfflinePublication(t *testing.T, fixture *publicationRegistry, 
 func (f *publicationRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
+	if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+		f.writeCount++
+	}
 	if r.URL.Path == "/v2/" {
 		w.WriteHeader(200)
 		return
@@ -398,7 +414,11 @@ func (f *publicationRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 
 		data = f.manifests[repository+"/"+reference]
-		w.Header().Set("Content-Type", ocispec.MediaTypeImageManifest)
+		var metadata struct {
+			MediaType string `json:"mediaType"`
+		}
+		_ = json.Unmarshal(data, &metadata)
+		w.Header().Set("Content-Type", metadata.MediaType)
 	} else if _, reference, found := strings.Cut(path, "/blobs/"); found {
 		data = f.blobs[reference]
 		if reference == f.corruptBlob {
@@ -436,4 +456,10 @@ func (f *publicationRegistry) snapshot() (map[string][]byte, map[string][]byte) 
 		blobs[key] = append([]byte(nil), data...)
 	}
 	return manifests, blobs
+}
+
+func (f *publicationRegistry) writes() int {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	return f.writeCount
 }

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-10-09T23:26:06.352861+00:00",
+  "classification": "upstream metadata discovery only, not candidate or freshness qualification",
+  "entries": [
+    {
+      "repository": "ghcr.io/aquasecurity/trivy-db",
+      "discoveryTag": "2",
+      "manifestDigest": "sha256:e07c6c72e5b17710acedd2e2a89f9bcb3bcf88aa758fcd4a59c588b205e42ccc",
+      "manifestBytes": 616,
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "config": {
+        "mediaType": "application/vnd.oci.empty.v1+json",
+        "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "size": 2
+      },
+      "layers": [
+        {
+          "mediaType": "application/vnd.aquasec.trivy.db.layer.v1.tar+gzip",
+          "digest": "sha256:e4ee16dcf83587ac9cd452b5fdeabcd0b2fe5164c9482453d573535068630d5f",
+          "size": 126378346
+        }
+      ],
+      "artifactPayloadBytes": 126378346,
+      "externalContent": false,
+      "payloadDownloaded": false,
+      "signatureQualified": false,
+      "freshnessQualified": false
+    },
+    {
+      "repository": "ghcr.io/aquasecurity/trivy-java-db",
+      "discoveryTag": "1",
+      "manifestDigest": "sha256:d5af8208b5fb2fc47657c70b89f43b915341681aee0cc71d58e34a5a480d270c",
+      "manifestBytes": 624,
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "config": {
+        "mediaType": "application/vnd.oci.empty.v1+json",
+        "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "size": 2
+      },
+      "layers": [
+        {
+          "mediaType": "application/vnd.aquasec.trivy.javadb.layer.v1.tar+gzip",
+          "digest": "sha256:1254cf73abd98d76f23b23ee716a8e65fa721e04d2da4b9a27c7de21ec45585f",
+          "size": 980383808
+        }
+      ],
+      "artifactPayloadBytes": 980383808,
+      "externalContent": false,
+      "payloadDownloaded": false,
+      "signatureQualified": false,
+      "freshnessQualified": false
+    }
+  ]
+}

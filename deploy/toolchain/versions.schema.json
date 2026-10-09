@@ -242,7 +242,8 @@
                   "contract",
                   "alpine",
                   "github-feed",
-                  "postgres"
+                  "postgres",
+                  "git"
                 ]
               },
               "locator": {

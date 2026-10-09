@@ -1742,6 +1742,60 @@
         {
           "count": 1,
           "kind": "regex",
+          "path": "scripts/fixtures/flux/server/Dockerfile.runtime",
+          "selector": "git=([0-9.]+-r[0-9]+)",
+          "value": "{version}-r0"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "scripts/fixtures/flux/server/Dockerfile.runtime",
+          "selector": "git-daemon=([0-9.]+-r[0-9]+)",
+          "value": "{version}-r0"
+        },
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "scripts/test-live-browser.sh",
+          "selector": "flux_fixture_runtime_image=\"astronomer-flux-fixture-runtime:alpine-3\\.24-git-([0-9.]+-r[0-9]+)\"",
+          "value": "{version}-r0"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-09T23:20:51.816742+00:00",
+        "provenance": "https://git-scm.com/; sha256:79d01e02b9cc0e623787e52f481f4d31976fa2fe6ce7189a6ca686d5d683aae0",
+        "releasedAt": "2026-09-28",
+        "stable": true,
+        "version": "2.56.0"
+      },
+      "ecosystem": "contract",
+      "exception": {
+        "createdAt": "2026-10-09T23:20:51.816742+00:00",
+        "evidence": "docs/assurance/technology-guide/w12/git-fixture/apk-metadata.json",
+        "exitCondition": "Scheduled Git discovery identifies current upstream target; remove exception when Alpine3.24 supplies matching current git/git-daemon packages or a source-built current Git CGI closure passes clone/HTTP/TLS characterization on both required architectures.",
+        "owner": "Plan032 W12 fixture maintainer",
+        "reason": "Upstream Git2.56.0 is newer than newest git/git-daemon packages2.54.0-r0 in the maintained immutable Alpine3.24.2 fixture base. Old2.49.1 pins cannot install at all. Preserve distribution-signed coherent CGI package closure for this disposable synthetic fixture.",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "git-flux-fixture",
+      "owner": "Plan032 W12 fixture maintainer",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Exact Alpine3.24.2 runtime builds with git/git-daemon2.54.0-r0. Its selected Git CGI executes production fixture HTTP and trusted TLS smart ls-remote plus Helm-index tests in a network-isolated container (both passed). Official APKINDEX supplies matching amd64/arm64 packages; arm64 runtime execution remains unqualified. Disposable synthetic repository fixture only; upstream2.56.0 remains a dated owned distribution-closure exception.",
+      "selected": "2.54.0",
+      "upstream": {
+        "kind": "git",
+        "url": "https://git-scm.com/"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
           "path": ".github/workflows/security-analysis.yaml",
           "selector": "github.com/zricethezav/gitleaks/v8@v([^\\s]+)",
           "value": "{version}"
@@ -9444,6 +9498,28 @@
       "state": "managed",
       "value": "v1.31.1",
       "workPackage": "W01"
+    },
+    {
+      "component": "git-flux-fixture",
+      "count": 1,
+      "kind": "apk-package",
+      "owner": "Plan032 W12 fixture maintainer",
+      "path": "scripts/fixtures/flux/server/Dockerfile.runtime",
+      "reason": "Exact distribution package pin bound to Git fixture authority consumer.",
+      "state": "managed",
+      "value": "git-daemon=2.54.0-r0",
+      "workPackage": "W12"
+    },
+    {
+      "component": "git-flux-fixture",
+      "count": 1,
+      "kind": "apk-package",
+      "owner": "Plan032 W12 fixture maintainer",
+      "path": "scripts/fixtures/flux/server/Dockerfile.runtime",
+      "reason": "Exact distribution package pin bound to Git fixture authority consumer.",
+      "state": "managed",
+      "value": "git=2.54.0-r0",
+      "workPackage": "W12"
     },
     {
       "component": "alpine",

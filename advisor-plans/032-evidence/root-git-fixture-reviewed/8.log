@@ -1,0 +1,7 @@
+=== RUN   TestFixtureHandlerServesSmartGitAndHelmRepository
+=== RUN   TestFixtureHandlerServesSmartGitAndHelmRepository/http
+=== RUN   TestFixtureHandlerServesSmartGitAndHelmRepository/https
+--- PASS: TestFixtureHandlerServesSmartGitAndHelmRepository (0.21s)
+    --- PASS: TestFixtureHandlerServesSmartGitAndHelmRepository/http (0.13s)
+    --- PASS: TestFixtureHandlerServesSmartGitAndHelmRepository/https (0.08s)
+PASS

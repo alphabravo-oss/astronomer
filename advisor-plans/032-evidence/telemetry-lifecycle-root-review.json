@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "workPackage": "W10",
+  "status": "SCOPED_REVIEW_ACCEPTED",
+  "packageStatus": "IN_PROGRESS",
+  "sourceCommit": "4011cd0fc134041fd475a9f6641f09ad0fc57af7",
+  "integratedCommit": "2ee13ad9745e95456465fbc23bda38fb7ad7604c",
+  "observedAt": "2026-10-09T23:42:54.049413+00:00",
+  "fullSourceAndTestsReviewed": true,
+  "rootIndependentChecks": [
+    {
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "./internal/db",
+        "./internal/worker",
+        "./internal/observability",
+        "-run",
+        "Composite|WorkerMetrics|StartMetrics|Tracing",
+        "-count=1",
+        "-v"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-4011cd0f-gates/0.log"
+    },
+    {
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "./internal/observability",
+        "-count=1"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-4011cd0f-gates/1.log"
+    },
+    {
+      "argv": [
+        "go",
+        "vet",
+        "./internal/db",
+        "./internal/worker",
+        "./internal/observability"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-4011cd0f-gates/2.log"
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/check-complexity-budget.mjs"
+      ],
+      "exitCode": 0,
+      "log": "/tmp/plan032-root-4011cd0f-gates/3.log"
+    }
+  ],
+  "retainedArtifacts": [
+    {
+      "path": "advisor-plans/032-evidence/root-w10-reviewed/0.log",
+      "sha256": "9f6bbde4aa51726e1382a93fef8b565ddb6b3f39b224a01ae2e35856305465b8",
+      "bytes": 3496
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w10-reviewed/1.log",
+      "sha256": "c5273b9c511544e596f5ef783023d1358f3ddc40d72793a145c968e10343d13d",
+      "bytes": 79
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w10-reviewed/2.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-w10-reviewed/3.log",
+      "sha256": "5320a0e9e21d9c225f596695861d52c2c607dcdfc493e261628ec6866f8fd76d",
+      "bytes": 101
+    }
+  ],
+  "scopeAndLimits": "Allused pgxoptionalinterfaces forwarded; endpointpath/default behavior and boundedexport/workerHTTPshutdown independently rerun. ActualPGcallbackfixture/collectorstack/wholetrace/cardinality/overhead remain open."
+}

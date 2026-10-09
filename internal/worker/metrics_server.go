@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -59,16 +60,37 @@ func StartMetricsServer(ctx context.Context, addr string, pinger HealthPinger, l
 		ReadHeaderTimeout: 15 * time.Second,
 	}
 
-	go func() {
-		<-ctx.Done()
-		if err := srv.Shutdown(context.Background()); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			observability.WithEvent(log, "worker_metrics_listener_shutdown_error").Warn("worker metrics server shutdown failed", "error", err)
-		}
-	}()
-
-	observability.WithEvent(log, "worker_metrics_listener_started").Info("starting worker metrics server", "addr", addr)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
 		return err
 	}
-	return nil
+	observability.WithEvent(log, "worker_metrics_listener_started").Info("starting worker metrics server", "addr", addr)
+	return serveWorkerMetrics(ctx, srv, listener, log, 5*time.Second)
+}
+
+// Wait for graceful drain within a fresh bounded context. Close connections
+// after the deadline so a stuck scrape cannot retain the shutdown goroutine.
+func serveWorkerMetrics(ctx context.Context, srv *http.Server, listener net.Listener, log *slog.Logger, timeout time.Duration) error {
+	serveDone := make(chan struct{})
+	shutdownDone := make(chan struct{})
+	go func() {
+		defer close(shutdownDone)
+		select {
+		case <-ctx.Done():
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			if err := srv.Shutdown(shutdownCtx); err != nil {
+				observability.WithEvent(log, "worker_metrics_listener_shutdown_error").Warn("worker metrics server shutdown failed", "error", err)
+				_ = srv.Close()
+			}
+		case <-serveDone:
+		}
+	}()
+	err := srv.Serve(listener)
+	close(serveDone)
+	<-shutdownDone
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }

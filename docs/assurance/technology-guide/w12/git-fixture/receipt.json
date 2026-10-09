@@ -1,0 +1,47 @@
+{
+  "artifacts": [
+    {
+      "path": "docs/assurance/technology-guide/w12/git-fixture/apk-metadata.json",
+      "sha256": "94a62bc930a5e744cdeabb054586b84105fbde30c3b7dc1da962d4d50ea5ebbf"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/git-fixture/build.log",
+      "sha256": "95f73dbc679b48deaac647c3007c4fd5e9fea282c33f6506d90cc5e1f2d665d9"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/git-fixture/characterization.log",
+      "sha256": "0bdc856d4a02e95307f306d082034631783b9b08bb5feeaea7da94454130ab81"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/git-fixture/failed-3c-matrix-receipt.json",
+      "sha256": "8b12e3073d364d8fa6e098255bef07896621a05b375df168ce8ae7eaefb48fcd"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/git-fixture/failed-3c-runner.log",
+      "sha256": "4e65daf7634fa7ef07e42199ec25b729fa59be79fa6be6420656f030a82580b5"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w12/git-fixture/git-primary.html",
+      "sha256": "79d01e02b9cc0e623787e52f481f4d31976fa2fe6ce7189a6ca686d5d683aae0"
+    }
+  ],
+  "capacity": "Subsequent64GiB/19% capacity check failed. Diagnostic shell accidentally continued the small package build without set -e; this invocation error is disclosed and further stack execution remains guarded.",
+  "characterization": {
+    "arm64Execution": "not-run",
+    "gitSmartHTTP": "pass",
+    "gitSmartHTTPSWithExplicitCA": "pass",
+    "helmIndexHTTPAndHTTPS": "pass",
+    "network": "none"
+  },
+  "executedPlatform": "linux/amd64",
+  "failedCandidateCommit": "3c2c7bff",
+  "failure": "Alpine3.24.2 official repository cannot install old git/git-daemon2.49.1-r0; no owned cluster or browser was created.",
+  "schemaVersion": 1,
+  "selected": "2.54.0-r0",
+  "status": "scoped-pass",
+  "targetPlatforms": [
+    "linux/amd64",
+    "linux/arm64"
+  ],
+  "upstream": "2.56.0"
+}

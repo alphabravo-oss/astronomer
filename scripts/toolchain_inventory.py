@@ -4,6 +4,7 @@ import re
 import subprocess
 
 PATTERNS = {
+    'apk-package': re.compile(r'\b((?:git|git-daemon)=[0-9]+(?:\.[0-9]+){2}-r[0-9]+)'),
     'action-version': re.compile(r'uses:\s*[^@\s]+@[^\n]+\n\s*with:\n\s*version:\s*[\"\']?v?([0-9]+(?:\.[0-9]+){1,2})'),
     'action': re.compile(r'\buses:\s*([^\s@]+@[a-f0-9]{40})'),
     'builder': re.compile(r'^FROM\s+([^\s]+(?::[^\s]+|@sha256:[a-f0-9]{64}))', re.M),

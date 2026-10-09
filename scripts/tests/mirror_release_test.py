@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -212,6 +213,75 @@ printf 'cosign\n' >>"$MIRROR_LOG"
     def _write_tool(path: Path, contents: str) -> None:
         path.write_text(contents, encoding="utf-8")
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+
+class DistributionV2AdapterTests(unittest.TestCase):
+    def arguments(self, root: Path, binary: Path, action: str = "v2-plan") -> list[str]:
+        result = [action, "--distribution-verifier", str(binary), "--verifier-sha256", MODULE.file_digest(binary),
+                  "--transfer", str(root / "original.tar.gz"), "--repository", "source.example.test/distribution",
+                  "--distribution-digest", DIGEST, "--catalog-digest", DIGEST, "--release", "v1.2.1",
+                  "--release-manifest-digest", DIGEST, "--trust-directory", str(root / "vendor-trust"),
+                  "--signature-provider", "cosign_key", "--key-ref", "qa",
+                  "--target", "registry.corp.test/astronomer"]
+        if action == "v2-plan":
+            result += ["--output-directory", str(root / "prepared")]
+        else:
+            result += ["--endorsement", str(root / "operator-plan.json"), "--signature", str(root / "operator.sig"),
+                       "--operator-key-ref", "operator", "--operator-trust-directory", str(root / "operator-trust"),
+                       "--destination-policy", str(root / "destinations.json"), "--registry-ca-file", str(root / "ca.pem")]
+        return result
+
+    def test_v2_delegates_exact_identity_to_hash_pinned_captured_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary = root / "verifier"
+            recorded = root / "argv.json"
+            binary.write_text("#!/usr/bin/python3\nimport json,sys\nfrom pathlib import Path\nPath(" + repr(str(recorded)) + ").write_text(json.dumps(sys.argv))\nprint('synthetic-private-marker')\n")
+            binary.chmod(0o700)
+            for action in ("v2-plan", "v2-copy"):
+                completed = subprocess.run([sys.executable, str(SCRIPT), *self.arguments(root, binary, action)], text=True, capture_output=True)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertNotIn("synthetic-private-marker", completed.stdout + completed.stderr)
+                forwarded = json.loads(recorded.read_text())
+                self.assertNotEqual(forwarded[0], str(binary))
+                self.assertFalse(Path(forwarded[0]).exists(), "owned executable snapshot was retained")
+                self.assertEqual(forwarded[forwarded.index("--expected-distribution-digest") + 1], DIGEST)
+                self.assertEqual(forwarded[forwarded.index("--expected-catalog-digest") + 1], DIGEST)
+                self.assertEqual(forwarded[forwarded.index("--key-ref") + 1], "qa")
+                self.assertNotIn("--qa-signing-key", forwarded)
+                if action == "v2-copy":
+                    self.assertIn("--mirror-endorsement", forwarded)
+                    self.assertIn("--destination-policy", forwarded)
+                    self.assertIn("--registry-ca-file", forwarded)
+                else:
+                    self.assertNotIn("--destination-policy", forwarded)
+
+    def test_v2_mismatched_tool_and_symlink_fail_before_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary = root / "verifier"
+            binary.write_text("#!/bin/sh\nexit 0\n")
+            binary.chmod(0o700)
+            arguments = self.arguments(root, binary)
+            arguments[arguments.index("--verifier-sha256") + 1] = "sha256:" + "0" * 64
+            with self.assertRaises(MODULE.MirrorError):
+                MODULE.distribution_v2_command(MODULE.parser().parse_args(arguments))
+            link = root / "link"
+            link.symlink_to(binary)
+            with self.assertRaises(MODULE.MirrorError):
+                MODULE.distribution_v2_command(MODULE.parser().parse_args(self.arguments(root, link)))
+
+    def test_v2_failed_tool_diagnostic_is_redacted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary = root / "verifier"
+            binary.write_text("#!/bin/sh\necho synthetic-private-marker >&2\nexit 1\n")
+            binary.chmod(0o700)
+            completed = subprocess.run([sys.executable, str(SCRIPT), *self.arguments(root, binary)], text=True, capture_output=True)
+            self.assertEqual(completed.returncode, 1)
+            self.assertIn("no qualification reported", completed.stderr)
+            self.assertNotIn("synthetic-private-marker", completed.stdout + completed.stderr)
 
 
 if __name__ == "__main__":
