@@ -1,6 +1,7 @@
+import type { CategoryValue } from "@/types/categories.generated";
 /** Per-cluster delivery deployment contracts and operations. */
 
-import { camelizeKeys } from "@/lib/camelize";
+import { camelizeWire } from "@/lib/camelize";
 import * as generated from "@/lib/api/generated/client";
 import { requireEnvelopeData } from "@/lib/api/data-envelope";
 import {
@@ -11,23 +12,13 @@ import {
   type DeliveryContracts,
   type PageParams,
 } from "@/lib/api/delivery-common";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type {
   AssertNoPhantomWireKeys,
   CamelizeKeys,
 } from "@/types/wire-contract";
 
-export type DeploymentPhase =
-  | "pending"
-  | "blocked"
-  | "applying"
-  | "ready"
-  | "degraded"
-  | "failed"
-  | "suspended"
-  | "deleting"
-  | "removed"
-  | "unknown";
+export type DeploymentPhase = CategoryValue<"DeliveryDeploymentPhase">;
 
 export type DeliveryConditionView = CamelizeKeys<
   DeliveryContracts["DeliveryCondition"]
@@ -53,18 +44,18 @@ export type ClusterDeploymentDetail = Omit<
 export function mapClusterDeployment(
   wire: DeliveryContracts["ClusterDeployment"],
 ): ClusterDeployment {
-  return camelizeKeys(wire) as unknown as ClusterDeployment;
+  return camelizeWire(wire);
 }
 function mapClusterDeploymentEvent(
   wire: DeliveryContracts["ClusterDeploymentEvent"],
 ): ClusterDeploymentEvent {
-  return camelizeKeys(wire) as unknown as ClusterDeploymentEvent;
+  return camelizeWire(wire);
 }
 function mapClusterDeploymentDetail(
   wire: DeliveryContracts["ClusterDeploymentDetail"],
 ): ClusterDeploymentDetail {
   return {
-    ...camelizeKeys(wire),
+    ...camelizeWire(wire),
     deployment: mapClusterDeployment(wire.deployment),
     events: wire.events.map(mapClusterDeploymentEvent),
   } as ClusterDeploymentDetail;
@@ -140,7 +131,7 @@ export async function actOnClusterDeployment(
           "postDeliveryDeploymentsByIdSuspend",
           args,
         );
-  return camelizeKeys(requireEnvelopeData(response.data, "delivery response"));
+  return camelizeWire(requireEnvelopeData(response.data, "delivery response"));
 }
 
 const clusterDeploymentMatchesWire: AssertNoPhantomWireKeys<

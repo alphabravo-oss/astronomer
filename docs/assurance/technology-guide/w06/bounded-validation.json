@@ -1,0 +1,138 @@
+{
+  "additionalBoundedChecks": {
+    "categorySchemaAndParityNegativeTests": 10,
+    "dependencyBoundary": "PASS:14 rules,1497 files,9592 imports",
+    "generatedImportBindingNegativeTests": 2,
+    "goPackageTests": "PASS",
+    "goPackages": [
+      "internal/delivery/model",
+      "internal/delivery/state",
+      "internal/delivery/rollout",
+      "internal/db/migrations",
+      "scripts/sdk-compatibility"
+    ],
+    "sdkSourceCompatibilityNegativeTests": 4,
+    "touchedGoVet": "PASS"
+  },
+  "baseCommit": "24ec277e29e9274e81670cd80548b93dd08811b0",
+  "observedAt": "2026-10-09T21:13:51.197192+00:00",
+  "qualificationRemaining": [
+    "Full make verify rerun after dependency-direction correction is active.",
+    "One frozen full frontend qualification on latest reviewed combined integration source is required.",
+    "W09 genuine migration072 integration and W12 PG18 qualification are separate; dedicated W06 schema71 proof does not claim them."
+  ],
+  "results": {
+    "apiContractFirstAttempt": {
+      "logDigest": "sha256:772454cb9c5807c0c2996a62edab973ff823f3a752c514c607d1bd6c92a06041",
+      "result": "FAIL: generated shared type imported an API consumer; corrected at generator source, dependency boundary now PASS; full rerun active"
+    },
+    "frontendCodeHealth": {
+      "logDigest": "sha256:f285ac639e2a4a839618dd8fbe52c5652561bc9bc9054d6029f6c1729a50c41f",
+      "result": "PASS"
+    },
+    "frontendFocused16": {
+      "logDigest": "sha256:59c5baa4d555fbf90e7cdb6b41540ad88e28f83354bd9044c6f0bae3aea014ed",
+      "result": "PASS"
+    },
+    "frontendFocusedInitialAttempt": {
+      "logDigest": "sha256:81c183403fbdea4c14968d4a99bfdb9b8618ac9bc990d67870593d32338f53d0",
+      "result": "FAIL: two transport mocks omitted newly checked required registration phase; corrected fixtures and final16 tests PASS"
+    },
+    "frontendLint": {
+      "logDigest": "sha256:7ff5ec71a63fc5c4f57556d004f6a12f45317828de5e39d3c4fba2a70cb4abbc",
+      "result": "PASS"
+    },
+    "frontendTypeCheck": {
+      "logDigest": "sha256:5872ea199fbd2562b12d2cc8002e5df057f7756b1eaaf515d4f3bd40bda81f0a",
+      "result": "PASS"
+    },
+    "fullLegacySDK": {
+      "logDigest": "sha256:d3c2e58643a78a9c30f89acf2161e53e01099f996e008406cffa84141808a9e7",
+      "result": "PASS"
+    },
+    "realDatabase22Checks152ValuesAndProductionAdapter": {
+      "logDigest": "sha256:ff2467c866ac58790b6ad3d200982de515aa16902dd03142aa110fddb7f4db02",
+      "result": "PASS"
+    },
+    "stagedFormatting": {
+      "logDigest": "sha256:304b3ba83494e1fa88b152f7497915beee33014217da5fbc460343d1ccc50112",
+      "result": "PASS"
+    },
+    "versionsAnd36NegativeTests": {
+      "logDigest": "sha256:314a4ecdc40717404164a814f4061a9625a5384e6d722a5fe17e2fbbc4fd1794",
+      "result": "PASS"
+    }
+  },
+  "schemaVersion": 1,
+  "sourceFiles": {
+    "Makefile": "sha256:a8562ba0c5d97f93860615215c821696c4ec1b3e8537eabe8bef6eef8c8f29f1",
+    "deploy/contracts/categories.json": "sha256:5a963d04d4802887993ffcb93e8d04fc019bdb46ab449931d670b0a8d4d23a57",
+    "docs/architecture/complexity-baseline.json": "sha256:e08fb448f32ae9f40affa0df38b6c423118cb836612b290c2b896f3e6b98fb2f",
+    "docs/openapi.yaml": "sha256:946205bdacdfd900d3bf96f8946c0e61780867310f7fd5175dbeaa8268f3550c",
+    "docs/rancher-quality-phase0-code-health-inventory.md": "sha256:f8395f5faab3a5123073fcb2ba80ecc99742ab85cb5bba9a0b048b1642ea7964",
+    "docs/rancher-quality-phase0-operation-task-inventory.md": "sha256:df78e8f65ea42933b65d47a5e65e81e0a61df21317a8c3a5d391d153e8d7f306",
+    "frontend/package.json": "sha256:387adc3ae15754062c31ac408a62d9d63cfcf8e838bfa28f14c982d7338ac616",
+    "frontend/src/components/delivery/shared.tsx": "sha256:d734799602327957081ed16ad2240cd03881dea821112644cae9974ee690887b",
+    "frontend/src/components/layout/cluster-scope-controls.tsx": "sha256:66a213fa11ceee5c66a0bc393ce57de35f9ed0352bba1b09fc81d54954c04452",
+    "frontend/src/lib/api/admin-operations.ts": "sha256:8eda9042c5142da64a6516f84aa247ab868688bd9f36e80092532ab4d293ba81",
+    "frontend/src/lib/api/backups.ts": "sha256:2687191dcabac9f047e40f62db253840e7f82845e8c1a077d71ce9f0cd7ee54d",
+    "frontend/src/lib/api/catalog.ts": "sha256:8978f7c029be438a0b99123e50ac63c5cc2f101032a200ffa7fff2575b263dde",
+    "frontend/src/lib/api/categorical-values.test.ts": "sha256:eb885a61fc4c675cd63238031a1c7476a63439f4b60096f095890c5790765383",
+    "frontend/src/lib/api/categorical-values.ts": "sha256:5b8e93c3c6ba3d7cd1f71dece5ff8b621fbd3b132eb50d9dec5cc413a158a395",
+    "frontend/src/lib/api/charlie-admin-mappers.ts": "sha256:b0177b986882f09e0aabb3814dd8ead7174163c8965a8d9c192097680da967d4",
+    "frontend/src/lib/api/charlie-admin.ts": "sha256:571bdb9e7a7ae2234f0216f5f60265b16d9687de1002fe89c7e956b0cccd1803",
+    "frontend/src/lib/api/charlie.ts": "sha256:2a7f4ab055214bd6a255e461e305d2b9e05df2c7078881268dfc3ea954e77982",
+    "frontend/src/lib/api/cluster-agents.ts": "sha256:706198f582233c0a13039907f7ca6996b3b8ae0d64da48b593b95e85a104866f",
+    "frontend/src/lib/api/cluster-registration.ts": "sha256:d8f50a2f726f693343b6d24ebe0652a3e395d5403a37dd919fec95d57225fe2f",
+    "frontend/src/lib/api/cluster-snapshots.ts": "sha256:4ff72d8295a203a4a235da715dfdef8f224a2488ff6d4ec05f89e77baa8942e9",
+    "frontend/src/lib/api/clusters.ts": "sha256:fd8ccbc9fd10ce441b46cc01352658096cbc227a16001b73b93c91fd1fafeff1",
+    "frontend/src/lib/api/delivery-bundles.ts": "sha256:042af9c08d7558521c8cf08509b37c66f4090c5fcb6876033570bf8c158950d8",
+    "frontend/src/lib/api/delivery-common.ts": "sha256:bc3ee074ebd27b97f009d98106e25e09a97052adee8cff8cc940bec8b0d17f53",
+    "frontend/src/lib/api/delivery-configuration.ts": "sha256:1790c351d94ba6623cb535f743e9439ed7e8734e3170d225a4f0653405af6621",
+    "frontend/src/lib/api/delivery-deployments.ts": "sha256:0b15b2d567a3dd69b560f37cdb358f5eff563a571890d496667b38d1b31d2fca",
+    "frontend/src/lib/api/delivery-rollouts.ts": "sha256:df994b637a9fbed5982c36f98545d4d8b43eaa43afae2fafc00c8f7c05076a0f",
+    "frontend/src/lib/api/delivery-sources.ts": "sha256:418f05d3ad6c2a84c94db6913ec19b214813b729ff850e43758fb9f3558535f4",
+    "frontend/src/lib/api/delivery-system.ts": "sha256:fec6c1737fccf47b23bbc077ee0c4d545b18f8ef6b1fa13b54622734affbdc37",
+    "frontend/src/lib/api/dex.ts": "sha256:b2d3782ccff5ec7c06bf0b79dc0bd42c7c29879b83812c3cdd6083c2544615d5",
+    "frontend/src/lib/api/generated/client.test.ts": "sha256:9c54a92d71d8c54bdd163f6abdfb097a8dddbe36dd0b51ee84a08f2f16dfb132",
+    "frontend/src/lib/api/generated/client.ts": "sha256:0309d9b352c4feca3a9b9509cf7f8143d4a309f3753a2e164e3394eed1ea27fb",
+    "frontend/src/lib/api/logging.ts": "sha256:cfc1ec596d13ec17b8b0557b3387bdd1d6cd9dad90bb32c721d83084ee38be2a",
+    "frontend/src/lib/api/monitoring-operation-reads.ts": "sha256:a0848d7966b7e538efaa2bcd9958ba2ec1fdedae2933e6a8887db9f0190a657a",
+    "frontend/src/lib/api/monitoring-stack.ts": "sha256:5c7853f454ae90b620fc42cf91637b8b8227a7e4f83c6222b195b65c39ddfb77",
+    "frontend/src/lib/api/nodes.ts": "sha256:96f0c284ce790ceaac72af3eec400a301849b912a75c01a023ac482e97db58a0",
+    "frontend/src/lib/api/security-policies.ts": "sha256:c5808e8faa0946ffcdfa51e9379ca44fe78cfa06799954a1ababd600850ab89b",
+    "frontend/src/lib/api/security-scans.ts": "sha256:590cde49a7442cf9538ad5671ae7dae7f63322197440036b6deec82f5c1defe3",
+    "frontend/src/lib/api/support-bundles.ts": "sha256:c893a5bd478fde6f27f0a12bebae2418ade257dfb0c8b5b9412e203d17235ec1",
+    "frontend/src/lib/api/tools.ts": "sha256:77026b8a38de723775d63ee840a267d985fcc764745f7c2da186c6c96c2ca1df",
+    "frontend/src/lib/camelize.ts": "sha256:6f1d3f3c5f401cf01e84dd771d42ae201cf0ed19325eeca5f13ad01888bdc86e",
+    "frontend/src/routes/dashboard/delivery/rollouts/$rolloutId/-page.tsx": "sha256:04a6496f4e7357392834bab514e60c40f477cd14756204fc6f84c78bc020ea84",
+    "frontend/src/routes/dashboard/delivery/rollouts/$rolloutId/index.test.tsx": "sha256:58dfc739497cf11230d69b91bf4d79a2955275910f8285a31be05b949eff1a1f",
+    "frontend/src/routes/dashboard/delivery/sources/-source-dialogs.tsx": "sha256:8e9cf77763dcfebe7fe954f7823370b68a64d97cb0223eb27559ce8b672d87d8",
+    "frontend/src/types/backups.ts": "sha256:86ea41db6ef1c53c8b41234722852aacfccdb7732cc55bb6d0107bfaf55b4aa3",
+    "frontend/src/types/categorical-responses.generated.ts": "sha256:3565ad787b8707c892c7bb6e11d81155e45e0fbb841ff09cc6cc0a9b1c2a5cb6",
+    "frontend/src/types/categories.generated.ts": "sha256:f08704ad9094dca0ddbbd895bfee0c6ed60eeb8fca094ddb7995127ad8e81efd",
+    "frontend/src/types/clusters.ts": "sha256:58ff6279851bb00beb95ba4877fa50fb26cd55ed57b4a6947c60de14721bb6dc",
+    "frontend/src/types/logging.ts": "sha256:7a4f6c05e9dabf5631cb32bcad4d75d4454156dcc83c4488a67789478cf8b6e9",
+    "frontend/src/types/openapi.generated.ts": "sha256:c0e2a2a7c04a55babda466492662237b4506ee09fa20b3c2e09c6c041a844678",
+    "frontend/src/types/security.ts": "sha256:845b3e83406ee0f72590433d51f90fc0fa11035a8d3b62e8deb0835dd15103f6",
+    "frontend/src/types/tools.ts": "sha256:b775b8499b6418282d7298450107bb2856aa0d7fc2987b092e4a169743e89de7",
+    "internal/delivery/model/enums.gen.go": "sha256:acdcd276544e4e627e8404002a47b3f122fa150b90b8df5384efbd1b188b0c22",
+    "internal/delivery/model/rollout.go": "sha256:35e0e89c3503732c2a928e2af17068cd4b8c13714da98ba7d7efaee786d1de14",
+    "internal/handler/assets/openapi.yaml": "sha256:946205bdacdfd900d3bf96f8946c0e61780867310f7fd5175dbeaa8268f3550c",
+    "oapi-codegen.compatibility-base.overlay.yaml": "sha256:af4e5a34efa6f88fecae22ba6bd900510fa6cf5551189240851261b0e4dfc8e2",
+    "oapi-codegen.overlay.yaml": "sha256:3fbdae0e55309ecf5d03a3c8bf25ca1002e973e9ef948ccf25e806805e680f30",
+    "pkg/astroclient/astroclient.gen.go": "sha256:f6451f80606496a3a6580445dfc2c3aac6eaf4c00bb9ed3714c3798051126ba1",
+    "pkg/astroclient/public_compatibility_test.go": "sha256:252af67d71c5dee7fbde4440a618720b38b94db3a0557ec722b109203cbf150c",
+    "scripts/categorical-contracts.py": "sha256:6d23f1a350b81e458d8032a1d0d2c1dc3f8d96781ed01cfd02161770a3a1c2e8",
+    "scripts/check-sdk-v1-compatibility.sh": "sha256:fb7b790648593dceb920d308f185b3205e298b64d7f8d10c7858c31f9ce4071c",
+    "scripts/code-health-inventory.mjs": "sha256:878365319a10b0ef8398a597c0fd4d3fe10c6b02242d45250433c32a1fd97df8",
+    "scripts/generate-openapi-client.mjs": "sha256:249fb89f2896a5346157817fd45725908d8137e7cd9d5a379600b4bac9bdb8c7",
+    "scripts/generate-openapi-types.mjs": "sha256:c979f9a4973dd94696c81004cde03b1d3e26cc926ced3c1889a412940f35c31f",
+    "scripts/lib/generated-schema-binding.mjs": "sha256:d538507cd6260e393e5b305efaf7356f7700a640b40bc41db632afe753cfc9e3",
+    "scripts/lib/generated-schema-binding.test.mjs": "sha256:9c3d5b7ae2868d3d40cd2bfe57e01f18b5c2e67f62bc066d6f51e253fc46ccca",
+    "scripts/sdk-compatibility/main.go": "sha256:2a5d17aa9bf2f379a5020fe48af8899e4d36056b3a4489d1ef680dbc453caecc",
+    "scripts/tests/categorical_contract_test.py": "sha256:b9185ff349e83dace799514445752f1181d74ff5d11c8b81e9d9b740515fb593",
+    "scripts/tests/sdk_v1_compatibility_test.py": "sha256:b85f400bfaa44eecd70b4e71e6e493ea6ec89b9eba0030d9bed13fa0bef48cd5",
+    "scripts/verify-enterprise.sh": "sha256:dd620f8c01ab3fbe8d91c7c4e36bacaecb08e956171ab6bb6c4301dfddc30a8a"
+  }
+}

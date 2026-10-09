@@ -13,9 +13,14 @@ Previously permissive v1 handlers use the explicit `AdditiveV1` adapter.
 Additional properties remain ignored at typed DTO boundaries, rather than being
 persisted or interpreted as authority. The CreateUser fixture includes both a
 `displayName` property and an additional nested object: it still creates the
-same user and defaults the username to the email. Existing frontend adapters,
-CLI and generated SDK callers remain compatible because no accepted field was
-renamed or removed. The published users schemas describe objects without
+same user and defaults the username to the email. Well-typed published requests
+retain their field names and additional-property behavior. Inhibition input
+hardening deliberately rejects blank equality labels, missing/null matcher
+values and explicit null regex flags formerly normalized to Go zero values;
+the dated [contract review](../api-breaking-change-review.md) and actual
+[released-handler characterization](../assurance/technology-guide/w09/inhibition-contract-review.md)
+disclose these changes. Empty matcher values and omitted regex=false remain
+valid. The published users schemas describe objects without
 `additionalProperties: false`; strict rejection would therefore change the v1
 contract. Existing exact readers continue using `ExactProduct`.
 

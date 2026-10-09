@@ -126,8 +126,8 @@ export function RegistrationConnectStep({
     });
     return () => off1();
   }, [live, autoDetect, clusterId, navigate]);
-
   const advance = async () => {
+    if (status?.phase === "unsupported") return;
     setConfirming(true);
     try {
       await confirmRegistration(clusterId);
@@ -415,7 +415,7 @@ export function RegistrationConnectStep({
               <ActionButton
                 intent="primary"
                 onClick={advance}
-                disabled={confirming}
+                disabled={confirming || status?.phase === "unsupported"}
                 loading={confirming}
                 loadingLabel="I've run it →"
               >

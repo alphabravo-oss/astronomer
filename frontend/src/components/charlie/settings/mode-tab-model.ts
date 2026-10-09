@@ -74,12 +74,7 @@ export function charlieModeWorkReady(
     ) {
       return false;
     }
-    if (
-      agent.replicas?.some(
-        (replica) =>
-          replica.state === "degraded" || replica.state === "unavailable",
-      )
-    ) {
+    if (agent.replicas?.some((replica) => replica.state !== "ready")) {
       return false;
     }
   }

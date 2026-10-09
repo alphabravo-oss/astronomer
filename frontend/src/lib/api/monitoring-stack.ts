@@ -1,3 +1,6 @@
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/openapi.generated";
+type MonitoringOperation = OpenAPIComponents["schemas"]["MonitoringOperation"];
+export type { MonitoringOperation };
 import { requireMonitoringData as requireData } from "./monitoring-data";
 export {
   previewClusterStack,
@@ -51,14 +54,9 @@ export {
  */
 import * as generated from "@/lib/api/generated/client";
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
-import type {
-  MonitoringOperation,
-  MonitoringSizerResponse,
-  OpenAPIComponents,
-} from "@/types/openapi.generated";
+import type { MonitoringSizerResponse } from "@/types/openapi.generated";
 
 export type {
-  MonitoringOperation,
   MonitoringOperationEvent,
   MonitoringSizerResponse,
   MonitoringSizerVerdict,

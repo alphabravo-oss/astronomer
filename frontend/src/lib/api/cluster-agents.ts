@@ -1,3 +1,6 @@
+import type { OpenAPIReadComponents } from "@/types/openapi.generated";
+type AgentUpgradeOperationWire =
+  OpenAPIReadComponents["schemas"]["AgentUpgradeOperationResponse"];
 import {
   getClusterAgents as getClusterAgentsOperation,
   getClusterAgentsByClusterIdDiagnostics,
@@ -22,7 +25,6 @@ import type {
 import type {
   AgentDiagnostics,
   AgentSelfTest,
-  AgentUpgradeOperationResponse as AgentUpgradeOperationWire,
   AgentUpgradePlan,
   AgentUpgradePlanRequest as AgentUpgradePlanWireRequest,
 } from "@/types/openapi.generated";

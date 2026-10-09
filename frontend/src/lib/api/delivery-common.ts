@@ -5,7 +5,7 @@ import { createIdempotencyKey } from "@/lib/api/idempotency";
 import { mapPage as mapCanonicalPage } from "@/lib/api/pagination";
 import { requireEnvelopeData } from "@/lib/api/data-envelope";
 import type { PaginatedResponse, PaginationMetadata } from "@/types";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 
 export type DeliveryContracts = OpenAPIComponents["schemas"];
 export type DeliveryPage<T> = PaginatedResponse<T>;

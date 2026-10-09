@@ -13,7 +13,7 @@ import {
 describe("generated OpenAPI client", () => {
   beforeEach(() => {
     request.mockReset();
-    request.mockResolvedValue({ data: { data: { id: "cluster-1" } } });
+    request.mockResolvedValue({ status: 200, data: { data: { id: "cluster-1", status: "active", registration_phase: "ready" } } });
   });
 
   it("owns URL expansion, query/header parameters, cancellation, and raw wire mode", async () => {
@@ -37,6 +37,7 @@ describe("generated OpenAPI client", () => {
 
   it("sends the OpenAPI request body without casing transforms", async () => {
     const body = { name: "west-prod", display_name: "West production" };
+    request.mockResolvedValue({ status: 201, data: { data: { id: "cluster-1", status: "active", registration_phase: "ready" } } });
     await postClusters({ body });
 
     expect(request).toHaveBeenCalledWith(

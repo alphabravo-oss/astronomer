@@ -15,7 +15,7 @@ import type {
   CISScanStatus,
   PaginatedResponse,
 } from "@/types";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 
 type CISWire = OpenAPIComponents["schemas"]["CISScan"];
 

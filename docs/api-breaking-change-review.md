@@ -576,3 +576,117 @@ triples apply only to the published-tag transition; unrelated changes still fail
 
 On 2026-10-08 the release owner approved v1.2.1 as the replacement for the
 unpublished v1.2.0 candidate. The API migration guidance above still applies.
+
+Reviewed 2026-10-09 by the API/backend/frontend maintainers for W06 response
+vocabulary refinement. Review deadline: **2026-10-16**. These exact five field
+sets were unconstrained strings in the released v1.2.1 specification. Their
+values already exist in writer/domain and database CHECK sets; this change
+documents those values and introduces no writer transition. The two previously
+DB-allowed rollout-cluster terminal states now have explicit terminal readers.
+Public SDK fields preserve their released string-compatible types. The full
+v1.2.1 external client compile fixture and pointer/marshal tests pass.
+
+The complete per-field/value disposition, released specification digest,
+canonical source digest and original raw 76-warning report are retained in
+`docs/assurance/technology-guide/w06/response-compatibility-disposition.json`
+and `v1.2.1-openapi-breaking.md`. This technical contract review is not human
+release approval. The separate 22 inhibition request warnings and their
+intentional malformed-JSON hardening belong to W09; this review does not cover
+request validation changes or future enum values. These exact triples ensure
+CI continues to reject unrelated field, value, path and operation changes.
+
+- GET /api/v1/delivery/rollouts/ added the new `aborted` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `awaiting_approval` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `draft` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `failed` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `paused` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `progressing` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `queued` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `rejected` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `resolving` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `rollback_failed` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `rolled_back` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `rolling_back` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/ added the new `succeeded` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `aborted` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `awaiting_approval` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `draft` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `failed` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `paused` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `progressing` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `queued` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `rejected` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `resolving` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `rollback_failed` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `rolled_back` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `rolling_back` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/ added the new `succeeded` enum value to the `data/rollout/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `aborted` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `acknowledged` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `blocked` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `failed` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `pending` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `ready` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `ready_previous` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `reconciling` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `released` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `rollback_failed` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `rolling_back` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `skipped` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/rollouts/{id}/clusters/ added the new `timed_out` enum value to the `data/items/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `aborted` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `awaiting_approval` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `draft` enum value to the `data/current_release/allOf[#/components/schemas/DeliverySystemRelease]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `draft` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `failed` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `paused` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `progressing` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `queued` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `released` enum value to the `data/current_release/allOf[#/components/schemas/DeliverySystemRelease]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `retired` enum value to the `data/current_release/allOf[#/components/schemas/DeliverySystemRelease]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `revoked` enum value to the `data/current_release/allOf[#/components/schemas/DeliverySystemRelease]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `rollback_failed` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `rolled_back` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `rolling_back` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+- GET /api/v1/delivery/system/compatibility/ added the new `succeeded` enum value to the `data/current_rollout/allOf[#/components/schemas/DeliverySystemRollout]/state` response property for the response status `200`
+
+Reviewed 2026-10-09 for Plan032 W09/W06 inhibition validation, expiring
+2026-11-08. These 22 exact POST/PUT differences apply only to the paths below;
+unrelated operation, field, warning or future change remains outside this
+review. Re-review against the released baseline before expiry; remove obsolete
+entries when that baseline advances. The released v1.2.1 handlers already
+rejected missing/empty source and target arrays, empty names and blank matcher
+labels. Their required/minimum/pattern schema corrections record that behavior.
+Blank equality labels are intentional validation hardening: released handlers
+accepted them, while the new handler returns a safe field-specific 422 before
+mutation. The same bounded change rejects missing/null matcher values and
+explicit null regex flags formerly normalized by Go zero values. Empty string
+values and omitted regex=false remain accepted, as do supported optional null
+collections/enabled values and additive properties. These malformed-input
+changes are disclosed in the [released-handler receipt](assurance/technology-guide/w09/inhibition-contract-review.md);
+they are not represented as unchanged runtime behavior. No historical released
+specification is edited, and this review does not waive generated SDK layout
+compatibility checks.
+
+- POST /api/v1/admin/alerting/inhibitions/ the request property `source_matchers` became required
+- POST /api/v1/admin/alerting/inhibitions/ the request property `target_matchers` became required
+- POST /api/v1/admin/alerting/inhibitions/ the `source_matchers` request property's minItems was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `target_matchers` request property's minItems was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `equal_labels/items/` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `name` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `source_matchers/items/label` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ the `target_matchers/items/label` request property's minLength was set to `1`
+- POST /api/v1/admin/alerting/inhibitions/ added the pattern `\S` to the request property `equal_labels/items/`
+- POST /api/v1/admin/alerting/inhibitions/ added the pattern `\S` to the request property `source_matchers/items/label`
+- POST /api/v1/admin/alerting/inhibitions/ added the pattern `\S` to the request property `target_matchers/items/label`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the request property `source_matchers` became required
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the request property `target_matchers` became required
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `source_matchers` request property's minItems was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `target_matchers` request property's minItems was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `equal_labels/items/` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `name` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `source_matchers/items/label` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ the `target_matchers/items/label` request property's minLength was set to `1`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `equal_labels/items/`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `source_matchers/items/label`
+- PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `target_matchers/items/label`

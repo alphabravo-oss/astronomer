@@ -7,7 +7,7 @@ import {
   postClusters as createClusterOperation,
 } from "@/lib/api/generated/client";
 import { mapPage } from "@/lib/api/pagination";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
 import type { Cluster, ClusterRegistration, PaginatedResponse } from "@/types";
 

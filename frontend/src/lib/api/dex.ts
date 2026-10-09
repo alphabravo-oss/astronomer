@@ -22,7 +22,7 @@ import type {
   DexSettings,
   DexSettingsWriteRequest,
 } from "@/types";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 
 type DexConnectorWire = OpenAPIComponents["schemas"]["DexConnector"];
 type DexConnectorTypeWire = OpenAPIComponents["schemas"]["DexConnectorType"];

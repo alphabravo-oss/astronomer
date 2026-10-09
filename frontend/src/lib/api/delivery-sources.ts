@@ -1,6 +1,7 @@
+import type { CategoryValue } from "@/types/categories.generated";
 /** Delivery source contracts and operations. */
 
-import { camelizeKeys } from "@/lib/camelize";
+import { camelizeWire } from "@/lib/camelize";
 import * as generated from "@/lib/api/generated/client";
 import { requireEnvelopeData } from "@/lib/api/data-envelope";
 import {
@@ -10,13 +11,11 @@ import {
   type PageParams,
   type TrustPolicyRequest,
 } from "@/lib/api/delivery-common";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIReadComponents as OpenAPIComponents } from "@/types/categories.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
 
-export type DeliverySourceType =
-  "git" | "oci_artifact" | "helm_http" | "helm_oci";
-export type DeliveryAuthMode =
-  "none" | "basic" | "bearer" | "ssh" | "workload_identity";
+export type DeliverySourceType = CategoryValue<"DeliverySourceKind">;
+export type DeliveryAuthMode = CategoryValue<"DeliverySourceAuthModeValue">;
 
 export interface SourceCredentialInput {
   username?: string;
@@ -57,7 +56,7 @@ export interface SourceVerification {
 }
 
 function mapSource(wire: DeliveryContracts["DeliverySource"]): DeliverySource {
-  return camelizeKeys(wire) as unknown as DeliverySource;
+  return camelizeWire(wire);
 }
 
 export async function listDeliverySources(
@@ -148,7 +147,5 @@ export async function verifyDeliverySource(
     headerParams: optionalIdempotencyHeader(key),
     signal,
   });
-  return camelizeKeys(
-    requireEnvelopeData(wire, "delivery response"),
-  ) as unknown as SourceVerification;
+  return camelizeWire(requireEnvelopeData(wire, "delivery response"));
 }

@@ -8,16 +8,16 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 
 ## Scan Scope
 
-- Worker Go files scanned: 105
-- Handler Go files scanned: 354
-- Production source files scanned: 495
+- Worker Go files scanned: 106
+- Handler Go files scanned: 357
+- Production source files scanned: 499
 - Task constants resolved: 160
 - Worker handler registrations: 91
 - Periodic schedules: 62
 - Task constructors: 71
 - Production `asynq.NewTask` call sites: 87
 - Production `.Enqueue(...)` call sites: 5
-- Task-outbox producer call sites: 31
+- Task-outbox producer call sites: 37
 - Durable operation tables: 15
 
 The hard CI behavior keeps this inventory current, requires registered/scheduled task expressions to remain parseable, and fails new direct Redis enqueue call sites until they are classified in `docs/direct-enqueue-classifications.json`.
@@ -160,16 +160,16 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/handler/admin_management_backup_operations.go:127`](internal/handler/admin_management_backup_operations.go:127) - `if _, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{DedupeKey: "management_backup_operation:" + operation.ID.String(), MaxRetry: 20, Timeout: 5 * time.Minute, MaxDeliveryAttempts: 30}); err != nil {`
 - [`internal/handler/admin_queues.go:294`](internal/handler/admin_queues.go:294) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/apiserver_allowlist.go:457`](internal/handler/apiserver_allowlist.go:457) - `_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
-- [`internal/handler/catalog_repositories.go:395`](internal/handler/catalog_repositories.go:395) - `outbox, mutationErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
+- [`internal/handler/catalog_repositories.go:394`](internal/handler/catalog_repositories.go:394) - `outbox, mutationErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/cloud_credentials_targets.go:113`](internal/handler/cloud_credentials_targets.go:113) - `_, err = q.UpsertCloudCredentialMaterializationWithTaskOutbox(ctx, sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams{`
 - [`internal/handler/cloud_credentials_targets.go:142`](internal/handler/cloud_credentials_targets.go:142) - `err = q.DeleteCloudCredentialMaterializationWithTaskOutbox(ctx, sqlc.DeleteCloudCredentialMaterializationWithTaskOutboxParams{`
 - [`internal/handler/cloud_credentials.go:69`](internal/handler/cloud_credentials.go:69) - `UpsertCloudCredentialMaterializationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams) (sqlc.CloudCredentialMaterialization, error)`
 - [`internal/handler/cloud_credentials.go:70`](internal/handler/cloud_credentials.go:70) - `DeleteCloudCredentialMaterializationWithTaskOutbox(ctx context.Context, arg sqlc.DeleteCloudCredentialMaterializationWithTaskOutboxParams) error`
 - [`internal/handler/cluster_registries.go:668`](internal/handler/cluster_registries.go:668) - `_, err := tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/cluster_snapshots.go:152`](internal/handler/cluster_snapshots.go:152) - `_, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{`
-- [`internal/handler/cluster_template_apply_enqueue.go:20`](internal/handler/cluster_template_apply_enqueue.go:20) - `UpsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams) (sqlc.ClusterTemplateApplication, error)`
-- [`internal/handler/cluster_template_apply_enqueue.go:42`](internal/handler/cluster_template_apply_enqueue.go:42) - `func upsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, q any, outbox tasks.TaskOutboxWriter, app sqlc.UpsertClusterTemplateApplicationParams, task *asynq.Task, opts tasks.TaskOutboxOptions) (sqlc.ClusterTemplateApplication, bool, error) {`
-- [`internal/handler/cluster_template_apply_enqueue.go:60`](internal/handler/cluster_template_apply_enqueue.go:60) - `row, err := atomicQ.UpsertClusterTemplateApplicationWithTaskOutbox(ctx, sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams{`
+- [`internal/handler/cluster_template_apply_enqueue.go:19`](internal/handler/cluster_template_apply_enqueue.go:19) - `UpsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams) (sqlc.ClusterTemplateApplication, error)`
+- [`internal/handler/cluster_template_apply_enqueue.go:41`](internal/handler/cluster_template_apply_enqueue.go:41) - `func upsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, q any, outbox tasks.TaskOutboxWriter, app sqlc.UpsertClusterTemplateApplicationParams, task *asynq.Task, opts tasks.TaskOutboxOptions) (sqlc.ClusterTemplateApplication, bool, error) {`
+- [`internal/handler/cluster_template_apply_enqueue.go:55`](internal/handler/cluster_template_apply_enqueue.go:55) - `row, err := atomicQ.UpsertClusterTemplateApplicationWithTaskOutbox(ctx, sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams{`
 - [`internal/handler/cluster_templates_applications.go:340`](internal/handler/cluster_templates_applications.go:340) - `app, atomic, err := upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), q, q, params, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/clusters_decommission.go:261`](internal/handler/clusters_decommission.go:261) - `_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/control_plane_snapshots.go:119`](internal/handler/control_plane_snapshots.go:119) - `_, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{`
@@ -184,9 +184,15 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/worker/tasks/gitops_sync.go:532`](internal/worker/tasks/gitops_sync.go:532) - `if _, err := EnqueueTaskOutbox(ctx, runtime.Deps.TaskOutbox, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/notification_dispatch.go:120`](internal/worker/tasks/notification_dispatch.go:120) - `_, err = EnqueueTaskOutbox(ctx, q, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/security_scan.go:255`](internal/worker/tasks/security_scan.go:255) - `_, err = EnqueueTaskOutbox(ctx, runtime.Deps.Outbox, task, TaskOutboxOptions{`
-- [`internal/worker/tasks/task_outbox_enqueue.go:16`](internal/worker/tasks/task_outbox_enqueue.go:16) - `UpsertTaskOutbox(ctx context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)`
-- [`internal/worker/tasks/task_outbox_enqueue.go:29`](internal/worker/tasks/task_outbox_enqueue.go:29) - `func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task, opts TaskOutboxOptions) (sqlc.TaskOutbox, error) {`
-- [`internal/worker/tasks/task_outbox_enqueue.go:47`](internal/worker/tasks/task_outbox_enqueue.go:47) - `return q.UpsertTaskOutbox(ctx, sqlc.UpsertTaskOutboxParams{`
+- [`internal/worker/tasks/task_outbox_enqueue.go:18`](internal/worker/tasks/task_outbox_enqueue.go:18) - `UpsertTaskOutbox(ctx context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)`
+- [`internal/worker/tasks/task_outbox_enqueue.go:31`](internal/worker/tasks/task_outbox_enqueue.go:31) - `func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task, opts TaskOutboxOptions) (sqlc.TaskOutbox, error) {`
+- [`internal/worker/tasks/task_outbox_enqueue.go:36`](internal/worker/tasks/task_outbox_enqueue.go:36) - `return q.UpsertTaskOutbox(ctx, params)`
+- [`internal/worker/tasks/task_outbox_enqueue.go:42`](internal/worker/tasks/task_outbox_enqueue.go:42) - `func PrepareTaskOutbox(ctx context.Context, task *asynq.Task, opts TaskOutboxOptions) (sqlc.UpsertTaskOutboxParams, error) {`
+- [`internal/worker/tasks/task_outbox_enqueue.go:44`](internal/worker/tasks/task_outbox_enqueue.go:44) - `return sqlc.UpsertTaskOutboxParams{}, &jsoncontract.Error{Field: "task_payload", Category: "missing_task"}`
+- [`internal/worker/tasks/task_outbox_enqueue.go:48`](internal/worker/tasks/task_outbox_enqueue.go:48) - `return sqlc.UpsertTaskOutboxParams{}, err`
+- [`internal/worker/tasks/task_outbox_enqueue.go:53`](internal/worker/tasks/task_outbox_enqueue.go:53) - `return sqlc.UpsertTaskOutboxParams{}, err`
+- [`internal/worker/tasks/task_outbox_enqueue.go:67`](internal/worker/tasks/task_outbox_enqueue.go:67) - `return sqlc.UpsertTaskOutboxParams{}, &jsoncontract.Error{Field: "task_options", Category: "out_of_range"}`
+- [`internal/worker/tasks/task_outbox_enqueue.go:76`](internal/worker/tasks/task_outbox_enqueue.go:76) - `return sqlc.UpsertTaskOutboxParams{`
 
 ## Durable Operation Tables
 
@@ -238,7 +244,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `agent_token_rotation` |1 |[`internal/handler/clusters_registration.go:264`](internal/handler/clusters_registration.go:264) |
 | `apiserver_allowlist_reconcile` |1 |[`internal/handler/apiserver_allowlist.go:391`](internal/handler/apiserver_allowlist.go:391) |
 | `catalog` |4 |[`internal/handler/catalog_installations.go:248`](internal/handler/catalog_installations.go:248)<br>[`internal/handler/catalog_installations.go:328`](internal/handler/catalog_installations.go:328)<br>[`internal/handler/catalog_installations.go:602`](internal/handler/catalog_installations.go:602)<br>[`internal/handler/catalog_installations.go:680`](internal/handler/catalog_installations.go:680) |
-| `catalog_repository_sync` |1 |[`internal/handler/catalog_repositories.go:359`](internal/handler/catalog_repositories.go:359) |
+| `catalog_repository_sync` |1 |[`internal/handler/catalog_repositories.go:358`](internal/handler/catalog_repositories.go:358) |
 | `cluster_template_apply` |1 |[`internal/handler/cluster_templates_applications.go:103`](internal/handler/cluster_templates_applications.go:103) |
 | `cluster_template_reapply` |1 |[`internal/handler/cluster_templates_applications.go:226`](internal/handler/cluster_templates_applications.go:226) |
 | `cluster-snapshot` |1 |[`internal/handler/cluster_snapshots_crud.go:62`](internal/handler/cluster_snapshots_crud.go:62) |
