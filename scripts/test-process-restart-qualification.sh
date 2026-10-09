@@ -3,7 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
-. scripts/lib/docker-test-endpoint.sh
+. scripts/lib/qualification-runtime.sh
 
 for tool in docker go openssl; do
   command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }
@@ -21,31 +21,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker run -d --rm --name "$postgres_container" \
-  -e POSTGRES_USER=process_restart \
-  -e POSTGRES_PASSWORD="$credential" \
-  -e POSTGRES_DB=process_restart \
-  -p "${DOCKER_TEST_BIND_HOST}::5432" pgvector/pgvector:pg16 >/dev/null
-docker run -d --rm --name "$redis_container" \
-  -p "${DOCKER_TEST_BIND_HOST}::6379" redis:7-alpine >/dev/null
-
-for attempt in $(seq 1 60); do
-  if docker exec "$postgres_container" pg_isready -U process_restart -d process_restart >/dev/null 2>&1 && \
-     docker exec "$redis_container" redis-cli ping >/dev/null 2>&1; then
-    break
-  fi
-  if [[ "$attempt" == 60 ]]; then
-    docker logs "$postgres_container" >&2 || true
-    docker logs "$redis_container" >&2 || true
-    exit 1
-  fi
-  sleep 0.5
-done
+qualification_postgres_run "$postgres_container" process_restart "$credential" process_restart
+qualification_valkey_run "$redis_container" "$credential"
+qualification_postgres_ready "$postgres_container" process_restart process_restart
+qualification_valkey_ready "$redis_container"
 
 postgres_port="$(docker port "$postgres_container" 5432/tcp | awk -F: 'NR == 1 {print $NF}')"
 redis_port="$(docker port "$redis_container" 6379/tcp | awk -F: 'NR == 1 {print $NF}')"
 export ASTRONOMER_PROCESS_RESTART_DATABASE_URL="postgres://process_restart:${credential}@${DOCKER_TEST_CONNECT_HOST}:${postgres_port}/process_restart?sslmode=disable"
-export ASTRONOMER_PROCESS_RESTART_REDIS_URL="redis://${DOCKER_TEST_CONNECT_HOST}:${redis_port}/0"
+export ASTRONOMER_PROCESS_RESTART_REDIS_URL="redis://:${credential}@${DOCKER_TEST_CONNECT_HOST}:${redis_port}/0"
 export ASTRONOMER_PROCESS_RESTART_DEDICATED=1
 
 go build -trimpath -o "$work_dir/migrator" ./cmd/migrator
@@ -55,5 +39,5 @@ race_args=()
 if [[ "${PROCESS_RESTART_QUALIFICATION_RACE:-0}" == "1" ]]; then
   race_args=(-race)
 fi
-go test "${race_args[@]}" ./internal/worker \
-  -run '^TestProcessRestartQualification$' -count=1 -timeout=3m -v
+python3 scripts/qualification-go.py --name process-restart --expected TestProcessRestartQualification -- \
+  "${race_args[@]}" -p=1 -count=1 -timeout=3m -run '^TestProcessRestartQualification$' ./internal/worker

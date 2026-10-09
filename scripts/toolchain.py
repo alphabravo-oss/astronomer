@@ -86,9 +86,11 @@ def validate(document, now=None, release=False):
                 allowed_tags = {selected, "v" + selected}
                 if name in ("go", "node"):
                     allowed_tags = {selected + "-alpine"}
-                elif name == "postgres":
+                elif name in ("postgres", "postgres-test-runtime"):
                     if tag and re.fullmatch(re.escape(selected) + r"-\d{12}-standard-trixie", tag):
                         allowed_tags.add(tag)
+                elif name == "valkey-test-runtime":
+                    allowed_tags = {selected + "-alpine"}
                 elif name == "nginx":
                     alpine = next(c["selected"] for c in document["components"] if c["id"] == "alpine")
                     allowed_tags = {selected + "-alpine" + ".".join(alpine.split(".")[:2]) + "-slim"}
