@@ -51,8 +51,14 @@ export HEARTBEAT_TEST_DATABASE_URL="$database_url"
 export INACTIVE_USER_RETENTION_TEST_DATABASE_URL="$database_url"
 export REFRESH_SESSION_TEST_DATABASE_URL="$database_url"
 export TABLE_VIEWS_TEST_DATABASE_URL="$database_url"
+export ASTRONOMER_JSON_TEST_DATABASE_URL="$database_url"
 
 expected=(
+  TestPostgresDurableJSONNestedNewWritesAndLegacyArrays
+  TestPostgresTaskPayloadSchemaMatchesV1Adapter
+  TestPostgresDurableJSONExpandPreservesCorruptHistoricalRows
+  TestPostgresIntegrityAuditDedupeUsesExistingOutbox
+  TestPostgresPlacementAndRolloutNestedWireShapes
   TestCatalogSearchFiltersScopeBeforePaginationAndCounts
   TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders
   TestCatalogOperationStatusReadsExactRolloutAndDeletion
@@ -87,7 +93,7 @@ go test "${race_args[@]}" -json -p=1 -count=1 -timeout=10m \
   -run "$pattern" \
   ./internal/db/sqlc ./internal/charlie ./internal/delivery/builtin \
   ./internal/delivery/rollout ./internal/delivery/catalogapp ./internal/worker/tasks \
-  ./internal/handler | tee "$report"
+  ./internal/handler ./internal/jsoncontract | tee "$report"
 test_status=${PIPESTATUS[0]}
 set -e
 (( test_status == 0 )) || exit "$test_status"
