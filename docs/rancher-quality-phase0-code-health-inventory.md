@@ -9,10 +9,10 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 ## Scan Scope
 
 - Frontend source files: 1262
-- Frontend source lines: 238127
-- Go source files under `internal/` excluding generated sqlc and tests: 1015
-- Go source files scanned for sqlc query references excluding generated sqlc: 2271
-- sqlc query declarations: 1272
+- Frontend source lines: 238130
+- Go source files under `internal/` excluding generated sqlc and tests: 1021
+- Go source files scanned for sqlc query references excluding generated sqlc: 2305
+- sqlc query declarations: 1327
 - Component files scanned: 457
 - Helm top-level values scanned: 35
 
@@ -94,7 +94,7 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
-- `actionTransition` in [`internal/delivery/rollout/control.go:355`](internal/delivery/rollout/control.go:355), [`internal/delivery/systemrollout/service.go:392`](internal/delivery/systemrollout/service.go:392)
+- `actionTransition` in [`internal/delivery/rollout/control.go:355`](internal/delivery/rollout/control.go:355), [`internal/delivery/systemrollout/service.go:345`](internal/delivery/systemrollout/service.go:345)
 - `bearerToken` in [`internal/handler/scim.go:272`](internal/handler/scim.go:272), [`internal/lokiauth/auth.go:369`](internal/lokiauth/auth.go:369)
 - `blocked` in [`internal/agentcompat/compat.go:112`](internal/agentcompat/compat.go:112), [`internal/delivery/distribution/diagnostic.go:13`](internal/delivery/distribution/diagnostic.go:13)
 - `canonicalCandidates` in [`internal/delivery/placement/placement.go:412`](internal/delivery/placement/placement.go:412), [`internal/delivery/rollout/cohorts.go:85`](internal/delivery/rollout/cohorts.go:85)
@@ -102,10 +102,10 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `contains` in [`internal/delivery/placement/placement.go:565`](internal/delivery/placement/placement.go:565), [`internal/server/vault_observer.go:108`](internal/server/vault_observer.go:108)
 - `containsControl` in [`internal/delivery/model/types.go:641`](internal/delivery/model/types.go:641), [`internal/handler/delivery/common.go:277`](internal/handler/delivery/common.go:277)
 - `containsString` in [`internal/agent/delivery/validator.go:454`](internal/agent/delivery/validator.go:454), [`internal/charlie/capability_schema.go:357`](internal/charlie/capability_schema.go:357)
-- `decisionDigest` in [`internal/delivery/rollout/scheduler.go:572`](internal/delivery/rollout/scheduler.go:572), [`internal/delivery/systemrollout/service.go:713`](internal/delivery/systemrollout/service.go:713)
+- `decisionDigest` in [`internal/delivery/rollout/scheduler.go:572`](internal/delivery/rollout/scheduler.go:572), [`internal/delivery/systemrollout/service.go:626`](internal/delivery/systemrollout/service.go:626)
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
 - `decodeRoleRules` in [`internal/handler/rbac_guards.go:251`](internal/handler/rbac_guards.go:251), [`internal/server/middleware/rbac_queries.go:244`](internal/server/middleware/rbac_queries.go:244)
-- `decodeStrict` in [`internal/delivery/provider/provider.go:483`](internal/delivery/provider/provider.go:483), [`internal/delivery/rollout/postgres_store.go:507`](internal/delivery/rollout/postgres_store.go:507)
+- `decodeStrict` in [`internal/delivery/provider/provider.go:497`](internal/delivery/provider/provider.go:497), [`internal/delivery/rollout/postgres_store.go:507`](internal/delivery/rollout/postgres_store.go:507)
 - `defaultString` in [`internal/handler/resource_presenters.go:703`](internal/handler/resource_presenters.go:703), [`internal/helmruntime/config.go:109`](internal/helmruntime/config.go:109)
 - `denied` in [`internal/charlie/action_guard.go:806`](internal/charlie/action_guard.go:806), [`internal/delivery/resolver/network.go:141`](internal/delivery/resolver/network.go:141)
 - `digestBytes` in [`internal/charlie/action_guard.go:801`](internal/charlie/action_guard.go:801), [`internal/delivery/resolver/service.go:171`](internal/delivery/resolver/service.go:171)
@@ -114,17 +114,17 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `isUniqueViolation` in [`internal/handler/cluster_templates_registry.go:336`](internal/handler/cluster_templates_registry.go:336), [`internal/projects/service.go:571`](internal/projects/service.go:571)
 - `missingCapabilities` in [`internal/agentcompat/compat.go:119`](internal/agentcompat/compat.go:119), [`internal/delivery/placement/placement.go:392`](internal/delivery/placement/placement.go:392)
 - `mustJSON` in [`internal/handler/delivery/target.go:712`](internal/handler/delivery/target.go:712), [`internal/worker/tasks/catalog_sync.go:683`](internal/worker/tasks/catalog_sync.go:683)
-- `normalizeDigest` in [`internal/charlie/admin_diagnostics.go:198`](internal/charlie/admin_diagnostics.go:198), [`internal/delivery/catalogapp/service.go:536`](internal/delivery/catalogapp/service.go:536)
+- `normalizeDigest` in [`internal/charlie/admin_diagnostics.go:198`](internal/charlie/admin_diagnostics.go:198), [`internal/delivery/catalogapp/service.go:484`](internal/delivery/catalogapp/service.go:484)
 - `nullableTime` in [`internal/charlie/cluster_agent_capability_adapter.go:192`](internal/charlie/cluster_agent_capability_adapter.go:192), [`internal/handler/alerting_responses.go:538`](internal/handler/alerting_responses.go:538)
 - `nullableUUID` in [`internal/charlie/delivery_capability_adapter.go:530`](internal/charlie/delivery_capability_adapter.go:530), [`internal/handler/alerting_responses.go:524`](internal/handler/alerting_responses.go:524), [`internal/handler/delivery/override_set.go:367`](internal/handler/delivery/override_set.go:367)
 - `percentile` in [`internal/anomaly/stats.go:184`](internal/anomaly/stats.go:184), [`internal/delivery/qualification/report.go:134`](internal/delivery/qualification/report.go:134)
 - `podReady` in [`internal/agent/delivery/system_inventory.go:410`](internal/agent/delivery/system_inventory.go:410), [`internal/charlie/management_kubernetes_adapter.go:30`](internal/charlie/management_kubernetes_adapter.go:30), [`internal/handler/monitoring_operations_readiness.go:191`](internal/handler/monitoring_operations_readiness.go:191)
 - `recordAuditOutbox` in [`internal/handler/audit_helpers.go:106`](internal/handler/audit_helpers.go:106), [`internal/handler/delivery/common.go:93`](internal/handler/delivery/common.go:93)
 - `requireSuperuser` in [`internal/handler/authorization.go:90`](internal/handler/authorization.go:90), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
-- `retryAfter` in [`internal/apisvr/allowlist/providers/errors.go:51`](internal/apisvr/allowlist/providers/errors.go:51), [`internal/delivery/builtin/provisioner.go:631`](internal/delivery/builtin/provisioner.go:631)
+- `retryAfter` in [`internal/apisvr/allowlist/providers/errors.go:51`](internal/apisvr/allowlist/providers/errors.go:51), [`internal/delivery/builtin/provisioner.go:587`](internal/delivery/builtin/provisioner.go:587)
 - `sortedUUIDs` in [`internal/delivery/model/placement.go:187`](internal/delivery/model/placement.go:187), [`internal/handler/authorization.go:223`](internal/handler/authorization.go:223)
-- `stableID` in [`internal/delivery/builtin/provisioner.go:635`](internal/delivery/builtin/provisioner.go:635), [`internal/delivery/catalogapp/service.go:532`](internal/delivery/catalogapp/service.go:532)
-- ... 8 more
+- `stableID` in [`internal/delivery/builtin/provisioner.go:591`](internal/delivery/builtin/provisioner.go:591), [`internal/delivery/catalogapp/service.go:480`](internal/delivery/catalogapp/service.go:480)
+- ... 9 more
 
 ### Dead-Code Candidates
 
@@ -145,7 +145,7 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 ## Summary
 
 - Hard failures: 0
-- Duplicate-code candidates: 38
+- Duplicate-code candidates: 39
 - Dead-code candidates: 4
 
 ## Definition Of Done For Each Candidate

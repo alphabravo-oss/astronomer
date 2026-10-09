@@ -47,6 +47,9 @@ function createVirtualRowsController(initial: VirtualRowsOptions) {
     scrollToFn: elementScroll,
     observeElementRect,
     observeElementOffset,
+    // Publish measurements after the observer cycle; synchronous React layout
+    // updates can otherwise resize the observed rows within that same cycle.
+    useAnimationFrameWithResizeObserver: true,
     onChange: publish,
   });
   const instance = new Virtualizer<HTMLDivElement, Element>(

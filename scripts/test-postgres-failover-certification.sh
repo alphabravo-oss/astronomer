@@ -146,7 +146,7 @@ go build -trimpath -o "$work_dir/migrator" ./cmd/migrator 2>&1 | tee "$artifact_
 # base backup as the postgres OS user so the promoted server retains safe file
 # ownership and permissions.
 bootstrap_stage="physical_base_backup"
-docker run --rm -v "$replica_volume:/var/lib/postgresql/data" \
+docker run --rm --user 0 -v "$replica_volume:/var/lib/postgresql/data" \
   --entrypoint sh "$postgres_image" -ceu \
   'chown -R postgres:postgres /var/lib/postgresql/data' >/dev/null
 docker run --rm --user postgres --network "$network" \
