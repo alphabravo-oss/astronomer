@@ -14,7 +14,7 @@ contract and explicitly approved release-specific exceptions.
 
 | Current modernization plan | Priority | Status | Next gate |
 | --- | --- | --- | --- |
-| [032 — Technology-guide alignment and latest-stable modernization](./032-technology-guide-alignment-and-latest-stable-master-plan.md) | P0/P1 fixes and modernization; P2 v2 preparation | **IN PROGRESS** on `implement/032-technology-guide` ([evidence](./032-evidence/README.md)) | W00 baseline/reconciliation, then bounded work packages W01–W17. Includes guide coverage, version governance, signed disconnected runtime, CNPG preservation and recovery, regression tests, qualification evidence, and release-policy boundaries. |
+| [032 — Technology guide alignment and latest stable](./032-technology-guide-alignment-and-latest-stable-master-plan.md) | P0–P2 · whole-product modernization | **IN PROGRESS** on `implement/032-technology-guide` | W00/W05/W06/W09 scoped completion reviewed; selected current toolchains, fixed SQL and signed delivery slices integrated. Actual current/previous PostgreSQL matrix, CNPG18 pool failover and historical-key physical restore pass with explicit synthetic-sample limits. Remaining security, disconnected freshness, pagination, observability, Helm, architecture, runners, catalog and whole candidate qualification continue. [Evidence/task status](./032-evidence/README.md). |
 
 ### Retained programs and historical status
 

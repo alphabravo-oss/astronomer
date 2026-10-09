@@ -91,6 +91,8 @@ def validate(document, now=None, release=False):
                         allowed_tags.add(tag)
                 elif name == "valkey-test-runtime":
                     allowed_tags = {selected + "-alpine"}
+                elif name in ("k3s-supported-test-runtime", "k3s-experimental-test-runtime"):
+                    allowed_tags = {"v" + selected.replace("+k3s", "-k3s")}
                 elif name == "nginx":
                     alpine = next(c["selected"] for c in document["components"] if c["id"] == "alpine")
                     allowed_tags = {selected + "-alpine" + ".".join(alpine.split(".")[:2]) + "-slim"}

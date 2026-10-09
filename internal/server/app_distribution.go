@@ -1,6 +1,10 @@
 package server
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
@@ -8,7 +12,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
-func newDistributionLoader(cfg *config.Config) (*distribution.Loader, error) {
+func newDistributionLoader(cfg *config.Config, ca []byte) (*distribution.Loader, error) {
 	policy, err := httpclient.ParseDestinationPolicy(cfg.DistributionDestinationPolicy)
 	if err != nil {
 		return nil, err
@@ -17,9 +21,16 @@ func newDistributionLoader(cfg *config.Config) (*distribution.Loader, error) {
 	if development {
 		return distribution.New(distribution.Options{Development: true, Network: policy})
 	}
-	trust, err := httpclient.TLSForCA(cfg.DeliverySourceCAFile)
-	if err != nil {
-		return nil, err
+	trust := &tls.Config{MinVersion: tls.VersionTLS12}
+	if len(ca) != 0 {
+		roots, poolErr := x509.SystemCertPool()
+		if poolErr != nil || roots == nil {
+			roots = x509.NewCertPool()
+		}
+		if !roots.AppendCertsFromPEM(ca) {
+			return nil, errors.New("builtin registry CA contains no certificates")
+		}
+		trust.RootCAs = roots
 	}
 	client, err := httpclient.NewDestinationClient(policy, httpclient.DestinationOptions{TLSConfig: trust, MaxResponseBytes: distribution.MaximumArchiveBytes})
 	if err != nil {

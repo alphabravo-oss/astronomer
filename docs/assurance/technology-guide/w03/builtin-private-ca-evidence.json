@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "workPackage": "W03",
+  "slice": "trusted-builtin-private-ca",
+  "baselineCommit": "14a5205b",
+  "observationDate": "2026-10-09",
+  "implementationStatus": "READY_FOR_REVIEW",
+  "packageStatus": "IN_PROGRESS",
+  "authoritativeQualification": false,
+  "policy": {
+    "source": "same canonical verified catalog loader as provisioner",
+    "identity": "deterministic builtin cluster/project/source plus exact chart URL/version/digest and publisher OIDC",
+    "transport": "independent canonical DestinationPolicy with 5s DNS deadline",
+    "ca": "once-captured public certificate bytes, <=1MiB <=64 CA certificates; no private key/trailing data",
+    "productionPublisher": "exact configured cosign_keyless identity and issuer; no mounted-key production escape",
+    "credentialIdentity": "existing internal receipt gains public_ca public-certificate fingerprint; no secret hash",
+    "databaseSchemaChanged": false,
+    "privateRegistryAuthenticationConfigured": false
+  },
+  "sourceSha256": {
+    "internal/agent/delivery/materializer.go": "608076fafb76f68231afde549b9cef537d56ca182caa2e8de6ae662c8ea47bcb",
+    "internal/agent/delivery/oci_tls_test.go": "6e0f7a8ad5ed341efd8eeae2b6eee02ef4b13eb87d7b93608da449d80aafcb42",
+    "internal/delivery/builtin/catalog_identity.go": "db453367f935f39fd6e830ccb06e1bf12ed7d2a8cd85ec4546ca5822bcbb3206",
+    "internal/delivery/provider/provider.go": "f903a969f8def472866dba1078b7290b91ac91cbd6725ce2570d4c221c934178",
+    "internal/delivery/provider/builtin_ca.go": "a6bb78051c64f37c4c16de8798f8e2c9f10ee9a3a32abbbd5b745fdaa1784347",
+    "internal/delivery/provider/builtin_ca_test.go": "cbe3afef5c32c022600f70f6864c6778b512dfdf967ab27b1b6088a109518727",
+    "internal/server/app_delivery.go": "b9e410f35e7bf3f21cea6076b94a0bf27a32cbadff6e214518e0d5415043b842",
+    "internal/server/app_distribution.go": "2e47d126d0edf6f3ca102ef82162a2ba173643330bd73029029b24f48b79954a",
+    "internal/server/app_builtin_ca.go": "eaa69eef95fe1512ad07ea12e8e894249280631b4e54fd6547c5595c936cef78",
+    "internal/server/app_builtin_ca_test.go": "4a3843ff090656898292229f890eb3a41678f9fb7f6a334ca947fee4e0afa90a",
+    "docs/assurance/technology-guide/w03/builtin-private-ca.md": "49a00900cb8476482316f2ca1a9dc22f02317bb59d15e704f4a62f578ec31bc7",
+    "docs/airgapped-install.md": "90d98914eb42f2b096ae59ca648c2cabbd4eb0134967117ead510641aadab49d"
+  },
+  "verification": [
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 go test ./internal/server ./internal/delivery/provider ./internal/agent/delivery -run \"TestBuiltinCA|TestOCITLS\" -count=1",
+      "result": "PASS"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 go test -race ./internal/delivery/provider ./internal/delivery/builtin ./internal/agent/delivery ./internal/server -count=1",
+      "result": "PASS",
+      "packageSeconds": {
+        "provider": 1.118,
+        "builtin": 1.125,
+        "agent_delivery": 12.705,
+        "server": 39.07
+      }
+    },
+    {
+      "command": "make docs-check",
+      "result": "PASS"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 make release-contract-check",
+      "result": "PASS",
+      "pythonFixtures": 61,
+      "includes": "release artifacts, chart images, Go release contracts"
+    },
+    {
+      "command": "node scripts/check-complexity-budget.mjs",
+      "result": "PASS",
+      "productionFiles": 2097,
+      "fileCeilings": 42,
+      "functionCeilings": 64
+    },
+    {
+      "command": "node scripts/check-dependency-boundaries.mjs",
+      "result": "PASS",
+      "rules": 14,
+      "files": 1489,
+      "imports": 9557
+    }
+  ],
+  "logSha256": {
+    "/tmp/plan032-w03-builtin-ca-focused.log": "6ea5227e0a8e36ffc0b587a773d0dbd58343daf5c21b518d46fb957c35e6d2cc",
+    "/tmp/plan032-w03-builtin-ca-race-final.log": "b2ea5a3f18b9f733a71630a959bb5bc9f6e76c066af7f25813ecd1ab492075dd",
+    "/tmp/plan032-w03-builtin-ca-docs-final.log": "46d75651d5c95796022be85b84dc6896539b6db98b629c748c13014aeb8eecc9",
+    "/tmp/plan032-w03-builtin-ca-release-contract.log": "46c245ce5f85bd4c3d03e5715883d41df06905868201a4add42b07e6ce35fe0d"
+  },
+  "positiveAssertions": [
+    "captured CA immutable against input/response mutation",
+    "actual provider assignment becomes Opaque Secret.ca.crt and OCI.certSecretRef",
+    "exact child digest and vendor verification retained",
+    "mixed registry authentication/TLS preserve both references and proper TLS keys",
+    "unchanged acknowledgment remains not_modified",
+    "CA rotation advances existing receipt credential epoch and invalidates old ack",
+    "independent destination policy cloned against caller mutation"
+  ],
+  "negativeAssertions": [
+    "missing/oversized/invalid/trailing CA",
+    "incomplete client TLS key pair",
+    "wrong cluster/project/source ownership",
+    "wrong URL/chart/version/digest/OIDC identity",
+    "HTTP or namespace source",
+    "unavailable verification catalog",
+    "source-development catalog",
+    "unapproved private destination or DNS outside approved CIDR"
+  ],
+  "initialFixtureError": {
+    "command": "focused provider CA test",
+    "result": "FAIL",
+    "diagnostic": "helm renderer chart and version must equal the immutable resolved source",
+    "resolution": "fixture source revision corrected to match its declared 1.0.0 renderer; no production gate bypass"
+  },
+  "qualificationLimits": [
+    "Catalog composition fixture injects OIDC metadata; it is not a production OIDC cryptographic end-to-end claim.",
+    "Canonical QA-key publication/offline crypto qualification remains a separate reviewed chain.",
+    "Production CA adapter is intentionally OIDC-only. Mounted-key builtin provider signing-key materialization is a separate prerequisite for a future local signed-candidate lane.",
+    "No live Flux private-registry fetch, cluster DNS/network policy, registry authentication, W04 fresh cache/no-egress, W12 RustFS operations or W17 publication performed.",
+    "Unsigned receipt records source observations and cannot mark package/release DONE."
+  ]
+}

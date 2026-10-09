@@ -369,18 +369,18 @@ W17 is run at milestone boundaries, not only after all v2 work. A bounded v1 mil
 
 **Ordered tasks:**
 
-- [ ] W01.1 Implement inventory schema, deterministic serialization, official upstream resolvers, and offline `--check` mode. Capture release date and stable/prerelease status; reject future/ambiguous releases unless independently validated.
-- [ ] W01.2 Inventory every version consumer before replacing literals. Include tools started via `go run module@version`, actions SHA/comments, curl-installed CLIs, Docker args, docs, fixture images, CNPG operator/plugin, and embedded catalog versions.
-- [ ] W01.3 Implement proposed `make versions-check` for deterministic source/consumer alignment and `make updates` for human-readable stable discovery, including `go list -u -m all`. Add machine-readable update evidence; the checker does not require online access on every ordinary PR.
-- [ ] W01.4 Resolve Go latest stable; update `go.mod`, toolchain/builders, and compatible generators/linter. Derive builder selection from authoritative Go version and resolved digest rather than copying separate version strings.
+- [x] W01.1 Implement inventory schema, deterministic serialization, official upstream resolvers, and offline `--check` mode. Capture release date and stable/prerelease status; reject future/ambiguous releases unless independently validated.
+- [x] W01.2 Inventory every version consumer before replacing literals. Include tools started via `go run module@version`, actions SHA/comments, curl-installed CLIs, Docker args, docs, fixture images, CNPG operator/plugin, and embedded catalog versions.
+- [x] W01.3 Implement proposed `make versions-check` for deterministic source/consumer alignment and `make updates` for human-readable stable discovery, including `go list -u -m all`. Add machine-readable update evidence; the checker does not require online access on every ordinary PR.
+- [x] W01.4 Resolve Go latest stable; update `go.mod`, toolchain/builders, and compatible generators/linter. Derive builder selection from authoritative Go version and resolved digest rather than copying separate version strings.
 - [ ] W01.5 Build all first-party Go tools/binaries, including migrator/key rotation/DR/shell helpers omitted by a simplistic server-only inventory. Test reachable vulnerabilities using the actual build toolchain.
-- [ ] W01.6 Update Go dependency families in coherent slices: pgx/otelpgx/OTel, Kubernetes/client-go/controller-runtime, authentication/crypto libraries, SDK/resolver/signature stacks. Review runtime changes, not only sums.
-- [ ] W01.7 Supersede the Node-major baseline ADR with latest stable Current for frontend build tooling. Update Node/npm, engines, version files, workflows, build images, local runner, and generated build metadata together.
-- [ ] W01.8 Upgrade TypeScript/ESLint/Vite/Vitest and compatible plugins in separate reviewable slices where needed. Preserve strict checking, cancellation gates, design-system restrictions, CSP checks, and bundle budgets.
-- [ ] W01.9 Refresh frontend dependency lockfile, router generator/plugin compatibility, Playwright/browser executables, UI primitives, and tested overrides. Remove obsolete overrides only after showing the original reason is resolved.
+- [x] W01.6 Update Go dependency families in coherent slices: pgx/otelpgx/OTel, Kubernetes/client-go/controller-runtime, authentication/crypto libraries, SDK/resolver/signature stacks. Review runtime changes, not only sums.
+- [x] W01.7 Supersede the Node-major baseline ADR with latest stable Current for frontend build tooling. Update Node/npm, engines, version files, workflows, build images, local runner, and generated build metadata together.
+- [x] W01.8 Upgrade TypeScript/ESLint/Vite/Vitest and compatible plugins in separate reviewable slices where needed. Preserve strict checking, cancellation gates, design-system restrictions, CSP checks, and bundle budgets.
+- [x] W01.9 Refresh frontend dependency lockfile, router generator/plugin compatibility, Playwright/browser executables, UI primitives, and tested overrides. Remove obsolete overrides only after showing the original reason is resolved.
 - [ ] W01.10 Expand automatic update discovery to Helm, manual CLIs, CNPG, Flux, Trivy, built-in apps, Charlie compatibility, dev stack, and supporting repositories. Use custom manager/resolver where Dependabot does not cover an ecosystem.
-- [ ] W01.11 Replace blanket major-ignore rules with reviewed update queues. Separate security-sensitive patch cadence from larger major qualification; recommend daily discovery and a weekly triage cycle.
-- [ ] W01.12 Add digest/provenance resolution and multiarch validation for selected images. A latest tag is a discovery input, never the final runtime identity.
+- [x] W01.11 Replace blanket major-ignore rules with reviewed update queues. Separate security-sensitive patch cadence from larger major qualification; recommend daily discovery and a weekly triage cycle.
+- [x] W01.12 Add digest/provenance resolution and multiarch validation for selected images. A latest tag is a discovery input, never the final runtime identity.
 - [ ] W01.13 For each lagging component, either qualify the current stable target or record the specific compatibility blocker. Do not silently preserve the old major as policy.
 - [ ] W01.14 Add freshness dashboard/report data: selected/upstream version, discovery age, exception age, owner, deadline, and evidence. Fail release preflight if the review is missing/stale; offline release preflight validates the signed resolution record instead of contacting upstream.
 
@@ -582,14 +582,14 @@ All listed commands exist at the baseline, including the component browser targe
 
 **Ordered tasks:**
 
-- [ ] W06.1 Inventory high-impact categories: rollout/cluster/deployment states, operation states, source/renderer kinds, approvals, credential status, registration, backup/restore, policy results, scanner status, and Charlie action states.
-- [ ] W06.2 Determine current writer/reader valid values across Go, DB constraints, OpenAPI, SDK, TypeScript, and Charlie bridge. Record backward compatibility and unknown value behavior.
-- [ ] W06.3 Add named closed OpenAPI enums for stable product categories. Kubernetes dynamic payloads and deliberate external forward-compatible categories require explicit checked adapters rather than inappropriate closed sets.
-- [ ] W06.4 Resolve `aborted`/`rollback_failed` rollout-cluster mismatch intentionally: support and implement them or migrate/reject them with documented logic. Do not delete DB allowed values without checking existing rows.
-- [ ] W06.5 Select one canonical enum authority and generate/check other representations, including DB CHECK semantics. If DB migration generation is inappropriate, a parity test must still compare the complete value sets.
-- [ ] W06.6 Generate browser unions/SDK types; remove unchecked `as unknown as` narrowing for affected wire models; retain legitimate view model transformations behind generated types.
-- [ ] W06.7 Add exhaustive action/status handling and typed unknown responses at trust boundaries. Unknown states must not quietly enable an action or become success.
-- [ ] W06.8 Regenerate all OpenAPI derived assets in one change and run compatibility diff against the actual v1 baseline.
+- [x] W06.1 Inventory high-impact categories: rollout/cluster/deployment states, operation states, source/renderer kinds, approvals, credential status, registration, backup/restore, policy results, scanner status, and Charlie action states.
+- [x] W06.2 Determine current writer/reader valid values across Go, DB constraints, OpenAPI, SDK, TypeScript, and Charlie bridge. Record backward compatibility and unknown value behavior.
+- [x] W06.3 Add named closed OpenAPI enums for stable product categories. Kubernetes dynamic payloads and deliberate external forward-compatible categories require explicit checked adapters rather than inappropriate closed sets.
+- [x] W06.4 Resolve `aborted`/`rollback_failed` rollout-cluster mismatch intentionally: support and implement them or migrate/reject them with documented logic. Do not delete DB allowed values without checking existing rows.
+- [x] W06.5 Select one canonical enum authority and generate/check other representations, including DB CHECK semantics. If DB migration generation is inappropriate, a parity test must still compare the complete value sets.
+- [x] W06.6 Generate browser unions/SDK types; remove unchecked `as unknown as` narrowing for affected wire models; retain legitimate view model transformations behind generated types.
+- [x] W06.7 Add exhaustive action/status handling and typed unknown responses at trust boundaries. Unknown states must not quietly enable an action or become success.
+- [x] W06.8 Regenerate all OpenAPI derived assets in one change and run compatibility diff against the actual v1 baseline.
 
 **Tests:** all known enum roundtrips, DB/domain schema exact agreement, unknown wire value behavior, malformed state, event/action matrix exhaustiveness, state evolution with old client where supported, and scheduling of intentionally supported terminal states.
 
@@ -635,14 +635,14 @@ Expected: tests include ceiling case and full traversal; every page progresses o
 **Ordered tasks:**
 
 - [ ] W08.1 Inventory domain SQL outside canonical queries, distinguishing fixed statements, dynamic K8s/extension queries, advisory locks, schema/test setup, and explicit low-level runtime operations.
-- [ ] W08.2 Capture transactional behavior before movement: isolation, row/advisory locks, held connection, idempotency keys, affected row checks, audit outbox, operation/outbox write ordering, and error translation.
-- [ ] W08.3 Move one bounded service's fixed SQL into annotated sqlc source, inject transaction-bound generated query interfaces, and retain parameterization. Do not replace a tx query with pool query accidentally.
-- [ ] W08.4 Keep PostgreSQL advisory locks on the same physical transaction/session where required; distinguish session locks from transaction locks.
+- [x] W08.2 Capture transactional behavior before movement: isolation, row/advisory locks, held connection, idempotency keys, affected row checks, audit outbox, operation/outbox write ordering, and error translation.
+- [x] W08.3 Move one bounded service's fixed SQL into annotated sqlc source, inject transaction-bound generated query interfaces, and retain parameterization. Do not replace a tx query with pool query accidentally.
+- [x] W08.4 Keep PostgreSQL advisory locks on the same physical transaction/session where required; distinguish session locks from transaction locks.
 - [ ] W08.5 Classify dynamic queries with named allowlisted construction patterns; preserve identifier quoting and value binding. No generic raw SQL bypass.
 - [ ] W08.6 Expand governance discovery across runtime SQL locations so destructive operations cannot escape by moving into Go. Require explicit ownership/audit/retention policy for relevant deletes.
 - [ ] W08.7 Add a no-new-unowned SQL gate; reduce existing approved exceptions per package without a growing baseline.
-- [ ] W08.8 Generate queries and review both canonical SQL and generated API changes. Do not hand edit generated methods.
-- [ ] W08.9 Prove concurrency fencing, rollback, errors, and audit intents with real PostgreSQL before moving the next service.
+- [x] W08.8 Generate queries and review both canonical SQL and generated API changes. Do not hand edit generated methods.
+- [x] W08.9 Prove concurrency fencing, rollback, errors, and audit intents with real PostgreSQL before moving the next service.
 
 **Tests:** duplicate operation idempotency, concurrent rollout planning, transaction rollback after intermediate write, DB constraint/error mapping, missing row, zero affected rows, stale generation, tenant filter, outbox and audit atomicity, governance fixture with Go-embedded delete.
 
@@ -664,16 +664,16 @@ Expected: typed generated interfaces, no unintended transaction behavior change,
 
 **Ordered tasks:**
 
-- [ ] W09.1 Inventory request decoders and durable JSON writers/readers; classify strict product DTOs, versioned internal records, raw Kubernetes objects, extension data, and externally defined payloads.
-- [ ] W09.2 Characterize existing v1 clients that send additional properties before rejecting them. Document compatibility adapters and fields deliberately retained.
-- [ ] W09.3 Adopt bounded body size, one JSON document, required fields, typed validation, and consistent error envelopes. Treat unknown fields according to the published contract rather than applying a blanket rule to arbitrary Kubernetes manifests.
-- [ ] W09.4 Define nested schemas for product-owned objects and arrays: inhibition labels, matchers, rollout parameters, placement selectors, task payloads, and audit metadata where a stable schema exists.
-- [ ] W09.5 Validate before durable writes; maintain explicitly versioned reader adapters for existing records. Keep tenant authorization separate from syntactic validation.
-- [ ] W09.6 Handle every reader error with the specified baseline-compatible behavior: the worker skips the malformed rule, continues evaluating valid rules, and emits a bounded diagnostic containing the rule ID and error category, never raw matcher data. Emit a deduplicated audit event for the integrity failure through the existing audit path. A corrupt rule alone cannot suppress an alert. Handler readers return the existing typed internal/data-integrity error envelope instead of fabricating an empty valid rule. Do not automatically delete, disable, or rewrite the stored rule; record an operator repair workflow separately.
-- [ ] W09.7 Add a read-only inventory of existing invalid rows before adding constraints. Use expand/migrate/contract with an explicit repair policy and reversible intermediate stages.
-- [ ] W09.8 Test partial updates separately from creates: omitted fields, null, empty arrays, empty objects, zero values, and explicit removal must retain their documented meaning.
-- [ ] W09.9 Extend the governance checker to discover new JSON persistence paths and require schema ownership and reader behavior.
-- [ ] W09.10 Generate API clients and update form errors so field validation reaches the operator without exposing stored secrets.
+- [x] W09.1 Inventory request decoders and durable JSON writers/readers; classify strict product DTOs, versioned internal records, raw Kubernetes objects, extension data, and externally defined payloads.
+- [x] W09.2 Characterize existing v1 clients that send additional properties before rejecting them. Document compatibility adapters and fields deliberately retained.
+- [x] W09.3 Adopt bounded body size, one JSON document, required fields, typed validation, and consistent error envelopes. Treat unknown fields according to the published contract rather than applying a blanket rule to arbitrary Kubernetes manifests.
+- [x] W09.4 Define nested schemas for product-owned objects and arrays: inhibition labels, matchers, rollout parameters, placement selectors, task payloads, and audit metadata where a stable schema exists.
+- [x] W09.5 Validate before durable writes; maintain explicitly versioned reader adapters for existing records. Keep tenant authorization separate from syntactic validation.
+- [x] W09.6 Handle every reader error with the specified baseline-compatible behavior: the worker skips the malformed rule, continues evaluating valid rules, and emits a bounded diagnostic containing the rule ID and error category, never raw matcher data. Emit a deduplicated audit event for the integrity failure through the existing audit path. A corrupt rule alone cannot suppress an alert. Handler readers return the existing typed internal/data-integrity error envelope instead of fabricating an empty valid rule. Do not automatically delete, disable, or rewrite the stored rule; record an operator repair workflow separately.
+- [x] W09.7 Add a read-only inventory of existing invalid rows before adding constraints. Use expand/migrate/contract with an explicit repair policy and reversible intermediate stages.
+- [x] W09.8 Test partial updates separately from creates: omitted fields, null, empty arrays, empty objects, zero values, and explicit removal must retain their documented meaning.
+- [x] W09.9 Extend the governance checker to discover new JSON persistence paths and require schema ownership and reader behavior.
+- [x] W09.10 Generate API clients and update form errors so field validation reaches the operator without exposing stored secrets.
 
 **Tests:** trailing document, oversized body, invalid nested item, duplicate or unsupported enum, malformed stored inhibition, empty but valid inhibition, old schema version, tenant mismatch, partial-update semantics, malformed provider JSON, and rolling-reader compatibility.
 

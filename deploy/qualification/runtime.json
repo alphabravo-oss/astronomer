@@ -18,10 +18,31 @@
     "image": "valkey/valkey:9.1.2-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11"
   },
   "gotestsum": "1.13.0",
-  "requiredExtensions": ["citext", "pgcrypto", "uuid-ossp", "vector"],
+  "requiredExtensions": [
+    "citext",
+    "pgcrypto",
+    "uuid-ossp",
+    "vector"
+  ],
   "sourceEvidence": "advisor-plans/032-evidence/cnpg18-prerequisites.json",
   "limits": [
     "These immutable operands qualify disposable test databases; they do not switch the production chart major.",
     "Standalone Docker fixtures do not qualify CloudNativePG operator failover, backup or recovery."
-  ]
+  ],
+  "kubernetes": {
+    "defaultMinor": "1.36",
+    "lanes": {
+      "1.36": {
+        "version": "1.36.5+k3s1",
+        "image": "rancher/k3s:v1.36.5-k3s1@sha256:057cfd5a9d51b89f1f0ee139c28d5d5fdd5aa7ddeac2742a0ba90c6dbc0329bb",
+        "qualification": "CNPG1.30 upstream-supported Kubernetes minor; owned K3s characterization, not vendor distribution certification"
+      },
+      "1.37": {
+        "version": "1.37.1+k3s1",
+        "image": "rancher/k3s:v1.37.1-k3s1@sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d",
+        "qualification": "Experimental: CNPG1.30 tested but not upstream-supported Kubernetes minor"
+      }
+    },
+    "kubectlPolicy": "Client major1 and within one minor of the selected server; no override of shared kubeconfig/context."
+  }
 }

@@ -34,7 +34,8 @@ The [source-bound receipt](prerequisite-oci-evidence.json) retains both Go packa
 race checks, eight Go package results, 11 metadata fixtures, docs and the full
 release-contract gate with 61 Python fixtures and release/chart/Go checks.
 Shared host capacity now permits the full gate; the earlier blocked retry
-remains historical. W03 is active. Trusted downstream Flux private CA delivery,
+remains historical. W03 is active. Trusted downstream Flux private CA delivery
+now has a [bounded source contract](builtin-private-ca.md); live registry access,
 complete mirror and workflow wiring, real supplier profiles, signed tool
 availability and later live qualifications remain explicit pending work.
 
