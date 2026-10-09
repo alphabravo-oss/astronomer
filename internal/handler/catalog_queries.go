@@ -196,6 +196,10 @@ func catalogVisibleToProject(ctx context.Context, queries CatalogQuerier, projec
 // Migration 071: also accepts ?tag= to filter on helm_chart_tags (used by
 // the service-mesh tab "Install" deep-link).
 func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	filter, ok := h.catalogChartFilter(w, r)
 	if !ok {
 		return
@@ -250,6 +254,10 @@ func (h *CatalogHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 
 // ListChartVersions handles GET /api/v1/catalog/charts/{id}/versions/.
 func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	chartID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid chart ID")

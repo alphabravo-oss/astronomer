@@ -19,6 +19,10 @@ import (
 
 // Commands handles GET /clusters/{cluster_id}/shell/sessions/{id}/commands/.
 func (h *KubectlShellHandler) Commands(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if h.Queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ShellUnavailable, "Kubectl shell is not configured")
 		return
@@ -62,6 +66,10 @@ func (h *KubectlShellHandler) Commands(w http.ResponseWriter, r *http.Request) {
 // AdminCommands handles GET /admin/shell-sessions/{id}/commands/.
 // Superuser sees commands for ANY session, regardless of owner.
 func (h *KubectlShellHandler) AdminCommands(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gateSuperuser(w, r) {
 		return
 	}

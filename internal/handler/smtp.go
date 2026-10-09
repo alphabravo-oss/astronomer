@@ -563,6 +563,10 @@ type emailListItem struct {
 // List handles GET /api/v1/admin/emails/. Paginated; default 50 per
 // page, max 200.
 func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if err := h.requireSuperuser(r); err != nil {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
 		return

@@ -23,6 +23,10 @@ func (h *GitOpsHandler) gate(w http.ResponseWriter, r *http.Request) bool {
 
 // List handles GET /api/v1/admin/gitops-sources/.
 func (h *GitOpsHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}

@@ -145,6 +145,10 @@ func toGroupMappingResponse(row sqlc.IdentityGroupMapping) GroupMappingResponse 
 
 // List handles GET /api/v1/admin/group-mappings/.
 func (h *GroupMappingsHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}

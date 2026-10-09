@@ -23,6 +23,10 @@ func (h *MonitoringHandler) UnmarshalBody(r *http.Request, dst any) error {
 
 // ListEndpoints handles GET /api/v1/monitoring/endpoints/.
 func (h *MonitoringHandler) ListEndpoints(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if h.queries == nil {
 		paging.Write(w, []any{}, paging.Exact(0, queryLimit(r, 20), queryOffset(r), len([]any{})))
 		return

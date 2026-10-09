@@ -36,6 +36,10 @@ type webhookDeliveryMutationResult struct {
 
 // Deliveries handles GET /api/v1/admin/webhooks/{id}/deliveries/.
 func (h *WebhookHandler) Deliveries(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if err := h.requireSuperuser(r); err != nil {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, err.Error())
 		return

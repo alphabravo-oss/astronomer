@@ -176,6 +176,10 @@ func validEnforcement(s string) bool { return s == "soft" || s == "hard" }
 
 // ListPlans handles GET /api/v1/admin/quota-plans/.
 func (h *QuotaHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}

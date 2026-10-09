@@ -522,6 +522,10 @@ func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // Requires the project to have visibility on the catalog (own, subscribed,
 // or globally public). Foreign-private catalogs return 403.
 func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	projectID, ok := parseProjectID(w, r)
 	if !ok {
 		return

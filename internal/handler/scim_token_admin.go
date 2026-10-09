@@ -179,6 +179,10 @@ func (h *SCIMTokenAdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 // List returns one bounded page of SCIM token metadata. Neither the plaintext
 // token nor its hash is selected from the database.
 func (h *SCIMTokenAdminHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.superuser(w, r) {
 		return
 	}

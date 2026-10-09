@@ -229,6 +229,10 @@ func (h *AuthHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
 
 // ListTokens handles GET /api/v1/auth/tokens/.
 func (h *AuthHandler) ListTokens(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")

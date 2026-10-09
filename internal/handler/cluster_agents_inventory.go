@@ -24,6 +24,10 @@ type clusterAgentCursorQuerier interface {
 }
 
 func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validatePageOffset(w, r) {
+		return
+	}
+
 	if h == nil || h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return

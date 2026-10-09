@@ -35,6 +35,10 @@ type CreateTemplateRequest struct {
 
 // ListTemplates handles GET /api/v1/security/templates/.
 func (h *SecurityHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 

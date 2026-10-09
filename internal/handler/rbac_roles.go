@@ -9,6 +9,10 @@ import (
 )
 
 func (h *RBACHandler) ListGlobalRoles(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 	items, err := h.queries.ListGlobalRoles(r.Context(), sqlc.ListGlobalRolesParams{Limit: limit, Offset: offset})
@@ -144,6 +148,10 @@ func (h *RBACHandler) DeleteGlobalRole(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RBACHandler) ListClusterRoles(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 	items, err := h.queries.ListClusterRoles(r.Context(), sqlc.ListClusterRolesParams{Limit: limit, Offset: offset})
@@ -270,6 +278,10 @@ func (h *RBACHandler) DeleteClusterRole(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *RBACHandler) ListProjectRoles(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 	items, err := h.queries.ListProjectRoles(r.Context(), sqlc.ListProjectRolesParams{Limit: limit, Offset: offset})

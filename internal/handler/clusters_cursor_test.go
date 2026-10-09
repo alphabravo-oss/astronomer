@@ -112,9 +112,14 @@ func TestClusterListUsesBoundCursorByDefault(t *testing.T) {
 func TestClusterLegacyOffsetIsBoundedBeforeSQL(t *testing.T) {
 	q := &cursorClusterQuerier{}
 	h := &ClusterHandler{queries: q}
-	recorder := httptest.NewRecorder()
-	h.List(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/clusters/?limit=20&offset=2147483647", nil))
-	if recorder.Code != http.StatusOK || len(q.offsetCalls) != 1 || q.offsetCalls[0].Offset != int32(maxPaginationOffset) {
-		t.Fatalf("status=%d offset calls=%+v body=%s", recorder.Code, q.offsetCalls, recorder.Body.String())
+	rejected := httptest.NewRecorder()
+	h.List(rejected, httptest.NewRequest(http.MethodGet, "/api/v1/clusters/?limit=20&offset=2147483647", nil))
+	if rejected.Code != http.StatusBadRequest || len(q.offsetCalls) != 0 {
+		t.Fatalf("unsupported offset status%d SQLcalls%+v", rejected.Code, q.offsetCalls)
+	}
+	accepted := httptest.NewRecorder()
+	h.List(accepted, httptest.NewRequest(http.MethodGet, "/api/v1/clusters/?limit=20&offset=10000", nil))
+	if accepted.Code != http.StatusOK || len(q.offsetCalls) != 1 || q.offsetCalls[0].Offset != int32(maxPaginationOffset) {
+		t.Fatalf("valid bounded offset status%d SQLcalls%+v", accepted.Code, q.offsetCalls)
 	}
 }

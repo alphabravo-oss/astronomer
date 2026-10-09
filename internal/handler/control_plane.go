@@ -193,6 +193,10 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	arg := sqlc.ListControlPlaneAlertsParams{
 		Limit:  int32(queryLimit(r, 50)),
 		Offset: int32(queryOffset(r)),
@@ -244,6 +248,10 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 }
 
 func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	items, err := h.queries.ListControlPlaneSilences(r.Context(), sqlc.ListControlPlaneSilencesParams{
 		Limit:  int32(queryLimit(r, 50)),
 		Offset: int32(queryOffset(r)),

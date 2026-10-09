@@ -15,6 +15,10 @@ import (
 )
 
 func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := queryLimit(r, 50)
 	offset := queryOffset(r)
 	arg := sqlc.ListToolOperationsParams{Limit: int32(limit), Offset: int32(offset)}

@@ -35,6 +35,10 @@ func (h *GitOpsHandler) Preview(w http.ResponseWriter, r *http.Request) {
 
 // ListClusters handles GET /api/v1/admin/gitops-sources/{id}/clusters/.
 func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}

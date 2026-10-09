@@ -40,6 +40,10 @@ import (
 // neither is set, the legacy "global list" behaviour is preserved
 // verbatim — no semantic change for existing callers.
 func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 

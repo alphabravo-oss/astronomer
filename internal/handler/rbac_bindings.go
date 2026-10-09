@@ -12,6 +12,10 @@ import (
 )
 
 func (h *RBACHandler) ListGlobalRoleBindings(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 	items, err := h.queries.ListGlobalRoleBindings(r.Context(), sqlc.ListGlobalRoleBindingsParams{Limit: limit, Offset: offset})
@@ -92,6 +96,10 @@ func (h *RBACHandler) DeleteGlobalRoleBinding(w http.ResponseWriter, r *http.Req
 }
 
 func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 	clusterID := r.URL.Query().Get("cluster_id")
@@ -203,6 +211,10 @@ func (h *RBACHandler) DeleteClusterRoleBinding(w http.ResponseWriter, r *http.Re
 }
 
 func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 	projectID := r.URL.Query().Get("project_id")
