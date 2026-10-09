@@ -6,6 +6,11 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
 
+// systemReleaseSlots is the hard forward-rollout safety budget. A released or
+// applying assignment reserves both a concurrency slot and an unavailable
+// slot until it reports Ready. Failed assignments keep consuming availability,
+// preventing a controller from compounding an outage below the configured
+// failure threshold.
 func systemReleaseSlots(strategy model.RolloutStrategy, total int32, current counts) int32 {
 	if total <= 0 {
 		return 0
