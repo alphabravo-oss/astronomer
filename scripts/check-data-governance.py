@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the closed destructive-delete inventory and JSON governance migration."""
+"""Verify canonical and Go/template destructive ownership and JSON governance."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import pathlib
 import re
 import sys
 import subprocess
+import importlib.util
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -35,7 +36,7 @@ def delete_targets() -> set[str]:
 
 def declared_policies() -> set[str]:
     document = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
-    if set(document) != {"schema_version", "policies"} or document["schema_version"] != 1:
+    if set(document) != {"schema_version", "policies"} or type(document["schema_version"]) is not int or document["schema_version"] != 1:
         fail("deletion policy must be the closed schema_version=1 document")
 
     declared: set[str] = set()
@@ -73,7 +74,16 @@ def check_json_governance_migration() -> None:
 
 
 def main() -> None:
-    actual = delete_targets()
+    spec = importlib.util.spec_from_file_location("sql_governance", ROOT / "scripts/check-sql-governance.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        module.check_generated_namespace()
+        runtime = module.inventory()
+        runtime_targets = module.verify(json.loads(module.POLICY.read_text()), runtime)
+    except (ValueError, KeyError, TypeError, OSError) as error:
+        fail(str(error))
+    actual = delete_targets() | runtime_targets
     declared = declared_policies()
     if actual != declared:
         missing = sorted(actual - declared)
@@ -83,7 +93,7 @@ def main() -> None:
     subprocess.run([sys.executable, str(ROOT / "scripts/check-json-governance.py")], cwd=ROOT, check=True)
     print(
         f"data-governance: {len(actual)} destructive tables classified; "
-        "durable JSON writer governance present"
+        "canonical and runtime Go/template discovery; durable JSON writer governance present"
     )
 
 
