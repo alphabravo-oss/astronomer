@@ -34,7 +34,7 @@ func NewWithBuiltinCA(queries Querier, decryptor Decryptor, ca []byte, authorize
 }
 
 func validBuiltinCA(ca []byte) bool {
-	if len(ca) == 0 || len(ca) > 1<<20 {
+	if len(ca) == 0 || len(ca) > protocol.MaxDeliveryCredentialValue {
 		return false
 	}
 	count := 0

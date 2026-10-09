@@ -2,7 +2,8 @@
 
 Server startup reads the operator's mounted registry CA once, as a regular file
 bounded to 1 MiB. The distribution HTTP client and delivery provider use the
-same captured bytes. The provider rejects malformed PEM, non-certificate
+same captured bytes. Delivery also respects the existing protocol limit of
+256 KiB per credential value. The provider rejects malformed PEM, non-certificate
 blocks, trailing data, non-CA certificates and bundles exceeding 64 certificates.
 TLS verification remains enabled. This CA is public certificate material;
 registry credentials and vendor signing trust remain separate.
