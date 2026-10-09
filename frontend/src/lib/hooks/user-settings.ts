@@ -28,7 +28,7 @@ export function useUsers(
 ) {
   return useQuery({
     queryKey: queryKeys.users.list(params ? { ...params } : undefined),
-    queryFn: () => getUsers(params),
+    queryFn: ({ signal }) => getUsers(params, signal),
     enabled: options?.enabled,
   });
 }
@@ -81,7 +81,7 @@ export function useResetUserPassword() {
 export function useGeneralSettings() {
   return useQuery({
     queryKey: queryKeys.settings.general,
-    queryFn: getGeneralSettings,
+    queryFn: ({ signal }) => getGeneralSettings(signal),
   });
 }
 
@@ -100,7 +100,7 @@ export function useSaveGeneralSettings() {
 export function useSSOProviders() {
   return useQuery({
     queryKey: queryKeys.settings.sso,
-    queryFn: getSSOProviders,
+    queryFn: ({ signal }) => getSSOProviders(signal),
   });
 }
 
@@ -120,7 +120,7 @@ export function useCreateSSOProvider() {
 export function useAPITokens() {
   return useQuery({
     queryKey: queryKeys.settings.tokens,
-    queryFn: getAPITokens,
+    queryFn: ({ signal }) => getAPITokens(signal),
   });
 }
 

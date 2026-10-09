@@ -27,7 +27,7 @@ export function useDatasourcesAdmin() {
 
   const datasourcesQuery = useQuery({
     queryKey: DATASOURCES_KEY,
-    queryFn: listDatasources,
+    queryFn: ({ signal }) => listDatasources(signal),
   });
   const datasources = datasourcesQuery.data ?? [];
 

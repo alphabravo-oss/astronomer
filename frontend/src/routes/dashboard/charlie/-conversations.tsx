@@ -20,7 +20,7 @@ export function Conversations({
 }) {
   const q = useQuery({
     queryKey: queryKeys.charlie.threads,
-    queryFn: listCharlieThreads,
+    queryFn: ({ signal }) => listCharlieThreads({ signal }),
     retry: false,
   });
   // Interactive threads only — server list is owner-scoped user chats.
@@ -30,7 +30,8 @@ export function Conversations({
     : null;
   const h = useQuery({
     queryKey: queryKeys.charlie.threadHistory(selectedConversation),
-    queryFn: () => getCharlieThreadHistory(selectedConversation!),
+    queryFn: ({ signal }) =>
+      getCharlieThreadHistory(selectedConversation!, { signal }),
     enabled: !!selectedConversation,
     retry: false,
   });

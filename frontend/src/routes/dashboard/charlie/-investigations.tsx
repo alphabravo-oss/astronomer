@@ -28,12 +28,12 @@ export function Investigations({
 }) {
   const q = useQuery({
     queryKey: queryKeys.charlie.sessions,
-    queryFn: listCharlieSessions,
+    queryFn: ({ signal }) => listCharlieSessions({ signal }),
     retry: false,
   });
   const findings = useQuery({
     queryKey: queryKeys.charlie.findings,
-    queryFn: listCharlieFindings,
+    queryFn: ({ signal }) => listCharlieFindings({ signal }),
     retry: false,
   });
   if (q.isError) return <QueryFailure label="Investigations" query={q} />;

@@ -87,8 +87,10 @@ export function toInhibitionWriteRequest(
   };
 }
 
-export async function listInhibitions(): Promise<AlertInhibition[]> {
-  const response = await getAdminAlertingInhibitions();
+export async function listInhibitions(
+  signal?: AbortSignal,
+): Promise<AlertInhibition[]> {
+  const response = await getAdminAlertingInhibitions({ signal });
   return response.data.map(mapInhibition);
 }
 

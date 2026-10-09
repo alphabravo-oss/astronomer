@@ -29,7 +29,7 @@ export function Approvals({ selected }: { selected: string | null }) {
   }>();
   const q = useQuery({
     queryKey: queryKeys.charlie.approvals,
-    queryFn: listCharlieApprovals,
+    queryFn: ({ signal }) => listCharlieApprovals({ signal }),
     retry: false,
   });
   const decide = useMutation({

@@ -44,7 +44,7 @@ function CharlieHub() {
   const tab = normalizeCharlieTab(params.get("tab"));
   const overview = useQuery({
     queryKey: queryKeys.charlie.overview,
-    queryFn: getCharlieOverview,
+    queryFn: ({ signal }) => getCharlieOverview({ signal }),
   });
   const mode = productModePresentation(overview.data?.mode);
   const set = (updates: Record<string, string | undefined>) => {

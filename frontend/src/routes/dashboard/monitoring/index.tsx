@@ -35,7 +35,7 @@ function MonitoringFleetPage() {
   );
   const grafanaQuery = useQuery({
     queryKey: queryKeys.monitoringStack.status("grafana"),
-    queryFn: getSharedGrafanaStatus,
+    queryFn: ({ signal }) => getSharedGrafanaStatus(signal),
   });
   const grafanaOpenURL = fleetGrafanaOpenURL(grafanaQuery.data);
 

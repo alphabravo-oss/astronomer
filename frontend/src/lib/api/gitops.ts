@@ -43,14 +43,14 @@ function requireData<T>(response: { data?: T }, operation: string): T {
   return response.data;
 }
 
-export async function listGitOpsSources() {
-  const page = await getAdminGitopsSources({ query: { limit: 200 } });
+export async function listGitOpsSources(signal?: AbortSignal) {
+  const page = await getAdminGitopsSources({ signal, query: { limit: 200 } });
   return page.data;
 }
 
-export async function getGitOpsSource(id: string) {
+export async function getGitOpsSource(id: string, signal?: AbortSignal) {
   return requireData(
-    await getAdminGitopsSourcesById({ path: { id } }),
+    await getAdminGitopsSourcesById({ signal, path: { id } }),
     "getGitOpsSource",
   );
 }
@@ -93,8 +93,12 @@ export async function previewGitOpsSource(id: string) {
   );
 }
 
-export async function listGitOpsSourceClusters(id: string) {
+export async function listGitOpsSourceClusters(
+  id: string,
+  signal?: AbortSignal,
+) {
   const page = await getAdminGitopsSourcesByIdClusters({
+    signal,
     path: { id },
     query: { limit: 200 },
   });

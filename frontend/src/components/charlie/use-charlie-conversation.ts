@@ -56,7 +56,7 @@ export function useCharlieConversation({
   // hides the drawer; New chat is the explicit reset control.
   const overview = useQuery({
     queryKey: queryKeys.charlie.overview,
-    queryFn: getCharlieOverview,
+    queryFn: ({ signal }) => getCharlieOverview({ signal }),
     retry: false,
   });
   // Optional admin mode status: when available, show ceiling settle state on the badge.
@@ -80,19 +80,19 @@ export function useCharlieConversation({
   });
   const activeThread = useQuery({
     queryKey: queryKeys.charlie.activeThread,
-    queryFn: getCharlieActiveThread,
+    queryFn: ({ signal }) => getCharlieActiveThread({ signal }),
     retry: false,
     refetchInterval: awaitingReply && !viewingThreadId ? 1_500 : false,
   });
   const commands = useQuery({
     queryKey: queryKeys.charlie.commands,
-    queryFn: getCharlieCommands,
+    queryFn: ({ signal }) => getCharlieCommands({ signal }),
     enabled: open,
     retry: false,
   });
   const threads = useQuery({
     queryKey: queryKeys.charlie.threads,
-    queryFn: listCharlieThreads,
+    queryFn: ({ signal }) => listCharlieThreads({ signal }),
     enabled: open && conversationListOpen,
     retry: false,
   });
@@ -115,10 +115,10 @@ export function useCharlieConversation({
     queryKey: displayedThreadId
       ? queryKeys.charlie.threadHistory(displayedThreadId)
       : queryKeys.charlie.history(sessionId),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       displayedThreadId
-        ? getCharlieThreadHistory(displayedThreadId)
-        : getCharlieHistory(sessionId!),
+        ? getCharlieThreadHistory(displayedThreadId, { signal })
+        : getCharlieHistory(sessionId!, { signal }),
     enabled: !!displayedThreadId || !!sessionId,
     retry: false,
     // SSE remains the low-latency path. Polling while one turn is outstanding
@@ -135,7 +135,7 @@ export function useCharlieConversation({
   });
   const sessionStatus = useQuery({
     queryKey: queryKeys.charlie.sessionStatus(sessionId),
-    queryFn: () => getCharlieSession(sessionId!),
+    queryFn: ({ signal }) => getCharlieSession(sessionId!, { signal }),
     // Always reconcile the current server-owned session when the drawer opens.
     // Closing the drawer intentionally unmounts the UI and its EventSource, but
     // it does not abort Charlie. This status read lets a reopened drawer attach

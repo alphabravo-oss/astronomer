@@ -15,8 +15,7 @@ type Contracts = OpenAPIComponents["schemas"];
 
 export type PublicBannerConfig = Contracts["PublicBannerSettings"];
 export type PublicBrandingConfig = Contracts["PublicBrandingSettings"];
-export type PublicRegistrationConfig =
-  Contracts["PublicRegistrationSettings"];
+export type PublicRegistrationConfig = Contracts["PublicRegistrationSettings"];
 export type RegistrationTLSMode =
   PublicRegistrationConfig["registration.tls_mode"];
 export type SSOPresetDefinition = Contracts["SSOPreset"];
@@ -28,20 +27,27 @@ function requireData<T>(response: { data?: T }, operation: string): T {
   return response.data;
 }
 
-export async function getPublicBranding(): Promise<PublicBrandingConfig> {
-  return requireData(await getSettingsBranding(), "getPublicBranding");
+export async function getPublicBranding(
+  signal?: AbortSignal,
+): Promise<PublicBrandingConfig> {
+  return requireData(
+    await getSettingsBranding({ signal }),
+    "getPublicBranding",
+  );
 }
 
-export async function getPublicBanner(): Promise<PublicBannerConfig> {
-  return requireData(await getSettingsBanner(), "getPublicBanner");
+export async function getPublicBanner(
+  signal?: AbortSignal,
+): Promise<PublicBannerConfig> {
+  return requireData(await getSettingsBanner({ signal }), "getPublicBanner");
 }
 
-export async function getRegistrationTLS(): Promise<{
+export async function getRegistrationTLS(signal?: AbortSignal): Promise<{
   mode: RegistrationTLSMode;
   caBundle: string;
 }> {
   const settings = requireData(
-    await getSettingsRegistration(),
+    await getSettingsRegistration({ signal }),
     "getRegistrationTLS",
   );
   return {

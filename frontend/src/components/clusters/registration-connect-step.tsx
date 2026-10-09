@@ -104,7 +104,7 @@ export function RegistrationConnectStep({
   // tlsMode/curlVariant selectors; defaults to public_ca on any failure.
   const { data: tlsData } = useQuery({
     queryKey: queryKeys.settings.registrationTls,
-    queryFn: () => getRegistrationTLS(),
+    queryFn: ({ signal }) => getRegistrationTLS(signal),
     staleTime: Infinity,
     retry: false,
   });

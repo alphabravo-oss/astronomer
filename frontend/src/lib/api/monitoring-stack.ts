@@ -216,9 +216,11 @@ export type SharedLokiStatus = Schemas["MonitoringStackStatus"];
 
 export async function getClusterStackStatus(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ClusterStackStatus> {
   return requireData(
     await generated.getClustersByIdMonitoringStackStatus({
+      signal,
       path: { id: clusterId },
     }),
     "getClusterStackStatus",
@@ -300,9 +302,11 @@ export async function uninstallClusterStack(
 //  plus the clusters:write token-scope backstop on every mutation)
 // ─────────────────────────────────────────────────────────────────────
 
-export async function getSharedThanosStatus(): Promise<SharedThanosStatus> {
+export async function getSharedThanosStatus(
+  signal?: AbortSignal,
+): Promise<SharedThanosStatus> {
   return requireData(
-    await generated.getSettingsMonitoringThanosStatus(),
+    await generated.getSettingsMonitoringThanosStatus({ signal }),
     "getSharedThanosStatus",
   );
 }
@@ -374,9 +378,11 @@ export async function uninstallSharedThanos(
 // Shared Alertmanager — /settings/monitoring/alertmanager/*
 // ─────────────────────────────────────────────────────────────────────
 
-export async function getSharedAlertmanagerStatus(): Promise<SharedAlertmanagerStatus> {
+export async function getSharedAlertmanagerStatus(
+  signal?: AbortSignal,
+): Promise<SharedAlertmanagerStatus> {
   return requireData(
-    await generated.getSettingsMonitoringAlertmanagerStatus(),
+    await generated.getSettingsMonitoringAlertmanagerStatus({ signal }),
     "getSharedAlertmanagerStatus",
   );
 }
@@ -443,9 +449,11 @@ export async function uninstallSharedAlertmanager(
 // Grafana is available only through the authenticated same-origin proxy.
 // ─────────────────────────────────────────────────────────────────────
 
-export async function getSharedGrafanaStatus(): Promise<SharedGrafanaStatus> {
+export async function getSharedGrafanaStatus(
+  signal?: AbortSignal,
+): Promise<SharedGrafanaStatus> {
   return requireData(
-    await generated.getSettingsMonitoringGrafanaStatus(),
+    await generated.getSettingsMonitoringGrafanaStatus({ signal }),
     "getSharedGrafanaStatus",
   );
 }
@@ -507,9 +515,11 @@ export async function uninstallSharedGrafana(
   );
 }
 
-export async function getMonitoringSizer(): Promise<MonitoringSizerResponse> {
+export async function getMonitoringSizer(
+  signal?: AbortSignal,
+): Promise<MonitoringSizerResponse> {
   return requireData(
-    await generated.getSettingsMonitoringSizer(),
+    await generated.getSettingsMonitoringSizer({ signal }),
     "getMonitoringSizer",
   );
 }
@@ -519,9 +529,11 @@ export async function getMonitoringSizer(): Promise<MonitoringSizerResponse> {
 // Feature-gated: feature.hosted_loki must be exactly true. ClusterIP only.
 // ─────────────────────────────────────────────────────────────────────
 
-export async function getSharedLokiStatus(): Promise<SharedLokiStatus> {
+export async function getSharedLokiStatus(
+  signal?: AbortSignal,
+): Promise<SharedLokiStatus> {
   return requireData(
-    await generated.getSettingsMonitoringLokiStatus(),
+    await generated.getSettingsMonitoringLokiStatus({ signal }),
     "getSharedLokiStatus",
   );
 }
@@ -587,43 +599,11 @@ export async function uninstallSharedLoki(
 // Operations queue — /settings/monitoring/operations/*
 // ─────────────────────────────────────────────────────────────────────
 
-export interface MonitoringOperationListParams {
-  targetType?: MonitoringOperationTargetType;
-  targetKey?: string;
-  status?: MonitoringOperationStatus;
-  limit?: number;
-  offset?: number;
-}
-
-/**
- * Newest first (ORDER BY created_at DESC), RBAC-filtered in Go — a caller
- * without monitoring:read on a target simply does not see its rows.
- *
- * This is what makes adopt-on-load possible: filtering by
- * (targetType, targetKey) and taking the newest row tells the UI whether work
- * is already in flight for this stack, whether the current user started it or
- * not. The `status` filter accepts ONE value, so callers that want "pending or
- * running" ask unfiltered and inspect the newest row instead of issuing two
- * requests.
- */
-export async function listMonitoringOperations(
-  params?: MonitoringOperationListParams,
-): Promise<MonitoringOperation[]> {
-  const response = await generated.getSettingsMonitoringOperations({
-    query: params,
-  });
-  return response.data ?? [];
-}
-
-/** Detail — the only endpoint that returns the operation's stage events. */
-export async function getMonitoringOperation(
-  id: string,
-): Promise<MonitoringOperation> {
-  return requireData(
-    await generated.getSettingsMonitoringOperationsById({ path: { id } }),
-    "getMonitoringOperation",
-  );
-}
+export {
+  listMonitoringOperations,
+  getMonitoringOperation,
+  type MonitoringOperationListParams,
+} from "./monitoring-operation-reads";
 
 /**
  * Re-enqueues a failed or superseded operation IN PLACE: same row, same id,
@@ -716,18 +696,19 @@ export function stackTargetLabel(target: MonitoringStackTarget): string {
 
 export async function getStackStatus(
   target: MonitoringStackTarget,
+  signal?: AbortSignal,
 ): Promise<MonitoringStackStatusBase> {
   switch (target.kind) {
     case "cluster":
-      return getClusterStackStatus(target.clusterId);
+      return getClusterStackStatus(target.clusterId, signal);
     case "thanos":
-      return getSharedThanosStatus();
+      return getSharedThanosStatus(signal);
     case "alertmanager":
-      return getSharedAlertmanagerStatus();
+      return getSharedAlertmanagerStatus(signal);
     case "grafana":
-      return getSharedGrafanaStatus();
+      return getSharedGrafanaStatus(signal);
     case "loki":
-      return getSharedLokiStatus();
+      return getSharedLokiStatus(signal);
   }
 }
 

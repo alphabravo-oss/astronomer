@@ -1,12 +1,9 @@
 import { ActionButton } from "@/components/ui/action-button";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { previewToolInstall } from "@/lib/api/tools";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
-import { queryKeys } from "@/lib/query-keys";
 import { toastWarning } from "@/lib/toast";
 import type { ClusterTool, ToolFormField } from "@/types";
-import { useQuery } from "@tanstack/react-query";
 import * as yaml from "js-yaml";
 import { useMemo, useState } from "react";
 import {
@@ -113,22 +110,13 @@ function ToolInstallModalEditor({
   const [editedPaths, setEditedPaths] = useState<Set<string>>(() => new Set());
 
   // Chart metadata (name/version/namespace) for the header.
-  const { data: preview, isLoading } = useQuery({
-    queryKey: queryKeys.tools.preview(
-      tool.slug,
-      clusterId,
-      selectedPreset,
-      isUpgrade ? (initialValuesYaml ?? "") : "",
-    ),
-    queryFn: () =>
-      previewToolInstall(tool.slug, {
-        cluster_id: clusterId,
-        preset: selectedPreset,
-        values_override:
-          isUpgrade && initialValuesYaml ? initialValuesYaml : undefined,
-      }),
-    enabled: !isUpgrade || initialValuesYaml !== undefined,
-  });
+  const { data: preview, isLoading } = useToolInstallPreview(
+    tool.slug,
+    clusterId,
+    selectedPreset,
+    isUpgrade ? (initialValuesYaml ?? "") : "",
+    !isUpgrade || initialValuesYaml !== undefined,
+  );
   const charts = preview?.charts ?? [];
   const presetValues = useMemo(
     () => previewToolFieldValues(preview?.charts ?? [], tool, fields),

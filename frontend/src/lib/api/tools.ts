@@ -141,8 +141,10 @@ function mapToolPreview(wire: Schemas["ToolPreview"]): ToolPreviewResponse {
 export async function getToolConfiguration(
   slug: string,
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ToolConfiguration> {
   const response = await getToolsBySlugConfiguration({
+    signal,
     path: { slug },
     query: { cluster_id: clusterId },
   });
@@ -159,8 +161,8 @@ export async function getToolConfiguration(
   };
 }
 
-export async function getTools(): Promise<ClusterTool[]> {
-  const response = await listToolsOperation({ query: { limit: 200 } });
+export async function getTools(signal?: AbortSignal): Promise<ClusterTool[]> {
+  const response = await listToolsOperation({ signal, query: { limit: 200 } });
   return (response.data ?? []).map(mapClusterTool);
 }
 
@@ -171,8 +173,10 @@ export async function getTool(slug: string): Promise<ClusterTool> {
 
 export async function getClusterToolsStatus(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ClusterToolStatus[]> {
   const response = await getClustersByClusterIdToolsStatus({
+    signal,
     path: { cluster_id: clusterId },
   });
   return (response.data ?? []).map(mapClusterToolStatus);
@@ -185,8 +189,10 @@ export async function previewToolInstall(
     preset: string;
     values_override?: string;
   },
+  signal?: AbortSignal,
 ): Promise<ToolPreviewResponse> {
   const response = await postToolsBySlugPreview({
+    signal,
     path: { slug },
     body: data,
   });
@@ -207,8 +213,10 @@ export async function installTool(
 
 export async function getToolOperation(
   operationId: string,
+  signal?: AbortSignal,
 ): Promise<ToolOperation> {
   const response = await getToolsOperationsById({
+    signal,
     path: { id: operationId },
   });
   return requireData(response, "getToolOperation");

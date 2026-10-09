@@ -29,7 +29,7 @@ import {
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { ResourceMasthead, PageShell } from "@/components/ui/page";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useVaultConnections } from "./-hooks";
 
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { useAppForm, useStore, isValidUrlWithScheme } from "@/lib/form";
@@ -37,13 +37,7 @@ import { errorMessages } from "@/components/form/error-summary";
 import { FormShell } from "@/components/ui/form-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { QueryStates } from "@/components/ui/query-states";
-import { queryKeys } from "@/lib/query-keys";
-import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
-  listVaultConnections,
-  createVaultConnection,
-  deleteVaultConnection,
-  testVaultConnection,
   VAULT_AUTH_SENTINEL,
   type VaultConnectionView,
   type VaultAuthMethod,
@@ -77,28 +71,14 @@ function blankBody(method: VaultAuthMethod): VaultConnectionWriteRequest {
 }
 
 function VaultConnectionsPage() {
-  const qc = useQueryClient();
-  const vaultConnectionsQuery = useQuery({
-    queryKey: queryKeys.vault.connections,
-    queryFn: listVaultConnections,
-  });
-  const { data: rows = [], isLoading } = vaultConnectionsQuery;
-
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<VaultConnectionView | null>(
     null,
   );
-
-  const createMu = useMutation({
-    mutationFn: (body: VaultConnectionWriteRequest) =>
-      createVaultConnection(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.vault.connections });
-    },
-    onError: (err: unknown) =>
-      setError(extractApiErrorMessage(err) ?? String(err)),
-  });
+  const { vaultConnectionsQuery, createMu, delMu, testMu } =
+    useVaultConnections(setError);
+  const { data: rows = [], isLoading } = vaultConnectionsQuery;
 
   const form = useAppForm({
     defaultValues: blankBody("token"),
@@ -115,16 +95,6 @@ function VaultConnectionsPage() {
   });
   // The auth-blob inputs switch shape on the selected method.
   const authMethod = useStore(form.store, (s) => s.values.auth_method);
-  const delMu = useMutation({
-    mutationFn: (id: string) => deleteVaultConnection(id),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: queryKeys.vault.connections }),
-  });
-  const testMu = useMutation({
-    mutationFn: (id: string) => testVaultConnection(id),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: queryKeys.vault.connections }),
-  });
 
   if (vaultConnectionsQuery.isError) {
     return (
@@ -225,7 +195,8 @@ function VaultConnectionsPage() {
       )}
 
       {creating && (
-        <FormShell form={form}
+        <FormShell
+          form={form}
           className="space-y-3 max-w-xl border border-border rounded-sm p-4"
           onSubmit={(e) => {
             e.preventDefault();
@@ -253,15 +224,30 @@ function VaultConnectionsPage() {
           </label>
           <label className="block text-sm">
             Vault URL
-            <form.Field name="addr" validators={{ onChange: ({ value }) => !isValidUrlWithScheme(value, ["http", "https"]) ? "Vault URL must be a valid http(s) address" : undefined }}>
+            <form.Field
+              name="addr"
+              validators={{
+                onChange: ({ value }) =>
+                  !isValidUrlWithScheme(value, ["http", "https"])
+                    ? "Vault URL must be a valid http(s) address"
+                    : undefined,
+              }}
+            >
               {(field) => (
                 <>
                   <Input
-                    name={field.name} required className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
+                    name={field.name}
+                    required
+                    className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
                     value={field.state.value}
-                    onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    onBlur={field.handleBlur}
                   />
-                  {errorMessages(field.state.meta.errors)[0] && <p className="mt-1 text-xs text-status-error">{errorMessages(field.state.meta.errors)[0]}</p>}
+                  {errorMessages(field.state.meta.errors)[0] && (
+                    <p className="mt-1 text-xs text-status-error">
+                      {errorMessages(field.state.meta.errors)[0]}
+                    </p>
+                  )}
                 </>
               )}
             </form.Field>

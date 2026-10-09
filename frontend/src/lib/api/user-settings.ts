@@ -148,10 +148,12 @@ function mapToken(wire: TokenWire | CreatedTokenWire): APIToken {
 
 export async function getUsers(
   params?: UserListParameters,
+  signal?: AbortSignal,
 ): Promise<PaginatedResponse<User>> {
   const pageSize = Math.max(1, Math.min(200, params?.pageSize ?? 20));
   const page = Math.max(1, params?.page ?? 1);
   const response = await getUsersOperation({
+    signal,
     query: {
       limit: pageSize,
       offset: (page - 1) * pageSize,
@@ -218,9 +220,11 @@ export async function resetUserPassword(
   };
 }
 
-export async function getGeneralSettings(): Promise<GeneralSettings> {
+export async function getGeneralSettings(
+  signal?: AbortSignal,
+): Promise<GeneralSettings> {
   return requireData(
-    await getSettingsGeneral(),
+    await getSettingsGeneral({ signal }),
     "getGeneralSettings",
   ) as GeneralSettings;
 }
@@ -234,8 +238,10 @@ export async function saveGeneralSettings(
   ) as GeneralSettings;
 }
 
-export async function getSSOProviders(): Promise<SSOProvider[]> {
-  const response = await getSettingsSso();
+export async function getSSOProviders(
+  signal?: AbortSignal,
+): Promise<SSOProvider[]> {
+  const response = await getSettingsSso({ signal });
   const rows = Array.isArray(response)
     ? response
     : ((response as { data?: SSOProviderWire[] }).data ?? []);
@@ -266,8 +272,9 @@ export async function createSSOProvider(
   );
 }
 
-export async function getAPITokens(): Promise<APIToken[]> {
+export async function getAPITokens(signal?: AbortSignal): Promise<APIToken[]> {
   const response = await getSettingsTokens({
+    signal,
     query: { limit: 200, offset: 0 },
   });
   return (response.data ?? []).map(mapToken);

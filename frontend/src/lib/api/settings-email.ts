@@ -94,8 +94,8 @@ function smtpConfigToWire(body: Partial<SmtpConfig>) {
 // SMTP — API funcs
 // ============================================================
 
-export async function getSmtpConfig(): Promise<SmtpConfig> {
-  const response = await adminSmtpGet();
+export async function getSmtpConfig(signal?: AbortSignal): Promise<SmtpConfig> {
+  const response = await adminSmtpGet({ signal });
   return smtpConfigFromWire(response.data);
 }
 

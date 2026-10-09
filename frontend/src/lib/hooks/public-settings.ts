@@ -12,7 +12,7 @@ import { queryKeys } from "@/lib/query-keys";
 export function useBranding() {
   return useQuery({
     queryKey: queryKeys.publicSettings.branding,
-    queryFn: () => getPublicBranding(),
+    queryFn: ({ signal }) => getPublicBranding(signal),
     staleTime: 5 * 60_000,
     retry: 1,
     throwOnError: false,
@@ -22,7 +22,7 @@ export function useBranding() {
 export function useBanner() {
   return useQuery({
     queryKey: queryKeys.publicSettings.banner,
-    queryFn: () => getPublicBanner(),
+    queryFn: ({ signal }) => getPublicBanner(signal),
     staleTime: 5 * 60_000,
     retry: 1,
     throwOnError: false,

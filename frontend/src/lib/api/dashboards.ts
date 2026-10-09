@@ -160,8 +160,11 @@ export function mapRenderedWidget(wire: RenderedWidgetWire): RenderedWidget {
 // Admin endpoints
 // ============================================================
 
-export async function listWidgets(): Promise<Widget[]> {
-  const page = await getAdminDashboardWidgets({ query: { limit: 200 } });
+export async function listWidgets(signal?: AbortSignal): Promise<Widget[]> {
+  const page = await getAdminDashboardWidgets({
+    signal,
+    query: { limit: 200 },
+  });
   return page.data.map(mapWidget);
 }
 
@@ -196,8 +199,13 @@ export async function deleteWidget(id: string): Promise<void> {
   await deleteAdminDashboardWidgetsById({ path: { id } });
 }
 
-export async function listDatasources(): Promise<DashboardDatasource[]> {
-  const page = await getAdminPrometheusDatasources({ query: { limit: 200 } });
+export async function listDatasources(
+  signal?: AbortSignal,
+): Promise<DashboardDatasource[]> {
+  const page = await getAdminPrometheusDatasources({
+    signal,
+    query: { limit: 200 },
+  });
   return page.data.map(mapDatasource);
 }
 
@@ -228,8 +236,7 @@ export async function deleteDatasource(id: string): Promise<void> {
   await deleteAdminPrometheusDatasourcesById({ path: { id } });
 }
 
-export type DatasourceTestResult =
-  Contracts["PrometheusDatasourceTestResult"];
+export type DatasourceTestResult = Contracts["PrometheusDatasourceTestResult"];
 
 export async function testDatasource(
   id: string,

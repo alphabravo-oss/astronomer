@@ -35,7 +35,7 @@ export function AutomationTab() {
   });
   const deadLetters = useQuery({
     queryKey: queryKeys.charlie.adminTriggerEvents("dead"),
-    queryFn: () => listCharlieTriggerEvents("dead", 0, 20),
+    queryFn: ({ signal }) => listCharlieTriggerEvents("dead", 0, 20, signal),
     retry: false,
   });
   const [draft, setDraft] = useDraft(q.data);

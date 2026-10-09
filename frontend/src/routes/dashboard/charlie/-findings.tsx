@@ -32,12 +32,12 @@ export function Findings({
   const canTriage = can(user, "charlie", "update");
   const q = useQuery({
     queryKey: queryKeys.charlie.findings,
-    queryFn: listCharlieFindings,
+    queryFn: ({ signal }) => listCharlieFindings({ signal }),
     retry: false,
   });
   const d = useQuery({
     queryKey: queryKeys.charlie.finding(selected),
-    queryFn: () => getCharlieFinding(selected!),
+    queryFn: ({ signal }) => getCharlieFinding(selected!, { signal }),
     enabled: !!selected,
     retry: false,
   });

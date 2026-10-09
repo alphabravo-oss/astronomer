@@ -28,7 +28,7 @@ export function AccountSecurityPage() {
   const qc = useQueryClient();
   const statusQuery = useQuery<TotpStatus>({
     queryKey: TOTP_STATUS_KEY,
-    queryFn: getTotpStatus,
+    queryFn: ({ signal }) => getTotpStatus({ signal }),
   });
 
   const [dialog, setDialog] = useState<"wizard" | "disable" | "regen" | null>(

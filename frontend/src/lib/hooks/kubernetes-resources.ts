@@ -50,7 +50,7 @@ export function useNamedResources<T>(
 export function usePersistentVolumes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.storage.pvs(clusterId),
-    queryFn: () => getPersistentVolumes(clusterId),
+    queryFn: ({ signal }) => getPersistentVolumes(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -58,7 +58,7 @@ export function usePersistentVolumes(clusterId: string) {
 export function usePersistentVolumeClaims(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.storage.pvcs(clusterId),
-    queryFn: () => getPersistentVolumeClaims(clusterId),
+    queryFn: ({ signal }) => getPersistentVolumeClaims(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -66,7 +66,7 @@ export function usePersistentVolumeClaims(clusterId: string) {
 export function useStorageClasses(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.storage.storageClasses(clusterId),
-    queryFn: () => getStorageClasses(clusterId),
+    queryFn: ({ signal }) => getStorageClasses(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -135,7 +135,7 @@ export function useDeletePV() {
 export function useServices(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.services(clusterId),
-    queryFn: () => getServices(clusterId),
+    queryFn: ({ signal }) => getServices(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -143,7 +143,7 @@ export function useServices(clusterId: string) {
 export function useIngresses(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.ingresses(clusterId),
-    queryFn: () => getIngresses(clusterId),
+    queryFn: ({ signal }) => getIngresses(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -151,7 +151,7 @@ export function useIngresses(clusterId: string) {
 export function useNetworkPolicies(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.networkPolicies(clusterId),
-    queryFn: () => getNetworkPolicies(clusterId),
+    queryFn: ({ signal }) => getNetworkPolicies(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -233,7 +233,7 @@ export function useDeleteNetworkPolicy() {
 export function useGateways(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.gateways(clusterId),
-    queryFn: () => getGateways(clusterId),
+    queryFn: ({ signal }) => getGateways(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -241,7 +241,7 @@ export function useGateways(clusterId: string) {
 export function useHTTPRoutes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.httpRoutes(clusterId),
-    queryFn: () => getHTTPRoutes(clusterId),
+    queryFn: ({ signal }) => getHTTPRoutes(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -249,7 +249,7 @@ export function useHTTPRoutes(clusterId: string) {
 export function useGatewayClasses(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.gatewayClasses(clusterId),
-    queryFn: () => getGatewayClasses(clusterId),
+    queryFn: ({ signal }) => getGatewayClasses(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -257,7 +257,7 @@ export function useGatewayClasses(clusterId: string) {
 export function useGRPCRoutes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.grpcRoutes(clusterId),
-    queryFn: () => getGRPCRoutes(clusterId),
+    queryFn: ({ signal }) => getGRPCRoutes(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -265,7 +265,7 @@ export function useGRPCRoutes(clusterId: string) {
 export function useTLSRoutes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.tlsRoutes(clusterId),
-    queryFn: () => getTLSRoutes(clusterId),
+    queryFn: ({ signal }) => getTLSRoutes(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -273,7 +273,7 @@ export function useTLSRoutes(clusterId: string) {
 export function useTCPRoutes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.tcpRoutes(clusterId),
-    queryFn: () => getTCPRoutes(clusterId),
+    queryFn: ({ signal }) => getTCPRoutes(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -281,7 +281,7 @@ export function useTCPRoutes(clusterId: string) {
 export function useUDPRoutes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.udpRoutes(clusterId),
-    queryFn: () => getUDPRoutes(clusterId),
+    queryFn: ({ signal }) => getUDPRoutes(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -289,7 +289,7 @@ export function useUDPRoutes(clusterId: string) {
 export function useReferenceGrants(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.referenceGrants(clusterId),
-    queryFn: () => getReferenceGrants(clusterId),
+    queryFn: ({ signal }) => getReferenceGrants(clusterId, signal),
     enabled: !!clusterId,
   });
 }

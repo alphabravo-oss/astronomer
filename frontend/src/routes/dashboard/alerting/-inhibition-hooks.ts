@@ -18,7 +18,7 @@ import { queryKeys } from "@/lib/query-keys";
 export function useInhibitions() {
   return useQuery({
     queryKey: queryKeys.alerting.inhibitions,
-    queryFn: () => listInhibitions(),
+    queryFn: ({ signal }) => listInhibitions(signal),
   });
 }
 

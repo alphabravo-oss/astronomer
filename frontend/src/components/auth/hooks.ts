@@ -47,7 +47,7 @@ export const dexQueryKeys = {
 export function useDexConnectorTypes() {
   return useQuery({
     queryKey: dexQueryKeys.connectorTypes,
-    queryFn: () => getDexConnectorTypes(),
+    queryFn: ({ signal }) => getDexConnectorTypes(signal),
     // The registry is process-static on the backend; cache aggressively.
     staleTime: 5 * 60 * 1000,
   });
@@ -56,14 +56,14 @@ export function useDexConnectorTypes() {
 export function useDexConnectors() {
   return useQuery({
     queryKey: dexQueryKeys.connectors,
-    queryFn: () => getDexConnectors(),
+    queryFn: ({ signal }) => getDexConnectors(signal),
   });
 }
 
 export function useDexConnector(id: string | undefined) {
   return useQuery({
     queryKey: dexQueryKeys.connector(id || ""),
-    queryFn: () => getDexConnector(id as string),
+    queryFn: ({ signal }) => getDexConnector(id as string, signal),
     enabled: !!id,
   });
 }
@@ -120,7 +120,7 @@ export function useDeleteDexConnector() {
 export function useDexSettings() {
   return useQuery({
     queryKey: dexQueryKeys.settings,
-    queryFn: () => getDexSettings(),
+    queryFn: ({ signal }) => getDexSettings(signal),
   });
 }
 

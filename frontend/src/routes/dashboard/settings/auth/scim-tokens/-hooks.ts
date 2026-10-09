@@ -17,7 +17,7 @@ import { queryKeys } from "@/lib/query-keys";
 export function useSCIMTokens() {
   return useQuery({
     queryKey: queryKeys.scimTokens,
-    queryFn: () => listSCIMTokens(),
+    queryFn: ({ signal }) => listSCIMTokens(signal),
   });
 }
 

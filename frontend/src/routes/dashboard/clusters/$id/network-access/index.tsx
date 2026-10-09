@@ -58,7 +58,7 @@ function ClusterNetworkAccessPage() {
 
   const query = useQuery({
     queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId),
-    queryFn: () => getApiserverAllowlist(clusterId),
+    queryFn: ({ signal }) => getApiserverAllowlist(clusterId, signal),
     // `network_access.changed` covers allow-list writes while the stream is
     // open; reconcile-side sync-status changes heal via this fallback poll.
     refetchInterval: liveFallback(30_000),
@@ -131,11 +131,11 @@ function ClusterNetworkAccessPage() {
 
   const { data: snapshotPage } = useQuery({
     queryKey: queryKeys.clusterPages.apiserverAllowlistSnapshots(clusterId),
-    queryFn: () => listApiserverAllowlistSnapshots(clusterId, { limit: 20 }),
+    queryFn: ({ signal }) =>
+      listApiserverAllowlistSnapshots(clusterId, { limit: 20 }, signal),
     enabled: showSnapshots,
   });
   const snapshots = snapshotPage?.data ?? [];
-
   function handleSave() {
     if (
       data?.mode === "monitor" &&

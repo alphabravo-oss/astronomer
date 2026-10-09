@@ -175,9 +175,12 @@ export async function getAlertRules(
   return page.data;
 }
 
-export async function getAlertRule(id: string): Promise<AlertRule> {
+export async function getAlertRule(
+  id: string,
+  signal?: AbortSignal,
+): Promise<AlertRule> {
   return requireData(
-    await getAlertingRulesById({ path: { id } }),
+    await getAlertingRulesById({ signal, path: { id } }),
     "getAlertRule",
   );
 }
@@ -264,9 +267,12 @@ export async function getAlertEventSummary(
   };
 }
 
-export async function getAlertEvent(id: string): Promise<AlertEvent> {
+export async function getAlertEvent(
+  id: string,
+  signal?: AbortSignal,
+): Promise<AlertEvent> {
   return requireData(
-    await getAlertingEventsById({ path: { id } }),
+    await getAlertingEventsById({ signal, path: { id } }),
     "getAlertEvent",
   );
 }

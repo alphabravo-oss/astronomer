@@ -20,7 +20,7 @@ const TOOL_OP_TERMINAL = new Set(["completed", "failed", "superseded"]);
 export function useTools() {
   return useQuery({
     queryKey: queryKeys.tools.list(),
-    queryFn: getTools,
+    queryFn: ({ signal }) => getTools(signal),
     staleTime: 60_000,
   });
 }
@@ -28,7 +28,7 @@ export function useTools() {
 export function useClusterToolsStatus(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.tools.clusterStatus(clusterId),
-    queryFn: () => getClusterToolsStatus(clusterId),
+    queryFn: ({ signal }) => getClusterToolsStatus(clusterId, signal),
     throwOnError: false,
     enabled: !!clusterId,
     refetchInterval: liveFallback(30_000),
@@ -38,7 +38,7 @@ export function useClusterToolsStatus(clusterId: string) {
 export function useToolConfiguration(slug: string, clusterId: string) {
   return useQuery({
     queryKey: queryKeys.tools.configuration(slug, clusterId),
-    queryFn: () => getToolConfiguration(slug, clusterId),
+    queryFn: ({ signal }) => getToolConfiguration(slug, clusterId, signal),
     enabled: !!slug && !!clusterId,
     throwOnError: false,
   });
@@ -47,7 +47,7 @@ export function useToolConfiguration(slug: string, clusterId: string) {
 export function useToolOperation(operationId: string | null) {
   return useQuery({
     queryKey: queryKeys.tools.operation(operationId || ""),
-    queryFn: () => getToolOperation(operationId as string),
+    queryFn: ({ signal }) => getToolOperation(operationId as string, signal),
     enabled: !!operationId,
     refetchInterval: (query) =>
       query.state.data?.status && TOOL_OP_TERMINAL.has(query.state.data.status)

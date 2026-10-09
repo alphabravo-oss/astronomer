@@ -285,9 +285,10 @@ export type LoggingAttachResult = Pick<
 
 export async function getLoggingAttachStatus(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<LoggingAttachStatus> {
   return requireData(
-    await getLoggingAttachStatusOperation({ path: { id: clusterId } }),
+    await getLoggingAttachStatusOperation({ signal, path: { id: clusterId } }),
     "getLoggingAttachStatus",
   );
 }
@@ -463,10 +464,11 @@ export async function getLoggingOperations(
 
 export async function getLoggingOperation(
   id: string,
+  signal?: AbortSignal,
 ): Promise<LoggingOperation> {
   return mapLoggingOperation(
     requireData(
-      await getLoggingOperationOperation({ path: { id } }),
+      await getLoggingOperationOperation({ signal, path: { id } }),
       "getLoggingOperation",
     ),
   );

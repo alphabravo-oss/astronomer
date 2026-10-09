@@ -92,20 +92,27 @@ function mapSettings(wire: DexSettingsWire): DexSettings {
   };
 }
 
-export async function getDexConnectorTypes(): Promise<DexConnectorTypeSpec[]> {
-  const response = await getAuthDexConnectorTypes();
+export async function getDexConnectorTypes(
+  signal?: AbortSignal,
+): Promise<DexConnectorTypeSpec[]> {
+  const response = await getAuthDexConnectorTypes({ signal });
   return requireData(response, "getDexConnectorTypes").map(mapConnectorType);
 }
 
-export async function getDexConnectors(): Promise<DexConnector[]> {
-  const response = await getAuthDexConnectors();
+export async function getDexConnectors(
+  signal?: AbortSignal,
+): Promise<DexConnector[]> {
+  const response = await getAuthDexConnectors({ signal });
   return requireData(response, "getDexConnectors").map(mapConnector);
 }
 
-export async function getDexConnector(id: string): Promise<DexConnector> {
+export async function getDexConnector(
+  id: string,
+  signal?: AbortSignal,
+): Promise<DexConnector> {
   return mapConnector(
     requireData(
-      await getAuthDexConnectorsById({ path: { id } }),
+      await getAuthDexConnectorsById({ signal, path: { id } }),
       "getDexConnector",
     ),
   );
@@ -147,8 +154,12 @@ export async function deleteDexConnector(id: string): Promise<void> {
   await deleteAuthDexConnectorsById({ path: { id } });
 }
 
-export async function getDexSettings(): Promise<DexSettings> {
-  return mapSettings(requireData(await getAuthDexSettings(), "getDexSettings"));
+export async function getDexSettings(
+  signal?: AbortSignal,
+): Promise<DexSettings> {
+  return mapSettings(
+    requireData(await getAuthDexSettings({ signal }), "getDexSettings"),
+  );
 }
 
 export async function updateDexSettings(

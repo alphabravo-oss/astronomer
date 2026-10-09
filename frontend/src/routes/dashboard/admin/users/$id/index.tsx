@@ -129,7 +129,7 @@ function AdminUserDetailPage() {
 
   const userQuery = useQuery({
     queryKey: userKey(id),
-    queryFn: () => getAdminUser(id),
+    queryFn: ({ signal }) => getAdminUser(id, { signal }),
   });
   const { data: user, isLoading } = userQuery;
 

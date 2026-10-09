@@ -20,7 +20,7 @@ const cisQueryKeys = {
 export function useCISProfiles(clusterId: string | undefined) {
   return useQuery({
     queryKey: cisQueryKeys.profiles(clusterId ?? ""),
-    queryFn: () => getCISProfiles(clusterId!),
+    queryFn: ({ signal }) => getCISProfiles(clusterId!, signal),
     enabled: !!clusterId,
     staleTime: 60_000,
   });

@@ -17,7 +17,7 @@ export function AlertInvestigation({
 }) {
   const query = useQuery({
     queryKey: queryKeys.alerting.event(id),
-    queryFn: () => getAlertEvent(id),
+    queryFn: ({ signal }) => getAlertEvent(id, signal),
     throwOnError: false,
   });
   return (
@@ -105,7 +105,7 @@ export function AlertRuleInspection() {
   const [id, setId] = useInvestigationParam("rule");
   const query = useQuery({
     queryKey: queryKeys.alerting.rule(id),
-    queryFn: () => getAlertRule(id),
+    queryFn: ({ signal }) => getAlertRule(id, signal),
     enabled: !!id,
     throwOnError: false,
   });

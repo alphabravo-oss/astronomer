@@ -66,8 +66,10 @@ function mapValidation(wire: ValidationWire): ConstraintValidateResult {
 
 export async function listGatekeeperConstraints(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<GatekeeperConstraint[]> {
   const response = await getClustersByIdGatekeeperConstraints({
+    signal,
     path: { id: clusterId },
   });
   return [

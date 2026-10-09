@@ -61,8 +61,10 @@ function requireData<T>(value: T | undefined, operation: string): T {
 
 export async function getCISProfiles(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<CISProfilesResponse> {
   const response = await getSecurityProfiles({
+    signal,
     query: { cluster_id: clusterId },
   });
   return requireData(response.data, "get CIS profiles");
