@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -38,6 +39,8 @@ type receipt struct {
 	SchemaVersion      int            `json:"schemaVersion"`
 	Status             string         `json:"status"`
 	Database           string         `json:"database"`
+	ServerVersionNum   int            `json:"serverVersionNum"`
+	ServerMajor        int            `json:"serverMajor"`
 	Callbacks          map[string]int `json:"actualOTelSpans"`
 	Rows               int            `json:"committedRows"`
 	ParameterRedaction bool           `json:"boundParameterAndCredentialAbsent"`
@@ -94,7 +97,14 @@ func readReference(path string) (string, error) {
 	if err != nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Host == "" || parsed.Path != "/"+ownedDatabase || parsed.Fragment != "" {
 		return "", errors.New("database reference must identify exact dedicated W10 database")
 	}
-	for key := range parsed.Query() {
+	query, err := url.ParseQuery(parsed.RawQuery)
+	if err != nil {
+		return "", errors.New("database connection options are malformed")
+	}
+	for key, values := range query {
+		if len(values) != 1 {
+			return "", errors.New("duplicate database connection options are forbidden")
+		}
 		switch key {
 		case "sslmode", "sslrootcert", "connect_timeout", "application_name":
 		default:
@@ -102,6 +112,14 @@ func readReference(path string) (string, error) {
 		}
 	}
 	return ref.URL, nil
+}
+
+func requireServerVersion(value string) (int, error) {
+	n, err := strconv.Atoi(value)
+	if err != nil || n/10000 != 18 {
+		return 0, errors.New("qualification requires actual PostgreSQL major 18")
+	}
+	return n, nil
 }
 
 func run(ctx context.Context, connection string) (*receipt, error) {
@@ -125,9 +143,13 @@ func run(ctx context.Context, connection string) (*receipt, error) {
 		return nil, errors.New("dedicated database connection failed")
 	}
 	defer database.Close()
-	var actual string
-	if database.Pool().QueryRow(ctx, "SELECT current_database()").Scan(&actual) != nil || actual != ownedDatabase {
+	var actual, version string
+	if database.Pool().QueryRow(ctx, "SELECT current_database(), current_setting('server_version_num')").Scan(&actual, &version) != nil || actual != ownedDatabase {
 		return nil, errors.New("database ownership fence failed")
+	}
+	versionNum, err := requireServerVersion(version)
+	if err != nil {
+		return nil, err
 	}
 	// Exercise Connect with the exact production ConnConfig/Tracer, without
 	// claiming that every background pool connection inherits a sampled parent.
@@ -174,15 +196,21 @@ func run(ctx context.Context, connection string) (*receipt, error) {
 	if err = shutdown(budget); err != nil {
 		return nil, errors.New("real OTLP shutdown flush failed")
 	}
-	return validateCapture(captures, trace.SpanContextFromContext(ctx).TraceID(), connection, rows)
+	return validateCapture(captures, trace.SpanContextFromContext(ctx).TraceID(), connection, rows, versionNum)
 }
 
-func validateCapture(c *capture, root trace.TraceID, connection string, rows int) (*receipt, error) {
+func validateCapture(c *capture, root trace.TraceID, connection string, rows, versionNum int) (*receipt, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	counts := map[string]int{"connect": 0, "prepare": 0, "batch": 0, "batchQuery": 0, "acquire": 0, "query": 0}
-	parsed, _ := url.Parse(connection)
-	password, _ := parsed.User.Password()
+	parsed, err := url.Parse(connection)
+	if err != nil {
+		return nil, errors.New("database connection is malformed")
+	}
+	var password string
+	if parsed.User != nil {
+		password, _ = parsed.User.Password()
+	}
 	connected := true
 	batchIDs := map[string]bool{}
 	for _, request := range c.requests {
@@ -239,7 +267,7 @@ func validateCapture(c *capture, root trace.TraceID, connection string, rows int
 	if counts["batchQuery"] < 2 || !connected {
 		return nil, errors.New("batch query or root trace linkage missing")
 	}
-	return &receipt{1, "pass", ownedDatabase, counts, rows, true, true, "Real production pgx tracer closure on dedicated owned CNPG18 database and loopback OTLP protobuf receiver; not whole application/queue/tunnel/collector-stack qualification."}, nil
+	return &receipt{SchemaVersion: 1, Status: "pass", Database: ownedDatabase, ServerVersionNum: versionNum, ServerMajor: versionNum / 10000, Callbacks: counts, Rows: rows, ParameterRedaction: true, TraceConnected: true, Scope: "Real production pgx tracer closure on dedicated owned CNPG18 database and loopback OTLP protobuf receiver; not whole application/queue/tunnel/collector-stack qualification."}, nil
 }
 
 func main() {
