@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-09T22:08:43.471553+00:00",
+  "baseCommit": "59aaf25756ac88c45b2486e0d5b3b87febb07e04",
+  "scope": "Bounded W16 GitOps credential reader correction; comprehensive cryptographic qualification remains separate.",
+  "behavior": "Current, legacy Fernet, malformed and unsupported Astronomer envelopes fail closed without a usable decryptor; valid encrypted and legacy plaintext formats remain readable.",
+  "baseline": {
+    "exitCode": 1,
+    "failedCases": 7,
+    "log": "baseline.log"
+  },
+  "checks": [
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 go test ./internal/worker/tasks -run '^TestGitOps' -count=1",
+      "exitCode": 0,
+      "log": "fixed-full.log"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 go test -race ./internal/worker/tasks -run GitOps -count=1",
+      "exitCode": 0,
+      "log": "race.log"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 go vet ./internal/worker/tasks",
+      "exitCode": 0,
+      "log": "vet.log"
+    },
+    {
+      "command": "node scripts/check-complexity-budget.mjs",
+      "exitCode": 0,
+      "note": "Only gitops_sync.go ratchet lowered926\u2192903 by generator."
+    }
+  ],
+  "sourceHashes": {
+    "internal/worker/tasks/gitops_sync.go": "sha256:93bfcbe4e30dc719e52d74c549ae802d56f091f5926653ac844bd231a7863541",
+    "internal/worker/tasks/gitops_credentials.go": "sha256:d09182eba2cde93012f7ad8d322f7f446f7778b72b64544746d686ce5b7b95ec",
+    "internal/worker/tasks/gitops_credential_recovery_test.go": "sha256:579a546245e4d077e745bc3f0976553ce0e1e5b7e5e2aac76044284f9983e283",
+    "docs/architecture/complexity-baseline.json": "sha256:cdc7549870eebb2b73384c093633a0316cff476905f2dec4aa378da365ad026d"
+  },
+  "logHashes": {
+    "fixed.log": "sha256:8ff00a09d579e964ef5aeeaf91c915687f8560755292a0d39290231b83e24f6e",
+    "baseline.log": "sha256:7a7cd53013fa43c0b5fc9a88a3590ce8e9fd4218be4cf88cd9b832d74b212bd7",
+    "vet.log": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "race.log": "sha256:c501a3a8c0396520c58d9c04350760394e6a18e7071b33ec3ee3e62aedd2a58f",
+    "fixed-full.log": "sha256:8ff00a09d579e964ef5aeeaf91c915687f8560755292a0d39290231b83e24f6e"
+  },
+  "limits": [
+    "No real upstream Git service is contacted by these tests.",
+    "No customer credential or key is used or retained.",
+    "These tests do not qualify database physical restore or overall recovery RTO."
+  ]
+}

@@ -35,7 +35,7 @@
     "internal/tunnel/server.go": 1513,
     "internal/worker/tasks/alert_evaluation.go": 1219,
     "internal/worker/tasks/cluster_decommission.go": 1050,
-    "internal/worker/tasks/gitops_sync.go": 926,
+    "internal/worker/tasks/gitops_sync.go": 903,
     "internal/worker/tasks/project_reconcile.go": 1059,
     "scripts/code-health-inventory.mjs": 812,
     "scripts/loadtest/report.go": 977,
