@@ -541,9 +541,9 @@ Expected: all required cases execute, no expected test is silently skipped, publ
 
 **Ordered tasks:**
 
-- [ ] W05.1 Add an explicit refresh deadline with a dedicated shared refresh lifetime, not the first caller's AbortSignal. Retain HttpOnly cookies, CSRF headers, singleflight, one-retry guard, and existing redirect behavior.
-- [ ] W05.2 Reject every queued follower when refresh times out/fails; clear queue/ownership deterministically. Verify a later login/recovery can make progress.
-- [ ] W05.3 Preserve Axios cancellation identity through transport error enrichment so intentional abort is not displayed as a real offline/server error.
+- [x] W05.1 Add an explicit refresh deadline with a dedicated shared refresh lifetime, not the first caller's AbortSignal. Retain HttpOnly cookies, CSRF headers, singleflight, one-retry guard, and existing redirect behavior.
+- [x] W05.2 Reject every queued follower when refresh times out/fails; clear queue/ownership deterministically. Verify a later login/recovery can make progress.
+- [x] W05.3 Preserve Axios cancellation identity through transport error enrichment so intentional abort is not displayed as a real offline/server error.
 - [ ] W05.4 Inventory all TanStack read query functions and API adapters; forward query signals through generated operations and bounded Kubernetes proxy adapters.
 - [ ] W05.5 Distinguish durable mutations/operation ownership from cancelable observation. Cancelling polling must not cancel a committed server operation.
 - [ ] W05.6 Replace selected filename list checks with broader AST-aware or equally defensible discovery. Maintain narrow documented exceptions for intentionally long-lived streams.

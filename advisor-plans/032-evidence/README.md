@@ -16,7 +16,7 @@ separately. No historic qualification is attributed to a new candidate.
 | W02 | IN PROGRESS | TODO | Source security enforcement and exact exceptions; isolated `implement/032-security-policy`. External ruleset application is separate. |
 | W03 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W04 | TODO | TODO | Await dependencies and bounded implementation slice. |
-| W05 | IN PROGRESS | TODO | Browser refresh, query cancellation and semantic forms; isolated `implement/032-browser-boundaries`. |
+| W05 | IN PROGRESS | Refresh regressions PASS; full scope TODO | Integrated refresh slice `7b167632`; query forwarding/forms and full gates in isolated `implement/032-browser-boundaries`. |
 | W06 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W07 | TODO | TODO | Await dependencies and bounded implementation slice. |
 | W08 | TODO | TODO | Await dependencies and bounded implementation slice. |
@@ -35,6 +35,8 @@ separately. No historic qualification is attributed to a new candidate.
 - `6c3da188`: master plan and advisor index preserved on the implementation branch.
 - `c4e9993c`: reviewed W00 baseline, source-bound inventories and CNPG render preservation test.
 - W00 review: evidence validator 12 records/402 inputs; 13 negative/positive schema cases; actual changed-image CNPG render test. Docs, config, release and dependency gates pass. Baseline Go CLI doc VCS issue retained; Go 1.27.2 passes without workaround.
+- `7b167632`: reviewed bounded session refresh, per-waiter cancellation, cancellation identity, and logout refresh invalidation. Reviewer rerun: 2 test files / 15 cases pass; additional package gates remain with W05.
+- Helm 4.3.0 isolated preliminary CNPG changed-image render test passes; this does not qualify SDK migration, live database ownership or release deployment.
 - No deployment or release qualification is inferred from these source gates.
 
 ## Rules
