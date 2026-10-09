@@ -1,0 +1,72 @@
+{
+  "cases": [
+    {
+      "case": "authentic-official-publisher",
+      "command": [
+        "unshare",
+        "--net",
+        "/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3",
+        "verify-blob",
+        "--offline",
+        "--trusted-root",
+        "/root/astronomer-all/astronomer-032-toolchain-integration/deploy/toolchain/trust/trusted_root.json",
+        "--bundle",
+        "/root/.cache/astronomer-032/qualification/cnpg/operators/cnpg-1.30.1.sigstore.json",
+        "--certificate-oidc-issuer",
+        "https://token.actions.githubusercontent.com",
+        "--certificate-identity",
+        "https://github.com/cloudnative-pg/cloudnative-pg/.github/workflows/release-publish.yml@refs/tags/v1.30.1",
+        "/root/.cache/astronomer-032/qualification/cnpg/operators/cnpg-1.30.1.yaml"
+      ],
+      "exitCode": 0,
+      "networkNamespace": "unshare --net; no network interfaces enabled",
+      "outputDigest": "sha256:9d25d6c1808feeb45965a458d4eb657547adab11c8f209d12ccadc6b9494282e",
+      "passed": true
+    },
+    {
+      "case": "wrong-publisher-for-astronomer",
+      "command": [
+        "unshare",
+        "--net",
+        "/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3",
+        "verify-blob",
+        "--offline",
+        "--trusted-root",
+        "/root/astronomer-all/astronomer-032-toolchain-integration/deploy/toolchain/trust/trusted_root.json",
+        "--bundle",
+        "/root/.cache/astronomer-032/qualification/cnpg/operators/cnpg-1.30.1.sigstore.json",
+        "--certificate-oidc-issuer",
+        "https://token.actions.githubusercontent.com",
+        "--certificate-identity-regexp",
+        "^https://github\\.com/alphabravo-oss/astronomer/\\.github/workflows/(toolchain-resolution\\.yaml@refs/heads/main|release\\.yaml@refs/tags/v[0-9]+\\.[0-9]+\\.[0-9]+)$",
+        "/root/.cache/astronomer-032/qualification/cnpg/operators/cnpg-1.30.1.yaml"
+      ],
+      "exitCode": 1,
+      "networkNamespace": "unshare --net; no network interfaces enabled",
+      "outputDigest": "sha256:e1b630ed03027c4912ab860df0d3592f150685fd5ab2d138e6448e7fa7e739e0",
+      "passed": true
+    }
+  ],
+  "inputs": [
+    {
+      "digest": "sha256:4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71",
+      "name": "cosign-3.1.3"
+    },
+    {
+      "digest": "sha256:6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66",
+      "name": "trusted_root.json"
+    },
+    {
+      "digest": "sha256:37237f145d8138256ea25ae830f87759255665ff08f8d552fdd8224a5ec032fb",
+      "name": "cnpg-1.30.1.yaml"
+    },
+    {
+      "digest": "sha256:ec3aef5351c4c6af1bb17991245d7abe7ff144c9d5b67c944e9ce5b8b3b71357",
+      "name": "cnpg-1.30.1.sigstore.json"
+    }
+  ],
+  "observedAt": "2026-10-09T20:05:40.544195+00:00",
+  "schemaVersion": 1,
+  "scope": "Actual Sigstore cryptographic verification of an authentic official CNPG bundle in a network-less namespace and rejection of its publisher by Astronomer signer policy. This does not qualify an Astronomer-produced signed resolution or publication.",
+  "sourceCommit": "01acf61a059843f5349ff4dec165f958fca7d463"
+}
