@@ -30,7 +30,7 @@
     {
       "path": "internal/agent/delivery/materializer.go",
       "owner": "agent backend",
-      "source_sha256": "5d2272ca8ef03c58027b5cd5493eb45c15741ff95c983d5b68d51e15e40b7978"
+      "source_sha256": "608076fafb76f68231afde549b9cef537d56ca182caa2e8de6ae662c8ea47bcb"
     },
     {
       "path": "internal/agent/delivery/validator.go",
@@ -325,7 +325,7 @@
     {
       "path": "internal/delivery/provider/provider.go",
       "owner": "delivery backend",
-      "source_sha256": "3cdb652517a31cef18f9e193dc3ce368a102eca94b218ce2a9fbef25623fa8d9"
+      "source_sha256": "f903a969f8def472866dba1078b7290b91ac91cbd6725ce2570d4c221c934178"
     },
     {
       "path": "internal/delivery/rollout/control.go",
@@ -1099,7 +1099,7 @@
       "function": "sourceObject",
       "operation": "SQLLiteral",
       "sha256": "9505cacb7c710ed17125fcc6cb3669e8ddca6c8cd8af6a31f6b3cd64604c3098",
-      "scope_sha256": "744a22c72c259d4a3f91430295c26f7b38fc97aefe2694dbd5554a3798d1e7de",
+      "scope_sha256": "ba68cc89652c3f9dae865c5b93b12eccf66fd7af60854fd1410770ba4b88fc25",
       "classification": "non-sql-candidate",
       "control": "Exact lexical candidate is existing prose/CLI input, not a SQL statement; enclosing source is bound."
     },

@@ -10,8 +10,8 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 - Frontend source files: 1262
 - Frontend source lines: 238127
-- Go source files under `internal/` excluding generated sqlc and tests: 1019
-- Go source files scanned for sqlc query references excluding generated sqlc: 2301
+- Go source files under `internal/` excluding generated sqlc and tests: 1021
+- Go source files scanned for sqlc query references excluding generated sqlc: 2306
 - sqlc query declarations: 1327
 - Component files scanned: 457
 - Helm top-level values scanned: 35
@@ -105,7 +105,7 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `decisionDigest` in [`internal/delivery/rollout/scheduler.go:572`](internal/delivery/rollout/scheduler.go:572), [`internal/delivery/systemrollout/service.go:626`](internal/delivery/systemrollout/service.go:626)
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
 - `decodeRoleRules` in [`internal/handler/rbac_guards.go:251`](internal/handler/rbac_guards.go:251), [`internal/server/middleware/rbac_queries.go:244`](internal/server/middleware/rbac_queries.go:244)
-- `decodeStrict` in [`internal/delivery/provider/provider.go:483`](internal/delivery/provider/provider.go:483), [`internal/delivery/rollout/postgres_store.go:507`](internal/delivery/rollout/postgres_store.go:507)
+- `decodeStrict` in [`internal/delivery/provider/provider.go:497`](internal/delivery/provider/provider.go:497), [`internal/delivery/rollout/postgres_store.go:507`](internal/delivery/rollout/postgres_store.go:507)
 - `defaultString` in [`internal/handler/resource_presenters.go:703`](internal/handler/resource_presenters.go:703), [`internal/helmruntime/config.go:109`](internal/helmruntime/config.go:109)
 - `denied` in [`internal/charlie/action_guard.go:806`](internal/charlie/action_guard.go:806), [`internal/delivery/resolver/network.go:141`](internal/delivery/resolver/network.go:141)
 - `digestBytes` in [`internal/charlie/action_guard.go:801`](internal/charlie/action_guard.go:801), [`internal/delivery/resolver/service.go:171`](internal/delivery/resolver/service.go:171)
