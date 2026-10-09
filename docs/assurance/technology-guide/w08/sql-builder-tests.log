@@ -1,0 +1,6 @@
+=== RUN   TestAuditSQLDynamicFilterBindsOperatorValues
+--- PASS: TestAuditSQLDynamicFilterBindsOperatorValues (0.00s)
+=== RUN   TestAuditSQLBatchBindsValuesAndPartitionDDLRejectsIdentifiers
+--- PASS: TestAuditSQLBatchBindsValuesAndPartitionDDLRejectsIdentifiers (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/db/sqlc	0.003s

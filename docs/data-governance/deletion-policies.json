@@ -62,9 +62,7 @@
       "owner": "cluster-decommission",
       "mechanism": "soft delete, durable decommission phases, audit identity archival, then bounded purge",
       "audit": "mandatory mutation audit plus archived cluster identity before final purge",
-      "tables": [
-        "clusters"
-      ]
+      "tables": ["clusters"]
     },
     {
       "classification": "explicit_audited_purge",
@@ -98,7 +96,6 @@
         "delivery_sources",
         "dex_connectors",
         "gitops_registration_sources",
-        "global_role_bindings",
         "global_roles",
         "helm_chart_versions",
         "helm_charts",
@@ -129,6 +126,45 @@
         "vault_connections",
         "webhook_subscriptions"
       ]
+    },
+    {
+      "classification": "authority_mutation",
+      "owner": "Charlie AdminService and CharlieAdminHandler",
+      "mechanism": "connection-scoped explicit trigger deletion with exact one-row check; no scheduled purge",
+      "audit": "existing pre-authority audit gate and handler completion record; not claimed atomic with the pool DELETE",
+      "tables": ["charlie_trigger_rules"]
+    },
+    {
+      "classification": "derived_projection_replacement",
+      "owner": "Charlie PGCentralFindingStore",
+      "mechanism": "replace finding resource projection inside the same transaction after authorized active connection/session/resource scope; does not delete durable finding history",
+      "audit": "existing parent finding/session authority and publication; projection replacement has no independent deletion audit",
+      "tables": ["charlie_finding_resources"]
+    },
+    {
+      "classification": "explicit_audited_purge",
+      "owner": "chart-rating, notification-template and read-audit-policy HTTP domains",
+      "mechanism": "explicit authorized mutation using existing executeMutation/runTx and mandatory audit outbox; rating checks row ownership and locks",
+      "audit": "chart.rating.deleted, admin.notification_template.reset and admin.read_audit_policy.deleted remain mandatory transactional intents",
+      "tables": [
+        "chart_ratings",
+        "notification_templates",
+        "read_audit_policies"
+      ]
+    },
+    {
+      "classification": "multiple_authority_paths",
+      "owner": "native RBAC domain and Charlie AdminService",
+      "mechanism": "canonical RBAC deletion retains transactional audit; Charlie automation identity removes one fixed builtin binding inside its existing transaction",
+      "audit": "Charlie access update uses existing pre-authority audit gate and handler completion record; no assertion that this separate authority path audit shares its SQL transaction",
+      "tables": ["global_role_bindings"]
+    },
+    {
+      "classification": "dormant_policy_unresolved",
+      "owner": "unresolved domain policy; backend/data owns dormant declarations only",
+      "mechanism": "existing parameterized PruneOldImageVulnerabilityReportSnapshots and DeleteClusterServiceMesh helpers have no production caller; runtime reference is forbidden by the SQL gate until authority/retention is reviewed; no cutoff is invented",
+      "audit": "activation audit/retention ownership unresolved; STOP before activation, preserve helper and existing data",
+      "tables": ["cluster_service_mesh", "image_vulnerability_report_snapshots"]
     }
   ]
 }
