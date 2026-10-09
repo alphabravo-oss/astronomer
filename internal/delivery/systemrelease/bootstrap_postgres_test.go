@@ -121,7 +121,7 @@ func TestPostgresSystemReleaseBootstrapSameTransactionLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer blocker.Rollback(context.Background())
+	defer func() { _ = blocker.Rollback(context.Background()) }()
 	if _, err := blocker.Exec(ctx, `SELECT pg_advisory_xact_lock(82003208)`); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestPostgresSystemReleaseBootstrapConcurrentFirstCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer blocker.Rollback(context.Background())
+	defer func() { _ = blocker.Rollback(context.Background()) }()
 	if _, err := blocker.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('astronomer-delivery-system-release',0))`); err != nil {
 		t.Fatal(err)
 	}
