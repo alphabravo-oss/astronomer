@@ -1,0 +1,106 @@
+{
+  "finishedAt": "2026-10-09T20:11:44.542253+00:00",
+  "finishedSourceDigest": "cd98b39d284443fdb0cc58ca1e09dda168f4741f531a62cc6a6f5989ca9260ee",
+  "finishedTrackedChanges": "",
+  "gates": [
+    {
+      "command": [
+        "node",
+        "--version"
+      ],
+      "cwd": ".",
+      "durationSeconds": 0.007,
+      "exitCode": 0,
+      "finishedAt": "2026-10-09T20:10:09.265968+00:00",
+      "log": "runtime.log",
+      "logDigest": "sha256:ff9f714664f5d87ac6548bb3700b0c18bd57add52ac986b01d4aec21543ccfda",
+      "name": "runtime",
+      "startedAt": "2026-10-09T20:10:09.259331+00:00"
+    },
+    {
+      "command": [
+        "npm",
+        "--version"
+      ],
+      "cwd": ".",
+      "durationSeconds": 0.11,
+      "exitCode": 0,
+      "finishedAt": "2026-10-09T20:10:09.376079+00:00",
+      "log": "npm.log",
+      "logDigest": "sha256:4211530c8fb0d148aab950b0005433a64dd6f19f26460831515c07d12fc826a9",
+      "name": "npm",
+      "startedAt": "2026-10-09T20:10:09.266270+00:00"
+    },
+    {
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "cwd": "frontend",
+      "durationSeconds": 9.945,
+      "exitCode": 0,
+      "finishedAt": "2026-10-09T20:10:19.321378+00:00",
+      "log": "strict-install.log",
+      "logDigest": "sha256:178190dfd8dc9de4a392be3061f10ac220dc05df1acc78196da2ad6bf8ce0cbf",
+      "name": "strict-install",
+      "startedAt": "2026-10-09T20:10:09.376601+00:00"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "type-check"
+      ],
+      "cwd": "frontend",
+      "durationSeconds": 31.468,
+      "exitCode": 0,
+      "finishedAt": "2026-10-09T20:10:50.790029+00:00",
+      "log": "type-check.log",
+      "logDigest": "sha256:74a7dd07a9b000f3cc02194245420185a5d7ebcb0667307d15a6705be3674a67",
+      "name": "type-check",
+      "startedAt": "2026-10-09T20:10:19.321786+00:00"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "cwd": "frontend",
+      "durationSeconds": 41.472,
+      "exitCode": 0,
+      "finishedAt": "2026-10-09T20:11:32.262615+00:00",
+      "log": "lint.log",
+      "logDigest": "sha256:e49a7391e71418658500c86c4579aaa2eaf00c3d5ee2cee5216f76766c704adc",
+      "name": "lint",
+      "startedAt": "2026-10-09T20:10:50.790444+00:00"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "code-health"
+      ],
+      "cwd": "frontend",
+      "durationSeconds": 12.279,
+      "exitCode": 1,
+      "finishedAt": "2026-10-09T20:11:44.541890+00:00",
+      "log": "code-health.log",
+      "logDigest": "sha256:da7520762fc95b19a01038e977823a75dd2b230b7d8df5f1706e5ccd92ec97b2",
+      "name": "code-health",
+      "startedAt": "2026-10-09T20:11:32.262973+00:00"
+    }
+  ],
+  "limits": [
+    "Frontend combined source qualification only; no API/stateful/live deployment/release signing qualification.",
+    "Matching Playwright1.64 Chromium1248 installed in the shared isolated tool cache; browser gate uses one worker and zero retries."
+  ],
+  "schemaVersion": 1,
+  "sourceCommit": "932eb4477ec46894ae96221e7e11953ab844b58c",
+  "sourceTree": "3a2254b73d9270e8885fb2963100711418153460",
+  "sourceTreeStable": true,
+  "startedAt": "2026-10-09T20:10:08.691167+00:00",
+  "startedSourceDigest": "cd98b39d284443fdb0cc58ca1e09dda168f4741f531a62cc6a6f5989ca9260ee",
+  "startedTrackedChanges": "",
+  "status": "failed"
+}
