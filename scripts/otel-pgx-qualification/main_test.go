@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestProtectedDatabaseReferenceRejectsUnsafeTargetsAndFiles(t *testing.T) {
@@ -41,5 +43,35 @@ func TestProtectedDatabaseReferenceRejectsUnsafeTargetsAndFiles(t *testing.T) {
 	_ = os.WriteFile(oversized, []byte(strings.Repeat("x", 16385)), 0600)
 	if _, err := readReference(oversized); err == nil {
 		t.Error("oversized reference accepted")
+	}
+}
+
+func TestReferenceOptionsRejectMalformedAndDuplicateQueries(t *testing.T) {
+	for _, query := range []string{"sslmode=require&sslmode=disable", "sslmode=%zz", "sslmode=require;dbname=other", "application_name=synthetic&application_name=other"} {
+		path := filepath.Join(t.TempDir(), "reference.json")
+		raw, _ := json.Marshal(databaseReference{URL: "postgres://localhost/" + ownedDatabase + "?" + query})
+		_ = os.WriteFile(path, raw, 0600)
+		if _, err := readReference(path); err == nil {
+			t.Error("ambiguous options accepted")
+		}
+	}
+}
+
+func TestCaptureHandlesPasswordlessReferences(t *testing.T) {
+	for _, connection := range []string{"postgres://localhost/" + ownedDatabase, "postgres://synthetic@localhost/" + ownedDatabase} {
+		if _, err := validateCapture(new(capture), trace.TraceID{}, connection, 2, 180006); err == nil {
+			t.Error("empty capture accepted")
+		}
+	}
+}
+
+func TestServerMajorFenceRejectsOtherServers(t *testing.T) {
+	for _, version := range []string{"170011", "190000", "180006malformed", "", "-180006"} {
+		if _, err := requireServerVersion(version); err == nil {
+			t.Error("unsupported server accepted")
+		}
+	}
+	if n, err := requireServerVersion("180006"); err != nil || n != 180006 {
+		t.Fatal("actual PostgreSQL18 rejected")
 	}
 }
