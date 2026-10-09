@@ -21,9 +21,21 @@ Commands on this scoped source:
   annotations; canonical helper functions are checked for continued existence.
 - `node scripts/check-docs.mjs`: passes.
 
-The gate uses unique function/operation/argument bindings (1,102), not raw site
+The initial gate uses unique function/operation/argument bindings (1,102), not raw site
 count as correctness proof. Read-only inventory verifies transaction mode and
 schema identity before reading every row of its explicitly stable-schema scope.
 Physical constraints and reader/worker tests provide independent behavior proof.
 The manifest records selector-name/query candidates' limitations: it is not a
 whole-program callgraph or arbitrary SQL type-resolution proof.
+
+The final refresh imports reviewed main `4798bcdd` (including W03) and removes
+the retired URL-bearing catalog diagnostic serializer. Five new modules and
+nine precise calls have explicit owner/schema/reader behavior; one old site is
+retired. It now discovers 1,134 calls and binds 1,110 unique sites in 388 modules.
+The critical row inventory also checks separate rollout strategy alongside its
+frozen plan, with a complete canonical-plan regression and actual database
+before/after receipts. Seven Go fixtures and ten Python negatives pass, and the
+combined data governance gate passes. `final-data-governance.log` and
+`final-governance-fixtures.log` retain the outputs. These additions preserve the
+same syntax/dataflow limitations and do not claim unrelated ignored errors were
+silently corrected.

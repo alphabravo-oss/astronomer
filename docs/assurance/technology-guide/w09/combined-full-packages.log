@@ -1,0 +1,9 @@
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	19.740s
+ok  	github.com/alphabravocompany/astronomer-go/internal/worker/tasks	1.575s
+ok  	github.com/alphabravocompany/astronomer-go/internal/audit	0.785s
+ok  	github.com/alphabravocompany/astronomer-go/internal/jsoncontract	0.207s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/model	0.006s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/rollout	5.573s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout	0.009s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp	0.009s
+ok  	github.com/alphabravocompany/astronomer-go/tools/json-governance	0.010s
