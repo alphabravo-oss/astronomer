@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
@@ -27,7 +28,15 @@ type TaskOutboxOptions struct {
 }
 
 func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task, opts TaskOutboxOptions) (sqlc.TaskOutbox, error) {
-	payload := observability.EnrichTaskPayload(ctx, task.Payload(), reqctx.CorrelationID(ctx))
+	payload, err := jsoncontract.ReadTaskPayloadV1(task.Payload())
+	if err != nil {
+		return sqlc.TaskOutbox{}, err
+	}
+	payload = observability.EnrichTaskPayload(ctx, payload, reqctx.CorrelationID(ctx))
+	// Enrichment can increase the document size; validate the final durable bytes.
+	if _, err := jsoncontract.ReadTaskPayloadV1(payload); err != nil {
+		return sqlc.TaskOutbox{}, err
+	}
 	if opts.QueueName == "" {
 		opts.QueueName = "default"
 	}

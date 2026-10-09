@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -178,5 +179,39 @@ func TestTaskOutboxOptionDefaults(t *testing.T) {
 	opts := taskOutboxOptions(row)
 	if len(opts) != 3 {
 		t.Fatalf("options = %d, want 3 base options", len(opts))
+	}
+}
+
+func TestDispatchTaskOutboxCorruptPayloadContinuesValidRows(t *testing.T) {
+	for _, raw := range []string{`null`, `[]`, `{"secret":"private-fixture"} {}`, `{"_correlation_id":null}`} {
+		t.Run(raw, func(t *testing.T) {
+			corrupt, valid := makeTaskOutboxRow(), makeTaskOutboxRow()
+			corrupt.Payload = []byte(raw)
+			q, e := &fakeTaskOutboxQuerier{rows: []sqlc.TaskOutbox{corrupt, valid}}, &fakeTaskOutboxEnqueuer{}
+			if err := DispatchTaskOutboxOnce(t.Context(), TaskOutboxDispatchDeps{Queries: q, Enqueuer: e}); err != nil {
+				t.Fatal(err)
+			}
+			if len(e.tasks) != 1 || len(q.failed) != 1 || len(q.delivered) != 1 || q.failed[0].ID != corrupt.ID || q.delivered[0].ID != valid.ID {
+				t.Fatalf("corrupt row enqueued or valid work lost: enqueued=%d failed=%d delivered=%d", len(e.tasks), len(q.failed), len(q.delivered))
+			}
+			if strings.Contains(q.failed[0].LastError, "private-fixture") || len(q.failed[0].LastError) > 100 {
+				t.Fatalf("unsafe stored diagnostic")
+			}
+		})
+	}
+}
+
+func TestDispatchTaskOutboxLegacyEmptyPayloadAdapter(t *testing.T) {
+	row := makeTaskOutboxRow()
+	row.Payload = nil
+	q, e := &fakeTaskOutboxQuerier{rows: []sqlc.TaskOutbox{row}}, &fakeTaskOutboxEnqueuer{}
+	if err := DispatchTaskOutboxOnce(t.Context(), TaskOutboxDispatchDeps{Queries: q, Enqueuer: e}); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.tasks) != 1 || string(e.tasks[0].Payload()) != `{}` {
+		t.Fatal("legacy empty payload did not use object adapter")
+	}
+	if row.Payload != nil {
+		t.Fatal("reader rewrote persisted payload")
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 )
 
 const TaskOutboxDispatchType = "task_outbox:dispatch"
@@ -68,9 +69,11 @@ func DispatchTaskOutboxOnce(ctx context.Context, deps TaskOutboxDispatchDeps) er
 }
 
 func dispatchTaskOutboxRow(ctx context.Context, deps TaskOutboxDispatchDeps, row sqlc.TaskOutbox, nowFn func() time.Time) error {
-	task := asynq.NewTask(row.TaskType, row.Payload)
-	opts := taskOutboxOptions(row)
-	_, err := deps.Enqueuer.EnqueueContext(ctx, task, opts...)
+	payload, err := jsoncontract.ReadTaskPayloadV1(row.Payload)
+	if err == nil {
+		task := asynq.NewTask(row.TaskType, payload)
+		_, err = deps.Enqueuer.EnqueueContext(ctx, task, taskOutboxOptions(row)...)
+	}
 	if err == nil || errors.Is(err, asynq.ErrTaskIDConflict) || errors.Is(err, asynq.ErrDuplicateTask) {
 		return deps.Queries.MarkTaskOutboxDelivered(ctx, sqlc.MarkTaskOutboxDeliveredParams{
 			ID:          row.ID,
