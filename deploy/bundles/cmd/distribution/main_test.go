@@ -222,3 +222,31 @@ func TestProducerBoundsRegularInputsBeforeAllocation(t *testing.T) {
 		t.Fatal("symlink input was read")
 	}
 }
+
+func TestReviewedRenderUsesDeclaredKubernetesMinor(t *testing.T) {
+	catalog, err := builtinbundles.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	image := "qa.example.test/workload@sha256:" + strings.Repeat("a", 64)
+	chart := testChart(t, catalog.Components[0], "{{ if eq .Capabilities.KubeVersion.Minor \"35\" }}apiVersion: v1\nkind: Pod\nspec:\n  containers:\n  - name: minor-specific\n    image: "+image+"\n{{ end }}")
+	profile, err := renderReviewedChart(chart, map[string]any{}, "qa", "qa", "1.35.0")
+	if err != nil || len(profile.Images) != 1 || profile.Images[0] != image {
+		t.Fatalf("supported minor-specific image missing: %v", err)
+	}
+	if _, err := renderReviewedChart(chart, map[string]any{}, "qa", "qa", "invalid"); err == nil {
+		t.Fatal("invalid Kubernetes profile accepted")
+	}
+}
+
+func TestImageClassificationRejectsInvalidQualifiedReference(t *testing.T) {
+	digest := "@sha256:" + strings.Repeat("a", 64)
+	for _, raw := range []string{"https://registry.example.test/image", "registry.example.test/UpperCase", "alias/image", "registry.example.test/image?token=private", "registry.example.test/image name"} {
+		if _, err := pinnedImage(raw + digest); err == nil {
+			t.Fatal("invalid qualified image accepted")
+		}
+	}
+	if normalized, err := pinnedImage("registry.example.test:5000/image:display-tag" + digest); err != nil || normalized != "registry.example.test:5000/image"+digest {
+		t.Fatalf("immutable image normalization failed: %v", err)
+	}
+}

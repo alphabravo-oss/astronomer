@@ -16,6 +16,14 @@ record remains classified with its decrypted domain owner; the read-only databas
 inventory does not unseal it. Runtime registry versions, including existing v2
 component/security schemas, are retained rather than flattened to v1.
 
+The combined reviewed W03/W09 refresh binds 388 modules, 1,134 calls and 1,110
+unique sites. Nine exact calls replace one retired diagnostic serializer. The
+new annotations cover signed distribution values cloning/profile comparisons,
+operator destination policy and the authenticated JSON helper. Discarded
+distribution clone/profile serializer results are explicitly recorded as
+predecoded-value assumptions, not proof that arbitrary Go maps cannot fail.
+Caller byte bounds and content-free helper errors are recorded separately.
+
 Canonical query bindings identify named SQL candidates. Canonical query-extension
 templates are also inventoried, including the idempotency response writer that
 returns a marshal error before SQL. Physical column candidates come from sqlc's

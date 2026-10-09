@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
@@ -298,6 +299,10 @@ func buildRow(event Event) (sqlc.CreateAuditLogV1Params, bool) {
 			return sqlc.CreateAuditLogV1Params{}, false
 		}
 		raw = buf
+	}
+	// Refuse an intent that the bounded durable reader cannot later deliver.
+	if len(raw) > jsoncontract.MaxDocumentBytes {
+		return sqlc.CreateAuditLogV1Params{}, false
 	}
 
 	if event.Source == "" {

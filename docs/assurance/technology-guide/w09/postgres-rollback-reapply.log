@@ -1,0 +1,18 @@
+{"time":"2026-10-09T20:56:47.204657712Z","level":"INFO","msg":"database migration","detail":"72/d durable_json_nested_validation (12.90943ms)"}
+exit=0
+{"time":"2026-10-09T20:56:47.243800361Z","level":"INFO","msg":"database migration","detail":"72/u durable_json_nested_validation (14.194249ms)"}
+exit=0
+Synthetic inhibition/task revisions unchanged across72->71->72=true
+{"time":"2026-10-09T21:01:30.035509607Z","level":"INFO","msg":"database migration","detail":"72/d durable_json_nested_validation (9.60897ms)"}
+exit=0
+{"time":"2026-10-09T21:01:30.240167761Z","level":"INFO","msg":"database migration","detail":"72/u durable_json_nested_validation (14.639393ms)"}
+exit=0
+{"time":"2026-10-09T21:18:39.669661944Z","level":"INFO","msg":"database migration","detail":"72/d durable_json_nested_validation (15.127522ms)"}
+exit=0
+{"time":"2026-10-09T21:19:37.611694359Z","level":"INFO","msg":"database migration","detail":"72/u durable_json_nested_validation (15.516214ms)"}
+exit=0
+{"time":"2026-10-09T21:19:37.798642492Z","level":"INFO","msg":"database migration","detail":"72/d durable_json_nested_validation (9.869376ms)"}
+exit=0
+{"time":"2026-10-09T21:19:37.827541795Z","level":"INFO","msg":"database migration","detail":"72/u durable_json_nested_validation (12.116455ms)"}
+exit=0
+All seeded inhibition/task/rollout document revisions unchanged across71->72->71->72=true

@@ -18100,6 +18100,21 @@
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
     },
     {
+      "path": "internal/delivery/distribution/archive.go",
+      "owner": "delivery/distribution",
+      "scope": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes; each exact call declares reader behavior and limitations"
+    },
+    {
+      "path": "internal/delivery/distribution/loader.go",
+      "owner": "delivery/distribution",
+      "scope": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes; each exact call declares reader behavior and limitations"
+    },
+    {
+      "path": "internal/delivery/distribution/mirror.go",
+      "owner": "delivery/distribution",
+      "scope": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes; each exact call declares reader behavior and limitations"
+    },
+    {
       "path": "internal/delivery/model/digest.go",
       "owner": "/delivery/model",
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
@@ -18908,6 +18923,16 @@
       "path": "internal/handler/workloads_routes.go",
       "owner": "/handler",
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
+    },
+    {
+      "path": "internal/httpclient/destinations.go",
+      "owner": "httpclient/operator-network-policy",
+      "scope": "Strict product operator DestinationPolicy and TrustedOrigin objects, max64KiB, finite origins/CIDRs; each exact call declares reader behavior and limitations"
+    },
+    {
+      "path": "internal/jsoncontract/decode.go",
+      "owner": "jsoncontract/authenticated-envelope",
+      "scope": "Strict product authenticated caller-defined DTO; bounded nesting64, byte bound owned by each caller; each exact call declares reader behavior and limitations"
     },
     {
       "path": "internal/jsoncontract/inhibition.go",
@@ -28195,17 +28220,6 @@
     },
     {
       "path": "internal/worker/tasks/catalog_sync.go",
-      "function": "recordRepositorySyncFailure",
-      "operation": "json.Marshal",
-      "arguments": [
-        "map[string]any{\n\t\"url\":       repoRecord.Url,\n\t\"repo_type\": repoRecord.RepoType,\n\t\"error\":     msg,\n}"
-      ],
-      "owner": "/worker/tasks",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
-    },
-    {
-      "path": "internal/worker/tasks/catalog_sync.go",
       "function": "fetchChartAssets",
       "operation": "json.Valid",
       "arguments": ["loaded.Schema"],
@@ -29586,6 +29600,89 @@
       "owner": "/protocol",
       "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
       "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+    },
+    {
+      "path": "internal/delivery/distribution/archive.go",
+      "function": "validateProfile",
+      "operation": "json.Marshal",
+      "arguments": ["component.Values"],
+      "owner": "delivery/distribution",
+      "schema": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes",
+      "reader_behavior": "Compare decoded catalog and closed profile JSON values for exact canonical equality; marshal result is explicitly discarded after JSON decoding, not a general arbitrary Go-map serializer guarantee"
+    },
+    {
+      "path": "internal/delivery/distribution/archive.go",
+      "function": "validateProfile",
+      "operation": "json.Marshal",
+      "arguments": ["values[component.Slug]"],
+      "owner": "delivery/distribution",
+      "schema": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes",
+      "reader_behavior": "Compare decoded catalog and closed profile JSON values for exact canonical equality; marshal result is explicitly discarded after JSON decoding, not a general arbitrary Go-map serializer guarantee"
+    },
+    {
+      "path": "internal/delivery/distribution/loader.go",
+      "function": "cloneCatalog",
+      "operation": "json.Marshal",
+      "arguments": ["component.Values"],
+      "owner": "delivery/distribution",
+      "schema": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes",
+      "reader_behavior": "Deep-copy previously decoded catalog values through JSON; serializer/reader errors are explicitly discarded and can leave nil values for unsupported programmatic graphs; loader/profile domain ownership remains separate"
+    },
+    {
+      "path": "internal/delivery/distribution/loader.go",
+      "function": "cloneCatalog",
+      "operation": "json.Unmarshal",
+      "arguments": ["data", "&component.Values"],
+      "owner": "delivery/distribution",
+      "schema": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes",
+      "reader_behavior": "Deep-copy previously decoded catalog values through JSON; serializer/reader errors are explicitly discarded and can leave nil values for unsupported programmatic graphs; loader/profile domain ownership remains separate"
+    },
+    {
+      "path": "internal/delivery/distribution/mirror.go",
+      "function": "projectMirrors",
+      "operation": "json.Marshal",
+      "arguments": ["component.Values"],
+      "owner": "delivery/distribution",
+      "schema": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes",
+      "reader_behavior": "Copy previously decoded catalog values and rewrite only authenticated image subjects; discarded JSON results are bounded-source assumptions, and non-object projected values return the content-free blocked values error"
+    },
+    {
+      "path": "internal/delivery/distribution/mirror.go",
+      "function": "projectMirrors",
+      "operation": "json.Unmarshal",
+      "arguments": ["valueBytes", "&values"],
+      "owner": "delivery/distribution",
+      "schema": "Signed distribution v1 catalog/profile Helm values; opaque JSON-compatible values beneath authenticated product envelopes",
+      "reader_behavior": "Copy previously decoded catalog values and rewrite only authenticated image subjects; discarded JSON results are bounded-source assumptions, and non-object projected values return the content-free blocked values error"
+    },
+    {
+      "path": "internal/httpclient/destinations.go",
+      "function": "ParseDestinationPolicy",
+      "operation": "json.NewDecoder",
+      "arguments": ["strings.NewReader(raw)"],
+      "owner": "httpclient/operator-network-policy",
+      "schema": "Strict product operator DestinationPolicy and TrustedOrigin objects, max64KiB, finite origins/CIDRs",
+      "reader_behavior": "Disallow unknown fields; reject null, trailing documents and invalid domain destinations with content-free errors; empty input retains unrestricted default"
+    },
+    {
+      "path": "internal/jsoncontract/decode.go",
+      "function": "Decode",
+      "operation": "json.NewDecoder",
+      "arguments": ["bytes.NewReader(data)"],
+      "owner": "jsoncontract/authenticated-envelope",
+      "schema": "Strict product authenticated caller-defined DTO; bounded nesting64, byte bound owned by each caller",
+      "reader_behavior": "Scan duplicate keys and one complete document, then reject unknown typed fields; content-free categories; opaque nested map values retain their producer-defined keys"
+    },
+    {
+      "path": "internal/worker/tasks/catalog_sync.go",
+      "function": "recordRepositorySyncFailure",
+      "operation": "json.Marshal",
+      "arguments": [
+        "map[string]any{\n\t\"repository_id\": repoRecord.ID,\n\t\"repo_type\":     repoRecord.RepoType,\n\t\"error\":         msg,\n}"
+      ],
+      "owner": "worker/catalog-sync",
+      "schema": "Versioned v1 audit object with repository_id UUID, repository type and domain-owned safe failure message; no repository URL",
+      "reader_behavior": "Marshal error returns before legacy direct audit write; ordinary database failure remains existing best-effort discarded result; not transactional mandatory audit or whole-reader correctness proof"
     }
   ]
 }
