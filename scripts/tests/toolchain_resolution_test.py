@@ -7,6 +7,9 @@ import pathlib
 import re
 import sys
 import unittest
+import tempfile
+import subprocess
+import os
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -44,6 +47,64 @@ class ResolutionTests(unittest.TestCase):
         self.receipt["expiresAt"] = "2027-01-01T00:00:00Z"
         with self.assertRaisesRegex(ValueError, "lifetime"):
             resolution.verify_binding(self.receipt, self.document, self.authority, self.now)
+
+    def test_nonpositive_lifetime_and_schema(self):
+        self.receipt["expiresAt"] = self.receipt["generatedAt"]
+        with self.assertRaisesRegex(ValueError, "precedes generation"):
+            resolution.verify_binding(self.receipt, self.document, self.authority, self.now)
+        self.setUp()
+        self.receipt["schemaVersion"] = 2
+        with self.assertRaisesRegex(ValueError, "unsupported resolution schema"):
+            resolution.verify_binding(self.receipt, self.document, self.authority, self.now)
+
+    def test_actual_verifier_cli_rejects_failure_missing_bundle_schema_and_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = pathlib.Path(directory)
+            record = directory / "record.json"
+            bundle = directory / "bundle.json"
+            bundle.write_text("{}")
+            cosign = directory / "cosign"
+            cosign.write_text("#!/bin/sh\nexit 42\n")
+            cosign.chmod(0o755)
+            env = dict(os.environ, PATH=str(directory) + os.pathsep + os.environ["PATH"], GOTOOLCHAIN="go1.27.2", GOMAXPROCS="2", GOFLAGS="-p=2")
+            base = [sys.executable, str(ROOT / "scripts/toolchain-resolution.py")]
+            generated = subprocess.run(base + ["--generate", "--record", str(record)], capture_output=True, text=True, env=env)
+            self.assertEqual(generated.returncode, 0, generated.stderr)
+            args = base + ["--verify", "--record", str(record)]
+            missing = subprocess.run(args, capture_output=True, text=True, env=env)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("signed Sigstore resolution bundle", missing.stderr)
+            failed = subprocess.run(args + ["--bundle", str(bundle)], capture_output=True, text=True, env=env)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("42", failed.stderr)
+            cosign.write_text("#!/bin/sh\nexit 0\n")
+            receipt = json.loads(record.read_text())
+            receipt["sourceCommit"] = "0" * 40
+            record.write_text(json.dumps(receipt))
+            wrong_source = subprocess.run(args + ["--bundle", str(bundle)], capture_output=True, text=True, env=env)
+            self.assertNotEqual(wrong_source.returncode, 0)
+            self.assertIn("different source commit", wrong_source.stderr)
+            receipt["schemaVersion"] = 99
+            record.write_text(json.dumps(receipt))
+            wrong_schema = subprocess.run(args + ["--bundle", str(bundle)], capture_output=True, text=True, env=env)
+            self.assertNotEqual(wrong_schema.returncode, 0)
+            self.assertIn("schema", wrong_schema.stderr.lower())
+
+    def test_dedicated_signing_workflow_contract(self):
+        workflow = ROOT / ".github/workflows/toolchain-resolution.yaml"
+        raw = subprocess.check_output(["go", "run", "./deploy/toolchain/check", "--yaml-json"], input=workflow.read_bytes(), cwd=ROOT)
+        document = json.loads(raw)
+        self.assertEqual(set(document["on"]), {"workflow_dispatch"})
+        self.assertEqual(document["permissions"], {"contents": "read"})
+        job = document["jobs"]["resolution"]
+        self.assertEqual(job["permissions"], {"contents": "read", "id-token": "write"})
+        self.assertEqual(job["if"], "github.repository == 'alphabravo-oss/astronomer' && github.ref == 'refs/heads/main'")
+        runs = [step.get("run", "") for step in job["steps"]]
+        self.assertTrue(any("cosign sign-blob --yes --bundle" in run for run in runs))
+        self.assertTrue(any("versions-release-check" in run for run in runs))
+        for step in job["steps"]:
+            if "uses" in step:
+                self.assertRegex(step["uses"], r"@[a-f0-9]{40}$")
 
     def test_signer_identity_negative_fixtures(self):
         policy = re.compile(resolution.IDENTITY)

@@ -72,6 +72,11 @@ def validate(document, now=None, release=False):
         for artifact in component["artifacts"]:
             if not set(component["platforms"]).issubset(artifact["platforms"]):
                 raise ValueError(f"{name}: unsupported artifact platform")
+            platform_digests = artifact.get("platformDigests")
+            if platform_digests is not None and set(platform_digests) != set(artifact["platforms"]):
+                raise ValueError(f"{name}: artifact platform-map contradiction")
+            if selected and ":" + selected not in artifact["reference"] and ":v" + selected not in artifact["reference"]:
+                raise ValueError(f"{name}: artifact does not identify selected version")
             if timestamp(artifact["verifiedAt"]) > now:
                 raise ValueError(f"{name}: future artifact verification")
             if not artifact["reference"].endswith("@" + artifact["digest"]):
@@ -89,7 +94,7 @@ def align(document, root=ROOT, write=False):
         for consumer in component["consumers"]:
             path = root / consumer["path"]
             source = path.read_text()
-            expected = consumer["value"].replace("{version}", component["selected"])
+            expected = consumer["value"].replace("{version}", component["selected"] or "")
             if component["artifacts"]:
                 expected = expected.replace("{reference}", component["artifacts"][0]["reference"])
             if consumer["kind"] == "json":
@@ -119,7 +124,8 @@ def align(document, root=ROOT, write=False):
 
 
 def fetch_bytes(url):
-    request = urllib.request.Request(url, headers={"User-Agent": "Astronomer-version-discovery", "Accept": "application/json"})
+    accept = "text/html, application/atom+xml" if url.startswith("https://github.com/") else "application/json"
+    request = urllib.request.Request(url, headers={"User-Agent": "Astronomer-version-discovery", "Accept": accept})
     with urllib.request.urlopen(request, timeout=30) as response:
         if response.status != 200:
             raise ValueError(f"upstream HTTP status {response.status}")
@@ -161,18 +167,18 @@ def github_feed(url, now):
         if STABLE.fullmatch(version):
             candidates.append((tuple(map(int, version.split("."))), version, page_url))
     for _, version, page_url in sorted(candidates, reverse=True):
-        if not page_url.startswith(url.removesuffix(".atom") + "/tag/"):
+        if not page_url.lower().startswith(url.removesuffix(".atom").lower() + "/tag/"):
             raise ValueError("GitHub feed links outside declared release repository")
         page, page_digest = fetch_bytes(page_url)
         html = page.decode()
         if re.search(r">\s*Pre-release\s*</span>", html):
             continue
-        # Release publication uses GitHub's UTC display format; the ISO time
-        # elsewhere on this page records its last edit, not publication.
-        dates = re.findall(r'<relative-time datetime="(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC)"', html)
+        # Bind the publication timestamp to the release event. Other times
+        # on this page describe included commits and must not be accepted.
+        dates = re.findall(r'released this\s*<relative-time\b[^>]*datetime="([^"]+)"', html)
         if len(dates) != 1:
             raise ValueError("GitHub release lacks unambiguous publication date")
-        date = dt.datetime.strptime(dates[0], "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=dt.timezone.utc).isoformat()
+        date = timestamp(dates[0]).isoformat()
         final_candidates([(version, date, True)], now)
         return version, date, digest + "; " + page_digest
     raise ValueError("GitHub feed lacks independently dated final release")

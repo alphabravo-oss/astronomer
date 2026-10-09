@@ -21,6 +21,10 @@ def bindings(document):
 
 def verify_binding(receipt, document, authority, now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
+    if receipt.get("schemaVersion") != 1:
+        raise ValueError("unsupported resolution schema")
+    if toolchain.timestamp(receipt["expiresAt"]) <= toolchain.timestamp(receipt["generatedAt"]):
+        raise ValueError("signed resolution expiry precedes generation")
     if receipt["authorityDigest"] != "sha256:" + hashlib.sha256(authority).hexdigest():
         raise ValueError("signed resolution authority digest mismatch")
     if receipt["components"] != bindings(document):

@@ -1,0 +1,152 @@
+[
+  {
+    "current": {
+      "1e69f48acb82d1966a394da916b4c1698aa569d6": "4.2.2"
+    },
+    "latest": "4.2.2",
+    "metadataDigest": "sha256:80ada36d410382545fe1eca25ebcca37d18945b7c530f90f4a14f290ea3d95bd; sha256:c42799eb72341cf6a384b785e02a65cbcba8e21cfaedf7ee77f5f32c5b4f4b86",
+    "observedAt": "2026-10-09T19:27:12.898366+00:00",
+    "releasedAt": "2026-08-04T20:36:29+00:00",
+    "repo": "actions/attest"
+  },
+  {
+    "current": {
+      "11d5960a326750d5838078e36cf38b85af677262": "4.4.0"
+    },
+    "latest": "7.0.1",
+    "metadataDigest": "sha256:52ac445486661cac338c9c78b492c453ddb03384b5e361f443b844155d68210a; sha256:8f9ef218e023fcd93b413f05a489c4a0ad8b1b25a5eb2e46b2d0bdfff9a58daf",
+    "observedAt": "2026-10-09T19:27:01.646066+00:00",
+    "releasedAt": "2026-07-20T15:10:05+00:00",
+    "repo": "actions/checkout"
+  },
+  {
+    "current": {
+      "d3f86a106a0bac45b974a628896c90dbdf5c8093": "4.3.0"
+    },
+    "latest": "8.0.2",
+    "metadataDigest": "sha256:5c88a155270504911a82ad115f23e33a64cc313190977433ad8f2a2c9743ec20; sha256:9c1f89aefad3555cb3b4897c96f7dbfc48a7ff4b2776cd4a9608352771c37bb5",
+    "observedAt": "2026-10-09T19:27:09.959047+00:00",
+    "releasedAt": "2026-10-07T10:09:51+00:00",
+    "repo": "actions/download-artifact"
+  },
+  {
+    "current": {
+      "40f1582b2485089dde7abd97c1529aa768e1baff": "5.6.0"
+    },
+    "latest": "7.0.0",
+    "metadataDigest": "sha256:6e505cbdb51d8d6f3d49037284e518c3fbc64ff8f5a36f4f74c721c23c8139f9; sha256:dba8498a2506f7b926b2a5ccbce2416cf6a246817bc1519743bd6437a8bebaa4",
+    "observedAt": "2026-10-09T19:27:01.608675+00:00",
+    "releasedAt": "2026-07-16T02:50:50+00:00",
+    "repo": "actions/setup-go"
+  },
+  {
+    "current": {
+      "49933ea5288caeca8642d1e84afbd3f7d6820020": "4.4.0"
+    },
+    "latest": "7.1.0",
+    "metadataDigest": "sha256:0ac4a5ada17ddbc48205a03135c913ac63fe50a7131e3f217d2ea664790fc297; sha256:0cd72e43ce8d616e9215734988e33f9eae76ad7ab03bfc620042f9664740e7fa",
+    "observedAt": "2026-10-09T19:27:04.584817+00:00",
+    "releasedAt": "2026-10-08T02:52:34+00:00",
+    "repo": "actions/setup-node"
+  },
+  {
+    "current": {
+      "ea165f8d65b6e75b540449e92b4886f43607fa02": "4.6.2"
+    },
+    "latest": "7.0.2",
+    "metadataDigest": "sha256:d8cdf827616beb5f945e982a5c1ebb7c35427d1e8a7d7c27be9d0f7cd3275020; sha256:be050449232279dcea29d631a711974b74fafd3231e6cf32e43d7886c15ac9f4",
+    "observedAt": "2026-10-09T19:27:01.763401+00:00",
+    "releasedAt": "2026-10-07T10:08:14+00:00",
+    "repo": "actions/upload-artifact"
+  },
+  {
+    "current": {
+      "e22c389904149dbc22b58101806040fa8d37a610": "0.24.0"
+    },
+    "latest": "0.24.3",
+    "metadataDigest": "sha256:6e020e79cf717a4aa6344796b0c1e10b1dc2a1b075f6a23b48d9c5d0403d8712; sha256:0b216a1ffad7017eb6380d85eaa8de86813adaa61b947d1afe80601d672345b1",
+    "observedAt": "2026-10-09T19:27:09.934423+00:00",
+    "releasedAt": "2026-10-02T15:35:43+00:00",
+    "repo": "anchore/sbom-action"
+  },
+  {
+    "current": {
+      "6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8": "0.24.0"
+    },
+    "latest": "0.36.0",
+    "metadataDigest": "sha256:d32bdce2b2ace4f42da364a4381a8147c316f8c91658205553b0086cb72c2ca3; sha256:74ed74b30d56e285b3171fbbefc12cf30f196a059d5e6ba5fc984569d63834bc",
+    "observedAt": "2026-10-09T19:27:07.626582+00:00",
+    "releasedAt": "2026-04-22T09:39:33+00:00",
+    "repo": "aquasecurity/trivy-action"
+  },
+  {
+    "current": {
+      "1a275c3b69536ee54be43f2070a358922e12c8d4": "4.3.1"
+    },
+    "latest": "5.0.1",
+    "metadataDigest": "sha256:0b993c0074d648a27ed3811cc1adc572bc12ff66106658b3c366567bcec55d17; sha256:981db40ba20384ddc42a923b0140eac47e375f739fc8cd6d8006d7d3ef225cac",
+    "observedAt": "2026-10-09T19:27:04.498780+00:00",
+    "releasedAt": "2026-06-23T20:07:19+00:00",
+    "repo": "azure/setup-helm"
+  },
+  {
+    "current": {
+      "10e90e3645eae34f1e60eeb005ba3a3d33f178e8": "6.19.2"
+    },
+    "latest": "7.4.0",
+    "metadataDigest": "sha256:2549dd158a0d6aec6d9d37dd009ecacfeeeb6ceeefdc46f42fce766884523fae; sha256:8adadb6f360b6ad15ec8271381440868efb00d00c5050d1c948668e9afa76ab7",
+    "observedAt": "2026-10-09T19:27:07.369056+00:00",
+    "releasedAt": "2026-09-15T08:22:01+00:00",
+    "repo": "docker/build-push-action"
+  },
+  {
+    "current": {
+      "c94ce9fb468520275223c153574b00df6fe4bcc9": "3.7.0"
+    },
+    "latest": "4.6.0",
+    "metadataDigest": "sha256:8d22f58b70b4b993e72e7eaf4a7a9171554d3da986e9a8356782d1654aa6cac1; sha256:9d174495812c9f3c2a1e72cc3d78a38cf290b1981791d0d48ad9c7247193d871",
+    "observedAt": "2026-10-09T19:27:10.482869+00:00",
+    "releasedAt": "2026-07-29T12:12:00+00:00",
+    "repo": "docker/login-action"
+  },
+  {
+    "current": {
+      "8d2750c68a42422c14e847fe6c8ac0403b4cbd6f": "3.12.0"
+    },
+    "latest": "4.4.1",
+    "metadataDigest": "sha256:2545afe2817170839f8e1dfd41daf47c6b63cf48bc7b4fe3796b7ea4182db300; sha256:c46619b167490054d8789a3ab5717824181fdd84f3950bf39e23b08be52afb05",
+    "observedAt": "2026-10-09T19:27:07.088623+00:00",
+    "releasedAt": "2026-09-16T07:50:21+00:00",
+    "repo": "docker/setup-buildx-action"
+  },
+  {
+    "current": {
+      "c7c53464625b32c7a7e944ae62b3e17d2b600130": "3.7.0"
+    },
+    "latest": "4.4.0",
+    "metadataDigest": "sha256:f79add3dd433d9ede724034f49938ba860a596edd098afbdb253ac941e6c2bec; sha256:9fd9294d6c40e47965926084bc7e250e3194d7e2ecec87ad54ccf36011ec6bfc",
+    "observedAt": "2026-10-09T19:27:13.318140+00:00",
+    "releasedAt": "2026-09-15T09:42:21+00:00",
+    "repo": "docker/setup-qemu-action"
+  },
+  {
+    "current": {
+      "c20e34f438d671fc35777cc9820dd7adf8252874": null
+    },
+    "latest": "4.38.3",
+    "metadataDigest": "sha256:e1a462fcbfcf0fee9131432131d578fa4b5a429b2572097814f5d7b6d77423b5; sha256:7ee7782d01e1426fc4248b860b1ea060da560bdb83fffc463c363f3fff8f13ef",
+    "observedAt": "2026-10-09T19:27:13.075465+00:00",
+    "releasedAt": "2026-10-08T13:01:01+00:00",
+    "repo": "github/codeql-action"
+  },
+  {
+    "current": {
+      "398d4b0eeef1380460a10c8013a76f728fb906ac": "3.9.1"
+    },
+    "latest": "4.1.2",
+    "metadataDigest": "sha256:00b529b181cfb5f7a4c41ec9c2c6b5ebbce3f49a550dc889217d0f40d289435f; sha256:3cf685db7dc810b900a564c91e7adc13fbe8c37c2350d3876714bd474ff624b3",
+    "observedAt": "2026-10-09T19:27:04.342544+00:00",
+    "releasedAt": "2026-05-07T01:27:27+00:00",
+    "repo": "sigstore/cosign-installer"
+  }
+]
