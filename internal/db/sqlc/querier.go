@@ -311,6 +311,7 @@ type Querier interface {
 	CountProjectsUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
 	CountPrometheusDatasources(ctx context.Context) (int64, error)
 	CountQuotaPlans(ctx context.Context) (int64, error)
+	CountReleasedDeliverySystems(ctx context.Context) (int64, error)
 	CountRestoreOperations(ctx context.Context) (int64, error)
 	CountSCIMGroupNames(ctx context.Context) (int64, error)
 	CountSCIMTokens(ctx context.Context) (int64, error)
@@ -430,6 +431,7 @@ type Querier interface {
 	// omit encrypted credentials and private CA material.
 	CreateDeliverySource(ctx context.Context, arg CreateDeliverySourceParams) (CreateDeliverySourceRow, error)
 	CreateDeliverySourceResolutionAndOutbox(ctx context.Context, arg CreateDeliverySourceResolutionAndOutboxParams) (CreateDeliverySourceResolutionAndOutboxRow, error)
+	CreateDeliverySystemBootstrapRelease(ctx context.Context, arg CreateDeliverySystemBootstrapReleaseParams) (CreateDeliverySystemBootstrapReleaseRow, error)
 	CreateDeliverySystemEvent(ctx context.Context, arg CreateDeliverySystemEventParams) (DeliverySystemEvent, error)
 	CreateDeliveryTarget(ctx context.Context, arg CreateDeliveryTargetParams) (DeliveryTarget, error)
 	CreateGitOpsSource(ctx context.Context, arg CreateGitOpsSourceParams) (GitopsRegistrationSource, error)
@@ -937,6 +939,7 @@ type Querier interface {
 	GetDeliveryRolloutForAction(ctx context.Context, arg GetDeliveryRolloutForActionParams) (DeliveryRollout, error)
 	GetDeliverySource(ctx context.Context, arg GetDeliverySourceParams) (GetDeliverySourceRow, error)
 	GetDeliverySourceResolutionWork(ctx context.Context, arg GetDeliverySourceResolutionWorkParams) (GetDeliverySourceResolutionWorkRow, error)
+	GetDeliverySystemBootstrapReleaseByVersion(ctx context.Context, version string) (GetDeliverySystemBootstrapReleaseByVersionRow, error)
 	GetDeliveryTarget(ctx context.Context, arg GetDeliveryTargetParams) (DeliveryTarget, error)
 	GetDeliveryTargetByName(ctx context.Context, arg GetDeliveryTargetByNameParams) (DeliveryTarget, error)
 	// Phase B4: Dex shim CRUD.
@@ -1945,6 +1948,9 @@ type Querier interface {
 	ListWorkloadOperationEvents(ctx context.Context, operationID uuid.UUID) ([]WorkloadOperationEvent, error)
 	ListWorkloadOperations(ctx context.Context, arg ListWorkloadOperationsParams) ([]WorkloadOperation, error)
 	LockCharlieConnectionActivation(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error)
+	// Trusted startup release bootstrap. Every call is bound to the same existing
+	// Serializable transaction; the advisory lock is transaction-scoped.
+	LockDeliverySystemReleaseBootstrap(ctx context.Context) error
 	// A row lock cannot serialize two concurrent creates when the provider row
 	// does not exist yet. This transaction-scoped advisory lock gives each
 	// canonical provider key a stable lock before the transaction re-reads it.
@@ -2075,6 +2081,7 @@ type Querier interface {
 	MaxStepOrderForCluster(ctx context.Context, clusterID uuid.UUID) (int32, error)
 	NextCharlieThreadSessionSequence(ctx context.Context, threadID uuid.UUID) (int32, error)
 	ObserveDeliverySystemAssignment(ctx context.Context, arg ObserveDeliverySystemAssignmentParams) (ObserveDeliverySystemAssignmentRow, error)
+	PromoteDeliverySystemBootstrapRelease(ctx context.Context, releaseID string) error
 	// Retain live sessions regardless of age. Terminal connection rows are useful
 	// operational history, but must not grow forever on reconnect-heavy estates.
 	PruneAgentConnectionHistoryBefore(ctx context.Context, cutoff time.Time) (int64, error)

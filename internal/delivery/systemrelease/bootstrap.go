@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -174,7 +175,8 @@ func withSystemReleaseIdentity(version string, identity [32]byte) string {
 
 // Ensure inserts and promotes exactly one immutable release under a
 // transaction-scoped advisory lock. Concurrent server replicas converge on the
-// same row; changing a published version in place fails closed.
+// same row on retry after any serializable snapshot conflict; changing a
+// published version in place fails closed.
 func Ensure(ctx context.Context, pool *pgxpool.Pool, config Config) (bool, error) {
 	if pool == nil {
 		return false, errors.New("delivery system release database is required")
@@ -192,26 +194,43 @@ func Ensure(ctx context.Context, pool *pgxpool.Pool, config Config) (bool, error
 		return false, fmt.Errorf("begin delivery system release transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('astronomer-delivery-system-release', 0))`); err != nil {
+	created, err := ensureRelease(ctx, sqlc.New(tx), spec, specDigest, verification)
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit delivery system release: %w", err)
+	}
+	return created, nil
+}
+
+type bootstrapQueries interface {
+	LockDeliverySystemReleaseBootstrap(context.Context) error
+	GetDeliverySystemBootstrapReleaseByVersion(context.Context, string) (sqlc.GetDeliverySystemBootstrapReleaseByVersionRow, error)
+	CreateDeliverySystemBootstrapRelease(context.Context, sqlc.CreateDeliverySystemBootstrapReleaseParams) (sqlc.CreateDeliverySystemBootstrapReleaseRow, error)
+	CountReleasedDeliverySystems(context.Context) (int64, error)
+	PromoteDeliverySystemBootstrapRelease(context.Context, string) error
+}
+
+func ensureRelease(ctx context.Context, q bootstrapQueries, spec immutableSpec, specDigest string, verification json.RawMessage) (bool, error) {
+	if err := q.LockDeliverySystemReleaseBootstrap(ctx); err != nil {
 		return false, fmt.Errorf("lock delivery system release: %w", err)
 	}
-	var id, currentDigest, state string
-	err = tx.QueryRow(ctx, `SELECT id::text, spec_digest, state FROM delivery_system_releases WHERE version = $1`, spec.Version).
-		Scan(&id, &currentDigest, &state)
+	row, err := q.GetDeliverySystemBootstrapReleaseByVersion(ctx, spec.Version)
+	id, currentDigest, state := row.ID, row.SpecDigest, row.State
 	created := false
 	if errors.Is(err, pgx.ErrNoRows) {
-		err = tx.QueryRow(ctx, `
-			INSERT INTO delivery_system_releases (
-				version, artifact_url, artifact_digest, distribution_digest,
-				agent_version, agent_image, minimum_kubernetes, maximum_kubernetes,
-				crd_storage_version, previous_storage_version, interval, timeout,
-				verification_policy, spec_digest
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-			RETURNING id::text, state`,
-			spec.Version, spec.ArtifactURL, spec.ArtifactDigest, spec.DistributionDigest,
-			spec.AgentVersion, spec.AgentImage, spec.MinimumKubernetes, spec.MaximumKubernetes,
-			spec.CRDStorageVersion, spec.PreviousStorageVersion, spec.Interval, spec.Timeout,
-			verification, specDigest).Scan(&id, &state)
+		var inserted sqlc.CreateDeliverySystemBootstrapReleaseRow
+		inserted, err = q.CreateDeliverySystemBootstrapRelease(ctx, sqlc.CreateDeliverySystemBootstrapReleaseParams{
+			Version: spec.Version, ArtifactUrl: spec.ArtifactURL,
+			ArtifactDigest: spec.ArtifactDigest, DistributionDigest: spec.DistributionDigest,
+			AgentVersion: spec.AgentVersion, AgentImage: spec.AgentImage,
+			MinimumKubernetes: spec.MinimumKubernetes, MaximumKubernetes: spec.MaximumKubernetes,
+			CrdStorageVersion: spec.CRDStorageVersion, PreviousStorageVersion: spec.PreviousStorageVersion,
+			Interval: spec.Interval, Timeout: spec.Timeout,
+			VerificationPolicy: verification, SpecDigest: specDigest,
+		})
+		id, state = inserted.ID, inserted.State
 		created = true
 	}
 	if err != nil {
@@ -227,17 +246,14 @@ func Ensure(ctx context.Context, pool *pgxpool.Pool, config Config) (bool, error
 	// upgrade. A later server/chart release remains draft until an operator
 	// starts the explicit canary/rolling system rollout; startup must never turn
 	// a management-plane restart into a simultaneous downstream upgrade.
-	var releasedCount int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM delivery_system_releases WHERE state='released'`).Scan(&releasedCount); err != nil {
+	releasedCount, err := q.CountReleasedDeliverySystems(ctx)
+	if err != nil {
 		return false, fmt.Errorf("count released delivery systems: %w", err)
 	}
 	if state == "draft" && releasedCount == 0 {
-		if _, err := tx.Exec(ctx, `UPDATE delivery_system_releases SET state='released', released_at=COALESCE(released_at,now()), retired_at=NULL WHERE id::text=$1`, id); err != nil {
+		if err := q.PromoteDeliverySystemBootstrapRelease(ctx, id); err != nil {
 			return false, fmt.Errorf("promote delivery system release: %w", err)
 		}
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("commit delivery system release: %w", err)
 	}
 	return created, nil
 }
