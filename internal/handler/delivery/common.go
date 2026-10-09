@@ -70,7 +70,7 @@ func respondDatabaseError(w http.ResponseWriter, err error) {
 		case "23505":
 			respondError(w, http.StatusConflict, "conflict", "a delivery resource with that identity already exists")
 			return
-		case "23503":
+		case "23503", "23001":
 			respondError(w, http.StatusConflict, "resource_in_use", "delivery resource is still referenced")
 			return
 		case "23514", "22001", "22P02":

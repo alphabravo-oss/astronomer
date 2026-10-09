@@ -1,0 +1,25 @@
+=== RUN   TestLoggingDeleteRestrictSQLStatesRollbackWithoutAudit
+=== RUN   TestLoggingDeleteRestrictSQLStatesRollbackWithoutAudit/23503
+=== RUN   TestLoggingDeleteRestrictSQLStatesRollbackWithoutAudit/23001
+2026/10/09 20:42:02 ERROR request failed request_id=fdc6e7d8-b218-495e-ae8b-5ff722d775a4 status=500 code=delete_error internal_detail="Failed to delete logging output"
+    postgres_restrict_test.go:55: SQLSTATE 23001 status=500 want=409
+=== RUN   TestLoggingDeleteRestrictSQLStatesRollbackWithoutAudit/08006
+2026/10/09 20:42:02 ERROR request failed request_id=36027ddc-8de8-485a-ae98-98eb8c83fc60 status=500 code=delete_error internal_detail="Failed to delete logging output"
+--- FAIL: TestLoggingDeleteRestrictSQLStatesRollbackWithoutAudit (0.00s)
+    --- PASS: TestLoggingDeleteRestrictSQLStatesRollbackWithoutAudit/23503 (0.00s)
+    --- FAIL: TestLoggingDeleteRestrictSQLStatesRollbackWithoutAudit/23001 (0.00s)
+    --- PASS: TestLoggingDeleteRestrictSQLStatesRollbackWithoutAudit/08006 (0.00s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/handler	0.056s
+=== RUN   TestSourceDeleteRestrictSQLStatesPreserveScopeAndNoAudit
+=== RUN   TestSourceDeleteRestrictSQLStatesPreserveScopeAndNoAudit/23503
+=== RUN   TestSourceDeleteRestrictSQLStatesPreserveScopeAndNoAudit/23001
+    postgres_restrict_test.go:45: unexpected error envelope: status=500
+=== RUN   TestSourceDeleteRestrictSQLStatesPreserveScopeAndNoAudit/08006
+--- FAIL: TestSourceDeleteRestrictSQLStatesPreserveScopeAndNoAudit (0.00s)
+    --- PASS: TestSourceDeleteRestrictSQLStatesPreserveScopeAndNoAudit/23503 (0.00s)
+    --- FAIL: TestSourceDeleteRestrictSQLStatesPreserveScopeAndNoAudit/23001 (0.00s)
+    --- PASS: TestSourceDeleteRestrictSQLStatesPreserveScopeAndNoAudit/08006 (0.00s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/handler/delivery	0.012s
+FAIL
