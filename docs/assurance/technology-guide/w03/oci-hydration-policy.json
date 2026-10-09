@@ -1,0 +1,21 @@
+{
+  "audited_call_sites": {
+    "internal/catalog/oci.go": "both NewOCIRegistryClient and ListOCIRegistryTags use catalogNetworkClient; OCI listing uses same injected client",
+    "internal/handler/catalog_hydrate.go": "guardCatalogURL then catalogContext before NewOCIRegistryClient and Pull",
+    "internal/handler/catalog_oci.go": "IngestOCIRepo(h.catalogContext(ctx),...)",
+    "internal/worker/tasks/catalog_sync.go": "syncOneRepository injects catalogOperationContext before IngestOCIRepo"
+  },
+  "command": "GOTOOLCHAIN=go1.27.2 GOMAXPROCS=4 GOFLAGS=-p=2 go test ./internal/handler -run TestInteractive.*Hydration -count=1",
+  "output": "ok  \tgithub.com/alphabravocompany/astronomer-go/internal/handler\t0.056s\n",
+  "package_done": false,
+  "qualification": "transport routing and pre-fetch rejection; approved fixture returns registry 404, not a real chart/archive qualification",
+  "result": "PASS",
+  "schema_version": 1,
+  "slice": "OCI-lazy-hydration-policy-followup",
+  "source_base_commit": "8ef5c085ea49114545d028d4974fef8cd2c954f6",
+  "source_sha256": {
+    "internal/handler/catalog_hydrate.go": "154c3b96ab0a68f9d0c3cb111544de0a727927fc614901675f188f4a239e93db",
+    "internal/handler/catalog_network_test.go": "9fc9f970dbd1a1b2dfd443af3e8bbc0aa38be1def24f1f134e9914b4464b8c84"
+  },
+  "work_package": "W03"
+}

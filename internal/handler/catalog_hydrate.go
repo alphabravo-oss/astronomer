@@ -305,6 +305,10 @@ func (h *CatalogHandler) fetchHTTPChartArchive(ctx context.Context, repo sqlc.He
 }
 
 func (h *CatalogHandler) fetchOCIChartArchive(ctx context.Context, repo sqlc.HelmRepository, chart sqlc.HelmChart, version sqlc.HelmChartVersion) ([]byte, error) {
+	if err := h.guardCatalogURL(ctx, strings.Replace(repo.Url, "oci://", "https://", 1)); err != nil {
+		return nil, fmt.Errorf("OCI chart source blocked")
+	}
+	ctx = h.catalogContext(ctx)
 	cfg, err := h.resolveOCIAuthConfig(repo)
 	if err != nil {
 		return nil, err
@@ -321,10 +325,10 @@ func (h *CatalogHandler) fetchOCIChartArchive(ctx context.Context, repo sqlc.Hel
 		registry.PullOptIgnoreMissingProv(true),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("oci pull %s: %w", ref, err)
+		return nil, fmt.Errorf("OCI chart pull failed")
 	}
 	if pulled == nil || pulled.Chart == nil || len(pulled.Chart.Data) == 0 {
-		return nil, fmt.Errorf("oci pull returned empty chart for %s", ref)
+		return nil, fmt.Errorf("OCI chart pull returned empty archive")
 	}
 	return pulled.Chart.Data, nil
 }
