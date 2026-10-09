@@ -119,6 +119,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	toolHandler.SetLogger(logger)
 	toolHandler.SetEventBus(bus)
 	catalogHandler := handler.NewCatalogHandlerWithHelm(queries, helmRequester)
+	catalogHandler.SetCursorCodec(c.cursorCodec)
 	if err := configureCatalogHandlerNetwork(catalogHandler, cfg); err != nil {
 		return err
 	}

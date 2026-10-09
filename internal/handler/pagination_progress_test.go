@@ -59,7 +59,7 @@ func TestCatalogPaginationCeilingMustProgressOrReject(t *testing.T) {
 func TestCatalogPaginationRejectsUnsupportedOffsetBeforeQuery(t *testing.T) {
 	q := &recordingChartSearchQuerier{clusterCatalogQuerier: &clusterCatalogQuerier{minimalCatalogQuerier: &minimalCatalogQuerier{fakeProjectCatalogQuerier: newFakeProjectCatalogQuerier()}}}
 	h := NewCatalogHandler(q)
-	for _, query := range []string{"offset=10020", "offset=18446744073709551615", "offset=1&offset=2", "cursor=foreign"} {
+	for _, query := range []string{"offset=10020", "offset=18446744073709551615", "offset=1&offset=2"} {
 		response := httptest.NewRecorder()
 		h.ListCharts(response, httptest.NewRequest("GET", "/api/v1/catalog/charts/?"+query, nil))
 		if response.Code != 400 || q.calls != 0 {

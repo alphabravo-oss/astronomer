@@ -10,6 +10,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 func (c *productionComposition) initializePersistence(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
@@ -50,6 +51,13 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 		database.Close()
 		return jwtErr
 	}
+
+	cursorCodec, cursorErr := paging.NewCursorCodec(cfg.SecretKey)
+	if cursorErr != nil {
+		database.Close()
+		return cursorErr
+	}
+	c.cursorCodec = cursorCodec
 
 	// Best-effort Fernet encryptor + SSO manager. Both are optional: if the
 	// encryption key is missing or invalid we still come up so dev/local

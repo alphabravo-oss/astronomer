@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -148,14 +149,15 @@ type CatalogApplicationDelivery interface {
 
 // CatalogHandler handles catalog endpoints (helm repositories, charts, installations).
 type CatalogHandler struct {
-	queries  CatalogQuerier
-	helm     HelmRequester
-	k8s      K8sRequester
-	delivery CatalogApplicationDelivery
-	log      *slog.Logger
-	authz    authorizationSupport
-	mu       sync.Mutex
-	trigger  chan struct{}
+	cursorCodec *paging.CursorCodec
+	queries     CatalogQuerier
+	helm        HelmRequester
+	k8s         K8sRequester
+	delivery    CatalogApplicationDelivery
+	log         *slog.Logger
+	authz       authorizationSupport
+	mu          sync.Mutex
+	trigger     chan struct{}
 	// helmConcurrency caps the number of executeOperation goroutines
 	// dispatched per reconciler tick. Zero falls back to the package
 	// default (see effectiveHelmConcurrency).
