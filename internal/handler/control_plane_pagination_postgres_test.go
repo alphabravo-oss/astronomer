@@ -66,7 +66,7 @@ func assertControlPlanePlan(t *testing.T, nodes []paginationPlanNode, index stri
 	found := false
 	for _, n := range nodes {
 		if n.NodeType == "Sort" || n.NodeType == "Incremental Sort" || n.NodeType == "Seq Scan" {
-			t.Fatalf("control-plane keyset scanned/sorted remaining dataset: %s", n.NodeType)
+			t.Fatalf("control-plane keyset lacks complete indexed ordering: %s", n.NodeType)
 		}
 		if n.IndexName == index {
 			found = true
@@ -84,7 +84,9 @@ func TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor(t *testing.T) {
 			ctx, tx := paginationPostgresTx(t)
 			controller := "p-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
 			if collection == "alerts" {
-				paginationExec(t, ctx, tx, `INSERT INTO control_plane_alerts(controller,condition_type,status,message,fired_at) SELECT $1,'fixture','resolved','fixture',TIMESTAMPTZ '2020-01-01' + (n/2)*INTERVAL '1 second' FROM generate_series(1,10042)n`, controller)
+				// A batch can share one timestamp; ID ordering must seek within
+				// the entire tie cohort rather than sort every remaining alert.
+				paginationExec(t, ctx, tx, `INSERT INTO control_plane_alerts(controller,condition_type,status,message,fired_at) SELECT $1,'fixture','resolved','fixture',TIMESTAMPTZ '2020-01-01' FROM generate_series(1,10042)n`, controller)
 				paginationExec(t, ctx, tx, `ANALYZE control_plane_alerts`)
 			} else {
 				paginationExec(t, ctx, tx, `INSERT INTO control_plane_silences(controller,reason,starts_at,ends_at,created_at) SELECT $1,'fixture',TIMESTAMPTZ '2020-01-01',TIMESTAMPTZ '2020-01-02',TIMESTAMPTZ '2020-01-01' + (n/2)*INTERVAL '1 second' FROM generate_series(1,10042)n`, controller)
