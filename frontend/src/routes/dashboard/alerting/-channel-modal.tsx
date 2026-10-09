@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAppForm, useStore } from "@/lib/form";
 import { useCreateNotificationChannel } from "@/lib/hooks/alerting";
 import { ActionButton } from "@/components/ui/action-button";
@@ -98,12 +99,17 @@ const channelTypeFields: Record<
 
 export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
   const createChannel = useCreateNotificationChannel();
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: {
       name: "",
       type: "slack" as NotificationChannelType,
       enabled: true,
       config: {} as Record<string, string>,
+    },
+    validators: {
+      onSubmit: ({ value }) =>
+        !value.name.trim() ? "Name is required" : undefined,
     },
     onSubmit: async ({ value }) => {
       try {
@@ -113,9 +119,12 @@ export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
           enabled: value.enabled,
           config: value.config,
         });
+        setServerError(undefined);
         onClose();
-      } catch {
-        // Error handled by mutation
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -128,6 +137,10 @@ export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       title="Add Notification Channel"
       onClose={onClose}
       size="md"
@@ -136,7 +149,7 @@ export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={() => void form.handleSubmit()}
+            type="submit"
             disabled={!channelName}
             loading={createChannel.isPending}
           >
@@ -146,6 +159,9 @@ export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
       }
       footerClassName="flex items-center justify-end gap-2"
     >
+      <form.AppForm>
+        <form.FormErrorSummary serverError={serverError} />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -156,6 +172,7 @@ export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
         <form.Field name="name">
           {(field) => (
             <Input
+              name={field.name}
               id="field-fb6296b7-99"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -204,10 +221,15 @@ export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
 
       {typeConfig.fields.map((field) => (
         <div key={field.key} className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">
+          <label
+            htmlFor={`channel-${field.key}`}
+            className="text-sm font-medium text-foreground"
+          >
             {field.label}
           </label>
           <Input
+            id={`channel-${field.key}`}
+            name={`config.${field.key}`}
             type={field.type}
             value={config[field.key] || ""}
             onChange={(e) =>
@@ -225,6 +247,7 @@ export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
         <form.Field name="enabled">
           {(field) => (
             <Input
+              name={field.name}
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}

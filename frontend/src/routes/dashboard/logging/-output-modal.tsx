@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAppForm, useStore } from "@/lib/form";
 import { useCreateLoggingOutput } from "@/lib/hooks/logging";
 import { useClusters } from "@/lib/hooks/clusters";
@@ -241,6 +242,7 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const clusters = clustersData?.data || [];
 
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: {
       name: "",
@@ -267,9 +269,12 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
           enabled: value.enabled,
           config: value.config,
         });
+        setServerError(undefined);
         onClose();
-      } catch {
-        // Error handled by mutation
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -282,6 +287,10 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       title="Create Logging Output"
       onClose={onClose}
       size="md"
@@ -290,7 +299,7 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={() => void form.handleSubmit()}
+            type="submit"
             disabled={!outputName}
             loading={createOutput.isPending}
           >
@@ -300,6 +309,9 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
       }
       footerClassName="flex items-center justify-end gap-2"
     >
+      <form.AppForm>
+        <form.FormErrorSummary serverError={serverError} />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           htmlFor="logging-output-name"
@@ -310,6 +322,7 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
         <form.Field name="name">
           {(field) => (
             <Input
+              name={field.name}
               id="logging-output-name"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -357,6 +370,7 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
         <form.Field name="clusterId">
           {(field) => (
             <Select
+              name={field.name}
               id="logging-output-cluster"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -403,6 +417,7 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
         <form.Field name="enabled">
           {(field) => (
             <Input
+              name={field.name}
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}

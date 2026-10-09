@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAppForm, useStore } from "@/lib/form";
 import { useAssignSecurityPolicy } from "@/lib/hooks/security";
 import { useQuery } from "@tanstack/react-query";
@@ -17,6 +18,7 @@ import { psaLevelColors } from "./-psa-constants";
 export function AssignTemplateModal({ onClose }: { onClose: () => void }) {
   const assignPolicy = useAssignSecurityPolicy();
 
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: {
       clusterId: "",
@@ -34,9 +36,13 @@ export function AssignTemplateModal({ onClose }: { onClose: () => void }) {
           cluster_id: value.clusterId,
           template_id: value.templateId,
         });
+        setServerError(undefined);
+        setServerError(undefined);
         onClose();
-      } catch {
-        // Persistent failure is rendered in the form summary.
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -53,6 +59,10 @@ export function AssignTemplateModal({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       title="Assign Security Template"
       onClose={onClose}
       size="md"
@@ -62,7 +72,7 @@ export function AssignTemplateModal({ onClose }: { onClose: () => void }) {
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={() => void form.handleSubmit()}
+            type="submit"
             disabled={
               assignPolicy.isPending || !values.clusterId || !selectedTemplate
             }
@@ -74,7 +84,7 @@ export function AssignTemplateModal({ onClose }: { onClose: () => void }) {
       }
     >
       <form.AppForm>
-        <form.FormErrorSummary serverError={assignPolicy.error?.message} />
+        <form.FormErrorSummary serverError={serverError} />
       </form.AppForm>
       <form.AppField name="clusterId">
         {(field) => (

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { DataTable } from "@/components/ui/data-table";
 import "./styles.css";
+import { ModalFixture } from "./modal";
 
 const rows = Array.from({ length: 1200 }, (_, index) => ({
   id: String(index).padStart(4, "0"),
@@ -67,4 +68,10 @@ function TableFixture() {
     </main>
   );
 }
-createRoot(document.getElementById("root")!).render(<TableFixture />);
+createRoot(document.getElementById("root")!).render(
+  new URLSearchParams(location.search).has("modal") ? (
+    <ModalFixture />
+  ) : (
+    <TableFixture />
+  ),
+);

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAppForm, useStore } from "@/lib/form";
 import { useCreateAlertRule, useUpdateAlertRule } from "@/lib/hooks/alerting";
 import type { AlertRuleWrite } from "@/lib/api/alerting";
@@ -54,6 +55,7 @@ export function AlertRuleModal({
 }) {
   const createRule = useCreateAlertRule();
   const updateRule = useUpdateAlertRule();
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: {
       name: rule?.name || "",
@@ -92,10 +94,7 @@ export function AlertRuleModal({
         threshold: value.threshold ? parseFloat(value.threshold) : undefined,
         duration: value.duration,
         enabled: value.enabled,
-        // Send the new fields with the snake_case names the backend
-        // CreateAlertRuleRequest expects. The handler also reads camelCase
-        // via Type/RuleType aliases, but the snake_case path is
-        // canonical. rule_kind is derived from `type` so the two stay in sync.
+        // The canonical write body uses snake_case; rule_kind follows type.
         rule_kind: isAnomaly ? "anomaly" : "threshold",
         cluster_id: clusterId || rule?.clusterId,
         metric: isAnomaly ? value.metric : undefined,
@@ -115,9 +114,12 @@ export function AlertRuleModal({
         } else {
           await createRule.mutateAsync(data);
         }
+        setServerError(undefined);
         onClose();
-      } catch {
-        // Error handled by mutation
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -135,7 +137,7 @@ export function AlertRuleModal({
       size="md"
       onSubmit={(event) => {
         event.preventDefault();
-        void form.handleSubmit();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
       }}
       footer={
         <>
@@ -153,9 +155,7 @@ export function AlertRuleModal({
       footerClassName="flex items-center justify-end gap-2"
     >
       <form.AppForm>
-        <form.FormErrorSummary
-          serverError={createRule.error?.message || updateRule.error?.message}
-        />
+        <form.FormErrorSummary serverError={serverError} />
       </form.AppForm>
       <div className="space-y-1.5">
         <label

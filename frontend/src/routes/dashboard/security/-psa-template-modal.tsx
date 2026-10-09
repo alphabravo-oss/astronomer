@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   useCreatePodSecurityTemplate,
@@ -20,7 +21,11 @@ const LEVEL_FIELDS = [
 ] as const;
 
 const VERSION_FIELDS = [
-  { name: "enforceVersion", id: "field-7db9bce2-775", label: "Enforce Version" },
+  {
+    name: "enforceVersion",
+    id: "field-7db9bce2-775",
+    label: "Enforce Version",
+  },
   { name: "auditVersion", id: "field-7db9bce2-791", label: "Audit Version" },
   { name: "warnVersion", id: "field-7db9bce2-806", label: "Warn Version" },
 ] as const;
@@ -63,6 +68,7 @@ export function PSATemplateModal({
   const createTemplate = useCreatePodSecurityTemplate();
   const updateTemplate = useUpdatePodSecurityTemplate();
 
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: {
       name: template?.name || "",
@@ -98,9 +104,12 @@ export function PSATemplateModal({
         } else {
           await createTemplate.mutateAsync(data);
         }
+        setServerError(undefined);
         onClose();
-      } catch {
-        // Error surfaced by mutation toast.
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -110,6 +119,10 @@ export function PSATemplateModal({
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       title={template ? "Edit PSA Template" : "Create PSA Template"}
       onClose={onClose}
       size="md"
@@ -119,7 +132,7 @@ export function PSATemplateModal({
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={() => void form.handleSubmit()}
+            type="submit"
             disabled={isPending || !templateName}
             loading={isPending}
           >
@@ -129,11 +142,7 @@ export function PSATemplateModal({
       }
     >
       <form.AppForm>
-        <form.FormErrorSummary
-          serverError={
-            createTemplate.error?.message ?? updateTemplate.error?.message
-          }
-        />
+        <form.FormErrorSummary serverError={serverError} />
       </form.AppForm>
 
       <form.Field name="name">

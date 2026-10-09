@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { useAppForm, useStore } from "@/lib/form";
 import { ActionButton } from "@/components/ui/action-button";
@@ -6,10 +7,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ModalShell } from "@/components/ui/modal-shell";
 import type { SIEMForwarder } from "@/types";
-import {
-  SIEM_AUTH_SENTINEL,
-  type SIEMForwarderWriteRequest,
-} from "@/lib/api/siem-forwarders";
+import { forwarderDefaults, forwarderRequest } from "./-forwarder-form";
 import { useCreateSIEMForwarder, useUpdateSIEMForwarder } from "./-hooks";
 import { FORMATS, TRANSPORTS } from "./-options";
 
@@ -24,51 +22,11 @@ export function SIEMForwarderModal({
   const update = useUpdateSIEMForwarder();
   const isEdit = !!forwarder;
 
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
-    defaultValues: {
-      name: forwarder?.name ?? "",
-      transport: forwarder?.transport ?? "syslog_tls",
-      endpoint: forwarder?.endpoint ?? "",
-      // On edit the real auth is never sent to the client; leave blank and only
-      // submit a new value if the operator types one.
-      auth: "",
-      eventFilters: (forwarder?.eventFilters ?? []).join(", "),
-      format: forwarder?.format ?? "",
-      tlsSkipVerify: forwarder?.tlsSkipVerify ?? false,
-      caCertPem: "",
-      batchSize: forwarder?.batchSize ?? 100,
-      flushIntervalMs: forwarder?.flushIntervalMs ?? 5000,
-      timeoutSeconds: forwarder?.timeoutSeconds ?? 10,
-      enabled: forwarder?.enabled ?? true,
-    },
+    defaultValues: forwarderDefaults(forwarder),
     onSubmit: async ({ value }) => {
-      const filters = value.eventFilters
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const body: SIEMForwarderWriteRequest = {
-        name: value.name,
-        transport: value.transport,
-        endpoint: value.endpoint,
-        event_filters: filters,
-        format: value.format,
-        tls_skip_verify: value.tlsSkipVerify,
-        batch_size: value.batchSize,
-        flush_interval_ms: value.flushIntervalMs,
-        timeout_seconds: value.timeoutSeconds,
-        enabled: value.enabled,
-      };
-      // Only send auth when the operator supplied a new value; on edit an empty
-      // field means "keep existing" (we echo the sentinel so a blank PUT doesn't
-      // wipe the stored blob).
-      if (value.auth.trim()) {
-        body.auth = value.auth;
-      } else if (isEdit && forwarder?.authConfigured) {
-        body.auth = SIEM_AUTH_SENTINEL;
-      }
-      if (value.caCertPem.trim()) {
-        body.ca_cert_pem = value.caCertPem;
-      }
+      const body = forwarderRequest(value, forwarder);
 
       try {
         if (forwarder) {
@@ -76,15 +34,16 @@ export function SIEMForwarderModal({
         } else {
           await create.mutateAsync(body);
         }
+        setServerError(undefined);
         onClose();
-      } catch {
-        /* mutation toasts on error */
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
 
-  // Old disabled gate (`!form.name || !form.endpoint`), recomputed from form
-  // state — the save button below keeps the identical condition.
   const name = useStore(form.store, (s) => s.values.name);
   const endpoint = useStore(form.store, (s) => s.values.endpoint);
   const tlsSkipVerify = useStore(form.store, (s) => s.values.tlsSkipVerify);
@@ -92,6 +51,10 @@ export function SIEMForwarderModal({
   const isPending = create.isPending || update.isPending;
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       title={isEdit ? "Edit SIEM Forwarder" : "Add SIEM Forwarder"}
       onClose={onClose}
       size="md"
@@ -101,7 +64,7 @@ export function SIEMForwarderModal({
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={() => void form.handleSubmit()}
+            type="submit"
             disabled={isPending || !name || !endpoint}
             loading={isPending}
           >
@@ -110,6 +73,9 @@ export function SIEMForwarderModal({
         </>
       }
     >
+      <form.AppForm>
+        <form.FormErrorSummary serverError={serverError} />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -117,9 +83,16 @@ export function SIEMForwarderModal({
         >
           Name
         </label>
-        <form.Field name="name">
+        <form.Field
+          name="name"
+          validators={{
+            onSubmit: ({ value }) =>
+              !value.trim() ? "Name is required" : undefined,
+          }}
+        >
           {(field) => (
             <Input
+              name={field.name}
               id="field-97739a4a-335"
               type="text"
               value={field.state.value}
@@ -142,6 +115,7 @@ export function SIEMForwarderModal({
           <form.Field name="transport">
             {(field) => (
               <Select
+                name={field.name}
                 id="field-97739a4a-351"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -166,6 +140,7 @@ export function SIEMForwarderModal({
           <form.Field name="format">
             {(field) => (
               <Select
+                name={field.name}
                 id="field-97739a4a-369"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -189,9 +164,16 @@ export function SIEMForwarderModal({
         >
           Endpoint
         </label>
-        <form.Field name="endpoint">
+        <form.Field
+          name="endpoint"
+          validators={{
+            onSubmit: ({ value }) =>
+              !value.trim() ? "Endpoint is required" : undefined,
+          }}
+        >
           {(field) => (
             <Input
+              name={field.name}
               id="field-97739a4a-389"
               type="text"
               value={field.state.value}
@@ -205,7 +187,10 @@ export function SIEMForwarderModal({
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">
+        <label
+          htmlFor="siem-auth"
+          className="text-sm font-medium text-foreground"
+        >
           Auth{" "}
           {isEdit && (
             <span className="text-2xs text-muted-foreground font-normal">
@@ -213,10 +198,16 @@ export function SIEMForwarderModal({
             </span>
           )}
         </label>
+        <p id="siem-auth-help" className="text-xs text-muted-foreground">
+          Leave blank when editing to retain stored credentials.
+        </p>
         <form.Field name="auth">
           {(field) => (
             <Input
+              name={field.name}
               type="password"
+              id="siem-auth"
+              aria-describedby="siem-auth-help"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -245,6 +236,7 @@ export function SIEMForwarderModal({
         <form.Field name="eventFilters">
           {(field) => (
             <Input
+              name={field.name}
               id="field-97739a4a-424"
               type="text"
               value={field.state.value}
@@ -268,6 +260,7 @@ export function SIEMForwarderModal({
           <form.Field name="batchSize">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-97739a4a-443"
                 type="number"
                 min={1}
@@ -290,6 +283,7 @@ export function SIEMForwarderModal({
           <form.Field name="flushIntervalMs">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-97739a4a-457"
                 type="number"
                 min={0}
@@ -312,6 +306,7 @@ export function SIEMForwarderModal({
           <form.Field name="timeoutSeconds">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-97739a4a-471"
                 type="number"
                 min={1}
@@ -339,6 +334,7 @@ export function SIEMForwarderModal({
         <form.Field name="caCertPem">
           {(field) => (
             <Textarea
+              name={field.name}
               id="field-97739a4a-487"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -356,6 +352,7 @@ export function SIEMForwarderModal({
           <form.Field name="enabled">
             {(field) => (
               <Input
+                name={field.name}
                 type="checkbox"
                 checked={field.state.value}
                 onChange={(e) => field.handleChange(e.target.checked)}
@@ -370,6 +367,7 @@ export function SIEMForwarderModal({
           <form.Field name="tlsSkipVerify">
             {(field) => (
               <Input
+                name={field.name}
                 type="checkbox"
                 checked={field.state.value}
                 onChange={(e) => field.handleChange(e.target.checked)}

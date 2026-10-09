@@ -309,6 +309,7 @@ function InhibitionModal({
   const update = useUpdateInhibition();
   const isEdit = !!inhibition;
 
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: {
       name: inhibition?.name ?? "",
@@ -335,9 +336,12 @@ function InhibitionModal({
         } else {
           await create.mutateAsync(body);
         }
+        setServerError(undefined);
         onClose();
-      } catch {
-        /* mutation toasts on error */
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -353,6 +357,10 @@ function InhibitionModal({
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       title={isEdit ? "Edit Inhibition Rule" : "Create Inhibition Rule"}
       onClose={onClose}
       size="md"
@@ -362,7 +370,7 @@ function InhibitionModal({
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={() => void form.handleSubmit()}
+            type="submit"
             disabled={!canSave}
             loading={isPending}
           >
@@ -372,6 +380,9 @@ function InhibitionModal({
       }
       footerClassName="flex items-center justify-end gap-2"
     >
+      <form.AppForm>
+        <form.FormErrorSummary serverError={serverError} />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -382,6 +393,7 @@ function InhibitionModal({
         <form.Field name="name">
           {(field) => (
             <Input
+              name={field.name}
               id="field-128ab69a-358"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -419,6 +431,7 @@ function InhibitionModal({
         <form.Field name="equalInput">
           {(field) => (
             <Input
+              name={field.name}
               id="field-128ab69a-386"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -438,6 +451,7 @@ function InhibitionModal({
         <form.Field name="enabled">
           {(field) => (
             <Input
+              name={field.name}
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}

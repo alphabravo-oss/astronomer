@@ -14,6 +14,7 @@ import { BareButton } from "@/components/form/bare-button";
 export function CreateUserModal({ onClose }: { onClose: () => void }) {
   const createUser = useCreateUser();
   const [showPassword, setShowPassword] = useState(false);
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: {
       username: "",
@@ -43,9 +44,12 @@ export function CreateUserModal({ onClose }: { onClose: () => void }) {
           displayName: value.displayName || value.username,
           password: value.password,
         });
+        setServerError(undefined);
         onClose();
-      } catch {
-        // Error handled by mutation
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -57,6 +61,10 @@ export function CreateUserModal({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       title="Create User"
       onClose={onClose}
       size="md"
@@ -68,13 +76,16 @@ export function CreateUserModal({ onClose }: { onClose: () => void }) {
             intent="primary"
             loading={createUser.isPending}
             disabled={gate}
-            onClick={() => void form.handleSubmit()}
+            type="submit"
           >
             Create User
           </ActionButton>
         </>
       }
     >
+      <form.AppForm>
+        <form.FormErrorSummary serverError={serverError} />
+      </form.AppForm>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label
@@ -86,6 +97,7 @@ export function CreateUserModal({ onClose }: { onClose: () => void }) {
           <form.Field name="username">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-f8166b36-97"
                 type="text"
                 value={field.state.value}
@@ -111,6 +123,7 @@ export function CreateUserModal({ onClose }: { onClose: () => void }) {
           <form.Field name="displayName">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-f8166b36-114"
                 type="text"
                 value={field.state.value}
@@ -133,6 +146,7 @@ export function CreateUserModal({ onClose }: { onClose: () => void }) {
         <form.Field name="email">
           {(field) => (
             <Input
+              name={field.name}
               id="field-f8166b36-130"
               type="email"
               value={field.state.value}
@@ -155,6 +169,7 @@ export function CreateUserModal({ onClose }: { onClose: () => void }) {
           <form.Field name="password">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-f8166b36-145"
                 type={showPassword ? "text" : "password"}
                 value={field.state.value}
@@ -195,6 +210,7 @@ export function EditUserModal({
   onClose: () => void;
 }) {
   const updateUser = useUpdateUser();
+  const [serverError, setServerError] = useState<string>();
   const form = useAppForm({
     defaultValues: {
       displayName: user.displayName,
@@ -211,9 +227,12 @@ export function EditUserModal({
             enabled: value.enabled,
           },
         });
+        setServerError(undefined);
         onClose();
-      } catch {
-        // Error handled by mutation
+      } catch (error) {
+        setServerError(
+          error instanceof Error ? error.message : "Unable to save",
+        );
       }
     },
   });
@@ -222,6 +241,10 @@ export function EditUserModal({
 
   return (
     <ModalShell
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!form.store.state.isSubmitting) void form.handleSubmit();
+      }}
       title="Edit User"
       onClose={onClose}
       size="md"
@@ -232,13 +255,16 @@ export function EditUserModal({
           <ActionButton
             intent="primary"
             loading={updateUser.isPending}
-            onClick={() => void form.handleSubmit()}
+            type="submit"
           >
             Update User
           </ActionButton>
         </>
       }
     >
+      <form.AppForm>
+        <form.FormErrorSummary serverError={serverError} />
+      </form.AppForm>
       <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border">
         <div className="w-10 h-10 rounded-full bg-linear-to-br from-zinc-600 to-zinc-800 flex items-center justify-center shrink-0">
           <span className="text-sm font-medium text-primary-foreground">
@@ -264,6 +290,7 @@ export function EditUserModal({
           <form.Field name="displayName">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-f8166b36-275"
                 type="text"
                 value={field.state.value}
@@ -283,6 +310,7 @@ export function EditUserModal({
           <form.Field name="email">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-f8166b36-288"
                 type="email"
                 value={field.state.value}
