@@ -1,0 +1,20 @@
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/provider	1.198s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/builtin	1.123s
+ok  	github.com/alphabravocompany/astronomer-go/internal/delivery/resolver	1.477s
+--- FAIL: TestSelectedCosignProducerToVerifiedLoader (0.02s)
+    verified_registry_test.go:302: QA key generation failed: fork/exec /root/.cache/astronomer-032/bin/cosign-3.1.3: no such file or directory 
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/delivery/distribution	0.534s
+ok  	github.com/alphabravocompany/astronomer-go/internal/server	38.620s
+ok  	github.com/alphabravocompany/astronomer-go/internal/agent/delivery	15.239s
+ok  	github.com/alphabravocompany/astronomer-go/internal/releasecontract	49.550s
+ok  	github.com/alphabravocompany/astronomer-go/deploy/bundles	1.253s
+--- FAIL: TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren (0.03s)
+    publication_test.go:67: QA key generation failed
+--- FAIL: TestActualPublisherClosesScannerDatabaseSubjectsAndOfflineGraph (0.07s)
+    publication_test.go:70: QA key generation failed
+--- FAIL: TestActualSignerUsesOwnedPrivateRegistryCA (0.12s)
+    publication_tls_test.go:76: QA key generation failed
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution	1.150s
+FAIL
