@@ -13,6 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
@@ -92,12 +93,13 @@ func decodeAndValidate[T any](w http.ResponseWriter, r *http.Request, out *T) bo
 // Unknown fields and trailing JSON are rejected so misspelled or retired
 // request fields cannot be silently ignored.
 func decodeStrictJSONBody(r *http.Request, out any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(out); err != nil {
-		return err
-	}
-	return ensureJSONEOF(decoder)
+	return jsoncontract.DecodeRequest(r, out, jsoncontract.ExactProduct)
+}
+
+// decodeV1JSONBody is the explicit adapter for historically additive v1 DTOs.
+// It preserves extra properties while imposing the same size/document bound.
+func decodeV1JSONBody(r *http.Request, out any) error {
+	return jsoncontract.DecodeRequest(r, out, jsoncontract.AdditiveV1)
 }
 
 func ensureJSONEOF(decoder *json.Decoder) error {

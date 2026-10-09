@@ -842,7 +842,7 @@ func (h *ResourceHandler) RemoveNodeAnnotation(w http.ResponseWriter, r *http.Re
 
 func (h *ResourceHandler) AddNodeTaint(w http.ResponseWriter, r *http.Request) {
 	var req nodeTaintRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -861,7 +861,7 @@ func (h *ResourceHandler) AddNodeTaint(w http.ResponseWriter, r *http.Request) {
 
 func (h *ResourceHandler) RemoveNodeTaint(w http.ResponseWriter, r *http.Request) {
 	var req nodeTaintRemoveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -910,7 +910,7 @@ func validTaintEffect(effect string) bool {
 
 func (h *ResourceHandler) setNodeMetadataKey(w http.ResponseWriter, r *http.Request, field string) {
 	var req nodeKeyValueRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -928,7 +928,7 @@ func (h *ResourceHandler) setNodeMetadataKey(w http.ResponseWriter, r *http.Requ
 
 func (h *ResourceHandler) removeNodeMetadataKey(w http.ResponseWriter, r *http.Request, field string) {
 	var req nodeKeyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

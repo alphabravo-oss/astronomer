@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -76,7 +75,7 @@ func (h *MonitoringHandler) sharedAlertmanagerPayload(ctx context.Context, r *ht
 	}
 
 	var req SharedAlertmanagerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+	if err := decodeV1JSONBody(r, &req); err != nil && err.Error() != "EOF" {
 		return SharedAlertmanagerRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("invalid JSON body")
 	}
 	if req.ManagementClusterID == "" {

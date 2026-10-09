@@ -54,7 +54,7 @@ func (h *MonitoringHandler) sharedGrafanaPayload(ctx context.Context, r *http.Re
 	}
 
 	var req SharedGrafanaRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+	if err := decodeV1JSONBody(r, &req); err != nil && err.Error() != "EOF" {
 		return SharedGrafanaRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("invalid JSON body")
 	}
 	if req.ManagementClusterID == "" {

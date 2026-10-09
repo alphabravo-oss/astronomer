@@ -299,8 +299,7 @@ func (h *ResourceHandler) DrainNode(w http.ResponseWriter, r *http.Request) {
 	}
 	var req drainNodeRequest
 	if r.Body != nil {
-		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		if err := decodeV1JSONBody(r, &req); err != nil && !errors.Is(err, io.EOF) {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 			return
 		}

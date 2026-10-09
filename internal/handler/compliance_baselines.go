@@ -280,7 +280,7 @@ func (h *ComplianceBaselinesHandler) Apply(w http.ResponseWriter, r *http.Reques
 	}
 	var req ApplyRequest
 	if r.ContentLength > 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeV1JSONBody(r, &req); err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 			return
 		}

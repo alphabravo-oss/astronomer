@@ -81,7 +81,7 @@ func manifestHasBundle(m ExtensionManifest) bool {
 
 func decodeExtensionManifest(r *http.Request) (ExtensionManifest, error) {
 	var raw json.RawMessage
-	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+	if err := decodeV1JSONBody(r, &raw); err != nil {
 		return ExtensionManifest{}, fmt.Errorf("invalid JSON body")
 	}
 	// openapi:request-operation postExtensionsValidate

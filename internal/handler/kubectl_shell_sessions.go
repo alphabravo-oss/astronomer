@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -199,7 +198,7 @@ func parseShellElevation(r *http.Request) bool {
 	}
 	// Best-effort: ignore decode errors (empty body, bad JSON) and treat
 	// them as "no elevation requested".
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeV1JSONBody(r, &body); err != nil {
 		return false
 	}
 	if body.Elevate {

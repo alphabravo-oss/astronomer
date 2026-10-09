@@ -129,7 +129,7 @@ func (h *AlertingHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req CreateChannelRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

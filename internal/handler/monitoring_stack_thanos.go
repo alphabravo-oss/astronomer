@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -20,7 +19,7 @@ func (h *MonitoringHandler) sharedThanosPayload(ctx context.Context, r *http.Req
 	}
 
 	var req SharedThanosStackRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+	if err := decodeV1JSONBody(r, &req); err != nil && err.Error() != "EOF" {
 		return SharedThanosStackRequest{}, nil, objectStoreSecretSpec{}, sqlc.MonitoringBackend{}, fmt.Errorf("invalid JSON body")
 	}
 	if req.ManagementClusterID == "" {

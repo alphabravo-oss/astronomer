@@ -393,7 +393,7 @@ func (h *CatalogHandler) SetCatalogChartFavorite(w http.ResponseWriter, r *http.
 		return
 	}
 	var request catalogFavoriteRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+	if err := decodeV1JSONBody(r, &request); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

@@ -354,7 +354,7 @@ func (h *PlatformSettingsHandler) BatchUpdate(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req platformSettingsBatchUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -453,7 +453,7 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var req updateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

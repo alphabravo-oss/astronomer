@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -98,11 +97,11 @@ func generateTempPassword() (string, error) {
 // CreateUserRequest represents the request body for creating a user.
 // openapi:request-operation postUsers
 type CreateUserRequest struct {
-	Email       string `json:"email"`
+	Email       string `json:"email" validate:"required,email"`
 	Username    string `json:"username"`
 	FirstName   string `json:"first_name"`
 	LastName    string `json:"last_name"`
-	Password    string `json:"password"`
+	Password    string `json:"password" validate:"required"`
 	IsActive    *bool  `json:"is_active"`
 	IsStaff     bool   `json:"is_staff"`
 	IsSuperuser bool   `json:"is_superuser"`
@@ -111,7 +110,7 @@ type CreateUserRequest struct {
 // UpdateUserRequest represents the request body for updating a user.
 // openapi:request UsersSettingsUpdateUserRequest
 type UpdateUserRequest struct {
-	Email     string `json:"email"`
+	Email     string `json:"email" validate:"omitempty,email"`
 	Username  string `json:"username"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
@@ -130,7 +129,7 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -145,6 +144,10 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Password == "" {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Password is required")
+		return
+	}
+	if err := validatorInstance().Struct(req); err != nil {
+		writeValidationError(w, r, err)
 		return
 	}
 	// DIR-04 / AUTH-R01: enforce live platform password policy when settings
@@ -206,8 +209,13 @@ func (h *ResourceHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req UpdateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	req.Email = strings.TrimSpace(req.Email)
+	if err := validatorInstance().Struct(req); err != nil {
+		writeValidationError(w, r, err)
 		return
 	}
 	email := strings.TrimSpace(req.Email)
@@ -361,7 +369,7 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 		generated bool
 	)
 	if r.Body != nil && r.ContentLength != 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		if err := decodeV1JSONBody(r, &req); err != nil && err != io.EOF {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 			return
 		}

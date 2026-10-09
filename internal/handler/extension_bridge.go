@@ -80,7 +80,7 @@ func (h *ExtensionHandler) IssueTicket(w http.ResponseWriter, r *http.Request) {
 
 	var req extTokenRequest
 	if r.Body != nil {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+		if err := decodeV1JSONBody(r, &req); err != nil && err.Error() != "EOF" {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 			return
 		}

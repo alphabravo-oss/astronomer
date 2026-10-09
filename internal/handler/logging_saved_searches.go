@@ -3,10 +3,8 @@ package handler
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -144,18 +142,7 @@ func normalizeLoggingSavedSearch(req loggingSavedSearchInput) (loggingSavedSearc
 }
 
 func decodeLoggingSavedSearchJSON(r *http.Request, destination any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return errors.New("request body must contain exactly one JSON object")
-		}
-		return err
-	}
-	return nil
+	return decodeStrictJSONBody(r, destination)
 }
 
 func (h *LoggingHandler) savedSearchQueries(w http.ResponseWriter, r *http.Request) (loggingSavedSearchQuerier, bool) {

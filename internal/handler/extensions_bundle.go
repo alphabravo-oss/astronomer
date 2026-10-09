@@ -92,7 +92,7 @@ var (
 // when no trusted key is configured.
 func (h *ExtensionHandler) VerifyBundle(w http.ResponseWriter, r *http.Request) {
 	var req VerifyBundleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

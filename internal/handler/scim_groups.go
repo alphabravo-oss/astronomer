@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -21,7 +20,7 @@ type scimGroupMutationResult struct {
 // written into user_idp_groups.
 func (h *SCIMHandler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	var body scimGroupCreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeV1JSONBody(r, &body); err != nil {
 		h.scimError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
@@ -76,7 +75,7 @@ func (h *SCIMHandler) PatchGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body scimGroupPatchRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeV1JSONBody(r, &body); err != nil {
 		h.scimError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}

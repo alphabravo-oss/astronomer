@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -155,15 +154,9 @@ func (h *PrincipalHandler) Materialize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
 	var request materializePrincipalRequest
-	if err := decoder.Decode(&request); err != nil {
+	if err := decodeStrictJSONBody(r, &request); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid principal materialization request")
-		return
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Request body must contain one JSON object")
 		return
 	}
 	connectorID, err := uuid.Parse(request.ConnectorID)

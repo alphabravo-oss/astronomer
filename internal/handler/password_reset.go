@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -61,7 +60,7 @@ type PasswordResetComplete struct {
 // surfacing the enumeration vector through a status-code split.
 func (h *AuthHandler) PasswordResetRequest(w http.ResponseWriter, r *http.Request) {
 	var req PasswordResetRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		// 202 with a no-op body — never tell the caller their request
 		// body was invalid.
 		w.WriteHeader(http.StatusAccepted)
@@ -142,7 +141,7 @@ func (h *AuthHandler) PasswordResetRequest(w http.ResponseWriter, r *http.Reques
 // the next-validation deny path.
 func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Request) {
 	var req PasswordResetComplete
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

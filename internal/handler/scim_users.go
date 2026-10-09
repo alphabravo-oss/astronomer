@@ -70,7 +70,7 @@ func invalidateCommittedSCIMSessions(ctx context.Context, jwt *auth.JWTManager, 
 // CreateUser handles POST /scim/v2/Users.
 func (h *SCIMHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req scimCreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		h.scimError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -180,7 +180,7 @@ func (h *SCIMHandler) PutUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req scimCreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		h.scimError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -268,7 +268,7 @@ func (h *SCIMHandler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req scimPatchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		h.scimError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

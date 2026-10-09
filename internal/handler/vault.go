@@ -41,7 +41,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -308,7 +307,7 @@ func (h *VaultHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req VaultConnectionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -399,7 +398,7 @@ func (h *VaultHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req VaultConnectionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -621,7 +620,7 @@ func (h *VaultHandler) PutProjectDefault(w http.ResponseWriter, r *http.Request)
 	var body struct {
 		ConnectionID *string `json:"connection_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := decodeV1JSONBody(r, &body); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}

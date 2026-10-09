@@ -20,7 +20,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -286,7 +285,7 @@ func (h *NetworkPolicyHandler) GetTemplate(w http.ResponseWriter, r *http.Reques
 // bootstrap from a builtin slug.
 func (h *NetworkPolicyHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	var req CreateNetworkPolicyTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -384,7 +383,7 @@ func (h *NetworkPolicyHandler) UpdateTemplate(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req CreateNetworkPolicyTemplateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -521,7 +520,7 @@ func (h *NetworkPolicyHandler) CreateApplications(w http.ResponseWriter, r *http
 		return
 	}
 	var req ApplyNetworkPolicyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeV1JSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
