@@ -220,7 +220,7 @@ func TestPostgresSystemRolloutConcurrentFenceHasOneWinner(t *testing.T) {
 			continue
 		}
 		var pgErr interface{ SQLState() string }
-		if !errors.Is(err, ErrConflict) && !(errors.As(err, &pgErr) && pgErr.SQLState() == "40001") {
+		if !errors.Is(err, ErrConflict) && (!errors.As(err, &pgErr) || pgErr.SQLState() != "40001") {
 			t.Fatalf("concurrent action error=%v", err)
 		}
 	}
