@@ -7,6 +7,7 @@ import json
 import pathlib
 import re
 import sys
+import subprocess
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -79,6 +80,7 @@ def main() -> None:
         stale = sorted(declared - actual)
         fail(f"delete inventory drift; unclassified={missing}, stale={stale}")
     check_json_governance_migration()
+    subprocess.run([sys.executable, str(ROOT / "scripts/check-json-governance.py")], cwd=ROOT, check=True)
     print(
         f"data-governance: {len(actual)} destructive tables classified; "
         "durable JSON writer governance present"
