@@ -67,6 +67,7 @@ class ImageResolutionTests(unittest.TestCase):
             with patch.object(images, 'request', side_effect=error):
                 with self.assertRaisesRegex(ValueError, 'auth realm'):
                     images.resolve_image('registry.example/image:latest')
+            error.close()
 
 
 if __name__ == '__main__':

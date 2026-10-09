@@ -15,7 +15,7 @@ class ConsumerInventoryTests(unittest.TestCase):
             root = pathlib.Path(directory)
             source = root / 'Dockerfile'
             source.write_text('FROM node:26.11.1\n')
-            document = {'components': [{'id': 'node'}], 'inventory': [{'path': 'Dockerfile', 'kind': 'builder', 'value': 'node:26.11.1', 'state': 'managed', 'component': 'node'}]}
+            document = {'components': [{'id': 'node', 'selected': '26.11.1', 'consumers': [{'path': 'Dockerfile', 'kind': 'regex', 'selector': r'^FROM (node:26\.11\.1)$', 'value': 'node:26.11.1'}]}], 'inventory': [{'path': 'Dockerfile', 'kind': 'builder', 'value': 'node:26.11.1', 'state': 'managed', 'component': 'node'}]}
             with patch.object(inventory, 'paths', return_value=['Dockerfile']):
                 inventory.check(document, root)
                 source.write_text('FROM node:27.0.0\n')
@@ -27,6 +27,20 @@ class ConsumerInventoryTests(unittest.TestCase):
                 source.write_text('FROM node:26.11.1\n')
                 document['inventory'][0]['component'] = 'unknown'
                 with self.assertRaisesRegex(ValueError, 'unknown authority'):
+                    inventory.check(document, root)
+
+    def test_managed_pin_must_match_declared_component_consumer_and_count(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            source = root / 'Dockerfile'
+            source.write_text('FROM node:26.11.1\nFROM node:20.0.0\n')
+            document = {'components': [{'id': 'node', 'selected': '26.11.1', 'consumers': [{'path': 'Dockerfile', 'kind': 'regex', 'selector': r'^FROM (node:26\.11\.1)$', 'value': 'node:26.11.1'}]}], 'inventory': [{'path': 'Dockerfile', 'kind': 'builder', 'value': version, 'state': 'managed', 'component': 'node', 'count': 1} for version in ['node:26.11.1', 'node:20.0.0']]}
+            with patch.object(inventory, 'paths', return_value=['Dockerfile']):
+                with self.assertRaisesRegex(ValueError, 'consumer provenance'):
+                    inventory.check(document, root)
+                source.write_text('FROM node:26.11.1\nFROM node:26.11.1\n')
+                document['inventory'].pop()
+                with self.assertRaisesRegex(ValueError, 'occurrence count'):
                     inventory.check(document, root)
 
     def test_schema_properties_are_not_image_consumers(self):

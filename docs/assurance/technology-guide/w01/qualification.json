@@ -1,0 +1,167 @@
+{
+  "authorityDigest": "sha256:8f266d9a336d48be54c55a7b75637c2f7eef100ea94466c41e6257bd3019de70",
+  "integrationBaseCommit": "0c9ac086915487eef2c4cdf4800181dd650060b1",
+  "limits": [
+    "Prior W01 unit/browser/API receipts do not qualify final combined W01+W05 source. Integration owner will run the combined frontend suite once after source integration.",
+    "Local image builds were amd64; official upstream manifests were validated for amd64/arm64. No signed release or live stateful qualification occurred.",
+    "Signed-resolution workflow and exact-source release consumer are implemented and fail closed; no authenticated positive signing run was executed. New candidates require TOOLCHAIN_RESOLUTION_RUN_ID pointing to the manual signing run for the exact tag commit. Historical v1.2.0/v1.2.1 artifact validation remains unchanged.",
+    "Existing PostgreSQL16/Redis7 worker fixtures do not prove PostgreSQL18.6/CNPG/Valkey9.1.2 production behavior. W12 owns those actual runtime qualification gates."
+  ],
+  "observedAt": "2026-10-09T20:02:17.618931+00:00",
+  "priorFrozenSourceCommit": "04c91a6d70a2d8cba478ff829e97e57348df0d4a",
+  "results": [
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 make versions-check",
+      "gate": "authority",
+      "logDigest": "sha256:6ab20091746436be1c8dda97d111d0f5426b0c8eb7bd8da7852e7c84ea89d846",
+      "result": "PASS: 176 components; 36 tests"
+    },
+    {
+      "command": "GITLEAKS_BIN=<qualified 8.30.1> python3 -m unittest gosec_tool_contract_test security_source_policy_test security_policy_contract_test",
+      "gate": "security-policy",
+      "logDigest": "sha256:7961d1d4b49100ac7e3644bbf8ef56cfbeacb48c0d93b041cbaad7be44093c79",
+      "result": "PASS: 26 tests, zero skips"
+    },
+    {
+      "command": "make verify-enterprise VERIFY_SCOPE=api-contract",
+      "gate": "api-contract",
+      "logDigest": "sha256:d6565ec9c4d5c2567422fbf889bf36342ce213e78182b2a0f53cb3e15adb8c35",
+      "result": "PASS: 33 subgates; stable source tree"
+    },
+    {
+      "command": "npm run test -- --maxWorkers=1",
+      "gate": "frontend-unit",
+      "logDigest": "sha256:753fe074fd5a052e551a4ceee1683638e9bed9eab7db0e1814d7c1caf4b85a5e",
+      "result": "PASS:333 files/2307 tests;577.61s"
+    },
+    {
+      "command": "npm run test:browser-components",
+      "gate": "frontend-browser",
+      "logDigest": "sha256:8978f7ae0dcb92fc151687db5757f772ffbfc0f15a2c7c2bb96a383e648f41e9",
+      "result": "PASS:12/12; Playwright1.64/Chromium1248; one worker/zero retries"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 python3 scripts/build-first-party.py",
+      "gate": "first-party-binaries",
+      "logDigest": "sha256:98b3aef35d6c060edc07908de096263ba3c2eb0bcbcb481c616e123efe92bc62",
+      "result": "PASS:16 executables under Go1.27.2"
+    },
+    {
+      "command": "docker buildx build <candidate dr Dockerfile>",
+      "gate": "image-dr",
+      "logDigest": "sha256:006d8d6fba4dde1aea1172b06d7831690e517d3d940eee02107ec29ec64c47cc",
+      "result": "PASS:local linux/amd64 candidate build; no release publication"
+    },
+    {
+      "command": "docker buildx build <candidate shell Dockerfile>",
+      "gate": "image-shell",
+      "logDigest": "sha256:a96ffa4cd95e2bb42add6ac68013131ca520a1f5dc48274d75ee1d652f8f83c2",
+      "result": "PASS:local linux/amd64 candidate build; no release publication"
+    },
+    {
+      "command": "docker buildx build <candidate server Dockerfile>",
+      "gate": "image-server",
+      "logDigest": "sha256:92a26c0db10ca4006b26f1c29931d9204e7609040adb20c39293f66c85a7a94a",
+      "result": "PASS:local linux/amd64 candidate build; no release publication"
+    },
+    {
+      "command": "docker buildx build <candidate worker Dockerfile>",
+      "gate": "image-worker",
+      "logDigest": "sha256:f1eae7110343a6b59418e429c333d10a1fe441f41dad2086ee4bbb4e99ea94ca",
+      "result": "PASS:local linux/amd64 candidate build; no release publication"
+    },
+    {
+      "command": "docker buildx build <candidate agent Dockerfile>",
+      "gate": "image-agent",
+      "logDigest": "sha256:7a75f01c34da25079aaa7d6dc27781eb3b54071a12debe5b6c87c82968b61a9e",
+      "result": "PASS:local linux/amd64 candidate build; no release publication"
+    },
+    {
+      "command": "docker buildx build <candidate migrate Dockerfile>",
+      "gate": "image-migrate",
+      "logDigest": "sha256:50f11ad2d34fca00117dea20c24dcb84ab06d8ce94ed07504a15feb51310011b",
+      "result": "PASS:local linux/amd64 candidate build; no release publication"
+    },
+    {
+      "command": "docker buildx build <candidate frontend Dockerfile>",
+      "gate": "image-frontend",
+      "logDigest": "sha256:c00eaee38985f7352bb87569365155627fac61728a3bab201f694230cef8a4d9",
+      "result": "PASS:local linux/amd64 candidate build; no release publication"
+    },
+    {
+      "command": "docker buildx build <candidate nginx Dockerfile>",
+      "gate": "image-nginx",
+      "logDigest": "sha256:0ad827e727f24361fb13f9ae092a84f816b26d295848557b2d5bb4c5b49501bc",
+      "result": "PASS:local linux/amd64 candidate build; no release publication"
+    },
+    {
+      "command": "make release-contract-check",
+      "gate": "release-contract",
+      "logDigest": "sha256:70e4884fefb6a1c822a0bfcd3f55309e885f43b8380c2bfaebc544fac63ad606",
+      "result": "PASS:55 Python tests; release-artifacts fixtures; Go release/bundle contracts"
+    },
+    {
+      "command": "make updates",
+      "gate": "stable-discovery",
+      "logDigest": "sha256:f03d7da2bd072d4af40ca9b2fbc1fd830e122a34c2905a74c28d749344ccff24",
+      "result": "PASS:176 component primary resolvers; zero unavailable; go list -u -m all"
+    },
+    {
+      "command": "GOTOOLCHAIN=go1.27.2 go test ./deploy/toolchain/check ./pkg/astroclient",
+      "gate": "authority-schema-and-public-sdk",
+      "logDigest": "sha256:91fe494f7176a0333c57e30e0f8cdc7531d75f7985aced0e86ea99fa24c965a0",
+      "result": "PASS:closed schema and meaningful public nullable/client compatibility fixture"
+    }
+  ],
+  "schemaVersion": 1,
+  "testedSourceFiles": [
+    {
+      "digest": "sha256:1850882bfec52d5124702e6a9f91153aa032b1b93baaae957f8b59039d65bef0",
+      "path": ".github/workflows/release.yaml"
+    },
+    {
+      "digest": "sha256:69d74dad945260f97492e0a61ba550da8cdbc6db4fc2a5b8fb774c6c9f3be853",
+      "path": ".github/workflows/security-analysis.yaml"
+    },
+    {
+      "digest": "sha256:8f266d9a336d48be54c55a7b75637c2f7eef100ea94466c41e6257bd3019de70",
+      "path": "deploy/toolchain/versions.json"
+    },
+    {
+      "digest": "sha256:894735be05376ba8ce9c254f717940f9ed1c332851a748e02b51488c4f63af1d",
+      "path": "deploy/toolchain/versions.schema.json"
+    },
+    {
+      "digest": "sha256:6494e21ea73fa7ee769f85f57d5a3e6a08725eae1e38c755fc3517c9e6bc0b66",
+      "path": "deploy/toolchain/trust/trusted_root.json"
+    },
+    {
+      "digest": "sha256:e50d22105e7fce121cfe285197e1140f90112be02f14d17c96bb1913d476c108",
+      "path": "scripts/toolchain.py"
+    },
+    {
+      "digest": "sha256:2a60987a8e228577041a4b2a0784b39ad16b913a2ee968eec74c616b32c65010",
+      "path": "scripts/toolchain-resolution.py"
+    },
+    {
+      "digest": "sha256:335027f0869120781251807b09c3cad282bb507e5138fe11e2666f79ab7ecd8a",
+      "path": "scripts/toolchain_inventory.py"
+    },
+    {
+      "digest": "sha256:178c129e3a2f2092a563d6553d76c2350f9750d9b9ca69205a7ad59a35d5e09f",
+      "path": "go.mod"
+    },
+    {
+      "digest": "sha256:4e27e056e6cd2e2b96343746eeca53661f5caf302eec2ce719afe20ce400e25d",
+      "path": "go.sum"
+    },
+    {
+      "digest": "sha256:998f26a45c0cf1bb5ff61320fdc543135e368e350169235dee9cd96cc6effdea",
+      "path": "frontend/package.json"
+    },
+    {
+      "digest": "sha256:26a16cecdcc7117ef56544fb307af3426f29f606fda97a890b3c45d0aa24ea73",
+      "path": "frontend/package-lock.json"
+    }
+  ]
+}

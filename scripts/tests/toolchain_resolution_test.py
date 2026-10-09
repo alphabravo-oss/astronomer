@@ -64,7 +64,8 @@ class ResolutionTests(unittest.TestCase):
             bundle = directory / "bundle.json"
             bundle.write_text("{}")
             cosign = directory / "cosign"
-            cosign.write_text("#!/bin/sh\nexit 42\n")
+            arguments = directory / "cosign-arguments.json"
+            cosign.write_text("#!/usr/bin/env python3\nimport json,sys\nopen(" + repr(str(arguments)) + ", 'w').write(json.dumps(sys.argv[1:]))\nsys.exit(42)\n")
             cosign.chmod(0o755)
             env = dict(os.environ, PATH=str(directory) + os.pathsep + os.environ["PATH"], GOTOOLCHAIN="go1.27.2", GOMAXPROCS="2", GOFLAGS="-p=2")
             base = [sys.executable, str(ROOT / "scripts/toolchain-resolution.py")]
@@ -77,6 +78,11 @@ class ResolutionTests(unittest.TestCase):
             failed = subprocess.run(args + ["--bundle", str(bundle)], capture_output=True, text=True, env=env)
             self.assertNotEqual(failed.returncode, 0)
             self.assertIn("42", failed.stderr)
+            invoked = json.loads(arguments.read_text())
+            self.assertIn("--trusted-root", invoked)
+            self.assertEqual(invoked[invoked.index("--trusted-root") + 1], str(ROOT / "deploy/toolchain/trust/trusted_root.json"))
+            self.assertIn("--certificate-identity-regexp", invoked)
+            self.assertNotIn("--insecure-ignore-tlog", invoked)
             cosign.write_text("#!/bin/sh\nexit 0\n")
             receipt = json.loads(record.read_text())
             receipt["sourceCommit"] = "0" * 40
@@ -108,6 +114,28 @@ class ResolutionTests(unittest.TestCase):
         for step in job["steps"]:
             if "uses" in step:
                 self.assertRegex(step["uses"], r"@[a-f0-9]{40}$")
+
+    def test_release_candidate_requires_signed_exact_source_artifact(self):
+        raw = subprocess.check_output(["go", "run", "./deploy/toolchain/check", "--yaml-json"], input=(ROOT / ".github/workflows/release.yaml").read_bytes(), cwd=ROOT)
+        document = json.loads(raw)
+        job = document["jobs"]["preflight"]
+        self.assertEqual(document["permissions"], {"contents": "read"})
+        steps = job["steps"]
+        consumer = next(s for s in steps if s.get("name") == "Validate offline signed toolchain resolution for a new candidate")
+        condition = "github.ref_name != 'v1.2.0' && github.ref_name != 'v1.2.1'"
+        self.assertEqual(consumer["if"], condition)
+        self.assertIn("versions-release-check", consumer["run"])
+        self.assertIn("TOOLCHAIN_RESOLUTION_BUNDLE=", consumer["run"])
+        download = next(s for s in steps if s.get("name") == "Download exact-source signed toolchain resolution")
+        self.assertEqual(download["if"], condition)
+        self.assertEqual(download["with"]["name"], "toolchain-resolution-${{ github.sha }}")
+        self.assertEqual(download["with"]["run-id"], "${{ vars.TOOLCHAIN_RESOLUTION_RUN_ID }}")
+        verifier = next(s for s in steps if s.get("name") == "Install signed-resolution verifier")
+        self.assertEqual(verifier["if"], condition)
+        self.assertEqual(verifier["with"]["cosign-release"], "v3.1.3")
+        required = next(s for s in steps if s.get("name") == "Require reviewed signed-resolution run for a new candidate")
+        self.assertEqual(required["if"], condition)
+        self.assertIn('^[1-9][0-9]*$', required["run"])
 
     def test_signer_identity_negative_fixtures(self):
         policy = re.compile(resolution.IDENTITY)

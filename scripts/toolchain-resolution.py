@@ -56,7 +56,7 @@ def main():
         return
     if not args.bundle:
         raise ValueError("release requires a signed Sigstore resolution bundle")
-    subprocess.run(["cosign", "verify-blob", "--offline", "--bundle", str(args.bundle), "--certificate-identity-regexp", IDENTITY, "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com", str(args.record)], check=True)
+    subprocess.run(["cosign", "verify-blob", "--offline", "--trusted-root", str(ROOT / "deploy/toolchain/trust/trusted_root.json"), "--bundle", str(args.bundle), "--certificate-identity-regexp", IDENTITY, "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com", str(args.record)], check=True)
     subprocess.run(["go", "run", "./deploy/toolchain/check", "deploy/toolchain/resolution.schema.json", str(args.record.resolve())], cwd=ROOT, check=True)
     receipt = json.loads(args.record.read_text())
     verify_binding(receipt, document, authority)
