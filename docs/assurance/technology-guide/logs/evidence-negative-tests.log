@@ -1,0 +1,18 @@
+test_candidate_qualification_requires_manifest (__main__.EvidenceContractTest.test_candidate_qualification_requires_manifest) ... ok
+test_changed_artifact_and_escape (__main__.EvidenceContractTest.test_changed_artifact_and_escape) ... ok
+test_changed_candidate_tree_digest (__main__.EvidenceContractTest.test_changed_candidate_tree_digest) ... ok
+test_changed_inventory_input_digest (__main__.EvidenceContractTest.test_changed_inventory_input_digest) ... ok
+test_changed_source_identity (__main__.EvidenceContractTest.test_changed_source_identity) ... ok
+test_deferral_requires_authority_and_reason (__main__.EvidenceContractTest.test_deferral_requires_authority_and_reason) ... ok
+test_duplicate_record (__main__.EvidenceContractTest.test_duplicate_record) ... ok
+test_other_package_static_record_needs_no_manifest (__main__.EvidenceContractTest.test_other_package_static_record_needs_no_manifest) ... ok
+test_pass_cannot_hide_failure_skip_or_missing_cases (__main__.EvidenceContractTest.test_pass_cannot_hide_failure_skip_or_missing_cases) ... ok
+test_retained_passing_record (__main__.EvidenceContractTest.test_retained_passing_record) ... ok
+test_reversed_timestamps (__main__.EvidenceContractTest.test_reversed_timestamps) ... ok
+test_symlink_artifact_is_rejected (__main__.EvidenceContractTest.test_symlink_artifact_is_rejected) ... ok
+test_unknown_fields_and_invalid_source_sha (__main__.EvidenceContractTest.test_unknown_fields_and_invalid_source_sha) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.047s
+
+OK

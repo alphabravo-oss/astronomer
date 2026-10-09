@@ -1,0 +1,1447 @@
+{
+  "branchProtection": "HTTP 404: Branch not protected (separate read-only gh api observation)",
+  "candidateSourceTree": {
+    "capturedAt": "2026-10-09T18:54:07Z",
+    "capturedFor": "W00 candidate test and architecture-document changes; input commit recorded separately",
+    "excludedEvidencePath": "docs/assurance/technology-guide",
+    "schema_version": 2,
+    "source_file_count": 5301,
+    "source_tree_sha256": "b51ab945b6a935acdda650ace1aeafecbf90c383c1ba78ab0a006f2407252087"
+  },
+  "database": {
+    "barmanCRDsPresent": [],
+    "cacheMode": "standalone Valkey StatefulSet; Sentinel not present",
+    "cnpgCRDsPresent": [],
+    "observedMode": "standalone StatefulSet; comparison environment, not CNPG-qualified",
+    "operatorOwnership": "CNPG/Barman absent from inspected CRDs/workloads; source requires external operator/plugin ownership",
+    "pvcIdentities": [
+      {
+        "capacity": "8Gi",
+        "name": "data-astronomer-postgres-0",
+        "ownerKinds": [],
+        "phase": "Bound",
+        "storageClass": "local-path",
+        "uid": "55a212da-a5a0-45ae-ae6d-747633be60e0"
+      },
+      {
+        "capacity": "2Gi",
+        "name": "data-astronomer-redis-0",
+        "ownerKinds": [],
+        "phase": "Bound",
+        "storageClass": "local-path",
+        "uid": "00c95f34-7a12-48dd-8737-0e104da1ee60"
+      }
+    ]
+  },
+  "dirtyStateTiming": "repository dirtyPaths captured during W00 after executor added test/docs; initial application worktree was clean; supporting changes were pre-existing",
+  "gitTree": "ad15003f81e1f6035aa711c533720e4065a301b4",
+  "githubRelease": {
+    "assets_count": 38,
+    "published_at": "2026-10-08T21:28:58Z",
+    "tag_name": "v1.2.1",
+    "target_commitish": "main"
+  },
+  "helmReleases": [
+    {
+      "app_version": "1.2.1",
+      "chart": "astronomer-1.2.1",
+      "name": "astronomer",
+      "namespace": "astronomer",
+      "revision": "233",
+      "status": "deployed",
+      "updated": "2026-10-08 20:16:23.146963544 +0000 UTC"
+    },
+    {
+      "app_version": "v0.75.1",
+      "chart": "kube-prometheus-stack-61.3.2",
+      "name": "astronomer-monitoring",
+      "namespace": "astronomer-monitoring",
+      "revision": "8",
+      "status": "deployed",
+      "updated": "2026-10-08 20:20:48.64060197 +0000 UTC"
+    },
+    {
+      "app_version": "v1.20.2",
+      "chart": "cert-manager-v1.20.2",
+      "name": "cert-manager",
+      "namespace": "cert-manager",
+      "revision": "1",
+      "status": "deployed",
+      "updated": "2026-08-18 13:45:52.086429776 +0000 UTC"
+    },
+    {
+      "app_version": "1.0.63",
+      "chart": "agent-chart-1.0.63",
+      "name": "charlie-agent",
+      "namespace": "astronomer-charlie",
+      "revision": "5",
+      "status": "deployed",
+      "updated": "2026-09-18 17:04:01.63620162 +0000 UTC"
+    },
+    {
+      "app_version": "1.15.1",
+      "chart": "ingress-nginx-4.15.1",
+      "name": "ingress-nginx",
+      "namespace": "ingress-nginx",
+      "revision": "1",
+      "status": "deployed",
+      "updated": "2026-08-18 13:46:36.552019878 +0000 UTC"
+    },
+    {
+      "app_version": "2.20.0",
+      "chart": "kube-state-metrics-8.6.0",
+      "name": "kube-state-metrics",
+      "namespace": "astronomer-monitoring",
+      "revision": "2",
+      "status": "deployed",
+      "updated": "2026-10-08 18:24:37.102111055 +0000 UTC"
+    },
+    {
+      "app_version": "1.12.1",
+      "chart": "prometheus-node-exporter-4.56.1",
+      "name": "prometheus-node-exporter",
+      "namespace": "astronomer-monitoring",
+      "revision": "1",
+      "status": "deployed",
+      "updated": "2026-09-18 21:33:47.945142172 +0000 UTC"
+    },
+    {
+      "app_version": "0.35.0",
+      "chart": "trivy-operator-0.37.0",
+      "name": "trivy-operator",
+      "namespace": "astronomer-trivy-system",
+      "revision": "1",
+      "status": "deployed",
+      "updated": "2026-10-07 20:27:25.376239219 +0000 UTC"
+    }
+  ],
+  "historicalReleaseRun": {
+    "conclusion": "success",
+    "created_at": "2026-10-08T21:19:11Z",
+    "event": "workflow_dispatch",
+    "head_sha": "3b378ef16141b9eaac35a1e5fe292e061b69f5f1",
+    "status": "completed",
+    "updated_at": "2026-10-08T21:29:01Z"
+  },
+  "initialApplicationDirtyPaths": [],
+  "limitations": [
+    "No Secret resources, private Helm values, logs, environment values, or database credentials were inspected.",
+    "Observed readiness is a point-in-time inventory, not product qualification.",
+    "No backup history or database contents queried; CNPG topology/restore/failover cannot be attributed to this cluster.",
+    "Image IDs are runtime observations, not renewed signature/provenance verification."
+  ],
+  "nodes": [
+    {
+      "kubernetesVersion": "v1.35.7+k3s1",
+      "name": "astronomer-dev-1-mj"
+    }
+  ],
+  "observedAt": "2026-10-09T18:47:08Z",
+  "planBaseline": "3b378ef16141b9eaac35a1e5fe292e061b69f5f1",
+  "podImageIdentities": [
+    {
+      "imageIDs": [
+        {
+          "imageID": "",
+          "ready": false,
+          "role": "agent"
+        }
+      ],
+      "name": "charlie-agent-0",
+      "namespace": "astronomer-charlie",
+      "phase": "Pending"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "",
+          "ready": false,
+          "role": "agent"
+        }
+      ],
+      "name": "charlie-agent-1",
+      "namespace": "astronomer-charlie",
+      "phase": "Pending"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "ghcr.io/fluxcd/helm-controller@sha256:0d52fff5c4d476277b8fcb6beb9041e269adb5db943fe69f5a806ea0c92b1511",
+          "ready": true,
+          "role": "manager"
+        }
+      ],
+      "name": "helm-controller-6b66dd9d84-2q4j7",
+      "namespace": "astronomer-delivery-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "ghcr.io/fluxcd/helm-controller@sha256:0d52fff5c4d476277b8fcb6beb9041e269adb5db943fe69f5a806ea0c92b1511",
+          "ready": true,
+          "role": "manager"
+        }
+      ],
+      "name": "helm-controller-6b66dd9d84-pb9wl",
+      "namespace": "astronomer-delivery-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "ghcr.io/fluxcd/helm-controller@sha256:16ada99456385100698a5d7adf90aba8a2089d987ab541c9566b6d7b0e897038",
+          "ready": false,
+          "role": "manager"
+        }
+      ],
+      "name": "helm-controller-78c69c546f-qb5l8",
+      "namespace": "astronomer-delivery-system",
+      "phase": "Succeeded"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "ghcr.io/fluxcd/kustomize-controller@sha256:2ebeaa341da77d52b6abbbba5efcee0450d47f8b42f0e6f33b08f9020262d606",
+          "ready": true,
+          "role": "manager"
+        }
+      ],
+      "name": "kustomize-controller-664456475d-bj96p",
+      "namespace": "astronomer-delivery-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "ghcr.io/fluxcd/kustomize-controller@sha256:2ebeaa341da77d52b6abbbba5efcee0450d47f8b42f0e6f33b08f9020262d606",
+          "ready": true,
+          "role": "manager"
+        }
+      ],
+      "name": "kustomize-controller-664456475d-m89gz",
+      "namespace": "astronomer-delivery-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "ghcr.io/fluxcd/kustomize-controller@sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f",
+          "ready": false,
+          "role": "manager"
+        }
+      ],
+      "name": "kustomize-controller-6b48f9cb8b-h6nwt",
+      "namespace": "astronomer-delivery-system",
+      "phase": "Succeeded"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "ghcr.io/fluxcd/kustomize-controller@sha256:2b8bec54ffb6caf421bd2a6c005d27f567d5dd4db7feb55794fb51fcabd69b8f",
+          "ready": false,
+          "role": "manager"
+        }
+      ],
+      "name": "kustomize-controller-6b48f9cb8b-wvwcr",
+      "namespace": "astronomer-delivery-system",
+      "phase": "Succeeded"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "ghcr.io/fluxcd/source-controller@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+          "ready": false,
+          "role": "manager"
+        }
+      ],
+      "name": "source-controller-5f885f85db-j4pl4",
+      "namespace": "astronomer-delivery-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "ghcr.io/fluxcd/source-controller@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+          "ready": true,
+          "role": "manager"
+        }
+      ],
+      "name": "source-controller-5f885f85db-wcl8j",
+      "namespace": "astronomer-delivery-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/prometheus-operator/prometheus-config-reloader@sha256:d90c01934e26f0f7461f25c747cbec7dddad7adee764fe3f60a5ebb68f52b0b4",
+          "ready": true,
+          "role": "init-config-reloader"
+        },
+        {
+          "imageID": "quay.io/prometheus/alertmanager@sha256:e13b6ed5cb929eeaee733479dce55e10eb3bc2e9c4586c705a4e8da41e5eacf5",
+          "ready": true,
+          "role": "alertmanager"
+        },
+        {
+          "imageID": "quay.io/prometheus-operator/prometheus-config-reloader@sha256:d90c01934e26f0f7461f25c747cbec7dddad7adee764fe3f60a5ebb68f52b0b4",
+          "ready": true,
+          "role": "config-reloader"
+        }
+      ],
+      "name": "alertmanager-astronomer-monitoring-kube-alertmanager-0",
+      "namespace": "astronomer-monitoring",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/kiwigrid/k8s-sidecar@sha256:b8d5067137fec093cf48670dc3a1dbb38f9e734f3a6683015c2e89a45db5fd16",
+          "ready": true,
+          "role": "grafana-init-sc-datasources"
+        },
+        {
+          "imageID": "ghcr.io/alphabravo-oss/astronomer-go-server@sha256:48cce0e439e378f71377dc5b3ac8b407a50a8fd296bbf3f581587753f8bb3761",
+          "ready": true,
+          "role": "astronomer-grafana-proxy"
+        },
+        {
+          "imageID": "docker.io/grafana/grafana@sha256:079600c9517b678c10cda6006b4487d3174512fd4c6cface37df7822756ed7a5",
+          "ready": true,
+          "role": "grafana"
+        },
+        {
+          "imageID": "quay.io/kiwigrid/k8s-sidecar@sha256:b8d5067137fec093cf48670dc3a1dbb38f9e734f3a6683015c2e89a45db5fd16",
+          "ready": true,
+          "role": "grafana-sc-dashboard"
+        }
+      ],
+      "name": "astronomer-monitoring-grafana-6976f4bcc9-5nl8n",
+      "namespace": "astronomer-monitoring",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/prometheus-operator/prometheus-operator@sha256:a7cc63108511dedb685cc05f1070114acf5b0e35548049bc68e9f93c2d88eb88",
+          "ready": true,
+          "role": "kube-prometheus-stack"
+        }
+      ],
+      "name": "astronomer-monitoring-kube-operator-665f56656-5p265",
+      "namespace": "astronomer-monitoring",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b",
+          "ready": true,
+          "role": "kube-state-metrics"
+        }
+      ],
+      "name": "astronomer-monitoring-kube-state-metrics-7c4b74cf4d-vp6fb",
+      "namespace": "astronomer-monitoring",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/prometheus/node-exporter@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
+          "ready": true,
+          "role": "node-exporter"
+        }
+      ],
+      "name": "astronomer-monitoring-prometheus-node-exporter-ws8gl",
+      "namespace": "astronomer-monitoring",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "registry.k8s.io/kube-state-metrics/kube-state-metrics@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b",
+          "ready": true,
+          "role": "kube-state-metrics"
+        }
+      ],
+      "name": "kube-state-metrics-78cd884446-5d5xx",
+      "namespace": "astronomer-monitoring",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/prometheus-operator/prometheus-config-reloader@sha256:d90c01934e26f0f7461f25c747cbec7dddad7adee764fe3f60a5ebb68f52b0b4",
+          "ready": true,
+          "role": "init-config-reloader"
+        },
+        {
+          "imageID": "quay.io/prometheus-operator/prometheus-config-reloader@sha256:d90c01934e26f0f7461f25c747cbec7dddad7adee764fe3f60a5ebb68f52b0b4",
+          "ready": true,
+          "role": "config-reloader"
+        },
+        {
+          "imageID": "quay.io/prometheus/prometheus@sha256:f20d3127bf2876f4a1df76246fca576b41ddf1125ed1c546fbd8b16ea55117e6",
+          "ready": true,
+          "role": "prometheus"
+        }
+      ],
+      "name": "prometheus-astronomer-monitoring-kube-prometheus-0",
+      "namespace": "astronomer-monitoring",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/prometheus/node-exporter@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
+          "ready": true,
+          "role": "node-exporter"
+        }
+      ],
+      "name": "prometheus-node-exporter-zhvlk",
+      "namespace": "astronomer-monitoring",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "mirror.gcr.io/aquasec/trivy-operator@sha256:4cdb11af98ff409cfa7af980098203a841a5fe957cc6a0bbb0df7668065eb5fa",
+          "ready": true,
+          "role": "trivy-operator"
+        }
+      ],
+      "name": "trivy-operator-5d65d8bc87-qp7s8",
+      "namespace": "astronomer-trivy-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "ghcr.io/alphabravo-oss/astronomer-frontend@sha256:9ba2344266ce9833354bbee6397c512f3caf530b66f32ab06f3123465294cce0",
+          "ready": true,
+          "role": "frontend"
+        }
+      ],
+      "name": "astronomer-frontend-55d654dfb6-xp8c7",
+      "namespace": "astronomer",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/library/postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+          "ready": true,
+          "role": "postgres"
+        }
+      ],
+      "name": "astronomer-postgres-0",
+      "namespace": "astronomer",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/valkey/valkey@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507",
+          "ready": true,
+          "role": "redis"
+        }
+      ],
+      "name": "astronomer-redis-0",
+      "namespace": "astronomer",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+          "ready": true,
+          "role": "wait-postgres"
+        },
+        {
+          "imageID": "ghcr.io/alphabravo-oss/astronomer-go-migrate@sha256:9604f5db0e45ef8c8ff10c87eb82bb5ebbd907852c23da7b23f30df378a67ce5",
+          "ready": true,
+          "role": "migrate"
+        },
+        {
+          "imageID": "ghcr.io/alphabravo-oss/astronomer-go-server@sha256:48cce0e439e378f71377dc5b3ac8b407a50a8fd296bbf3f581587753f8bb3761",
+          "ready": true,
+          "role": "server"
+        }
+      ],
+      "name": "astronomer-server-687f748dcf-ph2ct",
+      "namespace": "astronomer",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+          "ready": true,
+          "role": "wait-postgres"
+        },
+        {
+          "imageID": "docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+          "ready": true,
+          "role": "wait-redis"
+        },
+        {
+          "imageID": "ghcr.io/alphabravo-oss/astronomer-go-worker@sha256:61e703c246520953e92bc488f9e561a6753634c71f80019dd5b0814e93f89665",
+          "ready": true,
+          "role": "worker"
+        }
+      ],
+      "name": "astronomer-worker-6d4bd44864-vl49r",
+      "namespace": "astronomer",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/jetstack/cert-manager-acmesolver@sha256:cfa55e9c3dcfc6a3cba97575748c1549b04a30fd14d88a2fcb9e2dddef415e2f",
+          "ready": false,
+          "role": "acmesolver"
+        }
+      ],
+      "name": "cm-acme-http-solver-2j22z",
+      "namespace": "astronomer",
+      "phase": "Succeeded"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/calico/kube-controllers@sha256:44acab15d22ed702aec4deca59bdc15fdddc1da49b865a370d3978fcf5730569",
+          "ready": true,
+          "role": "calico-kube-controllers"
+        }
+      ],
+      "name": "calico-kube-controllers-b54c49fbd-wwr2z",
+      "namespace": "calico-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/calico/pod2daemon-flexvol@sha256:b39582ca0014605e8887a70e2f2fb103c8149d28d1aa6482fb5589e3c7c06197",
+          "ready": true,
+          "role": "flexvol-driver"
+        },
+        {
+          "imageID": "docker.io/calico/cni@sha256:fb35441ca9be59ebc2a3a00e6951f879d0edbecb3c1314defa3c4e927f4628c1",
+          "ready": true,
+          "role": "install-cni"
+        },
+        {
+          "imageID": "docker.io/calico/node@sha256:a819b2cb3dbeaa3849e99f40a5af60641bedc4d063456a718ad089ef38250389",
+          "ready": true,
+          "role": "calico-node"
+        }
+      ],
+      "name": "calico-node-bpv5v",
+      "namespace": "calico-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/calico/typha@sha256:a850b03ff45c6f63f0f52a068e932595123dae422ae30c212a1e06072ce592c6",
+          "ready": true,
+          "role": "calico-typha"
+        }
+      ],
+      "name": "calico-typha-78bc7dd4d7-r5m78",
+      "namespace": "calico-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/calico/csi@sha256:390214ff47cee5cb4021f922225ca37a9a64a53833f8cad906997fb12c4937b4",
+          "ready": true,
+          "role": "calico-csi"
+        },
+        {
+          "imageID": "docker.io/calico/node-driver-registrar@sha256:c15fcc64ea239e0f5a0df9ca01a632c7fbcab93c77c228b5b517272ca7fef01d",
+          "ready": true,
+          "role": "csi-node-driver-registrar"
+        }
+      ],
+      "name": "csi-node-driver-6jf4m",
+      "namespace": "calico-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/jetstack/cert-manager-controller@sha256:fe0623d7d04a382c888f03343a3a2da716e0d96ad3d5d790c0ebcbcb2a4329a5",
+          "ready": true,
+          "role": "cert-manager-controller"
+        }
+      ],
+      "name": "cert-manager-5957746d66-978d5",
+      "namespace": "cert-manager",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/jetstack/cert-manager-controller@sha256:fe0623d7d04a382c888f03343a3a2da716e0d96ad3d5d790c0ebcbcb2a4329a5",
+          "ready": false,
+          "role": "cert-manager-controller"
+        }
+      ],
+      "name": "cert-manager-5957746d66-hcmnh",
+      "namespace": "cert-manager",
+      "phase": "Succeeded"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/jetstack/cert-manager-controller@sha256:fe0623d7d04a382c888f03343a3a2da716e0d96ad3d5d790c0ebcbcb2a4329a5",
+          "ready": false,
+          "role": "cert-manager-controller"
+        }
+      ],
+      "name": "cert-manager-5957746d66-l2q28",
+      "namespace": "cert-manager",
+      "phase": "Succeeded"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/jetstack/cert-manager-cainjector@sha256:6f5a644135887b2aa7d5cc145072fa56421560e3586ff1f184358022d490f4e1",
+          "ready": true,
+          "role": "cert-manager-cainjector"
+        }
+      ],
+      "name": "cert-manager-cainjector-567c6b47ff-jd4dn",
+      "namespace": "cert-manager",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/jetstack/cert-manager-cainjector@sha256:6f5a644135887b2aa7d5cc145072fa56421560e3586ff1f184358022d490f4e1",
+          "ready": false,
+          "role": "cert-manager-cainjector"
+        }
+      ],
+      "name": "cert-manager-cainjector-567c6b47ff-pm58f",
+      "namespace": "cert-manager",
+      "phase": "Succeeded"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/jetstack/cert-manager-cainjector@sha256:6f5a644135887b2aa7d5cc145072fa56421560e3586ff1f184358022d490f4e1",
+          "ready": false,
+          "role": "cert-manager-cainjector"
+        }
+      ],
+      "name": "cert-manager-cainjector-567c6b47ff-pn895",
+      "namespace": "cert-manager",
+      "phase": "Succeeded"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/jetstack/cert-manager-webhook@sha256:baf651128b9f05c426cbd5e60e2036bf382c99ca270f49d0757d6f7d2452f4e5",
+          "ready": false,
+          "role": "cert-manager-webhook"
+        }
+      ],
+      "name": "cert-manager-webhook-7cc5c588cb-fzzd5",
+      "namespace": "cert-manager",
+      "phase": "Succeeded"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/jetstack/cert-manager-webhook@sha256:baf651128b9f05c426cbd5e60e2036bf382c99ca270f49d0757d6f7d2452f4e5",
+          "ready": true,
+          "role": "cert-manager-webhook"
+        }
+      ],
+      "name": "cert-manager-webhook-7cc5c588cb-mkx55",
+      "namespace": "cert-manager",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "registry.k8s.io/ingress-nginx/controller@sha256:594ceea76b01c592858f803f9ff4d2cb40542cae2060410b2c95f75907d659e1",
+          "ready": true,
+          "role": "controller"
+        }
+      ],
+      "name": "ingress-nginx-controller-6c7cd85885-57x2r",
+      "namespace": "ingress-nginx",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/rancher/mirrored-coredns-coredns@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea",
+          "ready": true,
+          "role": "coredns"
+        }
+      ],
+      "name": "coredns-c5fdd76cf-278zd",
+      "namespace": "kube-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/rancher/local-path-provisioner@sha256:1eba82e9c386038b4af6d69cca7519fac738c28c42735ed48ce70c882ad0d80f",
+          "ready": true,
+          "role": "local-path-provisioner"
+        }
+      ],
+      "name": "local-path-provisioner-5d9d9885bc-s45g9",
+      "namespace": "kube-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/rancher/mirrored-metrics-server@sha256:d9862115e7c7881280d3d75ca26bda8ffc0fc213315979575bf23ce9826205c0",
+          "ready": true,
+          "role": "metrics-server"
+        }
+      ],
+      "name": "metrics-server-7f4b6d9bd7-9lrnf",
+      "namespace": "kube-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "docker.io/rancher/klipper-lb@sha256:910944bb0bd94f060a82a56ca1ea1c577d3e49b3473a093a47a985f32e92d94a",
+          "ready": true,
+          "role": "lb-tcp-443"
+        },
+        {
+          "imageID": "docker.io/rancher/klipper-lb@sha256:910944bb0bd94f060a82a56ca1ea1c577d3e49b3473a093a47a985f32e92d94a",
+          "ready": true,
+          "role": "lb-tcp-80"
+        }
+      ],
+      "name": "svclb-ingress-nginx-controller-d4e276fc-z6495",
+      "namespace": "kube-system",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/tigera/operator@sha256:fc9ea45f2475fd99db1b36d2ff180a50017b1a5ea0e82a171c6b439b3a620764",
+          "ready": false,
+          "role": "tigera-operator"
+        }
+      ],
+      "name": "tigera-operator-58986cfc84-76992",
+      "namespace": "tigera-operator",
+      "phase": "Succeeded"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/tigera/operator@sha256:fc9ea45f2475fd99db1b36d2ff180a50017b1a5ea0e82a171c6b439b3a620764",
+          "ready": true,
+          "role": "tigera-operator"
+        }
+      ],
+      "name": "tigera-operator-58986cfc84-d5tq9",
+      "namespace": "tigera-operator",
+      "phase": "Running"
+    },
+    {
+      "imageIDs": [
+        {
+          "imageID": "quay.io/tigera/operator@sha256:fc9ea45f2475fd99db1b36d2ff180a50017b1a5ea0e82a171c6b439b3a620764",
+          "ready": false,
+          "role": "tigera-operator"
+        }
+      ],
+      "name": "tigera-operator-58986cfc84-r2b9p",
+      "namespace": "tigera-operator",
+      "phase": "Succeeded"
+    }
+  ],
+  "repositories": [
+    {
+      "commit": "6c3da1882c76662f1b7e01e80f89f5e2978bc7b4",
+      "dirtyPaths": [
+        "M docs/architecture/README.md",
+        "?? deploy/cnpg_upgrade_contract_test.go",
+        "?? docs/assurance/technology-guide/"
+      ],
+      "owner": "integration reviewer",
+      "purpose": "application source",
+      "repository": "astronomer-032-w00"
+    },
+    {
+      "commit": "3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5",
+      "dirtyPaths": [],
+      "owner": "catalog/platform",
+      "purpose": "catalog producer",
+      "repository": "astronomer-catalog"
+    },
+    {
+      "commit": "0a19944a5a21bb193d3366d088b9bf0036de6d3b",
+      "dirtyPaths": [],
+      "owner": "qualification/platform",
+      "purpose": "supporting examples or qualification; not shipped application runtime",
+      "repository": "astronomer-examples"
+    },
+    {
+      "commit": "cec9f5e026b2a8f2ea7bae174d361ba86969e655",
+      "dirtyPaths": [
+        "M .env.example",
+        " M README.md",
+        " M scripts/adopt.sh",
+        " M scripts/lib.sh",
+        " M scripts/mint-token.sh",
+        " M scripts/up.sh",
+        " M scripts/validate.sh",
+        " M terraform/stacks/eks/main.tf",
+        " M terraform/stacks/hetzner/main.tf",
+        " M terraform/stacks/kind/main.tf",
+        "?? scripts/preflight.sh"
+      ],
+      "owner": "qualification/platform",
+      "purpose": "supporting examples or qualification; not shipped application runtime",
+      "repository": "astronomer-testbed"
+    },
+    {
+      "commit": "046992c8e96d199e9a71375deed359611aebb50b",
+      "dirtyPaths": [],
+      "owner": "qualification/platform",
+      "purpose": "supporting examples or qualification; not shipped application runtime",
+      "repository": "astronomer-full-test-iac"
+    }
+  ],
+  "rulesets": [],
+  "runtimeDriftFromPlan": [],
+  "schemaVersion": 1,
+  "sourceCommit": "6c3da1882c76662f1b7e01e80f89f5e2978bc7b4",
+  "tag": {
+    "commit": "a1fc7b5bbf62605ec770e12bda72f80e8f04c1ad",
+    "name": "v1.2.1"
+  },
+  "workloads": [
+    {
+      "desiredReplicas": 2,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "ghcr.io/fluxcd/helm-controller@sha256:0d52fff5c4d476277b8fcb6beb9041e269adb5db943fe69f5a806ea0c92b1511",
+          "role": "manager"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "helm-controller",
+      "namespace": "astronomer-delivery-system",
+      "ownerKinds": [],
+      "readyReplicas": 2,
+      "uid": "81dde4f8-baab-4ba6-94eb-53e0e12e4eb2"
+    },
+    {
+      "desiredReplicas": 2,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "ghcr.io/fluxcd/kustomize-controller@sha256:2ebeaa341da77d52b6abbbba5efcee0450d47f8b42f0e6f33b08f9020262d606",
+          "role": "manager"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "kustomize-controller",
+      "namespace": "astronomer-delivery-system",
+      "ownerKinds": [],
+      "readyReplicas": 2,
+      "uid": "98c8a33f-8a6c-4dd1-8425-30810d3d7066"
+    },
+    {
+      "desiredReplicas": 2,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "ghcr.io/fluxcd/source-controller@sha256:6a6693172589f8ff26123a231d5fa6ceb194a6efb4dc647cdf057c959f76a2e3",
+          "role": "manager"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "source-controller",
+      "namespace": "astronomer-delivery-system",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "c2bc4e75-2ca2-4769-a74e-9dc79e68721f"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer-monitoring",
+      "images": [
+        {
+          "containerKind": "initContainers",
+          "reference": "quay.io/kiwigrid/k8s-sidecar:1.26.1",
+          "role": "grafana-init-sc-datasources"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/kiwigrid/k8s-sidecar:1.26.1",
+          "role": "grafana-sc-dashboard"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "docker.io/grafana/grafana:11.1.0",
+          "role": "grafana"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "ghcr.io/alphabravo-oss/astronomer-go-server@sha256:48cce0e439e378f71377dc5b3ac8b407a50a8fd296bbf3f581587753f8bb3761",
+          "role": "astronomer-grafana-proxy"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "astronomer-monitoring-grafana",
+      "namespace": "astronomer-monitoring",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "fe03162e-3959-42c5-9f4d-fe6f14a2eaec"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer-monitoring",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/prometheus-operator/prometheus-operator:v0.75.1",
+          "role": "kube-prometheus-stack"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "astronomer-monitoring-kube-operator",
+      "namespace": "astronomer-monitoring",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "a6f74f4a-a5dc-4daa-a045-ce3bd67999c8"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer-monitoring",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b",
+          "role": "kube-state-metrics"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "astronomer-monitoring-kube-state-metrics",
+      "namespace": "astronomer-monitoring",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "ab5a9444-dea7-4d42-ba24-8b38713854d5"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "kube-state-metrics",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b",
+          "role": "kube-state-metrics"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "kube-state-metrics",
+      "namespace": "astronomer-monitoring",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "d58e7f93-b90a-4a18-9ac0-520cc01fba5a"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "trivy-operator",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "mirror.gcr.io/aquasec/trivy-operator:0.35.0@sha256:4cdb11af98ff409cfa7af980098203a841a5fe957cc6a0bbb0df7668065eb5fa",
+          "role": "trivy-operator"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "trivy-operator",
+      "namespace": "astronomer-trivy-system",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "4460bf2f-b3d0-42b7-a058-a8d6257b33a4"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "ghcr.io/alphabravo-oss/astronomer-frontend@sha256:9ba2344266ce9833354bbee6397c512f3caf530b66f32ab06f3123465294cce0",
+          "role": "frontend"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "astronomer-frontend",
+      "namespace": "astronomer",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "f3ea3661-acd7-4899-bf2a-8d110290f588"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer",
+      "images": [
+        {
+          "containerKind": "initContainers",
+          "reference": "docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+          "role": "wait-postgres"
+        },
+        {
+          "containerKind": "initContainers",
+          "reference": "ghcr.io/alphabravo-oss/astronomer-go-migrate@sha256:9604f5db0e45ef8c8ff10c87eb82bb5ebbd907852c23da7b23f30df378a67ce5",
+          "role": "migrate"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "ghcr.io/alphabravo-oss/astronomer-go-server@sha256:48cce0e439e378f71377dc5b3ac8b407a50a8fd296bbf3f581587753f8bb3761",
+          "role": "server"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "astronomer-server",
+      "namespace": "astronomer",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "08d984dd-652c-4afb-b497-419d00a6dceb"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer",
+      "images": [
+        {
+          "containerKind": "initContainers",
+          "reference": "docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+          "role": "wait-postgres"
+        },
+        {
+          "containerKind": "initContainers",
+          "reference": "docker.io/library/busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
+          "role": "wait-redis"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "ghcr.io/alphabravo-oss/astronomer-go-worker@sha256:61e703c246520953e92bc488f9e561a6753634c71f80019dd5b0814e93f89665",
+          "role": "worker"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "astronomer-worker",
+      "namespace": "astronomer",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "c624e027-1efe-43d3-8ddf-bd644c7fd1f8"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "docker.io/calico/kube-controllers:v3.29.1",
+          "role": "calico-kube-controllers"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "calico-kube-controllers",
+      "namespace": "calico-system",
+      "ownerKinds": [
+        "Installation"
+      ],
+      "readyReplicas": 1,
+      "uid": "d67a82e2-a1db-424e-a150-9fc576da022d"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "docker.io/calico/typha:v3.29.1",
+          "role": "calico-typha"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "calico-typha",
+      "namespace": "calico-system",
+      "ownerKinds": [
+        "Installation"
+      ],
+      "readyReplicas": 1,
+      "uid": "d601aba7-d99f-4270-a82d-384b1356a84c"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "cert-manager",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/jetstack/cert-manager-controller:v1.20.2",
+          "role": "cert-manager-controller"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "cert-manager",
+      "namespace": "cert-manager",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "7a59efd4-374d-46b8-9d77-3f22b4a698e8"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "cert-manager",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/jetstack/cert-manager-cainjector:v1.20.2",
+          "role": "cert-manager-cainjector"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "cert-manager-cainjector",
+      "namespace": "cert-manager",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "a95abaa0-4bc1-42d0-9f16-4954ea3bcabb"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "cert-manager",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/jetstack/cert-manager-webhook:v1.20.2",
+          "role": "cert-manager-webhook"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "cert-manager-webhook",
+      "namespace": "cert-manager",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "43bb2501-15d5-4da6-b110-651df36cf24e"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "ingress-nginx",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "registry.k8s.io/ingress-nginx/controller:v1.15.1@sha256:594ceea76b01c592858f803f9ff4d2cb40542cae2060410b2c95f75907d659e1",
+          "role": "controller"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "ingress-nginx-controller",
+      "namespace": "ingress-nginx",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "7c74e07b-02d4-446c-91dc-b291bec0dd07"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "rancher/mirrored-coredns-coredns:1.14.6",
+          "role": "coredns"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "coredns",
+      "namespace": "kube-system",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "75f50d72-8556-4562-9613-8499bc1d196e"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "rancher/local-path-provisioner:v0.0.36",
+          "role": "local-path-provisioner"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "local-path-provisioner",
+      "namespace": "kube-system",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "82218e7e-bddc-4b9c-8f46-515337c670e2"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "rancher/mirrored-metrics-server:v0.9.0",
+          "role": "metrics-server"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "metrics-server",
+      "namespace": "kube-system",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "80d8966d-96a1-4d15-8871-0114cc238ec5"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/tigera/operator:v1.36.2",
+          "role": "tigera-operator"
+        }
+      ],
+      "kind": "Deployment",
+      "name": "tigera-operator",
+      "namespace": "tigera-operator",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "417f9530-1cd6-49b8-be10-0c148b64ba37"
+    },
+    {
+      "desiredReplicas": 2,
+      "helmRelease": "charlie-agent",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "charlie.dev.alphabravo.io/charlie/agent@sha256:d57e7d65ec5b489429ce3045cce9c573316cbae334ead019af1b28d7b8be9b61",
+          "role": "agent"
+        }
+      ],
+      "kind": "StatefulSet",
+      "name": "charlie-agent",
+      "namespace": "astronomer-charlie",
+      "ownerKinds": [],
+      "readyReplicas": 0,
+      "uid": "e9fc1390-bd4e-443d-9569-1d0b35fdadca"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer-monitoring",
+      "images": [
+        {
+          "containerKind": "initContainers",
+          "reference": "quay.io/prometheus-operator/prometheus-config-reloader:v0.75.1",
+          "role": "init-config-reloader"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/prometheus/alertmanager:v0.27.0",
+          "role": "alertmanager"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/prometheus-operator/prometheus-config-reloader:v0.75.1",
+          "role": "config-reloader"
+        }
+      ],
+      "kind": "StatefulSet",
+      "name": "alertmanager-astronomer-monitoring-kube-alertmanager",
+      "namespace": "astronomer-monitoring",
+      "ownerKinds": [
+        "Alertmanager"
+      ],
+      "readyReplicas": 1,
+      "uid": "9a7c4f71-ad07-453f-9f48-df72c05eddac"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer-monitoring",
+      "images": [
+        {
+          "containerKind": "initContainers",
+          "reference": "quay.io/prometheus-operator/prometheus-config-reloader:v0.75.1",
+          "role": "init-config-reloader"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/prometheus/prometheus:v2.53.1",
+          "role": "prometheus"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/prometheus-operator/prometheus-config-reloader:v0.75.1",
+          "role": "config-reloader"
+        }
+      ],
+      "kind": "StatefulSet",
+      "name": "prometheus-astronomer-monitoring-kube-prometheus",
+      "namespace": "astronomer-monitoring",
+      "ownerKinds": [
+        "Prometheus"
+      ],
+      "readyReplicas": 1,
+      "uid": "ceef83eb-3736-41e8-ab9f-94bb37c4a72e"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "docker.io/library/postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+          "role": "postgres"
+        }
+      ],
+      "kind": "StatefulSet",
+      "name": "astronomer-postgres",
+      "namespace": "astronomer",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "017d1034-2674-4011-9caf-d8af9fe34df0"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "docker.io/valkey/valkey@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507",
+          "role": "redis"
+        }
+      ],
+      "kind": "StatefulSet",
+      "name": "astronomer-redis",
+      "namespace": "astronomer",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "aa9c9e87-0c0e-442a-b415-fe230e6fab69"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "astronomer-monitoring",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
+          "role": "node-exporter"
+        }
+      ],
+      "kind": "DaemonSet",
+      "name": "astronomer-monitoring-prometheus-node-exporter",
+      "namespace": "astronomer-monitoring",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "ddfaa5cd-15a1-48ee-a3cc-62461a945005"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": "prometheus-node-exporter",
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "quay.io/prometheus/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
+          "role": "node-exporter"
+        }
+      ],
+      "kind": "DaemonSet",
+      "name": "prometheus-node-exporter",
+      "namespace": "astronomer-monitoring",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "d655d981-fcff-48f0-8e63-0925071fddfe"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "initContainers",
+          "reference": "docker.io/calico/pod2daemon-flexvol:v3.29.1",
+          "role": "flexvol-driver"
+        },
+        {
+          "containerKind": "initContainers",
+          "reference": "docker.io/calico/cni:v3.29.1",
+          "role": "install-cni"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "docker.io/calico/node:v3.29.1",
+          "role": "calico-node"
+        }
+      ],
+      "kind": "DaemonSet",
+      "name": "calico-node",
+      "namespace": "calico-system",
+      "ownerKinds": [
+        "Installation"
+      ],
+      "readyReplicas": 1,
+      "uid": "dbcce417-9e39-4891-9a99-b7948cf0dd5e"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "docker.io/calico/csi:v3.29.1",
+          "role": "calico-csi"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "docker.io/calico/node-driver-registrar:v3.29.1",
+          "role": "csi-node-driver-registrar"
+        }
+      ],
+      "kind": "DaemonSet",
+      "name": "csi-node-driver",
+      "namespace": "calico-system",
+      "ownerKinds": [
+        "Installation"
+      ],
+      "readyReplicas": 1,
+      "uid": "632ed539-902e-457e-9fbb-62160500bfbc"
+    },
+    {
+      "desiredReplicas": 1,
+      "helmRelease": null,
+      "images": [
+        {
+          "containerKind": "containers",
+          "reference": "rancher/klipper-lb:v0.4.17",
+          "role": "lb-tcp-80"
+        },
+        {
+          "containerKind": "containers",
+          "reference": "rancher/klipper-lb:v0.4.17",
+          "role": "lb-tcp-443"
+        }
+      ],
+      "kind": "DaemonSet",
+      "name": "svclb-ingress-nginx-controller-d4e276fc",
+      "namespace": "kube-system",
+      "ownerKinds": [],
+      "readyReplicas": 1,
+      "uid": "19f4b156-a4e7-4919-8525-4ce90916c1b2"
+    }
+  ]
+}
