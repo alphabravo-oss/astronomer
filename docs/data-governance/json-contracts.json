@@ -22408,11 +22408,11 @@
     {
       "path": "internal/delivery/resolver/oci.go",
       "function": "fetchCosignEvidence",
-      "operation": "json.NewDecoder",
-      "arguments": ["bytes.NewReader(manifestBytes)"],
+      "operation": "jsoncontract.Decode",
+      "arguments": ["manifestBytes", "&manifest"],
       "owner": "/delivery/resolver",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+      "schema": "OCI image manifest used for signed Cosign evidence",
+      "reader_behavior": "Canonical bounded JSON rejects duplicate keys, depth and trailing input before manifest digest/descriptor validation; typed error, no evidence accepted"
     },
     {
       "path": "internal/delivery/resolver/oci.go",
@@ -29900,6 +29900,15 @@
       "owner": "delivery/builtinbundles",
       "schema": "Owned embedded or supplied builtinbundles.Catalog release input",
       "reader_behavior": "Legacy DisallowUnknownFields plus EOF and Catalog.Validate; raw syntax error wrapped, duplicate keys/depth not independently rejected here. Supplied tooling file bytes are bounded; release catalog is source-owned. Inventory does not claim this older reader has canonical duplicate/depth behavior"
+    },
+    {
+      "path": "internal/delivery/resolver/oci.go",
+      "function": "simpleSigningClaimsDigest",
+      "operation": "jsoncontract.Decode",
+      "arguments": ["payload", "&document"],
+      "owner": "/delivery/resolver",
+      "schema": "Cosign simple-signing JSON; vendor identity and optional fields remain additive",
+      "reader_behavior": "Canonical bounded JSON rejects duplicate keys, depth and trailing input before existing partial claims reader binds image digest/type; unknown vendor fields preserved"
     }
   ]
 }
