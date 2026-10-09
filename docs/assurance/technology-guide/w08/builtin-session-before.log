@@ -1,0 +1,6 @@
+=== RUN   TestPostgresBuiltinCanceledTransactionReleasesSessionLock
+    session_postgres_test.go:81: canceled built-in transaction leaked session lock
+--- FAIL: TestPostgresBuiltinCanceledTransactionReleasesSessionLock (0.08s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/delivery/builtin	0.106s
+FAIL
