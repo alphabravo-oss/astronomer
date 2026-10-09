@@ -10,8 +10,8 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 - Frontend source files: 1255
 - Frontend source lines: 231677
-- Go source files under `internal/` excluding generated sqlc and tests: 983
-- Go source files scanned for sqlc query references excluding generated sqlc: 2180
+- Go source files under `internal/` excluding generated sqlc and tests: 986
+- Go source files scanned for sqlc query references excluding generated sqlc: 2194
 - sqlc query declarations: 1267
 - Component files scanned: 456
 - Helm top-level values scanned: 35
@@ -99,7 +99,7 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `canonicalCandidates` in [`internal/delivery/placement/placement.go:412`](internal/delivery/placement/placement.go:412), [`internal/delivery/rollout/cohorts.go:85`](internal/delivery/rollout/cohorts.go:85)
 - `cloneStringMap` in [`internal/delivery/model/placement.go:193`](internal/delivery/model/placement.go:193), [`internal/delivery/placement/placement.go:557`](internal/delivery/placement/placement.go:557)
 - `contains` in [`internal/delivery/placement/placement.go:565`](internal/delivery/placement/placement.go:565), [`internal/server/vault_observer.go:108`](internal/server/vault_observer.go:108)
-- `containsControl` in [`internal/delivery/model/types.go:641`](internal/delivery/model/types.go:641), [`internal/handler/delivery/common.go:282`](internal/handler/delivery/common.go:282)
+- `containsControl` in [`internal/delivery/model/types.go:641`](internal/delivery/model/types.go:641), [`internal/handler/delivery/common.go:277`](internal/handler/delivery/common.go:277)
 - `containsString` in [`internal/agent/delivery/validator.go:454`](internal/agent/delivery/validator.go:454), [`internal/charlie/capability_schema.go:357`](internal/charlie/capability_schema.go:357)
 - `decisionDigest` in [`internal/delivery/rollout/scheduler.go:572`](internal/delivery/rollout/scheduler.go:572), [`internal/delivery/systemrollout/service.go:731`](internal/delivery/systemrollout/service.go:731)
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
@@ -108,7 +108,7 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `defaultString` in [`internal/handler/resource_presenters.go:703`](internal/handler/resource_presenters.go:703), [`internal/helmruntime/config.go:109`](internal/helmruntime/config.go:109)
 - `denied` in [`internal/charlie/action_guard.go:806`](internal/charlie/action_guard.go:806), [`internal/delivery/resolver/network.go:186`](internal/delivery/resolver/network.go:186)
 - `digestBytes` in [`internal/charlie/action_guard.go:801`](internal/charlie/action_guard.go:801), [`internal/delivery/resolver/service.go:171`](internal/delivery/resolver/service.go:171)
-- `ensureJSONEOF` in [`internal/handler/validate.go:103`](internal/handler/validate.go:103), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
+- `ensureJSONEOF` in [`internal/handler/validate.go:105`](internal/handler/validate.go:105), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
 - `intValue` in [`internal/controlplane/service.go:177`](internal/controlplane/service.go:177), [`internal/handler/resource_presenters.go:598`](internal/handler/resource_presenters.go:598)
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
 - `isUniqueViolation` in [`internal/handler/cluster_templates_registry.go:336`](internal/handler/cluster_templates_registry.go:336), [`internal/projects/service.go:571`](internal/projects/service.go:571)
