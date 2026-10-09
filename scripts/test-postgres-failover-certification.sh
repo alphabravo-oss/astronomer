@@ -216,6 +216,7 @@ done
 image_id="$(docker image inspect "$postgres_image" --format '{{.Id}}')"
 source_commit="$(git rev-parse HEAD 2>/dev/null || printf unknown)"
 
+export POSTGRES_QUALIFICATION_MAJOR="$qualification_postgres_major"
 export ASTRONOMER_POSTGRES_FAILOVER_PRIMARY_URL="$primary_url"
 export ASTRONOMER_POSTGRES_FAILOVER_REPLICA_URL="$replica_url"
 export ASTRONOMER_POSTGRES_FAILOVER_PRIMARY_CONTAINER="$primary_container"
