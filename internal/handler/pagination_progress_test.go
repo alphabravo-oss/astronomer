@@ -33,6 +33,18 @@ func TestCatalogPaginationCeilingMustProgressOrReject(t *testing.T) {
 	second := httptest.NewRecorder()
 	h.ListCharts(second, httptest.NewRequest("GET", fmt.Sprintf("/api/v1/catalog/charts/?limit=20&offset=%d", *page.Pagination.NextOffset), nil))
 	if second.Code == 400 {
+		var rejection struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(second.Body.Bytes(), &rejection); err != nil {
+			t.Fatal(err)
+		}
+		if rejection.Error.Code != "offset_not_supported" || rejection.Error.Message == "" {
+			t.Fatalf("wrong rejection: %s", second.Body.String())
+		}
 		return
 	}
 	var next paging.Response[sqlc.HelmChart]
@@ -41,5 +53,17 @@ func TestCatalogPaginationCeilingMustProgressOrReject(t *testing.T) {
 	}
 	if second.Code != 200 || len(next.Data) == 0 || next.Data[0].ID == page.Data[0].ID {
 		t.Fatalf("accepted continuation repeated ceiling page: status%d first=%s next=%s", second.Code, page.Data[0].Name, next.Data[0].Name)
+	}
+}
+
+func TestCatalogPaginationRejectsUnsupportedOffsetBeforeQuery(t *testing.T) {
+	q := &recordingChartSearchQuerier{clusterCatalogQuerier: &clusterCatalogQuerier{minimalCatalogQuerier: &minimalCatalogQuerier{fakeProjectCatalogQuerier: newFakeProjectCatalogQuerier()}}}
+	h := NewCatalogHandler(q)
+	for _, query := range []string{"offset=10020", "offset=18446744073709551615", "offset=1&offset=2", "cursor=foreign"} {
+		response := httptest.NewRecorder()
+		h.ListCharts(response, httptest.NewRequest("GET", "/api/v1/catalog/charts/?"+query, nil))
+		if response.Code != 400 || q.calls != 0 {
+			t.Fatalf("query%s status%d SQLcalls%d", query, response.Code, q.calls)
+		}
 	}
 }

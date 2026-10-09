@@ -82,6 +82,10 @@ func (h *ProjectHandler) projectNavigationResponses(ctx context.Context, project
 }
 
 func (h *ProjectHandler) ListByCluster(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return

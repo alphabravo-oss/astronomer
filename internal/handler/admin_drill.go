@@ -203,6 +203,10 @@ func (h *AdminDrillHandler) GetLatest(w http.ResponseWriter, r *http.Request) {
 
 // ListHistory handles GET /api/v1/admin/backup-drill/history/.
 func (h *AdminDrillHandler) ListHistory(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}

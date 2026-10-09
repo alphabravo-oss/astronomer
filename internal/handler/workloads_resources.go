@@ -25,6 +25,10 @@ import (
 )
 
 func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterUUID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -99,6 +103,10 @@ func layerNamespaceUsage(items []map[string]any, snapshot clustermetrics.Snapsho
 }
 
 func (h *WorkloadHandler) ListNodes(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterUUID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -131,6 +139,10 @@ func (h *WorkloadHandler) GetNode(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterUUID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -304,6 +316,10 @@ func sortPodItems(items []map[string]any, order string) {
 }
 
 func (h *WorkloadHandler) ListWorkloadPods(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterUUID, ok := parseClusterID(w, r)
 	if !ok {
 		return

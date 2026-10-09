@@ -20,6 +20,10 @@ import (
 )
 
 func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 	search := strings.TrimSpace(r.URL.Query().Get("search"))

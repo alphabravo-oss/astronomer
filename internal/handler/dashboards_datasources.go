@@ -16,6 +16,10 @@ import (
 )
 
 func (h *DashboardHandler) AdminListDatasources(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if !h.gate(w, r) {
 		return
 	}

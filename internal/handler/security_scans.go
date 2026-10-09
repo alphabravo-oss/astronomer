@@ -62,6 +62,10 @@ func (h *SecurityHandler) publishCISScanChanged(clusterID, scanID uuid.UUID) {
 
 // ListScans handles GET /api/v1/clusters/{cluster_id}/security/scans/.
 func (h *SecurityHandler) ListScans(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -184,6 +188,10 @@ func (h *SecurityHandler) CancelScan(w http.ResponseWriter, r *http.Request) {
 
 // ListAllScans handles GET /api/v1/security/scans/.
 func (h *SecurityHandler) ListAllScans(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := int32(queryLimit(r, 20))
 	offset := int32(queryOffset(r))
 	all, clusterIDs, err := h.securityScanVisibility(r.Context())

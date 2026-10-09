@@ -31,6 +31,10 @@ type installedChartScopedPager interface {
 
 // ListInstallations handles GET /api/v1/clusters/{cluster_id}/installations/.
 func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -351,6 +355,10 @@ func (h *CatalogHandler) DeleteInstalledChart(w http.ResponseWriter, r *http.Req
 
 // ListInstalledCharts handles GET /api/v1/catalog/installed/.
 func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterIDStr := r.URL.Query().Get("cluster_id")
 	if clusterIDStr != "" {
 		ctx := chi.NewRouteContext()

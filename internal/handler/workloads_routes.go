@@ -21,6 +21,10 @@ import (
 )
 
 func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterUUID, ok := parseClusterID(w, r)
 	if !ok {
 		return
@@ -229,6 +233,10 @@ func (h *WorkloadHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.WorkloadError, "workload store not configured")
 		return

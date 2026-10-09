@@ -160,6 +160,10 @@ func auditLogToResponse(a sqlc.AuditLog) AuditLogResponse {
 // action, action_class, audience (people|system|all), result, correlation_id,
 // request_id, cluster_id, project_id, from, and to.
 func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	limit := auditQueryLimit(r)
 	offset := int32(queryOffset(r))
 	filter, filterErr := auditFilterFromRequest(r, limit, offset)

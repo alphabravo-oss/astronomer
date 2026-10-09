@@ -63,6 +63,10 @@ func (h *AnomalyHandler) SetAuthorization(engine *rbac.Engine, querier rbac.Bind
 // Supports ?clusterId= to scope the listing to one cluster. The
 // default is all baselines, sorted by most-recently-updated.
 func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if h == nil || h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "anomaly baseline querier not configured")
 		return

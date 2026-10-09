@@ -463,6 +463,10 @@ func (h *ApiserverAllowlistHandler) enqueueDurableReconcile(r *http.Request, q t
 
 // Snapshots handles GET /clusters/{cluster_id}/apiserver-allowlist/snapshots/.
 func (h *ApiserverAllowlistHandler) Snapshots(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return

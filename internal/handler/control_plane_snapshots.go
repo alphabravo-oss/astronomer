@@ -330,6 +330,10 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 // via ?limit= (default 50, max 200) and ?offset=. The DB is the source
 // of truth — we never re-poll the member cluster on list.
 func (h *ControlPlaneSnapshotHandler) ListSnapshots(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return

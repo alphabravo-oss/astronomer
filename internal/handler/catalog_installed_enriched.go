@@ -34,6 +34,10 @@ import (
 // LEFT-joined chart metadata. Tool installs (chart_version_id NULL)
 // come back with empty chart_* fields and a non-empty tool_slug.
 func (h *CatalogHandler) ListClusterApps(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return

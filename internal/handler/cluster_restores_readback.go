@@ -22,6 +22,10 @@ type clusterRestorePager interface {
 // Restore records belong to the target cluster. Source snapshot contents remain
 // behind the source cluster's own read gate, applied before pagination.
 func (h *ClusterSnapshotsHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	clusterID, ok := parseClusterID(w, r)
 	if !ok {
 		return

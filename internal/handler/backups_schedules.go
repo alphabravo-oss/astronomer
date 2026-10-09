@@ -17,6 +17,10 @@ import (
 
 // ListSchedules handles GET /api/v1/backups/schedules/.
 func (h *BackupHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	allow, restricted, ok := h.authz.resourceScopeFilter(w, r, rbac.ResourceBackups, rbac.VerbRead)
 	if !ok {
 		return

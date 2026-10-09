@@ -239,6 +239,10 @@ func (h *NativeRBACHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // List returns rules, optionally filtered by ?userId=. GET /native-rbac-rules/
 func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	if uid := strings.TrimSpace(r.URL.Query().Get("userId")); uid != "" {
 		userID, err := uuid.Parse(uid)
 		if err != nil {

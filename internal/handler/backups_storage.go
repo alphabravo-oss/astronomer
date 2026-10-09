@@ -18,6 +18,10 @@ import (
 
 // ListStorageConfigs handles GET /api/v1/backups/storage/.
 func (h *BackupHandler) ListStorageConfigs(w http.ResponseWriter, r *http.Request) {
+	if !validateLegacyPage(w, r) {
+		return
+	}
+
 	allow, restricted, ok := h.authz.resourceScopeFilter(w, r, rbac.ResourceBackups, rbac.VerbRead)
 	if !ok {
 		return
