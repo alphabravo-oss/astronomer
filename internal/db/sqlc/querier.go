@@ -71,6 +71,7 @@ type Querier interface {
 	BatchUpsertPlatformSettings(ctx context.Context, arg BatchUpsertPlatformSettingsParams) ([]PlatformSetting, error)
 	BindCharlieSessionCentralID(ctx context.Context, arg BindCharlieSessionCentralIDParams) (CharlieSession, error)
 	BindCharlieSessionThread(ctx context.Context, arg BindCharlieSessionThreadParams) (CharlieSession, error)
+	BuiltinCatalogSourceMatches(ctx context.Context, arg BuiltinCatalogSourceMatchesParams) (bool, error)
 	// Multi-row insert for repo-index ingest. Rows arrive as a JSON array
 	// (jsonb_to_recordset) so a whole chart's versions land in one query
 	// instead of one INSERT per version. ON CONFLICT DO NOTHING makes the
@@ -753,6 +754,11 @@ type Querier interface {
 	// enqueue but before acknowledgement can safely replay without producing a
 	// duplicate destination row.
 	EnqueueSIEMEventDeduped(ctx context.Context, arg EnqueueSIEMEventDedupedParams) (SiemForwardQueue, error)
+	EnsureBuiltinCatalogSource(ctx context.Context, arg EnsureBuiltinCatalogSourceParams) error
+	EnsureBuiltinComponentBundle(ctx context.Context, arg EnsureBuiltinComponentBundleParams) error
+	EnsureBuiltinComponentTarget(ctx context.Context, arg EnsureBuiltinComponentTargetParams) (int64, error)
+	EnsureBuiltinComponentVersion(ctx context.Context, arg EnsureBuiltinComponentVersionParams) error
+	EnsureBuiltinSystemProject(ctx context.Context, arg EnsureBuiltinSystemProjectParams) error
 	EnsureCatalogApplicationBundle(ctx context.Context, arg EnsureCatalogApplicationBundleParams) error
 	EnsureCatalogApplicationBundleVersion(ctx context.Context, arg EnsureCatalogApplicationBundleVersionParams) error
 	EnsureCatalogApplicationSource(ctx context.Context, arg EnsureCatalogApplicationSourceParams) error
@@ -825,6 +831,16 @@ type Querier interface {
 	GetBackupScheduleByID(ctx context.Context, id uuid.UUID) (BackupSchedule, error)
 	// Backup Storage Configs
 	GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (BackupStorageConfig, error)
+	GetBuiltinComponentBundleProject(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	GetBuiltinComponentVersionIdentity(ctx context.Context, id uuid.UUID) (GetBuiltinComponentVersionIdentityRow, error)
+	GetBuiltinLatestTargetRollout(ctx context.Context, targetID uuid.UUID) (GetBuiltinLatestTargetRolloutRow, error)
+	// Builtin assets require a session lock on the checked-out connection before
+	// Serializable begins. Generated lock/unlock methods must use that same
+	// connection; asset methods use its existing transaction.
+	GetBuiltinRegistrationState(ctx context.Context, id uuid.UUID) (GetBuiltinRegistrationStateRow, error)
+	GetBuiltinRolloutAttempt(ctx context.Context, targetID uuid.UUID) (GetBuiltinRolloutAttemptRow, error)
+	GetBuiltinSystemProjectIdentity(ctx context.Context, id uuid.UUID) (GetBuiltinSystemProjectIdentityRow, error)
+	GetBuiltinTargetDeployment(ctx context.Context, arg GetBuiltinTargetDeploymentParams) (GetBuiltinTargetDeploymentRow, error)
 	GetCatalogApplicationDeletionStatus(ctx context.Context, id uuid.UUID) (string, error)
 	GetCatalogApplicationDeploymentStatus(ctx context.Context, id uuid.UUID) (GetCatalogApplicationDeploymentStatusRow, error)
 	GetCatalogApplicationRollbackRevision(ctx context.Context, arg GetCatalogApplicationRollbackRevisionParams) (uuid.UUID, error)
@@ -1959,6 +1975,7 @@ type Querier interface {
 	ListWidgetsForScope(ctx context.Context, arg ListWidgetsForScopeParams) ([]DashboardWidget, error)
 	ListWorkloadOperationEvents(ctx context.Context, operationID uuid.UUID) ([]WorkloadOperationEvent, error)
 	ListWorkloadOperations(ctx context.Context, arg ListWorkloadOperationsParams) ([]WorkloadOperation, error)
+	LockBuiltinAssetsSession(ctx context.Context, clusterID string) error
 	LockCharlieConnectionActivation(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error)
 	// Trusted startup release bootstrap. Every call is bound to the same existing
 	// Serializable transaction; the advisory lock is transaction-scoped.
@@ -2345,6 +2362,7 @@ type Querier interface {
 	TransitionClusterDeploymentCAS(ctx context.Context, arg TransitionClusterDeploymentCASParams) (ClusterDeployment, error)
 	TransitionDeliveryRolloutCAS(ctx context.Context, arg TransitionDeliveryRolloutCASParams) (DeliveryRollout, error)
 	UnassignClusterGroup(ctx context.Context, id uuid.UUID) error
+	UnlockBuiltinAssetsSession(ctx context.Context, clusterID string) (bool, error)
 	UnlockUser(ctx context.Context, id uuid.UUID) error
 	// Best-effort stamp written from the auth middleware on every successful
 	// API-token request. The handler ignores write errors — this column is

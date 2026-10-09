@@ -1,0 +1,3 @@
+go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
+python3 ./scripts/generate-sqlc-extensions.py write
+sqlc-extensions: generated 28 isolated extensions
