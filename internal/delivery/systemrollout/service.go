@@ -616,12 +616,6 @@ func releaseNextCohort(ctx context.Context, tx pgx.Tx, id uuid.UUID, now time.Ti
 	return int32(tag.RowsAffected()), nil
 }
 
-// systemReleaseSlots is the hard forward-rollout safety budget. A released or
-// applying assignment reserves both a concurrency slot and an unavailable
-// slot until it reports Ready. Failed assignments keep consuming availability,
-// preventing a controller from compounding an outage below the configured
-// failure threshold.
-
 func rollbackComplete(current counts) bool {
 	return current.rollbackFailed == 0 && current.rollbackTargets > 0 && current.rolledBack == current.rollbackTargets
 }
