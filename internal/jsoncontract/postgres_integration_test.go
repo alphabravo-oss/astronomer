@@ -32,6 +32,15 @@ func postgresJSONFixture(t *testing.T) *pgx.Conn {
 	return conn
 }
 
+func rollbackJSONFixture(t *testing.T, tx pgx.Tx) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		t.Error("JSON fixture rollback failed")
+	}
+}
+
 func TestPostgresDurableJSONNestedNewWritesAndLegacyArrays(t *testing.T) {
 	conn := postgresJSONFixture(t)
 	for _, item := range []struct {
@@ -51,7 +60,7 @@ func TestPostgresDurableJSONNestedNewWritesAndLegacyArrays(t *testing.T) {
 			if err != nil {
 				t.Fatal("begin fixture failed")
 			}
-			defer tx.Rollback(context.Background())
+			defer rollbackJSONFixture(t, tx)
 			_, err = tx.Exec(t.Context(), `INSERT INTO public.alert_inhibitions (id,name,source_matchers,target_matchers,equal_labels) VALUES ($1,'synthetic',$2::jsonb,$3::jsonb,$4::jsonb)`, uuid.New(), item.source, item.target, item.equal)
 			if item.valid {
 				if err != nil {
@@ -87,7 +96,7 @@ func TestPostgresTaskPayloadSchemaMatchesV1Adapter(t *testing.T) {
 			t.Fatal("begin fixture failed")
 		}
 		_, err = tx.Exec(t.Context(), `INSERT INTO public.task_outbox (id,task_type,payload) VALUES ($1,'synthetic:work',$2)`, uuid.New(), raw)
-		_ = tx.Rollback(context.Background())
+		rollbackJSONFixture(t, tx)
 		if accepted && err != nil {
 			t.Fatal("valid task write failed")
 		}
@@ -106,7 +115,7 @@ func TestPostgresDurableJSONExpandPreservesCorruptHistoricalRows(t *testing.T) {
 	if err != nil {
 		t.Fatal("begin fixture failed")
 	}
-	defer tx.Rollback(context.Background())
+	defer rollbackJSONFixture(t, tx)
 	var definition string
 	if err := tx.QueryRow(t.Context(), `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='public.alert_inhibitions'::regclass AND conname='alert_inhibitions_nested_v1' AND NOT convalidated`).Scan(&definition); err != nil {
 		t.Fatal("expand constraint must exist without validating historical rows")
@@ -167,7 +176,7 @@ func TestPostgresIntegrityAuditDedupeUsesExistingOutbox(t *testing.T) {
 	if err != nil {
 		t.Fatal("begin fixture failed")
 	}
-	defer tx.Rollback(context.Background())
+	defer rollbackJSONFixture(t, tx)
 	q := sqlc.New(tx)
 	key := "synthetic-integrity:" + uuid.NewString()
 	event := audit.Event{Action: "alert.inhibition.integrity_failure", ResourceType: "alert_inhibition", ResourceID: uuid.NewString(), Detail: map[string]any{"category": "equal_labels:invalid_item", "schema_version": 1}}

@@ -18,7 +18,8 @@ func TLSForCA(filename string) (*tls.Config, error) {
 	if err != nil {
 		return nil, errors.New("destination CA file is unavailable")
 	}
-	defer file.Close()
+	// Read-only descriptor cleanup does not replace the trust validation result.
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() > 1<<20 {
 		return nil, errors.New("destination CA file is invalid")
