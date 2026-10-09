@@ -1,0 +1,1624 @@
+{
+  "schemaVersion": 1,
+  "scope": "Exact regenerable Go1.27.2 first-party archives containing source paths from seven closed root review worktrees; no active agent source paths/open files allowed. No global cache/image/builder prune.",
+  "observedAt": "2026-10-09T23:49:35.280276+00:00",
+  "sourceInventorySha256": "09afd29d8640bfaa5836f70a21f757174912220b17e98a12019e528b3a1662a3",
+  "removed": [
+    {
+      "path": "/root/.cache/go-build/34/344046e96136c64ff349d38f56eb44589403ea6282e54f11356d98e36da7dc52-d",
+      "bytes": 10142956,
+      "inode": 1350746,
+      "mtimeNs": 1791588859183195542,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "344046e96136c64ff349d38f56eb44589403ea6282e54f11356d98e36da7dc52"
+    },
+    {
+      "path": "/root/.cache/go-build/34/346481975f0aa2d8b8036435f95095f3ac29c33608117c08b87823d2724f89b2-d",
+      "bytes": 1172682,
+      "inode": 1350805,
+      "mtimeNs": 1791588938670161519,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "346481975f0aa2d8b8036435f95095f3ac29c33608117c08b87823d2724f89b2"
+    },
+    {
+      "path": "/root/.cache/go-build/5c/5c68ea28ce457b5c9308395d71691910cfd6508f63c73cbdaa409dc6f7f6a264-d",
+      "bytes": 9716692,
+      "inode": 1488653,
+      "mtimeNs": 1791588963688839324,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "5c68ea28ce457b5c9308395d71691910cfd6508f63c73cbdaa409dc6f7f6a264"
+    },
+    {
+      "path": "/root/.cache/go-build/82/82f5078ac97650173e4a881efc83217692277c01aafb72c6c4be3acdcb9640a2-d",
+      "bytes": 2772024,
+      "inode": 1451924,
+      "mtimeNs": 1791585274671275710,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "82f5078ac97650173e4a881efc83217692277c01aafb72c6c4be3acdcb9640a2"
+    },
+    {
+      "path": "/root/.cache/go-build/eb/eb736e7757ffda95505c86392a7856dc80e83c11630abdc0bec3040aff88a00f-d",
+      "bytes": 13031464,
+      "inode": 1580561,
+      "mtimeNs": 1791588949587696758,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "eb736e7757ffda95505c86392a7856dc80e83c11630abdc0bec3040aff88a00f"
+    },
+    {
+      "path": "/root/.cache/go-build/de/deb9ff8df404cfc74e20e9557ffff5c61473bc9e6a97343303f0fb1b83eece97-d",
+      "bytes": 8515538,
+      "inode": 1488628,
+      "mtimeNs": 1791588960221964209,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "deb9ff8df404cfc74e20e9557ffff5c61473bc9e6a97343303f0fb1b83eece97"
+    },
+    {
+      "path": "/root/.cache/go-build/9a/9a5956efe97e88fa72aa6dace3f979fb34b8fdd30325d251b99e7da258866003-d",
+      "bytes": 10262162,
+      "inode": 1580266,
+      "mtimeNs": 1791588894961193488,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "9a5956efe97e88fa72aa6dace3f979fb34b8fdd30325d251b99e7da258866003"
+    },
+    {
+      "path": "/root/.cache/go-build/29/2956e21c7c9174033d533c21342b16ac97dee950b9b10ec1619ae769d0aaf3ab-d",
+      "bytes": 1183952,
+      "inode": 1488832,
+      "mtimeNs": 1791589171749795271,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "2956e21c7c9174033d533c21342b16ac97dee950b9b10ec1619ae769d0aaf3ab"
+    },
+    {
+      "path": "/root/.cache/go-build/83/834ed613339ce056dfe18a7894ccf803fd3c6277a2b1e33814257fd10f149545-d",
+      "bytes": 1243852,
+      "inode": 1488631,
+      "mtimeNs": 1791588961611303363,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "834ed613339ce056dfe18a7894ccf803fd3c6277a2b1e33814257fd10f149545"
+    },
+    {
+      "path": "/root/.cache/go-build/5a/5af69891e485c14dd09662586c96575db5de77920d316fe87ece142b14d7a17c-d",
+      "bytes": 3561048,
+      "inode": 437462,
+      "mtimeNs": 1791584850994650767,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "5af69891e485c14dd09662586c96575db5de77920d316fe87ece142b14d7a17c"
+    },
+    {
+      "path": "/root/.cache/go-build/5a/5a7dccb70ed66e6f7894db2588e6c2eca94cacb6c3a0fd7ddc88d4be737b36eb-d",
+      "bytes": 1650186,
+      "inode": 1447337,
+      "mtimeNs": 1791584679776628320,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "5a7dccb70ed66e6f7894db2588e6c2eca94cacb6c3a0fd7ddc88d4be737b36eb"
+    },
+    {
+      "path": "/root/.cache/go-build/13/1330c2dee536af977006ea893dfa7532d3b86dddc61124e2c5ca9b117a245d07-d",
+      "bytes": 1109634,
+      "inode": 1453389,
+      "mtimeNs": 1791585293944959808,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "1330c2dee536af977006ea893dfa7532d3b86dddc61124e2c5ca9b117a245d07"
+    },
+    {
+      "path": "/root/.cache/go-build/13/13bf0292c9ca30497c46571ccdd47a8132e406b6edbf0c030e80ef7dc9d9bccf-d",
+      "bytes": 1593164,
+      "inode": 1450068,
+      "mtimeNs": 1791585120429077367,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "13bf0292c9ca30497c46571ccdd47a8132e406b6edbf0c030e80ef7dc9d9bccf"
+    },
+    {
+      "path": "/root/.cache/go-build/dc/dcd7282a7800a293fb9367d0bf901333d893d303875525a5331333cc2a07c01a-d",
+      "bytes": 1609696,
+      "inode": 576138,
+      "mtimeNs": 1791584394453608808,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "dcd7282a7800a293fb9367d0bf901333d893d303875525a5331333cc2a07c01a"
+    },
+    {
+      "path": "/root/.cache/go-build/ee/ee00a6393cc51b32ff15e80e8c306c7bb822af7565519b68ba5ff703eab94420-d",
+      "bytes": 1109528,
+      "inode": 1488600,
+      "mtimeNs": 1791588922893138175,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "ee00a6393cc51b32ff15e80e8c306c7bb822af7565519b68ba5ff703eab94420"
+    },
+    {
+      "path": "/root/.cache/go-build/ee/ee2ce3f89209fcf5e3b177b810ca48065b606cf479ad1419d189c69512cc80ba-d",
+      "bytes": 1761292,
+      "inode": 1488605,
+      "mtimeNs": 1791588925743442175,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "ee2ce3f89209fcf5e3b177b810ca48065b606cf479ad1419d189c69512cc80ba"
+    },
+    {
+      "path": "/root/.cache/go-build/ee/eedf9f106e3af87306cd8fbbd46a21b1f5aa1b2bf6a088c37952f59b89d31553-d",
+      "bytes": 3676416,
+      "inode": 1488383,
+      "mtimeNs": 1791588900237479165,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "eedf9f106e3af87306cd8fbbd46a21b1f5aa1b2bf6a088c37952f59b89d31553"
+    },
+    {
+      "path": "/root/.cache/go-build/f3/f3d02925ef798b35a37e9fd927de353d317ecf710240faead09165e454578082-d",
+      "bytes": 77741000,
+      "inode": 1488607,
+      "mtimeNs": 1791588932287044694,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "f3d02925ef798b35a37e9fd927de353d317ecf710240faead09165e454578082"
+    },
+    {
+      "path": "/root/.cache/go-build/f3/f324edbb7ee934d53d259ba6466b01ca67f621b6f64e7437cbb4b8eb152fa5bf-d",
+      "bytes": 6277796,
+      "inode": 576136,
+      "mtimeNs": 1791584393950196696,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "f324edbb7ee934d53d259ba6466b01ca67f621b6f64e7437cbb4b8eb152fa5bf"
+    },
+    {
+      "path": "/root/.cache/go-build/e3/e3ea5f7854e1417a8f923eacd0fecf74fed4edfeaafc8376dabab21f8a2c2b68-d",
+      "bytes": 10641024,
+      "inode": 1488622,
+      "mtimeNs": 1791588953636847591,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "e3ea5f7854e1417a8f923eacd0fecf74fed4edfeaafc8376dabab21f8a2c2b68"
+    },
+    {
+      "path": "/root/.cache/go-build/ec/ecb0e31f79fddc2610e3e1f9208c16fd5feb00eb848380ed1a488b6125e1c288-d",
+      "bytes": 10062620,
+      "inode": 1580631,
+      "mtimeNs": 1791588972504495444,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "ecb0e31f79fddc2610e3e1f9208c16fd5feb00eb848380ed1a488b6125e1c288"
+    },
+    {
+      "path": "/root/.cache/go-build/54/54ab231f9923be046dbf5aea21edf95a4155a8fa29e3c93484ab7bf1efac47ac-d",
+      "bytes": 10732062,
+      "inode": 1488618,
+      "mtimeNs": 1791588944937336874,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "54ab231f9923be046dbf5aea21edf95a4155a8fa29e3c93484ab7bf1efac47ac"
+    },
+    {
+      "path": "/root/.cache/go-build/68/68aa5df040a25ac9be900cc05b0941534086b1f144cfd33b8a580c3485da3ca4-d",
+      "bytes": 1596058,
+      "inode": 1580456,
+      "mtimeNs": 1791588909777396801,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "68aa5df040a25ac9be900cc05b0941534086b1f144cfd33b8a580c3485da3ca4"
+    },
+    {
+      "path": "/root/.cache/go-build/8f/8f19d78bb8751bdd7f220d1333acfa0ce67c8aa53bca1d132abfded6b1643fb2-d",
+      "bytes": 11625030,
+      "inode": 1488650,
+      "mtimeNs": 1791588963052201546,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "8f19d78bb8751bdd7f220d1333acfa0ce67c8aa53bca1d132abfded6b1643fb2"
+    },
+    {
+      "path": "/root/.cache/go-build/c2/c201bd25c66f6c65096556dae3d95bebfd9146673ad2693ef97ddaddc7ef9802-d",
+      "bytes": 10513174,
+      "inode": 1580560,
+      "mtimeNs": 1791588946776163991,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "c201bd25c66f6c65096556dae3d95bebfd9146673ad2693ef97ddaddc7ef9802"
+    },
+    {
+      "path": "/root/.cache/go-build/04/046eeb34c2f970d26bd0fb904cf2fbbc68217c2f897488209b916b164f6e1c7a-d",
+      "bytes": 2921622,
+      "inode": 1488601,
+      "mtimeNs": 1791588923318784172,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "046eeb34c2f970d26bd0fb904cf2fbbc68217c2f897488209b916b164f6e1c7a"
+    },
+    {
+      "path": "/root/.cache/go-build/04/047b41681e016bb703ad23081bb68804901669425037f85cb0bd449d100a736f-d",
+      "bytes": 19055852,
+      "inode": 1488612,
+      "mtimeNs": 1791588936800615194,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "047b41681e016bb703ad23081bb68804901669425037f85cb0bd449d100a736f"
+    },
+    {
+      "path": "/root/.cache/go-build/0a/0a9bdf360ef73c314e226e8610137848bb317df09a5e6743d4c80b18bf38ba78-d",
+      "bytes": 1731908,
+      "inode": 1488606,
+      "mtimeNs": 1791588931501391075,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "0a9bdf360ef73c314e226e8610137848bb317df09a5e6743d4c80b18bf38ba78"
+    },
+    {
+      "path": "/root/.cache/go-build/bc/bc2abe6be8e34bbb182156ac15078c3fb88f26ea47d9df2d660ab71416ebd552-d",
+      "bytes": 2786472,
+      "inode": 1450437,
+      "mtimeNs": 1791585126454274099,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "bc2abe6be8e34bbb182156ac15078c3fb88f26ea47d9df2d660ab71416ebd552"
+    },
+    {
+      "path": "/root/.cache/go-build/bc/bc3770a03ff69e481e578fff3460f1f3fa68c68fe4a0965bf84e3bfc4d294042-d",
+      "bytes": 1243852,
+      "inode": 1488007,
+      "mtimeNs": 1791588853580302140,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "bc3770a03ff69e481e578fff3460f1f3fa68c68fe4a0965bf84e3bfc4d294042"
+    },
+    {
+      "path": "/root/.cache/go-build/49/496f5c9be78dfdb1fffad1dd797205e2dc0d9106da4d8e2b8bbe4bff7ce915da-d",
+      "bytes": 5108934,
+      "inode": 1580035,
+      "mtimeNs": 1791588857340268586,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "496f5c9be78dfdb1fffad1dd797205e2dc0d9106da4d8e2b8bbe4bff7ce915da"
+    },
+    {
+      "path": "/root/.cache/go-build/e2/e2759116c706bb7a08776b22b050c048809468d5e8f2c031882cd277278058f1-d",
+      "bytes": 21071164,
+      "inode": 1580562,
+      "mtimeNs": 1791588951778666723,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "e2759116c706bb7a08776b22b050c048809468d5e8f2c031882cd277278058f1"
+    },
+    {
+      "path": "/root/.cache/go-build/61/619f67c99b72f0d30697f0cafa432aedc2c25cd970db9d9be7c89da95aab3fef-d",
+      "bytes": 1134780,
+      "inode": 1580215,
+      "mtimeNs": 1791588889673080615,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "619f67c99b72f0d30697f0cafa432aedc2c25cd970db9d9be7c89da95aab3fef"
+    },
+    {
+      "path": "/root/.cache/go-build/c0/c031125f7dbc8bbfe9dbc45d5a2d52e001d8070735c3dc0a5e98270a0b6afec2-d",
+      "bytes": 1508566,
+      "inode": 1453515,
+      "mtimeNs": 1791585295490838135,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "c031125f7dbc8bbfe9dbc45d5a2d52e001d8070735c3dc0a5e98270a0b6afec2"
+    },
+    {
+      "path": "/root/.cache/go-build/c0/c04482e0fbe90358077fd87bfde4bbdae49392e4cd31c47a62f0ba2fc3e79fcd-d",
+      "bytes": 2873096,
+      "inode": 1580200,
+      "mtimeNs": 1791588887289418205,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "c04482e0fbe90358077fd87bfde4bbdae49392e4cd31c47a62f0ba2fc3e79fcd"
+    },
+    {
+      "path": "/root/.cache/go-build/3c/3ce9936b54a6ce789f88b27c8e72006033566a8f888071b8cc6a6e14942bbf85-d",
+      "bytes": 1068988,
+      "inode": 1580008,
+      "mtimeNs": 1791588854376601190,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "3ce9936b54a6ce789f88b27c8e72006033566a8f888071b8cc6a6e14942bbf85"
+    },
+    {
+      "path": "/root/.cache/go-build/b6/b66da13bf1b56f866897a3444e9025ba2e7a046c4a54a538151d896f69f3b035-d",
+      "bytes": 12516562,
+      "inode": 1488615,
+      "mtimeNs": 1791588938417443340,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "b66da13bf1b56f866897a3444e9025ba2e7a046c4a54a538151d896f69f3b035"
+    },
+    {
+      "path": "/root/.cache/go-build/b6/b673ab4b7402af60513dd69ce65c45ce20c0a79b03a5508dc6ee94c442767b71-d",
+      "bytes": 2422442,
+      "inode": 1450032,
+      "mtimeNs": 1791585120036728526,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "b673ab4b7402af60513dd69ce65c45ce20c0a79b03a5508dc6ee94c442767b71"
+    },
+    {
+      "path": "/root/.cache/go-build/41/41de356cec2360be6a5336a21e52336c594ce59072a4c3d278113f52e4ca7a6f-d",
+      "bytes": 3655298,
+      "inode": 1488038,
+      "mtimeNs": 1791588856044942274,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "41de356cec2360be6a5336a21e52336c594ce59072a4c3d278113f52e4ca7a6f"
+    },
+    {
+      "path": "/root/.cache/go-build/ad/ad989aa618570aa7c96cbbda1f7da6f0f84249950031280b5253a3dd4008b32c-d",
+      "bytes": 12517266,
+      "inode": 1580227,
+      "mtimeNs": 1791588892687129470,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "ad989aa618570aa7c96cbbda1f7da6f0f84249950031280b5253a3dd4008b32c"
+    },
+    {
+      "path": "/root/.cache/go-build/32/32aed36535516e080aec06f7f8b20ce7de14ad7a3383b5247991ce8db33ad3e8-d",
+      "bytes": 123191796,
+      "inode": 1488126,
+      "mtimeNs": 1791588882317623247,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "32aed36535516e080aec06f7f8b20ce7de14ad7a3383b5247991ce8db33ad3e8"
+    },
+    {
+      "path": "/root/.cache/go-build/64/64ac97acaf47bb5dcac7977db6618e7d0e6a449f2b20fae8ab9d15a825483870-d",
+      "bytes": 2331232,
+      "inode": 964590,
+      "mtimeNs": 1791584395179115407,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "64ac97acaf47bb5dcac7977db6618e7d0e6a449f2b20fae8ab9d15a825483870"
+    },
+    {
+      "path": "/root/.cache/go-build/75/75b4789dcd5b68c6787295b5f9ef940b4462fcfaf79f00841844adf38f6124ba-d",
+      "bytes": 1118518,
+      "inode": 1350808,
+      "mtimeNs": 1791588953335753880,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "75b4789dcd5b68c6787295b5f9ef940b4462fcfaf79f00841844adf38f6124ba"
+    },
+    {
+      "path": "/root/.cache/go-build/8d/8de63f6493ff7bef974539dea6c9bbb8a5b032c68e517da4d77d462e32c36ae1-d",
+      "bytes": 2895088,
+      "inode": 1350776,
+      "mtimeNs": 1791588896461874668,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "8de63f6493ff7bef974539dea6c9bbb8a5b032c68e517da4d77d462e32c36ae1"
+    },
+    {
+      "path": "/root/.cache/go-build/8d/8db0b7cbc9714089932c73140f24d4c667ddf737bbbadff420325c4b6acba5f6-d",
+      "bytes": 23337020,
+      "inode": 1350802,
+      "mtimeNs": 1791588922619195962,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "8db0b7cbc9714089932c73140f24d4c667ddf737bbbadff420325c4b6acba5f6"
+    },
+    {
+      "path": "/root/.cache/go-build/e8/e8eead380c31c97ff80a49a172320bb69a771eebec23238628a71aa5b829f06d-d",
+      "bytes": 1054722,
+      "inode": 1488633,
+      "mtimeNs": 1791588961784516419,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "e8eead380c31c97ff80a49a172320bb69a771eebec23238628a71aa5b829f06d"
+    },
+    {
+      "path": "/root/.cache/go-build/e8/e87989b81cafebe5bae77d20376176b0389dfe5131fdd15c5ccfd69ebe6278fe-d",
+      "bytes": 1074280,
+      "inode": 1488663,
+      "mtimeNs": 1791588966362775305,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "e87989b81cafebe5bae77d20376176b0389dfe5131fdd15c5ccfd69ebe6278fe"
+    },
+    {
+      "path": "/root/.cache/go-build/e9/e9d61bedf56098ee90123767649a56bb6d3eda2f37c5c08aa601b6086e105509-d",
+      "bytes": 12484254,
+      "inode": 1350810,
+      "mtimeNs": 1791588957931536021,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "e9d61bedf56098ee90123767649a56bb6d3eda2f37c5c08aa601b6086e105509"
+    },
+    {
+      "path": "/root/.cache/go-build/e9/e93fc39f56a569c355fe1883832b97964225835d9e44e1b7551bcd3e567026db-d",
+      "bytes": 1651328,
+      "inode": 1350800,
+      "mtimeNs": 1791588914005750803,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "e93fc39f56a569c355fe1883832b97964225835d9e44e1b7551bcd3e567026db"
+    },
+    {
+      "path": "/root/.cache/go-build/16/16f77e9304f124f84444e75594ba111f77412716151fb7e0851f17154d07d857-d",
+      "bytes": 3652096,
+      "inode": 1488604,
+      "mtimeNs": 1791588925222912801,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "16f77e9304f124f84444e75594ba111f77412716151fb7e0851f17154d07d857"
+    },
+    {
+      "path": "/root/.cache/go-build/a9/a9b443ec378eb000ea8cbb9f644f478a5b0f2fda6beaa32abaa7e90a16ca2ff9-d",
+      "bytes": 1358782,
+      "inode": 1488511,
+      "mtimeNs": 1791588909460752161,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "a9b443ec378eb000ea8cbb9f644f478a5b0f2fda6beaa32abaa7e90a16ca2ff9"
+    },
+    {
+      "path": "/root/.cache/go-build/39/394b377931ef30deda6e4eb50f8b1bbcb6baa28ef0fd2c8d246867db62be8968-d",
+      "bytes": 2345516,
+      "inode": 1447404,
+      "mtimeNs": 1791584680916449502,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "394b377931ef30deda6e4eb50f8b1bbcb6baa28ef0fd2c8d246867db62be8968"
+    },
+    {
+      "path": "/root/.cache/go-build/03/03aa381d5d7393b9261c13c40ccbb0da3c46b68c40ea97589feabc2d2eb94be0-d",
+      "bytes": 1074366,
+      "inode": 1580021,
+      "mtimeNs": 1791588855531154325,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "03aa381d5d7393b9261c13c40ccbb0da3c46b68c40ea97589feabc2d2eb94be0"
+    },
+    {
+      "path": "/root/.cache/go-build/e0/e0dc9a50525e9433f0562f78d595b144e442c2ca7bdad425535235fd915394fd-d",
+      "bytes": 2641476,
+      "inode": 1449960,
+      "mtimeNs": 1791585119445693780,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "e0dc9a50525e9433f0562f78d595b144e442c2ca7bdad425535235fd915394fd"
+    },
+    {
+      "path": "/root/.cache/go-build/71/71183d8ce104e642a0b9e8f870bc04a327f7ba3fba9cf199a3fb28af875d47c7-d",
+      "bytes": 3021226,
+      "inode": 1580580,
+      "mtimeNs": 1791588964269967442,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "71183d8ce104e642a0b9e8f870bc04a327f7ba3fba9cf199a3fb28af875d47c7"
+    },
+    {
+      "path": "/root/.cache/go-build/3e/3e60e3c4835e65ac00b101d9eadceb568602f11403c4f5d9fe9d0cf31f604095-d",
+      "bytes": 69349962,
+      "inode": 1488784,
+      "mtimeNs": 1791588982295253149,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "3e60e3c4835e65ac00b101d9eadceb568602f11403c4f5d9fe9d0cf31f604095"
+    },
+    {
+      "path": "/root/.cache/go-build/b7/b74b9a111bc7a591a0fbdc46fa288e584b3bfe1561d8b99b4b5e59bdf05d4c33-d",
+      "bytes": 9948310,
+      "inode": 1580054,
+      "mtimeNs": 1791588860027259880,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "b74b9a111bc7a591a0fbdc46fa288e584b3bfe1561d8b99b4b5e59bdf05d4c33"
+    },
+    {
+      "path": "/root/.cache/go-build/4f/4f67a9b4b9e90095985b5ac5a60f40c54a8da66a70d8e230ec58c43b57c53272-d",
+      "bytes": 1358996,
+      "inode": 435226,
+      "mtimeNs": 1791584842540391184,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "4f67a9b4b9e90095985b5ac5a60f40c54a8da66a70d8e230ec58c43b57c53272"
+    },
+    {
+      "path": "/root/.cache/go-build/f1/f1e509d05fbbafb94be1880e9e41f2a0b18948180d434f90b42eb594c14ba35b-d",
+      "bytes": 2671324,
+      "inode": 863262,
+      "mtimeNs": 1791588909223270489,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "f1e509d05fbbafb94be1880e9e41f2a0b18948180d434f90b42eb594c14ba35b"
+    },
+    {
+      "path": "/root/.cache/go-build/f8/f8cf98191b6922a25f76c1555dc503066e5c838e41e2c13e1cf22f3ec6887e07-d",
+      "bytes": 5631390,
+      "inode": 1350804,
+      "mtimeNs": 1791588936841832274,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "f8cf98191b6922a25f76c1555dc503066e5c838e41e2c13e1cf22f3ec6887e07"
+    },
+    {
+      "path": "/root/.cache/go-build/d8/d8ed99421a08acd5fbd2e759336a2bdadad34e73d500edaaa8f35e884dfa143c-d",
+      "bytes": 1351934,
+      "inode": 1580203,
+      "mtimeNs": 1791588887617238299,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "d8ed99421a08acd5fbd2e759336a2bdadad34e73d500edaaa8f35e884dfa143c"
+    },
+    {
+      "path": "/root/.cache/go-build/d8/d8edfddffc02cb6f77d1ad1a263a8f4674192e03d810e201ae0adfe084d8c05a-d",
+      "bytes": 11625016,
+      "inode": 1580017,
+      "mtimeNs": 1791588855148324449,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "d8edfddffc02cb6f77d1ad1a263a8f4674192e03d810e201ae0adfe084d8c05a"
+    },
+    {
+      "path": "/root/.cache/go-build/53/53c46f068423e83bca5d657496e914513ae5b5fd86759343fd3c46d57417b4d4-d",
+      "bytes": 1356232,
+      "inode": 1488598,
+      "mtimeNs": 1791588919428361905,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "53c46f068423e83bca5d657496e914513ae5b5fd86759343fd3c46d57417b4d4"
+    },
+    {
+      "path": "/root/.cache/go-build/92/922a739d93724c2ff76b1a5d1349034d15fa19e524bd213b283a01efa226ec3c-d",
+      "bytes": 2769454,
+      "inode": 1580542,
+      "mtimeNs": 1791588924112405199,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "922a739d93724c2ff76b1a5d1349034d15fa19e524bd213b283a01efa226ec3c"
+    },
+    {
+      "path": "/root/.cache/go-build/37/37b0d825c760c9fb7239076d57324ca20fab5c466bf936fbe52e3d46d9382fc1-d",
+      "bytes": 3655298,
+      "inode": 1580589,
+      "mtimeNs": 1791588966928342657,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "37b0d825c760c9fb7239076d57324ca20fab5c466bf936fbe52e3d46d9382fc1"
+    },
+    {
+      "path": "/root/.cache/go-build/a5/a54ec9004122d48b96315982fcc0993a3e750c0ff355cec81cb33d763d4aee7b-d",
+      "bytes": 1515558,
+      "inode": 577303,
+      "mtimeNs": 1791588896878135519,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "a54ec9004122d48b96315982fcc0993a3e750c0ff355cec81cb33d763d4aee7b"
+    },
+    {
+      "path": "/root/.cache/go-build/a5/a5b4b0528f8c02b34d5793b3528259caabddb5de1246e30186a6b57916d2c94a-d",
+      "bytes": 1550554,
+      "inode": 575816,
+      "mtimeNs": 1791585197877045814,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "a5b4b0528f8c02b34d5793b3528259caabddb5de1246e30186a6b57916d2c94a"
+    },
+    {
+      "path": "/root/.cache/go-build/a5/a51f57d03116494ea1e1887417fe0d859fbee776a5360515714cce29e07f2487-d",
+      "bytes": 2430410,
+      "inode": 576741,
+      "mtimeNs": 1791588962871607318,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "a51f57d03116494ea1e1887417fe0d859fbee776a5360515714cce29e07f2487"
+    },
+    {
+      "path": "/root/.cache/go-build/31/315a01421e34ce223ef15bba4daf9a2db9f64603eafbd2b7aec4040d3eca0ac8-d",
+      "bytes": 23963612,
+      "inode": 1488669,
+      "mtimeNs": 1791588967455214297,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "315a01421e34ce223ef15bba4daf9a2db9f64603eafbd2b7aec4040d3eca0ac8"
+    },
+    {
+      "path": "/root/.cache/go-build/c5/c54abb3dd2fc1499d3f85730ed31b30d5088cfc522dde70e574d71b0552650ef-d",
+      "bytes": 2868668,
+      "inode": 1580049,
+      "mtimeNs": 1791588859882083521,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "c54abb3dd2fc1499d3f85730ed31b30d5088cfc522dde70e574d71b0552650ef"
+    },
+    {
+      "path": "/root/.cache/go-build/3d/3da711f96486052ff97bfd7195cd004e36a0d1310a1084f10ce4be401ea72e40-d",
+      "bytes": 10142970,
+      "inode": 1580597,
+      "mtimeNs": 1791588968495783084,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "3da711f96486052ff97bfd7195cd004e36a0d1310a1084f10ce4be401ea72e40"
+    },
+    {
+      "path": "/root/.cache/go-build/85/858d81beb72fe4e3f24f56c6506a32ff128bec878c8bbf57477fedd4ea727a5b-d",
+      "bytes": 1239882,
+      "inode": 1488265,
+      "mtimeNs": 1791588892977893034,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "858d81beb72fe4e3f24f56c6506a32ff128bec878c8bbf57477fedd4ea727a5b"
+    },
+    {
+      "path": "/root/.cache/go-build/d7/d7acd6dad58f11dc7e48cc46d0ca3581be0efa51181fd5414d03b9b9093ddf57-d",
+      "bytes": 1581476,
+      "inode": 1580217,
+      "mtimeNs": 1791588890074051493,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "d7acd6dad58f11dc7e48cc46d0ca3581be0efa51181fd5414d03b9b9093ddf57"
+    },
+    {
+      "path": "/root/.cache/go-build/d7/d71b45d26e165b1d72394c2d345e351acc30ef69c95deb42bf5ef4e289f744b4-d",
+      "bytes": 1355692,
+      "inode": 1453198,
+      "mtimeNs": 1791585290693543938,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "d71b45d26e165b1d72394c2d345e351acc30ef69c95deb42bf5ef4e289f744b4"
+    },
+    {
+      "path": "/root/.cache/go-build/d7/d79cc6a97a48925aa6a39a8e063c32f34429454963547fa8149473d22551ce8a-d",
+      "bytes": 10262076,
+      "inode": 1580557,
+      "mtimeNs": 1791588940492881568,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "d79cc6a97a48925aa6a39a8e063c32f34429454963547fa8149473d22551ce8a"
+    },
+    {
+      "path": "/root/.cache/go-build/a6/a6dfd651bfdaf000d473726708d9baccdf27120ef08fe25bb4ec815963761f06-d",
+      "bytes": 3008248,
+      "inode": 1488621,
+      "mtimeNs": 1791588953063461223,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "a6dfd651bfdaf000d473726708d9baccdf27120ef08fe25bb4ec815963761f06"
+    },
+    {
+      "path": "/root/.cache/go-build/09/0923bd7dee22c2561344e409f24900af7f26d72a8968fbcd428b7b59bf88c92e-d",
+      "bytes": 13264546,
+      "inode": 1350807,
+      "mtimeNs": 1791588952328209132,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "0923bd7dee22c2561344e409f24900af7f26d72a8968fbcd428b7b59bf88c92e"
+    },
+    {
+      "path": "/root/.cache/go-build/09/09f26986dc3236a7a72f1ecf84cac5ecd148de06be1ebfe1e201453950f41d50-d",
+      "bytes": 24091490,
+      "inode": 1350767,
+      "mtimeNs": 1791588889383332146,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "09f26986dc3236a7a72f1ecf84cac5ecd148de06be1ebfe1e201453950f41d50"
+    },
+    {
+      "path": "/root/.cache/go-build/f2/f2fd59445ef868496e866856f67b643e9699b95263333b9a8b884045deeee50d-d",
+      "bytes": 1059454,
+      "inode": 1580348,
+      "mtimeNs": 1791588900492809393,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "f2fd59445ef868496e866856f67b643e9699b95263333b9a8b884045deeee50d"
+    },
+    {
+      "path": "/root/.cache/go-build/f0/f03900c466c4364415ed932d21233e548eb3c3359d572043a7d8667566baa757-d",
+      "bytes": 1358938,
+      "inode": 1580586,
+      "mtimeNs": 1791588965117072362,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "f03900c466c4364415ed932d21233e548eb3c3359d572043a7d8667566baa757"
+    },
+    {
+      "path": "/root/.cache/go-build/2d/2d4abfdea0fc43e2a7937bb2bcab8da52c58a210eda830c4f850497f69c1bbb9-d",
+      "bytes": 2431852,
+      "inode": 1580013,
+      "mtimeNs": 1791588855088410503,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "2d4abfdea0fc43e2a7937bb2bcab8da52c58a210eda830c4f850497f69c1bbb9"
+    },
+    {
+      "path": "/root/.cache/go-build/fb/fbb785caed2f2c82067c89845e9fc14cafa76feef524ade88681cae1e62e02cd-d",
+      "bytes": 1269236,
+      "inode": 1488616,
+      "mtimeNs": 1791588941053439324,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "fbb785caed2f2c82067c89845e9fc14cafa76feef524ade88681cae1e62e02cd"
+    },
+    {
+      "path": "/root/.cache/go-build/48/480d7ce7a957e0b19a435edc1a19b846def741749789e07c9ec22e4da1f31d49-d",
+      "bytes": 10660648,
+      "inode": 1580389,
+      "mtimeNs": 1791588903450827808,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "480d7ce7a957e0b19a435edc1a19b846def741749789e07c9ec22e4da1f31d49"
+    },
+    {
+      "path": "/root/.cache/go-build/74/746b5ad3806a2e8a11f530632e6cb419fbfbab57ccdab197f0c6d818954e3c1f-d",
+      "bytes": 19202868,
+      "inode": 1488702,
+      "mtimeNs": 1791588971619640514,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "746b5ad3806a2e8a11f530632e6cb419fbfbab57ccdab197f0c6d818954e3c1f"
+    },
+    {
+      "path": "/root/.cache/go-build/44/44fb8d986196de6673f1f8ea6d925a9ec698a088d4a63dcd733a80b5c717fc4e-d",
+      "bytes": 77712972,
+      "inode": 1580687,
+      "mtimeNs": 1791588992032082250,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "44fb8d986196de6673f1f8ea6d925a9ec698a088d4a63dcd733a80b5c717fc4e"
+    },
+    {
+      "path": "/root/.cache/go-build/6a/6a79253a6fc2fdbc83e72a188fd6f44fb23dae5f6b7102ba650d7828fb1e55d8-d",
+      "bytes": 9993808,
+      "inode": 1580593,
+      "mtimeNs": 1791588968067891526,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "6a79253a6fc2fdbc83e72a188fd6f44fb23dae5f6b7102ba650d7828fb1e55d8"
+    },
+    {
+      "path": "/root/.cache/go-build/ef/eff2cf66f6afc265336e6fc31c5b8f42465cadfda8dcd59f7eaa1e844e2e985c-d",
+      "bytes": 1209894,
+      "inode": 1488370,
+      "mtimeNs": 1791588898889288451,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "eff2cf66f6afc265336e6fc31c5b8f42465cadfda8dcd59f7eaa1e844e2e985c"
+    },
+    {
+      "path": "/root/.cache/go-build/0e/0e2abeffc600e180fdfe3b039432cfe890c1b50510ebb4fc16d2c1c4cb322cf5-d",
+      "bytes": 10010330,
+      "inode": 1488445,
+      "mtimeNs": 1791588904358994864,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "0e2abeffc600e180fdfe3b039432cfe890c1b50510ebb4fc16d2c1c4cb322cf5"
+    },
+    {
+      "path": "/root/.cache/go-build/46/4633c12929cd7de9b57aebbd29e3421340851824843a5b84cb8b50b12a3864aa-d",
+      "bytes": 3560328,
+      "inode": 1488835,
+      "mtimeNs": 1791589180540665682,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "4633c12929cd7de9b57aebbd29e3421340851824843a5b84cb8b50b12a3864aa"
+    },
+    {
+      "path": "/root/.cache/go-build/46/46f2e78d1880e9e6043351c02dee416eb3122abc22089f964a85a6cd2f2b8251-d",
+      "bytes": 10641244,
+      "inode": 1488572,
+      "mtimeNs": 1791588912859038011,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "46f2e78d1880e9e6043351c02dee416eb3122abc22089f964a85a6cd2f2b8251"
+    },
+    {
+      "path": "/root/.cache/go-build/bb/bbcdf81a28b4bf4f9f2ba9e13e21d12024c4542f118613647ceed336c4f8983c-d",
+      "bytes": 2504494,
+      "inode": 1580566,
+      "mtimeNs": 1791588961428554789,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "bbcdf81a28b4bf4f9f2ba9e13e21d12024c4542f118613647ceed336c4f8983c"
+    },
+    {
+      "path": "/root/.cache/go-build/d3/d3b6db4f2a8d2074e233a17c41bec6857eff3b06a4c1fc98f0051b3c8fbd097a-d",
+      "bytes": 15155628,
+      "inode": 1580555,
+      "mtimeNs": 1791588939926721662,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "d3b6db4f2a8d2074e233a17c41bec6857eff3b06a4c1fc98f0051b3c8fbd097a"
+    },
+    {
+      "path": "/root/.cache/go-build/7c/7c04f122e6e9dcb40285f41f03f9e4808568cc4579f12acc23e4c01388e484eb-d",
+      "bytes": 21099580,
+      "inode": 1488540,
+      "mtimeNs": 1791588910974743259,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "7c04f122e6e9dcb40285f41f03f9e4808568cc4579f12acc23e4c01388e484eb"
+    },
+    {
+      "path": "/root/.cache/go-build/5d/5dca0f00b36ed9a2c1331ec4908f9e970260c81afd71538d49b98c5a05e65ca4-d",
+      "bytes": 2429052,
+      "inode": 1453171,
+      "mtimeNs": 1791585290454757533,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "5dca0f00b36ed9a2c1331ec4908f9e970260c81afd71538d49b98c5a05e65ca4"
+    },
+    {
+      "path": "/root/.cache/go-build/89/894fcfc2f90dffdbd5128b04c08bfc2c9b6f88cc8c694e4a798c2d325f4d7abb-d",
+      "bytes": 76805270,
+      "inode": 1488733,
+      "mtimeNs": 1791588973463629684,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "894fcfc2f90dffdbd5128b04c08bfc2c9b6f88cc8c694e4a798c2d325f4d7abb"
+    },
+    {
+      "path": "/root/.cache/go-build/ce/ce15ee7e2dd4b304e0fc49f48d0af032a889da2793f1311ab680f2dcf1f68aad-d",
+      "bytes": 13032498,
+      "inode": 1580418,
+      "mtimeNs": 1791588907113585527,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "ce15ee7e2dd4b304e0fc49f48d0af032a889da2793f1311ab680f2dcf1f68aad"
+    },
+    {
+      "path": "/root/.cache/go-build/a4/a499886c3716605cfaaa4cb654596505119460c7a4da8b43fdcae892ba5246fd-d",
+      "bytes": 1732426,
+      "inode": 1452526,
+      "mtimeNs": 1791585281005148465,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "a499886c3716605cfaaa4cb654596505119460c7a4da8b43fdcae892ba5246fd"
+    },
+    {
+      "path": "/root/.cache/go-build/ca/caec361651b8cf37074aa1701cf3ca9aea81594b52c2ed7be002a8dd207c2f7b-d",
+      "bytes": 2793082,
+      "inode": 1453507,
+      "mtimeNs": 1791585295044387712,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "caec361651b8cf37074aa1701cf3ca9aea81594b52c2ed7be002a8dd207c2f7b"
+    },
+    {
+      "path": "/root/.cache/go-build/45/4519c9ba90d8d1bd8ffe9e88b4e20e92e0a11919c36a4ce7fa513184a9f08e05-d",
+      "bytes": 18258444,
+      "inode": 1579999,
+      "mtimeNs": 1791588853584293727,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "4519c9ba90d8d1bd8ffe9e88b4e20e92e0a11919c36a4ce7fa513184a9f08e05"
+    },
+    {
+      "path": "/root/.cache/go-build/3f/3f69baade13467f9aa065757058753a447ad16d817a5315674a34a62226b55c2-d",
+      "bytes": 26358480,
+      "inode": 1580559,
+      "mtimeNs": 1791588946717548131,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "3f69baade13467f9aa065757058753a447ad16d817a5315674a34a62226b55c2"
+    },
+    {
+      "path": "/root/.cache/go-build/3f/3f31a06cc5557cad73e1fb567c74b66f65fb88365ccd0af206b437234f6e61f1-d",
+      "bytes": 1068916,
+      "inode": 1580728,
+      "mtimeNs": 1791589179973138130,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "3f31a06cc5557cad73e1fb567c74b66f65fb88365ccd0af206b437234f6e61f1"
+    },
+    {
+      "path": "/root/.cache/go-build/bd/bdb63f4f7b4d1ea1b8326a477f8dfdb2e4b4d324c4f7beb32ad30d3249f1736f-d",
+      "bytes": 2694014,
+      "inode": 1580003,
+      "mtimeNs": 1791588853975365683,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "bdb63f4f7b4d1ea1b8326a477f8dfdb2e4b4d324c4f7beb32ad30d3249f1736f"
+    },
+    {
+      "path": "/root/.cache/go-build/36/366888fdcc475962262358d5e8d988ae3ec8a12f074954d6ff90d1283ea721b8-d",
+      "bytes": 1356248,
+      "inode": 1488225,
+      "mtimeNs": 1791588886662114960,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "366888fdcc475962262358d5e8d988ae3ec8a12f074954d6ff90d1283ea721b8"
+    },
+    {
+      "path": "/root/.cache/go-build/4b/4bb455ec13c9cf44ab5b34e26ee9ca1730ae051918751a2a731c7148f2343dcd-d",
+      "bytes": 1708714,
+      "inode": 1452006,
+      "mtimeNs": 1791585275162881722,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "4bb455ec13c9cf44ab5b34e26ee9ca1730ae051918751a2a731c7148f2343dcd"
+    },
+    {
+      "path": "/root/.cache/go-build/ac/ac504c92c9db740f9b51d5052062671aa28a2a5819e774fb5bdac731125ca9ca-d",
+      "bytes": 23965078,
+      "inode": 1488060,
+      "mtimeNs": 1791588859254398928,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "ac504c92c9db740f9b51d5052062671aa28a2a5819e774fb5bdac731125ca9ca"
+    },
+    {
+      "path": "/root/.cache/go-build/b0/b03b7c6126605f176d8fcb6f6e4af7a486ed051b4fb01e591f5045eed4df75ca-d",
+      "bytes": 1379956,
+      "inode": 1451325,
+      "mtimeNs": 1791585197675409955,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "b03b7c6126605f176d8fcb6f6e4af7a486ed051b4fb01e591f5045eed4df75ca"
+    },
+    {
+      "path": "/root/.cache/go-build/c3/c3e9b9780eb000db6eff759efa53ea6b96c4735e4d98c248bc4a4508cd28a3e9-d",
+      "bytes": 10513496,
+      "inode": 1488448,
+      "mtimeNs": 1791588905347675573,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "c3e9b9780eb000db6eff759efa53ea6b96c4735e4d98c248bc4a4508cd28a3e9"
+    },
+    {
+      "path": "/root/.cache/go-build/73/739bf0991f5306597f14caba7ec48db2397b12621d0f85d777cdc5d172592c23-d",
+      "bytes": 1109878,
+      "inode": 1347763,
+      "mtimeNs": 1791584392547342762,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "739bf0991f5306597f14caba7ec48db2397b12621d0f85d777cdc5d172592c23"
+    },
+    {
+      "path": "/root/.cache/go-build/52/5209dc3f8716032fc229d53d30c0708e295a5af1d7a772ece30d69f6e6dfcb3f-d",
+      "bytes": 17587460,
+      "inode": 1580435,
+      "mtimeNs": 1791588908855700023,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "5209dc3f8716032fc229d53d30c0708e295a5af1d7a772ece30d69f6e6dfcb3f"
+    },
+    {
+      "path": "/root/.cache/go-build/95/95554139d18ed3af1e0820df5db01ee6cf00a840c56412dad8cf551896fada6e-d",
+      "bytes": 12146440,
+      "inode": 1488681,
+      "mtimeNs": 1791588970004363311,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "95554139d18ed3af1e0820df5db01ee6cf00a840c56412dad8cf551896fada6e"
+    },
+    {
+      "path": "/root/.cache/go-build/c7/c7060782de973647adb8f90544c240c107daee5fce6a1d3928b4e572e9ecd6dd-d",
+      "bytes": 1069006,
+      "inode": 437120,
+      "mtimeNs": 1791584850444996362,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "c7060782de973647adb8f90544c240c107daee5fce6a1d3928b4e572e9ecd6dd"
+    },
+    {
+      "path": "/root/.cache/go-build/6b/6b8caf5ca79bdcc2f9dcabf3d04d75f532b8dd0133246f6196a01ebd13d823d4-d",
+      "bytes": 19202864,
+      "inode": 1580067,
+      "mtimeNs": 1791588862574912418,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "6b8caf5ca79bdcc2f9dcabf3d04d75f532b8dd0133246f6196a01ebd13d823d4"
+    },
+    {
+      "path": "/root/.cache/go-build/5b/5bee683e8d949961ae01ba76b4ccc3f36d330f3b531f9cfcf8c4b0c8eba3d40d-d",
+      "bytes": 2794444,
+      "inode": 1488276,
+      "mtimeNs": 1791588893886383982,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "5bee683e8d949961ae01ba76b4ccc3f36d330f3b531f9cfcf8c4b0c8eba3d40d"
+    },
+    {
+      "path": "/root/.cache/go-build/2e/2e792e493807c501c339de67c45c7fe2cc21f447d577109e8802af6778f4234c-d",
+      "bytes": 9906708,
+      "inode": 1488629,
+      "mtimeNs": 1791588960773531022,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "2e792e493807c501c339de67c45c7fe2cc21f447d577109e8802af6778f4234c"
+    },
+    {
+      "path": "/root/.cache/go-build/06/061456f307f200beeb3a79d513d13569f007aeeb39bfa0272982670eb09bdc3e-d",
+      "bytes": 18206846,
+      "inode": 1488632,
+      "mtimeNs": 1791588961634120478,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "061456f307f200beeb3a79d513d13569f007aeeb39bfa0272982670eb09bdc3e"
+    },
+    {
+      "path": "/root/.cache/go-build/c6/c6f10a6269666619b52838658a304155fd5bd10671541c4766ae582749372aaa-d",
+      "bytes": 2431420,
+      "inode": 1453477,
+      "mtimeNs": 1791585294853922334,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "c6f10a6269666619b52838658a304155fd5bd10671541c4766ae582749372aaa"
+    },
+    {
+      "path": "/root/.cache/go-build/6e/6eb835b45658fde96f4b49bb84086baa6badda017114b09b7b8cb2ae3bd76721-d",
+      "bytes": 10566328,
+      "inode": 1350809,
+      "mtimeNs": 1791588955350199543,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "6eb835b45658fde96f4b49bb84086baa6badda017114b09b7b8cb2ae3bd76721"
+    },
+    {
+      "path": "/root/.cache/go-build/21/211f71189664d80c618b13c60cb6ec0ea9c40def06ef11b9ca0794374acf8182-d",
+      "bytes": 2648964,
+      "inode": 1488657,
+      "mtimeNs": 1791588964916437258,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "211f71189664d80c618b13c60cb6ec0ea9c40def06ef11b9ca0794374acf8182"
+    },
+    {
+      "path": "/root/.cache/go-build/02/02e9bb9c2f6546411fabdd02126f37bfe2f28403f471a7ba2d6f39c928c53646-d",
+      "bytes": 26381784,
+      "inode": 1488414,
+      "mtimeNs": 1791588901436948691,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "02e9bb9c2f6546411fabdd02126f37bfe2f28403f471a7ba2d6f39c928c53646"
+    },
+    {
+      "path": "/root/.cache/go-build/1c/1c32fcca8bbb1e984800056afd6c9cc67e01175756a33652ff06fcc0bf867c29-d",
+      "bytes": 1359084,
+      "inode": 1580005,
+      "mtimeNs": 1791588854231186422,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "1c32fcca8bbb1e984800056afd6c9cc67e01175756a33652ff06fcc0bf867c29"
+    },
+    {
+      "path": "/root/.cache/go-build/1c/1cec6df176c0965cab2fd7bc765e23218ea2a9c7fa0ab0bc64002cab64cd0238-d",
+      "bytes": 2876640,
+      "inode": 1347767,
+      "mtimeNs": 1791584392964575992,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "1cec6df176c0965cab2fd7bc765e23218ea2a9c7fa0ab0bc64002cab64cd0238"
+    },
+    {
+      "path": "/root/.cache/go-build/b4/b45e02bbffc9f4da180b3b08b02b2b8dfebf49899ceba5ae92bf736e989a4c59-d",
+      "bytes": 1379080,
+      "inode": 1488603,
+      "mtimeNs": 1791588924463139956,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "b45e02bbffc9f4da180b3b08b02b2b8dfebf49899ceba5ae92bf736e989a4c59"
+    },
+    {
+      "path": "/root/.cache/go-build/40/40d4b6febe295f8fbe021275c9b4acd79844d5d7e9417adab6be024356794f01-d",
+      "bytes": 10062616,
+      "inode": 1488097,
+      "mtimeNs": 1791588863415654491,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "40d4b6febe295f8fbe021275c9b4acd79844d5d7e9417adab6be024356794f01"
+    },
+    {
+      "path": "/root/.cache/go-build/b3/b3fabc8010e3973ce149b5c4c00f5d9ea89f4e7f71e3644b05f1399dcd9e726e-d",
+      "bytes": 5631526,
+      "inode": 1580323,
+      "mtimeNs": 1791588898483198476,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "b3fabc8010e3973ce149b5c4c00f5d9ea89f4e7f71e3644b05f1399dcd9e726e"
+    },
+    {
+      "path": "/root/.cache/go-build/05/05d112f5e3dc4f073becda4fe491ee1b8889be1466c6fb411c941afb9d0114d2-d",
+      "bytes": 1118910,
+      "inode": 1579997,
+      "mtimeNs": 1791588853105265426,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "05d112f5e3dc4f073becda4fe491ee1b8889be1466c6fb411c941afb9d0114d2"
+    },
+    {
+      "path": "/root/.cache/go-build/ea/ea1329b5c0c8e9be6d2f62683603f97310908c817b06b90614ac25bd201fd0ca-d",
+      "bytes": 10732350,
+      "inode": 1580391,
+      "mtimeNs": 1791588903646379126,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "ea1329b5c0c8e9be6d2f62683603f97310908c817b06b90614ac25bd201fd0ca"
+    },
+    {
+      "path": "/root/.cache/go-build/9e/9eab02892fe5fc571831e32def501e7799372abad24a0e3558cc9edbb5951d00-d",
+      "bytes": 2630598,
+      "inode": 435173,
+      "mtimeNs": 1791584842339221403,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "9eab02892fe5fc571831e32def501e7799372abad24a0e3558cc9edbb5951d00"
+    },
+    {
+      "path": "/root/.cache/go-build/9e/9ecbd00db0c86289ab2c4fa23ba65b03bcf32215747a8966ef5f5b549ed59e45-d",
+      "bytes": 6288680,
+      "inode": 1488602,
+      "mtimeNs": 1791588924254944032,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "9ecbd00db0c86289ab2c4fa23ba65b03bcf32215747a8966ef5f5b549ed59e45"
+    },
+    {
+      "path": "/root/.cache/go-build/9e/9e577543b04c0858042d967b9ea8a374c67d29ffec939766e823e5058050d904-d",
+      "bytes": 9993896,
+      "inode": 1488051,
+      "mtimeNs": 1791588858319722834,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "9e577543b04c0858042d967b9ea8a374c67d29ffec939766e823e5058050d904"
+    },
+    {
+      "path": "/root/.cache/go-build/9c/9c563044803a3c8c542c74a8091d0cb576c7394edd18057b1ea815dcd2c1aeb3-d",
+      "bytes": 9948326,
+      "inode": 1488679,
+      "mtimeNs": 1791588968988173861,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "9c563044803a3c8c542c74a8091d0cb576c7394edd18057b1ea815dcd2c1aeb3"
+    },
+    {
+      "path": "/root/.cache/go-build/7f/7ff7cdf8f4061dd556e0665da6967c09e23c0e6dec89e6cfcfdb5d09cc0e7bc8-d",
+      "bytes": 1118910,
+      "inode": 1488630,
+      "mtimeNs": 1791588961123035271,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "7ff7cdf8f4061dd556e0665da6967c09e23c0e6dec89e6cfcfdb5d09cc0e7bc8"
+    },
+    {
+      "path": "/root/.cache/go-build/7f/7f46205302a92ed41c3e26afe641a9054586334ae54f8539ebb4539b17032d62-d",
+      "bytes": 11702302,
+      "inode": 1488452,
+      "mtimeNs": 1791588905545398753,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "7f46205302a92ed41c3e26afe641a9054586334ae54f8539ebb4539b17032d62"
+    },
+    {
+      "path": "/root/.cache/go-build/b1/b12d08849c47d1123d88754b77e7750115f64db5d9d894faf7cff07b55802dac-d",
+      "bytes": 8478570,
+      "inode": 1453753,
+      "mtimeNs": 1791585310443918636,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "b12d08849c47d1123d88754b77e7750115f64db5d9d894faf7cff07b55802dac"
+    },
+    {
+      "path": "/root/.cache/go-build/30/30d402fafda130584d67de62f4d1941b92285b013f2b2864363bb6254251613a-d",
+      "bytes": 9906708,
+      "inode": 1579996,
+      "mtimeNs": 1791588852304548187,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "30d402fafda130584d67de62f4d1941b92285b013f2b2864363bb6254251613a"
+    },
+    {
+      "path": "/root/.cache/go-build/30/306300277be665ea29244fb0d6ffc513aa1e529dd747ab113e7f60878e5a4c49-d",
+      "bytes": 9716678,
+      "inode": 1580024,
+      "mtimeNs": 1791588855960087400,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "306300277be665ea29244fb0d6ffc513aa1e529dd747ab113e7f60878e5a4c49"
+    },
+    {
+      "path": "/root/.cache/go-build/d0/d0878c8e7f837df0568ad59525b38272172c00bac4641cfc8c1d1f052bf01b89-d",
+      "bytes": 1109634,
+      "inode": 1450134,
+      "mtimeNs": 1791585122913337552,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "d0878c8e7f837df0568ad59525b38272172c00bac4641cfc8c1d1f052bf01b89"
+    },
+    {
+      "path": "/root/.cache/go-build/1b/1b1027f4875c32506961db7200e33582f243f91e1a63ef7cf8776b45a30a0ed8-d",
+      "bytes": 5108934,
+      "inode": 1488661,
+      "mtimeNs": 1791588966132006518,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "1b1027f4875c32506961db7200e33582f243f91e1a63ef7cf8776b45a30a0ed8"
+    },
+    {
+      "path": "/root/.cache/go-build/7e/7e444634eddea3ac654a7bfef208d50a0eb5ffefadb8d4490a1838a33801fcb9-d",
+      "bytes": 14077812,
+      "inode": 1580359,
+      "mtimeNs": 1791588901065381688,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "7e444634eddea3ac654a7bfef208d50a0eb5ffefadb8d4490a1838a33801fcb9"
+    },
+    {
+      "path": "/root/.cache/go-build/7e/7e40c1f4a6b2acbd7d1db1448182b207fcf812d6204427a8c2d0a4fd3ba127e6-d",
+      "bytes": 12146426,
+      "inode": 1580057,
+      "mtimeNs": 1791588861231396017,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "7e40c1f4a6b2acbd7d1db1448182b207fcf812d6204427a8c2d0a4fd3ba127e6"
+    },
+    {
+      "path": "/root/.cache/go-build/7e/7ecbc5b052b545491ee3df5cfc8b925a9bfc2c5c9ab5464011e7e001f3c27348-d",
+      "bytes": 1273538,
+      "inode": 1580383,
+      "mtimeNs": 1791588902855649115,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "7ecbc5b052b545491ee3df5cfc8b925a9bfc2c5c9ab5464011e7e001f3c27348"
+    },
+    {
+      "path": "/root/.cache/go-build/87/87b8f39335a22c88e38cb8d12ed290d0dea1fb4230f0c328aeb91f8baefa34ac-d",
+      "bytes": 1219240,
+      "inode": 1580556,
+      "mtimeNs": 1791588940280488689,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "87b8f39335a22c88e38cb8d12ed290d0dea1fb4230f0c328aeb91f8baefa34ac"
+    },
+    {
+      "path": "/root/.cache/go-build/81/81a482c78e74c5bd77f17dc907bdbd8ceaee09cb1d55ef42b1c75d364395c978-d",
+      "bytes": 2873080,
+      "inode": 1580540,
+      "mtimeNs": 1791588920048919416,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "81a482c78e74c5bd77f17dc907bdbd8ceaee09cb1d55ef42b1c75d364395c978"
+    },
+    {
+      "path": "/root/.cache/go-build/81/8135ea297e8a70f93a674aa49a6f054cf366318934903769699375421f1df025-d",
+      "bytes": 10479034,
+      "inode": 1580192,
+      "mtimeNs": 1791588885974964202,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "8135ea297e8a70f93a674aa49a6f054cf366318934903769699375421f1df025"
+    },
+    {
+      "path": "/root/.cache/go-build/42/42ccb077707394f974f1b29e1ef3d9c62accc3515e9df7ac9a9988084f7e4be4-d",
+      "bytes": 3676400,
+      "inode": 1488599,
+      "mtimeNs": 1791588920785894653,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "42ccb077707394f974f1b29e1ef3d9c62accc3515e9df7ac9a9988084f7e4be4"
+    },
+    {
+      "path": "/root/.cache/go-build/42/424e6bd425c4055fad7245bad7d9c829ee078543a63554b1fcc69a99ba879a7d-d",
+      "bytes": 10659230,
+      "inode": 1488617,
+      "mtimeNs": 1791588942905138855,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "424e6bd425c4055fad7245bad7d9c829ee078543a63554b1fcc69a99ba879a7d"
+    },
+    {
+      "path": "/root/.cache/go-build/1e/1e9d001a77ea3ce5e893912a5e92306219e5478a5c39798ca9d97dd71f9d5bef-d",
+      "bytes": 1515402,
+      "inode": 1580558,
+      "mtimeNs": 1791588940717050076,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "1e9d001a77ea3ce5e893912a5e92306219e5478a5c39798ca9d97dd71f9d5bef"
+    },
+    {
+      "path": "/root/.cache/go-build/08/0832925854ec03ea485c002249b31cc81ddb9afb4ed7c3dd4c497c1805bbeca9-d",
+      "bytes": 10479018,
+      "inode": 1488597,
+      "mtimeNs": 1791588919045057995,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "0832925854ec03ea485c002249b31cc81ddb9afb4ed7c3dd4c497c1805bbeca9"
+    },
+    {
+      "path": "/root/.cache/go-build/08/084dc5669903ef9986207e6f2c37afb06fa501a3166d9551eea92cf09486a808-d",
+      "bytes": 69484430,
+      "inode": 1488518,
+      "mtimeNs": 1791588910183253678,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "084dc5669903ef9986207e6f2c37afb06fa501a3166d9551eea92cf09486a808"
+    },
+    {
+      "path": "/root/.cache/go-build/11/11a1e15d7993e8844883563be023a0cbb03e3ad97492136f8fd2dd37d7393408-d",
+      "bytes": 5847204,
+      "inode": 1580330,
+      "mtimeNs": 1791588899144411880,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "11a1e15d7993e8844883563be023a0cbb03e3ad97492136f8fd2dd37d7393408"
+    },
+    {
+      "path": "/root/.cache/go-build/84/84e68823107e33ff7912961923c95f18d8600af13635b0dcd7d6bb354347a588-d",
+      "bytes": 1351782,
+      "inode": 1580541,
+      "mtimeNs": 1791588920336404196,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-ca-review"
+      ],
+      "sha256": "84e68823107e33ff7912961923c95f18d8600af13635b0dcd7d6bb354347a588"
+    },
+    {
+      "path": "/root/.cache/go-build/84/8454746f20001b7709a75e9420f14f7e7bcc8fcdbc0cd628a5f8958dd25fb94e-d",
+      "bytes": 12192504,
+      "inode": 1580380,
+      "mtimeNs": 1791588902480888536,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "8454746f20001b7709a75e9420f14f7e7bcc8fcdbc0cd628a5f8958dd25fb94e"
+    },
+    {
+      "path": "/root/.cache/go-build/e4/e4b9782f158e5aaa1797d36447c06f109c0c2b673adf0185845b40f06bc65592-d",
+      "bytes": 1134042,
+      "inode": 1580574,
+      "mtimeNs": 1791588962276095969,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "e4b9782f158e5aaa1797d36447c06f109c0c2b673adf0185845b40f06bc65592"
+    },
+    {
+      "path": "/root/.cache/go-build/72/72a5c9301f237c5e44324a4b9519ca58adffd2edb6e01619a5fb0f9b316f228d-d",
+      "bytes": 1786034,
+      "inode": 1450480,
+      "mtimeNs": 1791585127223274397,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "72a5c9301f237c5e44324a4b9519ca58adffd2edb6e01619a5fb0f9b316f228d"
+    },
+    {
+      "path": "/root/.cache/go-build/28/280da1ad9edd4ac9d6724c921f3bbe88cc1b3bc525dd4db3cc3717c1ce97c1f1-d",
+      "bytes": 1515616,
+      "inode": 576137,
+      "mtimeNs": 1791584394193682406,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "280da1ad9edd4ac9d6724c921f3bbe88cc1b3bc525dd4db3cc3717c1ce97c1f1"
+    },
+    {
+      "path": "/root/.cache/go-build/98/9853c39219c43079308f9957977dba3e8de79435f5e25dc370ec87d73a76093d-d",
+      "bytes": 1059368,
+      "inode": 1488685,
+      "mtimeNs": 1791588970363950661,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "9853c39219c43079308f9957977dba3e8de79435f5e25dc370ec87d73a76093d"
+    },
+    {
+      "path": "/root/.cache/go-build/98/9831d039c86665363a00f6e1d323533fa84de8ceee09ef1f3eff1abcfb939b07-d",
+      "bytes": 1154426,
+      "inode": 1488480,
+      "mtimeNs": 1791588907775236707,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-integrated-review"
+      ],
+      "sha256": "9831d039c86665363a00f6e1d323533fa84de8ceee09ef1f3eff1abcfb939b07"
+    },
+    {
+      "path": "/root/.cache/go-build/22/22a7e94b4b4678d60ac90dd00e3fb0cfadcf913177928dff5111bc1068f257a4-d",
+      "bytes": 2504494,
+      "inode": 1350558,
+      "mtimeNs": 1791588853420993688,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "22a7e94b4b4678d60ac90dd00e3fb0cfadcf913177928dff5111bc1068f257a4"
+    },
+    {
+      "path": "/root/.cache/go-build/b8/b8a4a9e3926b014d833564c97e88d6de603a1d761f3b0dc176f7241464d2b1ea-d",
+      "bytes": 3503604,
+      "inode": 1452248,
+      "mtimeNs": 1791585277314637570,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-distribution-review"
+      ],
+      "sha256": "b8a4a9e3926b014d833564c97e88d6de603a1d761f3b0dc176f7241464d2b1ea"
+    },
+    {
+      "path": "/root/.cache/go-build/6c/6c1f44141faaeec85cf4bc7e2f4dacb4b7eca77c12ea7beb0cb8f05097b70479-d",
+      "bytes": 2887516,
+      "inode": 1450312,
+      "mtimeNs": 1791585125043181877,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-audit-review"
+      ],
+      "sha256": "6c1f44141faaeec85cf4bc7e2f4dacb4b7eca77c12ea7beb0cb8f05097b70479"
+    },
+    {
+      "path": "/root/.cache/go-build/6c/6c071bf8a82d7c37431257a72f54f0a7e5cf2c80e518824b4e6195ea33c121f4-d",
+      "bytes": 1129376,
+      "inode": 1488129,
+      "mtimeNs": 1791588882449843026,
+      "sourcePaths": [
+        "/root/astronomer-all/astronomer-032-governance-review"
+      ],
+      "sha256": "6c071bf8a82d7c37431257a72f54f0a7e5cf2c80e518824b4e6195ea33c121f4"
+    }
+  ],
+  "skipped": [],
+  "reclaimedBytes": 1474274758,
+  "preserved": "Source, branches, frozen and raw evidence, signed artifacts, toolchains, database/PVC/container/image state and all unselected cache entries.",
+  "afterGuardExitCode": 0,
+  "afterGuard": {
+    "path": ".",
+    "mountpoint": "/",
+    "total_kib": 354066236,
+    "used_kib": 267301516,
+    "available_kib": 72315444,
+    "available_gib": 68,
+    "free_percent": 21,
+    "minimum_free_gib": 20,
+    "minimum_free_percent": 20,
+    "meets_minimum": true
+  }
+}

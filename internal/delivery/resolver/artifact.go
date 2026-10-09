@@ -7,11 +7,7 @@ import (
 	"net/http"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
-	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/registry/remote"
-	remoteauth "oras.land/oras-go/v2/registry/remote/auth"
 )
 
 // FetchVerifiedOCIArtifact authenticates the pinned subject using the canonical
@@ -34,27 +30,9 @@ func fetchArtifactPayload(ctx context.Context, client *http.Client, repositoryNa
 	if maximum <= 0 || maximum > 512<<20 {
 		return nil, errors.New("OCI artifact size policy is invalid")
 	}
-	repository, err := remote.NewRepository(repositoryName)
-	if err != nil {
-		return nil, errors.New("OCI artifact repository is invalid")
-	}
-	repository.Client = &remoteauth.Client{Client: client, Credential: remoteauth.StaticCredential(repository.Reference.Registry, remoteauth.EmptyCredential)}
-	repository.MaxMetadataBytes = 1 << 20
-	descriptor, reader, err := repository.FetchReference(ctx, subjectDigest)
-	if err != nil {
-		return nil, errors.New("OCI artifact manifest is unavailable")
-	}
-	manifestBytes, err := readArtifactPayload(reader, descriptor.Size, 1<<20)
-	_ = reader.Close()
+	repository, manifest, _, err := fetchArtifactManifest(ctx, client, repositoryName, subjectDigest)
 	if err != nil {
 		return nil, err
-	}
-	if descriptor.Digest.String() != subjectDigest || digest.FromBytes(manifestBytes) != descriptor.Digest {
-		return nil, errors.New("OCI artifact manifest digest mismatch")
-	}
-	var manifest ocispec.Manifest
-	if err := jsoncontract.Decode(manifestBytes, &manifest); err != nil || manifest.SchemaVersion != 2 || len(manifest.Layers) != 1 {
-		return nil, errors.New("OCI artifact must have one payload layer")
 	}
 	layer := manifest.Layers[0]
 	if layer.MediaType != mediaType || len(layer.URLs) != 0 || layer.Digest.Algorithm() != digest.SHA256 {

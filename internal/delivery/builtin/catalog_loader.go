@@ -21,7 +21,7 @@ func (p *Provisioner) loadCatalog(ctx context.Context) (builtinbundles.Catalog, 
 	catalog, err := p.catalog.Load(ctx)
 	if provider, ok := p.catalog.(interface{ Status() distribution.Status }); ok {
 		status := provider.Status()
-		slog.InfoContext(ctx, "distribution status", "mode", status.Mode, "release", status.Release, "source_digest", status.SourceDigest, "location", status.Location, "verification", status.Verification, "inventory_complete", status.InventoryComplete, "last_successful_sync", status.LastSuccessfulSync, "blocked_category", status.BlockedCategory)
+		slog.InfoContext(ctx, "distribution status", "mode", status.Mode, "release", status.Release, "source_digest", status.SourceDigest, "location", status.Location, "verification", status.Verification, "inventory_complete", status.InventoryComplete, "database_payload_verification", status.DatabasePayloadVerification, "database_freshness", status.DatabaseFreshness, "last_successful_sync", status.LastSuccessfulSync, "blocked_category", status.BlockedCategory)
 	}
 	return catalog, err
 }

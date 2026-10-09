@@ -72,7 +72,7 @@ func ReadClosedArchive(payload []byte, release, catalogDigest string) (map[strin
 	if validateJSON(members["catalog.json"]) != nil {
 		return nil, BOM{}, errors.New("distribution catalog has ambiguous JSON")
 	}
-	if err := validateArtifactAssets(bom.Assets, members); err != nil {
+	if err := validateArtifactAssets(bom.AssetContractVersion, bom.Assets, members); err != nil {
 		return nil, BOM{}, err
 	}
 	return members, bom, nil
