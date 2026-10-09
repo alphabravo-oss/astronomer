@@ -80,8 +80,8 @@ type InhibitionMatcher struct {
 // openapi:request InhibitionRequest
 type InhibitionRequest struct {
 	Name           string              `json:"name" validate:"required"`
-	SourceMatchers []InhibitionMatcher `json:"source_matchers"`
-	TargetMatchers []InhibitionMatcher `json:"target_matchers"`
+	SourceMatchers []InhibitionMatcher `json:"source_matchers" validate:"required,min=1"`
+	TargetMatchers []InhibitionMatcher `json:"target_matchers" validate:"required,min=1"`
 	EqualLabels    []string            `json:"equal_labels"`
 	Enabled        *bool               `json:"enabled"`
 }
