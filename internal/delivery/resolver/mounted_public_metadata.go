@@ -13,15 +13,17 @@ import (
 // Missing/changed metadata is a source error, not a signing-material loss proof.
 // The identical canonical regular-FD reader pins identity and the 1 MiB bound.
 func FingerprintMountedPublicMetadata(ctx context.Context, path string) (string, error) {
- material,err:=readMountedPublicMetadata(ctx,path)
- if err!=nil{return "",err}
- defer clearBytes(material)
+	material, err := readMountedPublicMetadata(ctx, path)
+	if err != nil {
+		return "", err
+	}
+	defer clearBytes(material)
 
 	digest := sha256.Sum256(material)
 	return fmt.Sprintf("sha256:%x", digest), nil
 }
 
-func readMountedPublicMetadata(ctx context.Context,path string)([]byte,error) {
+func readMountedPublicMetadata(ctx context.Context, path string) ([]byte, error) {
 	if ctx == nil || !strictTrustOpeningAvailable || !filepath.IsAbs(path) {
 		return nil, errors.New("database mounted public metadata configuration invalid")
 	}
@@ -38,8 +40,8 @@ func readMountedPublicMetadata(ctx context.Context,path string)([]byte,error) {
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
-        clearBytes(material)
+		clearBytes(material)
 		return nil, err
 	}
- return material,nil
+	return material, nil
 }

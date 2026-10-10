@@ -85,7 +85,9 @@ func buildScanJobs(request JobRequest, images distribution.DatabaseScanImages) (
 	if err != nil {
 		return ScanJobs{}, err
 	}
-	if request.ImagePullSecret != "" && request.ImagePullSecret != "database-scan-"+request.ClaimID.String()+"-image-pull" { return ScanJobs{}, errors.New("owned scan Kubelet pull Secret differs from exact claim") }
+	if request.ImagePullSecret != "" && request.ImagePullSecret != "database-scan-"+request.ClaimID.String()+"-image-pull" {
+		return ScanJobs{}, errors.New("owned scan Kubelet pull Secret differs from exact claim")
+	}
 	inputRoot := InputVolumeRoot + "/input-" + request.ClaimID.String()
 	name := "database-scan-" + request.ClaimID.String()
 	claim := request.ClaimID.String()

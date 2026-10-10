@@ -60,10 +60,10 @@ type imageVulnRunTxFunc func(context.Context, func(ImageVulnMutationTx) error) e
 // — when nil the rescan path short-circuits, every read path still
 // works against the local DB.
 type ImageVulnHandler struct {
-	queries ImageVulnQuerier
-	k8s     K8sRequester
-	runTx   imageVulnRunTxFunc
- databaseStatus ImageDatabaseStatusReader
+	queries        ImageVulnQuerier
+	k8s            K8sRequester
+	runTx          imageVulnRunTxFunc
+	databaseStatus ImageDatabaseStatusReader
 }
 
 // NewImageVulnHandler constructs the handler. log defaults to slog's

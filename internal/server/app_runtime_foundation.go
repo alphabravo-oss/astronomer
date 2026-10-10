@@ -25,7 +25,7 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 		taskLeader: c.taskLeader, runtime: c.runtime,
 	}
 	databaseRefresh := c.databaseRefreshOwner
- databaseScan := c.databaseScanOwner
+	databaseScan := c.databaseScanOwner
 	c.transferDatabaseAuthority(s)
 	cleanupOnError := true
 	defer func() {
@@ -105,7 +105,9 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 		if databaseRefresh != nil {
 			loops = append(loops, namedRuntimeLoop{name: "database-update-refresh", run: func(ctx context.Context) { databaseRefresh.Run(ctx, logger) }})
 		}
-		if databaseScan != nil {loops=append(loops,namedRuntimeLoop{name:"database-owned-scans",run:func(ctx context.Context){databaseScan.Run(ctx,logger)}})}
+		if databaseScan != nil {
+			loops = append(loops, namedRuntimeLoop{name: "database-owned-scans", run: func(ctx context.Context) { databaseScan.Run(ctx, logger) }})
+		}
 		return runRuntimeLoopGroup(ctx, loops...)
 	}
 	if cfg.ServerReplicas > 1 && c.database != nil {

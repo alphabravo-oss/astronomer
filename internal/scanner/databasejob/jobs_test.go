@@ -45,13 +45,15 @@ func TestOwnedScanJobsSeparatePreparationCredentialsFromReadOnlyScanner(t *testi
 			t.Run(architecture+map[bool]string{false: "-anonymous", true: "-private"}[private], func(t *testing.T) {
 				request, images := ownedJobFixture(private)
 				request.Architecture = architecture
-				request.ImagePullSecret="database-scan-"+request.ClaimID.String()+"-image-pull"
+				request.ImagePullSecret = "database-scan-" + request.ClaimID.String() + "-image-pull"
 				value, err := buildScanJobs(request, images)
 				if err != nil {
 					t.Fatal(err)
 				}
 				prep, scan := value.Preparation.Spec.Template.Spec, value.Scan.Spec.Template.Spec
-				if len(prep.ImagePullSecrets)!=1||len(scan.ImagePullSecrets)!=1||prep.ImagePullSecrets[0].Name!=request.ImagePullSecret||scan.ImagePullSecrets[0].Name!=request.ImagePullSecret {t.Fatal("explicit Kubelet credential not scoped to both exact Jobs")}
+				if len(prep.ImagePullSecrets) != 1 || len(scan.ImagePullSecrets) != 1 || prep.ImagePullSecrets[0].Name != request.ImagePullSecret || scan.ImagePullSecrets[0].Name != request.ImagePullSecret {
+					t.Fatal("explicit Kubelet credential not scoped to both exact Jobs")
+				}
 				if prep.NodeName != request.NodeName || scan.NodeName != request.NodeName || scan.NodeSelector["kubernetes.io/arch"] != architecture {
 					t.Fatal("job moved away from the measured node")
 				}
@@ -155,10 +157,10 @@ func containsArgument(values []string, expected string) bool {
 
 func TestOwnedScanJobsRejectMutableAndIncompleteCurrentData(t *testing.T) {
 	mutations := map[string]func(*JobRequest, *distribution.DatabaseScanImages){
-		"claim":             func(r *JobRequest, _ *distribution.DatabaseScanImages) { r.ClaimID = uuid.Nil },
-		"foreign-kubelet-secret":func(r *JobRequest,_ *distribution.DatabaseScanImages){r.ImagePullSecret="foreign-secret"},
-		"mutable-workload":  func(r *JobRequest, _ *distribution.DatabaseScanImages) { r.WorkloadDigest = "latest" },
-		"tagged-repository": func(r *JobRequest, _ *distribution.DatabaseScanImages) { r.WorkloadRepository += ":latest" },
+		"claim":                  func(r *JobRequest, _ *distribution.DatabaseScanImages) { r.ClaimID = uuid.Nil },
+		"foreign-kubelet-secret": func(r *JobRequest, _ *distribution.DatabaseScanImages) { r.ImagePullSecret = "foreign-secret" },
+		"mutable-workload":       func(r *JobRequest, _ *distribution.DatabaseScanImages) { r.WorkloadDigest = "latest" },
+		"tagged-repository":      func(r *JobRequest, _ *distribution.DatabaseScanImages) { r.WorkloadRepository += ":latest" },
 		"credential-url": func(r *JobRequest, _ *distribution.DatabaseScanImages) {
 			r.WorkloadRepository = "https://user:fixture@registry.example.test/workload"
 		},

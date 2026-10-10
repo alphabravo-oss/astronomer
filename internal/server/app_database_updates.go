@@ -68,7 +68,9 @@ func databaseStartupOptionsForBuild(ctx context.Context, cfg *config.Config, rel
 }
 
 func (c *productionComposition) prepareDeliveryCatalog(ctx context.Context, cfg *config.Config) (builtin.CatalogLoader, error) {
- if err:=validateOwnedDatabaseScanSettings(cfg);err!=nil{return nil,err}
+	if err := validateOwnedDatabaseScanSettings(cfg); err != nil {
+		return nil, err
+	}
 	if !cfg.DeliveryDatabaseUpdatesEnabled {
 		ca, err := readBuiltinCA(cfg.DeliverySourceCAFile)
 		if err != nil {
@@ -151,7 +153,9 @@ func (c *productionComposition) prepareOwnedDatabaseCatalog(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	if err:=c.configureOwnedDatabaseScan(ctx,cfg,original,authority,proof);err!=nil{return nil,err}
+	if err := c.configureOwnedDatabaseScan(ctx, cfg, original, authority, proof); err != nil {
+		return nil, err
+	}
 	c.databaseRefreshOwner = refresh
 	c.hub.SetDeliveryStateProvider(owned)
 	c.databaseAuthority = authority
@@ -174,8 +178,14 @@ func (catalog *databaseAuthorityCatalog) Load(ctx context.Context) (builtinbundl
 }
 
 func (c *productionComposition) closeUntransferredDatabaseAuthority() {
- if c.databaseScanMaterial!=nil {c.databaseScanMaterial.Close();c.databaseScanMaterial=nil}
- if c.databaseScanPull!=nil {c.databaseScanPull.Close();c.databaseScanPull=nil}
+	if c.databaseScanMaterial != nil {
+		c.databaseScanMaterial.Close()
+		c.databaseScanMaterial = nil
+	}
+	if c.databaseScanPull != nil {
+		c.databaseScanPull.Close()
+		c.databaseScanPull = nil
+	}
 	if c.databaseAuthority != nil {
 		c.databaseAuthority.Close()
 		c.databaseAuthority = nil
@@ -186,10 +196,16 @@ func (c *productionComposition) transferDatabaseAuthority(server *Server) {
 		return
 	}
 	authority := c.databaseAuthority
- material,pull:=c.databaseScanMaterial,c.databaseScanPull
- c.databaseScanMaterial=nil;c.databaseScanPull=nil
+	material, pull := c.databaseScanMaterial, c.databaseScanPull
+	c.databaseScanMaterial = nil
+	c.databaseScanPull = nil
 	server.addResourceCloser("database physical authority", func(context.Context) error {
-		if material!=nil {material.Close()};if pull!=nil {pull.Close()}
+		if material != nil {
+			material.Close()
+		}
+		if pull != nil {
+			pull.Close()
+		}
 		authority.Close()
 		return nil
 	})

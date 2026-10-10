@@ -143,14 +143,16 @@ func prepareJob(stageOnly bool, command server.DatabaseJobPreparation) int {
 	if err == nil {
 		if stageOnly {
 			var prepared databasejob.Preparation
-            prepared, err = server.StageDatabaseScanInputRecord(ctx,cfg,command)
-            if err==nil {
-                output,openErr:=databasejob.NewMeasurementPipe(ctx,os.Stdout)
-                if openErr!=nil {err=openErr} else {
-                    err=databasejob.WritePreparationRecord(ctx,output,prepared)
-                    output.Close()
-                }
-            }
+			prepared, err = server.StageDatabaseScanInputRecord(ctx, cfg, command)
+			if err == nil {
+				output, openErr := databasejob.NewMeasurementPipe(ctx, os.Stdout)
+				if openErr != nil {
+					err = openErr
+				} else {
+					err = databasejob.WritePreparationRecord(ctx, output, prepared)
+					output.Close()
+				}
+			}
 		} else {
 			err = server.PrepareDatabaseCacheJob(ctx, cfg, command)
 		}
