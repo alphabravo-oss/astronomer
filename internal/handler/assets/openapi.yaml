@@ -2814,7 +2814,7 @@ components:
       required: [data, pagination]
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/ControlPlaneAlert'}}
-        pagination: {$ref: '#/components/schemas/PaginationMetadata'}
+        pagination: {$ref: '#/components/schemas/SignedCursorPaginationMetadata'}
     ControlPlaneSilence:
       type: object
       additionalProperties: false
@@ -2840,7 +2840,7 @@ components:
       required: [data, pagination]
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/ControlPlaneSilence'}}
-        pagination: {$ref: '#/components/schemas/PaginationMetadata'}
+        pagination: {$ref: '#/components/schemas/SignedCursorPaginationMetadata'}
     ControlPlaneSummary:
       type: object
       additionalProperties: false
@@ -9841,7 +9841,25 @@ components:
         offset: {type: integer, minimum: 0}
         has_more: {type: boolean}
         next_offset: {type: integer, minimum: 0, nullable: true}
+        next_cursor: {type: string, maxLength: 1024, nullable: true}
+    SignedCursorPaginationMetadata:
+      type: object
+      additionalProperties: false
+      required: [limit, offset, has_more, next_offset]
+      properties:
+        total: {type: integer, format: int64, minimum: 0}
+        limit: {type: integer, minimum: 1}
+        offset: {type: integer, minimum: 0}
+        has_more: {type: boolean}
+        next_offset: {type: integer, minimum: 0, nullable: true}
         next_cursor: {type: string, maxLength: 4096, nullable: true}
+    SignedCursorPageEnvelope:
+      type: object
+      description: Explicit signed-cursor collection page; only requests with cursor present opt into the larger token contract. Exact total is omitted when unknown.
+      required: [data, pagination]
+      properties:
+        data: {type: array, items: {}}
+        pagination: {$ref: '#/components/schemas/SignedCursorPaginationMetadata'}
     DeliverySourceVerification:
       type: object
       additionalProperties: false
@@ -26925,7 +26943,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PageEnvelope'
+                  - $ref: '#/components/schemas/SignedCursorPageEnvelope'
                   - properties:
                       data:
                         type: array

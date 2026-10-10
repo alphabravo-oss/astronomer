@@ -18175,9 +18175,9 @@
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
     },
     {
-      "path": "internal/delivery/resolver/artifact.go",
+      "path": "internal/delivery/resolver/artifact_metadata.go",
       "owner": "delivery/distribution",
-      "scope": "Release build/import JSON readers and outputs; exact function/operand schemas and legacy error assumptions declared per site; W03 owns authenticity and archive closure"
+      "scope": "Signature-first OCI manifest and additive configuration readers; exact descriptor/digest/cap closure, metadata verification distinct from payload availability/hash/freshness"
     },
     {
       "path": "internal/delivery/resolver/oci.go",
@@ -29739,8 +29739,8 @@
       "reader_behavior": "Shared duplicate/depth/EOF rejection into generic value; does not close arbitrary chart keys; archive category bounds apply"
     },
     {
-      "path": "internal/delivery/resolver/artifact.go",
-      "function": "fetchArtifactPayload",
+      "path": "internal/delivery/resolver/artifact_metadata.go",
+      "function": "fetchArtifactManifest",
       "operation": "jsoncontract.Decode",
       "arguments": ["manifestBytes", "&manifest"],
       "owner": "delivery/distribution",
@@ -29932,6 +29932,15 @@
       "owner": "pagination",
       "schema": "Canonical pagination.Cursor signed position envelope versions1(timestamp/ID) and2(text/group/ID), HMAC p1 domain and bounded2h issue time",
       "reader_behavior": "Domain-separated derived JWT key ring authenticates before canonical bounded JSON decode; exact current actor/scope/filter/order binding, stale/tamper/key-removal failure is a safe invalid cursor; no unsigned emission"
+    },
+    {
+      "path": "internal/delivery/resolver/artifact_metadata.go",
+      "function": "FetchVerifiedOCIArtifactMetadata",
+      "operation": "jsoncontract.Decode",
+      "arguments": ["configBytes", "&object"],
+      "owner": "delivery/distribution",
+      "schema": "Additive OCI artifact configuration object, descriptor 2 database metadata; payload availability/freshness remain separate authority",
+      "reader_behavior": "Signature-first manifest verification; descriptor/digest-bound max 1MiB bytes; canonical reader rejects duplicate/deep/trailing JSON and non-object/null while retaining supplier extension keys; static failure diagnostics"
     }
   ]
 }

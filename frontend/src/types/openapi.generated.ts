@@ -1862,7 +1862,7 @@ export interface OpenAPIComponents {
         };
     ControlPlaneAlertPage: {
           "data": OpenAPIComponents['schemas']['ControlPlaneAlert'][];
-          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+          "pagination": OpenAPIComponents['schemas']['SignedCursorPaginationMetadata'];
         };
     ControlPlanePolicy: {
           "monitoringQueueDepthThreshold": number;
@@ -1921,7 +1921,7 @@ export interface OpenAPIComponents {
         };
     ControlPlaneSilencePage: {
           "data": OpenAPIComponents['schemas']['ControlPlaneSilence'][];
-          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
+          "pagination": OpenAPIComponents['schemas']['SignedCursorPaginationMetadata'];
         };
     ControlPlaneSilenceRequest: {
           "controller": string;
@@ -5474,6 +5474,18 @@ export interface OpenAPIComponents {
           "expires_at"?: string;
           "idle_timeout_seconds"?: number;
           "command_count"?: number;
+        };
+    SignedCursorPageEnvelope: {
+          "data": unknown[];
+          "pagination": OpenAPIComponents['schemas']['SignedCursorPaginationMetadata'];
+        };
+    SignedCursorPaginationMetadata: {
+          "total"?: number;
+          "limit": number;
+          "offset": number;
+          "has_more": boolean;
+          "next_offset": number | null;
+          "next_cursor"?: string | null;
         };
     SmtpSettings: {
           "enabled"?: boolean;
@@ -13702,7 +13714,7 @@ export interface OpenAPIOperations {
           "cluster_id"?: string;
         };
       };
-    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
+    response: OpenAPIComponents['schemas']['SignedCursorPageEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['HelmChart'][];
       };
   };
@@ -18668,7 +18680,7 @@ export interface OpenAPIReadOperations {
   "postCatalogApplicationsPreview": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
         "data"?: OpenAPIReadComponents['schemas']['CatalogInstallationPreview'];
       } };
-  "getCatalogCharts": { response: OpenAPIReadComponents['schemas']['PageEnvelope'] & {
+  "getCatalogCharts": { response: OpenAPIReadComponents['schemas']['SignedCursorPageEnvelope'] & {
         "data"?: OpenAPIReadComponents['schemas']['HelmChart'][];
       } };
   "getCatalogChartsById": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
@@ -20298,6 +20310,8 @@ export type SharedGrafanaStackRequest = OpenAPIComponents['schemas']['SharedGraf
 export type SharedLokiStackRequest = OpenAPIComponents['schemas']['SharedLokiStackRequest'];
 export type SharedThanosStackRequest = OpenAPIComponents['schemas']['SharedThanosStackRequest'];
 export type ShellSession = OpenAPIComponents['schemas']['ShellSession'];
+export type SignedCursorPageEnvelope = OpenAPIComponents['schemas']['SignedCursorPageEnvelope'];
+export type SignedCursorPaginationMetadata = OpenAPIComponents['schemas']['SignedCursorPaginationMetadata'];
 export type SmtpSettings = OpenAPIComponents['schemas']['SmtpSettings'];
 export type SnapshotCreateRequest = OpenAPIComponents['schemas']['SnapshotCreateRequest'];
 export type SnapshotResponse = OpenAPIComponents['schemas']['SnapshotResponse'];
