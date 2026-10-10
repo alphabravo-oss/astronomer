@@ -582,7 +582,8 @@
         "HTTP proxy",
         "authenticated proxy URL",
         "NO_PROXY ambient bypass",
-        "actual HTTPS CONNECT/trust/body cancellation"
+        "actual HTTPS CONNECT/trust/body cancellation",
+        "proxy CONNECT uses target hostname; local validation does not pin proxy-side target DNS or routing"
       ]
     },
     {
@@ -604,5 +605,18 @@
     "non-HTTP candidates include unrelated database/cache/tunnel/Flux source protocols and are not assumed downloader plugins",
     "all new proxy and SDK fixture parents remain unexecuted"
   ],
-  "inventoryScriptOriginal": "/tmp/plan032_w11_operator_inventory.py"
+  "inventoryScriptOriginal": "/tmp/plan032_w11_operator_inventory.py",
+  "connectSourceInspection": {
+    "version": "go1.27.2",
+    "path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/src/net/http/transport.go",
+    "sha256": "sha256:c9146e77adc22d4b74ba77384ec7be7fc27c3af21ff20485f642b4d611b381a4",
+    "lines": [
+      1053,
+      1985,
+      1986,
+      1987,
+      1988
+    ],
+    "observation": "CONNECT request Host and opaque URL use canonical target hostname; no executed proxy destination-pinning qualification"
+  }
 }
