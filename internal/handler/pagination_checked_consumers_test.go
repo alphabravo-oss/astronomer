@@ -127,6 +127,8 @@ func TestCheckedInstalledSQLWindowMatchesLegacyMetadataAndScopes(t *testing.T) {
 					h := NewCatalogHandler(q)
 					if scoped {
 						h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: catalogReadBindings(cluster)})
+					} else {
+						h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: []rbac.RoleBinding{{RoleRules: []rbac.Rule{{Resource: "catalog", Verbs: []string{"read"}}}}}})
 					}
 					response := httptest.NewRecorder()
 					h.ListInstalledCharts(response, authedCatalogReq(http.MethodGet, "/api/v1/catalog/installed/?"+tc.query, nil))
