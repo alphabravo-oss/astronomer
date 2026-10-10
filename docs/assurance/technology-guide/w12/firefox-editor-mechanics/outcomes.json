@@ -1,0 +1,45 @@
+{
+  "stats": {
+    "startTime": "2026-10-10T02:43:27.062Z",
+    "duration": 23864.928,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  },
+  "cases": [
+    {
+      "title": "original Firefox bulk insertion submits one synthetic document",
+      "project": "scoped-firefox-editor",
+      "expectedStatus": "passed",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "failed",
+          "retry": 0,
+          "durationMs": 13343,
+          "errors": [
+            {
+              "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('#submitted')\nTimeout: 10000ms\n\u001b[32m- Expected  - 0\u001b[39m\n\u001b[31m+ Received  + 2\u001b[39m\n\n\u001b[31m+ # live-browser apply fixture\u001b[39m\n\u001b[31m+ {\"apiVersion\":\"v1\",\"kind\":\"ConfigMap\",\"metadata\":{\"name\":\"live-config\",\"namespace\":\"default\",\"labels\":{\"fixture-stage\":\"applied\"}},\"data\":{\"message\":\"after-live-apply\"}}\u001b[39m\n\u001b[2m  # live-browser apply fixture\u001b[22m\n\u001b[2m  {\"apiVersion\":\"v1\",\"kind\":\"ConfigMap\",\"metadata\":{\"name\":\"live-config\",\"namespace\":\"default\",\"labels\":{\"fixture-stage\":\"applied\"}},\"data\":{\"message\":\"after-live-apply\"}}\u001b[22m\n\u001b[2m  \u21b5\u001b[22m\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" locator('#submitted') with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('#submitted')\u001b[22m\n\u001b[2m    24 \u00d7 locator resolved to <pre id=\"submitted\"># live-browser apply fixture\u21b5{\"apiVersion\":\"v1\",\"\u2026</pre>\u001b[22m\n\u001b[2m       - unexpected value \"# live-browser apply fixture\u001b[22m\n\u001b[2m{\"apiVersion\":\"v1\",\"kind\":\"ConfigMap\",\"metadata\":{\"name\":\"live-config\",\"namespace\":\"default\",\"labels\":{\"fixture-stage\":\"applied\"}},\"data\":{\"message\":\"after-live-apply\"}}\u001b[22m\n\u001b[2m# live-browser apply fixture\u001b[22m\n\u001b[2m{\"apiVersion\":\"v1\",\"kind\":\"ConfigMap\",\"metadata\":{\"name\":\"live-config\",\"namespace\":\"default\",\"labels\":{\"fixture-stage\":\"applied\"}},\"data\":{\"message\":\"after-live-apply\"}}\u001b[22m\n\u001b[2m\"\u001b[22m\n\n\n  22 |   await page.keyboard.insertText(expected);\n  23 |   await page.getByRole(\"button\", { name: \"Dry run\", exact: true }).click();\n> 24 |   await expect(page.locator(\"#submitted\")).toHaveText(expected);\n     |                                            ^\n  25 |   const submitted = await page.locator(\"#submitted\").textContent();\n  26 |   expect(submitted?.match(/after-live-apply/g)?.length).toBe(1);\n  27 | });\n    at /root/astronomer-all/astronomer-032-firefox-fixture/frontend/.cache/monaco-input-characterization/editor.spec.ts:24:44"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "native Firefox key events submit the exact synthetic manifest",
+      "project": "scoped-firefox-editor",
+      "expectedStatus": "passed",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "retry": 0,
+          "durationMs": 4851,
+          "errors": []
+        }
+      ]
+    }
+  ],
+  "setupErrors": []
+}

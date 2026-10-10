@@ -1,0 +1,3 @@
+The scoped Firefox test used the actual controlled `YamlEditor`, synthetic ConfigMap content, and Monaco assets bound to application commit `5d8f9729`. Original bulk insertion reproduced duplicate submitted contents; native key events submitted exactly one document. Both cases used one worker and zero retries. This qualifies input mechanics only. The full fresh application Firefox and WebKit journeys remain open.
+
+The earlier web-server setup failure collected zero tests. Its failed capacity guard did not stop the ad hoc shell; that orchestration error is retained and disclosed. The corrected run used a fatal guard and finished with capacity passing. Original report, failure screenshot, context and trace remain private and hash-bound in the receipt.
