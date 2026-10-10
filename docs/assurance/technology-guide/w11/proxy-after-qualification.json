@@ -1,0 +1,777 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T07:28:05.274026+00:00",
+  "status": "SCOPED_PROXY_AFTER_PASS_NOT_WHOLE_HELM_ADOPTION",
+  "sourceCommit": "d29a7a5de995bb0ae57d74b4c26007642eb8b4d3",
+  "sourceBefore": "sha256:3a5a9037f357cd0ea34f4a8ce118d3e59278c7daef02606d895309fa2395218c",
+  "sourceAfter": "sha256:3a5a9037f357cd0ea34f4a8ce118d3e59278c7daef02606d895309fa2395218c",
+  "sourceStable": true,
+  "receipt": {
+    "originalPath": "/root/.cache/astronomer-032/qualification/w11-proxy-after-d29a7a5de995bb0ae57d74b4c26007642eb8b4d3/receipt.json",
+    "sha256": "sha256:5775e17ec3f52e03b2053a3ff2ac6fcf67b057b35114b537c1637ad08fcf65b6"
+  },
+  "actualGoVersion": "go version go1.27.2 linux/amd64",
+  "actualGoExecutableBefore": {
+    "path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+    "sha256": "sha256:548d3c32f83fa81152f543eb1526be7884cfe0526eb5e9ce29d3eca14786e7e0",
+    "sizeBytes": 17164055,
+    "mode": 365,
+    "device": 2049,
+    "inode": 2360704
+  },
+  "actualGoExecutableAfter": {
+    "path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+    "sha256": "sha256:548d3c32f83fa81152f543eb1526be7884cfe0526eb5e9ce29d3eca14786e7e0",
+    "sizeBytes": 17164055,
+    "mode": 365,
+    "device": 2049,
+    "inode": 2360704
+  },
+  "runnerSHA256": "sha256:f2fb587dfb3a8a6e36266fb6c868107304a1303894cab4607cc2a941ef940427",
+  "wrapperSHA256": "sha256:60c3790c8931a5d9986979f9fec5416b1f5e1f697b2c115272db8b40acd8000d",
+  "guardCount": 35,
+  "allDefaultGuardsPassed": true,
+  "finalCapacity": {
+    "path": "/root/astronomer-all/astronomer-032-w11",
+    "mountpoint": "/",
+    "total_kib": 354066236,
+    "used_kib": 269107244,
+    "available_kib": 70509716,
+    "available_gib": 67,
+    "free_percent": 20,
+    "minimum_free_gib": 20,
+    "minimum_free_percent": 20,
+    "meets_minimum": true
+  },
+  "resultInventory": {
+    "unexpectedTerminals": [],
+    "expectedParents": [
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmLocatorPreservesLocalChartPathAndCallerDeadline"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryOwnerPreservesNamedCredentialsAndTLSWithoutURLGrant"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryCredentialsRequireOwnedOriginOrExplicitOperatorFlag"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestSettingsUsesInjectedContract"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmOwnedRequestPreservesTransportSDKContextAndOwnerValues"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmOwnedRequestCancelsRealStreamingBodyAfterHeaders"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmDiscoveryUsesOwnedGetterAndJoinsCancellation"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmOwnedGetterRejectsAbsentOrExpiredContext"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmOperationDeadlinePreservesEarlierCallerAndRejectsInvalidScope"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmHTTPClientBindsBackgroundRequestWithoutMutatingOriginalPolicy"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmSDKDirectCanceledControlReturnsBeforeHookWorker"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmSDKJoinedInstallWaitPreservesPendingHistoryUntilWorkerStops"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmSDKJoinedUpgradeHookPreservesOldAndPendingRevisionUntilWorkerStops"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmJoinedActionRejectsExpiredOrMissingOwnerWithoutStartingSDK"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmPrivateRepositoryVersionCredentialsCAAndBodyCancellation"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHTTPSHelmProxyDoesNotReceiveRepositoryClientCertificate"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmHTTPProxyPreservesNamedVersionRepositoryAuthCAAndTargetIdentity"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmProxyNoProxyPreservesDirectTransferWithoutGrantingOrigins"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmProxyAuthorityAndBodyCancellationStayOwnedAndJoined"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmV1LayoutGuardPreservesRevisionAndRejectsUnknownRepresentation"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryPolicyDoesNotTrustChartURLOrLoopback"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryPolicyPreservesExactConfiguredPrivateAuthority"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryPolicyRejectsMalformedOperatorConfiguration"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryProxyRequiresIndependentOperatorAuthority"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryTypedProxyAllowsOperatorAuthAndRejectsAmbiguousInputs"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestBoundedResponseChecksHeaderBeforeReadingAndAllocation"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestBoundedResponseChunkedSentinelAndExactLimit"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestBoundedResponseCancellationAfterHeadersJoinsRead"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestBoundedResponseErrorsOmitUpstreamContentButRetainCancellation"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestNewUsesDefaultExternalTimeout"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestNewUsesProvidedTimeout"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestWithDefaultPreservesProvidedClient"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationPolicyRejectsAmbiguousAuthority"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationPolicyExactByteBoundAndUnrestrictedDefaults"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationPolicyClosedOrigins"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationClientPinsAddressAndRejectsRebinding"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationRedirectStripsCredentialsAndDeniesNewOrigin"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationClientCopiesAuthorityAndBlocksPrivateMetadata"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestPublicCDNRedirectConnectsWithoutCredentialsAndBlocksPrivate"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationClientClosesIdleConnectionsThroughBothWrappers"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationProxyOriginHasFiniteOperatorShape"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationProxyConstructionJoinsOwnedDNSCancellation"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationProxyConstructionCannotPublishExpiredOwner"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationProxySelectionIgnoresAmbientAuthority"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyRoutingPreservesExplicitCredentialsAndBypassWithoutAmbientAuthority"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyRoutingRefusesPublicPlaintextAndMalformedCredentialAuthority"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyBypassNeverGrantsRepositoryOrigin"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyConstructorJoinsDNSAndRefusesAmbiguousRouting"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyRoutesKeepDifferentOperatorEndpointsAndAvoidUnusedProxyDNS"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestOperatorProxyCaptureHasExplicitUpperLowerAndEmptyBypassPrecedence"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyTLSHandshakePreservesTransportAndEarlierOwnerLimits"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestRedirectOriginPairRequiresExplicitFiniteAuthority"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestFiniteOriginRedirectPinsConnectionsAndStripsCredentialsOnEveryHop"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestFiniteRedirectRejectsMetadataEvenWithExplicitCIDRAuthority"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestFiniteRedirectDirectionAndHopLimit"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestSafeTransport_UsesDialGuard"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestSafeClient_BlocksLoopbackDial"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestSafeClient_AllowsWhenDisabledForTest"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestSafeClientWithLimitRejectsChunkedOverflow"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestSafeClientAllowPrivate_BlocksLoopbackAndMetadata"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestGuardPublicHost"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestIsPublicIP_RejectsCGNAT"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestIsDialAllowed_AllowPrivateStillBlocksMetadata"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/config",
+        "test": "TestHelmRepositoryPolicyIsValidatedIndependentlyOfDeliveryTrust"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/config",
+        "test": "TestHelmRepositoryProxyConfigurationIsTypedAndSeparate"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/config",
+        "test": "TestHelmProxyEnvironmentIsCapturedOnceWithPrivatePolicyAndExplicitBypass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/config",
+        "test": "TestDirectEnvironmentAccessIsCentralized"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/server",
+        "test": "TestHelmRuntimeInjectsCapturedProxyRoutesWithoutAmbientReads"
+      }
+    ],
+    "terminalParents": [
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmLocatorPreservesLocalChartPathAndCallerDeadline",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryOwnerPreservesNamedCredentialsAndTLSWithoutURLGrant",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryCredentialsRequireOwnedOriginOrExplicitOperatorFlag",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestSettingsUsesInjectedContract",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmOwnedRequestPreservesTransportSDKContextAndOwnerValues",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmOwnedRequestCancelsRealStreamingBodyAfterHeaders",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmDiscoveryUsesOwnedGetterAndJoinsCancellation",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmOwnedGetterRejectsAbsentOrExpiredContext",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmOperationDeadlinePreservesEarlierCallerAndRejectsInvalidScope",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmHTTPClientBindsBackgroundRequestWithoutMutatingOriginalPolicy",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmSDKDirectCanceledControlReturnsBeforeHookWorker",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmSDKJoinedInstallWaitPreservesPendingHistoryUntilWorkerStops",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmSDKJoinedUpgradeHookPreservesOldAndPendingRevisionUntilWorkerStops",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmJoinedActionRejectsExpiredOrMissingOwnerWithoutStartingSDK",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmPrivateRepositoryVersionCredentialsCAAndBodyCancellation",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHTTPSHelmProxyDoesNotReceiveRepositoryClientCertificate",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmHTTPProxyPreservesNamedVersionRepositoryAuthCAAndTargetIdentity",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmProxyNoProxyPreservesDirectTransferWithoutGrantingOrigins",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmProxyAuthorityAndBodyCancellationStayOwnedAndJoined",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmV1LayoutGuardPreservesRevisionAndRejectsUnknownRepresentation",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryPolicyDoesNotTrustChartURLOrLoopback",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryPolicyPreservesExactConfiguredPrivateAuthority",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryPolicyRejectsMalformedOperatorConfiguration",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryProxyRequiresIndependentOperatorAuthority",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "test": "TestHelmRepositoryTypedProxyAllowsOperatorAuthAndRejectsAmbiguousInputs",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestBoundedResponseChecksHeaderBeforeReadingAndAllocation",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestBoundedResponseChunkedSentinelAndExactLimit",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestBoundedResponseCancellationAfterHeadersJoinsRead",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestBoundedResponseErrorsOmitUpstreamContentButRetainCancellation",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestNewUsesDefaultExternalTimeout",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestNewUsesProvidedTimeout",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestWithDefaultPreservesProvidedClient",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationPolicyRejectsAmbiguousAuthority",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationPolicyExactByteBoundAndUnrestrictedDefaults",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationPolicyClosedOrigins",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationClientPinsAddressAndRejectsRebinding",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationRedirectStripsCredentialsAndDeniesNewOrigin",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationClientCopiesAuthorityAndBlocksPrivateMetadata",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestPublicCDNRedirectConnectsWithoutCredentialsAndBlocksPrivate",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationClientClosesIdleConnectionsThroughBothWrappers",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationProxyOriginHasFiniteOperatorShape",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationProxyConstructionJoinsOwnedDNSCancellation",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationProxyConstructionCannotPublishExpiredOwner",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestDestinationProxySelectionIgnoresAmbientAuthority",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyRoutingPreservesExplicitCredentialsAndBypassWithoutAmbientAuthority",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyRoutingRefusesPublicPlaintextAndMalformedCredentialAuthority",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyBypassNeverGrantsRepositoryOrigin",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyConstructorJoinsDNSAndRefusesAmbiguousRouting",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyRoutesKeepDifferentOperatorEndpointsAndAvoidUnusedProxyDNS",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestOperatorProxyCaptureHasExplicitUpperLowerAndEmptyBypassPrecedence",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestTypedProxyTLSHandshakePreservesTransportAndEarlierOwnerLimits",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestRedirectOriginPairRequiresExplicitFiniteAuthority",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestFiniteOriginRedirectPinsConnectionsAndStripsCredentialsOnEveryHop",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestFiniteRedirectRejectsMetadataEvenWithExplicitCIDRAuthority",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestFiniteRedirectDirectionAndHopLimit",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestSafeTransport_UsesDialGuard",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestSafeClient_BlocksLoopbackDial",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestSafeClient_AllowsWhenDisabledForTest",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestSafeClientWithLimitRejectsChunkedOverflow",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestSafeClientAllowPrivate_BlocksLoopbackAndMetadata",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestGuardPublicHost",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestIsPublicIP_RejectsCGNAT",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "test": "TestIsDialAllowed_AllowPrivateStillBlocksMetadata",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/config",
+        "test": "TestDirectEnvironmentAccessIsCentralized",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/config",
+        "test": "TestHelmRepositoryPolicyIsValidatedIndependentlyOfDeliveryTrust",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/config",
+        "test": "TestHelmRepositoryProxyConfigurationIsTypedAndSeparate",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/config",
+        "test": "TestHelmProxyEnvironmentIsCapturedOnceWithPrivatePolicyAndExplicitBypass",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/server",
+        "test": "TestHelmRuntimeInjectsCapturedProxyRoutesWithoutAmbientReads",
+        "action": "pass"
+      }
+    ],
+    "missing": [],
+    "unexpected": [],
+    "duplicateParents": false,
+    "duplicateCases": false,
+    "skipped": [],
+    "failures": [],
+    "caseCounts": {
+      "pass": 97,
+      "fail": 0,
+      "skip": 0
+    },
+    "terminalPackages": [
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/helmruntime",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/httpclient",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/config",
+        "action": "pass"
+      },
+      {
+        "package": "github.com/alphabravocompany/astronomer-go/internal/server",
+        "action": "pass"
+      }
+    ],
+    "passed": true
+  },
+  "ownedCommands": [
+    {
+      "name": "go-version",
+      "exitCode": 0,
+      "reason": "",
+      "drained": true,
+      "command": [
+        "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+        "version"
+      ]
+    },
+    {
+      "name": "focused-tests",
+      "exitCode": 0,
+      "reason": "",
+      "drained": true,
+      "command": [
+        "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+        "test",
+        "-json",
+        "-race",
+        "-count=1",
+        "-timeout=3m",
+        "-run",
+        "^(TestBoundedResponseCancellationAfterHeadersJoinsRead|TestBoundedResponseChecksHeaderBeforeReadingAndAllocation|TestBoundedResponseChunkedSentinelAndExactLimit|TestBoundedResponseErrorsOmitUpstreamContentButRetainCancellation|TestDestinationClientClosesIdleConnectionsThroughBothWrappers|TestDestinationClientCopiesAuthorityAndBlocksPrivateMetadata|TestDestinationClientPinsAddressAndRejectsRebinding|TestDestinationPolicyClosedOrigins|TestDestinationPolicyExactByteBoundAndUnrestrictedDefaults|TestDestinationPolicyRejectsAmbiguousAuthority|TestDestinationProxyConstructionCannotPublishExpiredOwner|TestDestinationProxyConstructionJoinsOwnedDNSCancellation|TestDestinationProxyOriginHasFiniteOperatorShape|TestDestinationProxySelectionIgnoresAmbientAuthority|TestDestinationRedirectStripsCredentialsAndDeniesNewOrigin|TestDirectEnvironmentAccessIsCentralized|TestFiniteOriginRedirectPinsConnectionsAndStripsCredentialsOnEveryHop|TestFiniteRedirectDirectionAndHopLimit|TestFiniteRedirectRejectsMetadataEvenWithExplicitCIDRAuthority|TestGuardPublicHost|TestHTTPSHelmProxyDoesNotReceiveRepositoryClientCertificate|TestHelmDiscoveryUsesOwnedGetterAndJoinsCancellation|TestHelmHTTPClientBindsBackgroundRequestWithoutMutatingOriginalPolicy|TestHelmHTTPProxyPreservesNamedVersionRepositoryAuthCAAndTargetIdentity|TestHelmJoinedActionRejectsExpiredOrMissingOwnerWithoutStartingSDK|TestHelmLocatorPreservesLocalChartPathAndCallerDeadline|TestHelmOperationDeadlinePreservesEarlierCallerAndRejectsInvalidScope|TestHelmOwnedGetterRejectsAbsentOrExpiredContext|TestHelmOwnedRequestCancelsRealStreamingBodyAfterHeaders|TestHelmOwnedRequestPreservesTransportSDKContextAndOwnerValues|TestHelmPrivateRepositoryVersionCredentialsCAAndBodyCancellation|TestHelmProxyAuthorityAndBodyCancellationStayOwnedAndJoined|TestHelmProxyEnvironmentIsCapturedOnceWithPrivatePolicyAndExplicitBypass|TestHelmProxyNoProxyPreservesDirectTransferWithoutGrantingOrigins|TestHelmRepositoryCredentialsRequireOwnedOriginOrExplicitOperatorFlag|TestHelmRepositoryOwnerPreservesNamedCredentialsAndTLSWithoutURLGrant|TestHelmRepositoryPolicyDoesNotTrustChartURLOrLoopback|TestHelmRepositoryPolicyIsValidatedIndependentlyOfDeliveryTrust|TestHelmRepositoryPolicyPreservesExactConfiguredPrivateAuthority|TestHelmRepositoryPolicyRejectsMalformedOperatorConfiguration|TestHelmRepositoryProxyConfigurationIsTypedAndSeparate|TestHelmRepositoryProxyRequiresIndependentOperatorAuthority|TestHelmRepositoryTypedProxyAllowsOperatorAuthAndRejectsAmbiguousInputs|TestHelmRuntimeInjectsCapturedProxyRoutesWithoutAmbientReads|TestHelmSDKDirectCanceledControlReturnsBeforeHookWorker|TestHelmSDKJoinedInstallWaitPreservesPendingHistoryUntilWorkerStops|TestHelmSDKJoinedUpgradeHookPreservesOldAndPendingRevisionUntilWorkerStops|TestHelmV1LayoutGuardPreservesRevisionAndRejectsUnknownRepresentation|TestIsDialAllowed_AllowPrivateStillBlocksMetadata|TestIsPublicIP_RejectsCGNAT|TestNewUsesDefaultExternalTimeout|TestNewUsesProvidedTimeout|TestOperatorProxyCaptureHasExplicitUpperLowerAndEmptyBypassPrecedence|TestPublicCDNRedirectConnectsWithoutCredentialsAndBlocksPrivate|TestRedirectOriginPairRequiresExplicitFiniteAuthority|TestSafeClientAllowPrivate_BlocksLoopbackAndMetadata|TestSafeClientWithLimitRejectsChunkedOverflow|TestSafeClient_AllowsWhenDisabledForTest|TestSafeClient_BlocksLoopbackDial|TestSafeTransport_UsesDialGuard|TestSettingsUsesInjectedContract|TestTypedProxyBypassNeverGrantsRepositoryOrigin|TestTypedProxyConstructorJoinsDNSAndRefusesAmbiguousRouting|TestTypedProxyRoutesKeepDifferentOperatorEndpointsAndAvoidUnusedProxyDNS|TestTypedProxyRoutingPreservesExplicitCredentialsAndBypassWithoutAmbientAuthority|TestTypedProxyRoutingRefusesPublicPlaintextAndMalformedCredentialAuthority|TestTypedProxyTLSHandshakePreservesTransportAndEarlierOwnerLimits|TestWithDefaultPreservesProvidedClient)$",
+        "./internal/helmruntime",
+        "./internal/httpclient",
+        "./internal/config",
+        "./internal/server"
+      ]
+    }
+  ],
+  "artifacts": {
+    "capacity-001.json": "sha256:68b8adfdcd89be341e49f80012b35c61cb38b71e1ad4d1a694f6b17fabbc11e7",
+    "capacity-002.json": "sha256:2ab44205f13d8188154140bd6427985f3ba7dc266ec52fd152ae989b5f220f4c",
+    "capacity-003.json": "sha256:072696948a812ab1aa69eb6cb8f515cd62df48d0fad97234f7470a1e7bdc4aae",
+    "capacity-004.json": "sha256:372f737c1a2874750bf825accf7adf83ff035dd3a9b7416702fc2ad2236fcb0a",
+    "capacity-005.json": "sha256:cbec9d66bc159878de59c18379ea768615b8fd8997bd744c877d03df784c7d3d",
+    "capacity-006.json": "sha256:64d175c9f30a0518962dda1d3d05aaa9c5c3124971d09c5b119acfe35da359fb",
+    "capacity-007.json": "sha256:7faf0181e8d79d1d590e45a6310431e647ac17df7a6cfa08e6e1281d17345db3",
+    "capacity-008.json": "sha256:8a0d716437bbd8c8f6a3fc5a78df37d548b89cc7707d0fb92255cc7cb8d4adca",
+    "capacity-009.json": "sha256:cb551952a50cf2d177b22007ab1a02857df78fd72fe689e35bc82a9de7d332a5",
+    "capacity-010.json": "sha256:387e3f784dd6ee68cd2e7b1a4c7ac91291566f0aee24ffe4e4a80719133983bc",
+    "capacity-011.json": "sha256:e18909af81dfdeac9643b3b426591f91e26ecc6dc8e55982f55e756d7fcc2e79",
+    "capacity-012.json": "sha256:1aae0b6b435d15811ceea6ddb2a1d2c6de560d9b392c8ce709181b609fe6027c",
+    "capacity-013.json": "sha256:2f9104fb6051f89e82640b45214de7acf30630faf018695391aaf0c52d84d9dc",
+    "capacity-014.json": "sha256:23a275cd95fc81113da9e8579606fba32d4d2ca91cf6f46fc640dec18e3ec562",
+    "capacity-015.json": "sha256:3850b1526bb53d93843a1e47592930796d15aff0e6bc1cc9ff3396306adf129f",
+    "capacity-016.json": "sha256:2d323fc717a2bb662bbc57c659e4a5938139fda683342ff39321e32c4c17b248",
+    "capacity-017.json": "sha256:1ccb630adeffd0bb7a711bb84e16d47421903aadb23c917844596daef19598a7",
+    "capacity-018.json": "sha256:9ef2335ece67d56204b64d5b5690417b1b84e2e82ec948d2b209841098cdebc7",
+    "capacity-019.json": "sha256:a34343514e010d849acf8a13a9c7034acc5fbdca29cf080faebbec0fdee2dc0c",
+    "capacity-020.json": "sha256:08971e2a4d277bb3bd650a8f2235db6a27ef484e31c2803c607a16f2c9d714b7",
+    "capacity-021.json": "sha256:20ea1cfb76a4158470786afe02e9024d915627f9daffe6c7a3635f3c56d85b44",
+    "capacity-022.json": "sha256:034437a1e09b7c07917ae214a535ae0e0cb1bd2791944a02e915ea25571f8233",
+    "capacity-023.json": "sha256:907ba4b2b918f67dec437dacb62ff0596f0f3205dbc223c1e2ff5e151e8cfc79",
+    "capacity-024.json": "sha256:7895a44fe0af03d5df742cb302e912ff47c015719501591a9564cb8f66d02eb0",
+    "capacity-025.json": "sha256:8f91f689f286908bb423e74246930a44d86e8267f747969671d64c07a2d2f263",
+    "capacity-026.json": "sha256:b79399637480d6b721142edc9a48ae1b44614800dd731d9555e3b1842efdba4f",
+    "capacity-027.json": "sha256:b7fe79d541cb8ceea5de69203e602d023c0d376639f25284bb3d023b8b64f3f9",
+    "capacity-028.json": "sha256:320928ef9ab8af29f4296e159538e8c32034cf4b2b0f0c7c31f50a58d2b3b0a7",
+    "capacity-029.json": "sha256:dba948ff4a5f1aa8e3a42c784429105bf7210b859e8ea618831922ec68f37896",
+    "capacity-030.json": "sha256:994dd9008d792b4f88a7928242e051e48cd2f32b44e2c1560bd595288a811d3c",
+    "capacity-031.json": "sha256:c60cd5eb77873957454967b5dfe70737288efe39256f4774ea15e2b9d4c5d8c6",
+    "capacity-032.json": "sha256:8b1cf22249e1d312b7e7fcd1c0efa1380ef20e74d11bdf798a89193aa1e889de",
+    "capacity-033.json": "sha256:1600a9561f59c4c89c7dc3ffb6776066fe34fa4a5bad6b05ecb5058341d5c557",
+    "capacity-034.json": "sha256:27bee5bc71e43e351584e2ddb70b4579aeab13bea4842e4922058f821530b937",
+    "capacity-035.json": "sha256:542caf424305711732ba3d11919a52359a4c2b852f3db788ed8a77b0dd3724ee",
+    "fixture-interface-before.json": "sha256:1b4d01287f0e790669530785e3b613c540115663cdcecc36a464816e239ebb70",
+    "focused-tests.log": "sha256:8ad7e320553225cb62b1894a796e8afb0b0fb65c79a66e4b438e1b4af1c9289c",
+    "go-version.log": "sha256:ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+    "tracked-after.json": "sha256:2caca8632ae1e858658af9121a8a561d1ab15a5ff9286107e0dc2fb94c39f93d",
+    "tracked-before.json": "sha256:2caca8632ae1e858658af9121a8a561d1ab15a5ff9286107e0dc2fb94c39f93d"
+  },
+  "remaining": [
+    "Complete first-party consumers/module closure qualification, including selected Kubernetes patch residual",
+    "Real Kubernetes install/upgrade/uninstall/rollback, values/hooks/history/interruption/data preservation",
+    "Downloader plugins and distinct proxy client-auth/trust conventions",
+    "Remote CONNECT target DNS/address enforcement; no remote IP-pinning claim",
+    "Flux/CNPG graph and qualified SDK authority exception remain open"
+  ],
+  "metadataResults": "Original exact command/results and accidental cached native inventory disclosure retained losslessly in portable-original-index.json."
+}
