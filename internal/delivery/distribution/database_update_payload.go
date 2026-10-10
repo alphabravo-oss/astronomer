@@ -57,14 +57,31 @@ func inspectDatabaseUpdateFile(ctx context.Context, update *AuthenticatedDatabas
 	if snapshot.validate(document.Binding.Scanner, timing, now, document.PublishedAt) != nil {
 		return nil, errors.New("database payload snapshot unavailable or stale")
 	}
+	metadata, err := inspectPinnedDatabasePayload(ctx, snapshot.Role, inputPath, snapshot.Layer, snapshot.Metadata.Size, afterHash)
+	if err != nil {
+		return nil, err
+	}
+	if err := bindDatabasePayloadMetadata(metadata, snapshot.Metadata); err != nil {
+		return nil, databaseInspectionError(ctx, err.Error())
+	}
+	return &VerifiedDatabaseUpdatePayload{feedDigest: feed, snapshot: snapshot}, nil
+}
+
+// The consumer and operator supplier adapter share this complete compressed-byte
+// authentication and bounded archive parser. metadataSize zero means the producer
+// must derive its unknown metadata size, still under the same 64-KiB ceiling.
+func inspectPinnedDatabasePayload(ctx context.Context, role, inputPath string, layer DatabaseDescriptor, metadataSize int64, afterHash func()) ([]byte, error) {
+	if ctx == nil || !filepath.IsAbs(inputPath) || layer.validate(role) != nil || metadataSize < 0 || metadataSize > 64<<10 {
+		return nil, errors.New("database payload inspection inputs invalid")
+	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancel()
-	file, before, err := openDatabaseInspectionFile(inputPath, snapshot.Layer.Size)
+	file, before, err := openDatabaseInspectionFile(inputPath, layer.Size)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	if err := hashDatabaseInspectionFile(ctx, file, snapshot.Layer); err != nil {
+	if err := hashDatabaseInspectionFile(ctx, file, layer); err != nil {
 		return nil, err
 	}
 	if afterHash != nil {
@@ -77,7 +94,7 @@ func inspectDatabaseUpdateFile(ctx context.Context, update *AuthenticatedDatabas
 		return nil, databaseInspectionError(ctx, "database payload rewind failed")
 	}
 	hash := sha256.New()
-	compressed := &io.LimitedReader{R: databaseInspectionReader{ctx: ctx, input: file}, N: snapshot.Layer.Size + 1}
+	compressed := &io.LimitedReader{R: databaseInspectionReader{ctx: ctx, input: file}, N: layer.Size + 1}
 	buffered := bufio.NewReaderSize(io.TeeReader(compressed, hash), 64<<10)
 	zipper, err := gzip.NewReader(buffered)
 	if err != nil {
@@ -86,23 +103,20 @@ func inspectDatabaseUpdateFile(ctx context.Context, update *AuthenticatedDatabas
 	defer zipper.Close()
 	zipper.Multistream(false)
 	expanded := &io.LimitedReader{R: zipper, N: MaximumDatabaseExpandedBytes + 1}
-	metadata, err := inspectDatabaseMembers(ctx, expanded, snapshot)
+	metadata, err := inspectDatabaseMembers(ctx, expanded, role, metadataSize)
 	if err != nil {
 		return nil, err
 	}
 	if err := finishDatabasePayload(ctx, expanded, buffered); err != nil {
 		return nil, err
 	}
-	if expanded.N <= 0 || snapshot.Layer.Size+1-compressed.N != snapshot.Layer.Size || "sha256:"+hex.EncodeToString(hash.Sum(nil)) != snapshot.Layer.Digest || !sameDatabaseInspectionFile(file, inputPath, before) {
+	if expanded.N <= 0 || layer.Size+1-compressed.N != layer.Size || "sha256:"+hex.EncodeToString(hash.Sum(nil)) != layer.Digest || !sameDatabaseInspectionFile(file, inputPath, before) {
 		return nil, databaseInspectionError(ctx, "database payload layer size/hash or expansion binding failed")
-	}
-	if err := bindDatabasePayloadMetadata(metadata, snapshot.Metadata); err != nil {
-		return nil, databaseInspectionError(ctx, err.Error())
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return &VerifiedDatabaseUpdatePayload{feedDigest: feed, snapshot: snapshot}, nil
+	return metadata, nil
 }
 
 func openDatabaseInspectionFile(path string, size int64) (*os.File, os.FileInfo, error) {
@@ -148,10 +162,10 @@ func hashDatabaseInspectionFile(ctx context.Context, file *os.File, expected Dat
 	return ctx.Err()
 }
 
-func inspectDatabaseMembers(ctx context.Context, expanded io.Reader, snapshot DatabaseUpdateSnapshot) ([]byte, error) {
+func inspectDatabaseMembers(ctx context.Context, expanded io.Reader, role string, metadataSize int64) ([]byte, error) {
 	archive := tar.NewReader(expanded)
 	databaseName := "trivy.db"
-	if snapshot.Role == "trivy-java-database" {
+	if role == "trivy-java-database" {
 		databaseName = "trivy-java.db"
 	}
 	seen := map[string]bool{}
@@ -166,7 +180,7 @@ func inspectDatabaseMembers(ctx context.Context, expanded io.Reader, snapshot Da
 		}
 		seen[header.Name] = true
 		if header.Name == "metadata.json" {
-			if header.Size != snapshot.Metadata.Size || header.Size > 64<<10 {
+			if metadataSize > 0 && header.Size != metadataSize || header.Size > 64<<10 {
 				return nil, errors.New("database payload metadata size binding failed")
 			}
 			metadata, err = io.ReadAll(io.LimitReader(archive, header.Size+1))
@@ -212,28 +226,42 @@ func bindDatabasePayloadMetadata(payload []byte, expected DatabaseUpdateMetadata
 	if int64(len(payload)) != expected.Size || contentDigest(payload) != expected.Digest {
 		return errors.New("database payload upstream metadata digest/size differs")
 	}
+	metadata, err := decodeDatabasePayloadMetadata(payload)
+	if err != nil {
+		return err
+	}
+	if metadata.Version != expected.Schema || !metadata.UpdatedAt.Equal(expected.UpdatedAt) || !metadata.NextUpdate.Equal(expected.NextUpdate) {
+		return errors.New("database payload actual metadata differs from authenticated claim")
+	}
+	return nil
+}
+
+func decodeDatabasePayloadMetadata(payload []byte) (upstreamDatabaseMetadata, error) {
+	var metadata upstreamDatabaseMetadata
+	if len(payload) == 0 || len(payload) > 64<<10 {
+		return metadata, errors.New("database payload metadata size invalid")
+	}
 	// Upstream uses capitalized keys. Exact keys avoid Go's case-insensitive
 	// struct matching creating alternate interpretations of signed metadata.
 	var fields map[string]any
 	if decodeClosed(payload, &fields) != nil || fields == nil {
-		return errors.New("database payload metadata closed JSON invalid")
+		return metadata, errors.New("database payload metadata closed JSON invalid")
 	}
 	for name := range fields {
 		if name != "Version" && name != "UpdatedAt" && name != "NextUpdate" && name != "DownloadedAt" {
-			return errors.New("database payload metadata unknown field")
+			return metadata, errors.New("database payload metadata unknown field")
 		}
 	}
 	for _, name := range []string{"Version", "UpdatedAt", "NextUpdate"} {
 		if _, ok := fields[name]; !ok {
-			return errors.New("database payload metadata required field missing")
+			return metadata, errors.New("database payload metadata required field missing")
 		}
 	}
-	var metadata upstreamDatabaseMetadata
-	if decodeClosed(payload, &metadata) != nil || metadata.Version != expected.Schema || !metadata.UpdatedAt.Equal(expected.UpdatedAt) || !metadata.NextUpdate.Equal(expected.NextUpdate) || !databaseUpdateUTC(metadata.UpdatedAt) || !databaseUpdateUTC(metadata.NextUpdate) {
-		return errors.New("database payload actual metadata differs from authenticated claim")
+	if decodeClosed(payload, &metadata) != nil || !databaseUpdateUTC(metadata.UpdatedAt) || !databaseUpdateUTC(metadata.NextUpdate) {
+		return metadata, errors.New("database payload actual metadata differs from authenticated claim")
 	}
 	// DownloadedAt is local operational information, never a freshness clock.
-	return nil
+	return metadata, nil
 }
 
 func (verified *VerifiedDatabaseUpdatePayload) Snapshot() (string, DatabaseUpdateSnapshot, bool) {

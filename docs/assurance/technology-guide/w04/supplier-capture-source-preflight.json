@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "workPackage": "W04",
+  "slice": "new-supplier-capture-and-shared-no-write-inspection",
+  "wholePackageStatus": "IN_PROGRESS",
+  "sourceOnly": true,
+  "authoritativeQualification": false,
+  "goBuildTestVetExecuted": false,
+  "supplierPayloadMeasured": false,
+  "publicationExecuted": false,
+  "baseCommit": "84834377894b408b96f1fc937ce5c7a3a9be4001",
+  "sourceSHA256": {
+    "internal/delivery/distribution/database_update_contract.go": "d50ee14df2d2dc66b770f2073526c5f7a7ab12a2a9a382e6a508036739d1f3fd",
+    "internal/delivery/distribution/database_update_payload.go": "48331c1475f3ec90749aaad8028a4d38c8bb2854cb5edf25234a54be99d2a414",
+    "internal/delivery/distribution/database_supplier.go": "f6feb231657319b87b6b6b324a810e1b5281d87162907a8ec5d371b07d59761c",
+    "internal/delivery/distribution/database_supplier_test.go": "68adbba11e569c240d676f646b3f85ef53d69a5db0cd995dd3086d55aee4db5d",
+    "internal/delivery/resolver/artifact_metadata.go": "8c81c79d68f8d16570cbfb748f106f050a7c664cb94eccf1aa193fadcbdf4533",
+    "internal/delivery/resolver/supplier_metadata.go": "a826e4beda556a036e3eff71cb58a1760ffed6a153481063c8b4389a4446fd63",
+    "internal/delivery/resolver/supplier_metadata_test.go": "005260202bcba477821d3159c1262d167fb96e8541d6ae0f2a35048c3dd1a685",
+    "docs/assurance/technology-guide/w04/supplier-capture-inspector.md": "1a5d112501fb3bd0ef396440b1f0d0ddb7de27745889f6d049b4aa0d626d20bd"
+  },
+  "staticChecks": [
+    {
+      "command": "node scripts/check-complexity-budget.mjs",
+      "exitCode": 0,
+      "log": "docs/assurance/technology-guide/w04/supplier-capture-complexity.log",
+      "sha256": "a92ef08a6f985a08c909e93c2b8bd5cb6fdc2de468a9596cea561349f25d2103"
+    },
+    {
+      "command": "node scripts/check-dependency-boundaries.mjs",
+      "exitCode": 0,
+      "log": "docs/assurance/technology-guide/w04/supplier-capture-boundaries.log",
+      "sha256": "2cfb01d0d1c94c381c6b25c9fbf5fc6b8193be6b386ef7c51960a95824732822"
+    }
+  ],
+  "staticNodeVersion": "v26.11.1",
+  "runtimeQualification": "not executed; Go/runtime compiler window held by another owner"
+}

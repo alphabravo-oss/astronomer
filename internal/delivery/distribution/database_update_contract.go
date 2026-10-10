@@ -130,11 +130,14 @@ func (snapshot DatabaseUpdateSnapshot) validate(scanner DatabaseScannerCompatibi
 	if snapshot.Layer.validate(snapshot.Role) != nil || !validDatabaseUpdateSubject(snapshot.SupplierSubject, snapshot.Manifest.Digest) || !validDatabaseUpdateSubject(snapshot.PublishedSubject, snapshot.Manifest.Digest) || !validDatabaseUpdateSmallDescriptor(snapshot.Manifest, "application/vnd.oci.image.manifest.v1+json") || !validDatabaseUpdateConfig(snapshot.Config) {
 		return errors.New("database update immutable child claim invalid")
 	}
+	return validateDatabaseUpdateMetadata(snapshot.Role, snapshot.Metadata, scanner, timing, now, published)
+}
+
+func validateDatabaseUpdateMetadata(role string, metadata DatabaseUpdateMetadata, scanner DatabaseScannerCompatibility, timing DatabaseUpdateTiming, now, published time.Time) error {
 	maximumAge, schema := timing.MainMaximumAge, scanner.MainSchema
-	if snapshot.Role == "trivy-java-database" {
+	if role == "trivy-java-database" {
 		maximumAge, schema = timing.JavaMaximumAge, scanner.JavaSchema
 	}
-	metadata := snapshot.Metadata
 	if !digestPattern.MatchString(metadata.Digest) || metadata.Size <= 0 || metadata.Size > 64<<10 || metadata.Schema != schema || !databaseUpdateUTC(metadata.UpdatedAt) || !databaseUpdateUTC(metadata.NextUpdate) || metadata.UpdatedAt.After(now.Add(timing.ClockSkew)) || metadata.UpdatedAt.After(published.Add(timing.ClockSkew)) || !metadata.NextUpdate.After(metadata.UpdatedAt) || !now.Before(metadata.NextUpdate) || now.Sub(metadata.UpdatedAt) > maximumAge {
 		return errors.New("database update upstream metadata invalid or stale")
 	}

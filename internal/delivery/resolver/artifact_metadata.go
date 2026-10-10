@@ -33,29 +33,41 @@ func FetchVerifiedOCIArtifactMetadata(ctx context.Context, client *http.Client, 
 	if err != nil {
 		return empty, Verification{}, err
 	}
-	repository, manifest, manifestBytes, err := fetchArtifactManifest(ctx, client, repositoryName, subjectDigest)
+	metadata, err := fetchArtifactMetadata(ctx, client, repositoryName, subjectDigest, mediaType, maximumLayer)
 	if err != nil {
 		return empty, Verification{}, err
+	}
+	return metadata, verification, nil
+}
+
+// fetchArtifactMetadata is a shared bounded content parser. Signature-first
+// consumers establish vendor trust before reaching it; the separate operator
+// supplier capture establishes only reviewed transport and immutable bytes.
+func fetchArtifactMetadata(ctx context.Context, client *http.Client, repositoryName, subjectDigest, mediaType string, maximumLayer int64) (ArtifactMetadata, error) {
+	var empty ArtifactMetadata
+	repository, manifest, manifestBytes, err := fetchArtifactManifest(ctx, client, repositoryName, subjectDigest)
+	if err != nil {
+		return empty, err
 	}
 	layer := manifest.Layers[0]
 	config := manifest.Config
 	if manifest.Subject != nil || layer.MediaType != mediaType || layer.Digest.Algorithm() != digest.SHA256 || layer.Size <= 0 || layer.Size > maximumLayer || len(layer.URLs) != 0 || len(layer.Data) != 0 || config.Digest.Algorithm() != digest.SHA256 || config.Size <= 0 || config.Size > 1<<20 || len(config.URLs) != 0 || len(config.Data) != 0 {
-		return empty, Verification{}, errors.New("OCI metadata descriptor invalid")
+		return empty, errors.New("OCI metadata descriptor invalid")
 	}
 	reader, err := repository.Fetch(ctx, config)
 	if err != nil {
-		return empty, Verification{}, errors.New("OCI artifact configuration unavailable")
+		return empty, errors.New("OCI artifact configuration unavailable")
 	}
 	configBytes, err := readArtifactPayload(reader, config.Size, 1<<20)
 	_ = reader.Close()
 	if err != nil || digest.FromBytes(configBytes) != config.Digest {
-		return empty, Verification{}, errors.New("OCI artifact configuration binding invalid")
+		return empty, errors.New("OCI artifact configuration binding invalid")
 	}
 	var object map[string]any
 	if jsoncontract.Decode(configBytes, &object) != nil || object == nil {
-		return empty, Verification{}, errors.New("OCI artifact configuration ambiguous or invalid")
+		return empty, errors.New("OCI artifact configuration ambiguous or invalid")
 	}
-	return ArtifactMetadata{Manifest: manifestBytes, Config: configBytes, Layer: layer}, verification, nil
+	return ArtifactMetadata{Manifest: manifestBytes, Config: configBytes, Layer: layer}, nil
 }
 
 func fetchArtifactManifest(ctx context.Context, client *http.Client, repositoryName, subjectDigest string) (*remote.Repository, ocispec.Manifest, []byte, error) {
