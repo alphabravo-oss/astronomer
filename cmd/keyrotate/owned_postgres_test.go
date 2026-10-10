@@ -49,9 +49,26 @@ func ownedRotationDatabase(t *testing.T) (*sql.DB, context.Context) {
 	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Host == "" || u.Path != "/"+ref.Database || u.Fragment != "" {
 		t.Fatal("exclusive rotation database URL required")
 	}
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		t.Fatal("invalid owned database query")
+	}
+	for key, values := range query {
+		if len(values) != 1 {
+			t.Fatal("duplicate owned database query option")
+		}
+		switch key {
+		case "sslmode", "sslrootcert", "connect_timeout", "application_name":
+		default:
+			t.Fatal("owned database connection override rejected")
+		}
+	}
 	cfg, err := pgx.ParseConfig(ref.URL)
 	if err != nil {
 		t.Fatal("parse rotation database configuration")
+	}
+	if cfg.Database != ref.Database {
+		t.Fatal("owned database parser identity mismatch")
 	}
 	cfg.RuntimeParams["application_name"] = "plan032-w16-rotation"
 	db := stdlib.OpenDB(*cfg)
