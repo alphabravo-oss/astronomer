@@ -104,7 +104,7 @@
     "internal/grafanaproxy/promql.go:injectPromQLMatcher": 334,
     "internal/grafanaproxy/rewrite.go:jsonLooksLikeObject": 372,
     "internal/handler/monitoring_operations_runner.go:executeMonitoringOperation": 289,
-    "internal/tunnel/server.go:HandleWebSocket": 327,
+    "internal/tunnel/server.go:HandleWebSocket": 326,
     "scripts/openapi-request-fields.mjs:parseStructBody": 528,
     "scripts/operation-task-inventory.mjs:handlerOperationUsage": 361
   }
