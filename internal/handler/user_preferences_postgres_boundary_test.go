@@ -18,9 +18,11 @@ import (
 
 type preferencePostgresBoundary struct {
 	*sqlc.Queries
-	auditFailure            bool
-	upsertCalls, auditCalls int
-	upsertSQLState          string
+	auditFailure              bool
+	attachmentFailure         bool
+	reserveCalls, attachCalls int
+	upsertCalls, auditCalls   int
+	upsertSQLState            string
 }
 
 func (q *preferencePostgresBoundary) UpsertUserPreferences(ctx context.Context, params sqlc.UpsertUserPreferencesParams) (sqlc.UserPreference, error) {
@@ -39,6 +41,19 @@ func (q *preferencePostgresBoundary) UpsertAuditOutbox(ctx context.Context, para
 		return sqlc.AuditOutbox{}, errors.New("fixture audit persistence unavailable")
 	}
 	return q.Queries.UpsertAuditOutbox(ctx, params)
+}
+
+func (q *preferencePostgresBoundary) ReserveOperationIdempotencyKey(ctx context.Context, params sqlc.ReserveOperationIdempotencyKeyParams) (sqlc.OperationIdempotencyKey, error) {
+	q.reserveCalls++
+	return q.Queries.ReserveOperationIdempotencyKey(ctx, params)
+}
+
+func (q *preferencePostgresBoundary) AttachOperationIdempotencyKey(ctx context.Context, params sqlc.AttachOperationIdempotencyKeyParams) (sqlc.OperationIdempotencyKey, error) {
+	q.attachCalls++
+	if q.attachmentFailure {
+		return sqlc.OperationIdempotencyKey{}, errors.New("fixture preference attachment unavailable")
+	}
+	return q.Queries.AttachOperationIdempotencyKey(ctx, params)
 }
 
 func preferencePostgresHandler(t *testing.T, ctx context.Context, outer pgx.Tx, state *preferencePostgresBoundary) *AuthHandler {
