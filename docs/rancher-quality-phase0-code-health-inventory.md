@@ -8,10 +8,10 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 1267
-- Frontend source lines: 238636
-- Go source files under `internal/` excluding generated sqlc and tests: 1104
-- Go source files scanned for sqlc query references excluding generated sqlc: 2524
+- Frontend source files: 1270
+- Frontend source lines: 239038
+- Go source files under `internal/` excluding generated sqlc and tests: 1111
+- Go source files scanned for sqlc query references excluding generated sqlc: 2547
 - sqlc query declarations: 1340
 - Component files scanned: 459
 - Helm top-level values scanned: 35
@@ -19,7 +19,7 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 ## Hard Gates
 
 - Duplicate direct package declarations across frontend dependency sections: pass
-- Direct `fetch` or `axios` calls outside `frontend/src/lib/api*`: pass
+- Direct `fetch` or `axios` calls outside `frontend/src/lib/api*`: fail
 - Direct `sonner` imports or `toast.*` calls outside `frontend/src/lib/toast.ts`: pass
 - Page-local API `ResponseShape` types in app routes: pass
 - Duplicate frontend API shape type names ending in `Request`, `WriteRequest`, or `Response`: pass
@@ -42,7 +42,8 @@ These are hard-gate failures and should be removed or moved before merge.
 
 ### Direct HTTP Calls Outside API Layer
 
-- None.
+- [`frontend/src/routes/dashboard/settings/operations/operations-pagination.test.tsx:49`](frontend/src/routes/dashboard/settings/operations/operations-pagination.test.tsx:49) - direct axios call outside frontend API layer
+- [`frontend/src/routes/dashboard/settings/operations/operations-pagination.test.tsx:108`](frontend/src/routes/dashboard/settings/operations/operations-pagination.test.tsx:108) - direct axios call outside frontend API layer
 
 ### Direct Toast Calls Outside Toast Wrapper
 
@@ -144,7 +145,7 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 
 ## Summary
 
-- Hard failures: 0
+- Hard failures: 2
 - Duplicate-code candidates: 44
 - Dead-code candidates: 4
 
