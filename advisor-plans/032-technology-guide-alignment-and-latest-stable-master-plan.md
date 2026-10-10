@@ -788,21 +788,23 @@ W10 owner/category implementation is integrated through `f7dc3687`: finite HTTP 
 
 **Ordered tasks:**
 
-- [ ] W13.1 Inventory package imports, handler dependencies, direct database/Kubernetes calls, and ownership of identity, SSO/settings, cluster registration, resources, delivery, operations, and audit.
-- [ ] W13.2 Define explicit service boundaries and narrow interfaces based on real callers. Keep authorization decisions and tenant context visible at each operation boundary.
+- [x] W13.1 Inventory package imports, handler dependencies, direct database/Kubernetes calls, and ownership of identity, SSO/settings, cluster registration, resources, delivery, operations, and audit.
+- [x] W13.2 Define explicit service boundaries and narrow interfaces based on real callers. Keep authorization decisions and tenant context visible at each operation boundary.
 - [x] W13.3 Select one low-coupling domain first; add characterization tests covering authorization, errors, audit records, retries, idempotency, and transaction boundaries. Preferences original regressions and corrected behavior qualified on owned PostgreSQL17/18; PostgreSQL18 uses race. See [scoped review](./032-evidence/current-scoped-progress-20261010.json).
-- [ ] W13.4 Extract business behavior while handlers retain HTTP decoding/response mapping. Domain services must not depend on handler packages or browser request types.
-- [ ] W13.5 Centralize construction/configuration validation rather than creating scattered environment reads or a global service locator.
-- [ ] W13.6 Preserve agent tunnel semantics, cancellation, credential SSA/RBAC, generation fencing, tombstone handling, last-intent operation while disconnected, and Charlie bridge contracts.
-- [ ] W13.7 Move static SQL through W08 and durable schemas through W09; do not introduce a second persistence abstraction or ORM.
-- [ ] W13.8 Ratchet package boundaries and complexity budgets after each completed extraction. Document legitimate cross-domain orchestration explicitly.
-- [ ] W13.9 Prepare a separate v2 design identifying public breaks, compatibility period, migration tools, upgrade ordering, and customer impact. Do not convert this modernization plan into an unapproved big-bang rewrite.
+- [x] W13.4 Extract business behavior while handlers retain HTTP decoding/response mapping. Domain services must not depend on handler packages or browser request types.
+- [x] W13.5 Centralize construction/configuration validation rather than creating scattered environment reads or a global service locator.
+- [x] W13.6 Preserve agent tunnel semantics, cancellation, credential SSA/RBAC, generation fencing, tombstone handling, last-intent operation while disconnected, and Charlie bridge contracts.
+- [x] W13.7 Move static SQL through W08 and durable schemas through W09; do not introduce a second persistence abstraction or ORM.
+- [x] W13.8 Ratchet package boundaries and complexity budgets after each completed extraction. Document legitimate cross-domain orchestration explicitly.
+- [x] W13.9 Prepare a separate v2 design identifying public breaks, compatibility period, migration tools, upgrade ordering, and customer impact. Do not convert this modernization plan into an unapproved big-bang rewrite.
 
 **Verification:** `node scripts/check-dependency-boundaries.mjs`; `node scripts/check-complexity-budget.mjs`; targeted service/handler tests; `make verify-enterprise VERIFY_SCOPE=backend`; real database and worker contracts; generated API compatibility; selected live identity/agent cases.
 
 **Done:** extracted domains have clear constructors, owned data access and observable behavior, smaller transport handlers, and enforced dependency boundaries; v1 behavior is preserved.
 
 **Stop:** an extraction changes public behavior without a migration proposal, bypasses durable operation/audit semantics, or requires replacing Flux/CNPG/Charlie integration. Reduce the slice and retain the established product boundary.
+
+W13 implementation tasks are complete through `94563d7e`: all 1,363 production Go files inventoried; one preference domain extracted with unchanged v1/API/SQL/adjacent contracts and a separate unimplemented v2 design. Corrected source `427bcf14` passes 12 handler, 31 domain and 16 real PostgreSQL cases on each owned PostgreSQL 17/18 fixture, with PostgreSQL 18 race detection, no failures/skips, vet success and zero scoped post-child client/transaction/lock counts. Root independently verifies exact integrated source, original evidence, narrowed JSON/SQL ownership, no-growth budgets and enforced boundaries. The coupled backend and selected live-contract verification remain open before closing the W13 work package. These results do not implement an all-domain extraction or v2 rewrite, or qualify the whole product/deployment. [Root review](032-evidence/w13-service-and-w11-current-graph-root-review.json).
 
 ### W14 — Replace fragile operational shell state machines with typed orchestration
 

@@ -1,7 +1,7 @@
 {
   "kind": "RootScopedProgressReview",
   "implementationBranch": "implement/032-technology-guide",
-  "integrationHead": "a9122a13",
+  "integrationHead": "5971607157615dee68af43e4cd8073202ad6be5e",
   "checkedPagination": {
     "sourceAndEvidenceIntegratedThrough": "dd907ae6",
     "afterReceiptSHA256": "45f0854780f8426244165e2c8713586ac86c71e8c1c7b913a8caed005419c193",
@@ -21,7 +21,7 @@
     "isolatedSourceCommit": "d29a7a5de995bb0ae57d74b4c26007642eb8b4d3",
     "afterReceiptSHA256": "5775e17ec3f52e03b2053a3ff2ac6fcf67b057b35114b537c1637ad08fcf65b6",
     "rootVerified": "68 parents and 97 unique named terminals across four packages pass under race with zero failures/skips. All 40 artifact hashes, 35 numeric fatal guards, two held drained groups and all 7347 actual frozen Git bindings independently match. All 156 retained originals match; earlier 105 index entries remain unchanged.",
-    "composition": "Canonical Kubernetes module closure applied at00d2cd8b. Distribution renderer corrected using official Helm4.3 common APIs at56729f16; actual full production build passes, focused current-graph race suite remains incomplete after capacity stop.",
+    "composition": "Reviewed Helm4/current module source and producer correction integrated through59716071. Native source56729f16 passes full production build,104-parent focused race and12-consumer vet; later composition and live Helm qualification remain separate.",
     "limit": "Synthetic Kubernetes action storage and real local TLS/CONNECT fixtures do not qualify live CNPG/Flux adoption, repositories or the combined application."
   },
   "preferencesBefore17": {
@@ -59,7 +59,7 @@
     "receiptSHA256": "5de373a6e93fe67517500fd73af9e0699490d3eaf3b4f5463dcc467d67cdce2b",
     "rootVerified": "All 17 original artifact hashes, eight numeric guards, two held drained groups and stable selected Go independently match. Only go.mod/go.sum change: component-base 0.37.1 and six paired selected Kubernetes module checksums.",
     "appliedCommit": "00d2cd8b",
-    "limit": "Resolution passes. A later56729f16 full production build passes; full current-graph focused tests and vet remain pending."
+    "limit": "Resolution and later56729f16 production build/focused race/vet pass. Full candidate, separate gosec module and real Kubernetes qualification remain open."
   },
   "databaseAuthorityGeneration": {
     "sourceFreeze": "61363a39841a5f989cb277d6848141bca8051ac0",
@@ -88,5 +88,29 @@
     "overallStatus": "INCOMPLETE_CAPACITY_STOP",
     "limit": "The104-parent/11-package focused inventory is not complete; vet is unlaunched. Original00d2 build failure and this stopped successor remain retained. No full suite, live cluster or combined candidate qualification is claimed.",
     "capacityRemediation": "Exact1024 obsolete Go1.26.6 compiler archives removed under separately reviewed identity/hash/process fences. Root review retained atclosed-go1266-ar-cleanup-1024/root-review.json; no guard threshold changes."
+  },
+  "preferencesService": {
+    "qualifiedSource": "427bcf141ccb252ab76f29f420162671008c61c3",
+    "integrationCommit": "94563d7e78b7727d251b1cf91039234d637093bc",
+    "postgres17ReceiptSHA256": "a4c14c834923e41d7b9db5c626bf97084d22b811dfaffffad0574657a3d429c9",
+    "postgres18ReceiptSHA256": "8acf780e5761cbd67657ca4a16d4ba3e42f866349935876ef525e993a4fd4fc9",
+    "eachMajor": "12 handler/31 domain/16 actual PostgreSQL cases PASS, zero failures/skips; vet exit0. All PostgreSQL18 tests race. Scoped post-child observations0,0,0 on both majors.",
+    "rootReview": "w13-service-and-w11-current-graph-root-review.json",
+    "status": "IMPLEMENTATION_TASKS_COMPLETE_PACKAGE_VERIFICATION_PENDING",
+    "limit": "One domain extraction and separate v2 design, not whole backend or deployment qualification."
+  },
+  "helmCurrentGraphAfterCapacityRecovery": {
+    "qualifiedSource": "56729f16718cdeb08b4b77744310bd186ab1e9d5",
+    "receiptSHA256": "2ac3b16c4048bfeebd59237a58518c3f8e71676214d41cd71e48f10b070235c4",
+    "outcome": "PASS full go build ./...,104 parents/154 terminals/11 packages race,12-consumer vet; zero failures/skips.",
+    "rootVerified": "94 original artifact hashes,87 numeric fatal default guards,4 held/joined groups,7909 actual source byte/type/mode bindings,stable current Go548d and364 portable originals independently match.",
+    "limit": "Source567 native scope only; later597 composition, real Kubernetes and complete candidate remain unqualified."
+  },
+  "databaseRecoveryGeneration": {
+    "qualifiedSource": "943d94366c9bebc30daf5fa0c1e7c27ee56c3593",
+    "receiptSHA256": "26bedc91cdf511e685ced8c85e47a0f2311f5b7e57137bfd10e0757c4f2cf370",
+    "outcome": "PASS five canonical generation/check/storage gates; exact models.go and authority.sql.go derived changes,205 storage candidates unchanged.",
+    "rootVerified": "21 fatal numeric guards,119 outputs and7514 actual source byte/mode bindings independently match.",
+    "limit": "Generation only; current acceptance/recovery application compilation, real PostgreSQL79 and scan-used witness pending."
   }
 }
