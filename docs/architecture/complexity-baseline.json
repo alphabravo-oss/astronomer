@@ -73,7 +73,7 @@
     "frontend/src/routes/dashboard/alerting/-rule-modal.tsx:AlertRuleModal": 419,
     "frontend/src/routes/dashboard/audit/index.tsx:AuditLogPage": 321,
     "frontend/src/routes/dashboard/catalog/-install-chart-modal.tsx:InstallChartForm": 283,
-    "frontend/src/routes/dashboard/catalog/index.tsx:CatalogPage": 310,
+    "frontend/src/routes/dashboard/catalog/index.tsx:CatalogPage": 292,
     "frontend/src/routes/dashboard/cluster-templates/$id/index.tsx:ClusterTemplateDetailPage": 250,
     "frontend/src/routes/dashboard/clusters/$id/-page.tsx:ClusterDetailPage": 286,
     "frontend/src/routes/dashboard/clusters/$id/apps/-page.tsx:ClusterAppsPage": 306,

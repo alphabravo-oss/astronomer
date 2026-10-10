@@ -22,7 +22,7 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
 import { TabStrip, Tabs, TabsContent } from "@/components/ui/tabs";
 import type { HelmChart, HelmChartCategory, HelmChartVersion } from "@/types";
-import { Package, Plus, SearchX } from "lucide-react";
+import { Package, Plus } from "lucide-react";
 import { AddRepositoryModal } from "./-add-repository-modal";
 import { BrowseTab } from "./-browse-tab";
 import { ChartDetailModal } from "./-chart-detail-modal";
@@ -39,6 +39,7 @@ import {
 import { catalogTabs } from "./-tabs";
 import { InstalledTab } from "./-installed-tab";
 import { RepositoriesTab } from "./-repositories-tab";
+import { ChartEmptyState } from "./-chart-empty-state";
 
 const TAB_KEYS = ["browse", "installed", "repositories"] as const;
 
@@ -190,35 +191,15 @@ function CatalogPage() {
                 errorTitle="Failed to load charts"
                 isEmpty={(page) => page.data.length === 0}
                 empty={
-                  <EmptyState
-                    icon={
-                      searchQuery || selectedCategory !== "all"
-                        ? SearchX
-                        : Package
-                    }
-                    title={
-                      searchQuery || selectedCategory !== "all"
-                        ? "No charts match these filters"
-                        : "No charts available"
-                    }
-                    description={
-                      searchQuery || selectedCategory !== "all"
-                        ? "These filters apply to the current page. Try another page or clear the filters."
-                        : "Try another page, or add and sync a Helm repository."
-                    }
-                    actionLabel={
-                      searchQuery || selectedCategory !== "all"
-                        ? "Clear filters"
-                        : "Manage repositories"
-                    }
-                    onAction={() => {
-                      if (searchQuery || selectedCategory !== "all") {
-                        setSearchQuery("");
-                        setSelectedCategory("all");
-                      } else {
-                        setActiveTab("repositories");
-                      }
+                  <ChartEmptyState
+                    filtered={Boolean(
+                      searchQuery || selectedCategory !== "all",
+                    )}
+                    onClearFilters={() => {
+                      setSearchQuery("");
+                      setSelectedCategory("all");
                     }}
+                    onManageRepositories={() => setActiveTab("repositories")}
                   />
                 }
               >
