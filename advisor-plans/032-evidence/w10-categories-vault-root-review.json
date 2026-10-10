@@ -1,0 +1,58 @@
+{
+  "sourceCommit": "c997325932b3a0e982177bee126aa9ea276b7b91",
+  "packetSHA256": "deb6055b033cde23e6905dd6c449363957c158486c1e21c4b00705ec6bafd795",
+  "sourceDiffFullyRead": true,
+  "publicArtifactsVerified": 44,
+  "changedGitSourceBindingsVerified": 32,
+  "fullGitFingerprintVerified": 6847,
+  "privateOriginalsVerified": 9,
+  "fatalCapacityGuardsVerified": 10,
+  "actualRuns": [
+    {
+      "run": "failed-7c39/focused-after",
+      "parents": {
+        "pass": 18
+      },
+      "cases": {
+        "pass": 18
+      },
+      "exitCode": 1
+    },
+    {
+      "run": "focused-c997/focused-after",
+      "parents": {
+        "pass": 26
+      },
+      "cases": {
+        "pass": 48
+      },
+      "exitCode": 0
+    },
+    {
+      "run": "full-c997",
+      "parents": {
+        "pass": 2426,
+        "skip": 18
+      },
+      "cases": {
+        "pass": 4572,
+        "skip": 20
+      },
+      "exitCode": 0
+    }
+  ],
+  "realDatabasePathsQualified": false,
+  "wholeW10Complete": false,
+  "rootReexecutedGo": false,
+  "integrationStatus": "integrated",
+  "limitations": [
+    "No real PostgreSQL snapshot or fleet-scale certification in this packet. Embedded database operands are inventory only.",
+    "All20 existing skip events and reasons retained;18 parent skips and2 subtest skips. Includes inherited synchronous Dex tests and opt-in database/network paths.",
+    "Ten-thousand-owner and21-page/10-second bounds are engineering limits; actual snapshot and workload overhead remain unmeasured.",
+    "SSO/SIEM/snapshot/group metric lifetimes, collector isolation/readback, durable workflow propagation and tracing overhead remain open.",
+    "Vault connection metric label values now use verified UUIDs; label name remains connection and audit/display names remain unchanged."
+  ],
+  "integratedCommit": "f7dc36875b011df557fec9ca9cc51a90a1bd879e",
+  "exactIntegratedPaths": 32,
+  "integratedDifferences": []
+}

@@ -717,6 +717,8 @@ Expected: typed generated interfaces, no unintended transaction behavior change,
 
 **Stop:** a collector migration makes existing stored logs unreadable, monitoring requires transmitting customer secrets, or a declared signal exists only in mock output. Narrow the claim and design retention/migration first.
 
+W10 owner/category implementation is integrated through `f7dc3687`: finite HTTP methods/outcomes/Kubernetes kinds, hard admission budgets, owner-captured Vault callbacks and complete read-only snapshot publication prevent unbounded labels and retired-owner resurrection. Authoritative registration snapshots restore committed phases after a delayed flush. Frozen `c9973259` passes26focused parents/48race cases without skips and the full eight-package race with4,572PASS/20explicit skips; root verifies the exact source and original artifacts. [Root review](032-evidence/w10-categories-vault-root-review.json). Actual PostgreSQL snapshot, remaining metric-owner, collector and overhead qualification are still required before W10.7 or the whole package can be checked complete.
+
 ### W11 — Migrate Helm tooling without bypassing Flux or changing database ownership
 
 **Priority:** P1. **Effort/risk:** L/HIGH. **Dependencies:** W01, W03; W12 before production acceptance. **Owner:** platform/agent.
