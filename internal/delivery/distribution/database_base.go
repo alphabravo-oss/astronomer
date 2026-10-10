@@ -19,6 +19,7 @@ import (
 type DatabaseBaseSnapshot struct {
 	Binding                                          DatabaseUpdateBinding
 	PolicyFingerprint                                string
+	DistributionIdentity                             string
 	ChartSourceURL, Chart, ChartVersion, ChartDigest string
 	ScanningEnabled                                  bool
 }
@@ -48,14 +49,14 @@ func (loader *Loader) DatabaseBase(ctx context.Context) (*VerifiedDatabaseBase, 
 	// Options and the cached catalog are constructor-owned immutable snapshots.
 	// Load returns a deep copy, so callers cannot modify the verified cache.
 	binding := *loader.options.UpdateBinding
-	if catalog.DistributionIdentity != binding.BaseDistributionDigest || catalog.Release != binding.BaseRelease {
+	if catalog.DistributionIdentity != mirrorDistributionIdentity(binding.BaseDistributionDigest, loader.options.MirrorPlan) || catalog.Release != binding.BaseRelease {
 		return nil, errors.New("database update base catalog identity differs")
 	}
 	component, enabled, err := databaseBaseScanner(catalog, binding.Scanner)
 	if err != nil {
 		return nil, err
 	}
-	snapshot := DatabaseBaseSnapshot{Binding: binding, PolicyFingerprint: databasePolicyFingerprint(loader.options.Policy), ChartSourceURL: component.Source.URL, Chart: component.Source.Chart, ChartVersion: component.Source.Version, ChartDigest: component.Source.ChartDigest, ScanningEnabled: component.DefaultEnabled && enabled}
+	snapshot := DatabaseBaseSnapshot{Binding: binding, DistributionIdentity: catalog.DistributionIdentity, PolicyFingerprint: databasePolicyFingerprint(loader.options.Policy), ChartSourceURL: component.Source.URL, Chart: component.Source.Chart, ChartVersion: component.Source.Version, ChartDigest: component.Source.ChartDigest, ScanningEnabled: component.DefaultEnabled && enabled}
 	return &VerifiedDatabaseBase{owner: loader, snapshot: snapshot}, nil
 }
 
@@ -106,8 +107,17 @@ func databasePolicyFingerprint(policy model.TrustPolicy) string {
 }
 
 func (base *VerifiedDatabaseBase) Snapshot() (DatabaseBaseSnapshot, bool) {
-	if base == nil || base.owner == nil || base.snapshot.Binding.validate() != nil || !digestPattern.MatchString(base.snapshot.PolicyFingerprint) || !digestPattern.MatchString(base.snapshot.ChartDigest) {
+	if base == nil || base.owner == nil || base.snapshot.Binding.validate() != nil || !digestPattern.MatchString(base.snapshot.PolicyFingerprint) || !digestPattern.MatchString(base.snapshot.ChartDigest) || base.snapshot.DistributionIdentity != mirrorBindingIdentity(base.snapshot.Binding) {
 		return DatabaseBaseSnapshot{}, false
 	}
 	return base.snapshot, true
+}
+
+// The feed keeps the original OCI parent digest separate from the exact operator
+// endorsement. Both fields are closed signed binding data, not prefix matches.
+func mirrorBindingIdentity(binding DatabaseUpdateBinding) string {
+	if binding.MirrorEndorsementDigest == "" {
+		return binding.BaseDistributionDigest
+	}
+	return binding.BaseDistributionDigest + ";mirror:" + binding.MirrorEndorsementDigest
 }

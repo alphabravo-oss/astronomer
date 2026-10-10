@@ -182,3 +182,30 @@ func TestDatabaseUpdateNextUpdateCannotExtendAgeOrOwnedPolicy(t *testing.T) {
 		}
 	}
 }
+
+func TestDatabaseUpdateMirrorBindingIsExactAndOptionalOnlyWhenUnmirrored(t *testing.T) {
+	now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	document := databaseUpdateFixture(now)
+	original, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(original, []byte("mirror_endorsement_digest")) {
+		t.Fatal("unmirrored feed wire output changed")
+	}
+	document.Binding.MirrorEndorsementDigest = contentDigest([]byte("verified operator mirror"))
+	payload, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DecodeDatabaseUpdateDocument(payload, document.Binding, CadenceDatabaseUpdateTiming(), now, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, mirror := range []string{"", contentDigest([]byte("other mirror")), "invalid"} {
+		expected := document.Binding
+		expected.MirrorEndorsementDigest = mirror
+		if _, err := DecodeDatabaseUpdateDocument(payload, expected, CadenceDatabaseUpdateTiming(), now, true); err == nil {
+			t.Fatal("missing or different signed mirror binding accepted")
+		}
+	}
+}

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 )
 
@@ -17,16 +19,19 @@ import (
 // keeps its existing API. It does not promote durable epochs, approve publisher
 // attempts or prove scan-used DB provenance.
 type DatabaseAuthority struct {
-	mutex    sync.RWMutex
-	loader   *Loader
-	trust    *resolver.CosignTrustSnapshot
-	registry *resolver.DatabaseRegistryTransport
-	closed   bool
+	mutex       sync.RWMutex
+	loader      *Loader
+	trust       *resolver.CosignTrustSnapshot
+	mirrorTrust *resolver.CosignTrustSnapshot
+	registry    *resolver.DatabaseRegistryTransport
+	closed      bool
 }
 
 type DatabaseAuthoritySnapshot struct {
 	Base                          DatabaseBaseSnapshot
 	TrustMaterialFingerprint      string
+	MirrorTrustFingerprint        string
+	MirrorTrustOriginFingerprint  string
 	RegistryRootsFingerprint      string
 	RegistryPolicyFingerprint     string
 	RegistryRootOriginFingerprint string
@@ -39,6 +44,7 @@ type VerifiedDatabaseAuthorityBase struct {
 	owner                                             *DatabaseAuthority
 	base                                              *VerifiedDatabaseBase
 	fingerprint                                       string
+	mirrorTrust, mirrorTrustOrigin                    string
 	registryRoots, registryPolicy, registryRootOrigin string
 }
 
@@ -50,13 +56,19 @@ func NewDatabaseAuthority(ctx context.Context, options Options) (*DatabaseAuthor
 	if err != nil {
 		return nil, err
 	}
-	options.TrustDirectory = trust.FrozenDirectory()
-	loader, err := New(options)
+	mirrorTrust, err := captureDatabaseMirrorTrust(ctx, options.MirrorPlan)
 	if err != nil {
 		trust.Close()
 		return nil, err
 	}
-	return &DatabaseAuthority{loader: loader, trust: trust}, nil
+	options.TrustDirectory = trust.FrozenDirectory()
+	loader, err := New(options)
+	if err != nil {
+		trust.Close()
+		mirrorTrust.Close()
+		return nil, err
+	}
+	return &DatabaseAuthority{loader: loader, trust: trust, mirrorTrust: mirrorTrust}, nil
 }
 
 func (authority *DatabaseAuthority) Base(ctx context.Context) (*VerifiedDatabaseAuthorityBase, error) {
@@ -79,7 +91,7 @@ func (authority *DatabaseAuthority) Base(ctx context.Context) (*VerifiedDatabase
 		return nil, err
 	}
 	roots, policy := authority.registry.Fingerprints()
-	return &VerifiedDatabaseAuthorityBase{owner: authority, base: base, fingerprint: authority.physicalFingerprint(), registryRoots: roots, registryPolicy: policy, registryRootOrigin: authority.registry.RootOriginFingerprint()}, nil
+	return &VerifiedDatabaseAuthorityBase{owner: authority, base: base, fingerprint: authority.physicalFingerprint(), mirrorTrust: authority.mirrorTrust.Fingerprint(), mirrorTrustOrigin: authority.mirrorTrust.OriginFingerprint(), registryRoots: roots, registryPolicy: policy, registryRootOrigin: authority.registry.RootOriginFingerprint()}, nil
 }
 
 func (authority *DatabaseAuthority) Revalidate(ctx context.Context, proof *VerifiedDatabaseAuthorityBase) error {
@@ -140,7 +152,7 @@ func (proof *VerifiedDatabaseAuthorityBase) Snapshot() (DatabaseAuthoritySnapsho
 	if !valid {
 		return DatabaseAuthoritySnapshot{}, false
 	}
-	return DatabaseAuthoritySnapshot{Base: base, TrustMaterialFingerprint: proof.fingerprint, RegistryRootsFingerprint: proof.registryRoots, RegistryPolicyFingerprint: proof.registryPolicy, RegistryRootOriginFingerprint: proof.registryRootOrigin}, true
+	return DatabaseAuthoritySnapshot{Base: base, TrustMaterialFingerprint: proof.fingerprint, MirrorTrustFingerprint: proof.mirrorTrust, MirrorTrustOriginFingerprint: proof.mirrorTrustOrigin, RegistryRootsFingerprint: proof.registryRoots, RegistryPolicyFingerprint: proof.registryPolicy, RegistryRootOriginFingerprint: proof.registryRootOrigin}, true
 }
 
 func (authority *DatabaseAuthority) Close() {
@@ -154,6 +166,7 @@ func (authority *DatabaseAuthority) Close() {
 	}
 	authority.closed = true
 	authority.trust.Close()
+	authority.mirrorTrust.Close()
 	authority.registry.Close()
 }
 
@@ -187,6 +200,11 @@ func (authority *DatabaseAuthority) revalidatePhysicalTrust(ctx context.Context)
 	if err := authority.trust.Revalidate(ctx); err != nil {
 		return err
 	}
+	if authority.mirrorTrust != nil {
+		if err := authority.mirrorTrust.Revalidate(ctx); err != nil {
+			return err
+		}
+	}
 	if authority.registry != nil {
 		return authority.registry.Revalidate(ctx)
 	}
@@ -194,6 +212,9 @@ func (authority *DatabaseAuthority) revalidatePhysicalTrust(ctx context.Context)
 }
 
 func (authority *DatabaseAuthority) physicalFingerprint() string {
+	if authority.mirrorTrust != nil {
+		return authority.mirroredPhysicalFingerprint()
+	}
 	if authority.registry == nil {
 		return authority.trust.Fingerprint()
 	}
@@ -203,6 +224,59 @@ func (authority *DatabaseAuthority) physicalFingerprint() string {
 	}
 	hash := sha256.New()
 	for _, field := range []string{"astronomer-database-physical-authority-v2", authority.trust.Fingerprint(), roots, policy, authority.registry.RootOriginFingerprint()} {
+		var size [8]byte
+		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
+		_, _ = hash.Write(size[:])
+		_, _ = hash.Write([]byte(field))
+	}
+	return fmt.Sprintf("sha256:%x", hash.Sum(nil))
+}
+
+// No new verifier or policy is selected by document fields. The original
+// operator-origin signature is checked against the captured mounted key before
+// canonical loading; changing that key before/after construction fails closed.
+func captureDatabaseMirrorTrust(ctx context.Context, plan *MirrorPlan) (*resolver.CosignTrustSnapshot, error) {
+	if plan == nil {
+		return nil, nil
+	}
+	frozen, err := plan.immutable()
+	if err != nil {
+		return nil, err
+	}
+	proof := frozen.verified
+	trust, err := resolver.CaptureCosignTrust(ctx, proof.trustDirectory, proof.policy)
+	if err != nil {
+		return nil, err
+	}
+	verifier, err := resolver.NewExecVerifier(trust.FrozenDirectory())
+	if err == nil {
+		_, err = verifier.Verify(ctx, resolver.VerificationInput{Source: model.Source{Type: model.SourceHelmHTTP, Trust: proof.policy}, Artifact: proof.payload, Signature: proof.signature})
+	}
+	if err == nil {
+		err = trust.Revalidate(ctx)
+	}
+	if err != nil {
+		trust.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, errors.New("database mirror operator trust changed or unavailable")
+	}
+	return trust, nil
+}
+
+func (authority *DatabaseAuthority) mirroredPhysicalFingerprint() string {
+	mirror, origin := authority.mirrorTrust.Fingerprint(), authority.mirrorTrust.OriginFingerprint()
+	if mirror == "" || origin == "" {
+		return ""
+	}
+	roots, policy := authority.registry.Fingerprints()
+	registryOrigin := authority.registry.RootOriginFingerprint()
+	if authority.registry != nil && (roots == "" || policy == "" || registryOrigin == "") {
+		return ""
+	}
+	hash := sha256.New()
+	for _, field := range []string{"astronomer-database-physical-authority-v3", authority.trust.Fingerprint(), authority.loader.options.MirrorPlan.identity, mirror, origin, roots, policy, registryOrigin} {
 		var size [8]byte
 		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
 		_, _ = hash.Write(size[:])

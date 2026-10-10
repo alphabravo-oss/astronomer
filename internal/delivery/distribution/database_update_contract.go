@@ -19,12 +19,13 @@ var databaseUpdateVersion = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+$`)
 // DatabaseUpdateBinding is constructor-owned candidate/profile/scanner intent.
 // An update document cannot replace these fields or choose trust/network policy.
 type DatabaseUpdateBinding struct {
-	BaseRelease            string                       `json:"base_release"`
-	BaseDistributionDigest string                       `json:"base_distribution_digest"`
-	CatalogDigest          string                       `json:"catalog_digest"`
-	Profile                string                       `json:"profile"`
-	CandidateSourceCommit  string                       `json:"candidate_source_commit"`
-	Scanner                DatabaseScannerCompatibility `json:"scanner"`
+	BaseRelease             string                       `json:"base_release"`
+	BaseDistributionDigest  string                       `json:"base_distribution_digest"`
+	MirrorEndorsementDigest string                       `json:"mirror_endorsement_digest,omitempty"`
+	CatalogDigest           string                       `json:"catalog_digest"`
+	Profile                 string                       `json:"profile"`
+	CandidateSourceCommit   string                       `json:"candidate_source_commit"`
+	Scanner                 DatabaseScannerCompatibility `json:"scanner"`
 }
 
 type DatabaseScannerCompatibility struct {
@@ -80,6 +81,9 @@ func CadenceDatabaseUpdateTiming() DatabaseUpdateTiming {
 }
 
 func (binding DatabaseUpdateBinding) validate() error {
+	if binding.MirrorEndorsementDigest != "" && !digestPattern.MatchString(binding.MirrorEndorsementDigest) {
+		return errors.New("database update mirror binding invalid")
+	}
 	if !databaseUpdateVersion.MatchString(binding.BaseRelease) || !digestPattern.MatchString(binding.BaseDistributionDigest) || !digestPattern.MatchString(binding.CatalogDigest) || binding.Profile != "builtins" || !databaseUpdateCommit.MatchString(binding.CandidateSourceCommit) {
 		return errors.New("database update base/candidate binding invalid")
 	}

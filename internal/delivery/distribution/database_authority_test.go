@@ -33,7 +33,7 @@ func TestDatabasePhysicalAuthorityBindsActualCatalogBeforeCachedRotation(t *test
 		t.Fatal(err)
 	}
 	snapshot, valid := proof.Snapshot()
-	if !valid || !digestPattern.MatchString(snapshot.TrustMaterialFingerprint) || snapshot.Base.ScanningEnabled {
+	if !valid || !digestPattern.MatchString(snapshot.TrustMaterialFingerprint) || snapshot.TrustMaterialFingerprint != authority.trust.Fingerprint() || snapshot.MirrorTrustFingerprint != "" || snapshot.MirrorTrustOriginFingerprint != "" || snapshot.Base.Binding.MirrorEndorsementDigest != "" || snapshot.Base.DistributionIdentity != options.Digest || snapshot.Base.ScanningEnabled {
 		t.Fatal("physical base did not preserve actual disabled QA catalog")
 	}
 	if err := authority.Revalidate(t.Context(), proof); err != nil {

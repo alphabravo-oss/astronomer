@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"slices"
 	"strings"
 
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
@@ -21,11 +22,63 @@ type MirrorPlan struct {
 	ReleaseManifestDigest string    `json:"release_manifest_digest"`
 	Rewrites              []Rewrite `json:"rewrites"`
 	identity              string
+	verified              *verifiedMirrorPlan
 }
 type Rewrite struct {
 	Kind   string `json:"kind"`
 	Source string `json:"source"`
 	Target string `json:"target"`
+}
+
+// verifiedMirrorPlan preserves exact authenticated bytes and the operator trust
+// origin. Exported document fields remain data; mutating them invalidates the
+// proof. Optional physical DB authority captures and verifies the same original
+// endorsement again against constructor-owned frozen operator key material.
+type verifiedMirrorPlan struct {
+	document           MirrorPlan
+	payload, signature []byte
+	policy             model.TrustPolicy
+	trustDirectory     string
+}
+
+func mirrorDocument(plan MirrorPlan) MirrorPlan {
+	plan.verified = nil
+	plan.Rewrites = slices.Clone(plan.Rewrites)
+	return plan
+}
+
+func (plan *MirrorPlan) immutable() (*MirrorPlan, error) {
+	if plan == nil || plan.verified == nil {
+		return nil, errors.New("distribution mirror endorsement proof is unavailable")
+	}
+	proof := plan.verified
+	candidate, original := mirrorDocument(*plan), proof.document
+	rewrites := slices.Equal(candidate.Rewrites, original.Rewrites)
+	candidate.Rewrites, original.Rewrites = nil, nil
+	if !rewrites || candidate.SchemaVersion != original.SchemaVersion || candidate.Release != original.Release || candidate.DistributionDigest != original.DistributionDigest || candidate.CatalogDigest != original.CatalogDigest || candidate.ReleaseManifestDigest != original.ReleaseManifestDigest || candidate.identity != original.identity {
+		return nil, errors.New("distribution mirror endorsement changed after verification")
+	}
+	frozen := mirrorDocument(proof.document)
+	frozen.verified = proof
+	return &frozen, nil
+}
+
+// Identity is retrieval/provenance data from the exact authenticated document.
+// Returning it never grants current physical key authority; DB acceptance must
+// use its constructor-owned physical proof and revalidate the operator mount.
+func (plan *MirrorPlan) Identity() string {
+	frozen, err := plan.immutable()
+	if err != nil {
+		return ""
+	}
+	return frozen.identity
+}
+
+func mirrorDistributionIdentity(parent string, plan *MirrorPlan) string {
+	if plan == nil {
+		return parent
+	}
+	return parent + ";mirror:" + plan.identity
 }
 
 // VerifyMirrorPlan authenticates operator endorsement before interpreting any
@@ -82,6 +135,7 @@ func VerifyMirrorPlan(ctx context.Context, payload, signature []byte, keyRef, tr
 		}
 	}
 	plan.identity = contentDigest(payload)
+	plan.verified = &verifiedMirrorPlan{document: mirrorDocument(plan), payload: slices.Clone(payload), signature: slices.Clone(signature), policy: policy, trustDirectory: trustDirectory}
 	return &plan, nil
 }
 
@@ -139,7 +193,7 @@ func projectMirrors(ctx context.Context, catalog builtinbundles.Catalog, plan *M
 		}
 		component.Values = projected
 	}
-	catalog.DistributionIdentity += ";mirror:" + plan.identity
+	catalog.DistributionIdentity = mirrorDistributionIdentity(catalog.DistributionIdentity, plan)
 	if err := catalog.Validate(); err != nil {
 		return builtinbundles.Catalog{}, err
 	}

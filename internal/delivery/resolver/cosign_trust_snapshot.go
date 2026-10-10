@@ -152,6 +152,28 @@ func (snapshot *CosignTrustSnapshot) Fingerprint() string {
 	return snapshot.fingerprint
 }
 
+// OriginFingerprint binds the captured normalized mounted origin to the exact
+// policy/material fingerprint without exposing an operator filesystem path.
+// Callers retain this immutable value for historical provenance before Close.
+func (snapshot *CosignTrustSnapshot) OriginFingerprint() string {
+	if snapshot == nil {
+		return ""
+	}
+	snapshot.mutex.Lock()
+	defer snapshot.mutex.Unlock()
+	if snapshot.closed {
+		return ""
+	}
+	hash := sha256.New()
+	for _, field := range []string{"astronomer-database-trust-origin-v1", snapshot.mounted, snapshot.fingerprint} {
+		var size [8]byte
+		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
+		_, _ = hash.Write(size[:])
+		_, _ = hash.Write([]byte(field))
+	}
+	return fmt.Sprintf("sha256:%x", hash.Sum(nil))
+}
+
 func (snapshot *CosignTrustSnapshot) Close() {
 	if snapshot == nil {
 		return

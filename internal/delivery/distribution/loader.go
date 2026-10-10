@@ -73,9 +73,20 @@ func New(options Options) (*Loader, error) {
 		options.UpdateBinding = &binding
 	}
 	if options.MirrorPlan != nil {
-		copyPlan := *options.MirrorPlan
-		copyPlan.Rewrites = append([]Rewrite(nil), copyPlan.Rewrites...)
-		options.MirrorPlan = &copyPlan
+		frozen, err := options.MirrorPlan.immutable()
+		if err != nil {
+			return nil, err
+		}
+		options.MirrorPlan = frozen
+	}
+	if options.UpdateBinding != nil {
+		expectedMirror := ""
+		if options.MirrorPlan != nil {
+			expectedMirror = options.MirrorPlan.identity
+		}
+		if options.UpdateBinding.MirrorEndorsementDigest != expectedMirror {
+			return nil, errors.New("database update mirror binding differs from verified endorsement")
+		}
 	}
 	loader := &Loader{options: options, fetch: resolver.FetchVerifiedOCIArtifact, fetchMetadata: resolver.FetchVerifiedOCIArtifactMetadata, status: Status{Mode: "verified-release", Release: options.Release, SourceDigest: options.Digest, Verification: "pending"}}
 	if options.Development {
