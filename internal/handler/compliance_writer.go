@@ -568,63 +568,6 @@ func WriteAccessTokensCSV(ctx context.Context, w io.Writer, q AccessTokenQuerier
 	return total, nil
 }
 
-// WriteBackupDrillHistoryCSV emits every backup_drill_results row.
-// Mirrors what the /admin/backup-drill/history/ endpoint returns but
-// without pagination — the whole history is small (one row per
-// weekly drill, so ~50 rows/year).
-func WriteBackupDrillHistoryCSV(ctx context.Context, w io.Writer, q BackupDrillHistoryQuerier) (int64, error) {
-	cw := csv.NewWriter(w)
-	defer cw.Flush()
-
-	if err := cw.Write(backupDrillHistoryCSVHeader); err != nil {
-		return 0, err
-	}
-
-	total, err := q.CountBackupDrillResults(ctx)
-	if err != nil {
-		// Don't fail the writer — fall back to "fetch a generous
-		// upper bound" instead. The drill table is small enough that
-		// the count failure is almost always a transient connection
-		// issue, not a real "too many rows" case.
-		total = 10000
-	}
-	if total <= 0 {
-		// Empty table is a valid state pre-first-drill.
-		return 0, nil
-	}
-	rows, err := q.ListBackupDrillResults(ctx, sqlc.ListBackupDrillResultsParams{
-		Limit:  int32(total),
-		Offset: 0,
-	})
-	if err != nil {
-		return 0, err
-	}
-	var written int64
-	for _, r := range rows {
-		finished := ""
-		if r.FinishedAt.Valid {
-			finished = r.FinishedAt.Time.UTC().Format(time.RFC3339Nano)
-		}
-		schemaVer := ""
-		if r.SchemaVersion.Valid {
-			schemaVer = strconv.Itoa(int(r.SchemaVersion.Int32))
-		}
-		if err := cw.Write([]string{
-			r.ID.String(),
-			r.StartedAt.UTC().Format(time.RFC3339Nano),
-			finished,
-			r.Status,
-			schemaVer,
-			r.BackupKey,
-			r.ErrorMessage,
-		}); err != nil {
-			return written, err
-		}
-		written++
-	}
-	return written, nil
-}
-
 // ── policy-snapshot.json writer ─────────────────────────────────────────
 
 // PolicySnapshotEntry is the per-project entry the JSON writer emits.
@@ -652,6 +595,11 @@ type PolicySnapshotEntry struct {
 // to "<username> (<email>)" strings so the file is readable without a
 // db.
 func WritePolicySnapshotJSON(ctx context.Context, w io.Writer, q ProjectPolicyQuerier, users RBACSnapshotQuerier) error {
+	ctx, cancel := context.WithTimeout(ctx, complianceCollectionTimeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	projects, err := q.ListAllProjectsForCompliance(ctx)
 	if err != nil {
 		return err
@@ -697,23 +645,17 @@ func WritePolicySnapshotJSON(ctx context.Context, w io.Writer, q ProjectPolicyQu
 			ResourceQuotaPodCount:    p.ResourceQuotaPodCount,
 			Members:                  []string{},
 		}
-		// 200 per page should comfortably hold the members of any
-		// realistic project — exceeding it just truncates, which is
-		// fine because the rbac-snapshot.csv is the canonical record.
-		bindings, err := q.ListProjectRoleBindingsByProject(ctx, sqlc.ListProjectRoleBindingsByProjectParams{
-			ProjectID: p.ID,
-			Limit:     200,
-			Offset:    0,
-		})
-		if err == nil {
-			for _, b := range bindings {
-				if b.UserID.Valid {
-					if label := resolve(b.UserID); label != "" {
-						entry.Members = append(entry.Members, label)
-					}
-				} else if b.Group != "" {
-					entry.Members = append(entry.Members, "group:"+b.Group)
+		bindings, err := complianceProjectBindings(ctx, q, p.ID)
+		if err != nil {
+			return err
+		}
+		for _, b := range bindings {
+			if b.UserID.Valid {
+				if label := resolve(b.UserID); label != "" {
+					entry.Members = append(entry.Members, label)
 				}
+			} else if b.Group != "" {
+				entry.Members = append(entry.Members, "group:"+b.Group)
 			}
 		}
 		out = append(out, entry)
