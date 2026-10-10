@@ -176,5 +176,76 @@
       "bytes": 1512125
     },
     "scope": "Compiler selector maintenance and negative tests; no corrected full Firefox stack result"
+  },
+  "correctedFirefoxFailure": {
+    "observedAt": "2026-10-10T01:46:48.596247+00:00",
+    "sourceCommit": "2ec0a00485faee453eae8c22a9e6f3e5154c96c2",
+    "sourceBefore": {
+      "schema_version": 2,
+      "source_file_count": 6175,
+      "source_tree_sha256": "0c09b6b8e39ee6dd823354c428eff649e1d06f94c5977fee33e359e622a92995"
+    },
+    "sourceAfter": {
+      "schema_version": 2,
+      "source_file_count": 6175,
+      "source_tree_sha256": "0c09b6b8e39ee6dd823354c428eff649e1d06f94c5977fee33e359e622a92995"
+    },
+    "sourceStable": true,
+    "applicationCommit": "5d8f9729ba356ac687ce89a0871b7a32412b4de9",
+    "expectedCompiler": "go1.27.2",
+    "applicationFilesSHA256": "e96160c40b2429cebd9b566d1c48622f29e5488b7797b2030b0d597f8f50b86c",
+    "exitCode": 1,
+    "durationSeconds": 397.832825,
+    "result": {
+      "total": 18,
+      "passed": 16,
+      "failed": 2,
+      "skipped": 0,
+      "flaky": 0,
+      "retries": 0
+    },
+    "receipt": {
+      "path": "/root/.cache/astronomer-032/qualification/w12-frozen-2ec0-live-firefox-reuse/matrix-receipt.json",
+      "sha256": "ea79ac107e4587aa3ed3ff2cc3073bff335559bcb35d62fb80b64f04145de043",
+      "bytes": 994,
+      "restricted": true
+    },
+    "buildReuse": {
+      "path": "/root/.cache/astronomer-032/qualification/w12-frozen-2ec0-live-firefox-reuse/browser/build-reuse.json",
+      "sha256": "b8bf2e069708cd194d26282e170e08fff337116e21ef1acafc1bb827a75eb049",
+      "bytes": 117311,
+      "restricted": true
+    },
+    "restrictedArtifactManifest": {
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/corrected-failure-artifact-manifest.json",
+      "sha256": "f2583cbfa765b65920e65b24ffbcf54c7f62a0edf1ad8024a3bbde10946793c6",
+      "bytes": 12161,
+      "restricted": true
+    },
+    "restrictedArtifactRecords": 42,
+    "observations": [
+      {
+        "journey": "YAML",
+        "result": "Explicit YAML selector reaches Monaco; actual editor contains duplicate comment/JSON manifests; no dry-run POST recorded; Dry run passed assertion fails",
+        "scope": "Input/model characterization pending; no backend dry-run acceptance or save/readback claim"
+      },
+      {
+        "journey": "refresh",
+        "result": "All refresh rotation/replay/family-revocation HTTP assertions pass; existing page refresh401 precedes dashboard navigation abort and login200",
+        "scope": "Commit-ready page.goto reports NS_BINDING_ABORTED; final login controls not observed by this failed journey"
+      }
+    ],
+    "finalCapacityAfterRunnerAndCleanup": {
+      "exitCode": 1,
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/capacity-after-corrected-cleanup.json",
+      "sha256": "0e988159e1eac45b6fca6f52b7e04d0218ef7e345c341157d3c8da75071d5437",
+      "bytes": 205,
+      "restricted": true
+    },
+    "nativePreview": {
+      "toolAvailableAndAttached": true,
+      "observed": "Native environment-port and explicit127.0.0.1 navigation ERR_CONNECTION_REFUSED; host IPv4 TCP/HTTP200 succeeded; no manual app observation or certification"
+    },
+    "nextQualification": "Retain failures; characterize actual editor input and competing logout navigation before another fresh full stack; no run while maintained capacity guard fails"
   }
 }
