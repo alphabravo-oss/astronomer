@@ -1,0 +1,16 @@
+{
+  "observedAt": "2026-10-10T00:49:43.239230+00:00",
+  "target": "/root/astronomer-all/astronomer/frontend/node_modules",
+  "scope": "One ignored obsolete dependency install only; source, lockfiles, browser results and toolchains preserved. All active executor leases released.",
+  "records": 46082,
+  "regularFileBytes": 481228525,
+  "inventorySha256": "7d3669a9e5b871547d907c24cacc7dfc538947b9208b095687d5bb713e942515",
+  "openProcessReferences": [],
+  "lockSha256": "26a16cecdcc7117ef56544fb307af3426f29f606fda97a890b3c45d0aa24ea73",
+  "capacityBefore": "{\"path\":\".\",\"mountpoint\":\"/\",\"total_kib\":354066236,\"used_kib\":271848112,\"available_kib\":67768848,\"available_gib\":64,\"free_percent\":19,\"minimum_free_gib\":20,\"minimum_free_percent\":20,\"meets_minimum\":false}",
+  "targetAbsent": true,
+  "capacityAfter": "{\"path\":\".\",\"mountpoint\":\"/\",\"total_kib\":354066236,\"used_kib\":271240304,\"available_kib\":68376656,\"available_gib\":65,\"free_percent\":20,\"minimum_free_gib\":20,\"minimum_free_percent\":20,\"meets_minimum\":true}",
+  "capacityExitCode": 0,
+  "inventoryFile": "inventory.json.gz",
+  "compressedInventorySha256": "f9fe1f5902d8ef8f08d3abff402db32796ce12abf5e6099bd89955fdd14b4090"
+}
