@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
 
 type metricsSnapshotTx struct {
@@ -18,6 +20,9 @@ type metricsSnapshotTx struct {
 	committed   bool
 	rolledBack  bool
 	rowsError   error
+	rowCount    int
+	oversized   bool
+	cancel      context.CancelFunc
 }
 
 func (tx *metricsSnapshotTx) Query(ctx context.Context, _ string, args ...any) (pgx.Rows, error) {
@@ -31,9 +36,16 @@ func (tx *metricsSnapshotTx) Query(ctx context.Context, _ string, args ...any) (
 	if tx.queries == 2 && tx.queryError != nil {
 		return nil, tx.queryError
 	}
-	size := 500
-	if tx.queries == 2 {
-		size = 1
+	count := tx.rowCount
+	if count == 0 {
+		count = 501
+	}
+	size := min(max(0, count-int(args[0].(int32))), int(args[1].(int32)))
+	if tx.oversized {
+		size = int(args[1].(int32)) + 1
+	}
+	if tx.cancel != nil {
+		tx.cancel()
 	}
 	return &metricsSnapshotRows{remaining: size, err: tx.rowsError}, nil
 }
@@ -76,7 +88,7 @@ func (rows *metricsSnapshotRows) Scan(values ...any) error {
 
 func TestConnectionMetricsSnapshotTransactionBoundaries(t *testing.T) {
 	failure := errors.New("synthetic transaction failure")
-	for _, stage := range []string{"success", "begin", "second-page", "iterator", "commit", "cancel"} {
+	for _, stage := range []string{"success", "begin", "second-page", "iterator", "commit", "cancel", "cancel-in-query", "oversized", "exhausted", "exact-ceiling"} {
 		t.Run(stage, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -88,6 +100,14 @@ func TestConnectionMetricsSnapshotTransactionBoundaries(t *testing.T) {
 				tx.rowsError = failure
 			case "commit":
 				tx.commitError = failure
+			case "cancel-in-query":
+				tx.cancel = cancel
+			case "oversized":
+				tx.oversized = true
+			case "exhausted":
+				tx.rowCount = tunnel.ConnectionMetricsMaxOwners + 1
+			case "exact-ceiling":
+				tx.rowCount = tunnel.ConnectionMetricsMaxOwners
 			}
 			rows, err := collectConnectionMetricsSnapshot(ctx, func(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error) {
 				if options.IsoLevel != pgx.RepeatableRead || options.AccessMode != pgx.ReadOnly {
@@ -105,8 +125,12 @@ func TestConnectionMetricsSnapshotTransactionBoundaries(t *testing.T) {
 				}
 				return tx, nil
 			})
-			if stage == "success" {
-				if err != nil || len(rows) != 501 || !tx.committed {
+			if stage == "success" || stage == "exact-ceiling" {
+				wantRows := 501
+				if stage == "exact-ceiling" {
+					wantRows = tunnel.ConnectionMetricsMaxOwners
+				}
+				if err != nil || len(rows) != wantRows || !tx.committed {
 					t.Fatalf("complete consistent snapshot not returned: rows=%d committed=%t error=%v", len(rows), tx.committed, err)
 				}
 			} else if err == nil || rows != nil || tx.committed {
@@ -114,6 +138,9 @@ func TestConnectionMetricsSnapshotTransactionBoundaries(t *testing.T) {
 			}
 			if stage != "begin" && !tx.rolledBack {
 				t.Fatal("transaction cleanup did not run with a live bounded context")
+			}
+			if tx.queries > 21 {
+				t.Fatal("transaction exceeded finite page budget")
 			}
 		})
 	}

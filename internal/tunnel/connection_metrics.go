@@ -101,20 +101,29 @@ func RunConnectionMetricsReporter(ctx context.Context, lister clusterConnectionS
 }
 
 func collectConnectionMetricsPages(ctx context.Context, lister clusterConnectionStatusLister) ([]sqlc.ListClusterConnectionStatusRow, error) {
-	const pageSize int32 = 500
 	var complete []sqlc.ListClusterConnectionStatusRow
-	for offset := int32(0); ; offset += pageSize {
+	for offset := int32(0); offset <= ConnectionMetricsMaxOwners; offset += ConnectionMetricsPageSize {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		rows, err := lister.ListClusterConnectionStatus(ctx, sqlc.ListClusterConnectionStatusParams{
-			QueryLimit: pageSize, QueryOffset: offset,
+			QueryLimit: ConnectionMetricsPageSize, QueryOffset: offset,
 		})
 		if err != nil {
 			return nil, err
 		}
-		complete = append(complete, rows...)
-		if len(rows) < int(pageSize) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		complete, err = AppendConnectionMetricsPage(complete, rows)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) < int(ConnectionMetricsPageSize) {
 			return complete, nil
 		}
 	}
+	return nil, ErrConnectionMetricsBudget
 }
 
 // RunConnectionMetricsCollector accepts a complete, consistent observation.

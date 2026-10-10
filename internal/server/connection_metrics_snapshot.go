@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
 
 type connectionMetricsBegin func(context.Context, pgx.TxOptions) (pgx.Tx, error)
@@ -24,15 +25,23 @@ func collectConnectionMetricsSnapshot(ctx context.Context, begin connectionMetri
 		_ = tx.Rollback(cleanup)
 	}()
 	queries := sqlc.New(tx)
-	const pageSize int32 = 500
 	var complete []sqlc.ListClusterConnectionStatusRow
-	for offset := int32(0); ; offset += pageSize {
-		rows, err := queries.ListClusterConnectionStatus(ctx, sqlc.ListClusterConnectionStatusParams{QueryLimit: pageSize, QueryOffset: offset})
+	for offset := int32(0); offset <= tunnel.ConnectionMetricsMaxOwners; offset += tunnel.ConnectionMetricsPageSize {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		rows, err := queries.ListClusterConnectionStatus(ctx, sqlc.ListClusterConnectionStatusParams{QueryLimit: tunnel.ConnectionMetricsPageSize, QueryOffset: offset})
 		if err != nil {
 			return nil, err
 		}
-		complete = append(complete, rows...)
-		if len(rows) < int(pageSize) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		complete, err = tunnel.AppendConnectionMetricsPage(complete, rows)
+		if err != nil {
+			return nil, err
+		}
+		if len(rows) < int(tunnel.ConnectionMetricsPageSize) {
 			break
 		}
 	}

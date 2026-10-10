@@ -70,6 +70,27 @@ func TestConnectionMetricsOlderCollectionPreservesNewAdmission(t *testing.T) {
 	}
 }
 
+func TestConnectionMetricsOlderCollectionPreservesExistingOwnerReadmission(t *testing.T) {
+	metricOwnerInstance(t)
+	cid := uuid.New().String()
+	first := captureAgentMetrics(cid)
+	first.reconnect.Inc()
+	watermark := connectionMetricsWatermark()
+	second := captureAgentMetrics(cid)
+	second.reconnect.Inc()
+	publishConnectionMetrics(nil, time.Now(), watermark)
+	if !connectionMetricExists(t, "astronomer_agent_reconnects_total", cid) {
+		t.Fatal("older observation retired an existing owner admitted again while collecting")
+	}
+	if first.reconnect != second.reconnect || testutil.ToFloat64(second.reconnect) != 2 {
+		t.Fatal("readmission reset the current owner counter")
+	}
+	updateConnectionMetrics(nil, time.Now())
+	if connectionMetricExists(t, "astronomer_agent_reconnects_total", cid) {
+		t.Fatal("subsequent complete observation did not retire an absent owner")
+	}
+}
+
 func TestConnectionMetricsRenameAndDisconnectKeepCurrentCounters(t *testing.T) {
 	metricOwnerInstance(t)
 	cid := uuid.New()

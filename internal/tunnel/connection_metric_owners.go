@@ -52,11 +52,14 @@ func captureAgentMetrics(clusterID string) agentMetricHandles {
 	defer connectionMetricOwners.Unlock()
 	key := connectionMetricKey{observability.InstanceID(), clusterID}
 	owner := connectionMetricOwners.rows[key]
+	// Every admitted capture refreshes freshness, including reconnects for an
+	// existing owner. Keep its children so current-owner rates never reset.
+	connectionMetricOwners.serial++
 	if owner == nil {
-		connectionMetricOwners.serial++
-		owner = &connectionMetricOwner{created: connectionMetricOwners.serial}
+		owner = &connectionMetricOwner{}
 		connectionMetricOwners.rows[key] = owner
 	}
+	owner.created = connectionMetricOwners.serial
 	if owner.handles.reconnect == nil {
 		owner.handles = agentMetricHandles{
 			reconnect: agentReconnectsTotal.WithLabelValues(key.instance, key.cluster),
