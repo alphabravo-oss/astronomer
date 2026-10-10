@@ -121,25 +121,7 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid preference document")
 		return
 	}
-	if prefs.PinnedClusters == nil {
-		// pinned_clusters is optional in the request (older clients may omit
-		// it); normalize to an empty array so the stored value never becomes
-		// the JSON scalar `null`, which would fail the column's
-		// jsonb_typeof(...) = 'array' check.
-		prefs.PinnedClusters = []string{}
-	}
-	if prefs.StarredTypes == nil {
-		prefs.StarredTypes = []string{}
-	}
-	if prefs.RowsPerPage == 0 {
-		// rows_per_page is optional in the request (older clients omit it,
-		// and Go's zero value for an absent int field is 0, not one of the
-		// allowed page sizes); normalize before Validate rejects it.
-		prefs.RowsPerPage = userpreferences.DefaultRowsPerPage
-	}
-	if prefs.DateFormat == "" {
-		prefs.DateFormat = userpreferences.DefaultDateFormat
-	}
+	prefs = prefs.NormalizeOptional()
 	if err := prefs.Validate(); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
@@ -168,28 +150,66 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 		RowsPerPage:    int32(prefs.RowsPerPage),
 		DateFormat:     prefs.DateFormat,
 	}
-	var stored sqlc.UserPreference
-	err = h.preferencesRunTx(r.Context(), func(q UserPreferencesMutationTx) error {
-		var mutationErr error
-		stored, mutationErr = q.UpsertUserPreferences(r.Context(), params)
+	digest, err := canonicalOperationRequestDigest(prefs)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode user preferences")
+		return
+	}
+	intent := preferenceAuditIntent(r, userID, prefs, digest)
+	ctx := r.Context()
+	values := r.Header.Values("Idempotency-Key")
+	keyed := len(values) == 1 && validOperationIdempotencyKey(values[0])
+	if keyed {
+		ctx = withOperationIdempotency(r, "user-preferences:v1")
+	}
+	var response userpreferences.Preferences
+	err = h.preferencesRunTx(ctx, func(q UserPreferencesMutationTx) error {
+		var receiptQueries resourceOperationIdempotencyQuerier
+		if keyed {
+			var supported bool
+			receiptQueries, supported = q.(resourceOperationIdempotencyQuerier)
+			if !supported {
+				return errPreferenceReceiptUnavailable
+			}
+			prior, replay, claimErr := claimPreferenceReceipt(ctx, receiptQueries, r, userID, digest)
+			if claimErr != nil {
+				return claimErr
+			}
+			if replay {
+				response = prior
+				return nil
+			}
+		}
+		stored, mutationErr := q.UpsertUserPreferences(ctx, params)
 		if mutationErr != nil {
 			return mutationErr
 		}
-		return recordAuditOutbox(r, q, "user.preferences.updated", "user_preferences", userID.String(), "Console preferences", http.StatusOK, map[string]any{
-			"theme": prefs.Theme, "table_density": prefs.TableDensity,
-			"landing_route": prefs.LandingRoute, "time_format": prefs.TimeFormat,
-			"favorite_count": len(prefs.Favorites), "pinned_cluster_count": len(prefs.PinnedClusters),
-			"starred_type_count": len(prefs.StarredTypes),
-			"rows_per_page":      prefs.RowsPerPage, "date_format": prefs.DateFormat,
-		})
+		response, mutationErr = preferencesFromRow(stored)
+		if mutationErr != nil {
+			return mutationErr
+		}
+		storedDigest, encodeErr := canonicalOperationRequestDigest(response)
+		if encodeErr != nil || storedDigest != digest {
+			return errPreferenceReceiptInvalid
+		}
+		if mutationErr = audit.RecordIntent(ctx, q, intent); mutationErr != nil {
+			return mutationErr
+		}
+		if keyed {
+			return attachPreferenceReceipt(ctx, receiptQueries, r, userID, digest, response)
+		}
+		return nil
 	})
 	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency key identifies a different preference document")
+			return
+		}
+		if errors.Is(err, errPreferenceReceiptUnavailable) {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Preference replay storage is not configured")
+			return
+		}
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.InternalError, "Failed to update user preferences")
-		return
-	}
-	response, err := preferencesFromRow(stored)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Stored user preferences are invalid")
 		return
 	}
 	RespondJSON(w, http.StatusOK, response)

@@ -101,7 +101,7 @@ func TestUserPreferencesCharacterizationOptionalNormalization(t *testing.T) {
 
 func TestUserPreferencesCharacterizationAuditShapeAndRetryKey(t *testing.T) {
 	actor := uuid.New()
-	tx := &preferenceTxFake{}
+	tx := &preferenceReplayFake{preferenceTxFake: &preferenceTxFake{}, fakeOperationIdempotencyStore: &fakeOperationIdempotencyStore{}}
 	h := NewAuthHandler(nil, nil)
 	h.SetUserPreferences(&preferenceStoreFake{}, func(ctx context.Context, fn func(UserPreferencesMutationTx) error) error { return fn(tx) })
 	for _, requestID := range []string{"preference-request-first", "preference-request-retry"} {
@@ -114,7 +114,7 @@ func TestUserPreferencesCharacterizationAuditShapeAndRetryKey(t *testing.T) {
 			t.Fatalf("retry status=%d", response.Code)
 		}
 	}
-	if len(tx.audits) != 2 || tx.audits[0].DedupeKey != tx.audits[1].DedupeKey {
+	if len(tx.audits) != 1 || tx.upserts != 1 {
 		t.Fatal("same actor/path/idempotency key did not converge on one audit identity")
 	}
 	for _, event := range tx.audits {
