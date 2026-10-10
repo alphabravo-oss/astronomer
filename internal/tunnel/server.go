@@ -637,7 +637,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		wasReconnect = true
 	}
 	// Captured counter children cannot resurrect a retired cluster on late I/O.
-	agent.metrics.reconnect.Inc()
+	agent.metrics.reconnected()
 	if wasReconnect {
 		h.publish("agent.reconnecting", payload.ClusterID, sessionID, payload.AgentVersion)
 	}

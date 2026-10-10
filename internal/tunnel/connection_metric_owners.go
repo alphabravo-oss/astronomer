@@ -19,6 +19,12 @@ type agentMetricHandles struct {
 	outbound  prometheus.Counter
 }
 
+func (m agentMetricHandles) reconnected() {
+	if m.reconnect != nil {
+		m.reconnect.Inc()
+	}
+}
+
 func (m agentMetricHandles) message(direction string) {
 	switch direction {
 	case "inbound":
@@ -52,6 +58,10 @@ func captureAgentMetrics(clusterID string) agentMetricHandles {
 	defer connectionMetricOwners.Unlock()
 	key := connectionMetricKey{observability.InstanceID(), clusterID}
 	owner := connectionMetricOwners.rows[key]
+	if owner == nil && len(connectionMetricOwners.rows) >= ConnectionMetricsMaxOwners {
+		connectionMetricAdmissions.WithLabelValues(key.instance, "budget_dropped").Inc()
+		return agentMetricHandles{}
+	}
 	// Every admitted capture refreshes freshness, including reconnects for an
 	// existing owner. Keep its children so current-owner rates never reset.
 	connectionMetricOwners.serial++
@@ -67,6 +77,7 @@ func captureAgentMetrics(clusterID string) agentMetricHandles {
 			outbound:  agentMessagesTotal.WithLabelValues(key.instance, key.cluster, "outbound"),
 		}
 	}
+	connectionMetricAdmissions.WithLabelValues(key.instance, "recorded").Inc()
 	return owner.handles
 }
 
@@ -78,14 +89,52 @@ func connectionMetricsWatermark() uint64 {
 	return connectionMetricOwners.serial
 }
 
-func publishConnectionMetrics(rows []sqlc.ListClusterConnectionStatusRow, now time.Time, watermark uint64) {
+func publishConnectionMetrics(rows []sqlc.ListClusterConnectionStatusRow, now time.Time, watermark uint64) bool {
 	connectionMetricOwners.Lock()
 	defer connectionMetricOwners.Unlock()
 	instance := observability.InstanceID()
+	if len(rows) > ConnectionMetricsMaxOwners {
+		connectionMetricObservations.WithLabelValues(instance, "page_budget").Inc()
+		return false
+	}
 	current := make(map[connectionMetricKey]bool, len(rows))
 	for _, row := range rows {
 		key := connectionMetricKey{instance, row.ClusterID.String()}
 		current[key] = true
+	}
+	finalOwners := len(connectionMetricOwners.rows)
+	for key := range current {
+		if connectionMetricOwners.rows[key] == nil {
+			finalOwners++
+		}
+	}
+	for key, owner := range connectionMetricOwners.rows {
+		if key.instance == instance && !current[key] && owner.created <= watermark {
+			finalOwners--
+		}
+	}
+	if finalOwners > ConnectionMetricsMaxOwners {
+		connectionMetricObservations.WithLabelValues(instance, "owner_budget").Inc()
+		return false
+	}
+	// No vector or registry changes occur until the entire publication fits.
+	// Drop removed entries first so the registry never transiently exceeds its
+	// hard cap while an equally sized observation replaces them.
+	for key, owner := range connectionMetricOwners.rows {
+		if key.instance != instance || current[key] || owner.created > watermark {
+			continue
+		}
+		if owner.gauges {
+			deleteConnectionGauges(key, owner.name)
+		}
+		agentReconnectsTotal.DeleteLabelValues(key.instance, key.cluster)
+		for _, direction := range []string{"inbound", "outbound"} {
+			agentMessagesTotal.DeleteLabelValues(key.instance, key.cluster, direction)
+		}
+		delete(connectionMetricOwners.rows, key)
+	}
+	for _, row := range rows {
+		key := connectionMetricKey{instance, row.ClusterID.String()}
 		owner := connectionMetricOwners.rows[key]
 		if owner == nil {
 			connectionMetricOwners.serial++
@@ -104,19 +153,9 @@ func publishConnectionMetrics(rows []sqlc.ListClusterConnectionStatusRow, now ti
 		age := max(0, now.Sub(row.LastActivity).Seconds())
 		agentLastSeenSecondsGauge.WithLabelValues(key.instance, key.cluster, row.ClusterName).Set(age)
 	}
-	for key, owner := range connectionMetricOwners.rows {
-		if key.instance != instance || current[key] || owner.created > watermark {
-			continue
-		}
-		if owner.gauges {
-			deleteConnectionGauges(key, owner.name)
-		}
-		agentReconnectsTotal.DeleteLabelValues(key.instance, key.cluster)
-		for _, direction := range []string{"inbound", "outbound"} {
-			agentMessagesTotal.DeleteLabelValues(key.instance, key.cluster, direction)
-		}
-		delete(connectionMetricOwners.rows, key)
-	}
+	connectionMetricObservations.WithLabelValues(instance, "complete").Inc()
+	connectionMetricLastComplete.WithLabelValues(instance).Set(float64(now.Unix()))
+	return true
 }
 
 func deleteConnectionGauges(key connectionMetricKey, name string) {

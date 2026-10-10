@@ -70,6 +70,9 @@ func registerConnectionMetrics() {
 			agentLastSeenSecondsGauge,
 			agentMessagesTotal,
 			agentReconnectsTotal,
+			connectionMetricAdmissions,
+			connectionMetricObservations,
+			connectionMetricLastComplete,
 		)
 	})
 }
@@ -140,6 +143,7 @@ func RunConnectionMetricsCollector(ctx context.Context, collect func(context.Con
 		watermark := connectionMetricsWatermark()
 		complete, err := collect(ctx)
 		if err != nil {
+			recordConnectionMetricsFailure(err)
 			if log != nil {
 				log.Warn("failed to collect agent connection metrics", "error", err)
 			}
@@ -147,9 +151,11 @@ func RunConnectionMetricsCollector(ctx context.Context, collect func(context.Con
 		}
 		// Failed or cancelled collections leave the previous complete observation
 		// untouched, including disconnected clusters and live counter history.
-		if ctx.Err() == nil {
-			publishConnectionMetrics(complete, now, watermark)
+		if err := ctx.Err(); err != nil {
+			recordConnectionMetricsFailure(err)
+			return
 		}
+		publishConnectionMetrics(complete, now, watermark)
 	}
 
 	record()
