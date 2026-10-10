@@ -224,7 +224,9 @@ func (h *DecommissionHandler) HandleDecommission(ctx context.Context, msg *proto
 	}
 
 	// This ACK records admitted pending work; completion is still reported by
-	// the existing server-side orphan audit. No mutation starts before its write.
+	// the existing server-side orphan audit. The terminal Deployment/namespace
+	// mutation starts only after this ACK is written. Earlier selected cleanup
+	// steps have already run and remain reflected in their individual results.
 	steps = append(steps, ackStep)
 
 	ack := protocol.DecommissionAckPayload{
