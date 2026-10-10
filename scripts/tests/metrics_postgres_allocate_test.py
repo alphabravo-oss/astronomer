@@ -104,6 +104,34 @@ class MetricsAllocationTests(unittest.TestCase):
                 self.assertEqual(call.args[1], "new-live-primary")
                 self.assertTrue(call.args[3].startswith("SELECT "))
 
+    def test_final_capacity_retained_after_inspection_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args = SimpleNamespace(major="18", reference=str(root / "reference"), template_reference="private", artifact_dir=str(root / "evidence"), create=False)
+            address = urlsplit("postgres://192.0.2.1:30433/plan032_w07_cursor18")
+            process = SimpleNamespace(returncode=0, stdout='{"meets_minimum":true}')
+            with mock.patch.object(allocator, "reference_destination", return_value=root / "reference"), mock.patch.object(allocator, "template_reference", return_value=(address, "plan032_w07_cursor18", "digest")), mock.patch.object(allocator, "inspect", side_effect=ValueError("private secret text")), mock.patch.object(allocator.subprocess, "run", return_value=process) as run:
+                self.assertEqual(allocator.allocate(args), 1)
+            self.assertEqual(run.call_count, 2)
+            receipt = json.loads((root / "evidence" / "receipt.json").read_text())
+            self.assertFalse(receipt["created"])
+            self.assertEqual(receipt["finalCapacityExitCode"], 0)
+            self.assertTrue((root / "evidence" / "capacity-after.json").is_file())
+            self.assertNotIn("private secret text", json.dumps(receipt))
+
+    def test_final_capacity_failure_fails_successful_read_only_inspection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            args = SimpleNamespace(major="18", reference=str(root / "reference"), template_reference="private", artifact_dir=str(root / "evidence"), create=False)
+            address = urlsplit("postgres://192.0.2.1:30433/plan032_w07_cursor18")
+            processes = [SimpleNamespace(returncode=0, stdout='{}'), SimpleNamespace(returncode=1, stdout='{}')]
+            with mock.patch.object(allocator, "reference_destination", return_value=root / "reference"), mock.patch.object(allocator, "template_reference", return_value=(address, "plan032_w07_cursor18", "digest")), mock.patch.object(allocator, "inspect", return_value={"currentPrimary": "owned"}), mock.patch.object(allocator.subprocess, "run", side_effect=processes):
+                self.assertEqual(allocator.allocate(args), 1)
+            receipt = json.loads((root / "evidence" / "receipt.json").read_text())
+            self.assertFalse(receipt["created"])
+            self.assertEqual(receipt["errorKind"], "final_capacity_failure")
+            self.assertFalse((root / "reference").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
