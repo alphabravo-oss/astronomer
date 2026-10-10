@@ -88,7 +88,7 @@ func main() {
 	default:
 		level = slog.LevelInfo
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	logger := slog.New(observability.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 
 	observability.WithEvent(logger, "server_starting").Info("starting astronomer server",

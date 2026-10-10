@@ -1,0 +1,7 @@
+ok  	github.com/alphabravocompany/astronomer-go/internal/auth	5.900s
+ok  	github.com/alphabravocompany/astronomer-go/internal/monitoring	1.059s
+ok  	github.com/alphabravocompany/astronomer-go/internal/observability	11.716s
+ok  	github.com/alphabravocompany/astronomer-go/internal/db	1.058s
+ok  	github.com/alphabravocompany/astronomer-go/scripts/otel-pgx-qualification	1.033s
+
+DONE 271 tests in 14.627s

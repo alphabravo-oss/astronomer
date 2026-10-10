@@ -31,6 +31,7 @@ import (
 
 const ownedDatabase = "plan032_w10_callbacks"
 const secretProbe = "synthetic-sensitive-bind-must-not-export"
+const literalProbe = "synthetic-sensitive-literal-must-not-export"
 
 type databaseReference struct {
 	URL string `json:"database_url"`
@@ -44,6 +45,7 @@ type receipt struct {
 	Callbacks          map[string]int `json:"actualOTelSpans"`
 	Rows               int            `json:"committedRows"`
 	ParameterRedaction bool           `json:"boundParameterAndCredentialAbsent"`
+	LiteralRedaction   bool           `json:"sqlLiteralAbsent"`
 	TraceConnected     bool           `json:"spansShareRootTrace"`
 	Scope              string         `json:"scope"`
 }
@@ -190,6 +192,10 @@ func run(ctx context.Context, connection string) (*receipt, error) {
 	if database.Pool().QueryRow(ctx, "SELECT count(*) FROM callback_rows").Scan(&rows) != nil || rows != 2 {
 		return nil, errors.New("committed fixture rows differ")
 	}
+	var literal string
+	if database.Pool().QueryRow(ctx, "SELECT 'synthetic-sensitive-literal-must-not-export'::text").Scan(&literal) != nil || literal != literalProbe {
+		return nil, errors.New("SQL literal probe did not execute")
+	}
 	rootSpan.End()
 	budget, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -226,8 +232,8 @@ func validateCapture(c *capture, root trace.TraceID, connection string, rows, ve
 	}
 	for _, request := range c.requests {
 		raw, _ := proto.Marshal(request)
-		if bytes.Contains(raw, []byte(secretProbe)) || bytes.Contains(raw, []byte(connection)) || (password != "" && bytes.Contains(raw, []byte(password))) {
-			return nil, errors.New("export contains bound parameter or credential")
+		if bytes.Contains(raw, []byte(literalProbe)) || bytes.Contains(raw, []byte(secretProbe)) || bytes.Contains(raw, []byte(connection)) || (password != "" && bytes.Contains(raw, []byte(password))) {
+			return nil, errors.New("export contains SQL literal, bound parameter or credential")
 		}
 		for _, resource := range request.ResourceSpans {
 			for _, scope := range resource.ScopeSpans {
@@ -267,7 +273,7 @@ func validateCapture(c *capture, root trace.TraceID, connection string, rows, ve
 	if counts["batchQuery"] < 2 || !connected {
 		return nil, errors.New("batch query or root trace linkage missing")
 	}
-	return &receipt{SchemaVersion: 1, Status: "pass", Database: ownedDatabase, ServerVersionNum: versionNum, ServerMajor: versionNum / 10000, Callbacks: counts, Rows: rows, ParameterRedaction: true, TraceConnected: true, Scope: "Real production pgx tracer closure on dedicated owned CNPG18 database and loopback OTLP protobuf receiver; not whole application/queue/tunnel/collector-stack qualification."}, nil
+	return &receipt{SchemaVersion: 1, Status: "pass", Database: ownedDatabase, ServerVersionNum: versionNum, ServerMajor: versionNum / 10000, Callbacks: counts, Rows: rows, ParameterRedaction: true, LiteralRedaction: true, TraceConnected: true, Scope: "Real production pgx tracer closure on dedicated owned CNPG18 database and loopback OTLP protobuf receiver; not whole application/queue/tunnel/collector-stack qualification."}, nil
 }
 
 func main() {

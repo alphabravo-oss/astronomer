@@ -667,13 +667,13 @@ func (m *SSOManager) doAPIRequest(ctx context.Context, url string, token *oauth2
 		_ = resp.Body.Close()
 	}()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("SSO profile API returned HTTP status %d", resp.StatusCode)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API request to %s returned status %d: %s", url, resp.StatusCode, string(body))
 	}
 
 	return body, nil

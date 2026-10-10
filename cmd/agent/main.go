@@ -29,7 +29,7 @@ import (
 const upgradeReportInterval = time.Minute
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+	logger := slog.New(observability.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)

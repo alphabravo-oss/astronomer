@@ -87,7 +87,7 @@ func alertNotificationTxRunner(database *db.DB) tasks.AlertNotificationRunTx {
 }
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+	log := slog.New(observability.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	observability.WithEvent(log, "worker_starting").Info("starting astronomer worker binary",
