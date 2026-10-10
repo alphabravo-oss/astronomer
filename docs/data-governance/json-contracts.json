@@ -18930,14 +18930,19 @@
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
     },
     {
-      "path": "internal/handler/user_preferences.go",
-      "owner": "/handler",
-      "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
+      "path": "internal/userpreferences/row.go",
+      "owner": "userpreferences",
+      "scope": "One preference domain service: canonical v1 document/array encoding and version 1 actor-bound receipt; injected sqlc transaction and mandatory audit remain canonical"
     },
     {
-      "path": "internal/handler/user_preferences_integrity.go",
+      "path": "internal/userpreferences/service.go",
       "owner": "userpreferences",
-      "scope": "Owned version1 replay receipt for authenticated self preference replacement; existing operation idempotency storage and transaction-bound audit remain canonical"
+      "scope": "One preference domain service: canonical v1 document/array encoding and version 1 actor-bound receipt; injected sqlc transaction and mandatory audit remain canonical"
+    },
+    {
+      "path": "internal/userpreferences/receipt.go",
+      "owner": "userpreferences",
+      "scope": "One preference domain service: canonical v1 document/array encoding and version 1 actor-bound receipt; injected sqlc transaction and mandatory audit remain canonical"
     },
     {
       "path": "internal/handler/webhooks_endpoints.go",
@@ -26311,61 +26316,76 @@
       "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
     },
     {
-      "path": "internal/handler/user_preferences.go",
-      "function": "preferencesFromRow",
+      "path": "internal/userpreferences/row.go",
+      "function": "FromRow",
       "operation": "json.Unmarshal",
-      "arguments": ["row.Favorites", "&prefs.Favorites"],
-      "owner": "/handler",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+      "arguments": [
+        "row.Favorites",
+        "&prefs.Favorites"
+      ],
+      "owner": "userpreferences",
+      "schema": "Canonical Preferences v1; stored favorites, pinned_clusters and starred_types arrays with existing enum/default rules",
+      "reader_behavior": "Preserve existing stored-array decoding and validation; malformed data returns an error, no normalization or repair write"
     },
     {
-      "path": "internal/handler/user_preferences.go",
-      "function": "preferencesFromRow",
+      "path": "internal/userpreferences/row.go",
+      "function": "FromRow",
       "operation": "json.Unmarshal",
-      "arguments": ["row.PinnedClusters", "&prefs.PinnedClusters"],
-      "owner": "/handler",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+      "arguments": [
+        "row.PinnedClusters",
+        "&prefs.PinnedClusters"
+      ],
+      "owner": "userpreferences",
+      "schema": "Canonical Preferences v1; stored favorites, pinned_clusters and starred_types arrays with existing enum/default rules",
+      "reader_behavior": "Preserve existing stored-array decoding and validation; malformed data returns an error, no normalization or repair write"
     },
     {
-      "path": "internal/handler/user_preferences.go",
-      "function": "preferencesFromRow",
+      "path": "internal/userpreferences/row.go",
+      "function": "FromRow",
       "operation": "json.Unmarshal",
-      "arguments": ["row.StarredTypes", "&prefs.StarredTypes"],
-      "owner": "/handler",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+      "arguments": [
+        "row.StarredTypes",
+        "&prefs.StarredTypes"
+      ],
+      "owner": "userpreferences",
+      "schema": "Canonical Preferences v1; stored favorites, pinned_clusters and starred_types arrays with existing enum/default rules",
+      "reader_behavior": "Preserve existing stored-array decoding and validation; malformed data returns an error, no normalization or repair write"
     },
     {
-      "path": "internal/handler/user_preferences.go",
-      "function": "*AuthHandler.PutUserPreferences",
+      "path": "internal/userpreferences/service.go",
+      "function": "replacementParams",
       "operation": "json.Marshal",
-      "arguments": ["prefs.Favorites"],
-      "owner": "/handler",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+      "arguments": [
+        "p.Favorites"
+      ],
+      "owner": "userpreferences",
+      "schema": "Canonical Preferences v1 arrays, normalized and validated prepared command before transaction",
+      "reader_behavior": "Marshal existing favorites/pinned_clusters/starred_types arrays into canonical sqlc parameters; encode failure precedes mutation, no alternative persistence"
     },
     {
-      "path": "internal/handler/user_preferences.go",
-      "function": "*AuthHandler.PutUserPreferences",
+      "path": "internal/userpreferences/service.go",
+      "function": "replacementParams",
       "operation": "json.Marshal",
-      "arguments": ["prefs.PinnedClusters"],
-      "owner": "/handler",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+      "arguments": [
+        "p.PinnedClusters"
+      ],
+      "owner": "userpreferences",
+      "schema": "Canonical Preferences v1 arrays, normalized and validated prepared command before transaction",
+      "reader_behavior": "Marshal existing favorites/pinned_clusters/starred_types arrays into canonical sqlc parameters; encode failure precedes mutation, no alternative persistence"
     },
     {
-      "path": "internal/handler/user_preferences.go",
-      "function": "*AuthHandler.PutUserPreferences",
+      "path": "internal/userpreferences/service.go",
+      "function": "replacementParams",
       "operation": "json.Marshal",
-      "arguments": ["prefs.StarredTypes"],
-      "owner": "/handler",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+      "arguments": [
+        "p.StarredTypes"
+      ],
+      "owner": "userpreferences",
+      "schema": "Canonical Preferences v1 arrays, normalized and validated prepared command before transaction",
+      "reader_behavior": "Marshal existing favorites/pinned_clusters/starred_types arrays into canonical sqlc parameters; encode failure precedes mutation, no alternative persistence"
     },
     {
-      "path": "internal/handler/user_preferences_integrity.go",
+      "path": "internal/userpreferences/receipt.go",
       "function": "claimPreferenceReceipt",
       "operation": "jsoncontract.Decode",
       "arguments": [
@@ -26377,7 +26397,7 @@
       "reader_behavior": "Read at most32KiB; closed duplicate/depth/unknown/trailing decoder; require empty table and non-null empty object when operation_id is absent; partial state is typed internal error"
     },
     {
-      "path": "internal/handler/user_preferences_integrity.go",
+      "path": "internal/userpreferences/receipt.go",
       "function": "claimPreferenceReceipt",
       "operation": "jsoncontract.Decode",
       "arguments": [
@@ -26389,7 +26409,7 @@
       "reader_behavior": "Read at most32KiB; closed duplicate/depth/unknown/trailing decoder; validate version1, actor/resource/method/path and canonical committed document digest before replay; malformed state is internal error, valid changed command is conflict"
     },
     {
-      "path": "internal/handler/user_preferences_integrity.go",
+      "path": "internal/userpreferences/receipt.go",
       "function": "attachPreferenceReceipt",
       "operation": "json.Marshal",
       "arguments": [
@@ -30051,6 +30071,17 @@
       "owner": "ops/upgrade",
       "schema": "Private Checkpoint schema1: exact target/plan sha256, Kubernetes identity, ordered completed stage array, pending intent and acknowledged mutation/rollback flags; bounded64KiB, no credential values",
       "reader_behavior": "Strict canonical Decode rejects duplicate/unknown/trailing/deep/malformed/null or missing required fields; exact typed plan/identity/converse stage constraints. Locked writer retains pending/recovery bytes on error, refuses progress rewind, fsyncs before acknowledgement; resume assessment never mutation replay. Source draft/runtime qualification pending"
+    },
+    {
+      "path": "internal/userpreferences/service.go",
+      "function": "DocumentDigest",
+      "operation": "json.Marshal",
+      "arguments": [
+        "p"
+      ],
+      "owner": "userpreferences",
+      "schema": "Canonical normalized Preferences v1 JSON document; private deterministic SHA-256 request identity, unchanged version 1 replay field layout",
+      "reader_behavior": "Marshal typed validated preference command; same encoding/json output and sha256:<hex> digest as canonicalOperationRequestDigest before extraction; replay verifies stored document digest, no credential or environment input"
     }
   ]
 }
