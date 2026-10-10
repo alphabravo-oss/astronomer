@@ -148,9 +148,20 @@
       "serializer_sites": 1159
     },
     "parser_qualification": "Exact SHA-bound cached parsers, same current reviewed parser source; no current dependency rebuild by root",
-    "merge_protection": "Existing strict HTTP destination policy, CLI mirror wiring and exporter-health files have no merged changes"
+    "merge_protection": "Existing strict HTTP destination policy, CLI mirror wiring and exporter-health files have no merged changes",
+    "sdk_and_codec_race_vet": {
+      "source": "0b185c9ff6827e9c6af766138e8c47d909afb025",
+      "receipt": "root-0b185c9f-cursor/receipt.json",
+      "sdk_parents": 3,
+      "sdk_cases": 12,
+      "pagination_parents": 12,
+      "pagination_cases": 18,
+      "skips": 0,
+      "failures": 0,
+      "vet": "PASS"
+    }
   },
-  "verdict": "ACCEPT scoped core integration; root independent SDK/live compiler rerun still queued",
+  "verdict": "ACCEPT scoped core integration; independent SDK/codec race and vet PASS; whole W07 and integrated candidate remain open",
   "open": [
     "wider list and critical-consumer inventory/conversions",
     "larger representative cardinality and exposed-filter cost decision",
