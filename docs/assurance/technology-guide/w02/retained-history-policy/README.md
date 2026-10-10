@@ -9,3 +9,5 @@ Current collection provenance and the fresh current history scan remain open. Th
 The scanner excerpts under `evidence-bundle/scanner-source` are evidence-only copies, not runtime dependencies or executable policy authority. They document exact Gitleaks 8.30.1 regex, newline trimming and location calculation, and go-gitdiff 0.9.1 fragment construction. Both upstream projects use the MIT license; exact notices are retained under `evidence-bundle/licenses`. Primary sources are [Gitleaks v8.30.1](https://github.com/gitleaks/gitleaks/tree/v8.30.1) and [go-gitdiff v0.9.1](https://github.com/gitleaks/go-gitdiff/tree/v0.9.1). Fixture tests currently read the explicit selected scanner module cache used in this qualification; portable collector/test configuration is a separate pending proposal.
 
 Immutable evidence JSON and compressed artifacts preserve their reviewed bytes. Only the new prose and source-binding index are formatted.
+
+The scanner source excerpts use `.go.txt` filenames so Go package discovery treats them as evidence only. Their original source paths and byte digests remain bound by the manifest.

@@ -57,23 +57,23 @@
         "sha256": "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf"
       },
       "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/detect/location.go": {
-        "path": "scanner-source/1-location.go",
+        "path": "scanner-source/1-location.go.txt",
         "sha256": "cbbad8f3fa7d5a4ad4f6cbbd0a06a89eb8c5b728a19505ee004f068964a82faf"
       },
       "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/detect/detect.go": {
-        "path": "scanner-source/2-detect.go",
+        "path": "scanner-source/2-detect.go.txt",
         "sha256": "2bac563a09f22ff76c56b200c3b9b5dc865c1de699eb0ba2a27cca741fa9bd13"
       },
       "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/sources/git.go": {
-        "path": "scanner-source/3-git.go",
+        "path": "scanner-source/3-git.go.txt",
         "sha256": "1fb86062416b83f756be89165e4ef1244f038a6e59c6ab5c014d330909de8e8f"
       },
       "/root/go/pkg/mod/github.com/gitleaks/go-gitdiff@v0.9.1/gitdiff/text.go": {
-        "path": "scanner-source/4-text.go",
+        "path": "scanner-source/4-text.go.txt",
         "sha256": "cea8ba5be609f953b08aeef08bd51d94425abbf02cc8c0232a3d8fbcdc127e75"
       },
       "/root/go/pkg/mod/github.com/gitleaks/go-gitdiff@v0.9.1/gitdiff/gitdiff.go": {
-        "path": "scanner-source/5-gitdiff.go",
+        "path": "scanner-source/5-gitdiff.go.txt",
         "sha256": "d42dbd1fda41807911a694cf9726900daddf8f30d59651e2f585fe820a6bf898"
       }
     }

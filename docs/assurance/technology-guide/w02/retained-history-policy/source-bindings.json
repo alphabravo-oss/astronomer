@@ -59,27 +59,27 @@
       "bytes": 97731
     },
     {
-      "path": "docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/1-location.go",
+      "path": "docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/1-location.go.txt",
       "sha256": "cbbad8f3fa7d5a4ad4f6cbbd0a06a89eb8c5b728a19505ee004f068964a82faf",
       "bytes": 2028
     },
     {
-      "path": "docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/2-detect.go",
+      "path": "docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/2-detect.go.txt",
       "sha256": "2bac563a09f22ff76c56b200c3b9b5dc865c1de699eb0ba2a27cca741fa9bd13",
       "bytes": 27506
     },
     {
-      "path": "docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/3-git.go",
+      "path": "docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/3-git.go.txt",
       "sha256": "1fb86062416b83f756be89165e4ef1244f038a6e59c6ab5c014d330909de8e8f",
       "bytes": 14837
     },
     {
-      "path": "docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/4-text.go",
+      "path": "docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/4-text.go.txt",
       "sha256": "cea8ba5be609f953b08aeef08bd51d94425abbf02cc8c0232a3d8fbcdc127e75",
       "bytes": 4846
     },
     {
-      "path": "docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/5-gitdiff.go",
+      "path": "docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/5-gitdiff.go.txt",
       "sha256": "d42dbd1fda41807911a694cf9726900daddf8f30d59651e2f585fe820a6bf898",
       "bytes": 5151
     },
@@ -90,8 +90,8 @@
     },
     {
       "path": "docs/assurance/technology-guide/w02/retained-history-policy/history-sites-manifest.json",
-      "sha256": "107ceb18d776d0d1ec27d7e5e9282788cd223b9213614084ea1396e006edf8e3",
-      "bytes": 4533
+      "sha256": "52dcd844502d31d8dddb35a4ecc00415477a426e858069f8702b27d24745ac5a",
+      "bytes": 4553
     },
     {
       "path": "docs/assurance/technology-guide/w02/retained-history-policy/history-sites.json.gz",
