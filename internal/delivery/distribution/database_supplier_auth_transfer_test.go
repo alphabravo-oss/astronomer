@@ -116,7 +116,7 @@ func TestSupplierAuthenticatedCaptureAndTransferShareExactOwnedScope(t *testing.
 			if tokens != 1 || challenges != 1 || layers != 0 || violations {
 				t.Fatal("capture token authority or no-payload boundary differs")
 			}
-			output := filepath.Join(t.TempDir(), "supplier.tar.gz")
+			output := filepath.Join(supplierTransferPrivateDirectory(t), "supplier.tar.gz")
 			verified, err := inspector.Transfer(t.Context(), captured, output, now)
 			if err != nil {
 				t.Fatal("challenge-aware staged transfer failed")

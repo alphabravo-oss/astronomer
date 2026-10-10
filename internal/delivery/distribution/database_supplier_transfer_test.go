@@ -97,7 +97,7 @@ func TestSupplierTransferCommitsOnlyCompleteInspectedOriginalLayer(t *testing.T)
 	for _, role := range []string{"trivy-database", "trivy-java-database"} {
 		t.Run(role, func(t *testing.T) {
 			inspector, captured, transport, payload := supplierTransferFixture(t, role, "valid", now, nil)
-			output := filepath.Join(t.TempDir(), "database.tar.gz")
+			output := filepath.Join(supplierTransferPrivateDirectory(t), "database.tar.gz")
 			proof, err := inspector.Transfer(t.Context(), captured, output, now)
 			if err != nil {
 				t.Fatal(err)
@@ -126,7 +126,7 @@ func TestSupplierTransferRefusesRangeFailuresBeforeAcceptedOutput(t *testing.T) 
 	for _, scenario := range []string{"200", "multipart", "misaligned", "wrong-total", "duplicate-range", "partial", "oversized", "changed"} {
 		t.Run(scenario, func(t *testing.T) {
 			inspector, captured, transport, _ := supplierTransferFixture(t, "trivy-database", scenario, now, nil)
-			output := filepath.Join(t.TempDir(), "database.tar.gz")
+			output := filepath.Join(supplierTransferPrivateDirectory(t), "database.tar.gz")
 			if proof, err := inspector.Transfer(t.Context(), captured, output, now); err == nil || proof != nil {
 				t.Fatal("invalid supplier range produced accepted output")
 			}
@@ -146,7 +146,7 @@ func TestSupplierTransferRejectsUnownedPreconditionsBeforeLayerFetch(t *testing.
 	for _, scenario := range []string{"zero-capture", "foreign-capture", "relative-output", "existing-output", "public-directory", "symlink-directory", "missing-directory", "pre-cancel"} {
 		t.Run(scenario, func(t *testing.T) {
 			inspector, captured, transport, _ := supplierTransferFixture(t, "trivy-database", "valid", now, nil)
-			parent := t.TempDir()
+			parent := supplierTransferPrivateDirectory(t)
 			output := filepath.Join(parent, "database.tar.gz")
 			ctx := t.Context()
 			switch scenario {
@@ -169,7 +169,7 @@ func TestSupplierTransferRejectsUnownedPreconditionsBeforeLayerFetch(t *testing.
 					t.Fatal("fixture preparation failed")
 				}
 			case "symlink-directory":
-				link := filepath.Join(t.TempDir(), "link")
+				link := filepath.Join(supplierTransferPrivateDirectory(t), "link")
 				if os.Symlink(parent, link) != nil {
 					t.Fatal("fixture preparation failed")
 				}
@@ -197,7 +197,7 @@ func TestSupplierTransferCancellationAfterStagedBytesAndReplacementPreservation(
 	now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 	t.Run("cancel-after-bytes", func(t *testing.T) {
 		inspector, captured, _, _ := supplierTransferFixture(t, "trivy-database", "valid", now, nil)
-		output := filepath.Join(t.TempDir(), "database.tar.gz")
+		output := filepath.Join(supplierTransferPrivateDirectory(t), "database.tar.gz")
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 		staged := false
@@ -212,7 +212,7 @@ func TestSupplierTransferCancellationAfterStagedBytesAndReplacementPreservation(
 	})
 	t.Run("owned-temp-replaced", func(t *testing.T) {
 		inspector, captured, _, _ := supplierTransferFixture(t, "trivy-database", "valid", now, nil)
-		output := filepath.Join(t.TempDir(), "database.tar.gz")
+		output := filepath.Join(supplierTransferPrivateDirectory(t), "database.tar.gz")
 		var replaced, moved string
 		var phaseError error
 		proof, err := inspector.transfer(t.Context(), captured, output, now, func(file *os.File) {
@@ -249,7 +249,7 @@ func TestSupplierTransferRejectsStaleMetadataAfterCompleteHash(t *testing.T) {
 		return bytes.Replace(raw, []byte(now.Add(-2*time.Hour).Format(time.RFC3339)), []byte(now.Add(-31*time.Hour).Format(time.RFC3339)), 1)
 	}
 	inspector, captured, transport, _ := supplierTransferFixture(t, "trivy-database", "valid", now, edit)
-	output := filepath.Join(t.TempDir(), "database.tar.gz")
+	output := filepath.Join(supplierTransferPrivateDirectory(t), "database.tar.gz")
 	if proof, err := inspector.Transfer(t.Context(), captured, output, now); proof != nil || err == nil {
 		t.Fatal("stale actual upstream metadata produced proof")
 	}
@@ -268,4 +268,15 @@ func assertNoSupplierTemporary(t *testing.T, parent string) {
 	if err != nil || len(matches) != 0 {
 		t.Fatal("failed transfer left owned temporary staging")
 	}
+}
+
+// testing.TempDir creates a child with host-umask permissions. Each transfer
+// fixture explicitly establishes the production private-directory prerequisite.
+func supplierTransferPrivateDirectory(t *testing.T) string {
+	t.Helper()
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0700); err != nil {
+		t.Fatal("private supplier transfer fixture unavailable")
+	}
+	return directory
 }

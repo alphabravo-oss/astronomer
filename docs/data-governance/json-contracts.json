@@ -29940,12 +29940,12 @@
     },
     {
       "path": "internal/delivery/resolver/artifact_metadata.go",
-      "function": "FetchVerifiedOCIArtifactMetadata",
+      "function": "fetchArtifactMetadata",
       "operation": "jsoncontract.Decode",
       "arguments": ["configBytes", "&object"],
       "owner": "delivery/distribution",
       "schema": "Additive OCI artifact configuration object, descriptor 2 database metadata; payload availability/freshness remain separate authority",
-      "reader_behavior": "Signature-first manifest verification; descriptor/digest-bound max 1MiB bytes; canonical reader rejects duplicate/deep/trailing JSON and non-object/null while retaining supplier extension keys; static failure diagnostics"
+      "reader_behavior": "Signed consumers verify before this shared reader; the operator supplier capture establishes transport/content only. Descriptor/digest-bound max1MiB bytes; canonical reader rejects duplicate/deep/trailing JSON and non-object/null while retaining supplier extension keys; static failure diagnostics"
     },
     {
       "path": "internal/delivery/resolver/database_registry_auth.go",
