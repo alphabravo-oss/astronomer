@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "scope": "Shared HTTP Serve/Shutdown owner; agent binds before owner creation; worker lifecycle extraction preserves existing behavior",
+  "status": "scoped_pass",
+  "qualification_limits": [
+    "Actual bind collision and blocked Prometheus scrape demonstrate the two original ownership failures",
+    "Server Serve and Shutdown owners are joined; arbitrary context-ignoring handler goroutines are not claimed drained",
+    "Fixture cleanup separately releases and joins its held collector",
+    "No current repository-wide native security collection pass or whole W02 closure"
+  ],
+  "stages": [
+    {
+      "stage": "ownership-before",
+      "source": "5ebc3dece2c7ec8982033de9667a027b1efcaba7",
+      "original_directory": "/tmp/w02-http-health-before-5ebc3dec-run1",
+      "events": {
+        "parent_failures": 2,
+        "leaf_failures": 0,
+        "parent_passes": 0,
+        "leaf_passes": 0,
+        "skips": 0,
+        "package_failures": 1
+      },
+      "environment_events": null,
+      "source_stable": true,
+      "runner_final_guard_pass": true,
+      "steps": [
+        {
+          "name": "go-version",
+          "exit_code": 0,
+          "drained": true,
+          "leader_held": true
+        },
+        {
+          "name": "before",
+          "exit_code": 1,
+          "drained": true,
+          "leader_held": true
+        }
+      ]
+    },
+    {
+      "stage": "runtime-after",
+      "source": "402682212ce7778882edce7e10e85517700a46c2",
+      "original_directory": "/tmp/w02-http-health-after-40268221-run1",
+      "events": {
+        "parent_passes": 8,
+        "leaf_passes": 0,
+        "skips": 0,
+        "package_passes": 3
+      },
+      "environment_events": {
+        "parent_passes": 1,
+        "leaf_passes": 0,
+        "skips": 0,
+        "package_passes": 1
+      },
+      "source_stable": true,
+      "runner_final_guard_pass": true,
+      "steps": [
+        {
+          "name": "go-version",
+          "exit_code": 0,
+          "drained": true,
+          "leader_held": true
+        },
+        {
+          "name": "after",
+          "exit_code": 0,
+          "drained": true,
+          "leader_held": true
+        },
+        {
+          "name": "vet",
+          "exit_code": 0,
+          "drained": true,
+          "leader_held": true
+        },
+        {
+          "name": "environment-access",
+          "exit_code": 0,
+          "drained": true,
+          "leader_held": true
+        },
+        {
+          "name": "json-governance",
+          "exit_code": 0,
+          "drained": true,
+          "leader_held": true
+        },
+        {
+          "name": "boundaries",
+          "exit_code": 0,
+          "drained": true,
+          "leader_held": true
+        },
+        {
+          "name": "complexity",
+          "exit_code": 0,
+          "drained": true,
+          "leader_held": true
+        }
+      ]
+    }
+  ],
+  "source_maps": {
+    "ownership-before": {
+      "path": "ownership-before-git-source-map.json.gz",
+      "git_file_count": 7409,
+      "json_sha256": "94b5ff117291c11a7d2160a4012963d9c193a6436e025cf89b5b3919e33e2e97",
+      "gzip_sha256": "c4aaf18233d013e7d429f57c6c9c4b29eb3c2ab35f6562a9703b81c37b404cc1"
+    },
+    "runtime-after": {
+      "path": "runtime-after-git-source-map.json.gz",
+      "git_file_count": 7411,
+      "json_sha256": "b7dab933619f3aadab9fa0e544b42cdcb6d5736ef73dd0f22d3dbf269742ce72",
+      "gzip_sha256": "c93bbbf25d415679c1c75e27d63ba72c7df92a3e121f090b4b86949b10141e70"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "ownership-before/before.log.gz",
+      "original_path": "/tmp/w02-http-health-before-5ebc3dec-run1/before.log",
+      "original_size": 3365,
+      "original_sha256": "5f44fa2b7eb7c0ef1d57dc1849ff8ec397b8818a410c1b312e60a6fb910cdc3b",
+      "gzip_size": 582,
+      "gzip_sha256": "aa13d5a885f58e4e97306d61209ec28ae6975f6fac61304c05e58c9ee08fa8d0"
+    },
+    {
+      "path": "ownership-before/capacity.jsonl.gz",
+      "original_path": "/tmp/w02-http-health-before-5ebc3dec-run1/capacity.jsonl",
+      "original_size": 3503,
+      "original_sha256": "ff9d5790bf25331c61db781f37e7d34d2ee1d259003f91886eed9191bcc1f741",
+      "gzip_size": 405,
+      "gzip_sha256": "362c4aa0c7d9015346e87f3a2ef35a33a577a981f30caea8e90b60d1f6d9817f"
+    },
+    {
+      "path": "ownership-before/go-version.log.gz",
+      "original_path": "/tmp/w02-http-health-before-5ebc3dec-run1/go-version.log",
+      "original_size": 32,
+      "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "gzip_size": 52,
+      "gzip_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88"
+    },
+    {
+      "path": "ownership-before/receipt.json.gz",
+      "original_path": "/tmp/w02-http-health-before-5ebc3dec-run1/receipt.json",
+      "original_size": 3605,
+      "original_sha256": "3f5435a131fcf159232881cb38c35433a22dd18b97056b5d9f33fdb6a8ad2d56",
+      "gzip_size": 980,
+      "gzip_sha256": "e82aa1b66ef016f16ec6587f3e725a0b27270d223f9e7b2ab8396aea49c06f69"
+    },
+    {
+      "path": "runtime-after/after.log.gz",
+      "original_path": "/tmp/w02-http-health-after-40268221-run1/after.log",
+      "original_size": 10302,
+      "original_sha256": "0fea64695fec71a359eb80fddace71f1b869abf5e8a9c211801b9fa31a441912",
+      "gzip_size": 1166,
+      "gzip_sha256": "496727939928346757cb2b516d012ce5ccf5efd35bd7c34f448338f706e5b240"
+    },
+    {
+      "path": "runtime-after/boundaries.log.gz",
+      "original_path": "/tmp/w02-http-health-after-40268221-run1/boundaries.log",
+      "original_size": 65,
+      "original_sha256": "c707080f3f128435356055c6f05e930a7dd8aed51b42721c444acbe4cbfdcfda",
+      "gzip_size": 81,
+      "gzip_sha256": "25746ba7d83ff98a01e0d0f823c8ab630d7659bd7e6ef395c67fb81f08ae7134"
+    },
+    {
+      "path": "runtime-after/capacity.jsonl.gz",
+      "original_path": "/tmp/w02-http-health-after-40268221-run1/capacity.jsonl",
+      "original_size": 12104,
+      "original_sha256": "759ed1005a3e8a7a455acc1eb6c0aa19589deba9f9939054a8905205826e0766",
+      "gzip_size": 832,
+      "gzip_sha256": "7eeea3c0bbdc9818ea360ce610c19f96cfe1730281de2f939960a8f2cd1870f8"
+    },
+    {
+      "path": "runtime-after/complexity.log.gz",
+      "original_path": "/tmp/w02-http-health-after-40268221-run1/complexity.log",
+      "original_size": 101,
+      "original_sha256": "b55da56d971e278075255d4b1f2a3b6413242ff5c53a9994bd58efa292f3f8f2",
+      "gzip_size": 102,
+      "gzip_sha256": "afd203d885541d3a2284a5151b0dd9a0ced1822108b6ff0f27d135a7cb6d6a14"
+    },
+    {
+      "path": "runtime-after/environment-access.log.gz",
+      "original_path": "/tmp/w02-http-health-after-40268221-run1/environment-access.log",
+      "original_size": 1573,
+      "original_sha256": "7d3d496391a83d81bc738755349fab19f5c3d429e914da0d74b675928cc3d967",
+      "gzip_size": 353,
+      "gzip_sha256": "bf196ffe78e0fe27942ae2097f6d205b86cc47a989c880c51cd38dd9e19adfc8"
+    },
+    {
+      "path": "runtime-after/go-version.log.gz",
+      "original_path": "/tmp/w02-http-health-after-40268221-run1/go-version.log",
+      "original_size": 32,
+      "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "gzip_size": 52,
+      "gzip_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88"
+    },
+    {
+      "path": "runtime-after/json-governance.log.gz",
+      "original_path": "/tmp/w02-http-health-after-40268221-run1/json-governance.log",
+      "original_size": 153,
+      "original_sha256": "a506c7d6c67bde11fc0bdbcf05f2f826ba2b12791d92f507528faae6586cb107",
+      "gzip_size": 140,
+      "gzip_sha256": "2617791bc963806d599b2b824a4415bf1a7b6aa74d4aa0587081d756773b1343"
+    },
+    {
+      "path": "runtime-after/receipt.json.gz",
+      "original_path": "/tmp/w02-http-health-after-40268221-run1/receipt.json",
+      "original_size": 9706,
+      "original_sha256": "4dbbabac67b6448ed7a84967362165325d0c55a7476d925fcfbe98ceebbc3e4c",
+      "gzip_size": 1799,
+      "gzip_sha256": "ed30de65be607c6fca849eacba4911c305225ae2d12cca42c64e2efc089caae5"
+    },
+    {
+      "path": "runtime-after/vet.log.gz",
+      "original_path": "/tmp/w02-http-health-after-40268221-run1/vet.log",
+      "original_size": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "gzip_size": 20,
+      "gzip_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "inputs/00-w02-http-health-before-runner-strict-5ebc3dec-run_before.py.gz",
+      "original_path": "/tmp/w02-http-health-before-runner-strict-5ebc3dec/run_before.py",
+      "original_size": 7335,
+      "original_sha256": "c6bd6c6312a84f0de057448e9777a64dcdddf6fb35818e711b6a71375a3b4fe8",
+      "gzip_size": 3012,
+      "gzip_sha256": "a10be74067dcadbeedb2ed8fda305666395b826091177e2d4fe69320da883578"
+    },
+    {
+      "path": "inputs/01-w02-http-health-before-runner-strict-5ebc3dec-test_run_before.py.gz",
+      "original_path": "/tmp/w02-http-health-before-runner-strict-5ebc3dec/test_run_before.py",
+      "original_size": 4804,
+      "original_sha256": "0e342de1b101339bac5a3ceba47dad6f465edce9b27e877d9026294a9c0c15b5",
+      "gzip_size": 1523,
+      "gzip_sha256": "81f73229f1ee1c4654477dcbdc3e30b5dec18a2af09f112dd0f2d37379444833"
+    },
+    {
+      "path": "inputs/02-w02-http-health-after-runner-40268221-run_after.py.gz",
+      "original_path": "/tmp/w02-http-health-after-runner-40268221/run_after.py",
+      "original_size": 8500,
+      "original_sha256": "b6799bbec7c27f6cacce189e61c5b3760bc8b63f8c63b987eb7db8a8e599939c",
+      "gzip_size": 3389,
+      "gzip_sha256": "86dc7a6944a0c2b90c1cd907aeab6f88cf857f95b4fca35828933374caee624a"
+    },
+    {
+      "path": "inputs/03-w02-http-health-after-runner-40268221-test_run_after.py.gz",
+      "original_path": "/tmp/w02-http-health-after-runner-40268221/test_run_after.py",
+      "original_size": 3718,
+      "original_sha256": "74542f97d2048a083a6c1f405c9c283ce6d4c913a9ff76dfbc89e06ab95af5ad",
+      "gzip_size": 1266,
+      "gzip_sha256": "a6c438ba5c875e3a7b7c24c537c6eac211474094114b936af9a2e7baf8600bc0"
+    },
+    {
+      "path": "inputs/04-w02-http-health-after-runner-40268221-check_json_cached.py.gz",
+      "original_path": "/tmp/w02-http-health-after-runner-40268221/check_json_cached.py",
+      "original_size": 815,
+      "original_sha256": "bfe81778498e94e9d8a3c1712c7fff6d4040a198712201bfdf44fd1f3105d216",
+      "gzip_size": 489,
+      "gzip_sha256": "a55df6b237790b94be3691ed789207164c2563ca798177b4aef420ec6872827f"
+    },
+    {
+      "path": "inputs/05-w07-after-query-ee2c52d8-run_after.py.gz",
+      "original_path": "/tmp/w07-after-query-ee2c52d8/run_after.py",
+      "original_size": 10947,
+      "original_sha256": "4b1037ee327b96de13338c5ab8ba1366e5a6bec007f0c8cf634faf50dfaace46",
+      "gzip_size": 3780,
+      "gzip_sha256": "bc0f2b8c0f4229dc94b665ffd7c6037b4ca1604e1272e68f2133a114328ab1ba"
+    },
+    {
+      "path": "inputs/06-tmp-plan032_w04_owned_runner.py.gz",
+      "original_path": "/tmp/plan032_w04_owned_runner.py",
+      "original_size": 4144,
+      "original_sha256": "60c3790c8931a5d9986979f9fec5416b1f5e1f697b2c115272db8b40acd8000d",
+      "gzip_size": 1670,
+      "gzip_sha256": "f5868d3f31c3ff4d428c4b000b4958191f79374ae766f7f767977503adbf2de3"
+    },
+    {
+      "path": "inputs/07-w02-http-health-lifecycle-proposal-production.patch.gz",
+      "original_path": "/tmp/w02-http-health-lifecycle-proposal/production.patch",
+      "original_size": 2831,
+      "original_sha256": "6c5f530587b5ae64e1b9d2da0342c9b059004e1b1836b41daafea24415457e5d",
+      "gzip_size": 1038,
+      "gzip_sha256": "7f0ea638c42a7d8e1ec95bac0aabbb789d13689b00e44fd5ebb0f7a2861bc3de"
+    }
+  ],
+  "source_commits": {
+    "ownership_regressions": "5ebc3dece2c7ec8982033de9667a027b1efcaba7",
+    "shared_lifecycle": "cbc956ba108f88500aa7528ae6f9de78398251e7",
+    "shared_socket_fixtures": "402682212ce7778882edce7e10e85517700a46c2"
+  }
+}
