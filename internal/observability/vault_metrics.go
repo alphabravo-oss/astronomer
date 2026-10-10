@@ -66,7 +66,7 @@ func RecordVaultResolve(connection, outcome string, durationSeconds float64) {
 	if connection == "" {
 		connection = "unknown"
 	}
-	vaultResolvesTotal.WithLabelValues(MetricValues(connection, outcome)...).Inc()
+	vaultResolvesTotal.WithLabelValues(MetricValues(connection, vaultOutcomeLabel(outcome))...).Inc()
 	if outcome == VaultOutcomeSucceeded && durationSeconds > 0 {
 		vaultResolveDuration.WithLabelValues(MetricValues(connection)...).Observe(durationSeconds)
 	}

@@ -709,14 +709,14 @@ func (s *StateSubscriber) runGatekeeperConstraints(ctx context.Context, parentSt
 func (s *StateSubscriber) dispatch(op protocol.StateUpdateOp, kind, apiGroup, apiVersion string, meta metav1.Object) {
 	key := fmt.Sprintf("%s|%s|%s", kind, meta.GetNamespace(), meta.GetName())
 	s.log.Debug("state subscriber received event", "op", op, "kind", kind, "namespace", meta.GetNamespace(), "name", meta.GetName())
-	agentStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues(kind)...).Inc()
+	agentStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues(observability.StateMetricKind(kind))...).Inc()
 	if !s.limiter.Allow(key) {
-		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("rate_limited", kind)...).Inc()
+		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("rate_limited", observability.StateMetricKind(kind))...).Inc()
 		s.log.Debug("state subscriber rate-limited", "key", key)
 		return
 	}
 	if s.tunnelDown() {
-		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("disconnected", kind)...).Inc()
+		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("disconnected", observability.StateMetricKind(kind))...).Inc()
 		return
 	}
 	s.emit(s.sendContext(), op, kind, apiGroup, apiVersion, meta, key)
@@ -768,7 +768,7 @@ func (s *StateSubscriber) emit(ctx context.Context, op protocol.StateUpdateOp, k
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("marshal_failed", kind)...).Inc()
+		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("marshal_failed", observability.StateMetricKind(kind))...).Inc()
 		s.log.Warn("state subscriber: marshal failed", "kind", kind, "error", err)
 		return
 	}
@@ -778,7 +778,7 @@ func (s *StateSubscriber) emit(ctx context.Context, op protocol.StateUpdateOp, k
 		Payload:   body,
 	}
 	if err := s.sender.SendBlocking(ctx, msg); err != nil {
-		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("send_failed", kind)...).Inc()
+		agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("send_failed", observability.StateMetricKind(kind))...).Inc()
 		// The send channel is bounded and STATE_UPDATE is best-effort: after
 		// waiting out the tunnel's queue timeout we genuinely drop this hint.
 		// That is safe because a STATE_UPDATE is an invalidation hint, not an
@@ -789,7 +789,7 @@ func (s *StateSubscriber) emit(ctx context.Context, op protocol.StateUpdateOp, k
 		s.log.Warn("state subscriber: send failed", "kind", kind, "error", err)
 		return
 	}
-	agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("queued", kind)...).Inc()
+	agentStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("queued", observability.StateMetricKind(kind))...).Inc()
 	s.log.Debug("state subscriber sent", "kind", kind, "namespace", meta.GetNamespace(), "name", meta.GetName())
 }
 

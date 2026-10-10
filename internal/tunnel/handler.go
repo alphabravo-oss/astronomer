@@ -667,7 +667,7 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 		)
 		return
 	}
-	tunnelStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues(payload.Kind)...).Inc()
+	tunnelStateUpdatesReceivedTotal.WithLabelValues(observability.MetricValues(observability.StateMetricKind(payload.Kind))...).Inc()
 	h.log.Debug("received MsgStateUpdate",
 		slog.String("cluster_id", conn.ClusterID),
 		slog.String("kind", payload.Kind),
@@ -678,7 +678,7 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 	limiter := h.stateLimiter()
 	key := fmt.Sprintf("%s|%s", conn.ClusterID, stateUpdateKey(payload))
 	if !limiter.allow(key) {
-		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("rate_limited", payload.Kind)...).Inc()
+		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("rate_limited", observability.StateMetricKind(payload.Kind))...).Inc()
 		h.log.Debug("MsgStateUpdate rate-limited", slog.String("key", key))
 		return
 	}
@@ -687,7 +687,7 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 	p := h.publisher
 	h.mu.RUnlock()
 	if p == nil {
-		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("no_publisher", payload.Kind)...).Inc()
+		tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("no_publisher", observability.StateMetricKind(payload.Kind))...).Inc()
 		h.log.Warn("MsgStateUpdate received but no publisher set")
 		return
 	}
@@ -705,7 +705,7 @@ func (h *Hub) handleStateUpdate(conn *AgentConnection, msg *protocol.Message) {
 		"name":             payload.Name,
 		"resource_version": payload.ResourceVersion,
 	})
-	tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("published", payload.Kind)...).Inc()
+	tunnelStateUpdatesHandledTotal.WithLabelValues(observability.MetricValues("published", observability.StateMetricKind(payload.Kind))...).Inc()
 }
 
 func stateUpdateKey(payload protocol.StateUpdatePayload) string {
