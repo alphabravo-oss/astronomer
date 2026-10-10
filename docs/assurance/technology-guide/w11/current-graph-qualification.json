@@ -1310,8 +1310,8 @@
     "completeContractQualified": false
   },
   "limits": [
-    "Current full go build ./... passed; focused104-parent race incomplete because mandatory capacity guard stopped child.",
-    "Consumer vet was not executed. No full current graph/runtime/Helm4 adoption claim.",
+    "The historical first567 capacity-stop stage passed full go build ./... but left its104-parent race incomplete; unchanged-source run2 completed104 parents/154 terminals/11 packages under race.",
+    "Consumer vet was not executed in the historical first567 capacity-stop stage; unchanged-source run2 passed12-consumer vet. No whole-suite, live Kubernetes runtime or complete Helm4 adoption claim.",
     "Separate tools/gosec module is outside root-module build.",
     "Portable originals retain actual module diff, original compile failure, stopped test stream and every capacity/ownership receipt."
   ],
