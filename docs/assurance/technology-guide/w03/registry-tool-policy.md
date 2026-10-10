@@ -19,6 +19,7 @@ The [canonical redirect receipt](finite-redirect-evidence.json) and
 [one-byte supplier probe](finite-range-probe.json) establish their original,
 separate scopes. The latter proves range routing, not full database bytes,
 whole-layer SHA256, authenticated vendor publication or database freshness.
-This CLI source must receive its own coupled qualification after the accepted
-mainline's stricter JSON reader is incorporated. The task map records the
+The [CLI receipt](registry-tool-evidence.json) binds passing canonical factory
+tests, coupled four-package race checks, vet and docs to the accepted mainline's
+stricter JSON reader. It also retains the preceding capacity failure. The task map records the
 remaining [W03 criteria](task-status.md).
