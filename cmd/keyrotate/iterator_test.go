@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -15,6 +17,9 @@ import (
 // This driver models a valid first row followed by a connection/iterator error.
 // A partial page must never be interpreted as completed rotation evidence.
 type interruptedDriver struct{ ciphertext string }
+
+var interruptedDriverSequence atomic.Uint64
+
 type interruptedConn struct{ ciphertext string }
 type interruptedRows struct {
 	ciphertext string
@@ -58,8 +63,9 @@ func TestRotationRejectsIncompleteCiphertextPage(t *testing.T) {
 	if err != nil {
 		t.Fatal("encrypt synthetic value")
 	}
-	sql.Register("keyrotate-interrupted-page", interruptedDriver{ciphertext})
-	db, err := sql.Open("keyrotate-interrupted-page", "synthetic")
+	name := fmt.Sprintf("keyrotate-interrupted-page-%d", interruptedDriverSequence.Add(1))
+	sql.Register(name, interruptedDriver{ciphertext})
+	db, err := sql.Open(name, "synthetic")
 	if err != nil {
 		t.Fatal("open synthetic iterator")
 	}
