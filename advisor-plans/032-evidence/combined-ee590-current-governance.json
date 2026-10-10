@@ -1,0 +1,16 @@
+{
+  "source": "ee590de9b8a631f2044a1aedc81936da205558f0",
+  "observedAt": "2026-10-10T01:42:22.688544+00:00",
+  "result": "PASS",
+  "policyOutput": "sql-governance: 890 exact candidates; 177 source-bound owners; 9 embedded delete targets; two dormant activations blocked\njson-governance: 189 request owners; 205 storage candidates classified (including exact binary/scalar exclusions); 1159 serializer/read sites discovered\n",
+  "discoveryCalls": [
+    "sql",
+    "json"
+  ],
+  "parserSourceMatchesFrozen": "0b185c9f",
+  "parserBinaryHashesVerified": {
+    "/root/.cache/go-build/37/37712c088d943d59def32ad493e456a37dc4972df11c62122c211ac88d0ac260-d/sql-governance": "37712c088d943d59def32ad493e456a37dc4972df11c62122c211ac88d0ac260",
+    "/root/.cache/go-build/5c/5c629268ad1fe3fc6b927d5219d72cf79e1a56268fb02c18748b5c0ade1a84fd-d/json-governance": "5c629268ad1fe3fc6b927d5219d72cf79e1a56268fb02c18748b5c0ade1a84fd"
+  },
+  "scope": "Complete current Python ownership policies via exact cached source-matching AST executables; no current dependency rebuild or broad source scan claim"
+}
