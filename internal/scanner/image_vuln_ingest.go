@@ -90,9 +90,8 @@ type TrivyRegistry struct {
 }
 
 // TrivySummary holds the per-severity aggregate counts. The operator
-// emits these along with the report so we don't have to re-derive them
-// from the Vulnerabilities slice — but the ingest path also recomputes
-// them as a defensive cross-check (see normalizeSummary).
+// emits these along with the report. Ingest validates their range without
+// re-deriving them from a possibly incomplete Vulnerabilities slice.
 type TrivySummary struct {
 	CriticalCount int `json:"criticalCount"`
 	HighCount     int `json:"highCount"`
@@ -203,14 +202,9 @@ func (i *Ingester) IngestUnstructured(ctx context.Context, clusterID uuid.UUID, 
 // report name REPLACES the CVE rows (DELETE-then-INSERT inside the
 // tx) so operators never see a mix of stale + fresh CVEs.
 func (i *Ingester) Ingest(ctx context.Context, clusterID uuid.UUID, raw TrivyVulnerabilityReport) error {
-	if i == nil {
-		return errors.New("scanner: ingester is nil")
-	}
-	if clusterID == uuid.Nil {
-		return errors.New("scanner: cluster_id is required")
-	}
-	if strings.TrimSpace(raw.Metadata.Name) == "" {
-		return errors.New("scanner: report metadata.name is required")
+	summary, err := checkedIngestReportSummary(i, clusterID, raw)
+	if err != nil {
+		return err
 	}
 
 	scannedAt := parseRFC3339OrNow(raw.Report.UpdateTimestamp)
@@ -234,11 +228,11 @@ func (i *Ingester) Ingest(ctx context.Context, clusterID uuid.UUID, raw TrivyVul
 		ImageDigest:    raw.Report.Artifact.Digest,
 		Scanner:        scannerName,
 		ScannerVersion: raw.Report.Scanner.Version,
-		CriticalCount:  int32(raw.Report.Summary.CriticalCount),
-		HighCount:      int32(raw.Report.Summary.HighCount),
-		MediumCount:    int32(raw.Report.Summary.MediumCount),
-		LowCount:       int32(raw.Report.Summary.LowCount),
-		UnknownCount:   int32(raw.Report.Summary.UnknownCount),
+		CriticalCount:  summary.critical,
+		HighCount:      summary.high,
+		MediumCount:    summary.medium,
+		LowCount:       summary.low,
+		UnknownCount:   summary.unknown,
 		ScannedAt:      scannedAt,
 	}
 

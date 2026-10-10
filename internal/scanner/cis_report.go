@@ -1,6 +1,9 @@
 package scanner
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"math"
+)
 
 // DecodeCISReportJSON pulls the actual CIS report payload out of
 // spec.reportJSON (string-encoded) or spec.report (already an object),
@@ -36,7 +39,7 @@ func StringField(m map[string]any, keys ...string) string {
 	return ""
 }
 
-// NumericField returns a numeric report value as int32 when present.
+// NumericField returns an integral, representable report value as int32.
 func NumericField(m map[string]any, key string) (int32, bool) {
 	v, ok := m[key]
 	if !ok {
@@ -44,14 +47,23 @@ func NumericField(m map[string]any, key string) (int32, bool) {
 	}
 	switch n := v.(type) {
 	case float64:
+		if math.IsNaN(n) || math.IsInf(n, 0) || math.Trunc(n) != n || n < math.MinInt32 || n > math.MaxInt32 {
+			return 0, false
+		}
 		return int32(n), true
 	case int:
+		if n < math.MinInt32 || n > math.MaxInt32 {
+			return 0, false
+		}
 		return int32(n), true
 	case int64:
+		if n < math.MinInt32 || n > math.MaxInt32 {
+			return 0, false
+		}
 		return int32(n), true
 	case json.Number:
 		i, err := n.Int64()
-		if err != nil {
+		if err != nil || i < math.MinInt32 || i > math.MaxInt32 {
 			return 0, false
 		}
 		return int32(i), true
