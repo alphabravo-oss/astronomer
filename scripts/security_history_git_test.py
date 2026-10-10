@@ -1,5 +1,7 @@
 """Real disposable Git evidence for every reviewed proof class; never scans secrets."""
 import copy
+import os
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -10,7 +12,8 @@ from unittest import mock
 
 spec=importlib.util.spec_from_file_location('history',Path(__file__).with_name('security-history-policy.py'))
 p=importlib.util.module_from_spec(spec);spec.loader.exec_module(p)
-CONFIG=Path('/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/config/gitleaks.toml')
+CONFIG=Path(os.environ.get('ASTRONOMER_HISTORY_FIXTURE_RULE_CONFIG',str(Path(__file__).resolve().parents[1]/'docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/0-gitleaks.toml')))
+assert hashlib.sha256(CONFIG.read_bytes()).hexdigest()=='e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf', 'fixture rule config drift'
 
 class GitProofTest(unittest.TestCase):
     def setUp(self):

@@ -1,4 +1,6 @@
 import copy
+import os
+import hashlib
 import datetime as dt
 import gzip
 import importlib.util
@@ -28,7 +30,8 @@ class HistoryPolicyTest(unittest.TestCase):
                      referenced_commit=self.commit, referenced_blob_sha256=policy.sha(self.body),
                      field_components=['source_inputs', 'auth.go'],
                      field_rfc6901='/source_inputs/auth.go')
-        self.rule_config = Path('/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/config/gitleaks.toml')
+        self.rule_config = Path(os.environ.get('ASTRONOMER_HISTORY_FIXTURE_RULE_CONFIG', str(Path(__file__).resolve().parents[1]/'docs/assurance/technology-guide/w02/retained-history-policy/evidence-bundle/scanner-source/0-gitleaks.toml')))
+        assert hashlib.sha256(self.rule_config.read_bytes()).hexdigest() == 'e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf', 'fixture rule config drift'
         config = tomllib.loads(self.rule_config.read_text())
         self.pattern = re.compile(next(row['regex'] for row in config['rules'] if row['id'] == 'generic-api-key'))
         match = self.pattern.search(self.inventory.decode())

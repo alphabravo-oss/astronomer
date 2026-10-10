@@ -114,5 +114,7 @@
     "Fresh canonical collector provenance wiring",
     "Fresh current full-history scan and separate new-site dispositions",
     "Current native source-security remediation and release acceptance"
-  ]
+  ],
+  "immutable_source_commit": "ab95e1d78a707bb35f4ba451de2940fcd67874d7",
+  "artifact_read_scope": "Original approved packet bytes at immutable_source_commit; current fixture/collector stage bindings are separate, with no authority renewal"
 }
