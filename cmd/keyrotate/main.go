@@ -7,9 +7,9 @@
 //   - keyrotate sweeps the historical rows that were written under the old
 //     key and rewrites them under the new key
 //
-// Only after this command exits 0 can you drop the old key from the
-// encryptionKey config and restart. See docs/secret-rotation-runbook.md
-// for the full procedure.
+// A successful live sweep is necessary but does not authorize retiring keys
+// needed by retained backups, delayed payloads or rollback artifacts. See
+// docs/secret-rotation-runbook.md for the separate retention review.
 //
 // Usage:
 //
@@ -29,7 +29,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -59,7 +61,7 @@ func main() {
 		dbURL      = flag.String("database-url", os.Getenv("DATABASE_URL"), "Postgres connection string (env: DATABASE_URL)")
 		keyFlag    = flag.String("encryption-key", envKey, "comma-separated Fernet keys, new primary FIRST (env: ENCRYPTION_KEY or ASTRONOMER_ENCRYPTION_KEY)")
 		dryRun     = flag.Bool("dry-run", false, "report what would be re-encrypted; write nothing")
-		batchSize  = flag.Int("batch-size", 100, "rows per transaction (default 100)")
+		batchSize  = flag.Int("batch-size", 100, "scan-page size; each CAS update commits separately (default 100)")
 		dexCutover = flag.Bool("dex-public-clients-cutover-confirmed", false, "after all old server replicas are quiesced, encrypt and scrub legacy Dex public_clients")
 	)
 	flag.Parse()
@@ -77,7 +79,7 @@ func main() {
 
 	enc, err := auth.NewEncryptor(*keyFlag)
 	if err != nil {
-		log.Error("invalid encryption key", "err", err)
+		log.Error("invalid encryption key", rotationErrorAttrs(err)...)
 		os.Exit(2)
 	}
 	primaryKey := strings.TrimSpace(strings.Split(*keyFlag, ",")[0])
@@ -91,10 +93,11 @@ func main() {
 		log.Warn("only one key configured — nothing to rotate FROM; this run will rewrite ciphertexts under themselves (harmless but wasteful)")
 	}
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	connCfg, err := pgx.ParseConfig(*dbURL)
 	if err != nil {
-		log.Error("parse dsn", "err", err)
+		log.Error("parse dsn", rotationErrorAttrs(err)...)
 		os.Exit(2)
 	}
 	db := stdlib.OpenDB(*connCfg)
@@ -104,7 +107,7 @@ func main() {
 	db.SetMaxOpenConns(4)
 
 	if err := db.PingContext(ctx); err != nil {
-		log.Error("ping postgres", "err", err)
+		log.Error("ping postgres", rotationErrorAttrs(err)...)
 		os.Exit(2)
 	}
 
@@ -143,6 +146,7 @@ func main() {
 		"skipped", total.skipped,
 		"failed", total.failed,
 		"dry_run", *dryRun,
+		"key_retirement_authorized", false,
 		"duration", time.Since(startedAt))
 	if total.failed > 0 {
 		os.Exit(1)
@@ -164,6 +168,7 @@ var rewriteTargets = []target{
 	{"sso_configurations", "id", "client_secret_encrypted"},
 	{"dex_settings", "id", "public_clients_encrypted"},
 	{"backup_storage_configs", "id", "encrypted_credentials"},
+	{"management_backup_destinations", "id", "encrypted_credentials"},
 	{"vault_connections", "id", "auth_encrypted"},
 	{"gitops_registration_sources", "id", "auth_encrypted"},
 	{"gitops_registration_sources", "id", "webhook_secret_encrypted"},
@@ -236,26 +241,15 @@ func rewriteColumn(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.
 	for {
 		rows, err := db.QueryContext(ctx, selectBatchSQL(t), batchSize, offset)
 		if err != nil {
-			log.Error("scan select", "err", err)
+			log.Error("scan select", rotationErrorAttrs(err)...)
 			s.failed++
 			return s
 		}
-		type row struct {
-			id string
-			ct string
-		}
-		var batch []row
-		for rows.Next() {
-			var id, ct string
-			if err := rows.Scan(&id, &ct); err != nil {
-				log.Error("row scan", "err", err)
-				s.failed++
-				continue
-			}
-			batch = append(batch, row{id: id, ct: ct})
-		}
-		if err := rows.Close(); err != nil {
-			log.Error("rows close", "err", err)
+		batch, err := readCiphertextBatch(rows)
+		if err != nil {
+			log.Error("ciphertext page incomplete", rotationErrorAttrs(err)...)
+			s.failed++
+			return s
 		}
 		if len(batch) == 0 {
 			break
@@ -271,13 +265,13 @@ func rewriteColumn(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.
 			plain, err := enc.Decrypt(r.ct)
 			if err != nil {
 				log.Error("decrypt failed — no configured key signed this ciphertext",
-					"id", r.id, "err", err)
+					append([]any{"id", r.id}, rotationErrorAttrs(err)...)...)
 				s.failed++
 				continue
 			}
 			newCT, err := enc.Encrypt(plain)
 			if err != nil {
-				log.Error("re-encrypt failed", "id", r.id, "err", err)
+				log.Error("re-encrypt failed", append([]any{"id", r.id}, rotationErrorAttrs(err)...)...)
 				s.failed++
 				continue
 			}
@@ -287,7 +281,7 @@ func rewriteColumn(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.
 			}
 			res, err := db.ExecContext(ctx, casUpdateSQL(t), newCT, r.id, r.ct)
 			if err != nil {
-				log.Error("update failed", "id", r.id, "err", err)
+				log.Error("update failed", append([]any{"id", r.id}, rotationErrorAttrs(err)...)...)
 				s.failed++
 				continue
 			}
