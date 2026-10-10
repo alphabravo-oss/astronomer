@@ -20,8 +20,8 @@ import (
 func TestSnapshotDiagnosticsRetainTypedCategoryAndOmitServerPayload(t *testing.T) {
 	const rawValue = "synthetic-unlabelled-snapshot-value"
 	cases := []struct {
-		name string
-		err error
+		name     string
+		err      error
 		category string
 	}{
 		{name: "postgres", err: &pgconn.PgError{Code: "23505", Message: rawValue}, category: "postgres"},

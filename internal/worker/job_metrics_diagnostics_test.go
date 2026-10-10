@@ -10,9 +10,9 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgconn"
+	"go.opentelemetry.io/otel/trace"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -25,8 +25,8 @@ func TestInstrumentTaskPreservesTypedErrorRedactionAndCorrelation(t *testing.T) 
 		Details: &metav1.StatusDetails{Kind: "Secret", Name: rawValue, Causes: []metav1.StatusCause{{Type: metav1.CauseTypeFieldValueInvalid, Message: rawValue, Field: "data.value"}}},
 	}}
 	cases := []struct {
-		name string
-		err error
+		name     string
+		err      error
 		category string
 	}{
 		{name: "postgres", err: postgres, category: "postgres"},
