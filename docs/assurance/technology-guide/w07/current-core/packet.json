@@ -1,0 +1,62 @@
+{
+  "source": "0b185c9ff6827e9c6af766138e8c47d909afb025",
+  "source_dirty": "",
+  "timestamp_utc": "2026-10-10T01:23:18.709896+00:00",
+  "scope": "Incremental W07 core current-source qualification; wholeW07 remains in progress for wider list/consumer inventory and larger-cardinality exposed-filter performance",
+  "receipts": [
+    "receipt.json",
+    "paired-receipt.json"
+  ],
+  "openapi": {
+    "argv": [
+      "bash",
+      "scripts/openapi-breaking-change.sh",
+      "v1.2.1:docs/openapi.yaml",
+      "docs/openapi.yaml"
+    ],
+    "exit_code": 0,
+    "raw_findings": 82,
+    "inherited_reviews": 76,
+    "scoped_new_reviews": 6
+  },
+  "fixture_failure_before": {
+    "source": "9646be977f4b1aaaffa131e3464e302f6ccc3e34",
+    "path": "/tmp/w07-core-freeze/9646be97/current-reviews-test-before.log",
+    "sha256": "99b997ab7062d57bc163e0d8c6d9d174ed88e61c3dd34caced93867b78eee8f9",
+    "exit_code": 1,
+    "tests": 12,
+    "failures": 4,
+    "errors": 3,
+    "retained_path": "registry-fixture-before.log"
+  },
+  "sdk_released_fixture": {
+    "baseline": "v1.2.1",
+    "types": 2634,
+    "fields": 10671,
+    "functions": 2002,
+    "methods": 4132,
+    "constants": 1230
+  },
+  "artifacts": {
+    "openapi-gate.log": "42dc35dc63ba118f8ccbd4d57260e4cefe3a6315884297c51b41f092b2fa5160",
+    "core18-race.log": "31b49c85e08d46e8faeb16d933c5428a1f8da0275d3ad67b1b2972a45fde2b02",
+    "paired-receipt.json": "7f58d76d181a7d1baae5cc14505944281f9ba2b3b4b8480280339770e74c7bb2",
+    "core17.log": "88d865cb4a6482f169e300668aa2acb2243bc8c4b8c00e37a8eb1018b78a36a1",
+    "pagination.log": "4373b4aed521e3f7024c3221cba9122300446be48876b66a2680e990ffb80b19",
+    "ast-negative.log": "7751926642820167dd4da12dd04c079cc5e57237e7c703ba8735b058410adba9",
+    "json-negative.log": "72f09eca554e87a45b7156c6109520cf15e8b6ec157dc5c033610649b49b8698",
+    "sql-negative.log": "e15ef9340c541102a5bd6ce7524c95550456a6e85a4db28737afacc4c19a981e",
+    "json-policy.log": "bb2db5927c972e5423344847c6ee1065ff4fe94d07c8bcca33f3479eeeebafa8",
+    "sql-policy.log": "2029dada2ca920d58d01eabacdb88d0097dccecd38b45c7f0bbd5cd67cf37a58",
+    "current-reviews.log": "7066c0f75a6c6d848b6aa413102ffc77f94f706234a0c9e1e9c65a3d929e3152",
+    "sdk-freshness.log": "d1c054576d76d9ec466d77ba82c35ce6470ed2c091fc40b8c130f9351c5a1510",
+    "sdk-v1.log": "a21fd3889521f819fbc41c6601e21543aca2b32912f3d9b78db0c78d3db62745",
+    "receipt.json": "6adcf8135e4d45a2281c5bb0525adb5dcd6b774e6c55978f00c275614cf94ede",
+    "sdk-cursor.log": "ca4a434e96a9316d39c8bcf145d518c9bba6219d90235dcb3bf34c9226a6b5fb",
+    "openapi/openapi-breaking.md": "2cec359d31fcd66f00079c352b2b63d1f60aa0ba8dd3b7f58ebda6ebf52f1013",
+    "openapi/openapi-effective-review.md": "5d028157a89eb65073fb159bae460ff0bf281fa9481fade4da9fc9022cdbbbad",
+    "openapi/openapi-breaking-raw.json": "2b8ed006a64d5c4eff0ba6d15cdfca32617471244924ce967b29d8a902465716",
+    "openapi/openapi-changelog.md": "4f84c334c4f105203052e1e54f06d8aab8599b6b614aaadab77c02a09183609b"
+  },
+  "external_packet_sha256": "bbbc3ca4bdfebef887c2fef71ae15db0ce3d35397c35db6bfa5b1bc5733c2d56"
+}
