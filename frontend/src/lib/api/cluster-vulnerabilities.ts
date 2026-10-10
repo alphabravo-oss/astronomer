@@ -4,7 +4,7 @@ import * as generated from "@/lib/api/generated/client";
 import { requireEnvelopeData } from "@/lib/api/data-envelope";
 import type { OperationSnapshot } from "@/lib/api/operation-polling";
 import { mapPage } from "@/lib/api/pagination";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { OpenAPIComponents, OpenAPIReadComponents } from "@/types/openapi.generated";
 import type { PaginatedResponse } from "@/types";
 
 // ============================================================
@@ -456,7 +456,7 @@ export async function getImageVulnProgress(
 }
 
 /** Additive typed status; never extends the released report wire layout. */
-export async function getImageDatabaseStatus(clusterId: string, reportId: string, signal?: AbortSignal): Promise<OpenAPIComponents["schemas"]["ImageDatabaseStatusV1"]> {
+export async function getImageDatabaseStatus(clusterId: string, reportId: string, signal?: AbortSignal): Promise<OpenAPIReadComponents["schemas"]["ImageDatabaseStatusV1"]> {
  const envelope = await generated.getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus({path: {cluster_id: clusterId, id: reportId}, signal});
  return requireEnvelopeData(envelope, "Image database status");
 }

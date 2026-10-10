@@ -14,6 +14,8 @@ export function ImageDatabaseStatus({ clusterId, reportId }: {clusterId: string;
  });
  if (!read.allowed) return <PermissionState permission="clusters:read" />;
  const status = query.isError ? undefined : query.data;
+ // Unsupported read categories and unmeasured current workload never become clean.
+ const qualifiedClean = status?.eligible_for_clean_posture === true && status.current_workload_checked && status.finding_count === 0 && status.scan_state === "complete" && status.main_state === "fresh" && !status.report_expired && !status.rescan_required && ((status.java_applicability === "needed" && status.java_state === "fresh") || (status.java_applicability === "not_needed" && status.java_state === "not_needed"));
  return (
   <section className="border border-border rounded-md p-3 space-y-2" aria-label="Database freshness" aria-live="polite">
    <h3 className="text-xs font-medium uppercase">Database freshness</h3>
@@ -23,7 +25,7 @@ export function ImageDatabaseStatus({ clusterId, reportId }: {clusterId: string;
     <>
      <p className="text-sm">Scan: {status.scan_state}. Main database: {status.main_state}. Java database: {status.java_state}.</p>
      <p className="text-xs text-muted-foreground">
-      {status.finding_count > 0 ? `${status.finding_count} findings remain reported.` : status.eligible_for_clean_posture ? "No findings in the qualified current scan." : "No findings reported; current clean posture is unqualified."}
+      {status.finding_count > 0 ? `${status.finding_count} findings remain reported.` : qualifiedClean ? "No findings in the qualified current scan." : "No findings reported; current clean posture is unqualified."}
       {status.report_expired ? " Report has expired." : ""}
       {status.rescan_required ? " Rescan required." : ""}
       {status.java_applicability === "unknown" ? " Java applicability is unknown." : ""}

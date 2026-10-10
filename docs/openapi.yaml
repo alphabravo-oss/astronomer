@@ -3249,16 +3249,28 @@ components:
               $ref: '#/components/schemas/PaginationMetadata'
         severity_filter:
           type: string
+    ImageDatabaseScanState:
+      type: string
+      x-go-type: string
+      enum: [pending, failed, complete, unavailable]
+    ImageDatabasePostureState:
+      type: string
+      x-go-type: string
+      enum: [fresh, stale, unknown, unavailable, mirror_unreachable, not_needed, feed_expired]
+    ImageDatabaseJavaApplicability:
+      type: string
+      x-go-type: string
+      enum: [needed, not_needed, unknown]
     ImageDatabaseStatusV1:
       type: object
       additionalProperties: false
       required: [report_id, scan_state, main_state, java_state, java_applicability, reason, finding_count, observation_revision, witness_revision, cycle, accepted_generation, report_expired, rescan_required, eligible_for_clean_posture, current_workload_checked, resource_capacity_exhausted]
       properties:
         report_id: {type: string, format: uuid}
-        scan_state: {type: string, enum: [pending, failed, complete, unavailable]}
-        main_state: {type: string, enum: [fresh, stale, unknown, unavailable, mirror_unreachable, not_needed, feed_expired]}
-        java_state: {type: string, enum: [fresh, stale, unknown, unavailable, mirror_unreachable, not_needed, feed_expired]}
-        java_applicability: {type: string, enum: [needed, not_needed, unknown]}
+        scan_state: {type: string, $ref: '#/components/schemas/ImageDatabaseScanState'}
+        main_state: {type: string, $ref: '#/components/schemas/ImageDatabasePostureState'}
+        java_state: {type: string, $ref: '#/components/schemas/ImageDatabasePostureState'}
+        java_applicability: {type: string, $ref: '#/components/schemas/ImageDatabaseJavaApplicability'}
         reason: {type: string}
         finding_count: {type: integer, format: int64, minimum: 0}
         observation_revision: {type: integer, format: int64, minimum: 0}
