@@ -168,7 +168,7 @@ func TestSupportBundleExpiredSecretContinuationNeverClaimsAbsent(t *testing.T) {
 	if _, ok := files["ingress-certificates.json"]; ok {
 		t.Fatalf("incomplete secret snapshot emitted certificate absence projection: sections=%v", sections)
 	}
-	if !strings.Contains(strings.ToLower(strings.Join(sections, "\n")), "incomplete") {
+	if !strings.Contains(strings.Join(sections, "\n"), "incomplete Kubernetes snapshot: continuation expired") {
 		t.Fatalf("expired upstream snapshot not reported incomplete: %v", sections)
 	}
 }
@@ -177,16 +177,18 @@ func TestSupportBundleIncompleteNamespaceSnapshotIsExplicit(t *testing.T) {
 	for _, scenario := range []struct {
 		name     string
 		requests int
+		category string
 	}{
-		{"cycle", 2},
-		{"changed-version", 2},
-		{"missing-version", 1},
-		{"page-budget", 10},
-		{"oversized-page", 1},
+		{"cycle", 2, "continuation repeated"},
+		{"changed-version", 2, "snapshot changed"},
+		{"missing-version", 1, "snapshot identity missing"},
+		{"page-budget", 10, "page budget exhausted"},
+		{"oversized-page", 1, "page size exceeded"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			var requests atomic.Int32
 			peer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
 				request := requests.Add(1)
 				if r.URL.Query().Get("limit") != "500" || r.URL.Query().Get("resourceVersion") != "" {
 					t.Errorf("invalid list options: %s", r.URL.RawQuery)
@@ -224,7 +226,7 @@ func TestSupportBundleIncompleteNamespaceSnapshotIsExplicit(t *testing.T) {
 			if _, ok := files["events.json"]; ok {
 				t.Fatal("incomplete snapshot was emitted as a complete event list")
 			}
-			if int(requests.Load()) != scenario.requests || !strings.Contains(strings.Join(sections, "\n"), "incomplete Kubernetes snapshot") {
+			if int(requests.Load()) != scenario.requests || !strings.Contains(strings.Join(sections, "\n"), "incomplete Kubernetes snapshot: "+scenario.category) {
 				t.Fatalf("incomplete state missing or unbounded requests: requests=%d sections=%v", requests.Load(), sections)
 			}
 		})
@@ -234,6 +236,7 @@ func TestSupportBundleIncompleteNamespaceSnapshotIsExplicit(t *testing.T) {
 func TestSupportBundleContinuationStopsOnCallerCancellation(t *testing.T) {
 	secondStarted, secondStopped := make(chan struct{}), make(chan struct{})
 	peer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Query().Get("continue") != "" {
 			close(secondStarted)
 			<-r.Context().Done()
@@ -281,7 +284,7 @@ func TestSupportBundleContinuationStopsOnCallerCancellation(t *testing.T) {
 	if _, ok := readZipFiles(t, buffer.Bytes())["events.json"]; ok {
 		t.Fatal("cancelled partial snapshot emitted a complete event list")
 	}
-	if !strings.Contains(strings.Join(log.lines, "\n"), "incomplete Kubernetes snapshot") {
+	if !strings.Contains(strings.Join(log.lines, "\n"), "incomplete Kubernetes snapshot: request stopped") {
 		t.Fatalf("cancelled snapshot not reported incomplete: %v", log.lines)
 	}
 }
