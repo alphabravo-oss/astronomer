@@ -1,0 +1,27 @@
+{
+  "observedAt": "2026-10-10T01:48:53.872436+00:00",
+  "scope": "65 exact SHA/inode/mtime/size-verified regenerable archives containing only closed root review source prefixes; no other workspace prefixes or open inode/process references. Current parser executables, compiler source, toolchains, active executor cache inputs, source, signed artifacts, private references and all logs/traces retained. No global prune.",
+  "sourcePrefixes": [
+    "/root/astronomer-all/astronomer-032-ca-review",
+    "/root/astronomer-all/astronomer-032-governance-review",
+    "/root/astronomer-all/astronomer-032-integrated-review"
+  ],
+  "removedRecords": 65,
+  "removedBytes": 633964474,
+  "inventorySHA256": "56e40b8806ddcb4e395e5fb7c23d5ea8ebeb52f1da62990d10676ca445c4d1c3",
+  "compressedInventorySHA256": "05efea14f38330c9eac2a254ce13a0e432d7efc0f141b1ffece029ec0f6c22e7",
+  "allListedAbsent": true,
+  "capacityExitCode": 0,
+  "capacity": {
+    "path": ".",
+    "mountpoint": "/",
+    "total_kib": 354066236,
+    "used_kib": 271117064,
+    "available_kib": 68499896,
+    "available_gib": 65,
+    "free_percent": 20,
+    "minimum_free_gib": 20,
+    "minimum_free_percent": 20,
+    "meets_minimum": true
+  }
+}
