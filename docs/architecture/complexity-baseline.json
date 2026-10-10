@@ -23,7 +23,7 @@
     "internal/handler/delivery/target.go": 1022,
     "internal/handler/logging_reconciler.go": 890,
     "internal/handler/monitoring_sizer.go": 934,
-    "internal/handler/monitoring_stack_grafana.go": 865,
+    "internal/handler/monitoring_stack_grafana.go": 861,
     "internal/handler/network_policies.go": 833,
     "internal/handler/platform_settings.go": 891,
     "internal/handler/resources.go": 1102,
