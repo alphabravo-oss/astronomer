@@ -3,10 +3,12 @@ package httpclient
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTypedProxyRoutingPreservesExplicitCredentialsAndBypassWithoutAmbientAuthority(t *testing.T) {
@@ -160,5 +162,38 @@ func TestOperatorProxyCaptureHasExplicitUpperLowerAndEmptyBypassPrecedence(t *te
 	value = CaptureOperatorProxyRouting("", nil, ProxyRouting{NoProxy: "*"}, ProxyRouting{})
 	if value.NoProxy != "" {
 		t.Fatal("inert inherited bypass created a proxy requirement")
+	}
+}
+
+// net.Pipe deliberately never responds to ClientHello. Both the independent
+// canonical handshake timer and the earlier owner must close/join that I/O.
+func TestTypedProxyTLSHandshakePreservesTransportAndEarlierOwnerLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		handshake, owner time.Duration
+		ownerLive        bool
+	}{
+		{"transport-before-live-owner", 20 * time.Millisecond, 2 * time.Second, true},
+		{"earlier-owner", time.Second, 20 * time.Millisecond, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, server := net.Pipe()
+			defer server.Close()
+			defer client.Close()
+			owner, cancel := context.WithTimeout(context.Background(), tc.owner)
+			defer cancel()
+			transport := &http.Transport{TLSHandshakeTimeout: tc.handshake, DialContext: func(context.Context, string, string) (net.Conn, error) { return client, nil }}
+			started := time.Now()
+			connection, err := dialTLSWithProxyIdentity(transport)(owner, "tcp", "fixture.example:443")
+			if connection != nil || !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatal("owned blocked TLS handshake lost its limit")
+			}
+			if time.Since(started) > 500*time.Millisecond {
+				t.Fatal("custom TLS dial did not preserve earlier handshake/caller limit")
+			}
+			if tc.ownerLive && owner.Err() != nil {
+				t.Fatal("handshake limit expired only with the later caller")
+			}
+		})
 	}
 }

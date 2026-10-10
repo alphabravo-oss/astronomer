@@ -188,10 +188,18 @@ func dialTLSWithProxyIdentity(transport *http.Transport) func(context.Context, s
 			configuration.ServerName = host
 		}
 		secured := tls.Client(connection, configuration)
-		if err := secured.HandshakeContext(ctx); err != nil {
+		// A custom TLS dial hook replaces net/http's automatic handshake timer.
+		// Preserve the canonical transport limit as well as earlier caller expiry.
+		handshakeContext := ctx
+		if transport.TLSHandshakeTimeout > 0 {
+			var cancel context.CancelFunc
+			handshakeContext, cancel = context.WithTimeout(ctx, transport.TLSHandshakeTimeout)
+			defer cancel()
+		}
+		if err := secured.HandshakeContext(handshakeContext); err != nil {
 			_ = secured.Close()
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
+			if handshakeContext.Err() != nil {
+				return nil, handshakeContext.Err()
 			}
 			return nil, errors.New("destination TLS handshake failed")
 		}
