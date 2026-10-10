@@ -58,7 +58,7 @@ func offlineTransferFromFlags(exportLayout, output, archive, importDirectory, re
 	if err != nil {
 		return err
 	}
-	client, err := httpclient.NewDestinationClient(network, httpclient.DestinationOptions{TLSConfig: tls, MaxResponseBytes: distribution.MaximumArchiveBytes})
+	client, err := newRegistryToolDestinationClient(network, tls)
 	if err != nil {
 		return err
 	}
