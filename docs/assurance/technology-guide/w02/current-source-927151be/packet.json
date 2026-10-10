@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "source_commit": "927151bebf20c6a8f63fe76ff804b45e86044ded",
+  "integrated_main_parent": "2fa10f6734e7bf6c8d25f76c2d480ee7238b61a0",
+  "status": "COLLECTION_QUALIFIED_SOURCE_POLICY_FAIL",
+  "scope": "fresh native first-party default-platform source collection; W02 remains in progress",
+  "counts": {
+    "gosec_files": 1315,
+    "gosec_lines": 521181,
+    "gosec_engine_error_files": 0,
+    "gosec_high": 474,
+    "gosec_medium": 90,
+    "gosec_low": 1,
+    "govulncheck_note": 1,
+    "govulncheck_warning": 0,
+    "govulncheck_error": 0,
+    "normalized_findings": 566,
+    "native_packages": 141,
+    "native_command_packages": 25,
+    "native_selected_source_files": 1311,
+    "extra_fixture_packages": 3,
+    "extra_fixture_files": 4
+  },
+  "raw_external_artifacts": {
+    "gosec_json": {
+      "path": "/tmp/w02-current-rescan-927151be/gosec.json",
+      "sha256": "5dd4d2b3a4659111c0efbab9edd5c39fe59f91a5fddff309d09788afe9e300ae",
+      "not_committed": "scanner snippets remain in private external artifact; normalized source-bound reports are committed"
+    },
+    "gosec_log": {
+      "path": "/tmp/w02-current-rescan-927151be/gosec-native.log",
+      "sha256": "818669c45d42c010544fdad0e96d756dd7e2dda03d5da01ef7d1e44c03579e09"
+    },
+    "native_package_inventory": {
+      "path": "/tmp/w02-current-rescan-927151be/package-inventory.json",
+      "sha256": "79b71f6844e674d6a72ba7cda19321f73ab58a51880c18aac5ea94bb63b10367"
+    }
+  },
+  "source_control_proposals": "Exact 62 immutable SQL controls and one API-model G407 control are separate proposals; no exception/policy source changed in this collection. Existing stale exceptions fail closed. All HIGH/MED sites still require resolution or exact reviewed disposition.",
+  "preserved_prior_provenance": "Observed replaced binary and mismatched buildinfo retained under /tmp/w02-scanner-identity-reconciliation; new path rebuilt and verified. Initial unselected /usr/local/go/src stdlib inspection corrected to actual go env GOROOT; initial proposal retained externally.",
+  "artifacts": [
+    {
+      "path": "README.md",
+      "sha256": "f0c972fe721f1a19f4b4e020d9ba83cfc9a2c1c318af230f8963f4ffe148380f"
+    },
+    {
+      "path": "docs-check.log",
+      "sha256": "6e87af2c19a4f0692083acf8aef937b107a95a845160f3b539dc20e46d162eee"
+    },
+    {
+      "path": "existing-exception-current-matches.json",
+      "sha256": "7a263978894e5747c9816b5916831d562bbb358247bac1bd782c34caaa070591"
+    },
+    {
+      "path": "fips-random-nonce-control-proposal.json",
+      "sha256": "2867ef75d1429d093c501d4331e7a189842c36c68c5ba17e3ac7ef8c05d22d79"
+    },
+    {
+      "path": "gosec-build.log",
+      "sha256": "2a66e98637ba2e8e2599ad12dd4093fe2e58802061a8a9190b35a1a40e140375"
+    },
+    {
+      "path": "gosec-buildinfo.log",
+      "sha256": "41db166017882a7e73f7d6d2dd13d1fdf526d6a7a7419e8d1107ae05bd0bce8e"
+    },
+    {
+      "path": "gosec-counts.json",
+      "sha256": "b98dab2c8ad9c2b57dec0c33a528d940d846f9e8f45ca5070f575f064e3b93b8"
+    },
+    {
+      "path": "gosec.sarif",
+      "sha256": "c6d7fba0aa52d791571b5e5e7233c2de265ca447e2fbad44d829de582795f7ef"
+    },
+    {
+      "path": "govulncheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "govulncheck.sarif",
+      "sha256": "1c495dd02fb216eee575d3d0564e2f183863be26e2245cec21d3b07b6f9156cb"
+    },
+    {
+      "path": "native-coverage.json",
+      "sha256": "aed34c935f4337a5842385459cb5e214649c0365a74c34b5f5ed78ace55776c7"
+    },
+    {
+      "path": "policy-fixtures.log",
+      "sha256": "a4dfc6ba8d8ee7f993f00a450146247a1360e5c1204cf97b042c9525cb23198e"
+    },
+    {
+      "path": "receipt.json",
+      "sha256": "30cef274bc10b8ce18df7bb3fc3959f1753c2bfa87c2fb2e830aef3e78db64a3"
+    },
+    {
+      "path": "selected-go-env.log",
+      "sha256": "d8cc2fc34efd4415e0ed6991362c959ba2b8a1d0f15e75a9e2423fadabbcd11d"
+    },
+    {
+      "path": "source-findings.json",
+      "sha256": "0b28dc22b6ca0eaa04b6528c3a4837a67418ad3e0520265ac25481647b8496ca"
+    },
+    {
+      "path": "source-inputs.json",
+      "sha256": "97d44664d27fa13c27d2409db0687b244558a44de4cbd2416f6eecacfc1796c1"
+    },
+    {
+      "path": "source-policy.log",
+      "sha256": "69807779130b2eda8b85bc29963addf51cb6ef1736b0da8c611023d2b48abdd5"
+    },
+    {
+      "path": "sql-control-current-binding-proposal.json",
+      "sha256": "cab05e8af86f7e48479c00a351c43b5dd57d665285a66fce138d4f5a96f46848"
+    }
+  ],
+  "policy_fixture_command": [
+    "python3",
+    "scripts/tests/security_source_policy_test.py"
+  ],
+  "policy_fixture_exit_code": 0,
+  "policy_fixture_tests": 14,
+  "docs_check_command": [
+    "/root/.cache/astronomer-032/toolchains/node-v26.11.1-linux-x64/bin/node",
+    "scripts/check-docs.mjs"
+  ],
+  "docs_check_result": "documentation contract passed: 123 current documents, 621 relative links"
+}

@@ -1,0 +1,8 @@
+{
+	"CGO_ENABLED": "1",
+	"GOARCH": "amd64",
+	"GOOS": "linux",
+	"GOROOT": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64",
+	"GOTOOLCHAIN": "auto",
+	"GOVERSION": "go1.27.2"
+}
