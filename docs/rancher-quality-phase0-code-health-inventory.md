@@ -8,10 +8,10 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 1265
-- Frontend source lines: 238579
-- Go source files under `internal/` excluding generated sqlc and tests: 1041
-- Go source files scanned for sqlc query references excluding generated sqlc: 2364
+- Frontend source files: 1267
+- Frontend source lines: 238636
+- Go source files under `internal/` excluding generated sqlc and tests: 1047
+- Go source files scanned for sqlc query references excluding generated sqlc: 2383
 - sqlc query declarations: 1332
 - Component files scanned: 459
 - Helm top-level values scanned: 35
@@ -103,7 +103,7 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `containsControl` in [`internal/delivery/model/types.go:641`](internal/delivery/model/types.go:641), [`internal/handler/delivery/common.go:277`](internal/handler/delivery/common.go:277)
 - `containsString` in [`internal/agent/delivery/validator.go:454`](internal/agent/delivery/validator.go:454), [`internal/charlie/capability_schema.go:357`](internal/charlie/capability_schema.go:357)
 - `decisionDigest` in [`internal/delivery/rollout/scheduler.go:572`](internal/delivery/rollout/scheduler.go:572), [`internal/delivery/systemrollout/service.go:626`](internal/delivery/systemrollout/service.go:626)
-- `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
+- `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:394`](internal/scanner/image_vuln_ingest.go:394)
 - `decodeRoleRules` in [`internal/handler/rbac_guards.go:251`](internal/handler/rbac_guards.go:251), [`internal/server/middleware/rbac_queries.go:244`](internal/server/middleware/rbac_queries.go:244)
 - `decodeStrict` in [`internal/delivery/provider/provider.go:512`](internal/delivery/provider/provider.go:512), [`internal/delivery/rollout/postgres_store.go:507`](internal/delivery/rollout/postgres_store.go:507)
 - `defaultString` in [`internal/handler/resource_presenters.go:703`](internal/handler/resource_presenters.go:703), [`internal/helmruntime/config.go:109`](internal/helmruntime/config.go:109)
