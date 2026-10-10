@@ -176,13 +176,14 @@ func TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor(t *testing.T) {
 				}
 				ordered := len(measured) == 1 && assertControlPlanePlan(t, measured[0].Plan.Plans, index)
 				if !ordered && collection == "alerts" && len(measured) == 1 {
-					// This fixture has one controller/status. Either owned controller
-					// index supplies complete timestamp/ID ordering; both retain the
-					// strict 201 examined-row bound and forbid sorting/sequence scans.
-					ordered = assertControlPlanePlan(t, measured[0].Plan.Plans, "idx_control_plane_alerts_controller_keyset")
+					// This fixture has one controller/status. All three owned alert
+					// indexes supply complete timestamp/ID ordering; each retains the
+					// strict 201 examined-row bound and rejects sorting/sequence scans.
+					ordered = assertControlPlanePlan(t, measured[0].Plan.Plans, "idx_control_plane_alerts_controller_keyset") ||
+						assertControlPlanePlan(t, measured[0].Plan.Plans, "idx_control_plane_alerts_keyset")
 				}
 				if !ordered {
-					t.Fatal("control-plane continuation lacks complete ordering index")
+					t.Fatalf("%s lacks complete ordering index", measuredCapture.queryName)
 				}
 			}
 
