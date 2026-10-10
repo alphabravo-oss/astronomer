@@ -18,12 +18,13 @@ import (
 // feeds and supplier content cannot supply or expand these network decisions.
 // Client must be the canonical guarded client composed with this owned policy.
 type SupplierDatabaseOptions struct {
-	Repository string
-	Role       string
-	Scanner    DatabaseScannerCompatibility
-	Timing     DatabaseUpdateTiming
-	Network    httpclient.DestinationPolicy
-	Client     *http.Client
+	Repository     string
+	Role           string
+	Scanner        DatabaseScannerCompatibility
+	Timing         DatabaseUpdateTiming
+	Network        httpclient.DestinationPolicy
+	Client         *http.Client
+	Authentication resolver.DatabaseRegistryAuthentication
 }
 
 type SupplierDatabaseInspector struct {
@@ -67,8 +68,11 @@ func NewSupplierDatabaseInspector(options SupplierDatabaseOptions) (*SupplierDat
 		return nil, errors.New("supplier database operator constructor incomplete")
 	}
 	options.Network = options.Network.Clone()
-	client := *options.Client
-	options.Client = &client
+	client, err := resolver.NewDatabaseRegistryClient(options.Client, options.Repository, options.Authentication)
+	if err != nil {
+		return nil, errors.New("supplier database authentication constructor invalid")
+	}
+	options.Client = client
 	return &SupplierDatabaseInspector{options: options}, nil
 }
 
