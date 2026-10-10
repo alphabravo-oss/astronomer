@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import pathlib
+import stat
 import sys
 import tempfile
 
@@ -47,9 +48,11 @@ def generated_outputs() -> set[pathlib.Path]:
 
 
 def atomic_write(path: pathlib.Path, payload: str) -> None:
+    mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            os.fchmod(handle.fileno(), mode)
             handle.write(payload)
         os.replace(temporary_name, path)
     finally:
