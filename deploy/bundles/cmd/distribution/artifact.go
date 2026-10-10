@@ -182,7 +182,7 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 			return empty, err
 		}
 		if asset.DatabaseDescriptor != nil {
-			if err := streamPreparedDatabase(payloadSources[asset.ID], filepath.Join(directory, "blobs", "sha256", manifest.Layers[0].Digest.Encoded()), manifest.Layers[0]); err != nil {
+			if err := capturePreparedDatabase(payloadSources[asset.ID], filepath.Join(directory, "blobs", "sha256", manifest.Layers[0].Digest.Encoded()), manifest.Layers[0]); err != nil {
 				return empty, err
 			}
 		} else if _, err := writeBlob(directory, manifest.Layers[0].MediaType, members[asset.MemberPath]); err != nil {

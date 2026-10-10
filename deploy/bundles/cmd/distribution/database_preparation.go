@@ -118,6 +118,21 @@ func checkPreparedDatabaseCapacity(directory string, assets []distribution.Asset
 	return nil
 }
 
+// A content-addressed layer may be shared by two roles or already captured as
+// an identical small config blob. Reuse requires both the current source and
+// existing owned regular file to match the complete immutable claim.
+func capturePreparedDatabase(source, destination string, descriptor ocispec.Descriptor) error {
+	if _, err := os.Lstat(destination); os.IsNotExist(err) {
+		return streamPreparedDatabase(source, destination, descriptor)
+	} else if err != nil {
+		return errors.New("owned database output unavailable")
+	}
+	if err := streamPreparedDatabase(source, "", descriptor); err != nil {
+		return err
+	}
+	return streamPreparedDatabase(destination, "", descriptor)
+}
+
 // Snapshot exact regular input bytes with a fixed copy buffer. File replacement,
 // partial reads, growth and changed hashes reject the output. This never reads
 // a multi-GiB database into a byte slice. The caller owns and cleans destination.
