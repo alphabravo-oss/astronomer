@@ -23,7 +23,7 @@ func grafanaMetadataBoundaryFixture(t *testing.T, replicas string) (*MonitoringH
 	t.Helper()
 	h, base := newStackLifecycleHandler(t)
 	base.backend.AuthConfig = []byte(fmt.Sprintf(`{"sharedGrafana":{"managementClusterId":%q,"namespace":"monitoring","releaseName":"astronomer-grafana","status":"degraded","replicas":%s},"sharedThanos":{"status":"healthy","releaseName":"thanos","namespace":"monitoring"}}`, stackTestClusterID, replicas))
-	base.backend.AuthConfigEncrypted = nil
+	base.backend.AuthConfigEncrypted = ""
 	original := bytes.Clone(base.backend.AuthConfig)
 	q := &grafanaMetadataBoundaryQuerier{stackLifecycleQuerier: base}
 	peer := newGrafanaFolderK8sFake()
