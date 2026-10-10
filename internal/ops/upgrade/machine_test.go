@@ -3,6 +3,7 @@ package upgrade
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -36,6 +37,8 @@ type recordingDriver struct {
 	loseAfterApply        bool
 	reconciles            int
 	reconcileError        bool
+	unknownMutation       bool
+	unknownReconciliation bool
 	cleanupContextExpired bool
 	store                 *recordingStore
 }
@@ -60,9 +63,12 @@ func (d *recordingDriver) Step(ctx context.Context, step Stage, _ Plan) (Outcome
 	if step == d.cancelAt && d.cancel != nil {
 		d.cancel()
 	}
-	outcome := Outcome{Applied: step == Apply, Replaced: step == ReplaceDatabase}
+	outcome := Outcome{Known: true, Applied: step == Apply, Replaced: step == ReplaceDatabase}
 	if step == Apply && d.loseAfterApply {
 		d.fenceError = true
+	}
+	if d.unknownMutation && (step == Apply || step == ReplaceDatabase) {
+		return Outcome{}, childFailure(43)
 	}
 	if step == d.fail {
 		return outcome, childFailure(43)
@@ -74,7 +80,48 @@ func (d *recordingDriver) Reconcile(context.Context, Checkpoint) (Outcome, error
 	if d.reconcileError {
 		return Outcome{}, errors.New("synthetic uncertain state")
 	}
-	return Outcome{Applied: true}, nil
+	return Outcome{Known: !d.unknownReconciliation, Applied: true}, nil
+}
+
+func TestUnknownMutationReconcilesBeforeRollbackAndPreservesRecoveryIfUnresolved(t *testing.T) {
+	for _, unknown := range []bool{false, true} {
+		t.Run(fmt.Sprintf("unresolved_%t", unknown), func(t *testing.T) {
+			machine, driver, _ := testMachine()
+			driver.unknownMutation, driver.unknownReconciliation = true, unknown
+			result := machine.Run(context.Background(), testPlan(), nil)
+			if result.ExitCode != 43 || driver.reconciles != 1 {
+				t.Fatalf("unknown mutation was not reconciled: %+v", result)
+			}
+			if unknown {
+				if result.Result != "outcome_unknown" || result.RollbackAttempted {
+					t.Fatalf("uncertain outcome reclassified: %+v", result)
+				}
+				for _, stage := range driver.calls {
+					if stage == Cleanup || stage == Rollback {
+						t.Fatal("uncertain mutation discarded recovery handles")
+					}
+				}
+			} else if !result.RollbackAttempted {
+				t.Fatal("observed applied state did not trigger bounded rollback")
+			}
+		})
+	}
+}
+
+func TestUnknownMutationWithRecreatedIdentityDoesNotCleanRecovery(t *testing.T) {
+	machine, driver, _ := testMachine()
+	driver.unknownMutation = true
+	// A custom fence changes immediately after mutation intent is recorded.
+	driver.loseAfterApply = true
+	result := machine.Run(context.Background(), testPlan(), nil)
+	if result.Result != "outcome_unknown" || result.RollbackAttempted {
+		t.Fatalf("changed identity accepted: %+v", result)
+	}
+	for _, stage := range driver.calls {
+		if stage == Cleanup || stage == Rollback {
+			t.Fatal("changed identity permitted recovery cleanup")
+		}
+	}
 }
 func testPlan() Plan {
 	return Plan{Target: "v1.2.2", Previous: "v1.2.1", Mode: Execute, Identity: Identity{Context: "owned-context", APIServer: "https://127.0.0.1:6443", Namespace: "owned-namespace", NamespaceUID: "owned-namespace-uid", Release: "astronomer", ReleaseUID: "owned-release-uid"}, Timeout: time.Minute, CleanupTimeout: 30 * time.Second}
@@ -225,5 +272,27 @@ func TestReplacementRequiresExplicitLeaseAndPrecedesApply(t *testing.T) {
 	result = machine.Run(context.Background(), plan, nil)
 	if result.ExitCode == 0 || len(driver.calls) != 0 {
 		t.Fatal("unleased replacement allowed")
+	}
+}
+
+func TestCheckpointRejectsContradictoryAcknowledgementAndRollbackFlags(t *testing.T) {
+	plan := testPlan()
+	valid := Checkpoint{SchemaVersion: 1, Target: plan.Target, PlanDigest: planDigest(plan), Identity: plan.Identity, Completed: []Stage{Verify, Backup, DryRun}}
+	for _, kind := range []string{"completed_apply_without_ack", "replacement_before_stage", "rollback_before_apply"} {
+		t.Run(kind, func(t *testing.T) {
+			state := valid
+			state.Completed = append([]Stage(nil), valid.Completed...)
+			switch kind {
+			case "completed_apply_without_ack":
+				state.Completed = append(state.Completed, Apply)
+			case "replacement_before_stage":
+				state.Replaced = true
+			case "rollback_before_apply":
+				state.RollbackAttempted = true
+			}
+			if validateCheckpoint(state, plan) == nil {
+				t.Fatal("contradictory checkpoint accepted")
+			}
+		})
 	}
 }

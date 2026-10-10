@@ -53,3 +53,14 @@ func TestRuntimeBindingsRejectDuplicateMissingMutableOrMalformedDigest(t *testin
 		})
 	}
 }
+
+func TestRuntimeBindingsRejectInvalidRepositoryEvenWithValidDigestSuffix(t *testing.T) {
+	sources := map[string]string{"utilities.busybox": "owned", "postgres": "owned", "redis": "owned", "dex": "owned", "managementRestoreDrill.sidecar": "owned", "managementLogging": "owned"}
+	for _, prefix := range []string{"https://example.invalid/owned", "user:secret@example.invalid/owned", "example.invalid/../owned", "example.invalid/Owned", "example.invalid/owned:unchecked-tag"} {
+		var manifest releasecontract.Manifest
+		manifest.Astronomer.RuntimeImages = []releasecontract.RuntimeImage{{SourceReference: "owned", Reference: prefix + "@sha256:" + strings.Repeat("a", 64)}}
+		if _, err := RuntimeBindings(manifest, sources); err == nil {
+			t.Fatal("invalid or noncanonical OCI repository accepted")
+		}
+	}
+}

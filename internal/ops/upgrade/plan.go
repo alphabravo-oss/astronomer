@@ -11,6 +11,8 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
+	digest "github.com/opencontainers/go-digest"
+	"oras.land/oras-go/v2/registry"
 )
 
 type Mode string
@@ -114,8 +116,12 @@ func RuntimeBindings(manifest releasecontract.Manifest, chartSources map[string]
 				continue
 			}
 			count++
-			marker := strings.LastIndex(image.Reference, "@sha256:")
-			if marker <= 0 || len(image.Reference[marker+8:]) != 64 || !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(image.Reference[marker+8:]) {
+			parsed, err := registry.ParseReference(image.Reference)
+			if err != nil || parsed.Registry+"/"+parsed.Repository+"@"+parsed.Reference != image.Reference {
+				return nil, errors.New("runtime role is not a canonical OCI digest reference")
+			}
+			content, err := digest.Parse(parsed.Reference)
+			if err != nil || content.Algorithm() != digest.SHA256 || content.Validate() != nil {
 				return nil, errors.New("runtime role is not immutable")
 			}
 			result[role] = image.Reference

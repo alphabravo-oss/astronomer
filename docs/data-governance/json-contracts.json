@@ -19528,6 +19528,11 @@
       "path": "internal/delivery/resolver/database_registry_auth.go",
       "owner": "delivery/resolver",
       "scope": "Operator-constructor registry bearer-token response only; exact reviewed realm/service/repository pull scope, bounded credentials, canonical guarded transport, no persistence/public API/scan-used proof"
+    },
+    {
+      "path": "internal/ops/upgrade/machine.go",
+      "owner": "ops/upgrade",
+      "scope": "Private typed upgrade plan digest only; state machine draft, no public API or durable checkpoint writer yet"
     }
   ],
   "json_sites": [
@@ -29955,6 +29960,17 @@
       "owner": "delivery/resolver",
       "schema": "Closed registry token response with token/access_token/expires_in/issued_at fields; nonempty token each at most16KiB, standard bearer character syntax and equal values when both supplied",
       "reader_behavior": "Read at most128KiB+1 under bounded guarded request; canonical Decode rejects unknown/duplicate/deep/trailing input and invalid scalar types; reject oversized/conflicting credentials; static sanitized errors, no payload acceptance on auth failure"
+    },
+    {
+      "path": "internal/ops/upgrade/machine.go",
+      "function": "planDigest",
+      "operation": "json.Marshal",
+      "arguments": [
+        "plan"
+      ],
+      "owner": "ops/upgrade",
+      "schema": "Typed Plan value containing exact version/mode, explicit Kubernetes identity, bounded deadlines and optional disposable lease; deterministic private sha256 binding, no credential values",
+      "reader_behavior": "Digest compared with typed checkpoint before resumed assessment; changed mode/identity/lease/order rejected, no arbitrary JSON decoder or mutation replay; actual checkpoint persistence/adapter remains unqualified"
     }
   ]
 }

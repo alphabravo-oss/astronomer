@@ -28,6 +28,9 @@ type Store interface {
 }
 
 type Outcome struct {
+	// Known explicitly acknowledges both positive and negative mutation state.
+	// An error or cancellation with false booleans does not prove rollback.
+	Known    bool
 	Applied  bool
 	Replaced bool
 }
@@ -82,11 +85,11 @@ func (m Machine) Run(ctx context.Context, plan Plan, previous *Checkpoint) Resul
 			result.FailedStage = Verify
 			return result
 		}
-		_, err := m.Driver.Reconcile(bounded, state)
+		outcome, err := m.Driver.Reconcile(bounded, state)
 		if err == nil {
 			err = bounded.Err()
 		}
-		if err != nil {
+		if err != nil || !outcome.Known {
 			result.Result = "outcome_unknown"
 			result.FailedStage = state.Pending
 			return result
@@ -109,7 +112,8 @@ func (m Machine) Run(ctx context.Context, plan Plan, previous *Checkpoint) Resul
 		if completed(state, step) {
 			continue
 		}
-		if err := m.perform(ctx, plan, step, &state); err != nil {
+		outcome, err := m.perform(ctx, plan, step, &state)
+		if err != nil {
 			result.FailedStage = step
 			var child interface{ ExitCode() int }
 			if errors.As(err, &child) && child.ExitCode() > 0 && child.ExitCode() < 256 {
@@ -121,6 +125,9 @@ func (m Machine) Run(ctx context.Context, plan Plan, previous *Checkpoint) Resul
 			if errors.Is(err, context.DeadlineExceeded) {
 				result.ExitCode = 124
 			}
+			if (step == Apply || step == ReplaceDatabase) && !outcome.Known {
+				return m.assessUnknown(ctx, plan, &state, result)
+			}
 			return m.finish(ctx, plan, &state, result)
 		}
 	}
@@ -128,30 +135,56 @@ func (m Machine) Run(ctx context.Context, plan Plan, previous *Checkpoint) Resul
 	return m.finish(ctx, plan, &state, result)
 }
 
-func (m Machine) perform(ctx context.Context, plan Plan, stage Stage, state *Checkpoint) error {
+func (m Machine) perform(ctx context.Context, plan Plan, stage Stage, state *Checkpoint) (Outcome, error) {
 	bounded, stop := context.WithTimeout(ctx, plan.Timeout)
 	defer stop()
 	if err := bounded.Err(); err != nil {
-		return err
+		return Outcome{Known: true}, err
 	}
 	if err := m.Driver.Fence(bounded, plan.Identity, plan.Replace); err != nil {
-		return err
+		return Outcome{Known: true}, err
 	}
 	state.Pending = stage
 	if err := m.Store.Save(bounded, *state); err != nil {
-		return err
+		return Outcome{Known: true}, err
 	}
 	outcome, err := m.Driver.Step(bounded, stage, plan)
-	state.Applied, state.Replaced = state.Applied || outcome.Applied, state.Replaced || outcome.Replaced
+	if outcome.Known {
+		state.Applied, state.Replaced = state.Applied || outcome.Applied, state.Replaced || outcome.Replaced
+	}
 	if err == nil {
 		err = bounded.Err()
 	}
 	if err != nil {
-		return err
+		return outcome, err
+	}
+	if (stage == Apply && (!outcome.Known || !outcome.Applied)) || (stage == ReplaceDatabase && (!outcome.Known || !outcome.Replaced)) {
+		return outcome, errors.New("mutation postcondition was not acknowledged")
 	}
 	state.Completed = append(state.Completed, stage)
 	state.Pending = ""
-	return m.Store.Save(bounded, *state)
+	return outcome, m.Store.Save(bounded, *state)
+}
+
+func (m Machine) assessUnknown(ctx context.Context, plan Plan, state *Checkpoint, result Result) Result {
+	bounded, stop := context.WithTimeout(context.WithoutCancel(ctx), plan.CleanupTimeout)
+	defer stop()
+	result.Result = "outcome_unknown"
+	if m.Driver.Fence(bounded, plan.Identity, plan.Replace) != nil {
+		return result
+	}
+	outcome, err := m.Driver.Reconcile(bounded, *state)
+	if err != nil || bounded.Err() != nil || !outcome.Known {
+		// Preserve durable mutation intent and private recovery handles. Ordinary
+		// cleanup must not discard the only backup after an uncertain commit.
+		return result
+	}
+	state.Applied, state.Replaced = state.Applied || outcome.Applied, state.Replaced || outcome.Replaced
+	if m.Store.Save(bounded, *state) != nil {
+		return result
+	}
+	result.Result = "failed"
+	return m.finish(ctx, plan, state, result)
 }
 
 func (m Machine) finish(ctx context.Context, plan Plan, state *Checkpoint, result Result) Result {
@@ -216,8 +249,17 @@ func validateCheckpoint(state Checkpoint, plan Plan) error {
 	if state.Applied && !completed(state, Apply) && state.Pending != Apply {
 		return errors.New("checkpoint applied state differs")
 	}
-	if state.Replaced && plan.Replace == nil {
+	if completed(state, Apply) && !state.Applied {
+		return errors.New("checkpoint completed apply lacks acknowledgement")
+	}
+	if state.Replaced && (plan.Replace == nil || (!completed(state, ReplaceDatabase) && state.Pending != ReplaceDatabase)) {
 		return errors.New("checkpoint replacement lacks lease")
+	}
+	if completed(state, ReplaceDatabase) && !state.Replaced {
+		return errors.New("checkpoint completed replacement lacks acknowledgement")
+	}
+	if state.RollbackAttempted && !state.Applied && state.Pending != Apply {
+		return errors.New("checkpoint rollback precedes possible apply")
 	}
 	return nil
 }
