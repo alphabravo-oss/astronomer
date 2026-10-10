@@ -1,0 +1,117 @@
+import ast,copy,hashlib,json,os,sys,tempfile,unittest
+from pathlib import Path
+sys.path.insert(0,'/tmp')
+from plan032_w04_owned_runner import run_owned
+SOURCE=Path('/tmp/plan032-w04-mirrored-ca-gates.py')
+assert hashlib.sha256(SOURCE.read_bytes()).hexdigest()=='486b29860ec1c4bb295d678bca4d4e6534dcfdb8ec09d747fc6fd83275635392'
+TREE=ast.parse(SOURCE.read_text())
+FUNCTIONS=['atomic_json','terminals','require_packages','interrupt_workflow']
+NODES=[node for node in TREE.body if isinstance(node,(ast.FunctionDef,ast.ClassDef)) and node.name in (*FUNCTIONS,'WorkflowInterrupted')]
+namespace={'json':json,'signal':__import__('signal'),'os':os}
+exec(compile(ast.Module(body=NODES,type_ignores=[]),str(SOURCE),'exec'),namespace)
+PACKAGE='github.com/alphabravocompany/astronomer-go/internal/delivery/provider'
+class Controls(unittest.TestCase):
+ def events(self,rows):
+  with tempfile.TemporaryDirectory(prefix='plan032-ca-json-control-') as temporary:
+   path=Path(temporary)/'events.log';path.write_text('\n'.join(row if isinstance(row,str) else json.dumps(row) for row in rows)+'\n')
+   return namespace['terminals'](path)
+ def test_successor_exact_twenty_focused_parents_and_preserved_baseline(self):
+  workflow=next(node for node in TREE.body if isinstance(node,ast.Try) and node.finalbody)
+  focused=next(node.value.value for node in workflow.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='focused' for target in node.targets))
+  names=focused.removeprefix('^(').removesuffix(')$').split('|')
+  self.assertEqual(len(names),20);self.assertEqual(len(set(names)),20)
+  root=Path('/root/astronomer-all/astronomer-032-w04-ca-qualification')
+  test_source=''.join(path.read_text() for package in ('distribution','resolver','provider') for path in (root/'internal/delivery'/package).glob('*_test.go'))
+  for name in names:self.assertIn('func '+name+'(',test_source)
+  old=Path('/tmp/plan032-w04-pinned-ca-corrected-gates.py').read_text()
+  self.assertEqual(next(line for line in SOURCE.read_text().splitlines() if 'baseline=run(' in line),next(line for line in old.splitlines() if 'baseline=run(' in line))
+ def test_valid_exact_package(self):
+  entry=self.events([{'Action':'pass','Package':PACKAGE,'Test':'TestOwned'},{'Action':'pass','Package':PACKAGE}])
+  namespace['require_packages'](entry,['./internal/delivery/provider'])
+  self.assertEqual((entry['parents'],entry['cases'],entry['skips'],entry['failures']),(1,1,0,0))
+ def test_malformed(self):
+  with self.assertRaises(RuntimeError):self.events(['{broken'])
+ def test_non_event(self):
+  for row in ([],{}, {'Action':'output'}):
+   with self.subTest(row=row),self.assertRaises(RuntimeError):self.events([row])
+ def test_duplicate_test_terminal(self):
+  row={'Action':'pass','Package':PACKAGE,'Test':'TestOwned'}
+  with self.assertRaises(RuntimeError):self.events([row,row])
+ def test_duplicate_package_terminal(self):
+  row={'Action':'pass','Package':PACKAGE}
+  with self.assertRaises(RuntimeError):self.events([row,row])
+ def test_missing_package_terminal(self):
+  entry=self.events([{'Action':'pass','Package':PACKAGE,'Test':'TestOwned'}])
+  with self.assertRaises(RuntimeError):namespace['require_packages'](entry,['./internal/delivery/provider'])
+ def test_skip_is_retained_and_not_qualifying(self):
+  entry=self.events([{'Action':'skip','Package':PACKAGE,'Test':'TestOwned'},{'Action':'pass','Package':PACKAGE}])
+  self.assertEqual(entry['skips'],1)
+  self.assertTrue(entry['failures'] or entry['skips'])
+  entry=self.events([{'Action':'skip','Package':PACKAGE}])
+  with self.assertRaises(RuntimeError):namespace['require_packages'](entry,['./internal/delivery/provider'])
+ def test_actual_retained_build_failure_remains_failed(self):
+  entry=namespace['terminals'](Path('/root/.cache/astronomer-032/qualification/w04-pinned-ca-9ee/unchanged-provider-ca-baseline.log'))
+  self.assertEqual((entry['parents'],entry['cases']),(0,0));self.assertTrue(entry['buildEvents'])
+  self.assertTrue(any(row['action']=='fail' for row in entry['terminalPackages']))
+  with self.assertRaises(RuntimeError):namespace['require_packages'](entry,['./internal/delivery/provider'])
+ def test_documented_build_output_can_precede_real_pass(self):
+  entry=self.events([{'Action':'build-output','ImportPath':PACKAGE,'Output':'compiler diagnostic\n'},{'Action':'pass','Package':PACKAGE,'Test':'TestOwned'},{'Action':'pass','Package':PACKAGE}])
+  namespace['require_packages'](entry,['./internal/delivery/provider']);self.assertEqual(entry['parents'],1);self.assertEqual(entry['buildFailures'],0)
+ def test_documented_build_failure_cannot_qualify(self):
+  entry=self.events([{'Action':'build-fail','ImportPath':PACKAGE},{'Action':'pass','Package':PACKAGE,'Test':'TestOwned'},{'Action':'pass','Package':PACKAGE}])
+  self.assertEqual(entry['buildFailures'],1)
+  with self.assertRaises(RuntimeError):namespace['require_packages'](entry,['./internal/delivery/provider'])
+ def test_build_event_shape_is_closed(self):
+  for row in ({'Action':'build-output','ImportPath':PACKAGE},{'Action':'build-output','ImportPath':PACKAGE,'Output':42},{'Action':'build-fail','ImportPath':PACKAGE,'unreviewed':True}):
+   with self.subTest(row=row),self.assertRaises(RuntimeError):self.events([row])
+ def test_outer_sigterm_drains_restores_and_records_final(self):
+  workflow=next(node for node in TREE.body if isinstance(node,ast.Try) and node.finalbody)
+  baseline=next(node for node in workflow.body if isinstance(node,ast.Try) and node.finalbody)
+  controlled=copy.deepcopy(workflow);controlled.body=[copy.deepcopy(baseline)]
+  with tempfile.TemporaryDirectory(prefix='plan032-ca-signal-control-') as temporary:
+   root=Path(temporary); original=b'original-frozen-provider-bytes';(root/'provider.go').write_bytes(original)
+   functions=ast.unparse(ast.Module(body=NODES,type_ignores=[]))
+   program='''import json,os,signal,sys,time
+from pathlib import Path
+sys.path.insert(0,'/tmp')
+from plan032_w04_owned_runner import run_owned,restore_after_drain
+'''+functions+'''
+ROOT=Path(sys.argv[1]);OUT=ROOT;PRODUCTION=['provider.go'];BASE='controlled';ENV=dict(os.environ)
+original={'provider.go':b'original-frozen-provider-bytes'}
+receipt={'frozenSource':{'bytes':original['provider.go'].hex()},'scopedStatus':'RUNNING','guards':[],'gates':[]}
+active_outcome={'drained':True,'launched':False};failure=None
+sha=lambda data:__import__('hashlib').sha256(data).hexdigest()
+def git(*args):return b'mutated-baseline-provider-bytes'
+def snapshot():return {'bytes':(ROOT/'provider.go').read_bytes().hex()}
+def guard(label):receipt['guards'].append(label)
+def run(*args,**kwargs):
+ global active_outcome
+ child="import os,signal,time;from pathlib import Path;signal.signal(signal.SIGTERM,signal.SIG_IGN);Path(os.environ['CONTROL_READY']).write_text('ready');print('retained partial child log',flush=True);time.sleep(30)"
+ environment=dict(ENV,CONTROL_READY=str(ROOT/'ready'))
+ active_outcome=run_owned([sys.executable,'-c',child],ROOT/'child.log',ROOT,environment,lambda stage:None,10,interval=.02,grace=.1,kill_grace=1)
+ receipt['child']=active_outcome
+ if active_outcome['reason']:raise RuntimeError('controlled interrupted child')
+ return {'exitCode':0,'parents':3,'failures':0,'skips':0,'terminalPackages':[]}
+signal.signal(signal.SIGINT,interrupt_workflow);signal.signal(signal.SIGTERM,interrupt_workflow)
+'''+ast.unparse(controlled)+'''
+assert receipt['sourceUnchanged'] and receipt['baselineRestored'] and receipt['scopedStatus']=='FAIL'
+assert receipt['child']['drained'] and receipt['child']['leaderHeldUntilDrain'] and not receipt['child']['liveDescendantsAfterDrain']
+assert 'TERM' in receipt['child']['cleanupActions'] and 'KILL' in receipt['child']['cleanupActions']
+assert (ROOT/'child.log').read_bytes()==b'retained partial child log\\n'
+assert receipt['guards'][-1]=='final'
+print(json.dumps({'restored':True,'finalReceipt':True,'groupDrained':True,'cleanupActions':receipt['child']['cleanupActions']}),flush=True)
+'''
+   script=root/'controlled.py';script.write_text(program);sent=False
+   def signal_once(stage):
+    nonlocal sent
+    ready=root/'ready'
+    if ready.exists() and not sent:
+     # This is the exact retained own leader pid, before it can be reaped.
+     assert pid_file.exists();os.kill(int(pid_file.read_text()),__import__('signal').SIGTERM);sent=True
+   # The child writes its own PID before executing the extracted actual workflow.
+   script.write_text("from pathlib import Path;import os,sys;Path(sys.argv[1]+'/leader-pid').write_text(str(os.getpid()))\n"+program)
+   pid_file=root/'leader-pid'
+   outcome=run_owned([sys.executable,str(script),str(root)],root/'outer.log',root,dict(os.environ),signal_once,12,interval=.02,grace=.2,kill_grace=1)
+   self.assertTrue(sent);self.assertEqual(outcome['exitCode'],0,(root/'outer.log').read_text());self.assertTrue(outcome['drained'])
+   receipt=json.loads((root/'receipt.json').read_text());self.assertTrue(receipt['baselineRestored']);self.assertTrue(receipt['sourceUnchanged']);self.assertEqual((root/'provider.go').read_bytes(),original)
+if __name__=='__main__':unittest.main(verbosity=2)
