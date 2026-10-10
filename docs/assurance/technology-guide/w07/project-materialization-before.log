@@ -1,0 +1,7 @@
+=== RUN   TestCatalogProjectCursorPostgresSQLVisibilityWithoutRepositoryMaterialization
+2026/10/10 00:13:29 ERROR request failed request_id=d573e6ea-d0ef-46fd-b15a-5332798d33ea status=500 code=list_error internal_detail="Failed to resolve project catalogs"
+    catalog_project_cursor_postgres_test.go:58: page status=500 body={"error":{"code":"list_error","message":"The request could not be completed","request_id":"d573e6ea-d0ef-46fd-b15a-5332798d33ea"}}
+--- FAIL: TestCatalogProjectCursorPostgresSQLVisibilityWithoutRepositoryMaterialization (0.96s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/handler	1.013s
+FAIL
