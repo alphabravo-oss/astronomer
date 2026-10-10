@@ -400,6 +400,12 @@ type destinationTransport struct {
 	base   http.RoundTripper
 }
 
+func (t *destinationTransport) CloseIdleConnections() {
+	if transport, ok := t.base.(interface{ CloseIdleConnections() }); ok {
+		transport.CloseIdleConnections()
+	}
+}
+
 func (t *destinationTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	policy := t.policy
 	if restricted, _ := request.Context().Value(publicRedirectKey{}).(bool); restricted {
