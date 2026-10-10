@@ -18935,6 +18935,11 @@
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
     },
     {
+      "path": "internal/handler/user_preferences_integrity.go",
+      "owner": "userpreferences",
+      "scope": "Owned version1 replay receipt for authenticated self preference replacement; existing operation idempotency storage and transaction-bound audit remain canonical"
+    },
+    {
       "path": "internal/handler/webhooks_endpoints.go",
       "owner": "/handler",
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
@@ -26358,6 +26363,41 @@
       "owner": "/handler",
       "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
       "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+    },
+    {
+      "path": "internal/handler/user_preferences_integrity.go",
+      "function": "claimPreferenceReceipt",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "claim.Response",
+        "&pending"
+      ],
+      "owner": "userpreferences",
+      "schema": "Preference receipt v1: version, actor, method, path, request_digest, canonical Preferences; pending reservation is exactly an empty object",
+      "reader_behavior": "Read at most32KiB; closed duplicate/depth/unknown/trailing decoder; require empty table and non-null empty object when operation_id is absent; partial state is typed internal error"
+    },
+    {
+      "path": "internal/handler/user_preferences_integrity.go",
+      "function": "claimPreferenceReceipt",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "claim.Response",
+        "&stored"
+      ],
+      "owner": "userpreferences",
+      "schema": "Preference receipt v1: version, actor, method, path, request_digest, canonical Preferences; pending reservation is exactly an empty object",
+      "reader_behavior": "Read at most32KiB; closed duplicate/depth/unknown/trailing decoder; validate version1, actor/resource/method/path and canonical committed document digest before replay; malformed state is internal error, valid changed command is conflict"
+    },
+    {
+      "path": "internal/handler/user_preferences_integrity.go",
+      "function": "attachPreferenceReceipt",
+      "operation": "json.Marshal",
+      "arguments": [
+        "receipt"
+      ],
+      "owner": "userpreferences",
+      "schema": "Preference receipt v1: version, actor, method, path, request_digest, canonical Preferences; pending reservation is exactly an empty object",
+      "reader_behavior": "Marshal typed owned receipt after validated row readback; explicit32KiB bound before transaction-bound AttachOperationIdempotencyKey; attachment failure rolls back preference and mandatory audit"
     },
     {
       "path": "internal/handler/webhooks_endpoints.go",
