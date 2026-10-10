@@ -8,9 +8,9 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 
 ## Scan Scope
 
-- Worker Go files scanned: 109
-- Handler Go files scanned: 372
-- Production source files scanned: 518
+- Worker Go files scanned: 110
+- Handler Go files scanned: 374
+- Production source files scanned: 523
 - Task constants resolved: 160
 - Worker handler registrations: 91
 - Periodic schedules: 62
@@ -91,9 +91,9 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `cluster_groups:refresh_metrics` |HandleClusterGroupMetricsRefresh (tunnel) [`internal/worker/task_registry.go:162`](internal/worker/task_registry.go:162) |@every 5m / tunnel [`internal/worker/task_registry.go:260`](internal/worker/task_registry.go:260) |NewClusterGroupMetricsRefreshTask [`internal/worker/tasks/cluster_group_metrics.go:25`](internal/worker/tasks/cluster_group_metrics.go:25) |1 |
 | `cluster_registration_tokens:cleanup` |HandleCleanupRegistrationTokens (worker) [`internal/worker/task_registry.go:102`](internal/worker/task_registry.go:102) |@every 6h / default [`internal/worker/task_registry.go:212`](internal/worker/task_registry.go:212) |NewCleanupRegistrationTokensTask [`internal/worker/tasks/cleanup_registration_tokens.go:16`](internal/worker/tasks/cleanup_registration_tokens.go:16) |1 |
 | `cluster_snapshot:apply_operation` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:153`](internal/worker/task_registry.go:153) |none |NewClusterSnapshotOperationTask [`internal/worker/tasks/cluster_snapshot_poll.go:79`](internal/worker/tasks/cluster_snapshot_poll.go:79) |1 |
-| `cluster_snapshot:cleanup_expired` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:152`](internal/worker/task_registry.go:152) |15 4 * * * / tunnel [`internal/worker/task_registry.go:249`](internal/worker/task_registry.go:249) |NewClusterSnapshotCleanupExpiredTask [`internal/worker/tasks/cluster_snapshot_poll.go:759`](internal/worker/tasks/cluster_snapshot_poll.go:759) |1 |
-| `cluster_snapshot:dispatch_scheduled` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:151`](internal/worker/task_registry.go:151) |@every 1m / tunnel [`internal/worker/task_registry.go:248`](internal/worker/task_registry.go:248) |NewClusterSnapshotDispatchScheduledTask [`internal/worker/tasks/cluster_snapshot_poll.go:754`](internal/worker/tasks/cluster_snapshot_poll.go:754) |1 |
-| `cluster_snapshot:poll` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:150`](internal/worker/task_registry.go:150) |@every 30s / tunnel [`internal/worker/task_registry.go:247`](internal/worker/task_registry.go:247) |NewClusterSnapshotPollTask [`internal/worker/tasks/cluster_snapshot_poll.go:749`](internal/worker/tasks/cluster_snapshot_poll.go:749) |1 |
+| `cluster_snapshot:cleanup_expired` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:152`](internal/worker/task_registry.go:152) |15 4 * * * / tunnel [`internal/worker/task_registry.go:249`](internal/worker/task_registry.go:249) |NewClusterSnapshotCleanupExpiredTask [`internal/worker/tasks/cluster_snapshot_poll.go:767`](internal/worker/tasks/cluster_snapshot_poll.go:767) |1 |
+| `cluster_snapshot:dispatch_scheduled` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:151`](internal/worker/task_registry.go:151) |@every 1m / tunnel [`internal/worker/task_registry.go:248`](internal/worker/task_registry.go:248) |NewClusterSnapshotDispatchScheduledTask [`internal/worker/tasks/cluster_snapshot_poll.go:762`](internal/worker/tasks/cluster_snapshot_poll.go:762) |1 |
+| `cluster_snapshot:poll` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:150`](internal/worker/task_registry.go:150) |@every 30s / tunnel [`internal/worker/task_registry.go:247`](internal/worker/task_registry.go:247) |NewClusterSnapshotPollTask [`internal/worker/tasks/cluster_snapshot_poll.go:757`](internal/worker/tasks/cluster_snapshot_poll.go:757) |1 |
 | `cluster_template:apply` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:146`](internal/worker/task_registry.go:146) |none |NewClusterTemplateApplyTask [`internal/worker/tasks/cluster_template_apply.go:102`](internal/worker/tasks/cluster_template_apply.go:102) |1 |
 | `cluster_template:drift_check` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:147`](internal/worker/task_registry.go:147) |@every 1h / tunnel [`internal/worker/task_registry.go:255`](internal/worker/task_registry.go:255) |NewClusterTemplateDriftCheckTask [`internal/worker/tasks/cluster_template_apply.go:111`](internal/worker/tasks/cluster_template_apply.go:111) |1 |
 | `cluster_tombstone:enforce_retention` |HandleClusterTombstoneRetention (worker) [`internal/worker/task_registry.go:110`](internal/worker/task_registry.go:110) |0 5 * * * / default [`internal/worker/task_registry.go:228`](internal/worker/task_registry.go:228) |NewClusterTombstoneRetentionTask [`internal/worker/tasks/cluster_tombstone_retention.go:40`](internal/worker/tasks/cluster_tombstone_retention.go:40) |1 |
@@ -247,7 +247,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `catalog_repository_sync` |1 |[`internal/handler/catalog_repositories.go:362`](internal/handler/catalog_repositories.go:362) |
 | `cluster_template_apply` |1 |[`internal/handler/cluster_templates_applications.go:103`](internal/handler/cluster_templates_applications.go:103) |
 | `cluster_template_reapply` |1 |[`internal/handler/cluster_templates_applications.go:226`](internal/handler/cluster_templates_applications.go:226) |
-| `cluster-snapshot` |1 |[`internal/handler/cluster_snapshots_crud.go:62`](internal/handler/cluster_snapshots_crud.go:62) |
+| `cluster-snapshot` |1 |[`internal/handler/cluster_snapshots_crud.go:61`](internal/handler/cluster_snapshots_crud.go:61) |
 | `cluster-snapshot-restore` |1 |[`internal/handler/cluster_snapshots_restore.go:25`](internal/handler/cluster_snapshots_restore.go:25) |
 | `control-plane-snapshot` |1 |[`internal/handler/control_plane_snapshots.go:228`](internal/handler/control_plane_snapshots.go:228) |
 | `deferred` |1 |[`internal/handler/maintenance_gate.go:202`](internal/handler/maintenance_gate.go:202) |
