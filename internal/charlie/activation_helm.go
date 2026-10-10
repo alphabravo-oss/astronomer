@@ -116,7 +116,7 @@ func (r *InClusterHelmReleaser) Apply(ctx context.Context, spec HelmReleaseSpec)
 		install.RollbackOnFailure = false
 		install.Timeout = 5 * time.Minute
 		install.SetRegistryClient(client)
-		path, err := install.LocateChart(chartRef, settings)
+		path, err := r.locateChart(ctx, &install.ChartPathOptions, chartRef, settings)
 		if err != nil {
 			return fmt.Errorf("locate Charlie agent chart: %w", err)
 		}
@@ -137,7 +137,7 @@ func (r *InClusterHelmReleaser) Apply(ctx context.Context, spec HelmReleaseSpec)
 	upgrade.ReuseValues = spec.ReuseValues
 	upgrade.Timeout = 5 * time.Minute
 	upgrade.SetRegistryClient(client)
-	path, err := upgrade.LocateChart(chartRef, settings)
+	path, err := r.locateChart(ctx, &upgrade.ChartPathOptions, chartRef, settings)
 	if err != nil {
 		return fmt.Errorf("locate Charlie agent chart: %w", err)
 	}
@@ -147,6 +147,13 @@ func (r *InClusterHelmReleaser) Apply(ctx context.Context, spec HelmReleaseSpec)
 	}
 	_, err = upgrade.RunWithContext(context.WithoutCancel(ctx), agentReleaseName, chart, spec.Values)
 	return errors.Join(err, ctx.Err())
+}
+
+func (r *InClusterHelmReleaser) locateChart(ctx context.Context, options *action.ChartPathOptions, chartRef string, settings *cli.EnvSettings) (string, error) {
+	if registry.IsOCI(chartRef) {
+		return options.LocateChart(chartRef, settings)
+	}
+	return helmruntime.LocateRepositoryChart(ctx, r.runtime, chartRef, options.RepoURL, options.Version)
 }
 
 func (r *InClusterHelmReleaser) Uninstall(ctx context.Context) error {

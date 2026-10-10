@@ -32,6 +32,7 @@ type HelmHandler struct {
 	settings *cli.EnvSettings
 	driver   string
 	log      *slog.Logger
+	runtime  helmruntime.Config
 }
 
 // NewHelmHandler creates a new Helm operations handler.
@@ -43,6 +44,7 @@ func NewHelmHandler(log *slog.Logger, runtime helmruntime.Config) *HelmHandler {
 		settings: runtime.Settings(),
 		driver:   runtime.Driver,
 		log:      log,
+		runtime:  runtime,
 	}
 }
 
@@ -157,6 +159,9 @@ func decodeHelmRequest(msg *protocol.Message) (*protocol.HelmRequestPayload, err
 func (h *HelmHandler) locateChart(ctx context.Context, req *protocol.HelmRequestPayload) (string, error) {
 	// If a direct chart URL is provided, use it.
 	if req.ChartURL != "" {
+		if helmruntime.HTTPRepositoryReference(req.ChartURL) {
+			return helmruntime.LocateRepositoryChart(ctx, h.runtime, req.ChartURL, "", req.Version)
+		}
 		return req.ChartURL, nil
 	}
 
@@ -169,6 +174,9 @@ func (h *HelmHandler) locateChart(ctx context.Context, req *protocol.HelmRequest
 		strings.HasPrefix(strings.ToLower(chartName), "oci://")
 	if isOCI && !strings.HasPrefix(strings.ToLower(chartName), "oci://") && repoURL != "" {
 		chartName = strings.TrimRight(repoURL, "/") + "/" + strings.TrimLeft(req.ChartName, "/")
+	}
+	if !isOCI {
+		return helmruntime.LocateRepositoryChart(ctx, h.runtime, chartName, repoURL, req.Version)
 	}
 
 	// Pass a non-nil *action.Configuration. The SDK dereferences cfg fields on
@@ -187,13 +195,6 @@ func (h *HelmHandler) locateChart(ctx context.Context, req *protocol.HelmRequest
 			return "", fmt.Errorf("init OCI registry client: %w", err)
 		}
 		install.SetRegistryClient(rc)
-	}
-	// For traditional helm repos, set RepoURL so the SDK fetches the index
-	// itself and resolves chartName against it. Without this, LocateChart
-	// requires either a "repo_name/chart" prefix (we don't register repos
-	// in helm config) or a fully-qualified chart URL.
-	if repoURL != "" && !isOCI {
-		install.RepoURL = repoURL
 	}
 	if req.Version != "" {
 		install.Version = req.Version
