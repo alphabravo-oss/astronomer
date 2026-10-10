@@ -1,0 +1,203 @@
+{
+  "schema_version": 1,
+  "status": "QUALIFIED_BASELINE_COLLECTION_EXPECTED_COST_BUDGET_FAILURE",
+  "source_commit": "2aded732c65e1b9f285d038410f344d778ad842e",
+  "expected_database_schema": 75,
+  "fixture_rows": 100000,
+  "fixture_total_scan_budget": 250,
+  "scope": "Owned transaction-local synthetic query-cost baseline; no production capacity or universal response-limit promise. No query, index DDL or schema change.",
+  "selected_runtime": "go1.27.2 linux/amd64",
+  "argv": [
+    "/usr/local/go/bin/go",
+    "test",
+    "-count=1",
+    "-json",
+    "-run",
+    "^TestControlPlaneCursorPostgresRepresentativeSelectiveCost$",
+    "./internal/handler"
+  ],
+  "env_nonsecret": {
+    "GOTOOLCHAIN": "go1.27.2",
+    "GOMAXPROCS": "4",
+    "GOFLAGS": "-p=2",
+    "GOWORK": "off"
+  },
+  "summary": [
+    {
+      "postgres_major": 17,
+      "named_parent_count": 1,
+      "named_subcase_count": 27,
+      "named_terminal_counts": {
+        "pass": 17,
+        "fail": 11,
+        "skip": 0
+      },
+      "plans": 54,
+      "prepared_eight_execution_counter_deltas": 54,
+      "plans_exceeding_total_scan_budget250": 19,
+      "max_total_scan_rows_examined": 100000,
+      "test_exit": 1,
+      "runner_failure_category": null,
+      "elapsed_seconds": 49.458688735961914,
+      "capacity_checks": 8,
+      "all_capacity_checks_passed": true,
+      "owned_group_joined": true,
+      "source_before": {
+        "schema_version": 2,
+        "source_file_count": 7133,
+        "source_tree_sha256": "57c36c804bda21f139450fcbc011c54d6287ed20f1c588eac2836daf013c26b5"
+      },
+      "source_after": {
+        "schema_version": 2,
+        "source_file_count": 7133,
+        "source_tree_sha256": "57c36c804bda21f139450fcbc011c54d6287ed20f1c588eac2836daf013c26b5"
+      },
+      "source_stable": true,
+      "go_version": "go version go1.27.2 linux/amd64"
+    },
+    {
+      "postgres_major": 18,
+      "named_parent_count": 1,
+      "named_subcase_count": 27,
+      "named_terminal_counts": {
+        "pass": 17,
+        "fail": 11,
+        "skip": 0
+      },
+      "plans": 54,
+      "prepared_eight_execution_counter_deltas": 54,
+      "plans_exceeding_total_scan_budget250": 19,
+      "max_total_scan_rows_examined": 100000.0,
+      "test_exit": 1,
+      "runner_failure_category": null,
+      "elapsed_seconds": 21.853334426879883,
+      "capacity_checks": 6,
+      "all_capacity_checks_passed": true,
+      "owned_group_joined": true,
+      "source_before": {
+        "schema_version": 2,
+        "source_file_count": 7133,
+        "source_tree_sha256": "57c36c804bda21f139450fcbc011c54d6287ed20f1c588eac2836daf013c26b5"
+      },
+      "source_after": {
+        "schema_version": 2,
+        "source_file_count": 7133,
+        "source_tree_sha256": "57c36c804bda21f139450fcbc011c54d6287ed20f1c588eac2836daf013c26b5"
+      },
+      "source_stable": true,
+      "go_version": "go version go1.27.2 linux/amd64"
+    }
+  ],
+  "source_inputs": {
+    "internal/handler/control_plane_selective_cost_postgres_test.go": "3559b67ccdcb2b11c2115312fc1c3fa5547dcee14b9e7efa14368979bd457681",
+    "internal/handler/control_plane_cursor.go": "fd699e3e2b27fc7669747622bb8fc819822fc8c61e66aec2c6e7e009a9107a51",
+    "internal/handler/control_plane.go": "ad7ec47cc64fe361527a52bb0d3ecc897804eba86509802b57dbac9003fb9b54",
+    "internal/handler/control_plane_pagination_postgres_test.go": "2b190d560a7a23d5183bf810e7fa2226d4bb82e0b99aa184d6b27e42827e6439",
+    "internal/handler/pagination_postgres_test.go": "5dd8bbf090baa72a03a51381ac66cb6e80d84a1f25fb78ce8a2e11affa3d8e4f",
+    "internal/db/queries/control_plane.sql": "55c1719560fc17dfb242185d49245bd2f6bda625de9c6ec0371919b79b0380d0",
+    "internal/db/sqlc/control_plane.sql.go": "0c6a775a3b64dccdc6b83701b17d78bb19ce2d6cd4603175c85b2cf1320e6ab4",
+    "internal/db/schema_version.go": "55905e12af286300d0baf9140cc9d0f3b8a7948a4577ccbb3b5144dc8fabd735",
+    "scripts/hash-source-tree.py": "739313de7508333618654646c011da2bab0193cae38e08aad618a444a6173dd4",
+    "scripts/check-build-capacity.sh": "234bf4838a9537f65abe2bd2829b0f1b5e7991042ee92b1aa89de5cc8419fc15"
+  },
+  "public_artifacts": {
+    "run-bounded.py": "03f0c46e08eb01a539c12f8185700a04ac2bdb291e5bd1471d9d535b947f9b42",
+    "results.json": "8e88819c4925cdfb634e84914b87df9f71d6c06085e712015ab28fd549da96ac",
+    "summarize.py": "81d717bfe2dcc6d7abd90c90479439369852d03ba88b0cf46759324f27605811",
+    "test_runner.py": "2bacc98aaa0bab578bfc8c62226588debf7f4d5f026a9f39cba9a8a7fed51d22"
+  },
+  "external_artifacts": {
+    "/tmp/w07-budget-before-2aded732/postgres17-capacity.jsonl": {
+      "sha256": "fb3127d4dc3ec9805bcfe2a7904729a6a07c504ddea1912c7d78abb55c0fe76b",
+      "bytes": 634
+    },
+    "/tmp/w07-budget-before-2aded732/postgres17-receipt.json": {
+      "sha256": "2b1c7766dd397857323c52eec64a3d8378f51c5d159eae7e7bdc86f3a5178eea",
+      "bytes": 946
+    },
+    "/tmp/w07-budget-before-2aded732-postgres17-runner.log": {
+      "sha256": "a5a7e5cb1101b2a396c8fc0b27293b0075cc458f163ad09576dac0a2252f22ad",
+      "bytes": 846
+    },
+    "/tmp/w07-budget-before-2aded732-run2/build-packet.py": {
+      "sha256": "99d7548ac0dfb26eed354ac90a185c8db7ce532e22cff821ccec03d896640f3e",
+      "bytes": 5382
+    },
+    "/tmp/w07-budget-before-2aded732-run2/packet-build-summary.json": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/tmp/w07-budget-before-2aded732-run2/postgres17-capacity.jsonl": {
+      "sha256": "a669e1e406e7630eaef3d941b2d82514ee624b50fee59a4fb8a064b63f142583",
+      "bytes": 2557
+    },
+    "/tmp/w07-budget-before-2aded732-run2/postgres17-fences.json": {
+      "sha256": "dcecee8f360f77a33afa103b67f72a882d8f589f32e3a9441bb2881d5261948a",
+      "bytes": 728
+    },
+    "/tmp/w07-budget-before-2aded732-run2/postgres17-receipt.json": {
+      "sha256": "faa26f88baf997372274e96dc7575486cf176f24d3441f858d9b237c55e66f8e",
+      "bytes": 1022
+    },
+    "/tmp/w07-budget-before-2aded732-run2/postgres17-test.jsonl": {
+      "sha256": "36eb66310c1916c1bd9531dfa067382bd9f01d8937b868c22b4bb8b3e559048c",
+      "bytes": 1404766
+    },
+    "/tmp/w07-budget-before-2aded732-run2/postgres18-capacity.jsonl": {
+      "sha256": "bd4bdd552d30945578c85032ea025e75401c6d5e99e321df2fff08fe37f384cf",
+      "bytes": 1915
+    },
+    "/tmp/w07-budget-before-2aded732-run2/postgres18-fences.json": {
+      "sha256": "108077ca7e18360ad41c4694935ae172a19e2e07ebb978a49c0c9319dced393a",
+      "bytes": 734
+    },
+    "/tmp/w07-budget-before-2aded732-run2/postgres18-receipt.json": {
+      "sha256": "491cbc6d0b1b5d7bb0df1d70ba4e8cc566d7f566bce77bde104f0a5652d17783",
+      "bytes": 1022
+    },
+    "/tmp/w07-budget-before-2aded732-run2/postgres18-test.jsonl": {
+      "sha256": "0d50894805a744517e93cde8c09043ce1e06c83ad2edcce6e01f388e8eea2601",
+      "bytes": 1454436
+    },
+    "/tmp/w07-budget-before-2aded732-run2/structured-results.json": {
+      "sha256": "8e88819c4925cdfb634e84914b87df9f71d6c06085e712015ab28fd549da96ac",
+      "bytes": 128752
+    },
+    "/tmp/w07-budget-before-2aded732-run2/summarize.py": {
+      "sha256": "81d717bfe2dcc6d7abd90c90479439369852d03ba88b0cf46759324f27605811",
+      "bytes": 3464
+    },
+    "/tmp/w07-selective-cost-fix-proposal/run-bounded-ed89ec30.py": {
+      "sha256": "ed89ec30fa476e2d9ee2a0413f25b6daaa62e167d2c4e615a95ca9648a1b1fcb",
+      "bytes": 15133
+    },
+    "/tmp/w07-selective-cost-fix-proposal/runner-schema-fix-fixtures.log": {
+      "sha256": "f43b43764af0e27a30c7333a41a0724f28dde4121e7568b1298dfad86842821b",
+      "bytes": 2671
+    },
+    "/tmp/w07-selective-cost-fix-proposal/test_runner-b49ff3ea.py": {
+      "sha256": "b49ff3ea395d6b076ecf529715661d5a7eeda5dd8a7fc4ded5658763d50660c8",
+      "bytes": 9509
+    }
+  },
+  "runner_fixture_result": {
+    "tests": 17,
+    "exit": 0,
+    "seconds": 0.799
+  },
+  "earlier_runner_failure": {
+    "path": "/tmp/w07-budget-before-2aded732/postgres17-receipt.json",
+    "elapsed_seconds": 2.4953017234802246,
+    "error_category": "AssertionError",
+    "reason": "Original matcher missed explicit int64 in canonical const declaration. No Go child or database writes; stable source, final guard passed.",
+    "originals_preserved": true
+  },
+  "qualifications": [
+    "One named parent plus27 mode subcases, not28 independent parents.",
+    "All54 raw plans and54 eight-execution counters per major retained, including failing budget cases.",
+    "Raw originals stay external with exact hashes; structured projection excludes dynamic identifiers and SQL filter values.",
+    "Before fingerprint equals final-after fingerprint per major; later evidence-only commit is not the tested whole-tree source.",
+    "No race, vet, full-handler or native scanner claim from this lease.",
+    "DDL/query/generated correction remains unapplied and needs separate source review and owned qualification."
+  ]
+}
