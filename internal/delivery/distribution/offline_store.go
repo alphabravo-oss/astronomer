@@ -134,7 +134,7 @@ func validateStoredManifestGraph(blobs map[string][]byte, used map[string]bool, 
 	}
 	used[subject] = true
 	if !resolver.ArtifactConfigurationMatches(manifest.Config, blobs[manifest.Config.Digest.String()]) {
-		return errors.New("offline OCI configuration missing or changed")
+		return errors.New("offline OCI configuration descriptor missing or changed")
 	}
 	used[manifest.Config.Digest.String()] = true
 	for _, layer := range manifest.Layers {
