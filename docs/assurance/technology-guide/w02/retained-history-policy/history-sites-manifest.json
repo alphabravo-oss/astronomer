@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "record_count": 3184,
+  "registry_gzip_sha256": "be70a52a65723797440a63e011a64638256624839f690849130159b24f5e5e86",
+  "registry_json_sha256": "e79f957d62d2fb88b33c999ef54002947e4f5dd98cf311ff9327e1d09125fc34",
+  "original_report_gzip_sha256": "f324dc575c454e1fb3b2920e3b6c9bacb92e6dbd5ddd0d58627b9abc8d035b39",
+  "original_report_json_sha256": "c8bda38901d02becf668d4231193bedbabad18d78af46a03a53bdaeb63d9be6d",
+  "site_evidence_sha256": "de6203c1be20d0763c3245ea0aab591e9ec8f3a92f9e2c03ddda1078dfefbfa6",
+  "column_evidence_sha256": "cdc8b35fec6944534f9c1f9a9b55b811640eec0583a83ac9b4157bee17e80720",
+  "column_replay_sha256": "468e1abdeda936ce608ae8ea2734add83fe1ce0630c5606a858a2e1ac61fbce2",
+  "scanner": {
+    "module": "github.com/zricethezav/gitleaks/v8 v8.30.1",
+    "executable_sha256": "e24d16ea35db03f63d96be68102966dff343ad7010847ea1e5f936ffded29798",
+    "config_sha256": "4078c0f9c3918d37830163126705f814093343c7d28e726919af09bca9cfd5d7",
+    "column_source_sha256": {
+      "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/config/gitleaks.toml": "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf",
+      "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/detect/location.go": "cbbad8f3fa7d5a4ad4f6cbbd0a06a89eb8c5b728a19505ee004f068964a82faf",
+      "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/detect/detect.go": "2bac563a09f22ff76c56b200c3b9b5dc865c1de699eb0ba2a27cca741fa9bd13",
+      "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/sources/git.go": "1fb86062416b83f756be89165e4ef1244f038a6e59c6ab5c014d330909de8e8f",
+      "/root/go/pkg/mod/github.com/gitleaks/go-gitdiff@v0.9.1/gitdiff/text.go": "cea8ba5be609f953b08aeef08bd51d94425abbf02cc8c0232a3d8fbcdc127e75",
+      "/root/go/pkg/mod/github.com/gitleaks/go-gitdiff@v0.9.1/gitdiff/gitdiff.go": "d42dbd1fda41807911a694cf9726900daddf8f30d59651e2f585fe820a6bf898"
+    }
+  },
+  "review_owner": "Plan032 executor and root static review; not a human release approver",
+  "review_evidence": [
+    {
+      "path": "advisor-plans/032-evidence/historical-secret-triage-root-review.json",
+      "sha256": "0546f4cf40ebe4ca9961583ae2c470206f46d33eef0bfee45a8e00b1e0803c04"
+    },
+    {
+      "path": "advisor-plans/032-evidence/w02-all38-history-column-origin-root-review.json",
+      "sha256": "d2bb2510369f1759669884f33723e4a7560a8b0021924d8a1f19d393df92beb6"
+    }
+  ],
+  "expires_at": "2026-10-16T00:00:00Z",
+  "release_scope": "first-party-full-history",
+  "inputs": {
+    "original_report": {
+      "path": "original-report.json.gz",
+      "sha256": "f324dc575c454e1fb3b2920e3b6c9bacb92e6dbd5ddd0d58627b9abc8d035b39"
+    },
+    "site_evidence": {
+      "path": "site-evidence.json",
+      "sha256": "de6203c1be20d0763c3245ea0aab591e9ec8f3a92f9e2c03ddda1078dfefbfa6"
+    },
+    "column_evidence": {
+      "path": "root38-columns.json",
+      "sha256": "cdc8b35fec6944534f9c1f9a9b55b811640eec0583a83ac9b4157bee17e80720"
+    },
+    "column_replay": {
+      "path": "all-columns.json",
+      "sha256": "468e1abdeda936ce608ae8ea2734add83fe1ce0630c5606a858a2e1ac61fbce2"
+    },
+    "column_sources": {
+      "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/config/gitleaks.toml": {
+        "path": "scanner-source/0-gitleaks.toml",
+        "sha256": "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf"
+      },
+      "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/detect/location.go": {
+        "path": "scanner-source/1-location.go",
+        "sha256": "cbbad8f3fa7d5a4ad4f6cbbd0a06a89eb8c5b728a19505ee004f068964a82faf"
+      },
+      "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/detect/detect.go": {
+        "path": "scanner-source/2-detect.go",
+        "sha256": "2bac563a09f22ff76c56b200c3b9b5dc865c1de699eb0ba2a27cca741fa9bd13"
+      },
+      "/root/go/pkg/mod/github.com/zricethezav/gitleaks/v8@v8.30.1/sources/git.go": {
+        "path": "scanner-source/3-git.go",
+        "sha256": "1fb86062416b83f756be89165e4ef1244f038a6e59c6ab5c014d330909de8e8f"
+      },
+      "/root/go/pkg/mod/github.com/gitleaks/go-gitdiff@v0.9.1/gitdiff/text.go": {
+        "path": "scanner-source/4-text.go",
+        "sha256": "cea8ba5be609f953b08aeef08bd51d94425abbf02cc8c0232a3d8fbcdc127e75"
+      },
+      "/root/go/pkg/mod/github.com/gitleaks/go-gitdiff@v0.9.1/gitdiff/gitdiff.go": {
+        "path": "scanner-source/5-gitdiff.go",
+        "sha256": "d42dbd1fda41807911a694cf9726900daddf8f30d59651e2f585fe820a6bf898"
+      }
+    }
+  }
+}
