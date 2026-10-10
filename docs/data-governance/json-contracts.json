@@ -19533,6 +19533,11 @@
       "path": "internal/ops/upgrade/machine.go",
       "owner": "ops/upgrade",
       "scope": "Private typed upgrade plan digest only; state machine draft, no public API or durable checkpoint writer yet"
+    },
+    {
+      "path": "internal/ops/upgrade/store_linux.go",
+      "owner": "ops/upgrade",
+      "scope": "Private bounded schema1 checkpoint only; explicit owned0700 directory/nonblocking kernel lock, strict plan/identity/stage binding, retained recovery and atomic fsync publication; no release signature/public v1 evidence replacement"
     }
   ],
   "json_sites": [
@@ -29971,6 +29976,41 @@
       "owner": "ops/upgrade",
       "schema": "Typed Plan value containing exact version/mode, explicit Kubernetes identity, bounded deadlines and optional disposable lease; deterministic private sha256 binding, no credential values",
       "reader_behavior": "Digest compared with typed checkpoint before resumed assessment; changed mode/identity/lease/order rejected, no arbitrary JSON decoder or mutation replay; actual checkpoint persistence/adapter remains unqualified"
+    },
+    {
+      "path": "internal/ops/upgrade/store_linux.go",
+      "function": "decodeCheckpoint",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&state"
+      ],
+      "owner": "ops/upgrade",
+      "schema": "Private Checkpoint schema1: exact target/plan sha256, Kubernetes identity, ordered completed stage array, pending intent and acknowledged mutation/rollback flags; bounded64KiB, no credential values",
+      "reader_behavior": "Strict canonical Decode rejects duplicate/unknown/trailing/deep/malformed/null or missing required fields; exact typed plan/identity/converse stage constraints. Locked writer retains pending/recovery bytes on error, refuses progress rewind, fsyncs before acknowledgement; resume assessment never mutation replay. Source draft/runtime qualification pending"
+    },
+    {
+      "path": "internal/ops/upgrade/store_linux.go",
+      "function": "decodeCheckpoint",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&object"
+      ],
+      "owner": "ops/upgrade",
+      "schema": "Private Checkpoint schema1: exact target/plan sha256, Kubernetes identity, ordered completed stage array, pending intent and acknowledged mutation/rollback flags; bounded64KiB, no credential values",
+      "reader_behavior": "Strict canonical Decode rejects duplicate/unknown/trailing/deep/malformed/null or missing required fields; exact typed plan/identity/converse stage constraints. Locked writer retains pending/recovery bytes on error, refuses progress rewind, fsyncs before acknowledgement; resume assessment never mutation replay. Source draft/runtime qualification pending"
+    },
+    {
+      "path": "internal/ops/upgrade/store_linux.go",
+      "function": "*FileStore.Save",
+      "operation": "json.Marshal",
+      "arguments": [
+        "state"
+      ],
+      "owner": "ops/upgrade",
+      "schema": "Private Checkpoint schema1: exact target/plan sha256, Kubernetes identity, ordered completed stage array, pending intent and acknowledged mutation/rollback flags; bounded64KiB, no credential values",
+      "reader_behavior": "Strict canonical Decode rejects duplicate/unknown/trailing/deep/malformed/null or missing required fields; exact typed plan/identity/converse stage constraints. Locked writer retains pending/recovery bytes on error, refuses progress rewind, fsyncs before acknowledgement; resume assessment never mutation replay. Source draft/runtime qualification pending"
     }
   ]
 }

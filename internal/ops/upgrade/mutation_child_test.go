@@ -4,7 +4,6 @@ package upgrade
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -26,23 +25,6 @@ func TestOwnedUpgradeMutationHelper(t *testing.T) {
 	for {
 		time.Sleep(time.Second)
 	}
-}
-
-type privateTestCheckpoint struct {
-	path  string
-	state Checkpoint
-}
-
-func (s *privateTestCheckpoint) Save(ctx context.Context, state Checkpoint) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	s.state = state
-	bytes, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(s.path, bytes, 0o600)
 }
 
 type mutationChildDriver struct {
@@ -117,7 +99,11 @@ func TestTerminatedMutationBeforeAcknowledgementPreservesRecoveryByOwnership(t *
 				}
 			}
 			d.spec = process.Spec{Executable: executable, Args: []string{"-test.run=^TestOwnedUpgradeMutationHelper$"}, Environment: []process.Environment{{Name: "OPS_UPGRADE_MUTATION_HELPER", Literal: "1"}, {Name: "OPS_UPGRADE_MARKER", Literal: d.marker}}, Directory: root, CaptureDirectory: root, ID: "apply", Timeout: time.Second, TerminationGrace: 100 * time.Millisecond, MaximumCaptureBytes: 4096}
-			store := &privateTestCheckpoint{path: filepath.Join(root, "checkpoint")}
+			store, err := OpenFileStore(root, plan)
+			if err != nil {
+				t.Fatal("private durable checkpoint unavailable")
+			}
+			defer func() { _ = store.Close() }()
 			result := (Machine{Driver: d, Store: store}).Run(context.Background(), plan, nil)
 			if result.ExitCode != 124 {
 				t.Fatalf("owned child did not time out before acknowledgement: %+v", result)
@@ -126,7 +112,7 @@ func TestTerminatedMutationBeforeAcknowledgementPreservesRecoveryByOwnership(t *
 			if err != nil || string(bytes) != "synthetic backup retained" {
 				t.Fatal("recovery backup removed or changed")
 			}
-			if _, err = os.Stat(store.path); err != nil {
+			if _, err = os.Stat(filepath.Join(root, "checkpoint.json")); err != nil {
 				t.Fatal("private intent checkpoint removed")
 			}
 			if kind == "unknown" || kind == "recreated_owner" {
