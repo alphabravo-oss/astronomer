@@ -98,10 +98,10 @@ func assertOfflineTransferRejectsUnsafeMembers(t *testing.T, payload []byte, opt
 }
 
 func TestOfflineFlagsRequireIdentityAndRefuseNetworkConfiguration(t *testing.T) {
-	if err := offlineTransferFromFlags("", "", "absent", "", "", "", "", "", "", "", "", "", "", "", ""); err == nil {
+	if err := offlineTransferFromFlags("v1", "", "", "absent", "", "", "", "", "", "", "", "", "", "", "", ""); err == nil {
 		t.Fatal("identity-free transfer accepted")
 	}
-	if err := offlineTransferFromFlags("", "", "absent", "", "registry.example.test/distribution", "sha256:pin", "sha256:catalog", "v1.2.2", "/mounted/trust", "cosign_key", "vendor", "", "", "network-policy", ""); err == nil {
+	if err := offlineTransferFromFlags("v1", "", "", "absent", "", "registry.example.test/distribution", "sha256:pin", "sha256:catalog", "v1.2.2", "/mounted/trust", "cosign_key", "vendor", "", "", "network-policy", ""); err == nil {
 		t.Fatal("offline action accepted network configuration")
 	}
 }

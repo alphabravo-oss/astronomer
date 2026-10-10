@@ -59,6 +59,7 @@ func main() {
 	qaKey := flag.String("qa-signing-key", "", "QA-only local key file; never used by production OIDC mode")
 	networkFile := flag.String("destination-policy", "", "bounded operator destination policy JSON file")
 	caFile := flag.String("registry-ca-file", "", "operator-provided registry CA PEM file")
+	offlineFormat := flag.String("offline-transfer-format", "v1", "v1 bounded transfer or explicit streamed database-v2")
 	exportLayout := flag.String("export-published-layout", "", "capture original signed parent/children and legacy signatures from an exact prepared layout")
 	transferOutput := flag.String("transfer-output", "", "new closed offline transfer archive")
 	offlineArchive := flag.String("verify-offline-transfer", "", "verify a closed offline graph without any network transport")
@@ -66,6 +67,10 @@ func main() {
 	expectedDigest := flag.String("expected-distribution-digest", "", "caller-pinned original signed parent subject digest")
 	expectedCatalog := flag.String("expected-catalog-digest", "", "caller-pinned signed catalog digest")
 	flag.Parse()
+	if err := validateOfflineFormatSelection(*offlineFormat, mirror.selected(), *exportLayout != "" || *offlineArchive != ""); err != nil {
+		fmt.Fprintln(os.Stderr, "offline distribution action blocked:", err)
+		os.Exit(1)
+	}
 	if mirror.selected() {
 		if err := mirror.run(*repository, *expectedDigest, *expectedCatalog, *expectedRelease, *trustDirectory, *provider, *keyRef, *identity, *issuer, *detachedSignature, *networkFile, *caFile); err != nil {
 			fmt.Fprintln(os.Stderr, "verified distribution mirror blocked:", err)
@@ -74,8 +79,8 @@ func main() {
 		fmt.Println("verified distribution mirror action complete")
 		return
 	}
-	if *exportLayout != "" || *offlineArchive != "" {
-		if err := offlineTransferFromFlags(*exportLayout, *transferOutput, *offlineArchive, *importDirectory, *repository, *expectedDigest, *expectedCatalog, *expectedRelease, *trustDirectory, *provider, *keyRef, *identity, *issuer, *networkFile, *caFile); err != nil {
+	if *exportLayout != "" || *offlineArchive != "" || *offlineFormat != "v1" {
+		if err := offlineTransferFromFlags(*offlineFormat, *exportLayout, *transferOutput, *offlineArchive, *importDirectory, *repository, *expectedDigest, *expectedCatalog, *expectedRelease, *trustDirectory, *provider, *keyRef, *identity, *issuer, *networkFile, *caFile); err != nil {
 			fmt.Fprintln(os.Stderr, "offline distribution transfer blocked:", err)
 			os.Exit(1)
 		}

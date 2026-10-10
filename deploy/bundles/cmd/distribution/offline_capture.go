@@ -67,6 +67,13 @@ func captureOfflineTransfer(ctx context.Context, directory string, options distr
 }
 
 func captureManifest(ctx context.Context, repository *remote.Repository, reference string, graph *capturedGraph, signature bool) (string, error) {
+	return captureManifestGraph(ctx, repository, reference, graph, signature, false)
+}
+
+func captureManifestGraph(ctx context.Context, repository *remote.Repository, reference string, graph *capturedGraph, signature, databaseMetadata bool) (string, error) {
+	if databaseMetadata && signature {
+		return "", errors.New("signature payload cannot use database descriptor-only capture")
+	}
 	descriptor, reader, err := repository.FetchReference(ctx, reference)
 	if err != nil {
 		return "", errors.New("exact exported manifest unavailable")
@@ -91,8 +98,17 @@ func captureManifest(ctx context.Context, repository *remote.Repository, referen
 		if index == 0 {
 			limit = 1 << 20
 		}
+		if databaseMetadata && index > 0 {
+			limit = distribution.MaximumDatabaseLayerBytes
+		}
 		if child.Digest.Algorithm() != digest.SHA256 || child.Size <= 0 || child.Size > limit || len(child.URLs) != 0 || len(child.Data) != 0 {
 			return "", errors.New("exported descriptor has external or unbounded content")
+		}
+		if databaseMetadata && index > 0 {
+			if child.MediaType != "application/vnd.aquasec.trivy.db.layer.v1.tar+gzip" && child.MediaType != "application/vnd.aquasec.trivy.javadb.layer.v1.tar+gzip" {
+				return "", errors.New("descriptor-only capture is restricted to fixed database media")
+			}
+			continue
 		}
 		if graph.blobs[child.Digest.String()] != nil {
 			continue

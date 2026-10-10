@@ -14,7 +14,10 @@ import (
 	"oras.land/oras-go/v2/registry/remote/credentials"
 )
 
-func offlineTransferFromFlags(exportLayout, output, archive, importDirectory, repository, digest, catalogDigest, release, trustDirectory, provider, keyRef, identity, issuer, networkFile, caFile string) error {
+func offlineTransferFromFlags(format, exportLayout, output, archive, importDirectory, repository, digest, catalogDigest, release, trustDirectory, provider, keyRef, identity, issuer, networkFile, caFile string) error {
+	if format != "v1" && format != "database-v2" {
+		return errors.New("unsupported offline transfer format")
+	}
 	if (exportLayout == "") == (archive == "") || repository == "" || digest == "" || catalogDigest == "" || release == "" || trustDirectory == "" {
 		return errors.New("one transfer action and caller-pinned identity/trust required")
 	}
@@ -24,6 +27,9 @@ func offlineTransferFromFlags(exportLayout, output, archive, importDirectory, re
 	if archive != "" {
 		if networkFile != "" || caFile != "" || output != "" {
 			return errors.New("offline verification does not accept network configuration")
+		}
+		if format == "database-v2" {
+			return readOfflineDatabaseTransfer(ctx, archive, importDirectory, options)
 		}
 		if importDirectory != "" {
 			return importOfflineTransfer(ctx, archive, importDirectory, options)
@@ -68,6 +74,13 @@ func offlineTransferFromFlags(exportLayout, output, archive, importDirectory, re
 		return errors.New("protected registry credentials unavailable")
 	}
 	authenticated := &http.Client{Transport: registryAuthenticationTransport{client: &auth.Client{Client: client, Credential: credentials.Credential(store), Cache: auth.NewCache()}}, Timeout: client.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if format == "database-v2" {
+		metadata, files, err := captureOfflineDatabaseTransfer(ctx, exportLayout, options, authenticated, network)
+		if err != nil {
+			return err
+		}
+		return writeOfflineDatabaseTransfer(ctx, output, metadata, files, options)
+	}
 	payload, err := captureOfflineTransfer(ctx, exportLayout, options, authenticated, network)
 	if err != nil {
 		return err
@@ -81,6 +94,21 @@ func offlineTransferFromFlags(exportLayout, output, archive, importDirectory, re
 	if writeErr != nil || closeErr != nil {
 		_ = os.Remove(output)
 		return errors.New("offline export write failed")
+	}
+	return nil
+}
+
+// The historical default also applies to non-transfer producer commands.
+// A streamed format with no action or a mirror action is never silently ignored.
+func validateOfflineFormatSelection(format string, mirrorSelected, transferSelected bool) error {
+	if format != "v1" && format != "database-v2" {
+		return errors.New("unsupported offline transfer format")
+	}
+	if mirrorSelected && (format != "v1" || transferSelected) {
+		return errors.New("mirror and offline transfer actions cannot be combined")
+	}
+	if format == "database-v2" && !transferSelected {
+		return errors.New("streamed database format requires one transfer action")
 	}
 	return nil
 }

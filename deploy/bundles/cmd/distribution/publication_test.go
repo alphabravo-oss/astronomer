@@ -36,6 +36,7 @@ type publicationRegistry struct {
 	uploadCount  int
 	writeCount   int
 	payloadReads int
+	blobReads    map[string]int
 	rangeReads   int
 	denyRanges   bool
 	corruptBlob  string
@@ -189,6 +190,9 @@ func actualPublisherFixture(t *testing.T, scanner, descriptors bool) {
 	verifyActualKeyedConsumer(t, index, client, directory)
 	verifyActualOfflinePublication(t, fixture, index, options.Trust, directory)
 	offlineOptions := distribution.OfflineOptions{Repository: index.Repository, Digest: index.Digest, CatalogDigest: index.CatalogDigest, Release: index.Release, Profile: "builtins", TrustDirectory: directory, Policy: options.Trust}
+	if descriptors {
+		verifyActualDatabaseCaptureAndFlags(t, fixture, layout, index, offlineOptions, client, options.Network)
+	}
 	transfer, err := captureOfflineTransfer(t.Context(), layout, offlineOptions, client, options.Network)
 	if err != nil {
 		t.Fatalf("actual authenticated registry capture failed: %v", err)
@@ -450,6 +454,10 @@ func (f *publicationRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			data = []byte("changed bytes at immutable subject")
 		}
 		f.payloadReads++
+		if f.blobReads == nil {
+			f.blobReads = map[string]int{}
+		}
+		f.blobReads[reference]++
 	} else {
 		http.NotFound(w, r)
 		return
