@@ -1,0 +1,55 @@
+{
+  "utc": "2026-10-10T02:44:39.638607+00:00",
+  "sourceCommit": "c6381144f13f451fe8508a1bb7e4270ec2da3879",
+  "sourceTree": "778d18972f5bbb871dd6aa29cf61a0a3e4cbfd2b",
+  "independentChecks": {
+    "frozenGitAndWorkingFileBindings": 544,
+    "beforeAfterExact": true,
+    "gateLogShaBindings": 11,
+    "postEvidenceDocsSha": true,
+    "selectedCosignSha": true,
+    "actualRaceCases": {
+      "pass": 656
+    },
+    "actualRaceParents": 168,
+    "actualPackages": {
+      "github.com/alphabravocompany/astronomer-go/internal/delivery/distribution": 3.169,
+      "github.com/alphabravocompany/astronomer-go/internal/delivery/resolver": 4.453,
+      "github.com/alphabravocompany/astronomer-go/internal/httpclient": 1.178,
+      "github.com/alphabravocompany/astronomer-go/deploy/bundles": 1.2610000000000001,
+      "github.com/alphabravocompany/astronomer-go/deploy/bundles/cmd/distribution": 21.55,
+      "github.com/alphabravocompany/astronomer-go/cmd/astro": 1.609,
+      "github.com/alphabravocompany/astronomer-go/internal/releasecontract": 49.138
+    },
+    "actualSelectedCosignFixturePasses": {
+      "TestActualPublisherClosesScannerDatabaseSubjectsAndOfflineGraph": 4.82,
+      "TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren": 3.13,
+      "TestActualPublisherVerifiesDescriptorDatabasePayloadReadback": 9.05,
+      "TestSelectedCosignProducerToVerifiedLoader": 1.21
+    },
+    "packetChecker": "1 positive/11 negative PASS"
+  },
+  "scope": "Scoped source qualification; integration tree differs outside this slice and will need final combined qualification. No network CLI export, supplier whole-payload, OIDC, no-egress, registry import readback or release approval claim.",
+  "integration": {
+    "sourceCommits": [
+      "0d0c7edc",
+      "bc26df0b"
+    ],
+    "packetCommit": "d8ee9594",
+    "exactChangedSourcePaths": [
+      "deploy/bundles/cmd/distribution/main.go",
+      "deploy/bundles/cmd/distribution/offline_capture.go",
+      "deploy/bundles/cmd/distribution/offline_cli.go",
+      "deploy/bundles/cmd/distribution/offline_database_capture.go",
+      "deploy/bundles/cmd/distribution/offline_database_capture_test.go",
+      "deploy/bundles/cmd/distribution/offline_database_export.go",
+      "deploy/bundles/cmd/distribution/offline_database_export_test.go",
+      "deploy/bundles/cmd/distribution/offline_database_metadata_test.go",
+      "deploy/bundles/cmd/distribution/offline_transfer_test.go",
+      "deploy/bundles/cmd/distribution/publication_test.go"
+    ],
+    "changedSourceCount": 10,
+    "all544FrozenInputsMatchIntegratedTree": false,
+    "reason": "Other integrated W02/W16 paths are newer than frozen W03 input; combined qualification remains pending."
+  }
+}

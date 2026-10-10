@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "release_scope": "first-party-source-policy",
+  "passed": false,
+  "failures": [
+    "invalid or unavailable security evidence"
+  ],
+  "findings": []
+}
