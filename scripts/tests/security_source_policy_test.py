@@ -102,4 +102,86 @@ class SecurityPolicyTest(unittest.TestCase):
         self.high(); r=self.run_policy(); s=policy.sarif(r,'gosec')
         self.assertEqual(len(s['runs'][0]['results']),1); self.assertNotIn('SOURCE SNIPPET',json.dumps(s))
 
+class ReviewedSourceControlsTest(unittest.TestCase):
+    """Exercise the reviewed set without granting its generated namespace or rules."""
+
+    def setUp(self):
+        SecurityPolicyTest.setUp(self)
+        evidence = ROOT/'docs/assurance/technology-guide/w02/current-source-927151be'
+        bindings = json.loads((evidence/'sql-control-current-binding-proposal.json').read_text())
+        nonce = json.loads((evidence/'fips-random-nonce-control-proposal.json').read_text())
+        self.controls = [row['current_finding'] for row in bindings['checks']] + [nonce['finding']]
+        self.assertEqual(len(self.controls), 63)
+        self.assertEqual(len({row['fingerprint'] for row in self.controls}), 63)
+        for finding in self.controls:
+            path = self.root/finding['path']
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes((ROOT/finding['path']).read_bytes())
+            self.g['Issues'].append({
+                'severity': finding['level'], 'rule_id': finding['rule_id'],
+                'file': finding['path'], 'line': str(finding['line']),
+                'column': str(finding['column']),
+            })
+        self.e = json.loads((ROOT/'deploy/security/source-exceptions.json').read_text())
+        known = {row['fingerprint'] for row in self.controls}
+        self.e['exceptions'] = [row for row in self.e['exceptions'] if row['fingerprint'] in known]
+        # Production uses the real clock. This fixture evaluates the dated reviews
+        # within their explicit lifetime, then tests expiry separately.
+        self.now = dt.datetime(2026, 10, 10, tzinfo=dt.timezone.utc)
+
+    def run_policy(self):
+        return policy.evaluate(self.g, self.v, self.e, self.status,
+                               'first-party-source-policy', self.root, self.now)
+
+    def test_all_63_controls_are_exact_and_retained(self):
+        result = self.run_policy()
+        self.assertTrue(result['passed'])
+        self.assertEqual(len(result['findings']), 63)
+        self.assertTrue(all(row['accepted'] for row in result['findings']))
+
+    def test_new_credential_in_same_generated_file_is_blocked(self):
+        finding = self.controls[0]
+        self.g['Issues'].append({
+            'severity': 'HIGH', 'rule_id': 'G101', 'file': finding['path'],
+            'line': str(finding['line']), 'column': str(finding['column'] + 1),
+            'code': 'synthetic password value must not enter retained output',
+        })
+        result = self.run_policy()
+        self.assertFalse(result['passed'])
+        self.assertEqual(sum(row['accepted'] for row in result['findings']), 63)
+        self.assertNotIn('synthetic password', json.dumps(result))
+
+    def test_new_generated_file_is_blocked(self):
+        path = self.root/'internal/db/sqlc/new_credentials.sql.go'
+        path.write_text('package sqlc\nconst password = "synthetic fixture"\n')
+        self.g['Issues'].append({'severity': 'HIGH', 'rule_id': 'G101',
+                                 'file': str(path), 'line': '2', 'column': '7'})
+        self.assertFalse(self.run_policy()['passed'])
+
+    def test_changed_sql_or_nonce_source_invalidates_control(self):
+        for finding in (self.controls[0], self.controls[-1]):
+            path = self.root/finding['path']
+            original = path.read_bytes()
+            path.write_bytes(original + b'\n// changed security-sensitive source\n')
+            with self.subTest(path=finding['path']), self.assertRaises(ValueError):
+                self.run_policy()
+            path.write_bytes(original)
+
+    def test_new_fixed_nonce_site_is_blocked(self):
+        path = self.root/'scripts/fips-mode-probe/other.go'
+        path.write_text('package main\n// synthetic fixed external nonce fixture\n')
+        self.g['Issues'].append({'severity': 'HIGH', 'rule_id': 'G407',
+                                 'file': str(path), 'line': '2', 'column': '1'})
+        self.assertFalse(self.run_policy()['passed'])
+
+    def test_review_expiry_and_scope_fail_closed(self):
+        self.now = dt.datetime(2026, 10, 16, tzinfo=dt.timezone.utc)
+        with self.assertRaises(ValueError):
+            self.run_policy()
+        self.now = dt.datetime(2026, 10, 10, tzinfo=dt.timezone.utc)
+        with self.assertRaises(ValueError):
+            policy.evaluate(self.g, self.v, self.e, self.status,
+                            'unreviewed-release', self.root, self.now)
+
+
 if __name__=='__main__': unittest.main()
