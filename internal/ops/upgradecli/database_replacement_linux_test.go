@@ -92,7 +92,7 @@ func TestDisposableReplacementReconcileAssessesJoinedMutationBeforeAcknowledgeme
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec := process.Spec{Executable: executable, Args: []string{"-test.run=^TestDisposableReplacementReconcileAssessesJoinedMutationBeforeAcknowledgement$"}, Environment: []process.Environment{{Name: "OPS_REPLACEMENT_CHILD", Literal: "1"}, {Name: "OPS_REPLACEMENT_MARKER", Literal: marker}}, Directory: directory, CaptureDirectory: directory, ID: "replacement-fixture", Timeout: 2 * time.Second, TerminationGrace: 100 * time.Millisecond, MaximumCaptureBytes: 1024}
+	spec := process.Spec{Executable: executable, Args: []string{"-test.run=^TestDisposableReplacementReconcileAssessesJoinedMutationBeforeAcknowledgement$"}, Environment: []process.Environment{{Name: "OPS_REPLACEMENT_CHILD", Literal: "1"}, {Name: "OPS_REPLACEMENT_MARKER", Literal: marker}}, Directory: directory, CaptureDirectory: directory, ID: "replacement_fixture", Timeout: 2 * time.Second, TerminationGrace: 100 * time.Millisecond, MaximumCaptureBytes: 1024}
 	v.sqlAttempted = true
 	result, err := process.Run(context.Background(), spec)
 	if err == nil || result.ExitCode != 43 || !result.LeaderReaped {

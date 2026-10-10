@@ -20,6 +20,9 @@ func publicDirectoryFixture(t *testing.T) string {
 	if err := os.Mkdir(p, 0755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(p, 0755); err != nil {
+		t.Fatal(err)
+	}
 	return p
 }
 

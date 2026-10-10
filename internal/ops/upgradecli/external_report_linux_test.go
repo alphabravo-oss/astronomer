@@ -16,7 +16,7 @@ import (
 func TestExternalSanitizedReportNeverClaimsVerifiedDatabaseCopy(t *testing.T) {
 	release := helmReleaseFixture(t)
 	commands := release.fence.commands
-	backup := &ReleaseBackup{external: &externalBackupBinding{}, recovery: &HelmRecovery{observation: &HelmStateObservation{release: release}}, policy: ArtifactPolicy{MaximumBytes: 1024}, captures: map[string]process.ArtifactCapture{}}
+	backup := &ReleaseBackup{external: &externalBackupBinding{}, recovery: &HelmRecovery{policy: ArtifactPolicy{MaximumBytes: 1024}, observation: &HelmStateObservation{release: release}}, policy: ArtifactPolicy{MaximumBytes: 1024}, captures: map[string]process.ArtifactCapture{}}
 	for _, name := range releaseBackupNames[:6] {
 		capture := artifactFixture(t, commands.options.CaptureDirectory, name, []byte("synthetic retained "+name))
 		backup.captures[name] = *capture.StdoutArtifact
