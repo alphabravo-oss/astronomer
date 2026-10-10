@@ -458,6 +458,9 @@ func TestPinnedDatabaseAuthorityRejectsChangedVerifiedMirrorDocument(t *testing.
 
 func TestPinnedDatabaseAuthorityBindsSignedFeedToExactOperatorMirror(t *testing.T) {
 	options, registry, fixture, _ := pinnedDatabaseAuthorityFixture(t)
+	// Metadata verification fetches the exact declared config, unlike the
+	// parent/chart payload-only fixtures. Supply its unchanged authenticated bytes.
+	fixture.setBlob(contentDigest([]byte("{}")), []byte("{}"))
 	signer, key, err := signature.NewDefaultECDSASignerVerifier()
 	if err != nil {
 		t.Fatal(err)
