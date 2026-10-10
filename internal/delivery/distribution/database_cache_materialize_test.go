@@ -20,6 +20,8 @@ func databaseCacheUnitFixture(t *testing.T) (*AuthenticatedDatabaseUpdate, strin
 	main, _, mainBytes := databasePayloadUnitFixture(t, now, "trivy-database")
 	java, _, javaBytes := databasePayloadUnitFixture(t, now, "trivy-java-database")
 	main.document.Databases = append(main.document.Databases, java.document.Databases...)
+	main.timing = CadenceDatabaseUpdateTiming()
+	main.javaRequired = true
 	return main, databasePayloadOwnedFile(t, mainBytes), databasePayloadOwnedFile(t, javaBytes), now
 }
 func databaseCachePrivateRoot(t *testing.T) string {

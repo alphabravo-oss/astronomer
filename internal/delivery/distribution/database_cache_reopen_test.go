@@ -235,6 +235,9 @@ func TestDatabaseJobCacheReadCannotRenewMidReadModeChange(t *testing.T) {
 	if err := os.WriteFile(path, body, 0444); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(path, 0444); err != nil {
+		t.Fatal(err)
+	}
 	original, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)

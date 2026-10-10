@@ -31,6 +31,9 @@ func measuredFile(t *testing.T, path string, body []byte) string {
 	if err := os.WriteFile(path, body, 0444); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(path, 0444); err != nil {
+		t.Fatal(err)
+	}
 	sum := sha256.Sum256(body)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }

@@ -89,6 +89,9 @@ func TestDatabaseJobPullCannotAdoptPublicSymlinkMissingOrCanceledMaterial(t *tes
 	if err := os.WriteFile(path, valid, 0644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(path, 0644); err != nil {
+		t.Fatal(err)
+	}
 	if owner, err := CaptureDatabaseJobPullCredential(t.Context(), directory, "kubelet", []string{"registry.example.test"}); err == nil {
 		owner.Close()
 		t.Fatal("public credential mode accepted")
