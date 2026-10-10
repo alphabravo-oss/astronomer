@@ -52,6 +52,7 @@ type Provider struct {
 	builtinSigningKey      []byte
 	builtinSigningKeyRef   string
 	builtinSigningIdentity string
+	ownedSnapshots         *ownedSnapshotCoordinator
 }
 
 func New(queries Querier, decryptor Decryptor) *Provider {
@@ -98,10 +99,21 @@ func (p *Provider) Snapshot(ctx context.Context, authenticatedCluster uuid.UUID,
 		return protocol.DeliveryStateResponseV2{}, ErrClusterIdentityMismatch
 	}
 
+	if p.ownedSnapshots != nil {
+		return p.ownedSnapshots.snapshot(ctx, authenticatedCluster, request)
+	}
+	response, _, err := p.finalizeSnapshot(ctx, authenticatedCluster, request)
+	return response, err
+}
+
+// The canonical loop is shared unchanged by ordinary and owned transactional
+// snapshots. Its receipt is the actual Finalize query result, never a caller ETag.
+func (p *Provider) finalizeSnapshot(ctx context.Context, authenticatedCluster uuid.UUID, request protocol.DeliveryStateRequestV2) (protocol.DeliveryStateResponseV2, sqlc.DeliveryAssignmentReceipt, error) {
+
 	for attempt := 0; attempt < maxSnapshotFinalizeAttempts; attempt++ {
 		response, rows, systemRelease, contentDigest, credentialDigest, bindings, err := p.build(ctx, authenticatedCluster)
 		if err != nil {
-			return protocol.DeliveryStateResponseV2{}, err
+			return protocol.DeliveryStateResponseV2{}, sqlc.DeliveryAssignmentReceipt{}, err
 		}
 		receipt, err := p.queries.AdvanceDeliveryAssignmentSnapshot(ctx, sqlc.AdvanceDeliveryAssignmentSnapshotParams{
 			ClusterID:        authenticatedCluster,
@@ -109,15 +121,15 @@ func (p *Provider) Snapshot(ctx context.Context, authenticatedCluster uuid.UUID,
 			CredentialDigest: credentialDigest,
 		})
 		if err != nil {
-			return protocol.DeliveryStateResponseV2{}, fmt.Errorf("advance delivery snapshot: %w", err)
+			return protocol.DeliveryStateResponseV2{}, sqlc.DeliveryAssignmentReceipt{}, fmt.Errorf("advance delivery snapshot: %w", err)
 		}
 		response.SnapshotGeneration = receipt.DesiredSnapshotGeneration
 		response.CredentialEpoch = receipt.CredentialEpoch
 		response.ETag, err = response.CanonicalETag()
 		if err != nil {
-			return protocol.DeliveryStateResponseV2{}, err
+			return protocol.DeliveryStateResponseV2{}, sqlc.DeliveryAssignmentReceipt{}, err
 		}
-		_, err = p.queries.FinalizeDeliveryAssignmentSnapshot(ctx, sqlc.FinalizeDeliveryAssignmentSnapshotParams{
+		finalized, err := p.queries.FinalizeDeliveryAssignmentSnapshot(ctx, sqlc.FinalizeDeliveryAssignmentSnapshotParams{
 			SnapshotEtag:       response.ETag,
 			ClusterID:          authenticatedCluster,
 			SnapshotGeneration: response.SnapshotGeneration,
@@ -127,7 +139,7 @@ func (p *Provider) Snapshot(ctx context.Context, authenticatedCluster uuid.UUID,
 			continue
 		}
 		if err != nil {
-			return protocol.DeliveryStateResponseV2{}, fmt.Errorf("finalize delivery snapshot: %w", err)
+			return protocol.DeliveryStateResponseV2{}, sqlc.DeliveryAssignmentReceipt{}, fmt.Errorf("finalize delivery snapshot: %w", err)
 		}
 		if request.AckedSnapshotGeneration == response.SnapshotGeneration && request.AckedETag == response.ETag {
 			return protocol.DeliveryStateResponseV2{
@@ -136,17 +148,17 @@ func (p *Provider) Snapshot(ctx context.Context, authenticatedCluster uuid.UUID,
 				ETag:               response.ETag,
 				NotModified:        true,
 				CredentialEpoch:    response.CredentialEpoch,
-			}, nil
+			}, finalized, nil
 		}
 		if err := p.hydrateCredentials(&response, rows, systemRelease, bindings); err != nil {
-			return protocol.DeliveryStateResponseV2{}, err
+			return protocol.DeliveryStateResponseV2{}, sqlc.DeliveryAssignmentReceipt{}, err
 		}
 		if err := response.Validate(); err != nil {
-			return protocol.DeliveryStateResponseV2{}, fmt.Errorf("built invalid delivery snapshot: %w", err)
+			return protocol.DeliveryStateResponseV2{}, sqlc.DeliveryAssignmentReceipt{}, fmt.Errorf("built invalid delivery snapshot: %w", err)
 		}
-		return response, nil
+		return response, finalized, nil
 	}
-	return protocol.DeliveryStateResponseV2{}, ErrSnapshotChanged
+	return protocol.DeliveryStateResponseV2{}, sqlc.DeliveryAssignmentReceipt{}, ErrSnapshotChanged
 }
 
 func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.DeliveryStateResponseV2, []sqlc.ListClusterDeliveryAssignmentsRow, *sqlc.GetClusterDeliverySystemReleaseRow, string, string, map[string]publicTrustBinding, error) {
