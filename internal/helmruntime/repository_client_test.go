@@ -12,7 +12,7 @@ import (
 
 func TestHelmRepositoryPolicyDoesNotTrustChartURLOrLoopback(t *testing.T) {
 	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))
