@@ -50,8 +50,11 @@ then asserts canonical cancellation identity and removal of staged outputs;
 production always selects the fixed owned-file writer. A same-byte/inode/size
 input with changed modification time also fails its identity check. Structural length
 checks use declared sparse/oversized inputs without downloading or allocating
-large payloads. These tests, once executed, can establish the format boundary;
-they cannot qualify real upstream databases, full supplier hashes, database
+large payloads. The frozen reader passed 52 parents/210 cases with zero skips or failures
+in the two-package race suite using actual selected Cosign3.1.3, plus vet,
+focused readback/oversize tests and documentation/unchanged complexity gates.
+The source-bound packet is `offline-database-transfer-evidence.json`. These
+results establish the tested format boundary; they cannot qualify real upstream databases, full supplier hashes, database
 schema/freshness, original Astronomer OIDC signatures, production startup,
 registry import/readback, or a fresh-cache/no-egress live deployment. Those
 conditions remain explicit prerequisites for W03/W04.
