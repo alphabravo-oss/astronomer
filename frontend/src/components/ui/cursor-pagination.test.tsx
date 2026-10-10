@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from "@testing-library/react";
 import { useEffect } from "react";
 import { CursorPagination, useCursorPagination } from "./cursor-pagination";
 import type { PaginationMetadata } from "@/types";
@@ -157,3 +163,52 @@ it.each(["scope", "limit"])(
     ]);
   },
 );
+
+it("bounds previous-token history while preserving unlimited forward traversal and absolute pages", () => {
+  const { result, rerender } = renderHook(
+    ({ scope, limit }) => useCursorPagination(scope, limit),
+    { initialProps: { scope: "project-a", limit: 25 } },
+  );
+  for (let page = 2; page <= 450; page++) {
+    act(() => result.current.next(`opaque-page-${page}`));
+    expect(result.current.page).toBe(page);
+  }
+  let previousCount = 0;
+  for (let previous = 0; previous < 450; previous++) {
+    const before = result.current.params.cursor;
+    act(() => result.current.previous());
+    if (result.current.params.cursor === before) break;
+    previousCount++;
+  }
+  expect(previousCount).toBe(128);
+  expect(result.current.page).toBe(322);
+  expect(result.current.params.cursor).toBe("opaque-page-322");
+  render(
+    <CursorPagination
+      control={result.current}
+      label="charts"
+      query={{
+        data: {
+          pagination: { ...continuation, next_cursor: "next-unvisited" },
+        },
+        isError: false,
+        isFetching: false,
+      }}
+    />,
+  );
+  expect(
+    screen.getByRole("button", { name: "Previous charts page" }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Next charts page" }),
+  ).toBeEnabled();
+  expect(screen.getByText("Page 322")).toBeInTheDocument();
+  expect(
+    screen.getByText("Earlier pages are outside the 128-page history."),
+  ).toBeInTheDocument();
+  act(() => result.current.next("opaque-new-forward-page"));
+  expect(result.current.page).toBe(323);
+  rerender({ scope: "project-b", limit: 50 });
+  expect(result.current.page).toBe(1);
+  expect(result.current.params).toEqual({ limit: 50, cursor: "" });
+});
