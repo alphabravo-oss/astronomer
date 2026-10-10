@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "reviewedCommit": "02364e25ff73d5d4829b4841b0efff128be0c526",
+  "integratedCommit": "c09d9538",
+  "verifiedFiles": 12,
+  "privateOriginalReceiptsEqual": 2,
+  "privateOriginalExecutablesVerified": 2,
+  "sourceReview": "complete observer/driver previously reviewed; complete checker/README/index now reviewed; original manifest inspected independently",
+  "receipts": [
+    {
+      "name": "receipt.json",
+      "sha256": "020bb141a37e7d94f7f64dd8c72479853b1d23fe3d33ca2e4b11f9c22f7103d5",
+      "source": "b1befe42b616775271ee9af9caa88c4173937360",
+      "runtimeBindings": 50,
+      "binarySHA256": "02394aa9fb60ecca17a7887b7623179b142203a1377267c33fc3166c3dc0a70c",
+      "steps": [
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      "guards": [
+        {
+          "availableGiB": 66,
+          "freePercent": 20,
+          "requiredGiB": 20,
+          "requiredPercent": 20
+        },
+        {
+          "availableGiB": 66,
+          "freePercent": 20,
+          "requiredGiB": 20,
+          "requiredPercent": 20
+        },
+        {
+          "availableGiB": 66,
+          "freePercent": 20,
+          "requiredGiB": 20,
+          "requiredPercent": 20
+        }
+      ],
+      "statuses": [
+        "capture-failed",
+        "capture-failed"
+      ]
+    },
+    {
+      "name": "original-receipt.json",
+      "sha256": "f39ccc322656c7bd580e0f63895a25321a2e171b1338734f1490d8599daef854",
+      "source": "b1befe42b616775271ee9af9caa88c4173937360",
+      "runtimeBindings": 50,
+      "binarySHA256": "25e7a6e9d6e8963322e6c82df599cf2e2da29c4c836f62d6b43ec55e2849c385",
+      "steps": [
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      "guards": [
+        {
+          "availableGiB": 67,
+          "freePercent": 20,
+          "requiredGiB": 20,
+          "requiredPercent": 20
+        },
+        {
+          "availableGiB": 66,
+          "freePercent": 20,
+          "requiredGiB": 20,
+          "requiredPercent": 20
+        },
+        {
+          "availableGiB": 66,
+          "freePercent": 20,
+          "requiredGiB": 20,
+          "requiredPercent": 20
+        }
+      ],
+      "statuses": [
+        "capture-failed",
+        "capture-failed"
+      ]
+    }
+  ],
+  "checker": "one positive /10 targeted negative controls PASS and50 original Git source bindings",
+  "rootVerificationCorrections": [
+    "Initial attempted executable field observerExecutableSHA256 did not exist; actual binarySHA256 binding then independently matched.",
+    "Capacity raw originals are text, not JSON. Exact numeric fields and required20GiB/20% parsed and allsix satisfy limits."
+  ],
+  "finding": "Both main and Java exact original manifests carry size2 SHA256-bound inline empty OCI configuration. Existing metadata parser rejects nonempty config.Data before configuration/layer fetch.",
+  "scope": "Retained failures only; no payload availability, database freshness, endorsement, scan-use, publication, durable projection or release qualification."
+}
