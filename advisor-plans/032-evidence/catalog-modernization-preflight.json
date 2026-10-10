@@ -1,0 +1,66 @@
+{
+  "scope": "W15 read-only catalog modernization preflight; baseline validation only",
+  "source_commit": "3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5",
+  "branch": "implement/032-technology-guide",
+  "timestamp_utc": "2026-10-10T01:18:33.130998+00:00",
+  "source_inputs": {
+    "requirements-dev.txt": "d8007b848cc342cced6ff389ee317756597928a21cad4232a9afc8dab65fdd9d",
+    "CONTRIBUTING.md": "dbdf7ae29eed13299017eabb044d569c36008e4cab80e9ab2cac46f60a4c8a4b",
+    "README.md": "a192d0fcee4973cfa0b9c09b73d4c94e0b4e37318f01127cf4771cc1ebce48b1",
+    ".github/workflows/validate.yaml": "9ba4bebd2f590a527d908f28b125d657f35627e8e2975a04fa72232294bff50c",
+    ".github/workflows/release.yaml": "0508b76ca81787ada2f1128ede79b9ff570f6567d74d943c91d3af7dd13137c6",
+    "scripts/validate.sh": "bf8c37a059254da25438b2e85fd12e621c235271dac496a687a032173a420274",
+    "scripts/build_catalog.py": "d9831848cfa4aa6e875f8082512ea30e081028dcc3bf3282fd5135accc71a53f",
+    "scripts/resolve_artifacts.py": "70432d7fa6620b74fbe895f832321761ef429deaba19aa25db36cf68b10c02bc",
+    "scripts/validate_schema.py": "593ad0b2e2a0fff2cd67b505b952b35b0866d613840b66f2e79368f7e73bfa4e",
+    "tests/test_catalog_builder.py": "a756e32aadc0cb25769f082bb53887f25d39732edd260e31a23831c21099748e",
+    "tests/test_catalog_schema.py": "78d5b11b2ccdf2128d75f08bae52b1b13bc9e43e840f7f4b6839f5ad69c49209"
+  },
+  "observed_inputs": {
+    "ci_python": "3.12",
+    "direct_dependencies": [
+      "jsonschema[format]==4.25.1",
+      "PyYAML==6.0.2"
+    ],
+    "full_transitive_lock_present": false,
+    "project_manifest_present": false,
+    "actions": [
+      "actions/checkout@v4",
+      "actions/setup-python@v5",
+      "oras-project/setup-oras@v1",
+      "sigstore/cosign-installer@v3",
+      "actions/upload-artifact@v4"
+    ],
+    "release_ownership": "catalog tag workflow publishes unchanged v1 catalog OCI media type and Cosign signature; no publication authorized by this preflight"
+  },
+  "baseline_validation": {
+    "command": "./scripts/validate.sh",
+    "exit_code": 0,
+    "tests": 8,
+    "generated_files": 34,
+    "results": [
+      "catalog and revocation v1 schemas PASS",
+      "artifact lock covers every application PASS",
+      "deterministic generated output freshness PASS",
+      "structural jq validation PASS",
+      "all eight existing unit tests PASS"
+    ],
+    "qualification": "ambient baseline runtime; selected Python 3.15 and new locked closure not qualified"
+  },
+  "preservation": [
+    "v1 JSON schemas and canonical byte output",
+    "artifact digest, size and repository/chart/version identity",
+    "revocation policy",
+    "Cosign publisher identity and consumer-pair validation",
+    "existing eight meaningful unit tests"
+  ],
+  "next": [
+    "derive Python and tooling from shared current-stable authority",
+    "introduce pyproject plus full dependency lock with separate groups",
+    "test Python 3.15 wheel or source-build compatibility and narrowly dated exceptions",
+    "pin Actions to reviewed immutable SHAs",
+    "Ruff/type checks with exact owned scopes",
+    "dependency audit and SBOM with retained findings",
+    "producer/consumer signature and schema pair before any publication"
+  ]
+}
