@@ -44,6 +44,36 @@ func TestSIEMHTTPSFactoryRejectsMalformedCustomCA(t *testing.T) {
 	}
 }
 
+func TestSIEMTLSFactoriesRejectInvalidPEMAnchors(t *testing.T) {
+	for _, mode := range []string{siem.TransportSyslogTLS, siem.TransportSplunkHEC, siem.TransportNDJSONHTTPS} {
+		for _, skip := range []bool{false, true} {
+			for _, blockType := range []string{"CERTIFICATE", "PRIVATE KEY"} {
+				t.Run(mode+map[bool]string{false: "/verify/", true: "/explicit-skip/"}[skip]+blockType, func(t *testing.T) {
+					runtime := DispatchRuntime{}.normalized()
+					anchor := pem.EncodeToMemory(&pem.Block{Type: blockType, Bytes: []byte("invalid-DER-anchor-fixture")})
+					forwarder := sqlc.SiemForwarder{ID: uuid.New(), Transport: mode, Endpoint: "example.invalid:6514", CaCertPem: string(anchor), TlsSkipVerify: skip}
+					transport, err := runtime.defaultSIEMTransportFactory(forwarder, authBlob{})
+					if err == nil || err.Error() != "ca_cert_pem could not be parsed" || transport != nil {
+						t.Fatalf("invalid PEM anchor did not preserve the safe configuration error: transport=%T error=%v", transport, err)
+					}
+					if len(runtime.siemState.httpClients) != 0 {
+						t.Fatal("invalid PEM anchor cached a client")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestSIEMTLSConfigPreservesSystemRootsAndExplicitSkip(t *testing.T) {
+	for _, skip := range []bool{false, true} {
+		config, err := buildTLSConfig(sqlc.SiemForwarder{CaCertPem: " \n\t", TlsSkipVerify: skip})
+		if err != nil || config == nil || config.RootCAs != nil || config.InsecureSkipVerify != skip {
+			t.Fatal("empty custom CA changed system-root or explicit operator-skip semantics")
+		}
+	}
+}
+
 func TestSIEMMalformedCustomCACannotDeliverOrDeletePendingQueue(t *testing.T) {
 	defer httpclient.DisableGuardForTest()()
 	var requests atomic.Int32
