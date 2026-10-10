@@ -1,0 +1,2812 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "6c3da1882c76662f1b7e01e80f89f5e2978bc7b4",
+  "candidateCommit": "469536d3be9fb8220f1d39c638c8850aea1b6ac3",
+  "scope": "Reviewed W10 backend source reconciliation only; immutable file hashes, literal metric constructor Name fields in listed first-party scopes, and every checked-in dashboard panel target/options. This is not a runtime metric denominator or live query evaluation.",
+  "plan030OriginalBaseline": "f87b189fa5ea94ad5e86392f90f810f6b6dbd07c",
+  "plan030IntegratedHistory": "be14822227f38b181ef52f5e2ac69f245897df39",
+  "sourceAnchors": [
+    {
+      "path": "deploy/chart/templates/service-monitor.yaml",
+      "baseline_sha256": "b1b9b7850ceab4f6c7a4ffc248795d601f3291727fd375eba17dc58cb0cd8013",
+      "candidate_sha256": "b1b9b7850ceab4f6c7a4ffc248795d601f3291727fd375eba17dc58cb0cd8013",
+      "changed": false
+    },
+    {
+      "path": "deploy/chart/templates/prometheus-rules.yaml",
+      "baseline_sha256": "62fa8178a3d608301a8f4b33e7cbb95f7724040af6dc9dbf8861bdc91c10b13b",
+      "candidate_sha256": "53eb3dce3b839a2b3dd2cb11e171c55d5e9958817ba487bdd6f46f2c782468a4",
+      "changed": true
+    },
+    {
+      "path": "deploy/chart/templates/dashboards-configmap.yaml",
+      "baseline_sha256": "5f5c4a14ace065174df1c252bfb364b766656e66dfe040a6250328f5ce2664bb",
+      "candidate_sha256": "5f5c4a14ace065174df1c252bfb364b766656e66dfe040a6250328f5ce2664bb",
+      "changed": false
+    },
+    {
+      "path": "deploy/dashboards/management-plane.json",
+      "baseline_sha256": "e2e22dfd54172492c524a79779076bbf3ee0a860e0cc15561b355f2ab83d5dcf",
+      "candidate_sha256": "e2e22dfd54172492c524a79779076bbf3ee0a860e0cc15561b355f2ab83d5dcf",
+      "changed": false
+    },
+    {
+      "path": "deploy/docker-compose.telemetry.yml",
+      "baseline_sha256": "1727fe7e34910cc432a0fea314cd404c2672bb48429a99c660ae3f71d2c966a7",
+      "candidate_sha256": "1727fe7e34910cc432a0fea314cd404c2672bb48429a99c660ae3f71d2c966a7",
+      "changed": false
+    },
+    {
+      "path": "deploy/telemetry/promtail.yaml",
+      "baseline_sha256": "ab8b53943f3fb75fd835949e632a8055ef00abfbebac6921195e178e36e8c73a",
+      "candidate_sha256": "ab8b53943f3fb75fd835949e632a8055ef00abfbebac6921195e178e36e8c73a",
+      "changed": false
+    },
+    {
+      "path": "deploy/telemetry/prometheus.yaml",
+      "baseline_sha256": "eb29ccbccd605bb9fbd4675b23ff4922bce62ab614d68b94d44a01a3c5b803d4",
+      "candidate_sha256": "eb29ccbccd605bb9fbd4675b23ff4922bce62ab614d68b94d44a01a3c5b803d4",
+      "changed": false
+    },
+    {
+      "path": "deploy/telemetry/loki.yaml",
+      "baseline_sha256": "c9dbfccacc28317ad7cf6cca80b5661d08bccf217001a31934bd85a7a00912be",
+      "candidate_sha256": "c9dbfccacc28317ad7cf6cca80b5661d08bccf217001a31934bd85a7a00912be",
+      "changed": false
+    },
+    {
+      "path": "deploy/telemetry/tempo.yaml",
+      "baseline_sha256": "ddb8b93e141c763bd1733a11962a001ca1997449be5b25e9cc685ba5adee4da3",
+      "candidate_sha256": "ddb8b93e141c763bd1733a11962a001ca1997449be5b25e9cc685ba5adee4da3",
+      "changed": false
+    },
+    {
+      "path": "docs/metrics-v1.md",
+      "baseline_sha256": "3e1ec3dc3a896446ea3ada87ba9213334cb4c365f4342bda915a8b7f852b7487",
+      "candidate_sha256": "bdc61be97be842fe47489e7e90c3ffc5160a6fcf11246c7435b04b09fd87ee84",
+      "changed": true
+    },
+    {
+      "path": "internal/agent/observation_metrics.go",
+      "baseline_sha256": "d9fad9a3eba2cbd3a4c6e957d26e3d4df13a260572bbc8430a047cb97bb1bb4f",
+      "candidate_sha256": "d9fad9a3eba2cbd3a4c6e957d26e3d4df13a260572bbc8430a047cb97bb1bb4f",
+      "changed": false
+    },
+    {
+      "path": "internal/agent/observation/source.go",
+      "baseline_sha256": "6616aacf897c184224717fae63eeb9c3a5ee93eb0421d5a29fa6fb90622fee39",
+      "candidate_sha256": "6616aacf897c184224717fae63eeb9c3a5ee93eb0421d5a29fa6fb90622fee39",
+      "changed": false
+    },
+    {
+      "path": "internal/agent/observation/tracker.go",
+      "baseline_sha256": "ff2e6c8d212868a5e91f0873f87c538a20d68ae64f63e07b4a347318f7136d71",
+      "candidate_sha256": "ff2e6c8d212868a5e91f0873f87c538a20d68ae64f63e07b4a347318f7136d71",
+      "changed": false
+    },
+    {
+      "path": "internal/agent/observation/watch.go",
+      "baseline_sha256": "79134007c6d6e7e16c5cd9c981ce59b08aa19ab37fb7441d3f214bde8bfbf99c",
+      "candidate_sha256": "79134007c6d6e7e16c5cd9c981ce59b08aa19ab37fb7441d3f214bde8bfbf99c",
+      "changed": false
+    },
+    {
+      "path": "internal/observability/reconciler_metrics.go",
+      "baseline_sha256": "4de0e6c2d2134ce2d6025e0ed623ad260ab05086b059bb612457d63cd1167032",
+      "candidate_sha256": "4de0e6c2d2134ce2d6025e0ed623ad260ab05086b059bb612457d63cd1167032",
+      "changed": false
+    },
+    {
+      "path": "internal/observability/resource_search_metrics.go",
+      "baseline_sha256": "85fb7a182922fabbaded84b75f23e197955363d82b5b809731f95efb6f58fbaa",
+      "candidate_sha256": "85fb7a182922fabbaded84b75f23e197955363d82b5b809731f95efb6f58fbaa",
+      "changed": false
+    },
+    {
+      "path": "internal/observability/event_relay_metrics.go",
+      "baseline_sha256": "08d4f298eaedd5fbd455c04c99123b88fb98c6285f413ef998a5a5339477c7df",
+      "candidate_sha256": "08d4f298eaedd5fbd455c04c99123b88fb98c6285f413ef998a5a5339477c7df",
+      "changed": false
+    },
+    {
+      "path": "internal/server/otel_middleware.go",
+      "baseline_sha256": "113e30887623fd0176debcea1b8c3031d3f200da495832fb57e32e094f9c05f2",
+      "candidate_sha256": "113e30887623fd0176debcea1b8c3031d3f200da495832fb57e32e094f9c05f2",
+      "changed": false
+    },
+    {
+      "path": "internal/worker/job_metrics.go",
+      "baseline_sha256": "8f3296d9125de99d1f3d15d6e4e213ef8797cb6a51f05a94933412971be77b1d",
+      "candidate_sha256": "8f3296d9125de99d1f3d15d6e4e213ef8797cb6a51f05a94933412971be77b1d",
+      "changed": false
+    },
+    {
+      "path": "internal/observability/asynq_tracing.go",
+      "baseline_sha256": "c0e15e7bbc282aa3fa0cb2b2149a07321b69c04978eb647f245da4caebd99a5c",
+      "candidate_sha256": "c0e15e7bbc282aa3fa0cb2b2149a07321b69c04978eb647f245da4caebd99a5c",
+      "changed": false
+    },
+    {
+      "path": "internal/tunnel/connection_metrics.go",
+      "baseline_sha256": "d753553b15b7fa9bfefaa3eda6d7be08e3678e4b0a32313492baab269ce7b0e5",
+      "candidate_sha256": "d753553b15b7fa9bfefaa3eda6d7be08e3678e4b0a32313492baab269ce7b0e5",
+      "changed": false
+    }
+  ],
+  "literalMetricDeclarations": {
+    "w00_baseline": [
+      {
+        "path": "internal/agent/delivery/probe_metrics.go",
+        "sha256": "35af8d2dd5fa9181554904ce70f5caa499a3f5b806459710cd34b007337b5c10",
+        "literal_name_fields": [
+          "delivery_observation_refresh_duration_seconds",
+          "delivery_observation_source_age_seconds",
+          "delivery_observation_source_available",
+          "delivery_observation_sampled_at_timestamp_seconds",
+          "delivery_observation_observed_at_timestamp_seconds"
+        ]
+      },
+      {
+        "path": "internal/agent/metrics.go",
+        "sha256": "e56d32d569f44c0e0d51502b0a0356822a07cc30c76a5fa0875efe898a3699bb",
+        "literal_name_fields": [
+          "state_updates_received_total",
+          "state_updates_handled_total",
+          "tunnel_send_dropped_total",
+          "tunnel_send_queue_depth",
+          "tunnel_messages_total",
+          "inflight_dispatch_active",
+          "inflight_dispatch_rejected_total",
+          "response_buffer_bytes"
+        ]
+      },
+      {
+        "path": "internal/agent/observation_metrics.go",
+        "sha256": "d9fad9a3eba2cbd3a4c6e957d26e3d4df13a260572bbc8430a047cb97bb1bb4f",
+        "literal_name_fields": [
+          "observation_requests_total",
+          "observation_watch_events_total"
+        ]
+      },
+      {
+        "path": "internal/db/metrics.go",
+        "sha256": "457da7f4edfa715fc6f99de502fd9318c3cd48d593512d84540ddcb59f0c1175",
+        "literal_name_fields": [
+          "db_pool_acquired_connections",
+          "db_pool_idle_connections",
+          "db_pool_total_connections",
+          "db_pool_max_connections",
+          "db_pool_acquire_count_total",
+          "db_pool_empty_acquire_count_total",
+          "db_pool_canceled_acquire_count_total",
+          "db_pool_acquire_duration_seconds_total",
+          "db_query_duration_seconds",
+          "db_deadlocks_total",
+          "db_longest_transaction_seconds",
+          "task_outbox_rows",
+          "task_outbox_oldest_due_seconds",
+          "audit_outbox_rows",
+          "audit_outbox_oldest_seconds"
+        ]
+      },
+      {
+        "path": "internal/observability/drop_metrics.go",
+        "sha256": "45e1b6c02555fa97fcddf91a000f88589f6f8f667e3ebf297d44206c3190977d",
+        "literal_name_fields": [
+          "dropped_events_total"
+        ]
+      },
+      {
+        "path": "internal/observability/event_bus_metrics.go",
+        "sha256": "408398b196bf72ae92ee071aaa21dff404649274e33470ee8ad20416dd998f49",
+        "literal_name_fields": [
+          "filtered_events_total"
+        ]
+      },
+      {
+        "path": "internal/observability/event_relay_metrics.go",
+        "sha256": "08d4f298eaedd5fbd455c04c99123b88fb98c6285f413ef998a5a5339477c7df",
+        "literal_name_fields": [
+          "queue_depth",
+          "queue_capacity",
+          "events_total",
+          "publish_duration_seconds",
+          "healthy",
+          "last_success_timestamp_seconds"
+        ]
+      },
+      {
+        "path": "internal/observability/insecure_key_metrics.go",
+        "sha256": "9c368cc17f9478bdd690cf4d70bd3be5b2e26ce512c90c93fd72049e3d0c1003",
+        "literal_name_fields": [
+          "insecure_dev_key_in_use"
+        ]
+      },
+      {
+        "path": "internal/observability/kubectl_metrics.go",
+        "sha256": "5f1412da24e0d7f590c981ab5b34b7ce9a5eeed222971a16034f9166044bc596",
+        "literal_name_fields": [
+          "active_sessions"
+        ]
+      },
+      {
+        "path": "internal/observability/reconciler_metrics.go",
+        "sha256": "4de0e6c2d2134ce2d6025e0ed623ad260ab05086b059bb612457d63cd1167032",
+        "literal_name_fields": [
+          "runs_total",
+          "last_success_timestamp_seconds",
+          "duration_seconds"
+        ]
+      },
+      {
+        "path": "internal/observability/registration_metrics.go",
+        "sha256": "5949b9c52162ceab3ee9b27178898c75aef27dc9b16e04502ad4a38a4ce4b6fe",
+        "literal_name_fields": [
+          "phase",
+          "duration_seconds"
+        ]
+      },
+      {
+        "path": "internal/observability/resource_search_metrics.go",
+        "sha256": "85fb7a182922fabbaded84b75f23e197955363d82b5b809731f95efb6f58fbaa",
+        "literal_name_fields": [
+          "requests_total",
+          "clusters_total",
+          "duration_seconds"
+        ]
+      },
+      {
+        "path": "internal/observability/vault_metrics.go",
+        "sha256": "7bf365e8efe766efc5fdf3ff1e6be650f0c4509c36cc7e67ca975e025091300b",
+        "literal_name_fields": [
+          "resolves_total",
+          "resolve_duration_seconds",
+          "connection_health"
+        ]
+      },
+      {
+        "path": "internal/server/middleware/metrics.go",
+        "sha256": "b49bd98de50b418791c7bb9cfb9668aab201809287a5f026022a7bef1c930b88",
+        "literal_name_fields": [
+          "http_requests_total",
+          "http_request_duration_seconds",
+          "http_in_flight_requests"
+        ]
+      },
+      {
+        "path": "internal/server/middleware/read_audit_metrics.go",
+        "sha256": "46e4230ab32ed8576f32dcb110b51259c3f78759d708b959163a74e77bfc5722",
+        "literal_name_fields": [
+          "emissions_total",
+          "queue_depth"
+        ]
+      },
+      {
+        "path": "internal/tunnel/connection_metrics.go",
+        "sha256": "d753553b15b7fa9bfefaa3eda6d7be08e3678e4b0a32313492baab269ce7b0e5",
+        "literal_name_fields": [
+          "agent_connections",
+          "agent_last_seen_seconds",
+          "agent_messages_total",
+          "agent_reconnects_total"
+        ]
+      },
+      {
+        "path": "internal/tunnel/k8s_proxy_metrics.go",
+        "sha256": "059ed7d0cdb7f8609983d646466d51fa4e1481f92602abf1e7d019d57994da01",
+        "literal_name_fields": [
+          "errors_total"
+        ]
+      },
+      {
+        "path": "internal/tunnel/metrics.go",
+        "sha256": "dd153d65d0094dc805fba3fa97ed146399d2f07682ccc990bc04809cd9cc52c5",
+        "literal_name_fields": [
+          "state_updates_received_total",
+          "state_updates_handled_total",
+          "heartbeats_persisted_total",
+          "heartbeat_lifecycle_checks_total"
+        ]
+      },
+      {
+        "path": "internal/worker/job_metrics.go",
+        "sha256": "8f3296d9125de99d1f3d15d6e4e213ef8797cb6a51f05a94933412971be77b1d",
+        "literal_name_fields": [
+          "jobs_total",
+          "job_duration_seconds",
+          "job_retry_attempts_total"
+        ]
+      },
+      {
+        "path": "internal/worker/queue_metrics.go",
+        "sha256": "fdd0c65df0e24d8753ce435ce83e83465a83cc23cf47560c645e1a5f693c8795",
+        "literal_name_fields": [
+          "queue_depth",
+          "queue_latency_seconds"
+        ]
+      }
+    ],
+    "w10_backend": [
+      {
+        "path": "internal/agent/delivery/probe_metrics.go",
+        "sha256": "35af8d2dd5fa9181554904ce70f5caa499a3f5b806459710cd34b007337b5c10",
+        "literal_name_fields": [
+          "delivery_observation_refresh_duration_seconds",
+          "delivery_observation_source_age_seconds",
+          "delivery_observation_source_available",
+          "delivery_observation_sampled_at_timestamp_seconds",
+          "delivery_observation_observed_at_timestamp_seconds"
+        ]
+      },
+      {
+        "path": "internal/agent/metrics.go",
+        "sha256": "e56d32d569f44c0e0d51502b0a0356822a07cc30c76a5fa0875efe898a3699bb",
+        "literal_name_fields": [
+          "state_updates_received_total",
+          "state_updates_handled_total",
+          "tunnel_send_dropped_total",
+          "tunnel_send_queue_depth",
+          "tunnel_messages_total",
+          "inflight_dispatch_active",
+          "inflight_dispatch_rejected_total",
+          "response_buffer_bytes"
+        ]
+      },
+      {
+        "path": "internal/agent/observation_metrics.go",
+        "sha256": "d9fad9a3eba2cbd3a4c6e957d26e3d4df13a260572bbc8430a047cb97bb1bb4f",
+        "literal_name_fields": [
+          "observation_requests_total",
+          "observation_watch_events_total"
+        ]
+      },
+      {
+        "path": "internal/db/metrics.go",
+        "sha256": "457da7f4edfa715fc6f99de502fd9318c3cd48d593512d84540ddcb59f0c1175",
+        "literal_name_fields": [
+          "db_pool_acquired_connections",
+          "db_pool_idle_connections",
+          "db_pool_total_connections",
+          "db_pool_max_connections",
+          "db_pool_acquire_count_total",
+          "db_pool_empty_acquire_count_total",
+          "db_pool_canceled_acquire_count_total",
+          "db_pool_acquire_duration_seconds_total",
+          "db_query_duration_seconds",
+          "db_deadlocks_total",
+          "db_longest_transaction_seconds",
+          "task_outbox_rows",
+          "task_outbox_oldest_due_seconds",
+          "audit_outbox_rows",
+          "audit_outbox_oldest_seconds"
+        ]
+      },
+      {
+        "path": "internal/observability/drop_metrics.go",
+        "sha256": "45e1b6c02555fa97fcddf91a000f88589f6f8f667e3ebf297d44206c3190977d",
+        "literal_name_fields": [
+          "dropped_events_total"
+        ]
+      },
+      {
+        "path": "internal/observability/event_bus_metrics.go",
+        "sha256": "408398b196bf72ae92ee071aaa21dff404649274e33470ee8ad20416dd998f49",
+        "literal_name_fields": [
+          "filtered_events_total"
+        ]
+      },
+      {
+        "path": "internal/observability/event_relay_metrics.go",
+        "sha256": "08d4f298eaedd5fbd455c04c99123b88fb98c6285f413ef998a5a5339477c7df",
+        "literal_name_fields": [
+          "queue_depth",
+          "queue_capacity",
+          "events_total",
+          "publish_duration_seconds",
+          "healthy",
+          "last_success_timestamp_seconds"
+        ]
+      },
+      {
+        "path": "internal/observability/insecure_key_metrics.go",
+        "sha256": "9c368cc17f9478bdd690cf4d70bd3be5b2e26ce512c90c93fd72049e3d0c1003",
+        "literal_name_fields": [
+          "insecure_dev_key_in_use"
+        ]
+      },
+      {
+        "path": "internal/observability/kubectl_metrics.go",
+        "sha256": "5f1412da24e0d7f590c981ab5b34b7ce9a5eeed222971a16034f9166044bc596",
+        "literal_name_fields": [
+          "active_sessions"
+        ]
+      },
+      {
+        "path": "internal/observability/reconciler_metrics.go",
+        "sha256": "4de0e6c2d2134ce2d6025e0ed623ad260ab05086b059bb612457d63cd1167032",
+        "literal_name_fields": [
+          "runs_total",
+          "last_success_timestamp_seconds",
+          "duration_seconds"
+        ]
+      },
+      {
+        "path": "internal/observability/registration_metrics.go",
+        "sha256": "5949b9c52162ceab3ee9b27178898c75aef27dc9b16e04502ad4a38a4ce4b6fe",
+        "literal_name_fields": [
+          "phase",
+          "duration_seconds"
+        ]
+      },
+      {
+        "path": "internal/observability/resource_search_metrics.go",
+        "sha256": "85fb7a182922fabbaded84b75f23e197955363d82b5b809731f95efb6f58fbaa",
+        "literal_name_fields": [
+          "requests_total",
+          "clusters_total",
+          "duration_seconds"
+        ]
+      },
+      {
+        "path": "internal/observability/vault_metrics.go",
+        "sha256": "7bf365e8efe766efc5fdf3ff1e6be650f0c4509c36cc7e67ca975e025091300b",
+        "literal_name_fields": [
+          "resolves_total",
+          "resolve_duration_seconds",
+          "connection_health"
+        ]
+      },
+      {
+        "path": "internal/server/middleware/metrics.go",
+        "sha256": "b49bd98de50b418791c7bb9cfb9668aab201809287a5f026022a7bef1c930b88",
+        "literal_name_fields": [
+          "http_requests_total",
+          "http_request_duration_seconds",
+          "http_in_flight_requests"
+        ]
+      },
+      {
+        "path": "internal/server/middleware/read_audit_metrics.go",
+        "sha256": "46e4230ab32ed8576f32dcb110b51259c3f78759d708b959163a74e77bfc5722",
+        "literal_name_fields": [
+          "emissions_total",
+          "queue_depth"
+        ]
+      },
+      {
+        "path": "internal/tunnel/connection_metrics.go",
+        "sha256": "d753553b15b7fa9bfefaa3eda6d7be08e3678e4b0a32313492baab269ce7b0e5",
+        "literal_name_fields": [
+          "agent_connections",
+          "agent_last_seen_seconds",
+          "agent_messages_total",
+          "agent_reconnects_total"
+        ]
+      },
+      {
+        "path": "internal/tunnel/k8s_proxy_metrics.go",
+        "sha256": "059ed7d0cdb7f8609983d646466d51fa4e1481f92602abf1e7d019d57994da01",
+        "literal_name_fields": [
+          "errors_total"
+        ]
+      },
+      {
+        "path": "internal/tunnel/metrics.go",
+        "sha256": "dd153d65d0094dc805fba3fa97ed146399d2f07682ccc990bc04809cd9cc52c5",
+        "literal_name_fields": [
+          "state_updates_received_total",
+          "state_updates_handled_total",
+          "heartbeats_persisted_total",
+          "heartbeat_lifecycle_checks_total"
+        ]
+      },
+      {
+        "path": "internal/worker/job_metrics.go",
+        "sha256": "8f3296d9125de99d1f3d15d6e4e213ef8797cb6a51f05a94933412971be77b1d",
+        "literal_name_fields": [
+          "jobs_total",
+          "job_duration_seconds",
+          "job_retry_attempts_total"
+        ]
+      },
+      {
+        "path": "internal/worker/queue_metrics.go",
+        "sha256": "fdd0c65df0e24d8753ce435ce83e83465a83cc23cf47560c645e1a5f693c8795",
+        "literal_name_fields": [
+          "queue_depth",
+          "queue_latency_seconds"
+        ]
+      }
+    ]
+  },
+  "dashboardPanels": {
+    "w00_baseline": [
+      {
+        "path": "deploy/dashboards/baseline-tool-health.json",
+        "panel_id": null,
+        "title": "Reconciler runs (success/failed/skipped)",
+        "targets": [
+          {
+            "expr": "sum by (status, job) (rate(astronomer_reconciler_runs_total[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/baseline-tool-health.json",
+        "panel_id": null,
+        "title": "Last success age (seconds)",
+        "targets": [
+          {
+            "expr": "time() - max by (job) (astronomer_reconciler_last_success_timestamp_seconds)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/baseline-tool-health.json",
+        "panel_id": null,
+        "title": "Worker leader holders",
+        "targets": [
+          {
+            "expr": "astronomer_worker_leader_held == 1",
+            "refId": "A",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "Nodes",
+        "targets": [
+          {
+            "expr": "count(kube_node_info{cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "Pods (Running)",
+        "targets": [
+          {
+            "expr": "count(kube_pod_status_phase{phase=\"Running\", cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "Namespaces",
+        "targets": [
+          {
+            "expr": "count(kube_namespace_created{cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "PVCs (Bound)",
+        "targets": [
+          {
+            "expr": "count(kube_persistentvolumeclaim_status_phase{phase=\"Bound\", cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "Cluster CPU usage",
+        "targets": [
+          {
+            "expr": "sum by (cluster) (rate(node_cpu_seconds_total{mode!=\"idle\", cluster=~\"$cluster\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "Cluster memory usage",
+        "targets": [
+          {
+            "expr": "sum by (cluster) (node_memory_MemTotal_bytes{cluster=~\"$cluster\"} - node_memory_MemAvailable_bytes{cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Active rollouts",
+        "targets": [
+          {
+            "expr": "sum(astronomer_delivery_rollouts{state=~\"resolving|awaiting_approval|queued|progressing|paused|rolling_back\"}) or vector(0)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Failed rollouts",
+        "targets": [
+          {
+            "expr": "sum(astronomer_delivery_rollouts{state=~\"failed|rollback_failed\"}) or vector(0)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Stale deployment status",
+        "targets": [
+          {
+            "expr": "sum(astronomer_delivery_stale_deployments) or vector(0)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Flux controllers not Ready",
+        "targets": [
+          {
+            "expr": "sum(astronomer_delivery_flux_readiness{ready=\"false\"}) or vector(0)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Rollouts by strategy and state",
+        "targets": [
+          {
+            "expr": "sum by (strategy,state) (astronomer_delivery_rollouts)",
+            "legendFormat": "{{strategy}}/{{state}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Deployments by phase and drift",
+        "targets": [
+          {
+            "expr": "sum by (phase,drift) (astronomer_delivery_deployments)",
+            "legendFormat": "{{phase}} drift={{drift}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Source resolution p50 / p95 / p99",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum by (le) (rate(astronomer_delivery_source_resolution_duration_seconds_bucket[5m])))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(astronomer_delivery_source_resolution_duration_seconds_bucket[5m])))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum by (le) (rate(astronomer_delivery_source_resolution_duration_seconds_bucket[5m])))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Source resolution outcomes",
+        "targets": [
+          {
+            "expr": "sum by (source_type,result,verification) (rate(astronomer_delivery_source_resolutions_total[5m]))",
+            "legendFormat": "{{source_type}}/{{result}}/{{verification}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Snapshot protocol outcomes",
+        "targets": [
+          {
+            "expr": "sum by (result) (rate(astronomer_delivery_assignment_snapshots_total[5m]))",
+            "legendFormat": "{{result}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Worker outcomes",
+        "targets": [
+          {
+            "expr": "sum by (worker,result) (rate(astronomer_delivery_worker_events_total[5m]))",
+            "legendFormat": "{{worker}}/{{result}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Catalog entries / last successful sync age",
+        "targets": [
+          {
+            "expr": "astronomer_catalog_entries",
+            "legendFormat": "entries",
+            "refId": "A"
+          },
+          {
+            "expr": "time() - astronomer_catalog_last_success_timestamp_seconds",
+            "legendFormat": "sync age seconds",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Catalog synchronization outcomes",
+        "targets": [
+          {
+            "expr": "sum by (transport,result) (rate(astronomer_catalog_sync_total[5m]))",
+            "legendFormat": "{{transport}}/{{result}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/image-scan-summary.json",
+        "panel_id": null,
+        "title": "Critical CVEs by cluster",
+        "targets": [
+          {
+            "expr": "sum by (cluster) (astronomer_image_vulnerability_count{severity=\"critical\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/image-scan-summary.json",
+        "panel_id": null,
+        "title": "High CVEs by cluster",
+        "targets": [
+          {
+            "expr": "sum by (cluster) (astronomer_image_vulnerability_count{severity=\"high\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/image-scan-summary.json",
+        "panel_id": null,
+        "title": "Scans per hour",
+        "targets": [
+          {
+            "expr": "sum by (cluster) (rate(astronomer_image_vulnerability_scans_total[5m]) * 3600)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "HTTP 5xx ratio (5m)",
+        "targets": [
+          {
+            "expr": "astronomer:http_5xx_ratio:5m",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.01
+                },
+                {
+                  "color": "red",
+                  "value": 0.05
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "HTTP p99 latency (5m)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "In-flight requests",
+        "targets": [
+          {
+            "expr": "sum(astronomer_http_in_flight_requests)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Agents disconnected",
+        "targets": [
+          {
+            "expr": "sum((astronomer_agent_connections{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == bool 0) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1))",
+            "refId": "A",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "No data",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "HTTP request rate by status class",
+        "targets": [
+          {
+            "expr": "sum by (status_class) (rate(astronomer_http_requests_total[5m]))",
+            "legendFormat": "{{status_class}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "HTTP latency (p50 / p95 / p99)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Asynq queue depth by queue + state",
+        "targets": [
+          {
+            "expr": "sum by (queue, state) (astronomer_worker_queue_depth)",
+            "legendFormat": "{{queue}}/{{state}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Asynq oldest-pending age by queue",
+        "targets": [
+          {
+            "expr": "max by (queue) (astronomer_worker_queue_latency_seconds)",
+            "legendFormat": "{{queue}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Task outbox oldest-due age by status",
+        "targets": [
+          {
+            "expr": "max by (status) (astronomer_task_outbox_oldest_due_seconds)",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "DB pool health (acquired / idle / max)",
+        "targets": [
+          {
+            "expr": "sum(astronomer_db_pool_acquired_connections)",
+            "legendFormat": "acquired",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(astronomer_db_pool_idle_connections)",
+            "legendFormat": "idle",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(astronomer_db_pool_max_connections)",
+            "legendFormat": "max",
+            "refId": "C"
+          },
+          {
+            "expr": "sum(rate(astronomer_db_pool_empty_acquire_count_total[5m]))",
+            "legendFormat": "empty-acquire/s",
+            "refId": "D"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Transactional audit outbox age by status",
+        "targets": [
+          {
+            "expr": "max by (status) (astronomer_audit_outbox_oldest_seconds)",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 300
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Transactional audit outbox rows by status",
+        "targets": [
+          {
+            "expr": "sum by (status) (astronomer_audit_outbox_rows)",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 0,
+            "min": 0
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Agent connections (0 = disconnected)",
+        "targets": [
+          {
+            "expr": "astronomer_agent_connections",
+            "legendFormat": "{{cluster_name}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Agent reconnect rate",
+        "targets": [
+          {
+            "expr": "sum by (cluster_id) (rate(astronomer_agent_reconnects_total[5m]))",
+            "legendFormat": "{{cluster_id}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Management backup \u2014 hours since last success",
+        "targets": [
+          {
+            "expr": "(time() - max(kube_job_status_completion_time{job_name=~\".*-management-backup-.*\"} and on(job_name) kube_job_status_succeeded{job_name=~\".*-management-backup-.*\"} > 0)) / 3600",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "h",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 26
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Restore drill \u2014 days since last success",
+        "targets": [
+          {
+            "expr": "(time() - max(kube_job_status_completion_time{job_name=~\".*-restore-drill-.*\"} and on(job_name) kube_job_status_succeeded{job_name=~\".*-restore-drill-.*\"} > 0)) / 86400",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "d",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 14
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Backup / restore-drill failures (24h)",
+        "targets": [
+          {
+            "expr": "sum(increase(kube_job_status_failed{job_name=~\".*-management-backup-.*|.*-restore-drill-.*\"}[24h]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Server scrape availability",
+        "targets": [
+          {
+            "expr": "max(up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"})",
+            "refId": "A",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "No data",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Worker scrape availability",
+        "targets": [
+          {
+            "expr": "max(up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"})",
+            "refId": "A",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "No data",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Process CPU usage (cores)",
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "server {{pod}} / {{instance}}",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(process_cpu_seconds_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"}[5m]) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} == 1)",
+            "legendFormat": "worker {{pod}} / {{instance}}",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "cores",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Go heap in use",
+        "targets": [
+          {
+            "expr": "go_memstats_heap_inuse_bytes{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "server {{pod}} / {{instance}}",
+            "refId": "A"
+          },
+          {
+            "expr": "go_memstats_heap_inuse_bytes{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} == 1)",
+            "legendFormat": "worker {{pod}} / {{instance}}",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Go goroutines",
+        "targets": [
+          {
+            "expr": "go_goroutines{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "server {{pod}} / {{instance}}",
+            "refId": "A"
+          },
+          {
+            "expr": "go_goroutines{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} == 1)",
+            "legendFormat": "worker {{pod}} / {{instance}}",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Embedded observation source availability",
+        "targets": [
+          {
+            "expr": "(astronomer_agent_delivery_observation_source_available{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} * on(namespace, service, instance, astronomer_instance_id, source) ((astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} > bool 0) * (time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= bool 0) * (time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} <= bool 240))) and on(namespace, service, instance, astronomer_instance_id, source) ((time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0) and (time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} <= 60)) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}} / {{source}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Embedded observation source age",
+        "targets": [
+          {
+            "expr": "((time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}) and (astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} > 0) and (time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0)) and on(namespace, service, instance, astronomer_instance_id, source) ((time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0) and (time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} <= 60)) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}} / {{source}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Embedded tracked LIST/WATCH request rate",
+        "targets": [
+          {
+            "expr": "sum by (namespace, service, instance, kind, verb, outcome) (rate(astronomer_agent_observation_requests_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m])) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}} / {{kind}} / {{verb}} / {{outcome}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Embedded inventory refresh p95 duration",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum by (namespace, service, instance, source, outcome, le) (rate(astronomer_agent_delivery_observation_refresh_duration_seconds_bucket{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]))) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}} / {{source}} / {{outcome}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Embedded inventory refresh frequency",
+        "targets": [
+          {
+            "expr": "sum by (namespace, service, instance, source, outcome) (rate(astronomer_agent_delivery_observation_refresh_duration_seconds_count{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m])) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}} / {{source}} / {{outcome}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Server DB average acquisition duration",
+        "targets": [
+          {
+            "expr": "(rate(astronomer_db_pool_acquire_duration_seconds_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]) / (rate(astronomer_db_pool_acquire_count_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]) > 0)) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/node-usage.json",
+        "panel_id": null,
+        "title": "CPU usage by node",
+        "targets": [
+          {
+            "expr": "sum by (instance) (rate(node_cpu_seconds_total{mode!=\"idle\", cluster=~\"$cluster\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/node-usage.json",
+        "panel_id": null,
+        "title": "Memory usage by node",
+        "targets": [
+          {
+            "expr": "node_memory_MemTotal_bytes{cluster=~\"$cluster\"} - node_memory_MemAvailable_bytes{cluster=~\"$cluster\"}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/node-usage.json",
+        "panel_id": null,
+        "title": "Disk usage by node (/)",
+        "targets": [
+          {
+            "expr": "1 - (node_filesystem_avail_bytes{mountpoint=\"/\", cluster=~\"$cluster\"} / node_filesystem_size_bytes{mountpoint=\"/\", cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/security-posture-rollup.json",
+        "panel_id": null,
+        "title": "Critical CVE count (7d)",
+        "targets": [
+          {
+            "expr": "sum(astronomer_image_vulnerability_count{severity=\"critical\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/security-posture-rollup.json",
+        "panel_id": null,
+        "title": "High CVE count (7d)",
+        "targets": [
+          {
+            "expr": "sum(astronomer_image_vulnerability_count{severity=\"high\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/security-posture-rollup.json",
+        "panel_id": null,
+        "title": "Top 10 vulnerable images",
+        "targets": [
+          {
+            "expr": "topk(10, astronomer_image_vulnerability_count{severity=\"critical\"})",
+            "refId": "A",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/workload-health.json",
+        "panel_id": null,
+        "title": "Pods not Ready",
+        "targets": [
+          {
+            "expr": "sum(kube_pod_status_ready{condition=\"false\", cluster=~\"$cluster\", namespace=~\"$namespace\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/workload-health.json",
+        "panel_id": null,
+        "title": "Restarts (5m)",
+        "targets": [
+          {
+            "expr": "sum(increase(kube_pod_container_status_restarts_total{cluster=~\"$cluster\", namespace=~\"$namespace\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/workload-health.json",
+        "panel_id": null,
+        "title": "Workloads w/ unavailable replicas",
+        "targets": [
+          {
+            "expr": "count(kube_deployment_status_replicas_unavailable{cluster=~\"$cluster\", namespace=~\"$namespace\"} > 0)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/workload-health.json",
+        "panel_id": null,
+        "title": "Pod restart rate (per pod)",
+        "targets": [
+          {
+            "expr": "sum by (namespace, pod) (rate(kube_pod_container_status_restarts_total{cluster=~\"$cluster\", namespace=~\"$namespace\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      }
+    ],
+    "w10_backend": [
+      {
+        "path": "deploy/dashboards/baseline-tool-health.json",
+        "panel_id": null,
+        "title": "Reconciler runs (success/failed/skipped)",
+        "targets": [
+          {
+            "expr": "sum by (status, job) (rate(astronomer_reconciler_runs_total[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/baseline-tool-health.json",
+        "panel_id": null,
+        "title": "Last success age (seconds)",
+        "targets": [
+          {
+            "expr": "time() - max by (job) (astronomer_reconciler_last_success_timestamp_seconds)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/baseline-tool-health.json",
+        "panel_id": null,
+        "title": "Worker leader holders",
+        "targets": [
+          {
+            "expr": "astronomer_worker_leader_held == 1",
+            "refId": "A",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "Nodes",
+        "targets": [
+          {
+            "expr": "count(kube_node_info{cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "Pods (Running)",
+        "targets": [
+          {
+            "expr": "count(kube_pod_status_phase{phase=\"Running\", cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "Namespaces",
+        "targets": [
+          {
+            "expr": "count(kube_namespace_created{cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "PVCs (Bound)",
+        "targets": [
+          {
+            "expr": "count(kube_persistentvolumeclaim_status_phase{phase=\"Bound\", cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "Cluster CPU usage",
+        "targets": [
+          {
+            "expr": "sum by (cluster) (rate(node_cpu_seconds_total{mode!=\"idle\", cluster=~\"$cluster\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/cluster-overview.json",
+        "panel_id": null,
+        "title": "Cluster memory usage",
+        "targets": [
+          {
+            "expr": "sum by (cluster) (node_memory_MemTotal_bytes{cluster=~\"$cluster\"} - node_memory_MemAvailable_bytes{cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Active rollouts",
+        "targets": [
+          {
+            "expr": "sum(astronomer_delivery_rollouts{state=~\"resolving|awaiting_approval|queued|progressing|paused|rolling_back\"}) or vector(0)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Failed rollouts",
+        "targets": [
+          {
+            "expr": "sum(astronomer_delivery_rollouts{state=~\"failed|rollback_failed\"}) or vector(0)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Stale deployment status",
+        "targets": [
+          {
+            "expr": "sum(astronomer_delivery_stale_deployments) or vector(0)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Flux controllers not Ready",
+        "targets": [
+          {
+            "expr": "sum(astronomer_delivery_flux_readiness{ready=\"false\"}) or vector(0)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Rollouts by strategy and state",
+        "targets": [
+          {
+            "expr": "sum by (strategy,state) (astronomer_delivery_rollouts)",
+            "legendFormat": "{{strategy}}/{{state}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Deployments by phase and drift",
+        "targets": [
+          {
+            "expr": "sum by (phase,drift) (astronomer_delivery_deployments)",
+            "legendFormat": "{{phase}} drift={{drift}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Source resolution p50 / p95 / p99",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum by (le) (rate(astronomer_delivery_source_resolution_duration_seconds_bucket[5m])))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(astronomer_delivery_source_resolution_duration_seconds_bucket[5m])))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum by (le) (rate(astronomer_delivery_source_resolution_duration_seconds_bucket[5m])))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Source resolution outcomes",
+        "targets": [
+          {
+            "expr": "sum by (source_type,result,verification) (rate(astronomer_delivery_source_resolutions_total[5m]))",
+            "legendFormat": "{{source_type}}/{{result}}/{{verification}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Snapshot protocol outcomes",
+        "targets": [
+          {
+            "expr": "sum by (result) (rate(astronomer_delivery_assignment_snapshots_total[5m]))",
+            "legendFormat": "{{result}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Worker outcomes",
+        "targets": [
+          {
+            "expr": "sum by (worker,result) (rate(astronomer_delivery_worker_events_total[5m]))",
+            "legendFormat": "{{worker}}/{{result}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Catalog entries / last successful sync age",
+        "targets": [
+          {
+            "expr": "astronomer_catalog_entries",
+            "legendFormat": "entries",
+            "refId": "A"
+          },
+          {
+            "expr": "time() - astronomer_catalog_last_success_timestamp_seconds",
+            "legendFormat": "sync age seconds",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/continuous-delivery.json",
+        "panel_id": null,
+        "title": "Catalog synchronization outcomes",
+        "targets": [
+          {
+            "expr": "sum by (transport,result) (rate(astronomer_catalog_sync_total[5m]))",
+            "legendFormat": "{{transport}}/{{result}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/image-scan-summary.json",
+        "panel_id": null,
+        "title": "Critical CVEs by cluster",
+        "targets": [
+          {
+            "expr": "sum by (cluster) (astronomer_image_vulnerability_count{severity=\"critical\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/image-scan-summary.json",
+        "panel_id": null,
+        "title": "High CVEs by cluster",
+        "targets": [
+          {
+            "expr": "sum by (cluster) (astronomer_image_vulnerability_count{severity=\"high\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/image-scan-summary.json",
+        "panel_id": null,
+        "title": "Scans per hour",
+        "targets": [
+          {
+            "expr": "sum by (cluster) (rate(astronomer_image_vulnerability_scans_total[5m]) * 3600)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "HTTP 5xx ratio (5m)",
+        "targets": [
+          {
+            "expr": "astronomer:http_5xx_ratio:5m",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.01
+                },
+                {
+                  "color": "red",
+                  "value": 0.05
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "HTTP p99 latency (5m)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "In-flight requests",
+        "targets": [
+          {
+            "expr": "sum(astronomer_http_in_flight_requests)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Agents disconnected",
+        "targets": [
+          {
+            "expr": "sum((astronomer_agent_connections{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == bool 0) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1))",
+            "refId": "A",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "No data",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "HTTP request rate by status class",
+        "targets": [
+          {
+            "expr": "sum by (status_class) (rate(astronomer_http_requests_total[5m]))",
+            "legendFormat": "{{status_class}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "HTTP latency (p50 / p95 / p99)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum by (le) (rate(astronomer_http_request_duration_seconds_bucket[5m])))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Asynq queue depth by queue + state",
+        "targets": [
+          {
+            "expr": "sum by (queue, state) (astronomer_worker_queue_depth)",
+            "legendFormat": "{{queue}}/{{state}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Asynq oldest-pending age by queue",
+        "targets": [
+          {
+            "expr": "max by (queue) (astronomer_worker_queue_latency_seconds)",
+            "legendFormat": "{{queue}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Task outbox oldest-due age by status",
+        "targets": [
+          {
+            "expr": "max by (status) (astronomer_task_outbox_oldest_due_seconds)",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "DB pool health (acquired / idle / max)",
+        "targets": [
+          {
+            "expr": "sum(astronomer_db_pool_acquired_connections)",
+            "legendFormat": "acquired",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(astronomer_db_pool_idle_connections)",
+            "legendFormat": "idle",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(astronomer_db_pool_max_connections)",
+            "legendFormat": "max",
+            "refId": "C"
+          },
+          {
+            "expr": "sum(rate(astronomer_db_pool_empty_acquire_count_total[5m]))",
+            "legendFormat": "empty-acquire/s",
+            "refId": "D"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Transactional audit outbox age by status",
+        "targets": [
+          {
+            "expr": "max by (status) (astronomer_audit_outbox_oldest_seconds)",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 300
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Transactional audit outbox rows by status",
+        "targets": [
+          {
+            "expr": "sum by (status) (astronomer_audit_outbox_rows)",
+            "legendFormat": "{{status}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "decimals": 0,
+            "min": 0
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Agent connections (0 = disconnected)",
+        "targets": [
+          {
+            "expr": "astronomer_agent_connections",
+            "legendFormat": "{{cluster_name}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Agent reconnect rate",
+        "targets": [
+          {
+            "expr": "sum by (cluster_id) (rate(astronomer_agent_reconnects_total[5m]))",
+            "legendFormat": "{{cluster_id}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Management backup \u2014 hours since last success",
+        "targets": [
+          {
+            "expr": "(time() - max(kube_job_status_completion_time{job_name=~\".*-management-backup-.*\"} and on(job_name) kube_job_status_succeeded{job_name=~\".*-management-backup-.*\"} > 0)) / 3600",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "h",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 26
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Restore drill \u2014 days since last success",
+        "targets": [
+          {
+            "expr": "(time() - max(kube_job_status_completion_time{job_name=~\".*-restore-drill-.*\"} and on(job_name) kube_job_status_succeeded{job_name=~\".*-restore-drill-.*\"} > 0)) / 86400",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "d",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 14
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Backup / restore-drill failures (24h)",
+        "targets": [
+          {
+            "expr": "sum(increase(kube_job_status_failed{job_name=~\".*-management-backup-.*|.*-restore-drill-.*\"}[24h]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Server scrape availability",
+        "targets": [
+          {
+            "expr": "max(up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"})",
+            "refId": "A",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "No data",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Worker scrape availability",
+        "targets": [
+          {
+            "expr": "max(up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"})",
+            "refId": "A",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "noValue": "No data",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Process CPU usage (cores)",
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "server {{pod}} / {{instance}}",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(process_cpu_seconds_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"}[5m]) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} == 1)",
+            "legendFormat": "worker {{pod}} / {{instance}}",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "cores",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Go heap in use",
+        "targets": [
+          {
+            "expr": "go_memstats_heap_inuse_bytes{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "server {{pod}} / {{instance}}",
+            "refId": "A"
+          },
+          {
+            "expr": "go_memstats_heap_inuse_bytes{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} == 1)",
+            "legendFormat": "worker {{pod}} / {{instance}}",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Go goroutines",
+        "targets": [
+          {
+            "expr": "go_goroutines{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "server {{pod}} / {{instance}}",
+            "refId": "A"
+          },
+          {
+            "expr": "go_goroutines{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-worker-metrics\"} == 1)",
+            "legendFormat": "worker {{pod}} / {{instance}}",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Embedded observation source availability",
+        "targets": [
+          {
+            "expr": "(astronomer_agent_delivery_observation_source_available{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} * on(namespace, service, instance, astronomer_instance_id, source) ((astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} > bool 0) * (time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= bool 0) * (time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} <= bool 240))) and on(namespace, service, instance, astronomer_instance_id, source) ((time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0) and (time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} <= 60)) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}} / {{source}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Embedded observation source age",
+        "targets": [
+          {
+            "expr": "((time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}) and (astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} > 0) and (time() - astronomer_agent_delivery_observation_observed_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0)) and on(namespace, service, instance, astronomer_instance_id, source) ((time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} >= 0) and (time() - astronomer_agent_delivery_observation_sampled_at_timestamp_seconds{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} <= 60)) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}} / {{source}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Embedded tracked LIST/WATCH request rate",
+        "targets": [
+          {
+            "expr": "sum by (namespace, service, instance, kind, verb, outcome) (rate(astronomer_agent_observation_requests_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m])) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}} / {{kind}} / {{verb}} / {{outcome}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Embedded inventory refresh p95 duration",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum by (namespace, service, instance, source, outcome, le) (rate(astronomer_agent_delivery_observation_refresh_duration_seconds_bucket{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]))) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}} / {{source}} / {{outcome}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Embedded inventory refresh frequency",
+        "targets": [
+          {
+            "expr": "sum by (namespace, service, instance, source, outcome) (rate(astronomer_agent_delivery_observation_refresh_duration_seconds_count{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m])) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}} / {{source}} / {{outcome}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/management-plane.json",
+        "panel_id": null,
+        "title": "Server DB average acquisition duration",
+        "targets": [
+          {
+            "expr": "(rate(astronomer_db_pool_acquire_duration_seconds_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]) / (rate(astronomer_db_pool_acquire_count_total{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"}[5m]) > 0)) and on(namespace, service, instance) (up{namespace=\"${metrics_namespace}\",service=\"${metrics_fullname}-server-metrics\"} == 1)",
+            "legendFormat": "{{instance}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "noValue": "No data",
+            "custom": {
+              "spanNulls": false
+            }
+          }
+        },
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/node-usage.json",
+        "panel_id": null,
+        "title": "CPU usage by node",
+        "targets": [
+          {
+            "expr": "sum by (instance) (rate(node_cpu_seconds_total{mode!=\"idle\", cluster=~\"$cluster\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/node-usage.json",
+        "panel_id": null,
+        "title": "Memory usage by node",
+        "targets": [
+          {
+            "expr": "node_memory_MemTotal_bytes{cluster=~\"$cluster\"} - node_memory_MemAvailable_bytes{cluster=~\"$cluster\"}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/node-usage.json",
+        "panel_id": null,
+        "title": "Disk usage by node (/)",
+        "targets": [
+          {
+            "expr": "1 - (node_filesystem_avail_bytes{mountpoint=\"/\", cluster=~\"$cluster\"} / node_filesystem_size_bytes{mountpoint=\"/\", cluster=~\"$cluster\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/security-posture-rollup.json",
+        "panel_id": null,
+        "title": "Critical CVE count (7d)",
+        "targets": [
+          {
+            "expr": "sum(astronomer_image_vulnerability_count{severity=\"critical\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/security-posture-rollup.json",
+        "panel_id": null,
+        "title": "High CVE count (7d)",
+        "targets": [
+          {
+            "expr": "sum(astronomer_image_vulnerability_count{severity=\"high\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/security-posture-rollup.json",
+        "panel_id": null,
+        "title": "Top 10 vulnerable images",
+        "targets": [
+          {
+            "expr": "topk(10, astronomer_image_vulnerability_count{severity=\"critical\"})",
+            "refId": "A",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/workload-health.json",
+        "panel_id": null,
+        "title": "Pods not Ready",
+        "targets": [
+          {
+            "expr": "sum(kube_pod_status_ready{condition=\"false\", cluster=~\"$cluster\", namespace=~\"$namespace\"})",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/workload-health.json",
+        "panel_id": null,
+        "title": "Restarts (5m)",
+        "targets": [
+          {
+            "expr": "sum(increase(kube_pod_container_status_restarts_total{cluster=~\"$cluster\", namespace=~\"$namespace\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/workload-health.json",
+        "panel_id": null,
+        "title": "Workloads w/ unavailable replicas",
+        "targets": [
+          {
+            "expr": "count(kube_deployment_status_replicas_unavailable{cluster=~\"$cluster\", namespace=~\"$namespace\"} > 0)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      },
+      {
+        "path": "deploy/dashboards/workload-health.json",
+        "panel_id": null,
+        "title": "Pod restart rate (per pod)",
+        "targets": [
+          {
+            "expr": "sum by (namespace, pod) (rate(kube_pod_container_status_restarts_total{cluster=~\"$cluster\", namespace=~\"$namespace\"}[5m]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {},
+        "options": {}
+      }
+    ]
+  }
+}
