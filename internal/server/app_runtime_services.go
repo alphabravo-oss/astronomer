@@ -11,7 +11,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
-	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
@@ -64,11 +63,7 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 		logger.Warn("local cluster bootstrap failed", "error", err)
 	} else if localCluster != nil {
 		c.workloadHandler.SetLocalClusterID(localCluster.ID.String())
-		localAgent, err := buildLocalAgentLeaderRuntime(logger, c.queries, localCluster.ID, helmruntime.Config{
-			Driver: cfg.HelmDriver, RegistryConfig: cfg.HelmRegistryConfig,
-			RepositoryConfig: cfg.HelmRepositoryConfig, RepositoryCache: cfg.HelmRepositoryCache,
-			PluginsDirectory: cfg.HelmPluginsDirectory, BurstLimit: 100,
-		}, cfg.PodNamespace, cfg.ProcessHostname, localAgentDeliveryConfig{
+		localAgent, err := buildLocalAgentLeaderRuntime(logger, c.queries, localCluster.ID, helmRuntimeFromConfig(cfg), cfg.PodNamespace, cfg.ProcessHostname, localAgentDeliveryConfig{
 			Enabled:            cfg.DeliveryEnabled,
 			Namespace:          cfg.PodNamespace,
 			SystemOIDCIssuer:   cfg.DeliveryFluxDistributionOIDCIssuer,

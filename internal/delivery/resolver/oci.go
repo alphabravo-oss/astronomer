@@ -13,7 +13,7 @@ import (
 	semver "github.com/Masterminds/semver/v3"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v4/pkg/registry"
 	"oras.land/oras-go/v2/registry/remote"
 	remoteauth "oras.land/oras-go/v2/registry/remote/auth"
 

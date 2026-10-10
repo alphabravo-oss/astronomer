@@ -204,6 +204,8 @@ type DestinationOptions struct {
 	MaxResponseBytes int64
 	MaxRedirects     int
 	ProxyURL         string
+	// Explicit typed routing is independent of the legacy HTTPS-only field.
+	ProxyRouting *ProxyRouting
 	// AllowPublicCrossOriginRedirects preserves reviewed public CDN resolver behavior.
 	// Redirects always become public-only and lose credential-bearing headers.
 	AllowPublicCrossOriginRedirects bool
@@ -250,6 +252,19 @@ func freezeRedirectOriginPairs(policy DestinationPolicy, options DestinationOpti
 // environment is ignored. The caller's policy is copied and cannot be widened
 // by catalog content or by subsequent changes to caller-owned slices.
 func NewDestinationClient(policy DestinationPolicy, options DestinationOptions) (*http.Client, error) {
+	return NewDestinationClientContext(context.Background(), policy, options)
+}
+
+// NewDestinationClientContext additionally binds constructor-time proxy DNS
+// validation to the caller's owned operation. Requests still use their own
+// contexts; the supplied client never discovers authority from proxy env vars.
+func NewDestinationClientContext(ctx context.Context, policy DestinationPolicy, options DestinationOptions) (*http.Client, error) {
+	if ctx == nil {
+		return nil, errors.New("destination construction context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := policy.Validate(); err != nil {
 		return nil, err
 	}
@@ -264,7 +279,11 @@ func NewDestinationClient(policy DestinationPolicy, options DestinationOptions) 
 		options.TLSConfig = options.TLSConfig.Clone()
 	}
 	policy = cloneDestinationPolicy(policy)
-	return newDestinationClient(policy, options, net.DefaultResolver.LookupNetIP, (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext)
+	if options.ProxyRouting != nil {
+		value := *options.ProxyRouting
+		options.ProxyRouting = &value
+	}
+	return newDestinationClientContext(ctx, policy, options, net.DefaultResolver.LookupNetIP, (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext)
 }
 
 func cloneDestinationPolicy(policy DestinationPolicy) DestinationPolicy {
@@ -278,6 +297,16 @@ func cloneDestinationPolicy(policy DestinationPolicy) DestinationPolicy {
 }
 
 func newDestinationClient(policy DestinationPolicy, options DestinationOptions, lookup destinationLookup, dial func(context.Context, string, string) (net.Conn, error)) (*http.Client, error) {
+	return newDestinationClientContext(context.Background(), policy, options, lookup, dial)
+}
+
+func newDestinationClientContext(ctx context.Context, policy DestinationPolicy, options DestinationOptions, lookup destinationLookup, dial func(context.Context, string, string) (net.Conn, error)) (*http.Client, error) {
+	if ctx == nil {
+		return nil, errors.New("destination construction context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	pairs, err := freezeRedirectOriginPairs(policy, options)
 	if err != nil {
 		return nil, err
@@ -294,6 +323,18 @@ func newDestinationClient(policy DestinationPolicy, options DestinationOptions, 
 	}
 	if len(pairs) > 0 && options.MaxRedirects == 0 {
 		redirects = 2
+	}
+	var routing *frozenProxyRouting
+	if options.ProxyRouting != nil {
+		if options.ProxyURL != "" {
+			return nil, errors.New("destination proxy routing is ambiguous")
+		}
+		routing, err = freezeProxyRouting(*options.ProxyRouting, policy)
+		if err != nil {
+			return nil, err
+		}
+		// Typed routing validates selected proxy DNS on each actual request/dial.
+		// A NO_PROXY bypass must not resolve or connect an unused proxy endpoint.
 	}
 	transport := SafeTransport(options.TLSConfig)
 	transport.MaxResponseHeaderBytes = 1 << 20
@@ -314,9 +355,19 @@ func newDestinationClient(policy DestinationPolicy, options DestinationOptions, 
 		}
 
 		value := &url.URL{Scheme: scheme, Host: net.JoinHostPort(host, port)}
+		selectedProxy, _ := ctx.Value(selectedProxyOriginKey{}).(*url.URL)
+		if selectedProxy != nil {
+			value = &url.URL{Scheme: selectedProxy.Scheme, Host: net.JoinHostPort(host, port)}
+			if originIdentity(value) != originIdentity(selectedProxy) {
+				return nil, errors.New("destination proxy dial changes origin")
+			}
+		}
 		activePolicy := policy
 		if restricted, _ := ctx.Value(publicRedirectKey{}).(bool); restricted {
 			activePolicy = DestinationPolicy{}
+		}
+		if selectedProxy != nil {
+			activePolicy = policy
 		}
 		if options.ProxyURL != "" {
 			proxy, _ := parseOrigin(options.ProxyURL)
@@ -344,16 +395,24 @@ func newDestinationClient(policy DestinationPolicy, options DestinationOptions, 
 		if err != nil || proxy.Scheme != "https" {
 			return nil, errors.New("destination proxy is invalid")
 		}
-		if err := policy.validateURL(context.Background(), options.ProxyURL, lookup); err != nil {
+		validationErr := policy.validateURL(ctx, options.ProxyURL, lookup)
+		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		if validationErr != nil {
+			return nil, validationErr
+		}
 		transport.Proxy = http.ProxyURL(proxy)
+	}
+	if routing != nil {
+		transport.Proxy = routing.selectProxy
+		transport.DialTLSContext = dialTLSWithProxyIdentity(transport)
 	}
 	maximum := options.MaxResponseBytes
 	if maximum <= 0 {
 		maximum = 64 << 20
 	}
-	base := &destinationTransport{policy: policy, lookup: lookup, base: transport}
+	base := &destinationTransport{policy: policy, lookup: lookup, base: transport, proxyRouting: routing}
 	client := &http.Client{Timeout: timeout, Transport: &responseLimitTransport{base: base, maximum: maximum}}
 	client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
 		if len(pairs) > 0 && len(via) > redirects || len(pairs) == 0 && len(via) >= redirects {
@@ -391,13 +450,32 @@ func newDestinationClient(policy DestinationPolicy, options DestinationOptions, 
 		}
 		return policy.validateURL(request.Context(), request.URL.String(), lookup)
 	}
+	if err := ctx.Err(); err != nil {
+		client.CloseIdleConnections()
+		return nil, err
+	}
 	return client, nil
 }
 
+// ValidateProxyOrigin validates only the configured proxy shape. Destination
+// permission and actual addresses are enforced by the canonical constructor
+// and dial path; this helper performs no network lookup at process config load.
+func ValidateProxyOrigin(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	value, err := parseOrigin(raw)
+	if err != nil || value.Scheme != "https" || value.Path != "" && value.Path != "/" || value.RawQuery != "" || value.ForceQuery || value.Fragment != "" {
+		return errors.New("destination proxy is invalid")
+	}
+	return nil
+}
+
 type destinationTransport struct {
-	policy DestinationPolicy
-	lookup destinationLookup
-	base   http.RoundTripper
+	policy       DestinationPolicy
+	lookup       destinationLookup
+	base         http.RoundTripper
+	proxyRouting *frozenProxyRouting
 }
 
 func (t *destinationTransport) CloseIdleConnections() {
@@ -414,7 +492,21 @@ func (t *destinationTransport) RoundTrip(request *http.Request) (*http.Response,
 	if err := policy.validateURL(request.Context(), request.URL.String(), t.lookup); err != nil {
 		return nil, err
 	}
-	return t.base.RoundTrip(request.WithContext(context.WithValue(request.Context(), destinationSchemeKey{}, request.URL.Scheme)))
+	owned := context.WithValue(request.Context(), destinationSchemeKey{}, request.URL.Scheme)
+	if t.proxyRouting != nil {
+		proxy, err := t.proxyRouting.selectProxy(request)
+		if err != nil {
+			return nil, err
+		}
+		if proxy != nil {
+			authority := t.proxyRouting.authorities[originIdentity(proxy)]
+			if err := t.policy.validateURL(request.Context(), authority.String(), t.lookup); err != nil {
+				return nil, err
+			}
+			owned = context.WithValue(owned, selectedProxyOriginKey{}, authority)
+		}
+	}
+	return t.base.RoundTrip(request.WithContext(owned))
 }
 
 type destinationSchemeKey struct{}

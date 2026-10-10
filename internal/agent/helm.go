@@ -3,18 +3,21 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
-	"helm.sh/helm/v3/pkg/action"
-	helmchart "helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/registry"
-	"helm.sh/helm/v3/pkg/release"
-	"helm.sh/helm/v3/pkg/storage/driver"
+	"helm.sh/helm/v4/pkg/action"
+	helmchart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/kube"
+	"helm.sh/helm/v4/pkg/registry"
+	releasei "helm.sh/helm/v4/pkg/release"
+	"helm.sh/helm/v4/pkg/storage/driver"
 
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -29,6 +32,7 @@ type HelmHandler struct {
 	settings *cli.EnvSettings
 	driver   string
 	log      *slog.Logger
+	runtime  helmruntime.Config
 }
 
 // NewHelmHandler creates a new Helm operations handler.
@@ -40,18 +44,25 @@ func NewHelmHandler(log *slog.Logger, runtime helmruntime.Config) *HelmHandler {
 		settings: runtime.Settings(),
 		driver:   runtime.Driver,
 		log:      log,
+		runtime:  runtime,
 	}
 }
 
 // actionConfig creates a new Helm action configuration for the given namespace.
-func (h *HelmHandler) actionConfig(namespace string) (*action.Configuration, error) {
-	cfg := new(action.Configuration)
-	logFunc := func(format string, v ...interface{}) {
-		h.log.Debug(fmt.Sprintf(format, v...), "component", "helm")
-	}
+func (h *HelmHandler) actionConfig(ctx context.Context, namespace string) (*action.Configuration, error) {
+	cfg := action.NewConfiguration(action.ConfigurationSetLogger(h.log.With("component", "helm").Handler()))
 	settings := helmSettingsForNamespace(h.settings, namespace)
-	if err := cfg.Init(settings.RESTClientGetter(), namespace, h.driver, logFunc); err != nil {
+	getter, err := helmruntime.RequestClientGetter(ctx, settings.RESTClientGetter())
+	if err != nil {
+		return nil, err
+	}
+	if err = cfg.Init(getter, namespace, h.driver); err != nil {
 		return nil, fmt.Errorf("init helm config: %w", err)
+	}
+	if client, ok := cfg.KubeClient.(*kube.Client); ok {
+		client.WaitContext = ctx
+	} else {
+		return nil, fmt.Errorf("unsupported Helm Kubernetes wait client")
 	}
 	return cfg, nil
 }
@@ -76,6 +87,8 @@ func helmSettingsForNamespace(base *cli.EnvSettings, namespace string) *cli.EnvS
 	settings.RegistryConfig = base.RegistryConfig
 	settings.RepositoryConfig = base.RepositoryConfig
 	settings.RepositoryCache = base.RepositoryCache
+	settings.ContentCache = base.ContentCache
+	settings.ColorMode = base.ColorMode
 	settings.PluginsDirectory = base.PluginsDirectory
 	settings.MaxHistory = base.MaxHistory
 	settings.BurstLimit = base.BurstLimit
@@ -93,9 +106,20 @@ const defaultHelmReadyTimeout = 5 * time.Minute
 // the caller-provided seconds and falling back to the helm CLI default.
 func helmReadyTimeout(seconds int) time.Duration {
 	if seconds > 0 {
+		if int64(seconds) > int64(time.Duration(1<<63-1)/time.Second) {
+			return 0 // The operation owner rejects unrepresentable arithmetic.
+		}
 		return time.Duration(seconds) * time.Second
 	}
 	return defaultHelmReadyTimeout
+}
+
+func helmOperationContext(parent context.Context, seconds int) (context.Context, context.CancelFunc, error) {
+	timeout := helmReadyTimeout(seconds)
+	if timeout == 0 {
+		return nil, nil, errors.New("Helm timeout cannot be represented")
+	}
+	return helmruntime.OperationContext(parent, timeout)
 }
 
 func helmResult(streamID string, releaseName, namespace, status string, revision int, err error) *protocol.Message {
@@ -132,9 +156,12 @@ func decodeHelmRequest(msg *protocol.Message) (*protocol.HelmRequestPayload, err
 // action's ChartPathOptions; the helm SDK requires this to be set whenever
 // the chart name has the oci:// prefix (otherwise LocateChart returns
 // "missing registry client").
-func (h *HelmHandler) locateChart(req *protocol.HelmRequestPayload) (string, error) {
+func (h *HelmHandler) locateChart(ctx context.Context, req *protocol.HelmRequestPayload) (string, error) {
 	// If a direct chart URL is provided, use it.
 	if req.ChartURL != "" {
+		if helmruntime.HTTPRepositoryReference(req.ChartURL) {
+			return helmruntime.LocateRepositoryChart(ctx, h.runtime, req.ChartURL, "", req.Version)
+		}
 		return req.ChartURL, nil
 	}
 
@@ -148,25 +175,26 @@ func (h *HelmHandler) locateChart(req *protocol.HelmRequestPayload) (string, err
 	if isOCI && !strings.HasPrefix(strings.ToLower(chartName), "oci://") && repoURL != "" {
 		chartName = strings.TrimRight(repoURL, "/") + "/" + strings.TrimLeft(req.ChartName, "/")
 	}
+	if !isOCI {
+		return helmruntime.LocateRepositoryChart(ctx, h.runtime, chartName, repoURL, req.Version)
+	}
 
-	// Pass a non-nil *action.Configuration. Helm v3.20+ derefs cfg fields on
+	// Pass a non-nil *action.Configuration. The SDK dereferences cfg fields on
 	// some chart-resolution paths, so action.NewInstall(nil) panics with a
 	// nil pointer in LocateChart. We don't need a fully-initialized
 	// configuration to locate a chart — an empty struct is enough.
 	install := action.NewInstall(&action.Configuration{})
 	if isOCI {
-		rc, err := registry.NewClient()
+		httpClient, err := helmruntime.HTTPClient(ctx, &http.Client{Transport: registry.NewTransport(false)})
+		if err != nil {
+			return "", err
+		}
+		defer httpClient.CloseIdleConnections()
+		rc, err := registry.NewClient(registry.ClientOptHTTPClient(httpClient), registry.ClientOptCredentialsFile(h.settings.RegistryConfig))
 		if err != nil {
 			return "", fmt.Errorf("init OCI registry client: %w", err)
 		}
 		install.SetRegistryClient(rc)
-	}
-	// For traditional helm repos, set RepoURL so the SDK fetches the index
-	// itself and resolves chartName against it. Without this, LocateChart
-	// requires either a "repo_name/chart" prefix (we don't register repos
-	// in helm config) or a fully-qualified chart URL.
-	if repoURL != "" && !isOCI {
-		install.RepoURL = repoURL
 	}
 	if req.Version != "" {
 		install.Version = req.Version
@@ -188,7 +216,7 @@ func helmUpgradeUsesStoredChart(req *protocol.HelmRequestPayload) bool {
 	return strings.TrimSpace(req.ChartName) == "" && strings.TrimSpace(req.ChartURL) == "" && strings.TrimSpace(req.RepoURL) == ""
 }
 
-func (h *HelmHandler) loadUpgradeChart(cfg *action.Configuration, req *protocol.HelmRequestPayload) (*helmchart.Chart, error) {
+func (h *HelmHandler) loadUpgradeChart(ctx context.Context, cfg *action.Configuration, req *protocol.HelmRequestPayload) (*helmchart.Chart, error) {
 	if helmUpgradeUsesStoredChart(req) {
 		if cfg == nil || cfg.Releases == nil {
 			return nil, fmt.Errorf("helm storage is not configured")
@@ -197,12 +225,16 @@ func (h *HelmHandler) loadUpgradeChart(cfg *action.Configuration, req *protocol.
 		if err != nil {
 			return nil, fmt.Errorf("load last release chart: %w", err)
 		}
-		if last == nil || last.Chart == nil {
+		release, err := helmruntime.ReleaseV1(last)
+		if err != nil {
+			return nil, err
+		}
+		if release.Chart == nil {
 			return nil, fmt.Errorf("helm release %q has no chart to reuse", req.ReleaseName)
 		}
-		return last.Chart, nil
+		return release.Chart, nil
 	}
-	chartPath, err := h.locateChart(req)
+	chartPath, err := h.locateChart(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -220,9 +252,15 @@ func (h *HelmHandler) HandleInstall(ctx context.Context, msg *protocol.Message) 
 		return helmResult(msg.StreamID, "", "", "", 0, err), nil
 	}
 
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
+	if err != nil {
+		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
+	}
+	defer cancel()
+
 	h.log.Info("helm install", "release", req.ReleaseName, "namespace", req.Namespace)
 
-	cfg, err := h.actionConfig(req.Namespace)
+	cfg, err := h.actionConfig(ctx, req.Namespace)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
@@ -240,10 +278,12 @@ func (h *HelmHandler) HandleInstall(ctx context.Context, msg *protocol.Message) 
 	// "manifests applied". Without Wait, helm returns "deployed" the moment
 	// the objects are created, which the server treats as Ready — a false
 	// positive while pods are still rolling out.
-	install.Wait = true
+	install.WaitStrategy = kube.LegacyStrategy
+	install.WaitOptions = []kube.WaitOption{kube.WithWaitContext(ctx)}
+	install.ServerSideApply = false
 	install.Timeout = helmReadyTimeout(req.Timeout)
 
-	chartPath, err := h.locateChart(req)
+	chartPath, err := h.locateChart(ctx, req)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
@@ -254,12 +294,17 @@ func (h *HelmHandler) HandleInstall(ctx context.Context, msg *protocol.Message) 
 			fmt.Errorf("load chart: %w", err)), nil
 	}
 
-	rel, err := install.RunWithContext(ctx, chart, req.Values)
+	// The action must finish its worker before this owner is released. Helm4
+	// returns early for a canceled control context, so only bound transport
+	// and waits observe owner cancellation; the control context stays joined.
+	rel, err := helmruntime.RunJoined(ctx, func(control context.Context) (releasei.Releaser, error) {
+		return install.RunWithContext(control, chart, req.Values)
+	})
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
 
-	return helmResult(msg.StreamID, rel.Name, rel.Namespace, rel.Info.Status.String(), rel.Version, nil), nil
+	return helmResultFromRelease(msg.StreamID, req, rel), nil
 }
 
 // HandleUpgrade processes HELM_UPGRADE messages.
@@ -269,9 +314,15 @@ func (h *HelmHandler) HandleUpgrade(ctx context.Context, msg *protocol.Message) 
 		return helmResult(msg.StreamID, "", "", "", 0, err), nil
 	}
 
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
+	if err != nil {
+		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
+	}
+	defer cancel()
+
 	h.log.Info("helm upgrade", "release", req.ReleaseName, "namespace", req.Namespace)
 
-	cfg, err := h.actionConfig(req.Namespace)
+	cfg, err := h.actionConfig(ctx, req.Namespace)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
@@ -285,64 +336,87 @@ func (h *HelmHandler) HandleUpgrade(ctx context.Context, msg *protocol.Message) 
 	}
 	// See HandleInstall: block until workloads are Ready so "deployed"
 	// implies readiness instead of just "manifests applied".
-	upgrade.Wait = true
+	upgrade.WaitStrategy = kube.LegacyStrategy
+	upgrade.WaitOptions = []kube.WaitOption{kube.WithWaitContext(ctx)}
+	upgrade.ServerSideApply = "false"
 	upgrade.Timeout = helmReadyTimeout(req.Timeout)
 
-	chrt, err := h.loadUpgradeChart(cfg, req)
+	chrt, err := h.loadUpgradeChart(ctx, cfg, req)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
 
-	rel, err := upgrade.RunWithContext(ctx, req.ReleaseName, chrt, req.Values)
+	rel, err := helmruntime.RunJoined(ctx, func(control context.Context) (releasei.Releaser, error) {
+		return upgrade.RunWithContext(control, req.ReleaseName, chrt, req.Values)
+	})
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
 
-	return helmResult(msg.StreamID, rel.Name, rel.Namespace, rel.Info.Status.String(), rel.Version, nil), nil
+	return helmResultFromRelease(msg.StreamID, req, rel), nil
 }
 
 // HandleUninstall processes HELM_UNINSTALL messages.
-func (h *HelmHandler) HandleUninstall(_ context.Context, msg *protocol.Message) (*protocol.Message, error) {
+func (h *HelmHandler) HandleUninstall(ctx context.Context, msg *protocol.Message) (*protocol.Message, error) {
 	req, err := decodeHelmRequest(msg)
 	if err != nil {
 		return helmResult(msg.StreamID, "", "", "", 0, err), nil
 	}
 
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
+	if err != nil {
+		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
+	}
+	defer cancel()
+
 	h.log.Info("helm uninstall", "release", req.ReleaseName, "namespace", req.Namespace)
 
-	cfg, err := h.actionConfig(req.Namespace)
+	cfg, err := h.actionConfig(ctx, req.Namespace)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
 
 	uninstall := action.NewUninstall(cfg)
+	uninstall.WaitStrategy = kube.HookOnlyStrategy
+	uninstall.WaitOptions = []kube.WaitOption{kube.WithWaitContext(ctx)}
 	if req.Timeout > 0 {
-		uninstall.Timeout = time.Duration(req.Timeout) * time.Second
+		uninstall.Timeout = helmReadyTimeout(req.Timeout)
 	}
 
 	resp, err := uninstall.Run(req.ReleaseName)
+	err = errors.Join(err, ctx.Err())
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
 
 	status := ""
 	if resp.Release != nil {
-		status = resp.Release.Info.Status.String()
+		release, err := helmruntime.ReleaseV1(resp.Release)
+		if err != nil {
+			return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
+		}
+		status = release.Info.Status.String()
 	}
 
 	return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, status, 0, nil), nil
 }
 
 // HandleRollback processes HELM_ROLLBACK messages.
-func (h *HelmHandler) HandleRollback(_ context.Context, msg *protocol.Message) (*protocol.Message, error) {
+func (h *HelmHandler) HandleRollback(ctx context.Context, msg *protocol.Message) (*protocol.Message, error) {
 	req, err := decodeHelmRequest(msg)
 	if err != nil {
 		return helmResult(msg.StreamID, "", "", "", 0, err), nil
 	}
 
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
+	if err != nil {
+		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
+	}
+	defer cancel()
+
 	h.log.Info("helm rollback", "release", req.ReleaseName, "namespace", req.Namespace, "revision", req.Revision)
 
-	cfg, err := h.actionConfig(req.Namespace)
+	cfg, err := h.actionConfig(ctx, req.Namespace)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
@@ -355,10 +429,13 @@ func (h *HelmHandler) HandleRollback(_ context.Context, msg *protocol.Message) (
 	}
 	rollback := action.NewRollback(cfg)
 	rollback.Version = req.Revision
-	rollback.Wait = true
+	rollback.WaitStrategy = kube.LegacyStrategy
+	rollback.WaitOptions = []kube.WaitOption{kube.WithWaitContext(ctx)}
+	rollback.ServerSideApply = "false"
 	rollback.Timeout = helmReadyTimeout(req.Timeout)
 
 	err = rollback.Run(req.ReleaseName)
+	err = errors.Join(err, ctx.Err())
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", req.Revision, err), nil
 	}
@@ -367,7 +444,7 @@ func (h *HelmHandler) HandleRollback(_ context.Context, msg *protocol.Message) (
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
-	return helmResult(msg.StreamID, current.Name, current.Namespace, current.Info.Status.String(), current.Version, nil), nil
+	return helmResultFromRelease(msg.StreamID, req, current), nil
 }
 
 type helmOperationDriver struct {
@@ -375,7 +452,11 @@ type helmOperationDriver struct {
 	description string
 }
 
-func (d *helmOperationDriver) Create(key string, rel *release.Release) error {
+func (d *helmOperationDriver) Create(key string, value releasei.Releaser) error {
+	rel, err := helmruntime.ReleaseV1(value)
+	if err != nil {
+		return err
+	}
 	if rel.Info != nil {
 		rel.Info.Description = d.description
 	}
@@ -383,38 +464,51 @@ func (d *helmOperationDriver) Create(key string, rel *release.Release) error {
 }
 
 // HandleStatus processes HELM_STATUS messages.
-func (h *HelmHandler) HandleStatus(_ context.Context, msg *protocol.Message) (*protocol.Message, error) {
+func (h *HelmHandler) HandleStatus(ctx context.Context, msg *protocol.Message) (*protocol.Message, error) {
 	req, err := decodeHelmRequest(msg)
 	if err != nil {
 		return helmResult(msg.StreamID, "", "", "", 0, err), nil
 	}
 
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
+	if err != nil {
+		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
+	}
+	defer cancel()
+
 	h.log.Info("helm status", "release", req.ReleaseName, "namespace", req.Namespace)
 
-	cfg, err := h.actionConfig(req.Namespace)
+	cfg, err := h.actionConfig(ctx, req.Namespace)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
 
 	status := action.NewStatus(cfg)
 	rel, err := status.Run(req.ReleaseName)
+	err = errors.Join(err, ctx.Err())
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
 
-	return helmResult(msg.StreamID, rel.Name, rel.Namespace, rel.Info.Status.String(), rel.Version, nil), nil
+	return helmResultFromRelease(msg.StreamID, req, rel), nil
 }
 
 // HandleHistory processes HELM_HISTORY messages (DIR-12).
-func (h *HelmHandler) HandleHistory(_ context.Context, msg *protocol.Message) (*protocol.Message, error) {
+func (h *HelmHandler) HandleHistory(ctx context.Context, msg *protocol.Message) (*protocol.Message, error) {
 	req, err := decodeHelmRequest(msg)
 	if err != nil {
 		return helmHistoryResult(msg.StreamID, "", "", nil, err), nil
 	}
 
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
+	if err != nil {
+		return helmHistoryResult(msg.StreamID, req.ReleaseName, req.Namespace, nil, err), nil
+	}
+	defer cancel()
+
 	h.log.Info("helm history", "release", req.ReleaseName, "namespace", req.Namespace)
 
-	cfg, err := h.actionConfig(req.Namespace)
+	cfg, err := h.actionConfig(ctx, req.Namespace)
 	if err != nil {
 		return helmHistoryResult(msg.StreamID, req.ReleaseName, req.Namespace, nil, err), nil
 	}
@@ -422,13 +516,18 @@ func (h *HelmHandler) HandleHistory(_ context.Context, msg *protocol.Message) (*
 	hist := action.NewHistory(cfg)
 	hist.Max = 256
 	rels, err := hist.Run(req.ReleaseName)
+	err = errors.Join(err, ctx.Err())
 	if err != nil {
 		return helmHistoryResult(msg.StreamID, req.ReleaseName, req.Namespace, nil, err), nil
 	}
 	revs := make([]protocol.HelmRevision, 0, len(rels))
-	for _, rel := range rels {
-		if rel == nil || rel.Info == nil {
-			continue
+	for _, value := range rels {
+		rel, err := helmruntime.ReleaseV1(value)
+		if errors.Is(err, helmruntime.ErrReleaseMetadataUnavailable) {
+			continue // Preserve the existing missing-info history rule.
+		}
+		if err != nil {
+			return helmHistoryResult(msg.StreamID, req.ReleaseName, req.Namespace, nil, err), nil
 		}
 		entry := protocol.HelmRevision{
 			Revision:    rel.Version,
@@ -462,4 +561,12 @@ func helmHistoryResult(streamID, releaseName, namespace string, revs []protocol.
 		Timestamp: time.Now().UTC(),
 		Payload:   payload,
 	}
+}
+
+func helmResultFromRelease(streamID string, req *protocol.HelmRequestPayload, value releasei.Releaser) *protocol.Message {
+	rel, err := helmruntime.ReleaseV1(value)
+	if err != nil {
+		return helmResult(streamID, req.ReleaseName, req.Namespace, "", 0, err)
+	}
+	return helmResult(streamID, rel.Name, rel.Namespace, rel.Info.Status.String(), rel.Version, nil)
 }

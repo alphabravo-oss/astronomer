@@ -9,8 +9,8 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 ## Scan Scope
 
 - Worker Go files scanned: 108
-- Handler Go files scanned: 366
-- Production source files scanned: 510
+- Handler Go files scanned: 370
+- Production source files scanned: 515
 - Task constants resolved: 160
 - Worker handler registrations: 91
 - Periodic schedules: 62
@@ -237,7 +237,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `admin_gitops_source_sync` |1 |[`internal/handler/gitops_sync.go:30`](internal/handler/gitops_sync.go:30) |
 | `admin_management_backup_destination_delete` |1 |[`internal/handler/admin_management_backup_destinations_crud.go:193`](internal/handler/admin_management_backup_destinations_crud.go:193) |
 | `admin_queue_dlq` |1 |[`internal/handler/admin_queues.go:252`](internal/handler/admin_queues.go:252) |
-| `admin_task_outbox_retry` |1 |[`internal/handler/admin_task_outbox.go:184`](internal/handler/admin_task_outbox.go:184) |
+| `admin_task_outbox_retry` |1 |[`internal/handler/admin_task_outbox.go:182`](internal/handler/admin_task_outbox.go:182) |
 | `admin-webhook-delivery-retry` |1 |[`internal/handler/webhooks_deliveries.go:145`](internal/handler/webhooks_deliveries.go:145) |
 | `admin-webhook-test` |1 |[`internal/handler/webhooks_test_delivery.go:62`](internal/handler/webhooks_test_delivery.go:62) |
 | `agent_lifecycle` |1 |[`internal/handler/cluster_agents_upgrade.go:91`](internal/handler/cluster_agents_upgrade.go:91) |

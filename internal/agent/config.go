@@ -12,7 +12,8 @@ import (
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
-	"helm.sh/helm/v3/pkg/cli"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"helm.sh/helm/v4/pkg/cli"
 )
 
 // caCertMountPath is where the install manifest mounts the CA Secret
@@ -145,6 +146,22 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	kubernetesServiceHostConfigured := strings.TrimSpace(os.Getenv("KUBERNETES_SERVICE_HOST")) != ""
 	insecureConfigured := os.Getenv("ASTRONOMER_INSECURE") == "true"
 	helmRuntime := helmruntime.FromSettings(cli.New(), os.Getenv("HELM_DRIVER"))
+	helmRuntime.RepositoryDestinationPolicy = os.Getenv("HELM_REPOSITORY_DESTINATION_POLICY")
+	explicitProxyBypass, explicitProxyBypassSet := os.LookupEnv("HELM_REPOSITORY_NO_PROXY")
+	var bypass *string
+	if explicitProxyBypassSet {
+		bypass = &explicitProxyBypass
+	}
+	helmRuntime.RepositoryProxyRouting = httpclient.CaptureOperatorProxyRouting(os.Getenv("HELM_REPOSITORY_PROXY_URL"), bypass,
+		httpclient.ProxyRouting{HTTPURL: os.Getenv("HTTP_PROXY"), HTTPSURL: os.Getenv("HTTPS_PROXY"), NoProxy: os.Getenv("NO_PROXY")},
+		httpclient.ProxyRouting{HTTPURL: os.Getenv("http_proxy"), HTTPSURL: os.Getenv("https_proxy"), NoProxy: os.Getenv("no_proxy")})
+	policy, err := httpclient.ParseDestinationPolicy(helmRuntime.RepositoryDestinationPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if err := httpclient.ValidateProxyRouting(helmRuntime.RepositoryProxyRouting, policy); err != nil {
+		return nil, err
+	}
 	otelSamplerRatio := 0.05
 	if raw := strings.TrimSpace(os.Getenv("OTEL_TRACES_SAMPLER_ARG")); raw != "" {
 		parsed, err := strconv.ParseFloat(raw, 64)

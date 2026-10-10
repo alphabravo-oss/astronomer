@@ -1,20 +1,20 @@
 package resolver
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 
 	semver "github.com/Masterminds/semver/v3"
-	"helm.sh/helm/v3/pkg/repo"
+	"helm.sh/helm/v4/pkg/repo/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 type helmHTTPResolver struct{}
@@ -146,18 +146,14 @@ func fetchBounded(ctx context.Context, client *http.Client, rawURL string, reque
 		retryable := response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500
 		return nil, &Error{Code: CodeUpstreamTemporary, Message: "source returned an unsuccessful status", Retryable: retryable}
 	}
-	if response.ContentLength > maximum {
+	body, err := httpclient.ReadBoundedResponse(ctx, response, maximum)
+	if errors.Is(err, httpclient.ErrResponseBodyLimit) {
 		return nil, &Error{Code: CodeLimitExceeded, Message: "source artifact exceeds the configured size limit"}
 	}
-	buffer := bytes.NewBuffer(make([]byte, 0, minInt64(maximum, 1<<20)))
-	written, err := io.CopyN(buffer, response.Body, maximum+1)
-	if err != nil && err != io.EOF {
+	if err != nil {
 		return nil, &Error{Code: CodeUpstreamTemporary, Message: "source response could not be read", Retryable: true}
 	}
-	if written > maximum {
-		return nil, &Error{Code: CodeLimitExceeded, Message: "source artifact exceeds the configured size limit"}
-	}
-	return buffer.Bytes(), nil
+	return body, nil
 }
 
 func applyHTTPAuth(target *http.Request, mode model.AuthMode, credential *CredentialMaterial) error {
