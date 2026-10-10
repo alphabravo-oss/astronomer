@@ -6,7 +6,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/fips140"
-	"crypto/md5"
 	"crypto/rand"
 	"encoding/json"
 	"flag"
@@ -33,7 +32,7 @@ type result struct {
 }
 
 func main() {
-	name := flag.String("case", "identity", "identity, aes-gcm, fernet, bcrypt, argon2, or md5 negative control")
+	name := flag.String("case", "identity", "identity, aes-gcm, fernet, bcrypt, argon2, or aes-gcm-external-nonce assessment control")
 	flag.Parse()
 	r := result{Case: *name, Enabled: fips140.Enabled(), ModuleVersion: fips140.Version(),
 		GoVersion: runtime.Version(), GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
@@ -112,8 +111,24 @@ func characterize(name string) (status string) {
 			return "rejected_error"
 		}
 		return "completed_outside_native_module"
-	case "md5":
-		_ = md5.Sum([]byte("synthetic-negative-control"))
+	case "aes-gcm-external-nonce":
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return "rejected_error"
+		}
+		block, err := aes.NewCipher(key)
+		if err != nil {
+			return "rejected_error"
+		}
+		aead, err := cipher.NewGCM(block)
+		if err != nil {
+			return "rejected_error"
+		}
+		nonce := make([]byte, aead.NonceSize())
+		if _, err := rand.Read(nonce); err != nil {
+			return "rejected_error"
+		}
+		_ = aead.Seal(nil, nonce, []byte("synthetic-assessment-control"), nil)
 		return "completed"
 	default:
 		return "unknown_case"
