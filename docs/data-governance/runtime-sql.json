@@ -768,6 +768,11 @@
       "source_sha256": "c0fad79349a9ac436a1c63e3c1df9b8d258036f42829e944d939bc37c76c516c"
     },
     {
+      "path": "internal/ops/upgrade/plan.go",
+      "owner": "ops/upgrade backend",
+      "source_sha256": "6cacb23a5f7fe1a8ee356cf665b1678f5304366c7fa1579db0420863c780e014"
+    },
+    {
       "path": "internal/rbac/types.go",
       "owner": "rbac backend",
       "source_sha256": "e1a78bb11f98962f2b9dea2269d834b8f69a0430741f7183b67afa3313e2f75e"
@@ -8921,6 +8926,15 @@
       "scope_sha256": "b10b3456a41249575401ee6178fa4b190c45451489c1b05af0343eb0bc761f4b",
       "classification": "non-sql-candidate",
       "control": "URL.Query parses the finite registry authentication request URL to verify its service/scope query. It does not execute SQL; exact expression, enclosing declaration and module are bound."
+    },
+    {
+      "path": "internal/ops/upgrade/plan.go",
+      "function": "package",
+      "operation": "SQLLiteral",
+      "sha256": "da25480fb483e6ce3d30f1a179c3c07e9f3b045425b0ac54acc6758a97e2db62",
+      "scope_sha256": "b0bac573725b3000a6bf957baa98050d0f28bda02fe95db9a0656ccd183efcb4",
+      "classification": "non-sql-candidate",
+      "control": "The rollback literal is a typed upgrade Stage enum value. It is not a SQL statement or execution; the exact declaration and module source are bound."
     }
   ],
   "builders": [
