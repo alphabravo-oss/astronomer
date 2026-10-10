@@ -29,7 +29,7 @@
     "internal/handler/resources.go": 1102,
     "internal/handler/service_mesh.go": 893,
     "internal/handler/siem.go": 824,
-    "internal/handler/vault.go": 816,
+    "internal/handler/vault.go": 815,
     "internal/server/routes.go": 1284,
     "internal/tunnel/handler.go": 934,
     "internal/tunnel/server.go": 1513,
