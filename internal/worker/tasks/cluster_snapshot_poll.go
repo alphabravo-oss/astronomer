@@ -415,6 +415,10 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 		return nil
 	}
 
+	warnings, errorsCount, err := snapshotStatusCounts(status.Warnings, status.Errors)
+	if err != nil {
+		return err
+	}
 	nextPhase := status.Phase
 	if nextPhase == "" {
 		nextPhase = "New"
@@ -437,8 +441,8 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 		Phase:          nextPhase,
 		StartTime:      st,
 		CompletionTime: ct,
-		WarningsCount:  int32(status.Warnings),
-		ErrorsCount:    int32(status.Errors),
+		WarningsCount:  warnings,
+		ErrorsCount:    errorsCount,
 		LastPollError:  status.ValidationError,
 	}); err != nil {
 		return fmt.Errorf("mark snapshot phase: %w", err)
@@ -516,6 +520,10 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 		events.PublishChanged(deps.Bus, "snapshot", row.TargetClusterID.String(), row.ID.String(), map[string]any{"kind": "restore"})
 		return nil
 	}
+	warnings, errorsCount, err := snapshotStatusCounts(status.Warnings, status.Errors)
+	if err != nil {
+		return err
+	}
 	nextPhase := status.Phase
 	if nextPhase == "" {
 		nextPhase = "New"
@@ -533,8 +541,8 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 		Phase:          nextPhase,
 		StartTime:      st,
 		CompletionTime: ct,
-		WarningsCount:  int32(status.Warnings),
-		ErrorsCount:    int32(status.Errors),
+		WarningsCount:  warnings,
+		ErrorsCount:    errorsCount,
 		LastPollError:  status.ValidationError,
 	}); err != nil {
 		return err
