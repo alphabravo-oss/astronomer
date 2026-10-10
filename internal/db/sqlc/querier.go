@@ -545,6 +545,10 @@ type Querier interface {
 	CreateUserTableView(ctx context.Context, arg CreateUserTableViewParams) (UserTableView, error)
 	CreateVaultConnection(ctx context.Context, arg CreateVaultConnectionParams) (VaultConnection, error)
 	CreateVulnerabilityDatabaseBase(ctx context.Context, arg CreateVulnerabilityDatabaseBaseParams) (VulnerabilityDatabaseBasis, error)
+	// The owning transaction has rechecked current physical/base authority, actual
+	// copied vendor signature readback and pinned complete payloads. No externally
+	// supplied attempt UUID, expiry, approval or disposition bit enters this query.
+	CreateVulnerabilityDatabaseImportedAttempt(ctx context.Context, arg CreateVulnerabilityDatabaseImportedAttemptParams) (VulnerabilityDatabaseUpdateAttempt, error)
 	CreateVulnerabilityDatabaseRescanIntent(ctx context.Context, arg CreateVulnerabilityDatabaseRescanIntentParams) (int64, error)
 	// The authority lock and exact published reservation precede this CAS. Failure
 	// returns no row, and the owning transaction must roll back. A newer accepted
@@ -982,7 +986,10 @@ type Querier interface {
 	// must still lock current base/feed/workload/assignment and evaluate age.
 	GetCurrentImageVulnerabilityDatabaseWitnessForUpdate(ctx context.Context, reportID uuid.UUID) (ImageVulnerabilityDatabaseWitness, error)
 	// Discovery supplies only authenticated immutable feed DATA. This lookup is
-	// not acceptance: its owning constructor revalidates current physical authority
+	// Published and imported are distinct persisted dispositions. Imported means
+	// original authenticated signatures/bytes were copied and read back, never local
+	// endorsement or a local signing execution. This lookup is not acceptance:
+	// its owning constructor revalidates current physical authority
 	// and Accept locks/rechecks this actual reservation in the canonical finalizer.
 	GetCurrentPublishedVulnerabilityDatabaseAttempt(ctx context.Context, arg GetCurrentPublishedVulnerabilityDatabaseAttemptParams) (VulnerabilityDatabaseUpdateAttempt, error)
 	GetCurrentSystemRolloutRelease(ctx context.Context) (uuid.UUID, error)
@@ -1238,6 +1245,7 @@ type Querier interface {
 	GetUserTableView(ctx context.Context, arg GetUserTableViewParams) (UserTableView, error)
 	GetVaultConnectionByID(ctx context.Context, id uuid.UUID) (VaultConnection, error)
 	GetVaultConnectionByName(ctx context.Context, name string) (VaultConnection, error)
+	GetVulnerabilityDatabaseAttemptByGenerationForUpdate(ctx context.Context, arg GetVulnerabilityDatabaseAttemptByGenerationForUpdateParams) (VulnerabilityDatabaseUpdateAttempt, error)
 	GetVulnerabilityDatabaseBaseByID(ctx context.Context, id uuid.UUID) (VulnerabilityDatabaseBasis, error)
 	// PROPOSED APPEND ONLY. Existing frozen four079 inputs remain unchanged.
 	// Owning transaction holds the global authority advisory lock first.
@@ -1369,6 +1377,7 @@ type Querier interface {
 	// needs (pod_security_profile, network_policy_mode, resource_quota_*).
 	// Distinct from ListProjects to keep the read cheap when there are
 	// thousands of projects.
+	// The writer refuses the lookahead row before allocating the JSON document.
 	ListAllProjectsForCompliance(ctx context.Context) ([]ListAllProjectsForComplianceRow, error)
 	// All-users variant of ListUserBindingsWithRoles. Used by the
 	// rbac-snapshot.csv writer. UNION across the three binding tables
@@ -1422,6 +1431,11 @@ type Querier interface {
 	ListBackupsByStorage(ctx context.Context, arg ListBackupsByStorageParams) ([]Backup, error)
 	ListCRDOwnedClusters(ctx context.Context, limit int32) ([]ListCRDOwnedClustersRow, error)
 	ListCatalogApplicationRevisions(ctx context.Context, id uuid.UUID) ([]ListCatalogApplicationRevisionsRow, error)
+	ListCatalogGlobalCandidateWindowAfter(ctx context.Context, arg ListCatalogGlobalCandidateWindowAfterParams) ([]ListCatalogGlobalCandidateWindowAfterRow, error)
+	// Candidate selection precedes every residual predicate. This MATERIALIZED
+	// boundary and per-key LATERAL LIMIT retain bounded lookup plans in generic
+	// and custom preparation; actual EXPLAIN ANALYZE remains the authority.
+	ListCatalogGlobalCandidateWindowFirst(ctx context.Context, arg ListCatalogGlobalCandidateWindowFirstParams) ([]ListCatalogGlobalCandidateWindowFirstRow, error)
 	ListCatalogOperationEvents(ctx context.Context, operationID uuid.UUID) ([]CatalogOperationEvent, error)
 	ListCatalogOperations(ctx context.Context, arg ListCatalogOperationsParams) ([]CatalogOperation, error)
 	ListCatalogOperationsForScopes(ctx context.Context, arg ListCatalogOperationsForScopesParams) ([]CatalogOperation, error)
@@ -2349,6 +2363,11 @@ type Querier interface {
 	ReserveCharlieAutoBudget(ctx context.Context, arg ReserveCharlieAutoBudgetParams) (CharlieActionReceipt, error)
 	ReserveDexOperation(ctx context.Context, arg ReserveDexOperationParams) (ReserveDexOperationRow, error)
 	ReserveVulnerabilityDatabaseGeneration(ctx context.Context, arg ReserveVulnerabilityDatabaseGenerationParams) (int64, error)
+	// Only a complete authenticated import owner calls this under the current
+	// authority lock. A signed external generation cannot replace any newer or
+	// same-generation local reservation/acceptance. Exact replays use the locked
+	// existing immutable row instead of changing high-water marks.
+	ReserveVulnerabilityDatabaseImportedGeneration(ctx context.Context, arg ReserveVulnerabilityDatabaseImportedGenerationParams) (int64, error)
 	ResetExpiredAuditOutboxLeases(ctx context.Context, now time.Time) (int64, error)
 	// Called on a successful login. Also clears any expired lock so the next
 	// failed-attempt cycle starts from a clean state.

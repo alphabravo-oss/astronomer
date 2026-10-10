@@ -251,6 +251,11 @@ const (
 	CatalogApplicationPresentationVerificationStatusVerified       CatalogApplicationPresentationVerificationStatus = "verified"
 )
 
+// Defines values for CatalogControllerOperationWindowWindowLimit.
+const (
+	CatalogControllerOperationWindowWindowLimitN1000 CatalogControllerOperationWindowWindowLimit = 1000
+)
+
 // Defines values for CatalogPrerequisiteCheckStatus.
 const (
 	CatalogPrerequisiteCheckStatusAdvisory CatalogPrerequisiteCheckStatus = "advisory"
@@ -3628,6 +3633,24 @@ type CatalogApplicationPresentationSupportTier string
 
 // CatalogApplicationPresentationVerificationStatus defines model for CatalogApplicationPresentation.VerificationStatus.
 type CatalogApplicationPresentationVerificationStatus string
+
+// CatalogControllerOperationWindow Recent operations selected within the caller's authorized cluster scope.
+// The list and total are independent observations. A total is not a queue
+// depth, and an equal total does not prove a consistent complete snapshot.
+type CatalogControllerOperationWindow struct {
+	// Complete True only if the operation window is known to be a complete consistent snapshot. Separate list/count reads report false.
+	Complete bool   `json:"complete"`
+	Notice   string `json:"notice"`
+	Returned int    `json:"returned"`
+	Scope    string `json:"scope"`
+
+	// Total Independently observed authorized operation count, or null when unavailable. It may differ from the earlier list after concurrent changes.
+	Total       *int64                                      `json:"total"`
+	WindowLimit CatalogControllerOperationWindowWindowLimit `json:"windowLimit"`
+}
+
+// CatalogControllerOperationWindowWindowLimit defines model for CatalogControllerOperationWindow.WindowLimit.
+type CatalogControllerOperationWindowWindowLimit int
 
 // CatalogInstallationAcceptedEnvelope defines model for CatalogInstallationAcceptedEnvelope.
 type CatalogInstallationAcceptedEnvelope struct {

@@ -98,6 +98,37 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}
   schemas:
+    CatalogControllerOperationWindow:
+      type: object
+      description: |
+        Recent operations selected within the caller's authorized cluster scope.
+        The list and total are independent observations. A total is not a queue
+        depth, and an equal total does not prove a consistent complete snapshot.
+      required: [scope, windowLimit, returned, total, complete, notice]
+      properties:
+        scope:
+          type: string
+          enum: [global, authorized-clusters]
+          x-go-type: string
+        windowLimit:
+          type: integer
+          enum: [1000]
+        returned:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: Independently observed authorized operation count, or null when unavailable. It may differ from the earlier list after concurrent changes.
+        complete:
+          type: boolean
+          description: True only if the operation window is known to be a complete consistent snapshot. Separate list/count reads report false.
+        notice:
+          type: string
+          maxLength: 512
     CharlieAdminAgentReplicaStateValue:
       type: string
       x-go-type: string
@@ -26957,6 +26988,12 @@ paths:
         paginated envelope. Cluster Apps pages use `?cluster_id=` to obtain the
         caller-visible union of global sources plus authorized private project
         sources. `?project_id=` remains available to project administration.
+        Signed global-only cursor requests inspect a bounded authorized candidate
+        window before applying substring/tag filters. A page may contain zero
+        matches with has_more=true and an advancing next_cursor. Follow that
+        token until has_more=false; short or empty data does not prove exhaustion.
+        Limit is the maximum returned matches, not a promise to fill every page.
+        Offset/count and project/cluster repository-union semantics are unchanged.
       tags:
         - catalog
       security:
@@ -27402,7 +27439,10 @@ paths:
       description: |
         Summary document for the catalog operations reconciler: operation
         counts by status, recent operations/failures, chart and installed
-        counts. Counts are RBAC-filtered to the caller's visible clusters.
+        counts. Operation counts describe at most 1000 recent operations selected
+        after authorization. They are not fleet or queue totals. operationSummary
+        states the scope, independent count and snapshot incompleteness explicitly.
+        Installed counts are unavailable for restricted callers.
       tags:
         - catalog
       security:
@@ -27415,6 +27455,8 @@ paths:
               schema:
                 type: object
                 properties:
+                  operationSummary:
+                    $ref: '#/components/schemas/CatalogControllerOperationWindow'
                   reconciler:
                     type: object
                   catalog:

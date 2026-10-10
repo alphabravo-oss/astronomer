@@ -77,7 +77,7 @@ func (q *Queries) GetLatestSuccessfulBackupDrillResult(ctx context.Context) (Bac
 
 const listBackupDrillResults = `-- name: ListBackupDrillResults :many
 SELECT id, started_at, finished_at, status, backup_key, schema_version, error_message, created_at FROM backup_drill_results
-ORDER BY started_at DESC
+ORDER BY started_at DESC, id DESC
 LIMIT $1 OFFSET $2
 `
 

@@ -750,6 +750,14 @@ export interface OpenAPIComponents {
           "revoked": boolean;
           "updated_at": string;
         };
+    CatalogControllerOperationWindow: {
+          "scope": "global" | "authorized-clusters";
+          "windowLimit": 1000;
+          "returned": number;
+          "total": number | null;
+          "complete": boolean;
+          "notice": string;
+        };
     CatalogInstallationAcceptedEnvelope: {
           "data": {
             "installation": OpenAPIComponents['schemas']['InstalledChart'];
@@ -13911,6 +13919,7 @@ export interface OpenAPIOperations {
     path: "/api/v1/catalog/controller/status/";
     arguments: Record<string, never>;
     response: {
+        "operationSummary"?: OpenAPIComponents['schemas']['CatalogControllerOperationWindow'];
         "reconciler"?: Record<string, unknown>;
         "catalog"?: {
           "chartCount"?: number;
@@ -18779,6 +18788,7 @@ export interface OpenAPIReadOperations {
         "data"?: OpenAPIReadComponents['schemas']['ChartRecommendation'][];
       } };
   "getCatalogControllerStatus": { response: {
+        "operationSummary"?: OpenAPIReadComponents['schemas']['CatalogControllerOperationWindow'];
         "reconciler"?: Record<string, unknown>;
         "catalog"?: {
           "chartCount"?: number;
@@ -19760,6 +19770,7 @@ export type CISScanCreateRequest = OpenAPIComponents['schemas']['CISScanCreateRe
 export type CISScanEnvelope = OpenAPIComponents['schemas']['CISScanEnvelope'];
 export type CISScanListEnvelope = OpenAPIComponents['schemas']['CISScanListEnvelope'];
 export type CatalogApplicationPresentation = OpenAPIComponents['schemas']['CatalogApplicationPresentation'];
+export type CatalogControllerOperationWindow = OpenAPIComponents['schemas']['CatalogControllerOperationWindow'];
 export type CatalogInstallationAcceptedEnvelope = OpenAPIComponents['schemas']['CatalogInstallationAcceptedEnvelope'];
 export type CatalogInstallationPreview = OpenAPIComponents['schemas']['CatalogInstallationPreview'];
 export type CatalogOperation = OpenAPIComponents['schemas']['CatalogOperation'];

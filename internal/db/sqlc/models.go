@@ -492,6 +492,12 @@ type CatalogBlessedChart struct {
 	Revoked              bool            `json:"revoked"`
 }
 
+type CatalogGlobalChartKey struct {
+	ChartID      uuid.UUID `json:"chart_id"`
+	RepositoryID uuid.UUID `json:"repository_id"`
+	Name         string    `json:"name"`
+}
+
 type CatalogOperation struct {
 	ID            uuid.UUID          `json:"id"`
 	TargetType    string             `json:"target_type"`

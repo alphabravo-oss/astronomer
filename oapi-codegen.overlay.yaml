@@ -99,6 +99,11 @@
       "remove": true
     },
     {
+      "target": "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema.properties.operationSummary",
+      "description": "Keep the released Go response struct layout while a typed compatible reader exposes the additive window contract.",
+      "remove": true
+    },
+    {
       "target": "$.components.schemas.ClusterDeployment.properties.phase.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true
