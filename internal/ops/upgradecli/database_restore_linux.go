@@ -39,6 +39,7 @@ type TemporaryDatabase struct {
 	oid               uint32
 	creationAttempted bool
 	restored          bool
+	archiveList       []byte
 	input             func(context.Context, Tool, []string, *process.ArtifactCapture, int64) ([]byte, process.Result, error)
 }
 
@@ -97,9 +98,14 @@ func (v *TemporaryDatabase) Verify(ctx context.Context) error {
 		return errors.New("temporary restore already attempted; reconcile rather than replay")
 	}
 	b := v.backup.source
-	if _, _, err := v.input(ctx, b.fence.kubectl, v.arguments(true, archiveListScript), &v.backup.artifact, b.options.ArtifactPolicy.MaximumBytes); err != nil {
+	listing, _, err := v.input(ctx, b.fence.kubectl, v.arguments(true, archiveListScript), &v.backup.artifact, b.options.ArtifactPolicy.MaximumBytes)
+	if err != nil {
 		return err
 	}
+	if len(listing) == 0 || int64(len(listing)) > b.fence.commands.options.MaximumCaptureBytes {
+		return errors.New("readable archive listing missing or exceeds retained diagnostic budget")
+	}
+	v.archiveList = append([]byte(nil), listing...)
 	if err := v.sourceState(ctx); err != nil {
 		return err
 	}

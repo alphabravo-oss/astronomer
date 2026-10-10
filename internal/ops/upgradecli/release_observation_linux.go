@@ -184,6 +184,15 @@ func (o *HelmStateObservation) ReconcileHelm(ctx context.Context) (upgrade.Outco
 // bundled database's exact clean target-schema observations. Full Observe must
 // additionally verify workload images, agent configuration and actual /readyz.
 func (o *HelmStateObservation) ConfirmTarget(ctx context.Context) error {
+	return o.confirmTarget(ctx, nil)
+}
+
+// The optional target observer is independently captured before mutation. The
+// public original-source observation retains its initial Pod UID semantics.
+func (o *HelmStateObservation) confirmTarget(ctx context.Context, target *TargetDatabaseObservation) error {
+	if target != nil && (o == nil || target.source != o.source) {
+		return errors.New("target database observation owner differs")
+	}
 	first, err := o.Read(ctx)
 	if err != nil {
 		return err
@@ -196,7 +205,13 @@ func (o *HelmStateObservation) ConfirmTarget(ctx context.Context) error {
 		return err
 	}
 	if o.source != nil {
-		state, err := o.source.observe(ctx)
+		var state DatabaseSchemaState
+		var err error
+		if target == nil {
+			state, err = o.source.observe(ctx)
+		} else {
+			state, err = target.Observe(ctx)
+		}
 		if err != nil {
 			return err
 		}

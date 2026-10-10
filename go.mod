@@ -8,6 +8,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/aws/aws-sdk-go-v2 v1.47.2
 	github.com/coder/websocket v1.8.15
+	github.com/distribution/reference v0.6.0
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/exaring/otelpgx v0.13.0
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611

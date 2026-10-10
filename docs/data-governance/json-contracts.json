@@ -19558,6 +19558,16 @@
       "path": "internal/ops/upgradecli/release_observation_linux.go",
       "owner": "ops/upgradecli",
       "scope": "Bounded private Helm4.3 latest-release metadata only; explicit owned CLI/input/namespace/revision checks and repeated stable observations, no mutation replay or signer/image/full Driver proof"
+    },
+    {
+      "path": "internal/ops/upgradecli/signed_metadata_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Private cryptographically authenticated exact release/recovery metadata; canonical trust snapshot and bounded files. Strict readers grant no optional-file or raw-caller authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/target_chart_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Verified pinned OCI chart archive, bounded strict metadata and exact manifest compatibility; archive integrity/identity checked before values escape, no ambient or caller default authority."
     }
   ],
   "json_sites": [
@@ -30104,6 +30114,54 @@
       "owner": "ops/upgradecli",
       "schema": "Exact upstream Helm4.3 GetMetadata top-level schema; identity/revision/status/version fields validated, optional labels/annotations/dependencies retained only as private RawMessage; maximum1MiB, no credential diagnostics",
       "reader_behavior": "Canonical strict Decode rejects duplicate/unknown/trailing/malformed JSON before interpreting exact release/namespace/chart and known lifecycle status. Failed/pending/foreign/changing/automatic-rollback/replacement observations remain unknown; point-in-time reads do not exclude concurrent operator changes. Never grant signer, image, workload or DB authorization from metadata."
+    },
+    {
+      "path": "internal/ops/upgradecli/signed_metadata_linux.go",
+      "function": "decodeAuthenticatedManifest",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&manifest"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Exact releasecontract.Manifest after canonical signature verification, maximum1MiB",
+      "reader_behavior": "Strict Decode rejects duplicate/unknown/trailing/malformed JSON then Manifest.Validate enforces exact target, roles, compatibility, and content identity. Bytes alone grant no signer or Driver authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/signed_metadata_linux.go",
+      "function": "decodeAuthenticatedRecovery",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&record"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Exact recovery schema1 for historical v1.2.0 source commit/run and four file digests, maximum1MiB",
+      "reader_behavior": "Strict Decode precedes exact historical source/run/tag and content-hash matching. Only present optional artifacts are compared; absent optional files grant no authority. Authenticated manifest remains bound."
+    },
+    {
+      "path": "internal/ops/upgradecli/target_chart_linux.go",
+      "function": "targetChartCompatibilityWithValues",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "normalized",
+        "&chartMetadata"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Strict Helm4 chart.Metadata normalized from one unambiguous bounded YAML document",
+      "reader_behavior": "Strict canonical Decode precedes exact stable chart/application/version/type and zero dependencies checks. Raw archive size, expanded entries/bytes, gzip/tar closure and required compatibility metadata already bounded; no unknown raw metadata grants authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/target_chart_linux.go",
+      "function": "compareChartCompatibility",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&c"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Exact private chartCompatibility schema1, maximum1MiB",
+      "reader_behavior": "Strict Decode rejects malformed/unknown/duplicate/trailing JSON before complete protocol/agent/PostgreSQL-major/schema comparison to authenticated release manifest. Returns only verified chart schema bounds; no implicit PostgreSQL major migration or product authorization."
     }
   ]
 }

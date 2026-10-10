@@ -25,8 +25,9 @@ import (
 type ToolKind string
 
 const (
-	Helm    ToolKind = "helm"
-	Kubectl ToolKind = "kubectl"
+	Helm      ToolKind = "helm"
+	Kubectl   ToolKind = "kubectl"
+	GitHubCLI ToolKind = "gh"
 )
 
 // Tool is supplied from exact canonical authority or a separately bound
@@ -154,6 +155,9 @@ func (c *Commands) VerifyTool(ctx context.Context, tool Tool) error {
 	if tool.Kind == Kubectl {
 		args = []string{"version", "--client=true"}
 	}
+	if tool.Kind == GitHubCLI {
+		args = []string{"version"}
+	}
 	raw, _, err := c.execute(ctx, tool, args)
 	if err != nil {
 		return err
@@ -166,6 +170,13 @@ func (c *Commands) VerifyTool(ctx context.Context, tool Tool) error {
 		}
 		version = strings.TrimPrefix(lines[0], "Client Version: ")
 	}
+	if tool.Kind == GitHubCLI {
+		actual, parseErr := githubToolVersion(version)
+		if parseErr != nil {
+			return parseErr
+		}
+		version = "v" + actual
+	}
 	if version != tool.Version {
 		return errors.New("bound tool version differs")
 	}
@@ -176,7 +187,7 @@ func (c *Commands) VerifyTool(ctx context.Context, tool Tool) error {
 }
 
 func toolIdentity(tool Tool) (os.FileInfo, error) {
-	if (tool.Kind != Helm && tool.Kind != Kubectl) || !filepath.IsAbs(tool.Path) || tool.Version == "" || strings.ContainsAny(tool.Version, "\t\r\n ") || !strings.HasPrefix(tool.SHA256, "sha256:") || len(tool.SHA256) != 71 {
+	if (tool.Kind != Helm && tool.Kind != Kubectl && tool.Kind != GitHubCLI) || !filepath.IsAbs(tool.Path) || tool.Version == "" || strings.ContainsAny(tool.Version, "\t\r\n ") || !strings.HasPrefix(tool.SHA256, "sha256:") || len(tool.SHA256) != 71 {
 		return nil, errors.New("exact tool kind/path/version/digest binding required")
 	}
 	if _, err := hex.DecodeString(strings.TrimPrefix(tool.SHA256, "sha256:")); err != nil {
