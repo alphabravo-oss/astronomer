@@ -91,9 +91,9 @@ func TestPreferenceReceiptReaderRejectsCorruptStateAndSeparatesBodyConflict(t *t
 			q := &receiptStoreFake{rows: map[string]sqlc.OperationIdempotencyKey{
 				scope.Scope + "\x00" + scope.Key: {Scope: scope.Scope, IdempotencyKey: scope.Key, OperationTable: table, OperationID: pgtype.UUID{Bytes: id, Valid: true}, Response: raw},
 			}}
-			got, replay, err := claimPreferenceReceipt(ctx, q, replay, actor, requestDigest)
+			got, replayed, err := claimPreferenceReceipt(ctx, q, replay, actor, requestDigest)
 			if mode == "valid" {
-				if err != nil || !replay || got.Theme != prefs.Theme {
+				if err != nil || !replayed || got.Theme != prefs.Theme {
 					t.Fatal("valid committed receipt rejected")
 				}
 				return
@@ -102,7 +102,7 @@ func TestPreferenceReceiptReaderRejectsCorruptStateAndSeparatesBodyConflict(t *t
 			if mode == "changed-request" {
 				expected = ErrConflict
 			}
-			if replay || !errors.Is(err, expected) {
+			if replayed || !errors.Is(err, expected) {
 				t.Fatal("corrupt receipt became a replay or wrong public error category")
 			}
 		})
@@ -130,14 +130,14 @@ func TestPreferenceReceiptReservationRejectsPartialState(t *testing.T) {
 				row.Response = json.RawMessage(`[]`)
 			}
 			q := &receiptStoreFake{rows: map[string]sqlc.OperationIdempotencyKey{scope.Scope + "\x00" + scope.Key: row}}
-			_, replay, err := claimPreferenceReceipt(ctx, q, replay, actor, "unused-for-unattached")
+			_, replayed, err := claimPreferenceReceipt(ctx, q, replay, actor, "unused-for-unattached")
 			if mode == "fresh" {
-				if err != nil || replay {
+				if err != nil || replayed {
 					t.Fatal("canonical empty reservation rejected")
 				}
 				return
 			}
-			if replay || !errors.Is(err, ErrReceiptInvalid) {
+			if replayed || !errors.Is(err, ErrReceiptInvalid) {
 				t.Fatal("partial reservation was treated as a fresh mutation")
 			}
 		})
