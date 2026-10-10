@@ -40,7 +40,7 @@ func (r *InClusterHelmReleaser) helmConfig(ctx context.Context) (*cli.EnvSetting
 	}
 	settings := r.runtime.Settings()
 	settings.SetNamespace(r.namespace)
-	cfg := action.NewConfiguration(action.ConfigurationSetLogger(slog.Default().With("component", "charlie_helm").Handler()))
+	cfg := action.NewConfiguration(action.ConfigurationSetLogger(slog.NewTextHandler(io.Discard, nil)))
 	getter, err := helmruntime.RequestClientGetter(ctx, settings.RESTClientGetter())
 	if err != nil {
 		return nil, nil, err
