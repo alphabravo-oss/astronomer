@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	semver "github.com/Masterminds/semver/v3"
-	"helm.sh/helm/v3/pkg/repo"
+	"helm.sh/helm/v4/pkg/repo/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"

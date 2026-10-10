@@ -12,7 +12,7 @@ import (
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
-	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v4/pkg/cli"
 )
 
 // caCertMountPath is where the install manifest mounts the CA Secret

@@ -3,12 +3,13 @@
 // Helm consumers receive this value and never consult process-global state.
 package helmruntime
 
-import "helm.sh/helm/v3/pkg/cli"
+import "helm.sh/helm/v4/pkg/cli"
 
 const (
 	defaultRegistryConfig   = "/tmp/helm/config/registry/config.json"
 	defaultRepositoryConfig = "/tmp/helm/config/repositories.yaml"
 	defaultRepositoryCache  = "/tmp/helm/cache/repository"
+	defaultContentCache     = "/tmp/helm/cache/content"
 	defaultPluginsDirectory = "/tmp/helm/data/plugins"
 )
 
@@ -31,6 +32,8 @@ type Config struct {
 	RegistryConfig            string
 	RepositoryConfig          string
 	RepositoryCache           string
+	ContentCache              string
+	ColorMode                 string
 	PluginsDirectory          string
 	MaxHistory                int
 	BurstLimit                int
@@ -44,6 +47,8 @@ func InClusterDefaults() Config {
 		RegistryConfig:   defaultRegistryConfig,
 		RepositoryConfig: defaultRepositoryConfig,
 		RepositoryCache:  defaultRepositoryCache,
+		ContentCache:     defaultContentCache,
+		ColorMode:        "never",
 		PluginsDirectory: defaultPluginsDirectory,
 		BurstLimit:       100,
 	}
@@ -71,6 +76,8 @@ func FromSettings(settings *cli.EnvSettings, driver string) Config {
 		RegistryConfig:            settings.RegistryConfig,
 		RepositoryConfig:          settings.RepositoryConfig,
 		RepositoryCache:           settings.RepositoryCache,
+		ContentCache:              settings.ContentCache,
+		ColorMode:                 settings.ColorMode,
 		PluginsDirectory:          settings.PluginsDirectory,
 		MaxHistory:                settings.MaxHistory,
 		BurstLimit:                settings.BurstLimit,
@@ -96,6 +103,8 @@ func (c Config) Settings() *cli.EnvSettings {
 	settings.RegistryConfig = defaultString(c.RegistryConfig, defaultRegistryConfig)
 	settings.RepositoryConfig = defaultString(c.RepositoryConfig, defaultRepositoryConfig)
 	settings.RepositoryCache = defaultString(c.RepositoryCache, defaultRepositoryCache)
+	settings.ContentCache = defaultString(c.ContentCache, defaultContentCache)
+	settings.ColorMode = defaultString(c.ColorMode, "never")
 	settings.PluginsDirectory = defaultString(c.PluginsDirectory, defaultPluginsDirectory)
 	settings.MaxHistory = c.MaxHistory
 	settings.BurstLimit = c.BurstLimit

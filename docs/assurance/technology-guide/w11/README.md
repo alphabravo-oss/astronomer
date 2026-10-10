@@ -1,0 +1,7 @@
+# W11 source stage
+
+Base `ba833a77`. This stage inventories SDK/CLI/controller consumers and drafts the Helm4 import/API, request ownership and release-layout port. Seven new named context/release test parents plus the extended settings test are source fixtures only: no Go module resolution, build or test has run. `gofmt` parsing and `git diff --check` pass; these are not API compatibility checks. Existing Go sums, version authority, standalone tool consumers, Flux and chart/stateful inputs are unchanged.
+
+The ADR records consumer-specific adoption gates and the unresolved bounded HTTP locator/operator policy. Install and upgrade have explicit joined control contexts while owned storage/discovery/mapper/transport/waits receive cancellation. OCI registry authentication/pulls use the owned HTTP client with the standard registry transport. HTTP repository transfers still use the old SDK locator in this stage and are explicitly unqualified.
+
+Next source stages: narrow operator policy and canonical bounded HTTP locator with real private/default/cancellation/body/version fixtures; actual SDK worker/storage/hook/history characterization; coherent isolated module resolution and focused gates; chart/CNPG/Flux/coexistence and actual interruption/data-preserving qualification. This stage is not ready for production integration or a latest-qualified SDK claim.

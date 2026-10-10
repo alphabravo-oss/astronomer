@@ -2,16 +2,21 @@ package charlie
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v4/pkg/action"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/kube"
+	"helm.sh/helm/v4/pkg/registry"
 
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 )
@@ -29,48 +34,69 @@ func NewInClusterHelmReleaser(namespace string, runtime helmruntime.Config) *InC
 	return &InClusterHelmReleaser{namespace: namespace, runtime: runtime}
 }
 
-func (r *InClusterHelmReleaser) helmConfig() (*cli.EnvSettings, *action.Configuration, error) {
+func (r *InClusterHelmReleaser) helmConfig(ctx context.Context) (*cli.EnvSettings, *action.Configuration, error) {
 	if r == nil {
 		return nil, nil, fmt.Errorf("Charlie agent Helm installer is unavailable")
 	}
 	settings := r.runtime.Settings()
 	settings.SetNamespace(r.namespace)
-	cfg := new(action.Configuration)
-	if err := cfg.Init(settings.RESTClientGetter(), r.namespace, r.runtime.Driver, func(string, ...interface{}) {}); err != nil {
+	cfg := action.NewConfiguration(action.ConfigurationSetLogger(slog.Default().With("component", "charlie_helm").Handler()))
+	getter, err := helmruntime.RequestClientGetter(ctx, settings.RESTClientGetter())
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := cfg.Init(getter, r.namespace, r.runtime.Driver); err != nil {
 		return nil, nil, fmt.Errorf("init Charlie agent Helm: %w", err)
+	}
+	if client, ok := cfg.KubeClient.(*kube.Client); ok {
+		client.WaitContext = ctx
+	} else {
+		return nil, nil, fmt.Errorf("unsupported Charlie Helm wait client")
 	}
 	return settings, cfg, nil
 }
 
-func (r *InClusterHelmReleaser) registryClient(spec HelmReleaseSpec) (*registry.Client, error) {
+func (r *InClusterHelmReleaser) registryClient(ctx context.Context, spec HelmReleaseSpec) (*registry.Client, func(), error) {
 	creds := r.runtime.Settings().RegistryConfig
 	if err := os.MkdirAll(filepath.Dir(creds), 0o700); err != nil {
-		return nil, fmt.Errorf("Charlie agent registry config: %w", err)
+		return nil, nil, fmt.Errorf("Charlie agent registry config: %w", err)
 	}
-	client, err := registry.NewClient(registry.ClientOptCredentialsFile(creds), registry.ClientOptWriter(io.Discard))
+	httpClient, err := helmruntime.HTTPClient(ctx, &http.Client{Transport: registry.NewTransport(false)})
 	if err != nil {
-		return nil, fmt.Errorf("Charlie agent registry client: %w", err)
+		return nil, nil, err
+	}
+	client, err := registry.NewClient(registry.ClientOptCredentialsFile(creds), registry.ClientOptWriter(io.Discard), registry.ClientOptHTTPClient(httpClient))
+	if err != nil {
+		httpClient.CloseIdleConnections()
+		return nil, nil, fmt.Errorf("Charlie agent registry client: %w", err)
 	}
 	if strings.TrimSpace(spec.PullSecret) == "" {
-		return client, nil
+		return client, httpClient.CloseIdleConnections, nil
 	}
 	host := strings.TrimPrefix(strings.TrimPrefix(spec.ChartRef, "oci://"), "https://")
 	host, _, _ = strings.Cut(host, "/")
 	if err := client.Login(host, registry.LoginOptBasicAuth("charlie", spec.PullSecret)); err != nil {
-		return nil, fmt.Errorf("Charlie agent registry login: %w", err)
+		httpClient.CloseIdleConnections()
+		return nil, nil, fmt.Errorf("Charlie agent registry login: %w", err)
 	}
-	return client, nil
+	return client, httpClient.CloseIdleConnections, nil
 }
 
 func (r *InClusterHelmReleaser) Apply(ctx context.Context, spec HelmReleaseSpec) error {
-	settings, cfg, err := r.helmConfig()
+	ctx, cancel, err := helmruntime.OperationContext(ctx, 5*time.Minute)
 	if err != nil {
 		return err
 	}
-	client, err := r.registryClient(spec)
+	defer cancel()
+	settings, cfg, err := r.helmConfig(ctx)
 	if err != nil {
 		return err
 	}
+	client, closeClient, err := r.registryClient(ctx, spec)
+	if err != nil {
+		return err
+	}
+	defer closeClient()
 	cfg.RegistryClient = client
 	hist := action.NewHistory(cfg)
 	hist.Max = 1
@@ -84,8 +110,11 @@ func (r *InClusterHelmReleaser) Apply(ctx context.Context, spec HelmReleaseSpec)
 		install.ReleaseName = agentReleaseName
 		install.Namespace = r.namespace
 		install.CreateNamespace = true
-		install.Wait = false
-		install.Atomic = false
+		install.WaitStrategy = kube.HookOnlyStrategy
+		install.WaitOptions = []kube.WaitOption{kube.WithWaitContext(ctx)}
+		install.ServerSideApply = false
+		install.RollbackOnFailure = false
+		install.Timeout = 5 * time.Minute
 		install.SetRegistryClient(client)
 		path, err := install.LocateChart(chartRef, settings)
 		if err != nil {
@@ -95,13 +124,18 @@ func (r *InClusterHelmReleaser) Apply(ctx context.Context, spec HelmReleaseSpec)
 		if err != nil {
 			return fmt.Errorf("load Charlie agent chart: %w", err)
 		}
-		_, err = install.RunWithContext(ctx, chart, spec.Values)
-		return err
+		// Keep the SDK control call joined; only its owned transport/waits
+		// receive cancellation until the worker has actually finished.
+		_, err = install.RunWithContext(context.WithoutCancel(ctx), chart, spec.Values)
+		return errors.Join(err, ctx.Err())
 	}
 	upgrade := action.NewUpgrade(cfg)
 	upgrade.Namespace = r.namespace
-	upgrade.Wait = false
+	upgrade.WaitStrategy = kube.HookOnlyStrategy
+	upgrade.WaitOptions = []kube.WaitOption{kube.WithWaitContext(ctx)}
+	upgrade.ServerSideApply = "false"
 	upgrade.ReuseValues = spec.ReuseValues
+	upgrade.Timeout = 5 * time.Minute
 	upgrade.SetRegistryClient(client)
 	path, err := upgrade.LocateChart(chartRef, settings)
 	if err != nil {
@@ -111,19 +145,29 @@ func (r *InClusterHelmReleaser) Apply(ctx context.Context, spec HelmReleaseSpec)
 	if err != nil {
 		return fmt.Errorf("load Charlie agent chart: %w", err)
 	}
-	_, err = upgrade.RunWithContext(ctx, agentReleaseName, chart, spec.Values)
-	return err
+	_, err = upgrade.RunWithContext(context.WithoutCancel(ctx), agentReleaseName, chart, spec.Values)
+	return errors.Join(err, ctx.Err())
 }
 
-func (r *InClusterHelmReleaser) Uninstall(context.Context) error {
-	_, cfg, err := r.helmConfig()
+func (r *InClusterHelmReleaser) Uninstall(ctx context.Context) error {
+	ctx, cancel, err := helmruntime.OperationContext(ctx, 5*time.Minute)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	_, cfg, err := r.helmConfig(ctx)
 	if err != nil {
 		return err
 	}
 	uninstall := action.NewUninstall(cfg)
-	uninstall.Wait = false
+	uninstall.WaitStrategy = kube.HookOnlyStrategy
+	uninstall.WaitOptions = []kube.WaitOption{kube.WithWaitContext(ctx)}
 	uninstall.IgnoreNotFound = true
+	uninstall.Timeout = 5 * time.Minute
 	_, err = uninstall.Run(agentReleaseName)
+	if ctx.Err() != nil {
+		return errors.Join(err, ctx.Err())
+	}
 	if err != nil && strings.Contains(strings.ToLower(err.Error()), "not found") {
 		return nil
 	}
