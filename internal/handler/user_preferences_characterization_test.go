@@ -47,10 +47,13 @@ func TestUserPreferencesCharacterizationSelfIdentityBoundary(t *testing.T) {
 	}
 	// No mutation runner is configured: the missing row must remain a read
 	// that returns complete defaults, rather than hidden initialization.
-	var document map[string]any
-	if err := json.Unmarshal(response.Body.Bytes(), &document); err != nil {
+	var envelope struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
 		t.Fatal(err)
 	}
+	document := envelope.Data
 	for _, key := range []string{"favorites", "pinned_clusters", "starred_types"} {
 		value, ok := document[key].([]any)
 		if !ok || len(value) != 0 {
@@ -143,7 +146,7 @@ func TestUserPreferencesCharacterizationCancelledTransactionContext(t *testing.T
 	cancel()
 	response := httptest.NewRecorder()
 	h.PutUserPreferences(response, request.WithContext(ctx))
-	if !called || response.Code != http.StatusInternalServerError {
+	if !called || response.Code != statusClientClosedRequest || response.Body.Len() != 0 {
 		t.Fatalf("cancelled replace status=%d, transaction invoked=%v", response.Code, called)
 	}
 }

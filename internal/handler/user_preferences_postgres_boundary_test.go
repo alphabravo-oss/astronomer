@@ -103,8 +103,10 @@ func TestPreferencePostgresMissingReadIsActorScopedAndHasNoWrites(t *testing.T) 
 	request.URL.RawQuery = "user_id=" + other.String()
 	response := httptest.NewRecorder()
 	h.GetUserPreferences(response, request)
-	var got userpreferences.Preferences
-	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &got) != nil || got.Theme != userpreferences.Defaults().Theme || got.Favorites == nil {
+	var got struct {
+		Data userpreferences.Preferences `json:"data"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &got) != nil || got.Data.Theme != userpreferences.Defaults().Theme || got.Data.Favorites == nil {
 		t.Fatal("missing actor preferences did not return complete defaults")
 	}
 	for _, id := range []uuid.UUID{actor, other} {
