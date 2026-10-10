@@ -18,10 +18,10 @@ import (
 )
 
 func TestSupplierMetadataPinsOneResolutionWithoutSignatureOrPayloadReads(t *testing.T) {
-	for _, name := range []string{"valid", "duplicate-manifest", "changed-manifest", "oversized-layer", "external-layer", "inline-config", "changed-config", "duplicate-config", "wrong-resolution-media"} {
+	for _, name := range []string{"valid", "duplicate-manifest", "changed-manifest", "oversized-layer", "external-layer", "inline-config", "inline-config-mismatch", "inline-config-size", "inline-config-media", "inline-config-duplicate", "inline-config-url", "changed-config", "duplicate-config", "wrong-resolution-media"} {
 		t.Run(name, func(t *testing.T) {
 			config := []byte(`{}`)
-			if name == "duplicate-config" {
+			if name == "duplicate-config" || name == "inline-config-duplicate" {
 				config = []byte(`{"version":1,"version":1}`)
 			}
 			layer := ocispec.Descriptor{MediaType: "application/vnd.aquasec.trivy.db.layer.v1.tar+gzip", Digest: digest.FromString("QA database not downloaded"), Size: 64 << 20}
@@ -31,8 +31,20 @@ func TestSupplierMetadataPinsOneResolutionWithoutSignatureOrPayloadReads(t *test
 				layer.Size = 2<<30 + 1
 			case "external-layer":
 				layer.URLs = []string{"https://unapproved.example.test/database"}
-			case "inline-config":
-				configuration.Data = config
+			case "inline-config", "inline-config-mismatch", "inline-config-size", "inline-config-media", "inline-config-duplicate", "inline-config-url":
+				configuration.Data = append([]byte(nil), config...)
+				if name == "inline-config-mismatch" {
+					configuration.Data = []byte(`[]`)
+				}
+				if name == "inline-config-size" {
+					configuration.Size++
+				}
+				if name == "inline-config-media" {
+					configuration.MediaType = "application/vnd.aquasec.trivy.config.v1+json"
+				}
+				if name == "inline-config-url" {
+					configuration.URLs = []string{"https://unapproved.example.test/config"}
+				}
 			}
 			manifest := ocispec.Manifest{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageManifest, Config: configuration, Layers: []ocispec.Descriptor{layer}}
 			original, err := json.Marshal(manifest)
@@ -79,7 +91,7 @@ func TestSupplierMetadataPinsOneResolutionWithoutSignatureOrPayloadReads(t *test
 				return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: length, Request: request}, nil
 			})}
 			actualSubject, metadata, err := CaptureSupplierDatabaseMetadata(t.Context(), client, "reviewed.example.test/main", "2", layer.MediaType)
-			if name == "valid" {
+			if name == "valid" || name == "inline-config" {
 				if err != nil || actualSubject != subject || !bytes.Equal(metadata.Manifest, original) || !bytes.Equal(metadata.Config, config) || metadata.Layer.Digest != layer.Digest {
 					t.Fatalf("supplier capture failed: %v", err)
 				}
@@ -88,6 +100,9 @@ func TestSupplierMetadataPinsOneResolutionWithoutSignatureOrPayloadReads(t *test
 			}
 			mutex.Lock()
 			defer mutex.Unlock()
+			if name == "inline-config" && reads["GET /v2/main/blobs/"+configuration.Digest.String()] != 0 {
+				t.Fatal("inline config triggered a replacement blob fetch")
+			}
 			if reads["HEAD /v2/main/manifests/2"] != 1 {
 				t.Fatal("discovery tag was not resolved exactly once")
 			}

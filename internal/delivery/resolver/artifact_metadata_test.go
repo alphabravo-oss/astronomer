@@ -33,7 +33,7 @@ func TestVerifiedArtifactMetadataAuthenticatesLargeDescriptorWithoutFetchingPayl
 	if err := os.WriteFile(filepath.Join(trust, "qa.pub"), public, 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"valid", "untrusted-key", "oversized-layer", "external-layer", "inline-layer", "wrong-media", "changed-manifest", "changed-config", "partial-config", "duplicate-config"} {
+	for _, name := range []string{"valid", "inline-config", "inline-config-mismatch", "inline-config-size", "inline-config-media", "inline-config-url", "untrusted-inline", "untrusted-key", "oversized-layer", "external-layer", "inline-layer", "wrong-media", "changed-manifest", "changed-config", "partial-config", "duplicate-config"} {
 		t.Run(name, func(t *testing.T) {
 			config := []byte(`{}`)
 			if name == "duplicate-config" {
@@ -51,6 +51,21 @@ func TestVerifiedArtifactMetadataAuthenticatesLargeDescriptorWithoutFetchingPayl
 				layer.MediaType = "application/vnd.other.payload"
 			}
 			manifest := ocispec.Manifest{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageManifest, Config: ocispec.Descriptor{MediaType: "application/vnd.oci.empty.v1+json", Digest: digest.FromBytes(config), Size: int64(len(config))}, Layers: []ocispec.Descriptor{layer}}
+			if strings.Contains(name, "inline") {
+				manifest.Config.Data = append([]byte(nil), config...)
+			}
+			if name == "inline-config-mismatch" {
+				manifest.Config.Data = []byte(`[]`)
+			}
+			if name == "inline-config-size" {
+				manifest.Config.Size++
+			}
+			if name == "inline-config-media" {
+				manifest.Config.MediaType = "application/vnd.aquasec.trivy.config.v1+json"
+			}
+			if name == "inline-config-url" {
+				manifest.Config.URLs = []string{"https://unapproved.example.test/config"}
+			}
 			if name == "partial-config" {
 				manifest.Config.Size++
 			}
@@ -62,7 +77,7 @@ func TestVerifiedArtifactMetadataAuthenticatesLargeDescriptorWithoutFetchingPayl
 				t.Fatal(err)
 			}
 			signatureManifest, _ := json.Marshal(ocispec.Manifest{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageManifest, Config: manifest.Config, Layers: []ocispec.Descriptor{{MediaType: cosignSimpleSigningMediaType, Digest: digest.FromBytes(claim), Size: int64(len(claim)), Annotations: map[string]string{cosignSignatureAnnotation: base64.StdEncoding.EncodeToString(signed)}}}})
-			rootReads, payloadReads := 0, 0
+			rootReads, payloadReads, configReads := 0, 0, 0
 			client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 				var body []byte
 				media := "application/octet-stream"
@@ -81,6 +96,7 @@ func TestVerifiedArtifactMetadataAuthenticatesLargeDescriptorWithoutFetchingPayl
 					body = claim
 					media = cosignSimpleSigningMediaType
 				case strings.HasSuffix(request.URL.Path, "/blobs/"+manifest.Config.Digest.String()):
+					configReads++
 					body = config
 					if name == "changed-config" {
 						body = []byte(`[]`)
@@ -93,21 +109,24 @@ func TestVerifiedArtifactMetadataAuthenticatesLargeDescriptorWithoutFetchingPayl
 				return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(bytes.NewReader(body)), ContentLength: int64(len(body)), Request: request}, nil
 			})}
 			policy := model.TrustPolicy{Provider: model.SignatureCosignKey, KeyRef: "qa"}
-			if name == "untrusted-key" {
+			if name == "untrusted-key" || name == "untrusted-inline" {
 				policy.KeyRef = "missing"
 			}
 			metadata, verification, err := FetchVerifiedOCIArtifactMetadata(t.Context(), client, "mirror.example.test/database", subject, "application/vnd.aquasec.trivy.javadb.layer.v1.tar+gzip", policy, trust, 2<<30)
-			if name == "valid" {
+			if name == "valid" || name == "inline-config" {
 				if err != nil || verification.Status != "verified" || !bytes.Equal(metadata.Manifest, manifestBytes) || !bytes.Equal(metadata.Config, config) || metadata.Layer.Size != 980383808 {
 					t.Fatalf("large descriptor positive control: %v", err)
 				}
 			} else if err == nil {
 				t.Fatal("invalid signed metadata accepted")
 			}
+			if name == "inline-config" && configReads != 0 {
+				t.Fatal("signed inline config fetched replacement content")
+			}
 			if payloadReads != 0 {
 				t.Fatal("metadata authentication downloaded payload or used external descriptor location")
 			}
-			if name == "untrusted-key" && rootReads != 0 {
+			if (name == "untrusted-key" || name == "untrusted-inline") && rootReads != 0 {
 				t.Fatal("manifest fetched before signature acceptance")
 			}
 		})

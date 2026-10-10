@@ -51,16 +51,22 @@ func fetchArtifactMetadata(ctx context.Context, client *http.Client, repositoryN
 	}
 	layer := manifest.Layers[0]
 	config := manifest.Config
-	if manifest.Subject != nil || layer.MediaType != mediaType || layer.Digest.Algorithm() != digest.SHA256 || layer.Size <= 0 || layer.Size > maximumLayer || len(layer.URLs) != 0 || len(layer.Data) != 0 || config.Digest.Algorithm() != digest.SHA256 || config.Size <= 0 || config.Size > 1<<20 || len(config.URLs) != 0 || len(config.Data) != 0 {
+	if manifest.Subject != nil || layer.MediaType != mediaType || layer.Digest.Algorithm() != digest.SHA256 || layer.Size <= 0 || layer.Size > maximumLayer || len(layer.URLs) != 0 || len(layer.Data) != 0 || config.Digest.Algorithm() != digest.SHA256 || config.Size <= 0 || config.Size > 1<<20 || len(config.URLs) != 0 {
 		return empty, errors.New("OCI metadata descriptor invalid")
 	}
-	reader, err := repository.Fetch(ctx, config)
-	if err != nil {
-		return empty, errors.New("OCI artifact configuration unavailable")
+	configBytes := append([]byte(nil), config.Data...)
+	if len(config.Data) == 0 {
+		reader, err := repository.Fetch(ctx, config)
+		if err != nil {
+			return empty, errors.New("OCI artifact configuration unavailable")
+		}
+		configBytes, err = readArtifactPayload(reader, config.Size, 1<<20)
+		_ = reader.Close()
+		if err != nil {
+			return empty, errors.New("OCI artifact configuration binding invalid")
+		}
 	}
-	configBytes, err := readArtifactPayload(reader, config.Size, 1<<20)
-	_ = reader.Close()
-	if err != nil || digest.FromBytes(configBytes) != config.Digest {
+	if !ArtifactConfigurationMatches(config, configBytes) {
 		return empty, errors.New("OCI artifact configuration binding invalid")
 	}
 	var object map[string]any
