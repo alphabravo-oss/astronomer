@@ -209,6 +209,9 @@ func TestDatabasePayloadArchiveAndMetadataNegatives(t *testing.T) {
 				members[0].header.Format, members[0].header.PAXRecords = tar.FormatPAX, map[string]string{"comment": "not allowed"}
 			case "oversized-member":
 				members = members[:1]
+				// GNU encodes this header without allocating its declared body.
+				// USTAR cannot represent it and would fail before inspection.
+				members[0].header.Format = tar.FormatGNU
 				members[0].header.Size, members[0].bytes = MaximumDatabaseExpandedBytes+1, nil
 			case "truncated-member":
 				members = members[:1]
@@ -255,8 +258,12 @@ func TestDatabasePayloadArchiveAndMetadataNegatives(t *testing.T) {
 			if scenario != "unverified-feed" {
 				update.document.Databases[0] = snapshot
 			}
-			if result, err := InspectDatabaseUpdatePayload(t.Context(), update, role, databasePayloadOwnedFile(t, payload), CadenceDatabaseUpdateTiming(), now); err == nil || result != nil {
+			result, err := InspectDatabaseUpdatePayload(t.Context(), update, role, databasePayloadOwnedFile(t, payload), CadenceDatabaseUpdateTiming(), now)
+			if err == nil || result != nil {
 				t.Fatal("malformed payload or unmatched metadata produced verification proof")
+			}
+			if scenario == "oversized-member" && err.Error() != "database payload archive member invalid" {
+				t.Fatal("oversized fixture did not reach the bounded archive inspector")
 			}
 		})
 	}

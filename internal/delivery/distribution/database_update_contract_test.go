@@ -38,7 +38,7 @@ func TestDatabaseUpdateClosedContractBindsCandidateRolesAndFiniteClocks(t *testi
 	if _, err := DecodeDatabaseUpdateDocument(encodeDatabaseUpdateFixture(t, original), original.Binding, timing, now, true); err != nil {
 		t.Fatal(err)
 	}
-	for _, mutation := range []string{"version", "kind", "base", "catalog", "profile", "candidate", "scanner-image", "scanner-version", "scanner-schema", "generation", "nil-databases", "missing-main", "missing-java", "duplicate-role", "extra-role", "manifest-subject", "supplier-subject", "mutable-subject", "credential-subject", "config-media", "empty-config", "layer-media", "layer-size", "layer-digest", "metadata-digest", "metadata-size", "metadata-schema", "published-future", "expires-past", "expiry-order", "expiry-lifetime", "main-age", "java-age", "metadata-future", "metadata-after-publication", "next-order", "next-elapsed", "published-offset", "expires-offset", "updated-offset", "next-offset"} {
+	for _, mutation := range []string{"version", "kind", "base", "catalog", "profile", "candidate", "scanner-image", "scanner-version", "scanner-schema", "generation", "nil-databases", "missing-main", "missing-java", "duplicate-role", "extra-role", "manifest-subject", "supplier-subject", "mutable-subject", "credential-subject", "tagged-published-subject", "tagged-supplier-subject", "config-media", "empty-config", "layer-media", "layer-size", "layer-digest", "metadata-digest", "metadata-size", "metadata-schema", "published-future", "expires-past", "expiry-order", "expiry-lifetime", "main-age", "java-age", "metadata-future", "metadata-after-publication", "next-order", "next-elapsed", "published-offset", "expires-offset", "updated-offset", "next-offset"} {
 		t.Run(mutation, func(t *testing.T) {
 			document := databaseUpdateFixture(now)
 			snapshot := &document.Databases[0]
@@ -81,6 +81,10 @@ func TestDatabaseUpdateClosedContractBindsCandidateRolesAndFiniteClocks(t *testi
 				snapshot.PublishedSubject = "mirror.example.test/database:latest"
 			case "credential-subject":
 				snapshot.PublishedSubject = "user:password@mirror.example.test/database@" + snapshot.Manifest.Digest
+			case "tagged-published-subject":
+				snapshot.PublishedSubject = "mirror.example.test/database:latest@" + snapshot.Manifest.Digest
+			case "tagged-supplier-subject":
+				snapshot.SupplierSubject = "ghcr.io/aquasecurity/trivy-db:2@" + snapshot.Manifest.Digest
 			case "config-media":
 				snapshot.Config.MediaType = "application/json"
 			case "empty-config":

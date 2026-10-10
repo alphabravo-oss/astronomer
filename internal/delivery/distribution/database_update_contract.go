@@ -7,6 +7,7 @@ import (
 	"time"
 
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
+	"oras.land/oras-go/v2/registry/remote"
 )
 
 const DatabaseUpdateMediaType = "application/vnd.astronomer.vulnerability-db-update.v1+json"
@@ -161,7 +162,8 @@ func validDatabaseUpdateSubject(subject, manifest string) bool {
 		return false
 	}
 	canonical, err := builtinbundles.NormalizeOCISourceURL("oci://" + repository)
-	return err == nil && canonical == "oci://"+repository
+	reference, referenceError := remote.NewRepository(repository)
+	return err == nil && canonical == "oci://"+repository && referenceError == nil && reference.Reference.Reference == ""
 }
 
 func validDatabaseUpdateConfig(descriptor DatabaseDescriptor) bool {
