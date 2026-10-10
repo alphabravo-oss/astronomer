@@ -282,6 +282,11 @@ func (runtime GitOpsRuntime) SyncSource(ctx context.Context, sourceID uuid.UUID)
 	if runtime.Deps.Queries == nil {
 		return fmt.Errorf("gitops runtime not configured")
 	}
+	releaseCheckout, err := acquireGitOpsCheckout(ctx, runtime.cloneDir(sourceID))
+	if err != nil {
+		return err
+	}
+	defer releaseCheckout()
 	src, err := runtime.Deps.Queries.GetGitOpsSource(ctx, sourceID)
 	if err != nil {
 		return fmt.Errorf("load source: %w", err)
@@ -581,50 +586,8 @@ func (runtime GitOpsRuntime) walkSource(ctx context.Context, src sqlc.GitopsRegi
 	}
 	headSHA := head.Hash().String()
 
-	walkRoot, err := gitops.ResolvePathPrefix(dir, src.PathPrefix)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", nil, fmt.Errorf("walk root unreadable (check path_prefix %q): %w", src.PathPrefix, err)
-		}
-		return "", nil, fmt.Errorf("invalid path_prefix %q: %w", src.PathPrefix, err)
-	}
-	// A non-existent / unreadable / non-directory walkRoot must be a hard
-	// sync error — NOT silently interpreted as "all docs deleted" (H10).
-	// A typo'd path_prefix or renamed dir would otherwise yield zero docs
-	// and mass-decommission every cluster owned by this source.
-	if fi, statErr := os.Stat(walkRoot); statErr != nil {
-		return "", nil, fmt.Errorf("walk root %q unreadable (check path_prefix %q): %w", walkRoot, src.PathPrefix, statErr)
-	} else if !fi.IsDir() {
-		return "", nil, fmt.Errorf("walk root %q is not a directory (check path_prefix %q)", walkRoot, src.PathPrefix)
-	}
 	var docs []ParsedDoc
-	walkErr := filepath.WalkDir(walkRoot, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return fmt.Errorf("walk %s: %w", p, err)
-		}
-		// Never follow repository-controlled symlinks. A YAML symlink can read
-		// arbitrary worker-pod files even when path_prefix itself is contained.
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-		if d.IsDir() {
-			// Skip .git always
-			if d.Name() == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !isYAMLFile(p) {
-			return nil
-		}
-		rel, relErr := filepath.Rel(dir, p)
-		if relErr != nil {
-			rel = p
-		}
-		content, readErr := os.ReadFile(p)
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", rel, readErr)
-		}
+	walkErr := gitops.WalkCheckout(ctx, dir, src.PathPrefix, func(rel string, content []byte) error {
 		doc, parseErr := gitops.Parse(content, rel)
 		if parseErr != nil {
 			if gitops.IsSkippable(parseErr) {
@@ -641,11 +604,6 @@ func (runtime GitOpsRuntime) walkSource(ctx context.Context, src sqlc.GitopsRegi
 		return "", nil, walkErr
 	}
 	return headSHA, docs, nil
-}
-
-func isYAMLFile(p string) bool {
-	ext := strings.ToLower(filepath.Ext(p))
-	return ext == ".yaml" || ext == ".yml"
 }
 
 func (runtime GitOpsRuntime) cloneDir(sourceID uuid.UUID) string {
@@ -851,6 +809,11 @@ func (runtime GitOpsRuntime) PreviewSource(ctx context.Context, sourceID uuid.UU
 	if runtime.Deps.Queries == nil {
 		return PreviewResult{}, fmt.Errorf("gitops runtime not configured")
 	}
+	releaseCheckout, err := acquireGitOpsCheckout(ctx, runtime.cloneDir(sourceID))
+	if err != nil {
+		return PreviewResult{}, err
+	}
+	defer releaseCheckout()
 	src, err := runtime.Deps.Queries.GetGitOpsSource(ctx, sourceID)
 	if err != nil {
 		return PreviewResult{}, fmt.Errorf("load source: %w", err)

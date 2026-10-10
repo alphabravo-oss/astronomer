@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
@@ -32,13 +33,14 @@ const (
 
 func managedNS(name string) *corev1.Namespace {
 	return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
-		Name:   name,
+		Name: name,
+		UID:  types.UID("namespace-" + name), ResourceVersion: "1",
 		Labels: map[string]string{tPartOf: "astronomer", tManagedBy: "astronomer-server"},
 	}}
 }
 
 func partOfMeta(name, ns string) metav1.ObjectMeta {
-	return metav1.ObjectMeta{Name: name, Namespace: ns, Labels: map[string]string{tPartOf: "astronomer"}}
+	return metav1.ObjectMeta{Name: name, Namespace: ns, UID: types.UID("owned-" + name), ResourceVersion: "1", Labels: map[string]string{tPartOf: "astronomer"}}
 }
 
 // seedFullFootprint returns a fake clientset populated with the complete
@@ -53,8 +55,8 @@ func seedFullFootprint() *fake.Clientset {
 		managedNS("astronomer-ingress-nginx"),
 		managedNS("astronomer-cert-manager"),
 		managedNS("astronomer-gatekeeper-system"),
-		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent", Labels: map[string]string{tPartOf: "astronomer"}}},
-		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent", Labels: map[string]string{tPartOf: "astronomer"}}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent", UID: "owned-agent-rbac", ResourceVersion: "1", Labels: map[string]string{tPartOf: "astronomer"}}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-agent", UID: "owned-agent-rbac", ResourceVersion: "1", Labels: map[string]string{tPartOf: "astronomer"}}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-kube-state-metrics", Labels: map[string]string{tPartOf: "astronomer", tManagedBy: "astronomer-server"}}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "astronomer-kube-state-metrics", Labels: map[string]string{tPartOf: "astronomer", tManagedBy: "astronomer-server"}}},
 		&rbacv1.Role{ObjectMeta: partOfMeta("astronomer-agent-identity", "astronomer-system")},
@@ -107,10 +109,9 @@ func toAnyMap(m map[string]string) map[string]any {
 func newHandler(t *testing.T, cs *fake.Clientset, dyn dynamic.Interface) *DecommissionHandler {
 	t.Helper()
 	return &DecommissionHandler{
-		clientset:        cs,
-		dynamicClient:    dyn,
-		log:              slog.Default(),
-		agentDeleteDelay: 5 * time.Millisecond,
+		clientset:     cs,
+		dynamicClient: dyn,
+		log:           slog.Default(),
 	}
 }
 
@@ -129,7 +130,9 @@ func fullFootprintPayload() protocol.DecommissionPayload {
 func runDecommission(t *testing.T, h *DecommissionHandler, req protocol.DecommissionPayload) protocol.DecommissionAckPayload {
 	t.Helper()
 	body, _ := json.Marshal(req)
-	resp, err := h.HandleDecommission(context.Background(), &protocol.Message{Type: protocol.MsgDecommission, Payload: body})
+	ctx, owner := withDecommissionReply(context.Background())
+	defer owner.close()
+	resp, err := h.HandleDecommission(ctx, &protocol.Message{Type: protocol.MsgDecommission, Payload: body})
 	if err != nil {
 		t.Fatalf("HandleDecommission: %v", err)
 	}
@@ -137,8 +140,13 @@ func runDecommission(t *testing.T, h *DecommissionHandler, req protocol.Decommis
 	if err := json.Unmarshal(resp.Payload, &ack); err != nil {
 		t.Fatalf("decode ack: %v", err)
 	}
-	// Let the deferred Deployment + astronomer-system teardown run.
-	time.Sleep(80 * time.Millisecond)
+	// Direct fixture simulates a successful ACK write and synchronously joins
+	// the same captured cleanup. The real WebSocket boundary is tested separately.
+	if owner.cleanup != nil {
+		cleanupCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		_ = owner.cleanup(cleanupCtx)
+	}
 	return ack
 }
 

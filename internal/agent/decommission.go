@@ -124,10 +124,8 @@ type DecommissionHandler struct {
 	clientset     kubernetes.Interface
 	dynamicClient dynamic.Interface
 	log           *slog.Logger
-	// agentDeleteDelay is how long we wait after sending the ACK before
-	// deleting the agent's own Deployment. The delay gives the WS write
-	// loop time to flush the ACK frame to the server.
-	agentDeleteDelay time.Duration
+	// The terminal self-delete is owned by the connection writer after its ACK write.
+	selfDeletePending atomic.Bool
 	// pause, when set, is flipped true at the start of decommission so the
 	// Flux-native delivery runtime stops changing resources being torn down.
 	pause *atomic.Bool
@@ -153,10 +151,9 @@ func NewDecommissionHandler(client kubernetes.Interface, restCfg *rest.Config, l
 		return nil, fmt.Errorf("dynamic client: %w", err)
 	}
 	return &DecommissionHandler{
-		clientset:        client,
-		dynamicClient:    dyn,
-		log:              log,
-		agentDeleteDelay: 2 * time.Second,
+		clientset:     client,
+		dynamicClient: dyn,
+		log:           log,
 	}, nil
 }
 
@@ -164,8 +161,8 @@ func NewDecommissionHandler(client kubernetes.Interface, restCfg *rest.Config, l
 // MsgDecommission. It returns the MsgDecommissionAck synchronously; the
 // caller (tunnel readLoop) routes that response back via stream_id.
 //
-// After the ACK is queued, the handler schedules the agent's own Deployment
-// for deletion on a short delay so the WS write loop has a chance to flush.
+// Self-delete is staged only with the tunnel's private reply owner. The existing
+// joined write loop runs it synchronously after the ACK frame is written.
 func (h *DecommissionHandler) HandleDecommission(ctx context.Context, msg *protocol.Message) (*protocol.Message, error) {
 	if h == nil {
 		return nil, fmt.Errorf("decommission handler not configured")
@@ -180,6 +177,7 @@ func (h *DecommissionHandler) HandleDecommission(ctx context.Context, msg *proto
 		return nil, fmt.Errorf("decode decommission payload: %w", err)
 	}
 
+	selfDelete, ackStep := h.prepareSelfDelete(ctx, req)
 	steps := []protocol.DecommissionStepResult{}
 
 	// Velero CRs are removed in both the legacy and full-footprint flows.
@@ -225,21 +223,8 @@ func (h *DecommissionHandler) HandleDecommission(ctx context.Context, msg *proto
 		})
 	}
 
-	// Build and queue the ACK. The agent Deployment delete (step below) is
-	// scheduled on a delay so the WS write loop can flush this frame first.
-	ackStep := protocol.DecommissionStepResult{Name: "remove_agent_deployment"}
-	if !req.RemoveAgentDeployment {
-		ackStep.Skipped = true
-	} else if req.DryRun {
-		ackStep.Success = true
-		ackStep.Removed = 1
-	} else {
-		// We mark the step "success: pending" so the server knows we
-		// scheduled the delete; the actual kubectl delete happens after
-		// the ACK is queued for writing.
-		ackStep.Success = true
-		ackStep.Removed = 1
-	}
+	// This ACK records admitted pending work; completion is still reported by
+	// the existing server-side orphan audit. No mutation starts before its write.
 	steps = append(steps, ackStep)
 
 	ack := protocol.DecommissionAckPayload{
@@ -260,70 +245,10 @@ func (h *DecommissionHandler) HandleDecommission(ctx context.Context, msg *proto
 		Payload:   body,
 	}
 
-	if req.RemoveAgentDeployment && !req.DryRun {
-		// Fire-and-forget the agent self-delete after a short delay. We
-		// deliberately use context.Background here: if the caller's ctx
-		// is cancelled (which it will be when our pod is terminating!) we
-		// don't want that to interrupt the API server delete request mid-
-		// flight.
-		ns := h.agentNamespace(req)
-		name := req.AgentDeployment
-		if name == "" {
-			name = DefaultAgentDeploymentName
-		}
-		delay := h.agentDeleteDelay
-		removeNamespace := req.RemoveFullFootprint
-		nsKey, nsVal := splitSelector(orDefault(req.ManagedByLabel, defaultManagedBySelector))
-		rbacKey, rbacVal := splitSelector(orDefault(req.RBACLabel, defaultRBACSelector))
-		go func() {
-			time.Sleep(delay)
-			deleteCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			err := h.clientset.AppsV1().Deployments(ns).Delete(deleteCtx, name, kubeutil.DeleteOptions())
-			if err != nil && !apierrors.IsNotFound(err) {
-				h.log.Warn("decommission: failed to delete agent deployment",
-					"namespace", ns, "name", name, "error", err)
-			} else {
-				h.log.Info("decommission: agent deployment deleted",
-					"namespace", ns, "name", name)
-			}
-			if !removeNamespace {
-				return
-			}
-			// astronomer-system is torn down LAST: it cascades the SA,
-			// Secrets, ConfigMap, Service, NetworkPolicy, PDB, the
-			// self-management Roles/RoleBindings, and terminates the agent
-			// pod. Strictly label-gated so an operator namespace of the same
-			// name (lacking managed-by) is never deleted. A Forbidden here
-			// (non-admin profile) is non-fatal: the Deployment delete above
-			// already terminated the pod; the server's orphan audit surfaces
-			// the residual (now near-empty) namespace.
-			obj, gerr := h.clientset.CoreV1().Namespaces().Get(deleteCtx, ns, metav1.GetOptions{})
-			if gerr != nil {
-				if !apierrors.IsNotFound(gerr) {
-					h.log.Warn("decommission: failed to load agent namespace for teardown",
-						"namespace", ns, "error", gerr)
-				}
-				return
-			}
-			if !hasLabel(obj.Labels, nsKey, nsVal) {
-				h.log.Warn("decommission: agent namespace not astronomer-managed, leaving in place",
-					"namespace", ns)
-				return
-			}
-			if derr := h.clientset.CoreV1().Namespaces().Delete(deleteCtx, ns, kubeutil.DeleteOptions()); derr != nil && !apierrors.IsNotFound(derr) {
-				h.log.Warn("decommission: failed to delete agent namespace",
-					"namespace", ns, "error", derr)
-			} else {
-				h.log.Info("decommission: agent namespace deleted", "namespace", ns)
-			}
-			// Finally, the agent's OWN cluster-scoped RBAC — deleted LAST, after
-			// the namespace delete that needed it (removing it sooner would
-			// self-revoke the namespace-delete permission). Best-effort: the pod
-			// is terminating, but the cluster-scoped role/binding outlive the
-			// namespace cascade and a residual is caught by the server orphan audit.
-			h.removeAgentClusterRBAC(deleteCtx, rbacKey, rbacVal)
-		}()
+	if selfDelete != nil {
+		owner := decommissionReplyFromContext(ctx)
+		owner.cleanup = selfDelete.execute
+		owner.release = func() { h.selfDeletePending.Store(false) }
 	}
 
 	return resp, nil
@@ -555,8 +480,8 @@ func (h *DecommissionHandler) removeBaselineNamespaces(ctx context.Context, key,
 // those grant the agent the cluster-scoped permission it needs to delete the
 // astronomer-system namespace, so deleting them here would self-revoke and make
 // the deferred namespace teardown fail (Forbidden). The agent's own cluster RBAC
-// is removed LAST, after the namespace delete, by removeAgentClusterRBAC in the
-// deferred self-delete goroutine. The agent's namespaced RoleBinding variant
+// is removed LAST, after the namespace delete, by the captured UID-bound cleanup in the
+// joined post-ACK cleanup. The agent's namespaced RoleBinding variant
 // (used by namespaced profiles) cascades with the namespace delete; we also
 // attempt it here for the case the namespace delete is Forbidden. Gated on
 // part-of=astronomer.
@@ -598,42 +523,6 @@ func (h *DecommissionHandler) removeClusterRBAC(ctx context.Context, key, val st
 	})
 
 	return o.toStep("remove_cluster_rbac")
-}
-
-// removeAgentClusterRBAC deletes the agent's OWN cluster-scoped RBAC
-// (astronomer-agent ClusterRole + ClusterRoleBinding), gated on part-of. It runs
-// LAST — in the deferred self-delete goroutine, AFTER the astronomer-system
-// namespace delete — because these grant the cluster-scoped permission the
-// namespace delete needs; removing them sooner self-revokes it. Best-effort (the
-// pod is terminating); a residual is surfaced by the server's orphan audit.
-func (h *DecommissionHandler) removeAgentClusterRBAC(ctx context.Context, key, val string) {
-	rbac := h.clientset.RbacV1()
-	o := &guardOutcome{}
-	// ClusterRoleBinding (the actual GRANT) FIRST: this runs in the dying pod's
-	// grace window racing process exit, and the binding is the security-relevant
-	// half — a lone ClusterRole with no binding (and the SA already gone with the
-	// namespace) grants nothing. If exit cuts us off after this, the residual is
-	// inert and the server orphan audit surfaces it.
-	crb, gerr := rbac.ClusterRoleBindings().Get(ctx, "astronomer-agent", metav1.GetOptions{})
-	var crbLabels map[string]string
-	if crb != nil {
-		crbLabels = crb.Labels
-	}
-	o.guardedDelete("clusterrolebinding", "astronomer-agent", crbLabels, gerr, key, val, false, func() error {
-		return rbac.ClusterRoleBindings().Delete(ctx, "astronomer-agent", kubeutil.DeleteOptions())
-	})
-	cr, err := rbac.ClusterRoles().Get(ctx, "astronomer-agent", metav1.GetOptions{})
-	var crLabels map[string]string
-	if cr != nil {
-		crLabels = cr.Labels
-	}
-	o.guardedDelete("clusterrole", "astronomer-agent", crLabels, err, key, val, false, func() error {
-		return rbac.ClusterRoles().Delete(ctx, "astronomer-agent", kubeutil.DeleteOptions())
-	})
-	if len(o.guarded)+len(o.errs)+len(o.forbidden) > 0 {
-		h.log.Info("decommission: agent cluster RBAC teardown (deferred)",
-			"removed", o.removed, "guarded", o.guarded, "errs", o.errs, "forbidden", o.forbidden)
-	}
 }
 
 // removeAgentSingletons deletes the namespaced singletons in astronomer-system
