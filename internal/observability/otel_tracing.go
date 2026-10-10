@@ -116,6 +116,12 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 			return noopShutdown, fmt.Errorf("otel exporter headers are malformed")
 		}
 	}
+	// The SDK otherwise logs full exporter errors directly to stderr, including
+	// collector-controlled HTTP error bodies. Keep one safe event; returned
+	// export/shutdown errors and the exporter counters retain their semantics.
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(error) {
+		log.Warn("OpenTelemetry SDK reported an error", "event", "otel.sdk.error")
+	}))
 
 	// Propagator is always set, even when the exporter is off. That
 	// way an incoming traceparent header from a load balancer still
@@ -127,6 +133,7 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 
 	if endpoint == "" {
 		otel.SetTracerProvider(noop.NewTracerProvider())
+		tracingMetrics.enabled.Store(false)
 		log.Debug("otel tracing disabled (OTEL_EXPORTER_OTLP_ENDPOINT unset)")
 		return noopShutdown, nil
 	}
@@ -172,12 +179,15 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 		// Batcher buffers + ships in the background. 5s flush window
 		// keeps lag bounded under steady load; the explicit Shutdown
 		// flushes the rest on graceful exit.
-		sdktrace.WithBatcher(diagnosticExporter{exporter},
+		sdktrace.WithBatcher(tracingMetricsExporter{diagnosticExporter{exporter}, tracingMetrics},
+			sdktrace.WithMaxQueueSize(2048),
+			sdktrace.WithMaxExportBatchSize(512),
 			sdktrace.WithBatchTimeout(5*time.Second),
 			sdktrace.WithExportTimeout(tracingExportTimeout),
 		),
 	)
 	otel.SetTracerProvider(tp)
+	tracingMetrics.enabled.Store(true)
 
 	log.Info("otel tracing initialized",
 		"sampler_ratio", ratio,

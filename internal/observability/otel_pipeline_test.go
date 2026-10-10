@@ -18,8 +18,12 @@ import (
 
 func preserveTracingGlobals(t *testing.T) {
 	t.Helper()
-	provider, propagator := otel.GetTracerProvider(), otel.GetTextMapPropagator()
-	t.Cleanup(func() { otel.SetTracerProvider(provider); otel.SetTextMapPropagator(propagator) })
+	provider, propagator, errorHandler := otel.GetTracerProvider(), otel.GetTextMapPropagator(), otel.GetErrorHandler()
+	t.Cleanup(func() {
+		otel.SetTracerProvider(provider)
+		otel.SetTextMapPropagator(propagator)
+		otel.SetErrorHandler(errorHandler)
+	})
 }
 
 func TestTracingRejectsMalformedEndpointWithoutCredentialDisclosure(t *testing.T) {

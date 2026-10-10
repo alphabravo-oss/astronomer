@@ -1,0 +1,9 @@
+# Trace export failures
+
+`AstronomerTraceExportFailing` reports completed SDK export failures for one installation. Process readiness, PostgreSQL connectivity, queue ownership and downstream reconciliation remain separate signals. An enabled exporter does not prove collector readiness; absence of successful exports can also reflect quiet traffic or sampling zero. Missing Prometheus samples are unknown.
+
+Inspect `astronomer_tracing_enabled`, both bounded `result` series and the last successful timestamp for the named metrics Service. Check the configured HTTP(S) collector route, DNS/TLS trust, network policy, authentication and collector health from that process's network. Inspect safe operation/status fields; do not copy tokens, headers, connection credentials or secret payloads into diagnostic output.
+
+Configuration changes require a process restart. Keep OTLP authentication in Secret-backed headers and use the agent's own collector route; management-plane credentials do not cross that boundary. Do not make exporter availability a prerequisite for queue ownership or HTTP readiness.
+
+The queue holds at most 2048 spans, with 512 per batch and five-second export/flush bounds. Nonblocking saturation can discard spans, and shutdown can finish without all evidence when its caller deadline expires. The exported counter records completed SDK calls, not internal retries or queue drops. A successful protocol response does not establish durable delivery of every span. Background SDK diagnostics use the safe fixed `otel.sdk.error` event and omit arbitrary collector error-body text. Preserve operation IDs and durable audits for asynchronous correlation when trace evidence is incomplete. Restore the collector, verify a new real workflow arrives and record the evidence gap; do not infer healthy zero activity from missing spans.

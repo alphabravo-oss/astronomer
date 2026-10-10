@@ -33,6 +33,14 @@ group `astronomer.observability.alerts`):
 - `AstronomerGrafanaDown` — kube-state-metrics on Deployment `astronomer-grafana`; process check is `GET /api/health`
 - `AstronomerLokiGatewayDown` — kube-state-metrics on Deployment `astronomer-loki-gateway`
 
+## Trace export health
+
+- `astronomer_tracing_enabled{astronomer_instance_id}` is one when an exporter is configured. It does not probe the collector or change process readiness; sampling zero can deliberately produce no spans.
+- `astronomer_tracing_exports_total{astronomer_instance_id,result="success|failure"}` counts completed SDK export calls. Success means the exporter returned nil after protocol handling; it does not prove durable storage or delivery of every span. SDK transport retries and queue drops are not counted by this boundary.
+- `astronomer_tracing_last_success_timestamp_seconds{astronomer_instance_id}` records the last successful export. Zero means no success observed. Missing scrape data means unknown, and a quiet sampled workload is not proof of a failed exporter.
+
+The SDK queue is bounded to 2048 spans and each export batch to 512. Enqueue is nonblocking, so saturated queues may lose diagnostic spans. There is no claimed drop counter for the SDK's unexposed queue. Export and shutdown are bounded; collector outages do not stop request/task ownership or alter dependency readiness. `AstronomerTraceExportFailing` alerts only on actual failed export calls and links to the [trace-export runbook](runbooks/trace-export-failing.md).
+
 ## Server HTTP Metrics
 
 - `astronomer_http_requests_total{astronomer_instance_id,method,route_template,status_class}`
