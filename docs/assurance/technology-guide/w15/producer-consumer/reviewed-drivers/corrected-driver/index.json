@@ -1,0 +1,45 @@
+{
+  "scope": "source-only exact empty-images graph-validator correction; no retry credit",
+  "predecessor_driver_sha256": "662f7eac6db9c0a34a32ae3db6c8ded58504d6237079b245c6d639632c3e7cd8",
+  "canonical_producer_source": {
+    "path": "/root/astronomer-all/astronomer-catalog-032-w15/scripts/build_catalog.py",
+    "sha256": "a9ea3c82f0343ca5dc847044a373946d53d61d7af38f8541352bc22c80e78f00"
+  },
+  "artifacts": [
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-empty-images-afd3af6/README.md",
+      "sha256": "a13eda90979b5d79e6cd44f1c3199fd9815cd8be6121b54f705c0d07f70f2fb3",
+      "bytes": 1319
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-empty-images-afd3af6/current-fingerprints.json",
+      "sha256": "df4a833b7acfc225ab2a039919d23e9d58fa0980ad27c2254a4edfe0f30c12cd",
+      "bytes": 340
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-empty-images-afd3af6/produce.py",
+      "sha256": "bd846e6cf1366137adce551e20fb3a3f0ab546c291d84f04e556c67a9bf73298",
+      "bytes": 3004
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-empty-images-afd3af6/review.patch",
+      "sha256": "c226cd65bb223dd064297df00b4b0490db044a4a290e4c47e3a8e7ce7df66463",
+      "bytes": 1863
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-empty-images-afd3af6/run_interop.py",
+      "sha256": "092024f1235037db5eb3a2a0866c4480b5817f5888a0865de35186be2ed4e75f",
+      "bytes": 11923
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-empty-images-afd3af6/source-bindings.json",
+      "sha256": "e2dd482ce617483bc8db01afb66bae0d8afb79b11ef11ef539b6572b5b1e54ba",
+      "bytes": 85489
+    },
+    {
+      "path": "/tmp/w15-catalog-producer-consumer-empty-images-afd3af6/test_controls.py",
+      "sha256": "0a4eddb9cca5f993a60981e38001c0f3c6372e372d3381c3e6caff16db5fb442",
+      "bytes": 4918
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"category":{"database":1,"logging":2,"monitoring":7,"networking":2,"other":1,"security":6,"storage":2},"kubernetes":{">=1.27.0 <1.36.0":1,">=1.31.0 <1.36.0":20},"supportTier":{"astronomer":3,"experimental":2,"upstream":16}}

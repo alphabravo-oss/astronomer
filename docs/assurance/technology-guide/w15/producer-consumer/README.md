@@ -1,0 +1,11 @@
+# Canonical catalog producer and signed consumer interoperability
+
+Scoped proof only. The original run 9a52 passed both tool probes and its first canonical producer output, then failed the evidence checker because canonical images.txt is legitimately empty. The consumer was not launched in that run. That failure and its original receipt remain unchanged.
+
+The corrected run e4d5 passed all five held steps. Two independent canonical producer outputs have the same complete 34-file byte graph, 21 applications and 17 repositories. The only zero-length file accepted is the canonical images.txt. Every file is regular and private mode 0600 in the original owned outputs; complete output bytes are retained here. The actual Go race consumer passed one parent and eleven children, twelve named terminals and one package terminal, with no skips. It authenticates a synthetic signed OCI graph through the canonical catalog loader and verifies semantic entry shape, exact source/digest binding and zero persistence writes on negative paths.
+
+Catalog source afd3 and consumer source b82a stayed byte-identical throughout. The qualified private 62-package environment remains bound to its historical creation source 4e6, with the original 61-package environment and selected bootstrap tools unchanged. All 23 raw numeric default 20 GiB/20% guards passed in the corrected run, and all five child groups were held until drain and joined. The earlier failed run has fourteen independently checked default guards.
+
+Original logs, receipts, complete producer graphs and reviewed drivers are retained by byte size and SHA. Gzip uses mtime zero and expands to the original bytes. Two complete Git blob/mode maps bind the 75 catalog and 9,087 consumer files. Private fixture homes, caches and installed third-party environment bodies are excluded; their exact receipt bindings and original private directories remain preserved. No private signing keys are included.
+
+The signing key and OCI transport are synthetic, owned test inputs. This does not qualify a live registry or TLS transport, keyless public signing, GitHub publication, database mutation, customer deployment, ARM execution, CI execution or the whole W15 package. Existing catalog transport and tooling qualifications remain separately scoped.

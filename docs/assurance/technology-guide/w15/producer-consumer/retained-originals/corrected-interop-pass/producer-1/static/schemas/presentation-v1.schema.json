@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.alphabravo.io/schemas/presentation-v1.json",
+  "title": "Astronomer application presentation metadata v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["featured", "configurationMode", "sections"],
+  "properties": {
+    "featured": { "type": "boolean" },
+    "configurationMode": { "enum": ["schema", "yaml", "schema-and-yaml"] },
+    "sections": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+      "uniqueItems": true
+    },
+    "screenshots": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri", "pattern": "^https://" },
+      "uniqueItems": true
+    },
+    "annotations": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    }
+  }
+}

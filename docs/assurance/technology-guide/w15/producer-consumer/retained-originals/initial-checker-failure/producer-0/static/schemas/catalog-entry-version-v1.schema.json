@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astronomer.alphabravo.io/schemas/catalog-entry-version-v1.json",
+  "title": "Astronomer catalog entry version v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "artifact", "identities"],
+  "properties": {
+    "version": { "type": "string", "minLength": 1 },
+    "appVersion": { "type": "string" },
+    "releaseNotes": { "type": "string" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "repository", "name", "version"],
+      "properties": {
+        "type": { "enum": ["helm-http", "helm-oci", "oci", "git"] },
+        "repository": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "revision": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "git" } } },
+          "then": { "required": ["revision"] },
+          "else": { "required": ["digest"] }
+        }
+      ]
+    },
+    "identities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chartDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "provenanceDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "sbomDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "signatureDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "images": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^.+@(sha256:[a-f0-9]{64})$" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "deprecated": { "type": "boolean", "default": false },
+    "replacement": { "type": "string" },
+    "revoked": { "type": "boolean", "default": false }
+  }
+}
