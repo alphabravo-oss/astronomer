@@ -1,6 +1,7 @@
 # Plan 032 implementation evidence
 
 Implementation branch: `implement/032-technology-guide`.
+The scoped typed upgrade core now also has explicit process/upgrade import-direction rules. Both isolated and integrated checks pass with sixteen rules; production adapters and deployment qualification remain open. [Boundary review](w14-core-import-boundary-root-review.json).
 Application source baseline: `3b378ef16141b9eaac35a1e5fe292e061b69f5f1`.
 Catalog source baseline: `3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5`.
 
