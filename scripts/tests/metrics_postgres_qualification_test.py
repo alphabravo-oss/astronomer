@@ -87,6 +87,16 @@ class MetricsOwnershipTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "owned cluster node"):
             self.check()
 
+    def test_endpoints_bind_ready_current_primary_uid(self):
+        report = self.check()
+        endpoint = {"metadata": {"namespace": fence.NAMESPACE, "name": report["service"], "uid": "endpoint-uid"}, "subsets": [{"addresses": [{"targetRef": {"kind": "Pod", "namespace": fence.NAMESPACE, "name": report["currentPrimary"], "uid": report["currentPrimaryUID"]}}], "ports": [{"port": 5432, "protocol": "TCP"}]}]}
+        self.assertEqual(fence.endpoints_fence(endpoint, report)["readyEndpointTargetUID"], report["currentPrimaryUID"])
+        for mutate in [lambda x: x["metadata"].update(name="foreign-service"), lambda x: x["subsets"][0]["addresses"][0]["targetRef"].update(uid="former-primary"), lambda x: x["subsets"][0].update(notReadyAddresses=[{}]), lambda x: x["subsets"][0].update(addresses=[]), lambda x: x["subsets"][0]["ports"][0].update(port=5433)]:
+            altered = copy.deepcopy(endpoint)
+            mutate(altered)
+            with self.assertRaises(ValueError):
+                fence.endpoints_fence(altered, report)
+
     def test_reference_rejects_database_uid_fragment_override_and_duplicate(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "ref.json"

@@ -70,9 +70,23 @@ def fence(namespace, cluster, primary, services, nodes, address, lane):
     return {"namespaceUID": ns["uid"], "clusterUID": metadata["uid"], "currentPrimary": live["name"], "currentPrimaryUID": live["uid"], "service": matching[0]["metadata"]["name"], "serviceUID": matching[0]["metadata"]["uid"], "readyInstances": 3, "database": lane["database"]}
 
 
-def live_fence(args):
-    lane = LANES[args.major]
-    address, digest = reference(args.reference, lane)
+def endpoints_fence(endpoints, report):
+    metadata = endpoints["metadata"]
+    if metadata["namespace"] != NAMESPACE or metadata["name"] != report["service"]:
+        raise ValueError("service endpoints identity differs")
+    subsets = endpoints.get("subsets", [])
+    if len(subsets) != 1 or subsets[0].get("notReadyAddresses"):
+        raise ValueError("service endpoints are not one ready primary")
+    addresses, ports = subsets[0].get("addresses", []), subsets[0].get("ports", [])
+    if len(addresses) != 1 or not any(p.get("port") == 5432 and p.get("protocol", "TCP") == "TCP" for p in ports):
+        raise ValueError("service endpoint address or port differs")
+    target = addresses[0].get("targetRef", {})
+    if target.get("kind") != "Pod" or target.get("namespace") != NAMESPACE or target.get("name") != report["currentPrimary"] or target.get("uid") != report["currentPrimaryUID"]:
+        raise ValueError("service endpoint does not target current owned primary")
+    return {"endpointsUID": metadata["uid"], "readyEndpointTargetUID": target["uid"]}
+
+
+def owned_endpoint(args, address, lane):
     command = [args.kubectl, "--kubeconfig", args.kubeconfig, "--request-timeout=10s"]
     def get(kind, name=None):
         cmd = command + (["-n", NAMESPACE] if kind not in {"nodes", "namespace"} else []) + ["get", kind]
@@ -82,6 +96,14 @@ def live_fence(args):
     namespace = get("namespace", NAMESPACE)
     cluster = get("cluster", lane["cluster"])
     report = fence(namespace, cluster, get("pod", cluster["status"]["currentPrimary"]), get("services"), get("nodes"), address, lane)
+    report.update(endpoints_fence(get("endpoints", report["service"]), report))
+    return report
+
+
+def live_fence(args):
+    lane = LANES[args.major]
+    address, digest = reference(args.reference, lane)
+    report = owned_endpoint(args, address, lane)
     report.update({"observedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "privateReferenceSHA256": digest, "postgresMajor": args.major})
     return report
 
