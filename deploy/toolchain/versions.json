@@ -4206,29 +4206,73 @@
       "artifacts": [],
       "consumers": [],
       "discovery": {
-        "observedAt": "2026-10-09T18:55:59.772731Z",
-        "provenance": "sha256:1f90d75243d3741367f2ef3bb91ae9510d8e239260bb45a526c076a5a4abf51e",
+        "observedAt": "2026-10-10T17:47:06.325752+00:00",
+        "provenance": "sha256:9b65df101b3869b95a2843ca018a763d586e496349ace289cbdbda5d63c83759",
         "releasedAt": "2026-09-09T23:51:48Z",
         "stable": true,
         "version": "4.3.0"
       },
       "ecosystem": "github",
-      "exception": {
-        "createdAt": "2026-10-09T19:22:39Z",
-        "evidence": "docs/assurance/technology-guide/w01/README.md",
-        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
-        "owner": "platform/backend",
-        "reason": "The current application SDK selects Helm v4.3.0 and its scoped synthetic SDK/proxy/current-graph evidence is retained under W11. Standalone CLI selection and unchanged Local CI/release CLI3.21.0/3.16.2/3.16.4 consumers still need their own exact platform and operation qualification; they are not qualified by the SDK migration. Flux remains a separate upstream controller graph.",
-        "reviewBy": "2026-10-16T00:00:00Z"
-      },
+      "executableArtifacts": [
+        {
+          "archiveMember": "linux-amd64/helm",
+          "digest": "sha256:86584a54def73570558f66f5111cc53dfed56689637ae32c1201205d494f54fb",
+          "kind": "tar.gz",
+          "name": "helm-v4.3.0-linux-amd64.tar.gz",
+          "platform": "linux/amd64",
+          "provenance": "docs/assurance/technology-guide/w14/cli-primary/helm/helm-v4.3.0-linux-amd64.tar.gz.sha256sum",
+          "sizeBytes": 20321063,
+          "url": "https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz",
+          "verifiedAt": "2026-10-10T17:47:06.325752+00:00",
+          "version": "4.3.0"
+        },
+        {
+          "archiveMember": "linux-arm64/helm",
+          "digest": "sha256:31c5794dd55c66a51e6b7d2e2ac7a114ae8b1de41ff1d9ba51748ac973b06a08",
+          "kind": "tar.gz",
+          "name": "helm-v4.3.0-linux-arm64.tar.gz",
+          "platform": "linux/arm64",
+          "provenance": "docs/assurance/technology-guide/w14/cli-primary/helm/helm-v4.3.0-linux-arm64.tar.gz.sha256sum",
+          "sizeBytes": 17889190,
+          "url": "https://get.helm.sh/helm-v4.3.0-linux-arm64.tar.gz",
+          "verifiedAt": "2026-10-10T17:47:06.325752+00:00",
+          "version": "4.3.0"
+        }
+      ],
       "id": "helm",
       "owner": "platform/backend",
       "platforms": [
         "linux/amd64",
         "linux/arm64"
       ],
-      "qualification": "Owning package must qualify exact asset/platform and consumer graph before deployment",
-      "selected": null,
+      "qualification": "Source-selected standalone Helm4.3.0 with exact official amd64/arm64 archive metadata; archive extraction, native CLI version, all upgrade/rollback/hooks and legacy CI/release consumers remain unqualified. Embedded SDK and Flux are independent.",
+      "selected": "4.3.0",
+      "sourceBindings": [
+        {
+          "digest": "sha256:9b65df101b3869b95a2843ca018a763d586e496349ace289cbdbda5d63c83759",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/helm/release-latest.json"
+        },
+        {
+          "digest": "sha256:9b65df101b3869b95a2843ca018a763d586e496349ace289cbdbda5d63c83759",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/helm/release-v4.3.0.json"
+        },
+        {
+          "digest": "sha256:b44f0bf701af457342007f037ca22d79f4d25be431b258e2126d0b237f9da310",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/helm/helm-v4.3.0-linux-amd64.tar.gz.sha256sum"
+        },
+        {
+          "digest": "sha256:6d76b16d775d22263af4d2a06e99d4e1c020997dfd0c5a6fd150a8d47565bf61",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/helm/helm-v4.3.0-linux-arm64.tar.gz.sha256sum"
+        },
+        {
+          "digest": "sha256:661ef508e13d7ae6dfe85c4872e5f82f5816cf48cb11bb1ae156a4f0a2d3c2bf",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/helm/helm-linux-amd64-head.json"
+        },
+        {
+          "digest": "sha256:d56de13bab77407430e002e0776f569e10e57db753574622fd3c81f95d4ce620",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/helm/helm-linux-arm64-head.json"
+        }
+      ],
       "upstream": {
         "kind": "github",
         "url": "https://api.github.com/repos/helm/helm/releases"
@@ -4736,6 +4780,30 @@
         "reason": "Existing declared1.33-1.35 comparison lanes need per-cluster supported clients;1.37 would violate kubectl skew, and existing1.35/1.33 is already unqualified. W12 repairs the client matrix without silently changing supported clusters.",
         "reviewBy": "2026-10-16T00:00:00Z"
       },
+      "executableArtifacts": [
+        {
+          "digest": "sha256:3cfeaf80be482b435b0aa214aff6e0b2c312ee23c0ff20810c75517b6004c6eb",
+          "kind": "binary",
+          "name": "kubectl",
+          "platform": "linux/amd64",
+          "provenance": "docs/assurance/technology-guide/w14/cli-primary/kubectl/kubectl-amd64.sha256",
+          "sizeBytes": 59121826,
+          "url": "https://dl.k8s.io/release/v1.35.9/bin/linux/amd64/kubectl",
+          "verifiedAt": "2026-10-10T18:38:29.457329+00:00",
+          "version": "1.35.9"
+        },
+        {
+          "digest": "sha256:39c98bca82875d9a9ddfb6f3c5ab17c3f78ea0801230683e538a67d5c053308d",
+          "kind": "binary",
+          "name": "kubectl",
+          "platform": "linux/arm64",
+          "provenance": "docs/assurance/technology-guide/w14/cli-primary/kubectl/kubectl-arm64.sha256",
+          "sizeBytes": 55378082,
+          "url": "https://dl.k8s.io/release/v1.35.9/bin/linux/arm64/kubectl",
+          "verifiedAt": "2026-10-10T18:38:29.457329+00:00",
+          "version": "1.35.9"
+        }
+      ],
       "id": "kubectl-shell",
       "owner": "platform/runtime (W12)",
       "platforms": [
@@ -4744,6 +4812,16 @@
       ],
       "qualification": "Existing declared1.33-1.35 comparison lanes need per-cluster supported clients;1.37 would violate kubectl skew, and existing1.35/1.33 is already unqualified. W12 repairs the client matrix without silently changing supported clusters.",
       "selected": "1.35.9",
+      "sourceBindings": [
+        {
+          "digest": "sha256:de79dcf74d6cf4a7346d17ffa054d2111b3f7bb4b48cc6bf368091e850e5760b",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/kubectl/kubectl-amd64.sha256"
+        },
+        {
+          "digest": "sha256:7164404dcffb0ace33cc0bf59b9aeaeeafdd57907b907844f923ccc9fa2e4e41",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/kubectl/kubectl-arm64.sha256"
+        }
+      ],
       "upstream": {
         "kind": "github",
         "url": "https://api.github.com/repos/kubernetes/kubernetes/releases"
@@ -7537,6 +7615,70 @@
       "upstream": {
         "kind": "github",
         "url": "https://api.github.com/repos/valkey-io/valkey/releases"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [],
+      "discovery": {
+        "observedAt": "2026-10-10T18:17:08.482557+00:00",
+        "provenance": "sha256:02aabf71024121d01ddde79ef092a2a7a50d62c03c12db18f9af3f982484af8c",
+        "releasedAt": "2026-09-30T02:40:02Z",
+        "stable": true,
+        "version": "2.102.0"
+      },
+      "ecosystem": "github",
+      "executableArtifacts": [
+        {
+          "archiveMember": "gh_2.102.0_linux_amd64/bin/gh",
+          "digest": "sha256:bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386",
+          "kind": "tar.gz",
+          "name": "gh_2.102.0_linux_amd64.tar.gz",
+          "platform": "linux/amd64",
+          "provenance": "docs/assurance/technology-guide/w14/cli-primary/gh/gh-checksums.txt",
+          "sizeBytes": 15319960,
+          "url": "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz",
+          "verifiedAt": "2026-10-10T18:17:08.482557+00:00",
+          "version": "2.102.0"
+        },
+        {
+          "archiveMember": "gh_2.102.0_linux_arm64/bin/gh",
+          "digest": "sha256:7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484",
+          "kind": "tar.gz",
+          "name": "gh_2.102.0_linux_arm64.tar.gz",
+          "platform": "linux/arm64",
+          "provenance": "docs/assurance/technology-guide/w14/cli-primary/gh/gh-checksums.txt",
+          "sizeBytes": 13917794,
+          "url": "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_arm64.tar.gz",
+          "verifiedAt": "2026-10-10T18:17:08.482557+00:00",
+          "version": "2.102.0"
+        }
+      ],
+      "id": "github-cli",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Source-selected official GH2.102.0 archives with exact API/checksum proof; joined CLI version/auth/attestation and upgrade orchestration remain unqualified. No ambient PATH selection.",
+      "selected": "2.102.0",
+      "sourceBindings": [
+        {
+          "digest": "sha256:02aabf71024121d01ddde79ef092a2a7a50d62c03c12db18f9af3f982484af8c",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/gh/gh-latest.json"
+        },
+        {
+          "digest": "sha256:02aabf71024121d01ddde79ef092a2a7a50d62c03c12db18f9af3f982484af8c",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/gh/gh-tag.json"
+        },
+        {
+          "digest": "sha256:afe49e9affa232faa8212aed035417166f6ade9b9470acb53d4dbd28c0504e8d",
+          "path": "docs/assurance/technology-guide/w14/cli-primary/gh/gh-checksums.txt"
+        }
+      ],
+      "upstream": {
+        "kind": "github",
+        "url": "https://api.github.com/repos/cli/cli/releases"
       }
     }
   ],

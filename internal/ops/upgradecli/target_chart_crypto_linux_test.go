@@ -102,7 +102,7 @@ func newLocalChartCryptoFixture(t *testing.T, foreignSigner bool, postgresMajor 
 	metadata := newMetadataCryptoFixture(t, "v1.2.2")
 	manifest, compatibility := chartCompatibilityFixture(t)
 	values := runtimeValuesFixture
-	if len(postgresMajor) > 1 || len(postgresMajor) == 1 && postgresMajor[0] != "17" {
+	if len(postgresMajor) > 1 || len(postgresMajor) == 1 && (postgresMajor[0] != "17" && postgresMajor[0] != "17-cnpg") {
 		t.Fatal("explicit synthetic PostgreSQL 17 fixture only")
 	}
 	if len(postgresMajor) == 1 {
@@ -112,6 +112,9 @@ func newLocalChartCryptoFixture(t *testing.T, foreignSigner bool, postgresMajor 
 				manifest.Astronomer.RuntimeImages[i].SourceReference = "fixture.invalid/postgres:17.11"
 			}
 		}
+	}
+	if len(postgresMajor) == 1 && postgresMajor[0] == "17-cnpg" {
+		values = strings.Replace(values, "postgres:\n  image:", "postgres:\n  cloudNativePG:\n    imageName: ghcr.io/cloudnative-pg/postgresql:17.11-202610050823-standard-trixie@sha256:"+strings.Repeat("a", 64)+"\n  image:", 1)
 	}
 	archive := chartArchiveFixture(t, append(normalChartEntries(compatibility), chartArchiveEntry{name: "astronomer/values.yaml", data: []byte(values)}))
 	config := []byte(`{}`)

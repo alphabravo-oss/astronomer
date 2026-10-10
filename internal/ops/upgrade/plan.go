@@ -84,7 +84,7 @@ func (p Plan) Validate() error {
 			return errors.New("explicit immutable release and namespace identities required")
 		}
 	}
-	if p.Timeout <= 0 || p.Timeout > time.Hour || p.CleanupTimeout <= 0 || p.CleanupTimeout > 5*time.Minute {
+	if p.Timeout <= 0 || p.CleanupTimeout <= 0 || p.CleanupTimeout > 5*time.Minute {
 		return errors.New("bounded operation and cleanup deadlines required")
 	}
 	if p.Replace != nil {

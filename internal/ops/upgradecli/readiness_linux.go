@@ -30,9 +30,19 @@ func NewReadiness(fence *OwnershipFence, minimumReadyNodes uint32) (*Readiness, 
 	return &Readiness{fence: fence, minimumReadyNodes: minimumReadyNodes}, nil
 }
 
-func (r *Readiness) Check(ctx context.Context) error {
+func (r *Readiness) Check(ctx context.Context) error { return r.check(ctx, nil) }
+
+func (r *Readiness) check(ctx context.Context, replacement *DisposableReplacement) error {
 	if r == nil || ctx == nil {
 		return errors.New("explicit readiness context and composition required")
+	}
+	if replacement != nil {
+		if replacement.backup.source.fence != r.fence {
+			return errors.New("quiesced owner differs from readiness")
+		}
+		if err := replacement.verifyQuiesced(ctx); err != nil {
+			return err
+		}
 	}
 	id := r.fence.options.Identity
 	if err := r.fence.Fence(ctx, id, nil); err != nil {
@@ -68,11 +78,19 @@ func (r *Readiness) Check(ctx context.Context) error {
 	if err := checkReadyDeployments(deployments); err != nil {
 		return err
 	}
-	pdbs, err := read("get", "poddisruptionbudgets", "--namespace", id.Namespace, "--selector", selector, "--output", "go-template="+disruptionTemplate)
+	pdbTemplate := disruptionTemplate
+	if replacement != nil {
+		pdbTemplate = quiescedPDBTemplate
+	}
+	pdbs, err := read("get", "poddisruptionbudgets", "--namespace", id.Namespace, "--selector", selector, "--output", "go-template="+pdbTemplate)
 	if err != nil {
 		return err
 	}
-	if err := checkDisruptionAllowance(pdbs); err != nil {
+	if replacement != nil {
+		if err := replacement.checkQuiescedPDBs(ctx, pdbs); err != nil {
+			return err
+		}
+	} else if err := checkDisruptionAllowance(pdbs); err != nil {
 		return err
 	}
 	// All observations must finish before acknowledging readiness. A recreated

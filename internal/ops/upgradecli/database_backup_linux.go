@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/alphabravocompany/astronomer-go/internal/ops/process"
 )
 
@@ -22,14 +24,15 @@ const databasePodTemplate = `{{.metadata.uid}}{{"\t"}}{{.metadata.name}}{{"\t"}}
 var databaseName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,62}$`)
 
 type DatabaseBackupOptions struct {
-	Database        string
-	RestoreDatabase string
-	DatabasePodUID  string
-	Owner           string
-	ExpectedMajor   uint32
-	MinimumSchema   uint32
-	TargetSchema    uint32
-	ArtifactPolicy  ArtifactPolicy
+	DecryptProofWebhookID string
+	Database              string
+	RestoreDatabase       string
+	DatabasePodUID        string
+	Owner                 string
+	ExpectedMajor         uint32
+	MinimumSchema         uint32
+	TargetSchema          uint32
+	ArtifactPolicy        ArtifactPolicy
 }
 
 type DatabaseSchemaState struct{ Major, Version uint32 }
@@ -40,15 +43,20 @@ type DatabaseSchemaState struct{ Major, Version uint32 }
 // Constructor admission and successful dumping alone do not certify a readable
 // archive or a temporary restore; those later operations retain their own gates.
 type SourceDatabaseBackup struct {
-	fence   *OwnershipFence
-	options DatabaseBackupOptions
-	capture func(context.Context, Tool, []string, ArtifactPolicy) (*process.ArtifactCapture, process.Result, error)
+	cnpg           *CloudNativePGSource
+	cnpgRestore    CloudNativePGRestoreOptions
+	observeBound   func(context.Context) (DatabaseSchemaState, error)
+	argumentsBound func(bool, string, ...string) []string
+	fence          *OwnershipFence
+	options        DatabaseBackupOptions
+	capture        func(context.Context, Tool, []string, ArtifactPolicy) (*process.ArtifactCapture, process.Result, error)
 }
 
 // DatabaseBackup retains private recovery material and its initial schema
 // binding. Its fields are private to this composition package, so an arbitrary
 // public metadata object cannot become restore authority.
 type DatabaseBackup struct {
+	cnpg     *CloudNativePGBackup
 	source   *SourceDatabaseBackup
 	artifact process.ArtifactCapture
 	schema   DatabaseSchemaState
@@ -58,6 +66,12 @@ func NewSourceDatabaseBackup(fence *OwnershipFence, options DatabaseBackupOption
 	if fence == nil || fence.commands == nil || fence.options.DatabasePod == "" || !databaseName.MatchString(options.Database) || !databaseName.MatchString(options.RestoreDatabase) || !strings.HasPrefix(options.RestoreDatabase, "astronomer_upgrade_verify_") || options.Database == options.RestoreDatabase || options.DatabasePodUID == "" || options.Owner == "" || strings.ContainsAny(options.DatabasePodUID+options.Owner, "\t\r\n") || options.ExpectedMajor == 0 || options.MinimumSchema == 0 || options.TargetSchema < options.MinimumSchema || options.ArtifactPolicy.MaximumBytes <= 0 {
 		return nil, errors.New("explicit bundled database identity, schema, temporary name and capture policy required")
 	}
+	if options.DecryptProofWebhookID != "" {
+		id, err := uuid.Parse(options.DecryptProofWebhookID)
+		if err != nil || id.String() != options.DecryptProofWebhookID {
+			return nil, errors.New("RC_DECRYPT_PROOF_WEBHOOK_ID requires canonical UUID")
+		}
+	}
 	return &SourceDatabaseBackup{fence: fence, options: options, capture: fence.commands.CaptureArtifact}, nil
 }
 
@@ -65,6 +79,9 @@ func (b *SourceDatabaseBackup) observe(ctx context.Context) (DatabaseSchemaState
 	var empty DatabaseSchemaState
 	if ctx == nil || b == nil {
 		return empty, errors.New("explicit source database context and binding required")
+	}
+	if b.observeBound != nil {
+		return b.observeBound(ctx)
 	}
 	if err := b.fence.Fence(ctx, b.fence.options.Identity, nil); err != nil {
 		return empty, err
@@ -95,6 +112,13 @@ func (b *SourceDatabaseBackup) observe(ctx context.Context) (DatabaseSchemaState
 
 func (b *SourceDatabaseBackup) Dump(ctx context.Context) (*DatabaseBackup, process.Result, error) {
 	var empty process.Result
+	if b != nil && b.cnpg != nil {
+		backup, result, err := b.cnpg.Dump(ctx)
+		if err != nil {
+			return nil, result, err
+		}
+		return &DatabaseBackup{source: b, artifact: backup.artifact, schema: backup.schema, cnpg: backup}, result, nil
+	}
 	state, err := b.observe(ctx)
 	if err != nil {
 		return nil, empty, err
@@ -117,6 +141,9 @@ func (b *SourceDatabaseBackup) Dump(ctx context.Context) (*DatabaseBackup, proce
 }
 
 func (b *SourceDatabaseBackup) arguments(stdin bool, script string, positionals ...string) []string {
+	if b.argumentsBound != nil {
+		return b.argumentsBound(stdin, script, positionals...)
+	}
 	args := []string{"--kubeconfig", b.fence.options.Kubeconfig, "--context", b.fence.options.Identity.Context, "exec", "--namespace", b.fence.options.Identity.Namespace}
 	if stdin {
 		args = append(args, "-i")

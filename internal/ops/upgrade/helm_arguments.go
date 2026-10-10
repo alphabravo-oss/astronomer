@@ -54,9 +54,17 @@ func (in HelmInputs) arguments() ([]string, error) {
 	if in.Plan.Validate() != nil || !filepath.IsAbs(in.ManifestFile) || in.Manifest.Release.Version != in.Plan.Target {
 		return nil, errors.New("exact target/manifest/plan binding required")
 	}
-	chart, err := registry.ParseReference(strings.TrimPrefix(in.ChartReference, "oci://"))
-	if err != nil || !strings.HasPrefix(in.ChartReference, "oci://") || chart.Reference != "" || chart.String() != strings.TrimPrefix(in.ChartReference, "oci://") {
-		return nil, errors.New("exact OCI chart repository required")
+	// A local archive is accepted only as an argv representation. Its content
+	// and immutable filesystem binding belong to the higher concrete Driver.
+	if filepath.IsAbs(in.ChartReference) {
+		if filepath.Clean(in.ChartReference) != in.ChartReference || !strings.HasSuffix(in.ChartReference, ".tgz") {
+			return nil, errors.New("exact absolute local chart archive required")
+		}
+	} else {
+		chart, err := registry.ParseReference(strings.TrimPrefix(in.ChartReference, "oci://"))
+		if err != nil || !strings.HasPrefix(in.ChartReference, "oci://") || chart.Reference != "" || chart.String() != strings.TrimPrefix(in.ChartReference, "oci://") {
+			return nil, errors.New("exact OCI chart repository required")
+		}
 	}
 	images, err := applicationBindings(in.Manifest, in.Plan.Target)
 	if err != nil {

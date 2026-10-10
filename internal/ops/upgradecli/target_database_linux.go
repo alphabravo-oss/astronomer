@@ -25,20 +25,21 @@ type databaseStorageAnchor struct {
 
 type observedDatabasePod struct{ uid, name, applicationName, controllerName, controllerUID, claimName string }
 
-// TargetDatabaseObservation permits a replacement Pod only under the initially
-// captured single-replica StatefulSet and its same Bound PVC/PV claim. It never
-// relaxes SourceDatabaseBackup's initial Pod UID, grants DROP authorization or
-// claims CloudNativePG/failover/major-upgrade qualification. Repeated reads are
-// point-in-time fences, not a Kubernetes or PostgreSQL lock.
+// TargetDatabaseObservation retains the initial StatefulSet/PVC/PV anchors for
+// bundled mode, or Cluster/PVC/PV/Service/application-Secret anchors for CNPG.
+// A target member may be recreated after Apply under its same captured storage
+// and controller; SourceDatabaseBackup's original source UID map never changes.
+// These are point-in-time fences, not live qualification or database locks.
 type TargetDatabaseObservation struct {
-	source    *SourceDatabaseBackup
-	mu        sync.Mutex
-	anchor    *databaseStorageAnchor
-	capturing bool
+	source       *SourceDatabaseBackup
+	mu           sync.Mutex
+	anchor       *databaseStorageAnchor
+	capturing    bool
+	cnpgCaptured bool
 }
 
 func NewTargetDatabaseObservation(source *SourceDatabaseBackup) (*TargetDatabaseObservation, error) {
-	if source == nil || source.fence == nil || source.fence.commands == nil || source.options.DatabasePodUID == "" || source.fence.options.DatabasePod == "" {
+	if source == nil || source.fence == nil || source.fence.commands == nil || source.options.DatabasePodUID == "" || (source.fence.options.DatabasePod == "" && source.cnpg == nil) {
 		return nil, errors.New("initial bundled source database ownership required")
 	}
 	return &TargetDatabaseObservation{source: source}, nil
@@ -50,6 +51,18 @@ func NewTargetDatabaseObservation(source *SourceDatabaseBackup) (*TargetDatabase
 func (o *TargetDatabaseObservation) Capture(ctx context.Context) error {
 	if o == nil || ctx == nil {
 		return errors.New("explicit database capture context required")
+	}
+	if o.source.cnpg != nil {
+		o.mu.Lock()
+		defer o.mu.Unlock()
+		if o.cnpgCaptured {
+			return errors.New("CNPG target owner already captured")
+		}
+		if _, err := o.source.observe(ctx); err != nil {
+			return err
+		}
+		o.cnpgCaptured = true
+		return ctx.Err()
 	}
 	o.mu.Lock()
 	if o.anchor != nil || o.capturing {
@@ -108,6 +121,15 @@ func (o *TargetDatabaseObservation) Observe(ctx context.Context) (DatabaseSchema
 	var empty DatabaseSchemaState
 	if o == nil || ctx == nil {
 		return empty, errors.New("explicit target database observation required")
+	}
+	if o.source.cnpg != nil {
+		o.mu.Lock()
+		captured := o.cnpgCaptured
+		o.mu.Unlock()
+		if !captured {
+			return empty, errors.New("initial CNPG target owner capture missing")
+		}
+		return observeCNPGTarget(ctx, o.source)
 	}
 	o.mu.Lock()
 	if o.anchor == nil {

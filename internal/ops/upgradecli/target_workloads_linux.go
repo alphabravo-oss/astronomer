@@ -21,6 +21,7 @@ type TargetWorkloads struct {
 	observation *HelmStateObservation
 	readyz      *ReadyzObservation
 	database    *TargetDatabaseObservation
+	external    *ReleaseBackup
 }
 
 func NewTargetWorkloads(observation *HelmStateObservation, readyz *ReadyzObservation) (*TargetWorkloads, error) {
@@ -48,6 +49,11 @@ func NewTargetWorkloadsWithDatabase(observation *HelmStateObservation, readyz *R
 func (o *TargetWorkloads) Check(ctx context.Context) error {
 	if o == nil || ctx == nil || o.observation == nil || o.observation.release == nil || o.readyz == nil {
 		return errors.New("explicit complete target observation context required")
+	}
+	if o.external != nil {
+		if err := o.external.externalAbsent(ctx); err != nil {
+			return err
+		}
 	}
 	if err := o.observation.confirmTarget(ctx, o.database); err != nil {
 		return err
@@ -100,6 +106,11 @@ func (o *TargetWorkloads) Check(ctx context.Context) error {
 	}
 	if err := r.manifestBinding(); err != nil {
 		return err
+	}
+	if o.external != nil {
+		if err := o.external.externalAbsent(ctx); err != nil {
+			return err
+		}
 	}
 	return o.observation.confirmTarget(ctx, o.database)
 }

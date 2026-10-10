@@ -49,7 +49,13 @@ type CommandOptions struct {
 	MaximumCaptureBytes int64
 }
 
+type commandCredential struct {
+	path    string
+	initial metadataInput
+}
+
 type Commands struct {
+	credentials      []commandCredential
 	options          CommandOptions
 	mu               sync.Mutex
 	sequence         uint16
@@ -59,11 +65,25 @@ type Commands struct {
 }
 
 func NewCommands(options CommandOptions) (*Commands, error) {
-	if !filepath.IsAbs(options.Directory) || !filepath.IsAbs(options.CaptureDirectory) || options.Timeout <= 0 || options.Timeout > time.Hour || options.TerminationGrace <= 0 || options.TerminationGrace > 5*time.Second || options.MaximumCaptureBytes <= 0 || options.MaximumCaptureBytes > 16<<20 {
+	if !filepath.IsAbs(options.Directory) || !filepath.IsAbs(options.CaptureDirectory) || options.Timeout <= 0 || options.TerminationGrace <= 0 || options.TerminationGrace > 5*time.Second || options.MaximumCaptureBytes <= 0 || options.MaximumCaptureBytes > 16<<20 {
 		return nil, errors.New("explicit command paths and finite lifecycle/capture bounds required")
 	}
 	options.Environment = append([]process.Environment(nil), options.Environment...)
-	return &Commands{options: options, run: process.Run, artifactCapacity: artifactCapacity, verified: make(map[Tool]struct{})}, nil
+	if len(options.Environment) > 64 {
+		return nil, errors.New("finite named operator environment required")
+	}
+	credentials := make([]commandCredential, 0, len(options.Environment))
+	for _, binding := range options.Environment {
+		if binding.SecretFile == "" {
+			continue
+		}
+		initial, err := bindMetadataArtifact(context.Background(), binding.SecretFile, 64<<10)
+		if err != nil {
+			return nil, errors.New("initial private operator credential unavailable")
+		}
+		credentials = append(credentials, commandCredential{binding.SecretFile, initial})
+	}
+	return &Commands{options: options, credentials: credentials, run: process.Run, artifactCapacity: artifactCapacity, verified: make(map[Tool]struct{})}, nil
 }
 
 // Execute retains raw output only in the process core's exclusive private
@@ -99,6 +119,9 @@ func (c *Commands) executeBound(ctx context.Context, tool Tool, args []string, a
 	if err := ctx.Err(); err != nil {
 		return nil, process.Result{}, err
 	}
+	if err := c.validateCredentialEnvironment(ctx); err != nil {
+		return nil, process.Result{}, err
+	}
 	if input != nil {
 		if err := verifyArtifactInput(ctx, c.options.CaptureDirectory, input, inputMaximum); err != nil {
 			return nil, process.Result{}, err
@@ -122,6 +145,10 @@ func (c *Commands) executeBound(ctx context.Context, tool Tool, args []string, a
 	}
 	result, runErr := c.run(ctx, spec)
 	actual, identityErr := toolIdentity(tool)
+	credentialErr := c.validateCredentialEnvironment(ctx)
+	if credentialErr != nil {
+		return nil, result, errors.Join(runErr, credentialErr)
+	}
 	if identityErr != nil || !os.SameFile(identity, actual) {
 		return nil, result, errors.Join(runErr, errors.New("bound tool identity changed"))
 	}
@@ -253,4 +280,23 @@ func readCapture(directory, name string, maximum int64, expected string) ([]byte
 		return nil, errors.New("private capture bytes differ")
 	}
 	return raw, nil
+}
+
+func (c *Commands) validateCredentialEnvironment(ctx context.Context) error {
+	if c == nil || ctx == nil {
+		return errors.New("explicit operator credential composition required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	for _, initial := range c.credentials {
+		actual, err := bindMetadataArtifact(ctx, initial.path, 64<<10)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err != nil || !sameArtifact(initial.initial.identity, actual.identity) || initial.initial.hash != actual.hash {
+			return errors.New("initial operator credential file changed")
+		}
+	}
+	return ctx.Err()
 }

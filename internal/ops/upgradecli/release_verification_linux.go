@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -27,13 +28,28 @@ const releaseSmallFilesMaximum = int64(16 << 10)
 // It does not authorize a backup, replacement, Apply or complete post-upgrade
 // workload observation. Serialize this handle with its single Driver invocation.
 type ReleaseVerification struct {
-	chart    *TargetChartContent
-	commands *Commands
-	github   Tool
-	inputs   map[string]metadataInput
+	chart      *TargetChartContent
+	commands   *Commands
+	github     Tool
+	inputs     map[string]metadataInput
+	repository string
 }
 
 func NewReleaseVerification(ctx context.Context, chart *TargetChartContent, commands *Commands, github Tool) (*ReleaseVerification, error) {
+	return NewReleaseVerificationWithRepository(ctx, chart, commands, github, releaseRepository)
+}
+
+var releaseRepositoryName = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9](?:[A-Za-z0-9._-]{0,99})$`)
+
+// The explicit legacy --repo selection affects only the GH repository check.
+// The normal release Sigstore identity below remains fixed to releaseRepository.
+func NewReleaseVerificationWithRepository(ctx context.Context, chart *TargetChartContent, commands *Commands, github Tool, repository string) (*ReleaseVerification, error) {
+	if repository == "" {
+		repository = releaseRepository
+	}
+	if !releaseRepositoryName.MatchString(repository) {
+		return nil, errors.New("explicit GitHub repository selection invalid")
+	}
 	if ctx == nil || chart == nil || chart.metadata == nil || chart.client == nil || commands == nil || github.Kind != GitHubCLI {
 		return nil, errors.New("explicit verified chart, joined commands and bound GitHub CLI required")
 	}
@@ -43,7 +59,7 @@ func NewReleaseVerification(ctx context.Context, chart *TargetChartContent, comm
 	if _, err := toolIdentity(github); err != nil {
 		return nil, err
 	}
-	v := &ReleaseVerification{chart: chart, commands: commands, github: github, inputs: make(map[string]metadataInput)}
+	v := &ReleaseVerification{chart: chart, commands: commands, github: github, repository: repository, inputs: make(map[string]metadataInput)}
 	for _, name := range []string{"RELEASE_IMAGES", "SHA256SUMS"} {
 		input, err := bindMetadataArtifact(ctx, filepath.Join(chart.metadata.directory, name), releaseSmallFilesMaximum)
 		if err != nil {
@@ -121,7 +137,7 @@ func (v *ReleaseVerification) Verify(ctx context.Context) error {
 	}
 	// A joined successful real gh invocation verifies the archive against actual
 	// GitHub attestations. A test seam alone is not native/provenance qualification.
-	if _, _, err := v.commands.Execute(ctx, v.github, []string{"attestation", "verify", v.chart.archivePath, "--repo", releaseRepository}); err != nil {
+	if _, _, err := v.commands.Execute(ctx, v.github, []string{"attestation", "verify", v.chart.archivePath, "--repo", v.repository}); err != nil {
 		return err
 	}
 	if _, err := v.chart.readArchive(ctx); err != nil {

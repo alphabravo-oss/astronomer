@@ -151,6 +151,11 @@ func releaseVersion(state ReleaseState, version string) bool {
 // infer absence of mutation. The higher Driver must retain recovery material.
 // These are repeated point-in-time observations, not an atomic cluster lock.
 func (o *HelmStateObservation) ReconcileHelm(ctx context.Context) (upgrade.Outcome, error) {
+	return o.reconcileHelm(ctx, false)
+}
+
+// Only the complete Driver calls this after independent retained replacement OID assessment.
+func (o *HelmStateObservation) reconcileHelm(ctx context.Context, replacementAssessed bool) (upgrade.Outcome, error) {
 	first, err := o.Read(ctx)
 	if err != nil {
 		return upgrade.Outcome{}, err
@@ -163,7 +168,7 @@ func (o *HelmStateObservation) ReconcileHelm(ctx context.Context) (upgrade.Outco
 		return upgrade.Outcome{}, errors.New("Helm state changed during mutation assessment")
 	}
 	r := o.release
-	if r.plan.Replace != nil {
+	if r.plan.Replace != nil && !replacementAssessed {
 		return upgrade.Outcome{}, errors.New("database replacement requires its own mutation assessment")
 	}
 	if first.Status != "deployed" {

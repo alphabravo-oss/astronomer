@@ -28,13 +28,21 @@ const readyzServiceTemplate = `{{range .items}}{{$service := .}}{{range .spec.po
 // Calls must be serialized by the complete release Driver.
 type ReadyzObservation struct {
 	release *HelmRelease
+	port    uint16
 }
 
 func NewReadyzObservation(release *HelmRelease) (*ReadyzObservation, error) {
+	return NewReadyzObservationWithPort(release, 0)
+}
+
+// A zero port preserves the existing ephemeral adapter; the legacy executable
+// injects its independently captured HEALTH_PORT. Occupied ports fail, never
+// silently change the requested endpoint.
+func NewReadyzObservationWithPort(release *HelmRelease, port uint16) (*ReadyzObservation, error) {
 	if release == nil || release.fence == nil || release.fence.commands == nil || release.plan.Validate() != nil {
 		return nil, errors.New("one bound release command owner required")
 	}
-	return &ReadyzObservation{release: release}, nil
+	return &ReadyzObservation{release: release, port: port}, nil
 }
 
 func (o *ReadyzObservation) Check(ctx context.Context) error {
@@ -56,7 +64,7 @@ func (o *ReadyzObservation) Check(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	listener, err := net.Listen("tcp4", "127.0.0.1:"+strconv.FormatUint(uint64(o.port), 10))
 	if err != nil {
 		return errors.New("reserve owned readiness loopback port")
 	}
