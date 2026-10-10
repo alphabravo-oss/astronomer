@@ -1,0 +1,521 @@
+{
+  "schemaVersion": 1,
+  "artifacts": [
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/crypto-inventory-df5803bc.json",
+      "bytes": 48515,
+      "sha256": "2d82349099805f95d4e5be26c599ed24791fe486e2cf0cccf0b1fb4c77beab37"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-df5803bc/build-off.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-df5803bc/capacity-before-off.json",
+      "bytes": 204,
+      "sha256": "9a3afd17126888daae66bae030f6a3b31fb1d3bf286fcd4cca76b245372c93d7"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-df5803bc/off-off-identity.json",
+      "bytes": 377,
+      "sha256": "079c5a318d1be6ea821e5253f4d5a1d6626d26563702b470ce7879430299e4b9"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-df5803bc/off-off-identity.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-df5803bc/probe-off",
+      "bytes": 4591841,
+      "sha256": "89171cbfd06883e9244837270dd21a1c2a5b6aa5815014a5bbefb78b63dc97b7"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/build-info-off.txt",
+      "bytes": 809,
+      "sha256": "a9cb2cde013749e156bf751f5b765379022723a09c69e98e6030fe6741303a9d"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/build-info-v1.0.0.txt",
+      "bytes": 903,
+      "sha256": "3f34292ef5a49d50bfc1ff1ca9c57c67858c7a6e0c6c4e97cc4f4b1926dad68b"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/build-off.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/build-v1.0.0.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/capacity-before-off.json",
+      "bytes": 204,
+      "sha256": "dd0b881d276ffe25cba0c1a46a9cc994d31fd63988cfa67718e603e8d34e7564"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/capacity-before-v1.0.0.json",
+      "bytes": 204,
+      "sha256": "ff47059f80deec1562f657ce08759bdc81843b2f8d2283806381d109c2025bc3"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-aes-gcm-external-nonce.json",
+      "bytes": 392,
+      "sha256": "017d7184ca44976bcc7a8f2eb4dff30f86ec879cc50c02d107cfe06e428c87e6"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-aes-gcm-external-nonce.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-aes-gcm.json",
+      "bytes": 377,
+      "sha256": "d113608026ad196b3703e6fe171e7a2cd54b598ea6c9b053d0c436b281ced1d2"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-aes-gcm.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-argon2.json",
+      "bytes": 398,
+      "sha256": "d337ff9d8cb17073c2430148a444539630fd1f7901f6a76635e12be2371f64de"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-argon2.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-bcrypt.json",
+      "bytes": 398,
+      "sha256": "47d433e34440fbb1f246bfd2a837b7b60b208633db6cc512b5ca48e68d01bb7e"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-bcrypt.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-fernet.json",
+      "bytes": 389,
+      "sha256": "2d7b567c96a7776b118629515736d3ae03b753ca96a0aa29f7927091d9480f2a"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-fernet.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-identity.json",
+      "bytes": 377,
+      "sha256": "079c5a318d1be6ea821e5253f4d5a1d6626d26563702b470ce7879430299e4b9"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-identity.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-unknown.json",
+      "bytes": 380,
+      "sha256": "be22a1c2f1906b694453736720b4f200a8c7bcca0f794d2d8740ecab8f7c424b"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/off-off-unknown.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/probe-off",
+      "bytes": 4591841,
+      "sha256": "89171cbfd06883e9244837270dd21a1c2a5b6aa5815014a5bbefb78b63dc97b7"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/probe-v1.0.0",
+      "bytes": 4627525,
+      "sha256": "24ce875b24cd3f79039a5f6ebcf8733a998d2092a058be335e2abad2fc593879"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/receipt.json",
+      "bytes": 21205,
+      "sha256": "02947a156e77358a84052ff6f7c20ac00d1c4938444ee851c19bb8297bcbf4a5"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/snapshot-binding-receipt.json",
+      "bytes": 8048,
+      "sha256": "53405b874321ff85303acbec82cd6be3447c1011004bad63d8d860e98071e475"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-aes-gcm-external-nonce.json",
+      "bytes": 421,
+      "sha256": "6d199a203ab076b51f28e910638ecc8edc46591ae712b1e94db89f521f5331d2"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-aes-gcm-external-nonce.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-aes-gcm.json",
+      "bytes": 406,
+      "sha256": "d97eb6c274758889a92183df0235b5dd5b202f06bd6b18911ac7f95603ebeb17"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-aes-gcm.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-argon2.json",
+      "bytes": 427,
+      "sha256": "5142dc5d4a2dcad2ba014be6c1f5e9fc7aa6e89f29aa32155d18cdc530f7cdc8"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-argon2.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-bcrypt.json",
+      "bytes": 427,
+      "sha256": "bebacb1641716d1ea07d072737aa6219b347e36607e7dea0a908b056c36b38b5"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-bcrypt.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-fernet.json",
+      "bytes": 418,
+      "sha256": "fe5860fe5400fa90ef9ca48b6ad8e4136108256dc35159ba72d92b6d71b86248"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-fernet.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-identity.json",
+      "bytes": 406,
+      "sha256": "5d70f8e40ae36e9df25203064dc577a596a9e68fd373974cdff94071381b4f82"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-identity.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-unknown.json",
+      "bytes": 409,
+      "sha256": "fe0505749f48215b07033ec3021d7d768e86cec64131ba996a4a49eb19c5fddb"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-on-unknown.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-aes-gcm-external-nonce.json",
+      "bytes": 426,
+      "sha256": "11085d8472f84a0ace332fdd4fa1a96901ee1daa2db747d8007c6c9aed7531fd"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-aes-gcm-external-nonce.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-aes-gcm.json",
+      "bytes": 406,
+      "sha256": "d97eb6c274758889a92183df0235b5dd5b202f06bd6b18911ac7f95603ebeb17"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-aes-gcm.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-argon2.json",
+      "bytes": 427,
+      "sha256": "5142dc5d4a2dcad2ba014be6c1f5e9fc7aa6e89f29aa32155d18cdc530f7cdc8"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-argon2.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-bcrypt.json",
+      "bytes": 427,
+      "sha256": "bebacb1641716d1ea07d072737aa6219b347e36607e7dea0a908b056c36b38b5"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-bcrypt.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-fernet.json",
+      "bytes": 418,
+      "sha256": "fe5860fe5400fa90ef9ca48b6ad8e4136108256dc35159ba72d92b6d71b86248"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-fernet.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-identity.json",
+      "bytes": 406,
+      "sha256": "5d70f8e40ae36e9df25203064dc577a596a9e68fd373974cdff94071381b4f82"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-identity.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-unknown.json",
+      "bytes": 409,
+      "sha256": "fe0505749f48215b07033ec3021d7d768e86cec64131ba996a4a49eb19c5fddb"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/mode-spike-settings-df5803bc/v1.0.0-only-unknown.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/module-closure-df5803bc.jsonl",
+      "bytes": 207541,
+      "sha256": "f67ac2ce1b21ff0fb655b14d7f6c4be17a91ce477c51e2929f24aaac206a8e83"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/primary/cmvp-5247-security-policy.pdf",
+      "bytes": 804584,
+      "sha256": "2dfcf09554a8f045d6a6326a1c66ac4c079f3fc27cee90ed27262c60c75b4478"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/primary/cmvp-5247.html",
+      "bytes": 84384,
+      "sha256": "25b15efd8a83c0532ecbe9a104c84f137f89520cf0b3423396ce141ef2c6f0e8"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/primary/cmvp-modules-in-process.html",
+      "bytes": 141527,
+      "sha256": "220b2afca585da96126de137f46364d3335e5af053aa5150192c4cd1d6532ff2"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/primary/go-1.27.html",
+      "bytes": 65791,
+      "sha256": "96489916c8cd09e81614aabac62e7d2acc0f97c30e7238dac1c9316c4a1cd94b"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/primary/go-fips140.html",
+      "bytes": 36806,
+      "sha256": "4a8e4112e082c2309e080c8f8b582b3ed17bf4c3a76bd682bd9d62bf5cff384d"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/primary/receipt.json",
+      "bytes": 2102,
+      "sha256": "3f67686a5768b6713bcf6a1ab32b35b38c19300ae0128b6d2d5242dc110cff08"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-baseline-current75/capacity-before.json",
+      "bytes": 204,
+      "sha256": "0ffe679ca65a2905c044cf1f1d860e187a10f8d9805411d2039ca44e6e06615d"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-baseline-current75/go-test.jsonl",
+      "bytes": 5134,
+      "sha256": "232a95c17204efd9bfd81f12448f35c0fc2bc029c51702fc53f512dd61d1fc49"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-baseline-current75/receipt.json",
+      "bytes": 1179,
+      "sha256": "0517579996a0c74b26addf23cc891a7f29bda9aa27d41d774f27bdc0d7203e54"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/capacity-before-build.json",
+      "bytes": 204,
+      "sha256": "a3e1a053dce7339be6d56257c819f8f01428749b82f81a486557c39215e0fdfb"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/capacity-before-migration.json",
+      "bytes": 204,
+      "sha256": "557ca08782b9cd9ef2244af23b2863a8b8f35db363108cfb7aea133b4f531b5a"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/migration-receipt.json",
+      "bytes": 1178,
+      "sha256": "0482a379afa7c82cc092adf098436fe25171e70ae31604fd96c25acdbd120add"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/migration.log",
+      "bytes": 10636,
+      "sha256": "08e819b31f6a02f8477076c3fafc3657bce8574d9fddff3de293f027fdfda15b"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/migrator",
+      "bytes": 10469827,
+      "sha256": "52bee977069f93303ac46ee2cfe4296bdfed6d58add7ee8f9eb907b5525da2e5"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/migrator-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/ownership-before-migration.json",
+      "bytes": 480,
+      "sha256": "7ce4663cf1276a6137d892e5a2569dec3c068ed20f5c2a4a0c56f17ab25931d6"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/ownership-immediately-before-migration.json",
+      "bytes": 480,
+      "sha256": "e8417e23ca981bae953904952caaf4ed8ee7d10658323ac89bb2dbe5f7796f0e"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/postgres-race/capacity-before.json",
+      "bytes": 204,
+      "sha256": "e806649e62344759e076c2b0b84527041df2aeb65a03dc81443d3bd1f21cf2d4"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/postgres-race/go-test.jsonl",
+      "bytes": 6271,
+      "sha256": "4f0fbd7b258097a9060957daeb19d6001781df89ef739b7c69122592ca0803a9"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/postgres-race/ownership-before-process.json",
+      "bytes": 480,
+      "sha256": "b5ac0036994f56a2f2b45466f9cfa704f345ee4c05e0c5a86c3d4fc2e2827e7f"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/postgres-race/ownership-fence.json",
+      "bytes": 480,
+      "sha256": "5fd174d25c14d49dc907cc3a970b880197252bf86d921415bdb878b51ff63a96"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-ac2f4d12/postgres-race/receipt.json",
+      "bytes": 1593,
+      "sha256": "e29f769b2ee1aec151e8d5cd20e178f7a7b00590299db501efe8538d2021cb9f"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation/postgres-race/capacity-before.json",
+      "bytes": 204,
+      "sha256": "f03d12e956e684fc67c9c517a231ce532f8f592056f9dfc9701fe8fe04a39bdf"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation/postgres-race/go-test.jsonl",
+      "bytes": 6276,
+      "sha256": "a98788ed5fa18e0b39785aa552d38a0666bedfef41db37093866d033fc552080"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation/postgres-race/ownership-before-process.json",
+      "bytes": 480,
+      "sha256": "670f1801a97d1de2cb268ca338ad566f63b3da074915cd1267f866a1595d9d7e"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation/postgres-race/ownership-fence.json",
+      "bytes": 480,
+      "sha256": "3ccee093800be747881b6c6bc1df16d7b405ec98fefdeec726a167eb8b85f917"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation/postgres-race/receipt.json",
+      "bytes": 1593,
+      "sha256": "330da79fa5167d53b2b7ddd2ed9130115c6a10cddcd0580e4761430967b14be9"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-operations/postgres-race/capacity-before.json",
+      "bytes": 204,
+      "sha256": "c48fac810e36d3ff32539d9e71affac2afa560ac5fd510ad22860521d0db7c4e"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-operations/postgres-race/go-test.jsonl",
+      "bytes": 6671,
+      "sha256": "d07bd041b2b7ef9efb7c574b0a1e651bc861b9ac2fe177212a2540efd4dd61a8"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-operations/postgres-race/ownership-before-process.json",
+      "bytes": 480,
+      "sha256": "1cc04eb90aa63b5a9f23089a135ad948e7d247ac3601db1b7aa057df2a6e7eda"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-operations/postgres-race/ownership-fence.json",
+      "bytes": 480,
+      "sha256": "38ad4e8d19fc8bdcd84a8bc19474c39bffc8ee7acbf9a32e6ec63b5555be0c87"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-operations/postgres-race/receipt.json",
+      "bytes": 1593,
+      "sha256": "d749798dbea33969b2e4546324e32006173de21ab6f283fcf158841719258ed4"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-query/full-package/capacity-before.json",
+      "bytes": 204,
+      "sha256": "f7149979df6bbd6a96838d4f520dc65f3b6a58516862d57f36620f41a59969f1"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-query/full-package/go-test.jsonl",
+      "bytes": 238326,
+      "sha256": "ef884e4e3e0743e75cab3f4615e2e6bc246d2d053a5352feb35a8da80df7f863"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-query/full-package/ownership-immediately-before-process.json",
+      "bytes": 480,
+      "sha256": "7f9cab70e344c3d1885b11aa0238b1fc1dbebca835b01ec0f236ee1694ea1642"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-query/full-package/receipt.json",
+      "bytes": 44487,
+      "sha256": "a53760005c6491c8d392c10c773fd0d9bc4c9c037180ec9437ae5322beda3b1c"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-query/postgres-race/capacity-before.json",
+      "bytes": 204,
+      "sha256": "54f4a1e4e052e51f77920f31aa4e7b2292cb7438d8976651893986891dea2f0f"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-query/postgres-race/go-test.jsonl",
+      "bytes": 6727,
+      "sha256": "9c0664dd3a27d0e05a5ec1a16d52af9381fd46b9b1ff749ee4aabf27435d245c"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-query/postgres-race/ownership-before-process.json",
+      "bytes": 480,
+      "sha256": "201ef8e947b9d8b9fe469817bfa4a938874d8e969a0909fa06b7ddadfe550284"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-query/postgres-race/ownership-fence.json",
+      "bytes": 480,
+      "sha256": "724d7ab469a5a083484773399a4b18d8801fd4d1a2aef2a17f38cf04b5e2fa6b"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-fixed-cancellation-query/postgres-race/receipt.json",
+      "bytes": 1592,
+      "sha256": "c276ffd83992819fdf7a56f22b65ff200bcc74fb3756af202a20f791f3fc7b58"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/rotation-owner-refresh.json",
+      "bytes": 637,
+      "sha256": "338a6f6feda447ebfc34f3e97397faf09f722246e81259f14df903b05f363342"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/runtime-ownership-check-e9d5/ownership-fence.json",
+      "bytes": 480,
+      "sha256": "6f8830673ea462db6c4a26ac0c01beb5e148204658f801a0aebad6d54d660e88"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w16/runtime-sql-after.json",
+      "bytes": 495040,
+      "sha256": "df345e42a45e65db03222a6c1c92752f8413083a844a51418e7248a493df6825"
+    }
+  ],
+  "scope": "Explicit owned assessment directories only; no connection reference, key reference or secret material included. Raw outputs and all failed attempts remain restricted and source-bound."
+}
