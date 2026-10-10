@@ -295,4 +295,57 @@ class ReviewedCurrentAuditStatusControlTest(ReviewedAuditStatusControlTest):
             policy.evaluate(self.g, self.v, self.e, self.status, 'release-tag', self.root, self.now)
 
 
+
+
+class CurrentReviewed25SourceControlsTest(unittest.TestCase):
+    """Only the 21 exactly reviewed guards; all four unresolved rows stay blocked."""
+    def setUp(self):
+        SecurityPolicyTest.setUp(self)
+        directory = ROOT/'docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25'
+        self.records = json.loads((directory/'reviewed-dispositions.json').read_text())['records']
+        self.raw_rows = json.loads((directory/'raw-selected-findings.json').read_text())['rows']
+        self.assertEqual(len(self.records), 21)
+        known = {row['canonical_finding']['fingerprint'] for row in self.records}
+        for row in self.raw_rows:
+            finding = row['canonical_finding']
+            target = self.root/finding['path']
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((ROOT/finding['path']).read_bytes())
+            self.assertEqual(policy.digest(target.read_bytes()), finding['source_digest'])
+            if row['verdict'] == 'not_actionable':
+                self.g['Issues'].append(copy.deepcopy(row['raw_issue']) | {'file':finding['path']})
+        self.e = json.loads(EXCEPTIONS.read_text())
+        self.e['exceptions'] = [row for row in self.e['exceptions'] if row['fingerprint'] in known]
+        self.assertEqual(len(self.e['exceptions']), 21)
+        self.now = dt.datetime(2026,10,10,tzinfo=dt.timezone.utc)
+    def run_policy(self):
+        return policy.evaluate(self.g,self.v,self.e,self.status,'first-party-source-policy',self.root,self.now)
+    def test_exact_current_21_retained_with_no_source_snippets(self):
+        result = self.run_policy()
+        self.assertTrue(result['passed']); self.assertEqual(len(result['findings']),21)
+        self.assertTrue(all(row['accepted'] for row in result['findings']))
+        self.assertTrue(all('code' not in row for row in result['findings']))
+    def test_four_unresolved_findings_are_not_accepted(self):
+        open_rows = [row for row in self.raw_rows if row['verdict']=='needs_review']
+        self.assertEqual(len(open_rows),4)
+        for row in open_rows:
+            self.g['Issues'].append(copy.deepcopy(row['raw_issue']) | {'file':row['canonical_finding']['path']})
+        result=self.run_policy();self.assertFalse(result['passed'])
+        self.assertEqual(sum(row['accepted'] for row in result['findings']),21)
+        self.assertEqual(sum(not row['accepted'] for row in result['findings']),4)
+    def test_changed_source_and_new_column_do_not_inherit_guard(self):
+        finding=self.records[0]['canonical_finding'];path=self.root/finding['path'];original=path.read_bytes()
+        path.write_bytes(original+b'\n// security-sensitive change\n')
+        with self.assertRaises(ValueError):self.run_policy()
+        path.write_bytes(original)
+        self.g['Issues'].append({'severity':'HIGH','rule_id':finding['rule_id'],'file':finding['path'],'line':str(finding['line']),'column':str(finding['column']+100)})
+        result=self.run_policy();self.assertFalse(result['passed']);self.assertEqual(sum(row['accepted'] for row in result['findings']),21)
+    def test_expiry_scope_and_scanner_incompleteness_fail(self):
+        self.now=dt.datetime(2026,10,16,tzinfo=dt.timezone.utc)
+        with self.assertRaises(ValueError):self.run_policy()
+        self.now=dt.datetime(2026,10,10,tzinfo=dt.timezone.utc)
+        with self.assertRaises(ValueError):policy.evaluate(self.g,self.v,self.e,self.status,'different-scope',self.root,self.now)
+        self.g['Golang errors']={'sample.go':[{'error':'synthetic incomplete analysis'}]}
+        self.assertFalse(self.run_policy()['passed'])
+
 if __name__=='__main__': unittest.main()

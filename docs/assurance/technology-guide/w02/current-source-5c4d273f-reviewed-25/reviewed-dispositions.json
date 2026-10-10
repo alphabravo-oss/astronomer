@@ -1,0 +1,729 @@
+{
+  "schema_version": 1,
+  "existingExactRecordsReusedInputIndices": [
+    172,
+    269
+  ],
+  "source_commit": "5c4d273ff564aab0ede8bb9265c789380f6f640d",
+  "raw_receipt_sha256": "sha256:a3f59c4591ce3cb2956c41968d0fe649afb4ce9c503fc9589b7e610b1b07ba2b",
+  "disposition": "exact_not_actionable_source_review_not_no_fix_risk_waiver",
+  "records": [
+    {
+      "triage_item_id": "current-gosec-000",
+      "input_index": 0,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/ops/upgradecli/artifact_capture_linux.go",
+        "line": 76,
+        "column": 54,
+        "source_digest": "sha256:9028891c1b75efe917b70fc167fcec80bee5dd20a1ee2c4b79503315010e0075",
+        "fingerprint": "sha256:a2f5568cd4001784c92d69c2a5dd7b1a5765832ab783c9b667e5e6958c6e3ca7",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "artifactCapacity reads Statfs counts",
+        "positive Bsize/Blocks and Bavail<=Blocks are checked",
+        "both counts must be <=MaxInt64/block before multiply and cast"
+      ],
+      "evidence": [
+        "artifact_capture_linux.go:64-77 validates each multiplication against MaxInt64 before either reported cast."
+      ],
+      "counterevidence": [
+        "Both casts are dominated by the explicit supported-range rejection; neither unsigned product can exceed MaxInt64."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-001",
+      "input_index": 1,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/ops/upgradecli/artifact_capture_linux.go",
+        "line": 76,
+        "column": 30,
+        "source_digest": "sha256:9028891c1b75efe917b70fc167fcec80bee5dd20a1ee2c4b79503315010e0075",
+        "fingerprint": "sha256:edae6e73bfed015827f417d3e735a85be1072078971f777158f84211854be127",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "artifactCapacity reads Statfs counts",
+        "positive Bsize/Blocks and Bavail<=Blocks are checked",
+        "both counts must be <=MaxInt64/block before multiply and cast"
+      ],
+      "evidence": [
+        "artifact_capture_linux.go:64-77 validates each multiplication against MaxInt64 before either reported cast."
+      ],
+      "counterevidence": [
+        "Both casts are dominated by the explicit supported-range rejection; neither unsigned product can exceed MaxInt64."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-103",
+      "input_index": 103,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/webhooks_endpoints.go",
+        "line": 205,
+        "column": 25,
+        "source_digest": "sha256:ab282ba41e7effd8728af70391cd069d68427a9724f4e5180fc10cb216782756",
+        "fingerprint": "sha256:cf3df49fbfcdcd6c56667672f9d08ca8a11efc3e527d9831679aa9ff48d93084",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Create/Update require superuser",
+        "mergeForCreate/mergeForUpdate each call validateMerged",
+        "invalid bounds return before encryption, transaction, or int32 casts"
+      ],
+      "evidence": [
+        "webhooks_response.go:28-109 returns validateMerged from both merge paths.",
+        "webhooks_response.go:128-133 bounds retries to 0..50 and timeout to 1..300.",
+        "webhooks_endpoints.go:Create/Update return on validation error before reported casts."
+      ],
+      "counterevidence": [
+        "Every admitted value is within int32; an oversized or negative JSON integer cannot reach either cast."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-104",
+      "input_index": 104,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/webhooks_endpoints.go",
+        "line": 204,
+        "column": 25,
+        "source_digest": "sha256:ab282ba41e7effd8728af70391cd069d68427a9724f4e5180fc10cb216782756",
+        "fingerprint": "sha256:9ff13ab9f1171f5919564e7f89f41d238beadf4dcea081b40d83c23ba1a33825",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Create/Update require superuser",
+        "mergeForCreate/mergeForUpdate each call validateMerged",
+        "invalid bounds return before encryption, transaction, or int32 casts"
+      ],
+      "evidence": [
+        "webhooks_response.go:28-109 returns validateMerged from both merge paths.",
+        "webhooks_response.go:128-133 bounds retries to 0..50 and timeout to 1..300.",
+        "webhooks_endpoints.go:Create/Update return on validation error before reported casts."
+      ],
+      "counterevidence": [
+        "Every admitted value is within int32; an oversized or negative JSON integer cannot reach either cast."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-105",
+      "input_index": 105,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/webhooks_endpoints.go",
+        "line": 96,
+        "column": 25,
+        "source_digest": "sha256:ab282ba41e7effd8728af70391cd069d68427a9724f4e5180fc10cb216782756",
+        "fingerprint": "sha256:282b7779b666cf9c03dde9c3282dba2b068860544d09bf05cf0a9cf6b4ceb002",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Create/Update require superuser",
+        "mergeForCreate/mergeForUpdate each call validateMerged",
+        "invalid bounds return before encryption, transaction, or int32 casts"
+      ],
+      "evidence": [
+        "webhooks_response.go:28-109 returns validateMerged from both merge paths.",
+        "webhooks_response.go:128-133 bounds retries to 0..50 and timeout to 1..300.",
+        "webhooks_endpoints.go:Create/Update return on validation error before reported casts."
+      ],
+      "counterevidence": [
+        "Every admitted value is within int32; an oversized or negative JSON integer cannot reach either cast."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-106",
+      "input_index": 106,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/webhooks_endpoints.go",
+        "line": 95,
+        "column": 25,
+        "source_digest": "sha256:ab282ba41e7effd8728af70391cd069d68427a9724f4e5180fc10cb216782756",
+        "fingerprint": "sha256:33b30fa97432b0aeb7729396441ab5c8952768f9aa17336a02add6cf110db53c",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Create/Update require superuser",
+        "mergeForCreate/mergeForUpdate each call validateMerged",
+        "invalid bounds return before encryption, transaction, or int32 casts"
+      ],
+      "evidence": [
+        "webhooks_response.go:28-109 returns validateMerged from both merge paths.",
+        "webhooks_response.go:128-133 bounds retries to 0..50 and timeout to 1..300.",
+        "webhooks_endpoints.go:Create/Update return on validation error before reported casts."
+      ],
+      "counterevidence": [
+        "Every admitted value is within int32; an oversized or negative JSON integer cannot reach either cast."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-113",
+      "input_index": 113,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/siem.go",
+        "line": 385,
+        "column": 25,
+        "source_digest": "sha256:f253b8c882712feb8ab06175c7c9298915530bfa6aa2e47c03e75d03923da70f",
+        "fingerprint": "sha256:d33d09adc9c23cdda758c1754dbf1ab4975f542690123ff4bc1e416c8387082b",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-114",
+      "input_index": 114,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/siem.go",
+        "line": 384,
+        "column": 25,
+        "source_digest": "sha256:f253b8c882712feb8ab06175c7c9298915530bfa6aa2e47c03e75d03923da70f",
+        "fingerprint": "sha256:53f75271d63b7418c42ff6a60c561c2aeef9b67f6e991193554d071194910b40",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-115",
+      "input_index": 115,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/siem.go",
+        "line": 383,
+        "column": 25,
+        "source_digest": "sha256:f253b8c882712feb8ab06175c7c9298915530bfa6aa2e47c03e75d03923da70f",
+        "fingerprint": "sha256:4e918a0a7d414b9b1895c546fe8907e831045e06a070c824e117cd6030a13d0a",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-116",
+      "input_index": 116,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/siem.go",
+        "line": 270,
+        "column": 25,
+        "source_digest": "sha256:f253b8c882712feb8ab06175c7c9298915530bfa6aa2e47c03e75d03923da70f",
+        "fingerprint": "sha256:b3d40b0e1180652eef9333da4e4e745f967b90a3e0bf6d409dc85b842b011e85",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-117",
+      "input_index": 117,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/siem.go",
+        "line": 269,
+        "column": 25,
+        "source_digest": "sha256:f253b8c882712feb8ab06175c7c9298915530bfa6aa2e47c03e75d03923da70f",
+        "fingerprint": "sha256:1207307154cac59e4fe934a9542c7b4d08898cca280fc04135a8c0573b9bc2b3",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-118",
+      "input_index": 118,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/siem.go",
+        "line": 268,
+        "column": 25,
+        "source_digest": "sha256:f253b8c882712feb8ab06175c7c9298915530bfa6aa2e47c03e75d03923da70f",
+        "fingerprint": "sha256:187857344a553ccced117fc3f68b3f860737cd2cd2fcf274592c079bd2dfcf12",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Create/Update require superuser",
+        "both merged settings paths call validateMergedSIEM",
+        "batch 1..10000 / flush 100..600000 / timeout 1..300 checked before mutation parameters"
+      ],
+      "evidence": [
+        "siem.go:655-750 returns the same validator from both create and update merges.",
+        "siem.go:768-776 explicitly bounds all three fields before either caller casts."
+      ],
+      "counterevidence": [
+        "All three admitted ranges fit int32; guards precede both create/update write effects."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-172",
+      "input_index": 172,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G407",
+        "path": "scripts/fips-mode-probe/main.go",
+        "line": 80,
+        "column": 22,
+        "source_digest": "sha256:91611294e3bda418e2fd13f802a45faa809b7f112c739c135be0b6211299aa4b",
+        "fingerprint": "sha256:2230af0652180afc15dd854e8860d77d2db094cdbbb5f74cf677d669f84eacd8",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "generate random key",
+        "construct NewGCMWithRandomNonce",
+        "Seal requires empty caller nonce and internally generates random nonce"
+      ],
+      "evidence": [
+        "scripts/fips-mode-probe/main.go:67-85 constructs NewGCMWithRandomNonce, not ordinary NewGCM.",
+        "Selected Go 1.27.2 crypto/cipher/gcm.go:79-128 specifies random 96-bit nonce; Seal panics on non-empty supplied nonce."
+      ],
+      "counterevidence": [
+        "The nil argument selects the documented random-nonce API; no caller-provided fixed nonce is used."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-173",
+      "input_index": 173,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G709",
+        "path": "internal/handler/cloud_credentials_test_endpoint.go",
+        "line": 372,
+        "column": 25,
+        "source_digest": "sha256:6d32d87efea4b05c763ce89eb5400d0c4173ac68598695cfe5247e1be80beabe",
+        "fingerprint": "sha256:71cff4a542aa06be6a7bc9aad5868cffd2c03e5c9448fd66b6f4cf97f4d20552",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "fixed https://sts.amazonaws.com/ GetCallerIdentity through SafeClient",
+        "parse into string fields (Arn/Account/UserId or Code/Message)",
+        "no arbitrary object type or XML callback supplied"
+      ],
+      "evidence": [
+        "cloud_credentials_test_endpoint.go:135-155 fixes STS origin and defines a closed string-only response type.",
+        "cloud_credentials_test_endpoint.go:365-373 defines a closed string-only error type.",
+        "Selected Go encoding/xml handles declarations as Directive tokens; only built-in/numeric or explicitly supplied Entity mappings expand entities. These calls supply no external resolver/custom unmarshaler."
+      ],
+      "counterevidence": [
+        "The supplied claim does not demonstrate arbitrary code, object construction, or XXE through these Unmarshal calls."
+      ],
+      "proof_gaps": [
+        "signedGet:479 performs unbounded io.ReadAll before XML parsing. That separate response-size/resource boundary remains open and is not approved by this deserialization disposition."
+      ],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-174",
+      "input_index": 174,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G709",
+        "path": "internal/handler/cloud_credentials_test_endpoint.go",
+        "line": 155,
+        "column": 25,
+        "source_digest": "sha256:6d32d87efea4b05c763ce89eb5400d0c4173ac68598695cfe5247e1be80beabe",
+        "fingerprint": "sha256:1fd0020a180a3c397ced90d948678282cdc30020668a7a3a7fe0dd705a904e99",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "fixed https://sts.amazonaws.com/ GetCallerIdentity through SafeClient",
+        "parse into string fields (Arn/Account/UserId or Code/Message)",
+        "no arbitrary object type or XML callback supplied"
+      ],
+      "evidence": [
+        "cloud_credentials_test_endpoint.go:135-155 fixes STS origin and defines a closed string-only response type.",
+        "cloud_credentials_test_endpoint.go:365-373 defines a closed string-only error type.",
+        "Selected Go encoding/xml handles declarations as Directive tokens; only built-in/numeric or explicitly supplied Entity mappings expand entities. These calls supply no external resolver/custom unmarshaler."
+      ],
+      "counterevidence": [
+        "The supplied claim does not demonstrate arbitrary code, object construction, or XXE through these Unmarshal calls."
+      ],
+      "proof_gaps": [
+        "signedGet:479 performs unbounded io.ReadAll before XML parsing. That separate response-size/resource boundary remains open and is not approved by this deserialization disposition."
+      ],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-183",
+      "input_index": 183,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G704",
+        "path": "internal/handler/cloud_credentials_test_endpoint.go",
+        "line": 73,
+        "column": 32,
+        "source_digest": "sha256:6d32d87efea4b05c763ce89eb5400d0c4173ac68598695cfe5247e1be80beabe",
+        "fingerprint": "sha256:f8f7091bd977de2074709f8d4831fe0b3b30b94af2c5e6cc71b107944edd0f57",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "app_tenant_handlers.go creates NewDefaultCloudTester",
+        "constructor selects canonical SafeClient(10s)",
+        "production DigitalOceanEndpoint is empty so endpoint becomes fixed api.digitalocean.com/v2/account"
+      ],
+      "evidence": [
+        "server/app_tenant_handlers.go:123 installs the canonical constructor, not a request-selected tester.",
+        "DefaultCloudTester.DigitalOceanEndpoint and HTTPClient are dependency-injection fields; current non-test composition never populates an arbitrary endpoint/client."
+      ],
+      "counterevidence": [
+        "A credential payload cannot set this destination. SafeClient additionally rejects forbidden public-network destinations at dial."
+      ],
+      "proof_gaps": [
+        "This is limited to the two DigitalOcean findings and verified current composition; it does not classify the remaining tunnel/Helm SSRF findings."
+      ],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-184",
+      "input_index": 184,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G704",
+        "path": "internal/handler/cloud_credentials_test_endpoint.go",
+        "line": 68,
+        "column": 40,
+        "source_digest": "sha256:6d32d87efea4b05c763ce89eb5400d0c4173ac68598695cfe5247e1be80beabe",
+        "fingerprint": "sha256:57c4afdd4852b213b4055e16cc12ccdd94c86b484b95d9e7fa85d52a7aaf72db",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "app_tenant_handlers.go creates NewDefaultCloudTester",
+        "constructor selects canonical SafeClient(10s)",
+        "production DigitalOceanEndpoint is empty so endpoint becomes fixed api.digitalocean.com/v2/account"
+      ],
+      "evidence": [
+        "server/app_tenant_handlers.go:123 installs the canonical constructor, not a request-selected tester.",
+        "DefaultCloudTester.DigitalOceanEndpoint and HTTPClient are dependency-injection fields; current non-test composition never populates an arbitrary endpoint/client."
+      ],
+      "counterevidence": [
+        "A credential payload cannot set this destination. SafeClient additionally rejects forbidden public-network destinations at dial."
+      ],
+      "proof_gaps": [
+        "This is limited to the two DigitalOcean findings and verified current composition; it does not classify the remaining tunnel/Helm SSRF findings."
+      ],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-269",
+      "input_index": 269,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G109",
+        "path": "internal/handler/audit.go",
+        "line": 686,
+        "column": 23,
+        "source_digest": "sha256:b58a3bece0351047daabecdfc8d718fd1b7c51da88dbc5ca9783ee321632300f",
+        "fingerprint": "sha256:4751dbc4e4cdec8e7c043d508b12339dac29bce1b41a2ae77948b13310600085",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "Atoi rejects parse overflow",
+        "statusCode<0 or >599 rejected",
+        "only supported HTTP code cast to int32"
+      ],
+      "evidence": [
+        "audit.go:681-687 rejects Atoi errors and values outside 0..599 before the cast."
+      ],
+      "counterevidence": [
+        "All admitted values fit int32."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-290",
+      "input_index": 290,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G118",
+        "path": "internal/httpserver/serve.go",
+        "line": 19,
+        "column": 2,
+        "source_digest": "sha256:709c09ca5ce6dd11959d15bcadca4830e9beb99adb5fbb1292900676d14ab3a1",
+        "fingerprint": "sha256:c10148ba70514f4ec38ac5126df6d64e6e2ee7fdd21585a51002d117826b4f04",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "shutdown owner selects original context or serving completion",
+        "after cancellation derives fresh bounded context to permit graceful drain",
+        "Serve waits shutdownDone before returning"
+      ],
+      "evidence": [
+        "httpserver/serve.go:16-39 joins shutdownDone and closes remaining connections if graceful shutdown fails."
+      ],
+      "counterevidence": [
+        "Background is the root of a finite shutdown grace period; it does not launch unjoined application mutation after request cancellation."
+      ],
+      "proof_gaps": [],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-291",
+      "input_index": 291,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G118",
+        "path": "internal/charlie/mcp_runtime.go",
+        "line": 246,
+        "column": 2,
+        "source_digest": "sha256:73bc785d42ae8ae63a58279549851d515593d49d1cb1c228d668d8f5d7117e29",
+        "fingerprint": "sha256:f9e06549c3ef563bd27294e3b7bfb2363808d060409e0bd3ef63c9d5eeb37381",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "owned listener Serve returns",
+        "runtime removes only matching current listener identity",
+        "fixed listener_stopped log emitted"
+      ],
+      "evidence": [
+        "mcp_runtime.go:244-267 uses Background only as the log context after listener Serve returns."
+      ],
+      "counterevidence": [
+        "The reported call does not issue HTTP/database/cluster work and does not reset listener identity unless the same listener remains current."
+      ],
+      "proof_gaps": [
+        "This exact verdict does not certify every MCP listener shutdown/worker-drain lifecycle."
+      ],
+      "source_review_only": true
+    },
+    {
+      "triage_item_id": "current-gosec-294",
+      "input_index": 294,
+      "canonical_finding": {
+        "tool": "gosec",
+        "rule_id": "G122",
+        "path": "internal/charlie/contract/verify.go",
+        "line": 51,
+        "column": 26,
+        "source_digest": "sha256:039e326a3316383e0ccf20744eecc5bfc8ddd0d8ca5670c7283df1ffd0eb5255",
+        "fingerprint": "sha256:7baf4569ce3a71dea070157efacd4e8bd22c5cdd0ae91bcd6d8653b08d01393f",
+        "level": "HIGH"
+      },
+      "verdict": "not_actionable",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "reviewed_on": "2026-10-10",
+      "expires_at": "2026-10-16T00:00:00Z",
+      "control_chain": [
+        "unexported verifyChecksums is referenced only by contract_test.go",
+        "test enumerates local checked-in pinned contract files",
+        "each file must match local manifest SHA"
+      ],
+      "evidence": [
+        "Repository-wide exact-reference search found verifyChecksums definition plus only two contract_test.go call sites.",
+        "Production schemas are embedded; this checksum-walk helper is not invoked by shipped runtime request/CLI paths."
+      ],
+      "counterevidence": [
+        "No supported attacker-to-runtime file-read boundary was found for this exact helper."
+      ],
+      "proof_gaps": [
+        "Local test filesystem confinement can be hardened independently; this verdict does not accept an exposed runtime archive reader."
+      ],
+      "source_review_only": true
+    }
+  ],
+  "open_input_indices": [
+    175,
+    176,
+    292,
+    293
+  ],
+  "limits": [
+    "No current whole policy PASS, fresh scanner or runtime verification is claimed.",
+    "Remaining362 unclassified and four needs_review remain open; AWS signedGet response-cap gap remains separately open.",
+    "Source review approval does not approve wildcard/rule/namespace matching; changed source, line or column requires new review."
+  ]
+}
