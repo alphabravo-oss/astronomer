@@ -262,7 +262,7 @@ Do not treat the table as proof an upstream image scans clean or an existing cus
 | W01 | Latest-stable inventory and runtime/dependency updates | P0 | L/MED | W00 | IMPLEMENTATION READY |
 | W02 | Enforced security gates and policy-bound waivers | P0 | M/MED | W00; tool compat W01 | IN PROGRESS |
 | W03 | Runtime-consumed signed mirrored catalogs and complete asset closure | P0 | L/HIGH | W00, W02 trust policy | IN PROGRESS |
-| W04 | Offline Trivy DB lifecycle and no-public-egress qualification | P0 | L/MED | W03 | TODO |
+| W04 | Offline Trivy DB lifecycle and no-public-egress qualification | P0 | L/MED | W03 | IN PROGRESS |
 | W05 | Bounded refresh, transport cancellation, accessible modal forms | P1 | M/MED | W00; W01 frontend tooling | DONE (scoped) |
 | W06 | Authoritative delivery and categorical enums | P1 | M/MED for delivery; L for inventory | W00 | DONE (scoped) |
 | W07 | Complete scope-bound cursor pagination | P1 | L/MED | W00 | IN PROGRESS |
@@ -274,7 +274,7 @@ Do not treat the table as proof an upstream image scans clean or an existing cus
 | W13 | Backend domain extraction for v2 | P2 | XL/HIGH | W06, W08, W09; W12 characterization | TODO |
 | W14 | Typed operational CLI and small shell wrappers | P2 | XL/HIGH | W01; W12 characterization; W17 for release rehearsals | TODO |
 | W15 | Catalog Python and supporting repo supply chain parity | P1/P2 | L/MED | W01, W03 | TODO |
-| W16 | Explicit crypto/FIPS decision and optional artifact design | P2 | M for decision; XL/HIGH for claimed artifact | W00, W01, W12; product decision before optional implementation | IN PROGRESS |
+| W16 | Explicit crypto/FIPS decision and optional artifact design | P2 | M for decision; XL/HIGH for claimed artifact | W00, W01, W12; product decision before optional implementation | DONE (ordinary v1 scope; conditional artifact not selected) |
 | W17 | Exact candidate integration, deployment, release policy closure | P1 | L/HIGH | Applicable packages above | TODO |
 
 The effort values are relative sizing, not delivery promises. W13/W14 contain multiple PRs and can span weeks. W16 is a gated design track; no implicit FIPS certification or forced cryptographic rewrite is authorized by this plan.
@@ -853,6 +853,8 @@ Expected: typed generated interfaces, no unintended transaction behavior change,
 
 ### W16 — Decide and qualify the cryptographic/FIPS product boundary
 
+**Accepted scope (2026-10-10):** ordinary hardened v1 cryptography, compatible readers and scoped rotation/recovery. The conditional FIPS artifact is not selected. [Task dispositions and retained evidence](../docs/assurance/technology-guide/w16/README.md) distinguish the 21 direct native-mode controls from application/platform certification and retain all failed attempts. Root verified 103 restricted artifact hashes, 254 literal-import source bindings, 28 manual boundary source hashes, 697 module entries and five primary snapshots. W12 browser/whole-candidate qualification remains separate.
+
 **Priority:** P2, decision/spike before implementation. **Effort/risk:** M for decision, XL/HIGH for a claimed compliant artifact. **Dependencies:** W00, W01, W12. **Owner:** security/backend/product.
 
 **Why:** the guide discusses encrypted data and a FIPS-capable Go distribution. Go now documents native FIPS facilities, so an old Microsoft/BoringCrypto recommendation must be reevaluated against current primary documentation. Astronomer's existing encryption and key rotation are valuable capabilities; neither they nor a compiler flag establishes a certified product.
@@ -861,16 +863,16 @@ Expected: typed generated interfaces, no unintended transaction behavior change,
 
 **Ordered tasks:**
 
-- [ ] W16.1 Record the current product claim: FIPS qualification is not established by this review. Inventory TLS, JWT signing, secret encryption, backup encryption, signatures, password hashing, agent trust, and third-party crypto.
-- [ ] W16.2 Decide whether customers require FIPS mode, validated cryptographic modules, a specific deployment compliance framework, or ordinary hardened cryptography. These are distinct requirements.
-- [ ] W16.3 Compare current native Go FIPS support with supported platforms, selected module validation status, approved modes/algorithms, dependencies, and operational constraints.
-- [ ] W16.4 Produce a small spike proving the intended build/runtime mode and identifying paths that bypass it. Verify upstream validation records and exact module/build boundaries before making a claim.
-- [ ] W16.5 If a dedicated artifact is warranted, define separate artifact identity, provenance, platform matrix, runtime checks, test coverage, and support limitations.
-- [ ] W16.6 Keep the versioned secret envelope, algorithm/key IDs, multi-key decryption, and online rotation. Introduce any new algorithm as a compatible additional reader/writer with an explicit migration.
-- [ ] W16.7 Prove interrupted/resumed rotation, mixed old/new ciphertext, transaction boundaries, rollback compatibility, restored backup decryption, and safe key retirement.
-- [ ] W16.8 Never retire a key solely because live-row counts are zero; assess backups, audit/archive data, delayed tasks, and rollback artifacts.
-- [ ] W16.9 Preserve cookie/CSRF/browser refresh and explicit bearer API behavior. Document threat-model exceptions rather than merging distinct credential channels.
-- [ ] W16.10 Publish only verified capability statements. A compliance framework such as FedRAMP requires much more than this implementation package.
+- [x] W16.1 Record the current product claim: FIPS qualification is not established by this review. Inventory TLS, JWT signing, secret encryption, backup encryption, signatures, password hashing, agent trust, and third-party crypto.
+- [x] W16.2 Decide whether customers require FIPS mode, validated cryptographic modules, a specific deployment compliance framework, or ordinary hardened cryptography. These are distinct requirements.
+- [x] W16.3 Compare current native Go FIPS support with supported platforms, selected module validation status, approved modes/algorithms, dependencies, and operational constraints.
+- [x] W16.4 Produce a small spike proving the intended build/runtime mode and identifying paths that bypass it. Verify upstream validation records and exact module/build boundaries before making a claim.
+- [x] W16.5 If a dedicated artifact is warranted, define separate artifact identity, provenance, platform matrix, runtime checks, test coverage, and support limitations.
+- [x] W16.6 Keep the versioned secret envelope, algorithm/key IDs, multi-key decryption, and online rotation. Introduce any new algorithm as a compatible additional reader/writer with an explicit migration.
+- [x] W16.7 Prove interrupted/resumed rotation, mixed old/new ciphertext, transaction boundaries, rollback compatibility, restored backup decryption, and safe key retirement.
+- [x] W16.8 Never retire a key solely because live-row counts are zero; assess backups, audit/archive data, delayed tasks, and rollback artifacts.
+- [x] W16.9 Preserve cookie/CSRF/browser refresh and explicit bearer API behavior. Document threat-model exceptions rather than merging distinct credential channels.
+- [x] W16.10 Publish only verified capability statements. A compliance framework such as FedRAMP requires much more than this implementation package.
 
 **Verification:** key-rotation/envelope tests and real-DB integration; backup restoration with historical keys; crypto inventory completeness; platform-specific spike output; external validation references if the product makes a certified-module claim.
 
@@ -1148,7 +1150,7 @@ An executor can close a subtask after its focused gate passes, but closes the wo
 - [ ] W13 v2 preparation has enforced domain boundaries without accidental v1 breaks.
 - [ ] W14 selected operational runners preserve safety and evidence under failure.
 - [ ] W15 catalog tools and supporting version consumers are reproducible and tested.
-- [ ] W16 crypto/FIPS decision documented; any new capability separately qualified.
+- [x] W16 crypto/FIPS decision documented; scoped ordinary-v1 capabilities qualified; optional compliance artifact not selected.
 - [ ] W17 exact milestone candidate is built, installed, exercised, and recoverable within approved release scope.
 - [ ] All unresolved upstream CVEs/licenses/qualification limitations are disclosed according to the actual applicable policy.
 - [ ] Advisor index and evidence ledger reflect observed status and exact scope.
