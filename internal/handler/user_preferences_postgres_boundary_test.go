@@ -144,7 +144,7 @@ func TestPreferencePostgresRequiredFavoritesRejectBeforeMutation(t *testing.T) {
 				t.Fatal("invalid required favorites committed state")
 			}
 			// Preserve the actual baseline CHECK evidence before asserting the intended boundary.
-			if response.Code == http.StatusInternalServerError && state.upsertSQLState != "23514" {
+			if response.Code != http.StatusBadRequest && (response.Code != http.StatusInternalServerError || state.upsertSQLState != "23514" || state.upsertCalls != 1) {
 				t.Fatal("invalid-array baseline failed for an unrelated reason")
 			}
 			if response.Code != http.StatusBadRequest || state.upsertCalls != 0 {
@@ -216,6 +216,9 @@ func TestPreferencePostgresChangedBodySameKeyCannotRetainStaleAudit(t *testing.T
 	}
 	if preferencePostgresAuditCount(t, ctx, tx, actor) != 1 {
 		t.Fatal("changed-body retry duplicated audit identity")
+	}
+	if response.Code != http.StatusConflict && (response.Code != http.StatusOK || row.Theme != "light" || recordedTheme != "dark") {
+		t.Fatal("changed-body baseline differed from the actual full-replace and retained-audit path")
 	}
 	if response.Code != http.StatusConflict || row.Theme != "dark" || recordedTheme != "dark" {
 		t.Fatal("changed-body same-key replay replaced preferences while retaining the first audit detail")
