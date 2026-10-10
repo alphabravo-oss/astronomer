@@ -611,8 +611,8 @@ Expected: generated assets fresh, no accidental public breaking change, mismatch
 **Ordered tasks:**
 
 - [ ] W07.1 Inventory all list operations and classify cursor/offset/in-memory/dynamic K8s continuation. Record authorized filters, sort keys, limits/count semantics, and existing clients.
-- [ ] W07.2 Add focused regression at 10,000 ceiling before changing behavior. Demonstrate metadata advertising 10,020 while the next request clamps back.
-- [ ] W07.3 Define compatible transition: add cursor fields, retain bounded legacy offset where valid, and explicitly error at unsupported offset rather than returning a repeated page. Document error code and migration guidance.
+- [x] W07.2 Add focused regression at 10,000 ceiling before changing behavior. Demonstrate metadata advertising 10,020 while the next request clamps back.
+- [x] W07.3 Define compatible transition: add cursor fields, retain bounded legacy offset where valid, and explicitly error at unsupported offset rather than returning a repeated page. Document error code and migration guidance.
 - [ ] W07.4 Implement stable keyset ordering with unique tie-breaker; bind cursor to tenant/project/cluster/authorization scope, filters, ordering, and any required snapshot identity.
 - [ ] W07.5 Scope/filter before pagination and counts. Exact total is optional; never fabricate it from page length or global count.
 - [ ] W07.6 Add indexes after reviewing actual queries/plans; use expand-safe DDL and migration checks. Prove bounded query cost with representative data.
