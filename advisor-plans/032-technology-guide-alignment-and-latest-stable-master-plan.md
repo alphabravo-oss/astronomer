@@ -465,23 +465,23 @@ These excerpts explain wiring/trust defects; they are not instructions to reprod
 
 **Ordered tasks:**
 
-- [ ] W03.1 Define one signed distribution/catalog contract for built-in chart archives, recursive chart dependencies, values profiles, runtime image inventory, CRDs, tools, operator/plugin assets, database assets, and trust material.
-- [ ] W03.2 Map `DeliveryBundleRepository`/`Digest`/trust policy from configuration into an injected verified loader consumed by the actual provisioner. Fetch/validate once with bounded cache and update identity; no unverified parallel path.
-- [ ] W03.3 Preserve safe connected/source-development behavior explicitly. Production uses release bound verified inputs; source-tree fixtures identify their development mode and cannot masquerade as a signed release.
+- [x] W03.1 Define one signed distribution/catalog contract for built-in chart archives, recursive chart dependencies, values profiles, runtime image inventory, CRDs, tools, operator/plugin assets, database assets, and trust material.
+- [x] W03.2 Map `DeliveryBundleRepository`/`Digest`/trust policy from configuration into an injected verified loader consumed by the actual provisioner. Fetch/validate once with bounded cache and update identity; no unverified parallel path.
+- [x] W03.3 Preserve safe connected/source-development behavior explicitly. Production uses release bound verified inputs; source-tree fixtures identify their development mode and cannot masquerade as a signed release.
 - [ ] W03.4 Build a closed asset inventory from declared supported chart values/presets and actual renders. Include init containers, sidecars, hooks, operators, jobs, enabled optional profiles, and generated downstream workloads.
-- [ ] W03.5 Fail inventory generation for unrenderable charts, unresolved mutable inputs, missing architecture, or unclassified image values. Best-effort warning is not sufficient for a qualified bundle.
+- [x] W03.5 Fail inventory generation for unrenderable charts, unresolved mutable inputs, missing architecture, or unclassified image values. Best-effort warning is not sufficient for a qualified bundle.
 - [ ] W03.6 Extend mirror planning to chart archives/repos, workload image values, catalog source URL, Trivy DB assets, CNPG operator/server/plugin images, Valkey, Dex, Fluent Bit, Charlie assets, DR/shell tools, and selected supported integrations.
-- [ ] W03.7 Project validated rewrites into the exact Source and Renderer inputs the provisioner persists. Keep immutable bundle version identity and deterministic names stable, or define an explicit migration/fencing transition.
-- [ ] W03.8 Implement idempotent transition for existing built-ins: distinguish already installed public source identities from newly mirrored release versions, retain history, and reconcile through durable product operations. Never directly edit Flux objects outside agent/system delivery.
-- [ ] W03.9 Make application catalog source explicitly local in disconnected mode. Remove first boot public fetch dependency through a release bound local artifact/default or explicit disabled-unavailable mode where that feature is not qualified.
-- [ ] W03.10 Replace catalog archive trust order: verify signed closed BOM/trust policy before extraction; validate path/member/type/size bounds; reject extra, missing, duplicate, symlink/hardlink, or unexpected members as appropriate.
+- [x] W03.7 Project validated rewrites into the exact Source and Renderer inputs the provisioner persists. Keep immutable bundle version identity and deterministic names stable, or define an explicit migration/fencing transition.
+- [x] W03.8 Implement idempotent transition for existing built-ins: distinguish already installed public source identities from newly mirrored release versions, retain history, and reconcile through durable product operations. Never directly edit Flux objects outside agent/system delivery.
+- [x] W03.9 Make application catalog source explicitly local in disconnected mode. Remove first boot public fetch dependency through a release bound local artifact/default or explicit disabled-unavailable mode where that feature is not qualified.
+- [x] W03.10 Replace catalog archive trust order: verify signed closed BOM/trust policy before extraction; validate path/member/type/size bounds; reject extra, missing, duplicate, symlink/hardlink, or unexpected members as appropriate.
 - [ ] W03.11 Include chart values-profile and image inventory digests in the signed catalog BOM. Require complete export inventory; preserve operator overrides through an explicit unqualified/needs-requalification state.
 - [ ] W03.12 Reuse hardened release kit extraction and offline Sigstore verification patterns. Do not invent a second weaker verifier or fetch trust keys during verification.
-- [ ] W03.13 Keep internal OCI registry architecture portable. Use an existing operator-provided registry or a qualified local distribution; if packaged, specify storage/PVC/S3, TLS/authentication, quotas, cleanup, multiarch, and recovery.
+- [x] W03.13 Keep internal OCI registry architecture portable. Use an existing operator-provided registry or a qualified local distribution; if packaged, specify storage/PVC/S3, TLS/authentication, quotas, cleanup, multiarch, and recovery.
 - [ ] W03.14 Keep S3 configuration endpoint overrides and discovery explicit; distinguish internal data endpoint from externally reachable presigning endpoint where browser links are used. Qualify RustFS operations, not just an HTTP 200 health check.
-- [ ] W03.15 Repair obsolete fresh_only/six runbook assertions by using the canonical validator. Include examples covering the actual release install mode and signed metadata.
-- [ ] W03.16 Generate/exercise runbook snippets against release fixtures. Document private CA/registry credentials, operator-managed CNPG/plugin prerequisites, asset capacity, import verification, source configuration, and diagnostics without credentials.
-- [ ] W03.17 Expose redacted runtime distribution status: source/release digest, mirrored location, verification status, inventory completeness, last successful sync, and blocked asset category. No sensitive URL parts or private keys.
+- [x] W03.15 Repair obsolete fresh_only/six runbook assertions by using the canonical validator. Include examples covering the actual release install mode and signed metadata.
+- [x] W03.16 Generate/exercise runbook snippets against release fixtures. Document private CA/registry credentials, operator-managed CNPG/plugin prerequisites, asset capacity, import verification, source configuration, and diagnostics without credentials.
+- [x] W03.17 Expose redacted runtime distribution status: source/release digest, mirrored location, verification status, inventory completeness, last successful sync, and blocked asset category. No sensitive URL parts or private keys.
 
 **Tests and expected behavior:**
 
@@ -499,6 +499,8 @@ Expected: all passing; no public locations in the persisted disconnected qualifi
 **Done:** the mirrored artifact is actually consumed, all qualification assets are closed/verified, catalog import authenticates before extraction, and runbook fixture checks accept the current valid release/reject invalid ones.
 
 **Stop:** namespace/source identity migration cannot preserve existing ownership; a chart supplier cannot be fully inventoried; mirror trust requires unsafe private host bypass; CNPG/Charlie/prerequisite assets lack a distribution contract. Record unqualified profile explicitly; do not silently claim full airgap.
+
+W03 source-task review (2026-10-10): checked items are implemented and supported by the retained scoped source/fixture evidence in [the task map](../docs/assurance/technology-guide/w03/task-status.md) and [root distribution review](032-evidence/streamed-distribution-root-review.json). These checks do not qualify a current supplier database, large offline kit, production OIDC publisher or deployed candidate. W03 remains in progress; tasks 4, 6, 11, 12 and 14 retain their concrete remaining actions.
 
 ### W04 — Deliver fresh vulnerability databases offline and prove no public egress
 
