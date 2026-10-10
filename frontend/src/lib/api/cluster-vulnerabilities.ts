@@ -454,3 +454,9 @@ export async function getImageVulnProgress(
     lastScanAgeSeconds: raw.last_scan_age_seconds,
   };
 }
+
+/** Additive typed status; never extends the released report wire layout. */
+export async function getImageDatabaseStatus(clusterId: string, reportId: string, signal?: AbortSignal): Promise<OpenAPIComponents["schemas"]["ImageDatabaseStatusV1"]> {
+ const envelope = await generated.getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus({path: {cluster_id: clusterId, id: reportId}, signal});
+ return requireEnvelopeData(envelope, "Image database status");
+}

@@ -233,7 +233,7 @@
           "additionalProperties": false,
           "properties": {
             "minimumUpgradeVersion": { "const": 1 },
-            "targetVersion": { "const": 78 }
+            "targetVersion": { "const": 79 }
           },
           "required": ["minimumUpgradeVersion", "targetVersion"]
         }
@@ -966,7 +966,7 @@
               "databaseSchema": {
                 "properties": {
                   "minimumUpgradeVersion": { "const": 1 },
-                  "targetVersion": { "const": 78 }
+                  "targetVersion": { "const": 79 }
                 },
                 "required": ["minimumUpgradeVersion", "targetVersion"]
               }

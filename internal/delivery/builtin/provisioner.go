@@ -362,71 +362,15 @@ func ensureComponent(ctx context.Context, q builtinComponentQueries, projectID, 
 		return targetIdentity{}, fmt.Errorf("built-in bundle %s identity conflict", component.Slug)
 	}
 
-	valuesJSON, err := json.Marshal(component.Values)
-	if err != nil {
-		return targetIdentity{}, fmt.Errorf("encode built-in values %s: %w", component.Slug, err)
-	}
-	reconciliation := model.ReconciliationPolicy{
-		Interval: model.Duration(5 * time.Minute), RetryInterval: model.Duration(30 * time.Second),
-		Timeout: model.Duration(10 * time.Minute), Prune: true, Wait: true, Drift: model.DriftRepair,
-	}
-	requirements := make([]model.CapabilityRequirement, 0, len(component.Requirements.Capabilities))
-	for _, capability := range component.Requirements.Capabilities {
-		requirements = append(requirements, model.CapabilityRequirement{Name: capability})
-	}
-	draft := model.BundleVersionDraft{
-		SourceID: source.id, RequestedRevision: component.Source.Version, Scope: model.ScopePlatform,
-		Renderer: model.RendererSpec{Kind: model.RendererHelm, Helm: &model.HelmSpec{
-			Chart: component.Source.Chart, ChartVersion: component.Source.Version,
-			ReleaseName: component.ReleaseName, TargetNamespace: component.TargetNamespace,
-			Values: valuesJSON, InstallRetries: 3, UpgradeRetries: 3,
-		}},
-		Reconciliation: reconciliation, RequiredCapabilities: requirements,
-	}
-	artifactDigest, err := model.ParseDigest(component.Source.ChartDigest)
+	compiled, err := compileComponentVersion(bundleID, source, release, component, trust, distributionIdentity, verificationIdentity)
 	if err != nil {
 		return targetIdentity{}, err
 	}
-	revision := model.ImmutableRevision{Kind: model.RevisionHelmChart, Value: component.Source.Version, ArtifactDigest: artifactDigest}
-	resolved, err := draft.Resolve(revision)
-	if err != nil {
-		return targetIdentity{}, fmt.Errorf("validate built-in component %s: %w", component.Slug, err)
-	}
-	specDigest, err := model.CanonicalDigest(struct {
-		Spec         model.BundleVersionSpec `json:"spec"`
-		Dependencies []uuid.UUID             `json:"dependency_bundle_ids"`
-	}{resolved, []uuid.UUID{}})
-	if err != nil {
-		return targetIdentity{}, err
-	}
-	resolvedSource := model.ResolvedSourceSpec{
-		SourceID: source.id, Type: sourceType(source),
-		URL: source.url, AuthMode: model.AuthNone,
-		Trust: trust, Revision: revision,
-	}
-	sourceJSON, _ := json.Marshal(resolvedSource)
-	rendererJSON, _ := json.Marshal(draft.Renderer)
-	reconciliationJSON, _ := json.Marshal(reconciliation)
-	requirementsJSON, _ := json.Marshal(requirements)
-	versionID, versionLabel := componentVersionIdentity(bundleID, release, component, distributionIdentity)
-	verificationStatus := "unsigned"
-	if distributionIdentity != "" {
-		verificationStatus = "verified"
-		verificationIdentity += ";distribution:" + distributionIdentity + ";upstream:" + component.Source.OriginalURL + ";archive:" + component.Source.OriginalArchiveDigest
-	} else {
-		verificationIdentity = "source-development:" + release
-	}
-	if err := q.EnsureBuiltinComponentVersion(ctx, sqlc.EnsureBuiltinComponentVersionParams{
-		ID: versionID, BundleID: bundleID, SourceID: source.id, Version: versionLabel,
-		RequestedRevision: component.Source.Version, ArtifactDigest: component.Source.ChartDigest,
-		SourceSpec: sourceJSON, RendererSpec: rendererJSON, ReconciliationPolicy: reconciliationJSON,
-		Requirements: requirementsJSON, SpecDigest: specDigest.String(), VerificationStatus: verificationStatus,
-		VerificationIdentity: verificationIdentity,
-	}); err != nil {
+	if err := q.EnsureBuiltinComponentVersion(ctx, compiled); err != nil {
 		return targetIdentity{}, fmt.Errorf("ensure built-in version %s: %w", component.Slug, err)
 	}
-	version, err := q.GetBuiltinComponentVersionIdentity(ctx, versionID)
-	if err != nil || version.BundleID != bundleID || version.SpecDigest != specDigest.String() || version.State != "ready" {
+	version, err := q.GetBuiltinComponentVersionIdentity(ctx, compiled.ID)
+	if err != nil || version.BundleID != bundleID || version.SpecDigest != compiled.SpecDigest || version.State != "ready" {
 		return targetIdentity{}, fmt.Errorf("built-in version %s identity conflict", component.Slug)
 	}
 
@@ -435,8 +379,8 @@ func ensureComponent(ctx context.Context, q builtinComponentQueries, projectID, 
 	targetID := stableID("target", clusterID.String(), component.Slug)
 	generation, err := q.EnsureBuiltinComponentTarget(ctx, sqlc.EnsureBuiltinComponentTargetParams{
 		ID: targetID, ProjectID: projectID, Name: "astronomer-builtins-" + component.Slug,
-		Description: component.Description, BundleVersionID: versionID, Placement: placementJSON,
-		RolloutPolicy: rolloutPolicyJSON, ReconciliationPolicy: reconciliationJSON,
+		Description: component.Description, BundleVersionID: compiled.ID, Placement: placementJSON,
+		RolloutPolicy: rolloutPolicyJSON, ReconciliationPolicy: compiled.ReconciliationPolicy,
 	})
 	if err != nil {
 		return targetIdentity{}, fmt.Errorf("ensure built-in target %s: %w", component.Slug, err)

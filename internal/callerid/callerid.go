@@ -56,6 +56,12 @@ const (
 	// SourceAgentLifecycle is self-upgrade, decommission, heartbeat/health,
 	// informers and the SSAR self-probes. §10.5.
 	SourceAgentLifecycle Source = "agent-lifecycle"
+ // SourceDatabaseScan is the constructor-owned joined database scan loop.
+ // It reads its current selected workload/node and manages exact claim-scoped
+ // Jobs/PVC/Secret/NetworkPolicy in the owned scan namespace. Actual requester
+ // construction enforces resource/verb/cluster boundaries; this origin grants
+ // no arbitrary forwarding, user header or report-supplied authority.
+ SourceDatabaseScan Source = "database-scan"
 )
 
 // Exemption is one row of the §10 list. Keeping the list as data — rather than
@@ -74,6 +80,10 @@ type Exemption struct {
 
 // exemptions is THE list. Nothing outside this table may be machine-origin.
 var exemptions = map[Source]Exemption{
+ SourceDatabaseScan: {
+  Source: SourceDatabaseScan,
+  Reason: "constructor-owned joined database scan loop; exact current workload/node reads and claim-scoped resources in the owned scan namespace",
+ },
 	SourceSelfManage: {
 		Source: SourceSelfManage,
 		Reason: "astronomer managing its own install inside AstronomerOwnedNamespaces",
@@ -249,4 +259,15 @@ func Fill(ctx context.Context, existing protocol.CallerIdentity) protocol.Caller
 		return existing
 	}
 	return Resolve(ctx)
+}
+
+// HasAuthenticatedUserContext checks only server-bound session attribution.
+// It does not alter Resolve precedence or machine exemptions. Constructor-owned
+// autonomous loops use this guard before stamping their own origin so a user
+// request can never become a database-scan loop by adding a machine marker.
+func HasAuthenticatedUserContext(ctx context.Context) bool {
+ if ctx==nil {return false}
+ if subject,ok:=ctx.Value(userSubjectKey).(string);ok&&subject!="" {return true}
+ user,ok:=reqctx.AuthenticatedUser(ctx)
+ return ok&&user!=nil
 }

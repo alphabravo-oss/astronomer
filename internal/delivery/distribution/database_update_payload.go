@@ -21,6 +21,7 @@ const MaximumDatabaseExpandedBytes int64 = 8 << 30
 type VerifiedDatabaseUpdatePayload struct {
 	feedDigest string
 	snapshot   DatabaseUpdateSnapshot
+	content    DatabaseCacheContent
 }
 
 type upstreamDatabaseMetadata struct {
@@ -57,66 +58,77 @@ func inspectDatabaseUpdateFile(ctx context.Context, update *AuthenticatedDatabas
 	if snapshot.validate(document.Binding.Scanner, timing, now, document.PublishedAt) != nil {
 		return nil, errors.New("database payload snapshot unavailable or stale")
 	}
-	metadata, err := inspectPinnedDatabasePayload(ctx, snapshot.Role, inputPath, snapshot.Layer, snapshot.Metadata.Size, afterHash)
+	inspected, err := inspectPinnedDatabaseContent(ctx, snapshot.Role, inputPath, snapshot.Layer, snapshot.Metadata.Size, afterHash)
 	if err != nil {
 		return nil, err
 	}
-	if err := bindDatabasePayloadMetadata(metadata, snapshot.Metadata); err != nil {
+	if err := bindDatabasePayloadMetadata(inspected.metadata, snapshot.Metadata); err != nil {
 		return nil, databaseInspectionError(ctx, err.Error())
 	}
-	return &VerifiedDatabaseUpdatePayload{feedDigest: feed, snapshot: snapshot}, nil
+	return &VerifiedDatabaseUpdatePayload{feedDigest: feed, snapshot: snapshot, content: inspected.database}, nil
 }
 
 // The consumer and operator supplier adapter share this complete compressed-byte
 // authentication and bounded archive parser. metadataSize zero means the producer
 // must derive its unknown metadata size, still under the same 64-KiB ceiling.
 func inspectPinnedDatabasePayload(ctx context.Context, role, inputPath string, layer DatabaseDescriptor, metadataSize int64, afterHash func()) ([]byte, error) {
+	inspected, err := inspectPinnedDatabaseContent(ctx, role, inputPath, layer, metadataSize, afterHash)
+	return inspected.metadata, err
+}
+
+func inspectPinnedDatabaseContent(ctx context.Context, role, inputPath string, layer DatabaseDescriptor, metadataSize int64, afterHash func()) (databaseInspectedContent, error) {
+	return inspectPinnedDatabaseContentTo(ctx, role, inputPath, layer, metadataSize, afterHash, nil)
+}
+
+// The optional private sink is chosen by the cache owner, never archive paths.
+// It is reached only after the complete compressed layer has authenticated.
+func inspectPinnedDatabaseContentTo(ctx context.Context, role, inputPath string, layer DatabaseDescriptor, metadataSize int64, afterHash func(), sink func(string, int64) (io.Writer, error)) (databaseInspectedContent, error) {
 	if ctx == nil || !filepath.IsAbs(inputPath) || layer.validate(role) != nil || metadataSize < 0 || metadataSize > 64<<10 {
-		return nil, errors.New("database payload inspection inputs invalid")
+		return databaseInspectedContent{}, errors.New("database payload inspection inputs invalid")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancel()
 	file, before, err := openDatabaseInspectionFile(inputPath, layer.Size)
 	if err != nil {
-		return nil, err
+		return databaseInspectedContent{}, err
 	}
 	defer file.Close()
 	if err := hashDatabaseInspectionFile(ctx, file, layer); err != nil {
-		return nil, err
+		return databaseInspectedContent{}, err
 	}
 	if afterHash != nil {
 		afterHash()
 	}
 	if !sameDatabaseInspectionFile(file, inputPath, before) {
-		return nil, errors.New("database payload file changed after authentication")
+		return databaseInspectedContent{}, errors.New("database payload file changed after authentication")
 	}
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return nil, databaseInspectionError(ctx, "database payload rewind failed")
+		return databaseInspectedContent{}, databaseInspectionError(ctx, "database payload rewind failed")
 	}
 	hash := sha256.New()
 	compressed := &io.LimitedReader{R: databaseInspectionReader{ctx: ctx, input: file}, N: layer.Size + 1}
 	buffered := bufio.NewReaderSize(io.TeeReader(compressed, hash), 64<<10)
 	zipper, err := gzip.NewReader(buffered)
 	if err != nil {
-		return nil, databaseInspectionError(ctx, "database payload gzip invalid")
+		return databaseInspectedContent{}, databaseInspectionError(ctx, "database payload gzip invalid")
 	}
 	defer zipper.Close()
 	zipper.Multistream(false)
 	expanded := &io.LimitedReader{R: zipper, N: MaximumDatabaseExpandedBytes + 1}
-	metadata, err := inspectDatabaseMembers(ctx, expanded, role, metadataSize)
+	inspected, err := inspectDatabaseMemberContentTo(ctx, expanded, role, metadataSize, sink)
 	if err != nil {
-		return nil, err
+		return databaseInspectedContent{}, err
 	}
 	if err := finishDatabasePayload(ctx, expanded, buffered); err != nil {
-		return nil, err
+		return databaseInspectedContent{}, err
 	}
 	if expanded.N <= 0 || layer.Size+1-compressed.N != layer.Size || "sha256:"+hex.EncodeToString(hash.Sum(nil)) != layer.Digest || !sameDatabaseInspectionFile(file, inputPath, before) {
-		return nil, databaseInspectionError(ctx, "database payload layer size/hash or expansion binding failed")
+		return databaseInspectedContent{}, databaseInspectionError(ctx, "database payload layer size/hash or expansion binding failed")
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return databaseInspectedContent{}, err
 	}
-	return metadata, nil
+	return inspected, nil
 }
 
 func openDatabaseInspectionFile(path string, size int64) (*os.File, os.FileInfo, error) {
@@ -163,6 +175,15 @@ func hashDatabaseInspectionFile(ctx context.Context, file *os.File, expected Dat
 }
 
 func inspectDatabaseMembers(ctx context.Context, expanded io.Reader, role string, metadataSize int64) ([]byte, error) {
+	inspected, err := inspectDatabaseMemberContent(ctx, expanded, role, metadataSize)
+	return inspected.metadata, err
+}
+
+func inspectDatabaseMemberContent(ctx context.Context, expanded io.Reader, role string, metadataSize int64) (databaseInspectedContent, error) {
+	return inspectDatabaseMemberContentTo(ctx, expanded, role, metadataSize, nil)
+}
+
+func inspectDatabaseMemberContentTo(ctx context.Context, expanded io.Reader, role string, metadataSize int64, sink func(string, int64) (io.Writer, error)) (databaseInspectedContent, error) {
 	archive := tar.NewReader(expanded)
 	databaseName := "trivy.db"
 	if role == "trivy-java-database" {
@@ -170,31 +191,47 @@ func inspectDatabaseMembers(ctx context.Context, expanded io.Reader, role string
 	}
 	seen := map[string]bool{}
 	var metadata []byte
+	var database DatabaseCacheContent
 	for count := 0; ; count++ {
 		header, err := archive.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil || count >= 2 || header == nil || header.Typeflag != tar.TypeReg || header.Linkname != "" || len(header.PAXRecords) != 0 || len(header.Xattrs) != 0 || header.Format != tar.FormatUSTAR && header.Format != tar.FormatGNU || seen[header.Name] || header.Size <= 0 || header.Size > MaximumDatabaseExpandedBytes || header.Name != databaseName && header.Name != "metadata.json" {
-			return nil, databaseInspectionError(ctx, "database payload archive member invalid")
+			return databaseInspectedContent{}, databaseInspectionError(ctx, "database payload archive member invalid")
+		}
+		if header.Name == "metadata.json" && (metadataSize > 0 && header.Size != metadataSize || header.Size > 64<<10) {
+			return databaseInspectedContent{}, errors.New("database payload metadata size binding failed")
 		}
 		seen[header.Name] = true
-		if header.Name == "metadata.json" {
-			if metadataSize > 0 && header.Size != metadataSize || header.Size > 64<<10 {
-				return nil, errors.New("database payload metadata size binding failed")
+		var output io.Writer = io.Discard
+		if sink != nil {
+			output, err = sink(header.Name, header.Size)
+			if err != nil || output == nil {
+				return databaseInspectedContent{}, databaseInspectionError(ctx, "database cache member destination unavailable")
 			}
+		}
+		if header.Name == "metadata.json" {
 			metadata, err = io.ReadAll(io.LimitReader(archive, header.Size+1))
 			if err != nil || int64(len(metadata)) != header.Size {
-				return nil, databaseInspectionError(ctx, "database payload metadata truncated")
+				return databaseInspectedContent{}, databaseInspectionError(ctx, "database payload metadata truncated")
 			}
-		} else if _, err := io.CopyBuffer(io.Discard, archive, make([]byte, 64<<10)); err != nil {
-			return nil, databaseInspectionError(ctx, "database payload database member truncated")
+			if written, err := output.Write(metadata); err != nil || written != len(metadata) {
+				return databaseInspectedContent{}, databaseInspectionError(ctx, "database cache metadata write failed")
+			}
+		} else {
+			hash := sha256.New()
+			copied, err := io.CopyBuffer(io.MultiWriter(hash, output), archive, make([]byte, 64<<10))
+			if err != nil || copied != header.Size {
+				return databaseInspectedContent{}, databaseInspectionError(ctx, "database payload database member truncated")
+			}
+			database = DatabaseCacheContent{Role: role, File: databaseName, Digest: "sha256:" + hex.EncodeToString(hash.Sum(nil)), Size: copied}
 		}
 	}
 	if !seen[databaseName] || !seen["metadata.json"] {
-		return nil, errors.New("database payload required member missing")
+		return databaseInspectedContent{}, errors.New("database payload required member missing")
 	}
-	return metadata, nil
+	return databaseInspectedContent{metadata: metadata, database: database}, nil
 }
 
 func finishDatabasePayload(ctx context.Context, expanded io.Reader, compressed *bufio.Reader) error {

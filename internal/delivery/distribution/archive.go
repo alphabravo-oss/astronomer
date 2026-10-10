@@ -34,6 +34,9 @@ func readArchiveMembers(payload []byte, release, catalogDigest, profileName stri
 	if err := validateProfile(bom, members, catalog, profileName); err != nil {
 		return empty, bom, nil, err
 	}
+	if _, err := ValidateDatabaseScanImageProfile(catalog, bom, members, profileName); err != nil {
+		return empty, bom, nil, err
+	}
 	return catalog, bom, members, nil
 }
 

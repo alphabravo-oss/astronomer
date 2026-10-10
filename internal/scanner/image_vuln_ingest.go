@@ -52,6 +52,7 @@ type TrivyVulnerabilityReport struct {
 
 // TrivyMetadata is the standard k8s metadata block.
 type TrivyMetadata struct {
+	UID       string            `json:"uid"`
 	Name      string            `json:"name"`
 	Namespace string            `json:"namespace"`
 	Labels    map[string]string `json:"labels"`
@@ -117,6 +118,7 @@ type TrivyCVE struct {
 // Querier is the slice of *sqlc.Queries Ingest needs. Defined as an
 // interface so tests can stub the DB without standing up Postgres.
 type Querier interface {
+	UpsertImageVulnerabilityObservation(context.Context, sqlc.UpsertImageVulnerabilityObservationParams) (sqlc.ImageVulnerabilityObservation, error)
 	UpsertImageVulnerabilityReport(ctx context.Context, arg sqlc.UpsertImageVulnerabilityReportParams) (sqlc.ImageVulnerabilityReport, error)
 	// Sprint 081: history snapshot appended on every ingest so the
 	// dashboard can render trend lines + diff-vs-yesterday. The
@@ -278,6 +280,15 @@ func (i *Ingester) Ingest(ctx context.Context, clusterID uuid.UUID, raw TrivyVul
 		_ = rollback(ctx)
 		i.recordOutcome("error")
 		return fmt.Errorf("scanner: upsert report: %w", err)
+	}
+
+	// Same transaction and BEFORE deleting any existing CVEs. The upstream
+	// field remains nullable; received_at is assigned by the database clock,
+	// never substituted for upstream time or interpreted as scan-used proof.
+	if err := persistReportObservation(ctx, q, report.ID, raw.Metadata.UID, raw.Report.UpdateTimestamp); err != nil {
+		rollbackReportObservation(rollback)
+		i.recordOutcome("error")
+		return err
 	}
 
 	// Append a history-snapshot row alongside the live upsert. The

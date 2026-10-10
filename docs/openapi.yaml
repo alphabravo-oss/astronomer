@@ -3249,6 +3249,34 @@ components:
               $ref: '#/components/schemas/PaginationMetadata'
         severity_filter:
           type: string
+    ImageDatabaseStatusV1:
+      type: object
+      additionalProperties: false
+      required: [report_id, scan_state, main_state, java_state, java_applicability, reason, finding_count, observation_revision, witness_revision, cycle, accepted_generation, report_expired, rescan_required, eligible_for_clean_posture, current_workload_checked, resource_capacity_exhausted]
+      properties:
+        report_id: {type: string, format: uuid}
+        scan_state: {type: string, enum: [pending, failed, complete, unavailable]}
+        main_state: {type: string, enum: [fresh, stale, unknown, unavailable, mirror_unreachable, not_needed, feed_expired]}
+        java_state: {type: string, enum: [fresh, stale, unknown, unavailable, mirror_unreachable, not_needed, feed_expired]}
+        java_applicability: {type: string, enum: [needed, not_needed, unknown]}
+        reason: {type: string}
+        finding_count: {type: integer, format: int64, minimum: 0}
+        observation_revision: {type: integer, format: int64, minimum: 0}
+        witness_revision: {type: integer, format: int64, minimum: 0}
+        cycle: {type: integer, format: int64, minimum: 0}
+        accepted_generation: {type: integer, format: int64, minimum: 0}
+        accepted_feed_digest: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        report_expired: {type: boolean}
+        rescan_required: {type: boolean}
+        eligible_for_clean_posture: {type: boolean}
+        current_workload_checked: {type: boolean}
+        resource_capacity_exhausted: {type: boolean}
+    ImageDatabaseStatusV1Envelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/ImageDatabaseStatusV1'}
     ImageVulnerabilityReportDetailEnvelope:
       type: object
       additionalProperties: false
@@ -15698,6 +15726,29 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ImageVulnerabilityReportDetailEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}/database-status:
+    get:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-route-class: public-api
+      operationId: getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus
+      tags: [Clusters]
+      summary: Read verified database provenance separately from findings
+      description: Prior findings remain visible. Unknown Java applicability, missing current-workload observation, stale or changed report/feed revision cannot produce a qualified clean posture. Completion is not a database freshness timestamp.
+      parameters:
+        - {name: cluster_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Current database status and retained findings
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImageDatabaseStatusV1Envelope'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}

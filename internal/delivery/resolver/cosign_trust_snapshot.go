@@ -36,11 +36,9 @@ func CaptureCosignTrust(ctx context.Context, directory string, policy model.Trus
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	reference, suffix := policy.KeyRef, ".pub"
-	if policy.Provider == model.SignatureCosignKeyless {
-		reference, suffix = trustedRootRef, ".json"
-	} else if policy.Provider != model.SignatureCosignKey {
-		return nil, errors.New("database physical trust provider unsupported")
+	reference, suffix, err := databaseCosignTrustReference(policy)
+	if err != nil {
+		return nil, err
 	}
 	verifier, err := NewExecVerifier(directory)
 	if err != nil {
@@ -51,11 +49,7 @@ func CaptureCosignTrust(ctx context.Context, directory string, policy model.Trus
 		return nil, err
 	}
 	defer clearBytes(material)
-	if policy.Provider == model.SignatureCosignKey {
-		err = validateMountedPublicKey(material)
-	} else {
-		_, err = root.NewTrustedRootFromJSON(material)
-	}
+	err = validateDatabaseCosignTrustMaterial(policy, material)
 	if err != nil {
 		return nil, errors.New("database physical trust material invalid")
 	}
@@ -164,14 +158,7 @@ func (snapshot *CosignTrustSnapshot) OriginFingerprint() string {
 	if snapshot.closed {
 		return ""
 	}
-	hash := sha256.New()
-	for _, field := range []string{"astronomer-database-trust-origin-v1", snapshot.mounted, snapshot.fingerprint} {
-		var size [8]byte
-		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
-		_, _ = hash.Write(size[:])
-		_, _ = hash.Write([]byte(field))
-	}
-	return fmt.Sprintf("sha256:%x", hash.Sum(nil))
+	return cosignTrustOriginFingerprint(snapshot.mounted, snapshot.fingerprint)
 }
 
 func (snapshot *CosignTrustSnapshot) Close() {
@@ -189,4 +176,33 @@ func (snapshot *CosignTrustSnapshot) Close() {
 	if err == nil && current.IsDir() && os.SameFile(snapshot.owned, current) {
 		_ = os.RemoveAll(snapshot.directory)
 	}
+}
+
+func databaseCosignTrustReference(policy model.TrustPolicy) (reference, suffix string, err error) {
+	if policy.Provider == model.SignatureCosignKeyless {
+		return trustedRootRef, ".json", nil
+	}
+	if policy.Provider == model.SignatureCosignKey {
+		return policy.KeyRef, ".pub", nil
+	}
+	return "", "", errors.New("database physical trust provider unsupported")
+}
+
+func validateDatabaseCosignTrustMaterial(policy model.TrustPolicy, material []byte) error {
+	if policy.Provider == model.SignatureCosignKey {
+		return validateMountedPublicKey(material)
+	}
+	_, err := root.NewTrustedRootFromJSON(material)
+	return err
+}
+
+func cosignTrustOriginFingerprint(mounted, fingerprint string) string {
+	hash := sha256.New()
+	for _, field := range []string{"astronomer-database-trust-origin-v1", mounted, fingerprint} {
+		var size [8]byte
+		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
+		_, _ = hash.Write(size[:])
+		_, _ = hash.Write([]byte(field))
+	}
+	return fmt.Sprintf("sha256:%x", hash.Sum(nil))
 }

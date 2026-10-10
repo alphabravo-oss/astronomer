@@ -30,6 +30,9 @@ type DatabaseAuthority struct {
 type DatabaseAuthoritySnapshot struct {
 	Base                          DatabaseBaseSnapshot
 	TrustMaterialFingerprint      string
+	VendorTrustFingerprint        string
+	VendorTrustOriginFingerprint  string
+	MirrorPolicyFingerprint       string
 	MirrorTrustFingerprint        string
 	MirrorTrustOriginFingerprint  string
 	RegistryRootsFingerprint      string
@@ -44,7 +47,8 @@ type VerifiedDatabaseAuthorityBase struct {
 	owner                                             *DatabaseAuthority
 	base                                              *VerifiedDatabaseBase
 	fingerprint                                       string
-	mirrorTrust, mirrorTrustOrigin                    string
+	vendorTrust, vendorOrigin                         string
+	mirrorPolicy, mirrorTrust, mirrorTrustOrigin      string
 	registryRoots, registryPolicy, registryRootOrigin string
 }
 
@@ -91,7 +95,7 @@ func (authority *DatabaseAuthority) Base(ctx context.Context) (*VerifiedDatabase
 		return nil, err
 	}
 	roots, policy := authority.registry.Fingerprints()
-	return &VerifiedDatabaseAuthorityBase{owner: authority, base: base, fingerprint: authority.physicalFingerprint(), mirrorTrust: authority.mirrorTrust.Fingerprint(), mirrorTrustOrigin: authority.mirrorTrust.OriginFingerprint(), registryRoots: roots, registryPolicy: policy, registryRootOrigin: authority.registry.RootOriginFingerprint()}, nil
+	return &VerifiedDatabaseAuthorityBase{owner: authority, base: base, fingerprint: authority.physicalFingerprint(), vendorTrust: authority.trust.Fingerprint(), vendorOrigin: authority.trust.OriginFingerprint(), mirrorPolicy: authority.mirrorPolicyFingerprint(), mirrorTrust: authority.mirrorTrust.Fingerprint(), mirrorTrustOrigin: authority.mirrorTrust.OriginFingerprint(), registryRoots: roots, registryPolicy: policy, registryRootOrigin: authority.registry.RootOriginFingerprint()}, nil
 }
 
 func (authority *DatabaseAuthority) Revalidate(ctx context.Context, proof *VerifiedDatabaseAuthorityBase) error {
@@ -152,7 +156,7 @@ func (proof *VerifiedDatabaseAuthorityBase) Snapshot() (DatabaseAuthoritySnapsho
 	if !valid {
 		return DatabaseAuthoritySnapshot{}, false
 	}
-	return DatabaseAuthoritySnapshot{Base: base, TrustMaterialFingerprint: proof.fingerprint, MirrorTrustFingerprint: proof.mirrorTrust, MirrorTrustOriginFingerprint: proof.mirrorTrustOrigin, RegistryRootsFingerprint: proof.registryRoots, RegistryPolicyFingerprint: proof.registryPolicy, RegistryRootOriginFingerprint: proof.registryRootOrigin}, true
+	return DatabaseAuthoritySnapshot{Base: base, TrustMaterialFingerprint: proof.fingerprint, VendorTrustFingerprint: proof.vendorTrust, VendorTrustOriginFingerprint: proof.vendorOrigin, MirrorPolicyFingerprint: proof.mirrorPolicy, MirrorTrustFingerprint: proof.mirrorTrust, MirrorTrustOriginFingerprint: proof.mirrorTrustOrigin, RegistryRootsFingerprint: proof.registryRoots, RegistryPolicyFingerprint: proof.registryPolicy, RegistryRootOriginFingerprint: proof.registryRootOrigin}, true
 }
 
 func (authority *DatabaseAuthority) Close() {
@@ -222,14 +226,7 @@ func (authority *DatabaseAuthority) physicalFingerprint() string {
 	if roots == "" || policy == "" {
 		return ""
 	}
-	hash := sha256.New()
-	for _, field := range []string{"astronomer-database-physical-authority-v2", authority.trust.Fingerprint(), roots, policy, authority.registry.RootOriginFingerprint()} {
-		var size [8]byte
-		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
-		_, _ = hash.Write(size[:])
-		_, _ = hash.Write([]byte(field))
-	}
-	return fmt.Sprintf("sha256:%x", hash.Sum(nil))
+	return databasePhysicalFingerprint(authority.trust.Fingerprint(), "", "", "", roots, policy, authority.registry.RootOriginFingerprint())
 }
 
 // No new verifier or policy is selected by document fields. The original
@@ -275,8 +272,29 @@ func (authority *DatabaseAuthority) mirroredPhysicalFingerprint() string {
 	if authority.registry != nil && (roots == "" || policy == "" || registryOrigin == "") {
 		return ""
 	}
+	return databasePhysicalFingerprint(authority.trust.Fingerprint(), authority.loader.options.MirrorPlan.identity, mirror, origin, roots, policy, registryOrigin)
+}
+
+// Only the canonical loader-owned verified mirror policy supplies this field.
+func (authority *DatabaseAuthority) mirrorPolicyFingerprint() string {
+	if authority.mirrorTrust == nil {
+		return ""
+	}
+	return databasePolicyFingerprint(authority.loader.options.MirrorPlan.verified.policy)
+}
+
+// The same framing is used for live physical ownership and retained comparison
+// DATA. No hash is interpreted as signature, current trust or acceptance.
+func databasePhysicalFingerprint(vendor, mirrorIdentity, mirror, mirrorOrigin, roots, policy, registryOrigin string) string {
+	fields := []string{"astronomer-database-physical-authority-v3", vendor, mirrorIdentity, mirror, mirrorOrigin, roots, policy, registryOrigin}
+	if mirrorIdentity == "" {
+		if roots == "" && policy == "" && registryOrigin == "" {
+			return vendor
+		}
+		fields = []string{"astronomer-database-physical-authority-v2", vendor, roots, policy, registryOrigin}
+	}
 	hash := sha256.New()
-	for _, field := range []string{"astronomer-database-physical-authority-v3", authority.trust.Fingerprint(), authority.loader.options.MirrorPlan.identity, mirror, origin, roots, policy, registryOrigin} {
+	for _, field := range fields {
 		var size [8]byte
 		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
 		_, _ = hash.Write(size[:])

@@ -32,18 +32,35 @@ type DatabaseRegistryAuthentication struct {
 // policy beneath ORAS's challenge/token machinery. A constructor-owned cache is
 // scoped to this repository only; there is no ambient/global credential cache.
 func NewDatabaseRegistryClient(client *http.Client, repositoryName string, policy DatabaseRegistryAuthentication) (*http.Client, error) {
+	return newDatabaseRegistryClient(client, repositoryName, policy, false)
+}
+
+// NewDatabaseRegistryPublicationClient is protected operator-constructor
+// composition only. Runtime loaders, signed feeds and HTTP requests cannot
+// select this constructor. It expands only the same exact repository to OCI
+// push, retaining the identical realm/service/credential and destination guards.
+func NewDatabaseRegistryPublicationClient(client *http.Client, repositoryName string, policy DatabaseRegistryAuthentication) (*http.Client, error) {
+	return newDatabaseRegistryClient(client, repositoryName, policy, true)
+}
+
+func newDatabaseRegistryClient(client *http.Client, repositoryName string, policy DatabaseRegistryAuthentication, publication bool) (*http.Client, error) {
 	repository, err := remote.NewRepository(repositoryName)
 	if client == nil || client.Transport == nil || err != nil || repository.Reference.Reference != "" || !validDatabaseRegistryAuthentication(policy) {
 		return nil, errors.New("database registry authentication constructor invalid")
 	}
 	host := repository.Reference.Registry
-	guard := &databaseAuthenticationTransport{base: client.Transport, host: host, repository: repository.Reference.Repository, policy: policy}
+	guard := &databaseAuthenticationTransport{base: client.Transport, host: host, repository: repository.Reference.Repository, policy: policy, publication: publication}
 	guarded := *client
 	guarded.Transport = guard
 	guarded.Jar = nil
 	// Each registry/token request is finite independently of the whole transfer.
-	if guarded.Timeout <= 0 || guarded.Timeout > time.Minute {
-		guarded.Timeout = time.Minute
+	maximumRequest := time.Minute
+	if publication {
+		maximumRequest = 15 * time.Minute
+		guarded.Timeout = maximumRequest
+	}
+	if guarded.Timeout <= 0 || guarded.Timeout > maximumRequest {
+		guarded.Timeout = maximumRequest
 	}
 	originalRedirect := guarded.CheckRedirect
 	guarded.CheckRedirect = func(request *http.Request, via []*http.Request) error {
@@ -58,7 +75,7 @@ func NewDatabaseRegistryClient(client *http.Client, repositoryName string, polic
 	authentication := &remoteauth.Client{Client: &guarded, Cache: remoteauth.NewCache(), Credential: remoteauth.StaticCredential(host, remoteauth.Credential{Username: policy.Username, Password: policy.Password})}
 	outer := *client
 	outer.Jar = nil
-	outer.Transport = &databaseAuthenticatedTransport{authentication: authentication, guarded: &guarded, host: host, repository: repository.Reference.Repository}
+	outer.Transport = &databaseAuthenticatedTransport{authentication: authentication, guarded: &guarded, host: host, repository: repository.Reference.Repository, publication: publication}
 	// Redirects are resolved only by the guarded inner client; no second redirect
 	// pass may interpret an already checked response.
 	outer.CheckRedirect = func(*http.Request, []*http.Request) error {
@@ -87,19 +104,20 @@ type databaseAuthenticatedTransport struct {
 	guarded        *http.Client
 	host           string
 	repository     string
+	publication    bool
 }
 
 func (transport *databaseAuthenticatedTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	if err := request.Context().Err(); err != nil {
 		return nil, err
 	}
-	if request.URL.Scheme != "https" || request.URL.Host != transport.host || request.URL.User != nil || !strings.HasPrefix(request.URL.Path, "/v2/"+transport.repository+"/") || request.URL.RawQuery != "" || request.Header.Get("Authorization") != "" || request.Header.Get("Cookie") != "" || request.Header.Get("Proxy-Authorization") != "" || (request.Method != http.MethodGet && request.Method != http.MethodHead) {
+	if request.URL.Scheme != "https" || request.URL.Host != transport.host || request.URL.User != nil || !strings.HasPrefix(request.URL.Path, "/v2/"+transport.repository+"/") || !validDatabaseRegistryRequest(request, transport.host, transport.repository, transport.publication) || request.Header.Get("Authorization") != "" || request.Header.Get("Cookie") != "" || request.Header.Get("Proxy-Authorization") != "" {
 		return nil, errors.New("database registry request outside constructor scope")
 	}
 	// Replace, rather than append, caller scope hints: upstream ORAS merges hints
-	// with challenges. Only this immutable repository's pull scope is authorized.
+	// with challenges. Only this constructor's exact repository scope is authorized.
 	ctx := remoteauth.WithScopes(request.Context())
-	ctx = remoteauth.WithScopesForHost(ctx, transport.host, remoteauth.ScopeRepository(transport.repository, remoteauth.ActionPull))
+	ctx = remoteauth.WithScopesForHost(ctx, transport.host, databaseRegistryScope(transport.repository, transport.publication))
 	response, err := transport.authentication.Do(request.Clone(ctx))
 	if err != nil {
 		return nil, databaseAuthenticationError(request.Context(), err)
@@ -112,10 +130,11 @@ func (transport *databaseAuthenticatedTransport) CloseIdleConnections() {
 }
 
 type databaseAuthenticationTransport struct {
-	base       http.RoundTripper
-	host       string
-	repository string
-	policy     DatabaseRegistryAuthentication
+	base        http.RoundTripper
+	host        string
+	repository  string
+	policy      DatabaseRegistryAuthentication
+	publication bool
 }
 
 func (transport *databaseAuthenticationTransport) isTokenRequest(request *http.Request) bool {
@@ -166,7 +185,11 @@ func (transport *databaseAuthenticationTransport) validChallenge(header http.Hea
 		return false
 	}
 	parameters := make(map[string]string, 3)
-	for _, raw := range strings.Split(strings.TrimPrefix(challenges[0], "Bearer "), ",") {
+	parts := strings.Split(strings.TrimPrefix(challenges[0], "Bearer "), ",")
+	if transport.publication {
+		parts = databasePublicationBearerParts(strings.TrimPrefix(challenges[0], "Bearer "))
+	}
+	for _, raw := range parts {
 		match := databaseBearerParameter.FindStringSubmatch(strings.TrimSpace(raw))
 		if len(match) != 3 || (match[1] != "realm" && match[1] != "service" && match[1] != "scope") {
 			return false
@@ -176,7 +199,7 @@ func (transport *databaseAuthenticationTransport) validChallenge(header http.Hea
 		}
 		parameters[match[1]] = match[2]
 	}
-	if len(parameters) != 3 || parameters["scope"] != remoteauth.ScopeRepository(transport.repository, remoteauth.ActionPull) {
+	if len(parameters) != 3 || parameters["scope"] != databaseRegistryScope(transport.repository, transport.publication) && (!transport.publication || parameters["scope"] != remoteauth.ScopeRepository(transport.repository, remoteauth.ActionPull)) {
 		return false
 	}
 	realm, err := url.Parse(parameters["realm"])
@@ -198,7 +221,7 @@ func (transport *databaseAuthenticationTransport) validTokenRequest(request *htt
 		return false
 	}
 	query, err := url.ParseQuery(request.URL.RawQuery)
-	if err != nil || len(query) != 2 || len(query["scope"]) != 1 || len(query["service"]) != 1 || query.Get("scope") != remoteauth.ScopeRepository(transport.repository, remoteauth.ActionPull) {
+	if err != nil || len(query) != 2 || len(query["scope"]) != 1 || len(query["service"]) != 1 || query.Get("scope") != databaseRegistryScope(transport.repository, transport.publication) {
 		return false
 	}
 	realm := *request.URL

@@ -34,6 +34,10 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 		return true, 0
 	}
 
+	if args[0] == "database-update-publish" {
+		return true, handleDatabasePublicationCommand(args[1:], stdout, stderr)
+	}
+
 	if args[0] == "grafana-proxy" {
 		cfg, err := grafanaproxy.ParseConfig(os.Getenv("LISTEN_ADDR"), os.Getenv("GRAFANA_UPSTREAM"), os.Getenv("ASTRONOMER_URL"), os.Getenv("GRAFANA_PUBLIC_PATH"), os.Getenv("GRAFANA_PROXY_KEY"))
 		if err == nil {

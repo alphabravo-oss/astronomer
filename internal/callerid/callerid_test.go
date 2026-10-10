@@ -166,6 +166,7 @@ func TestExemptionListMatchesDesignSection10(t *testing.T) {
 		SourceCrossPodTransport: true, // transport, not origin (§10.3)
 		SourceKubectlShell:      false,
 		SourceAgentLifecycle:    false,
+        SourceDatabaseScan: false,
 	}
 	if len(Exemptions()) != len(want) {
 		t.Fatalf("exemption count = %d, want %d", len(Exemptions()), len(want))

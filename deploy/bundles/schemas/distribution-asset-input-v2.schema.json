@@ -28,6 +28,7 @@
         "enum": [
           "database-cnpg",
           "vulnerability-scanning",
+          "measured-vulnerability-scanning",
           "cache-valkey",
           "identity-dex",
           "logs-fluent-bit",
@@ -72,7 +73,8 @@
               "trivy-database",
               "trivy-java-database",
               "application-catalog",
-              "distribution-registry"
+              "distribution-registry",
+              "database-scan-helper"
             ]
           },
           "path": {

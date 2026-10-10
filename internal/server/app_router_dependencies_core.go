@@ -53,6 +53,7 @@ func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config
 	imageVulns := handler.NewImageVulnHandler(queries)
 	imageVulns.SetK8sRequester(requester)
 	imageVulns.SetRunTx(sqlcMutationTxRunner[handler.ImageVulnMutationTx](database))
+ if c.databaseScanOwner!=nil {imageVulns.SetDatabaseStatusReader(c.databaseScanOwner)}
 
 	serviceProxy := handler.NewServiceProxyHandler(requester)
 	serviceProxy.SetToolQuerier(queries)

@@ -63,6 +63,7 @@ type ImageVulnHandler struct {
 	queries ImageVulnQuerier
 	k8s     K8sRequester
 	runTx   imageVulnRunTxFunc
+ databaseStatus ImageDatabaseStatusReader
 }
 
 // NewImageVulnHandler constructs the handler. log defaults to slog's

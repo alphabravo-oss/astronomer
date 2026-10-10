@@ -52,7 +52,7 @@ func TestPreferencePostgresProductionRouteGeneratedClientContract(t *testing.T) 
 		t.Fatal("owned preference route database identity mismatch")
 	}
 	version, dirty, err := database.SchemaVersion(ctx)
-	if err != nil || dirty || version != db.ExpectedSchemaVersion || version != 78 {
+	if err != nil || dirty || version != db.ExpectedSchemaVersion {
 		t.Fatal("owned preference route database schema mismatch")
 	}
 	actor, other := uuid.New(), uuid.New()

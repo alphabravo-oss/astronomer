@@ -24,6 +24,9 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 		Encryptor: c.encryptor, SSO: c.ssoManager, charlieRuntime: lifecycles, charlieBridge: c.managedCharlieBridge,
 		taskLeader: c.taskLeader, runtime: c.runtime,
 	}
+	databaseRefresh := c.databaseRefreshOwner
+ databaseScan := c.databaseScanOwner
+	c.transferDatabaseAuthority(s)
 	cleanupOnError := true
 	defer func() {
 		if !cleanupOnError {
@@ -86,7 +89,7 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 	}
 	metricsPublisher := livemetrics.New(c.bus, c.queries, c.clusterHandler.MetricsProvider(), logger)
 	runReconcilers := func(ctx context.Context) error {
-		return runRuntimeLoopGroup(ctx,
+		loops := []namedRuntimeLoop{
 			namedRuntimeLoop{name: "monitoring", run: c.monitoringHandler.RunReconciler},
 			namedRuntimeLoop{name: "backup", run: c.backupHandler.RunReconciler},
 			namedRuntimeLoop{name: "tool", run: c.toolHandler.RunReconciler},
@@ -98,7 +101,12 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 			namedRuntimeLoop{name: "cluster-probes", run: func(ctx context.Context) {
 				runClusterProbeReconciler(ctx, logger, c.queries, c.requester)
 			}},
-		)
+		}
+		if databaseRefresh != nil {
+			loops = append(loops, namedRuntimeLoop{name: "database-update-refresh", run: func(ctx context.Context) { databaseRefresh.Run(ctx, logger) }})
+		}
+		if databaseScan != nil {loops=append(loops,namedRuntimeLoop{name:"database-owned-scans",run:func(ctx context.Context){databaseScan.Run(ctx,logger)}})}
+		return runRuntimeLoopGroup(ctx, loops...)
 	}
 	if cfg.ServerReplicas > 1 && c.database != nil {
 		if err := c.runtime.Go("leader-reconcilers", true, func(ctx context.Context) error {

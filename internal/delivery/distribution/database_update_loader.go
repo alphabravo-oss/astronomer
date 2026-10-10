@@ -35,8 +35,10 @@ type DatabaseUpdateLoader struct {
 // release/catalog revocation state or authorization to mutate desired state.
 // Durable composition must establish those separate preconditions first.
 type AuthenticatedDatabaseUpdate struct {
-	digest   string
-	document DatabaseUpdateDocument
+	digest       string
+	document     DatabaseUpdateDocument
+	timing       DatabaseUpdateTiming
+	javaRequired bool
 }
 
 func NewDatabaseUpdateLoader(options DatabaseUpdateOptions) (*DatabaseUpdateLoader, error) {
@@ -80,7 +82,7 @@ func (loader *DatabaseUpdateLoader) Load(ctx context.Context, now time.Time) (*A
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return &AuthenticatedDatabaseUpdate{digest: options.Digest, document: document}, nil
+	return &AuthenticatedDatabaseUpdate{digest: options.Digest, document: document, timing: options.Timing, javaRequired: options.JavaRequired}, nil
 }
 
 func (loader *DatabaseUpdateLoader) verifySnapshot(ctx context.Context, snapshot DatabaseUpdateSnapshot) error {
@@ -111,4 +113,16 @@ func (update *AuthenticatedDatabaseUpdate) Snapshot() (string, DatabaseUpdateDoc
 	document := update.document
 	document.Databases = append([]DatabaseUpdateSnapshot(nil), update.document.Databases...)
 	return update.digest, document, true
+}
+
+// ValidateCurrentMetadata reevaluates finite clocks on this constructor's
+// authenticated immutable document. It does not revalidate physical trust,
+// durable revocation, payload bytes or scan-used provenance. Durable owners
+// perform those independent checks before accepting and committing state.
+func (update *AuthenticatedDatabaseUpdate) ValidateCurrentMetadata(now time.Time) error {
+	if _, _, valid := update.Snapshot(); !valid {
+		return errors.New("database update authenticated metadata unavailable")
+	}
+	_, err := validateDatabaseUpdateDocument(update.document, update.document.Binding, update.timing, now, update.javaRequired)
+	return err
 }
