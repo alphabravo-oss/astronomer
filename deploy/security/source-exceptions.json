@@ -990,6 +990,21 @@
       "approved_by": "root/source-review",
       "evidence": "docs/assurance/technology-guide/w02/current-source-927151be/fips-random-nonce-control-proposal.json sha256:2867ef75d1429d093c501d4331e7a189842c36c68c5ba17e3ac7ef8c05d22d79; docs/assurance/technology-guide/w16/receipt.json; selected Go1.27.2 API source SHA256 1c438306f268e692037dbb2e98a34ba91b2ee23d0c452954d6ab415591f6f459; root exact static review, not release approval",
       "expires_at": "2026-10-16T00:00:00Z"
+    },
+    {
+      "tool": "gosec",
+      "rule_id": "G109",
+      "path": "internal/handler/audit.go",
+      "line": 686,
+      "column": 23,
+      "source_digest": "sha256:840531e2004b113c50793d6419bd41d779805e39c9bef690c6e9d6a8e4f7ef93",
+      "fingerprint": "sha256:2a483c9450bb4bb24b0682b584ff920deaa6453b4b9da358550064157b495c57",
+      "release_scope": "first-party-source-policy",
+      "reason": "Exact audit status_code filter rejects strconv.Atoi errors, negative values and values above 599 before int32 conversion. Only 0..599 reaches this sink, all representable. No other narrowing site or changed guard is covered.",
+      "owner": "security/platform",
+      "approved_by": "root/source-review",
+      "evidence": "Managed static triage current-g407-g109-static-triage.json SHA256 169ce0aed05060d9ca566ecbf45c803cb43f3268aacc27dae622d31bba5c7e02; exact current source/fingerprint independently reviewed by root; prior reviewed-source-controls.json guard disposition unchanged; no human/tag/release approval",
+      "expires_at": "2026-10-16T00:00:00Z"
     }
   ]
 }
