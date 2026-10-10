@@ -15,8 +15,9 @@ import (
 	"runtime/debug"
 
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/crypto/bcrypt"
 
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/fernet/fernet-go"
 )
 
 type result struct {
@@ -84,30 +85,25 @@ func characterize(name string) (status string) {
 		}
 		return "completed"
 	case "fernet":
-		key, err := auth.GenerateKey()
+		key := new(fernet.Key)
+		if err := key.Generate(); err != nil {
+			return "rejected_error"
+		}
+		sealed, err := fernet.EncryptAndSign([]byte("synthetic"), key)
 		if err != nil {
 			return "rejected_error"
 		}
-		enc, err := auth.NewEncryptor(key)
-		if err != nil {
+		opened := fernet.VerifyAndDecrypt(sealed, 0, []*fernet.Key{key})
+		if string(opened) != "synthetic" {
 			return "rejected_error"
 		}
-		sealed, err := enc.Encrypt("synthetic")
-		if err != nil || !enc.IsPrimaryCiphertext(sealed) {
-			return "rejected_error"
-		}
-		opened, err := enc.Decrypt(sealed)
-		if err != nil || opened != "synthetic" {
-			return "rejected_error"
-		}
-		return "completed"
+		return "completed_library_path"
 	case "bcrypt":
-		encoded, err := auth.HashPassword("synthetic-password")
+		encoded, err := bcrypt.GenerateFromPassword([]byte("synthetic-password"), bcrypt.DefaultCost)
 		if err != nil {
 			return "rejected_error"
 		}
-		ok, _, err := auth.VerifyPassword(encoded, "synthetic-password")
-		if err != nil || !ok {
+		if err := bcrypt.CompareHashAndPassword(encoded, []byte("synthetic-password")); err != nil {
 			return "rejected_error"
 		}
 		return "completed_outside_native_module"
