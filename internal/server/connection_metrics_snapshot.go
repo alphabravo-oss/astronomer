@@ -48,5 +48,8 @@ func collectConnectionMetricsSnapshot(ctx context.Context, begin connectionMetri
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return complete, nil
 }
