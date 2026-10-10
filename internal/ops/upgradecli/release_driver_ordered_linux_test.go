@@ -40,6 +40,7 @@ func orderedReplacementDriverFixture(t *testing.T) (*ReleaseDriver, *orderedDriv
 	t.Helper()
 	invocation, options, _ := invocationVerifiedRunFixture(t, "")
 	old := invocation.driver
+	schemaVersion := old.backup.source.options.TargetSchema
 	commands := old.release.fence.commands
 	fence := old.release.fence
 	state := &orderedDriverState{server: 2, worker: 1, serverRV: 10, workerRV: 11}
@@ -94,10 +95,10 @@ func orderedReplacementDriverFixture(t *testing.T) (*ReleaseDriver, *orderedDriv
 			return nil, nil
 		}
 		if slices.Contains(args, temporarySchemaScript) {
-			return []byte(lease.RestoreDatabaseName + "|17|1|78|f\n"), nil
+			return []byte(fmt.Sprintf("%s|17|1|%d|f\n", lease.RestoreDatabaseName, schemaVersion)), nil
 		}
 		if slices.Contains(args, databaseStateScript) {
-			return []byte(lease.DatabaseName + "|17|1|78|f\n"), nil
+			return []byte(fmt.Sprintf("%s|17|1|%d|f\n", lease.DatabaseName, schemaVersion)), nil
 		}
 		if len(args) > 5 && args[4] == "auth" {
 			return []byte("yes\n"), nil
