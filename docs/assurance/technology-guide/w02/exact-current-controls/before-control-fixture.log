@@ -1,0 +1,15 @@
+test_all_63_controls_are_exact_and_retained (tests.ReviewedSourceControlsTest.test_all_63_controls_are_exact_and_retained) ... FAIL
+
+======================================================================
+FAIL: test_all_63_controls_are_exact_and_retained (tests.ReviewedSourceControlsTest.test_all_63_controls_are_exact_and_retained)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/astronomer-all/astronomer-032-w02-current/scripts/tests/security_source_policy_test.py", line 138, in test_all_63_controls_are_exact_and_retained
+    self.assertTrue(result['passed'])
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 1 test in 0.013s
+
+FAILED (failures=1)

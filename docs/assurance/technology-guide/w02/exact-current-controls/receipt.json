@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "source_commit": "80b99826b1438dd2b3fb3413ad5342eac2ea47f9",
+  "source_inputs": {
+    "deploy/security/source-exceptions.json": "9fc6dd069fe7e9be76b103f0e37404affb30e79938583d06bcc0677e584c1757",
+    "scripts/security-source-policy.py": "0c086bdcbb0a65117af8dc6c411468e0540e7e7b97204176a2fc65ae5480c566",
+    "scripts/tests/security_source_policy_test.py": "9425efb8dddc2fb674dc5a7b774ce686c1059741cb1b3ebdd59f9ab189026d36",
+    "deploy/security/source-policy.json": "86320bf542892a3179470f75485ad097b285ae7685042f8cf6c5cee8804c0fce",
+    "deploy/security/source-reviews.json": "c78d8d18d30ed8e13407e1222feabbbce72c509f2b4a3724a7e60dc1be26f094",
+    "internal/agent/tunnel.go": "e9e1c875218f2e4dc8ecc20336438ea582ebf8566b48948e253cf9202465cb9e",
+    "internal/db/sqlc/agent_ingest.sql.go": "946c7fb2599b43720ea42b368b499bf1451c5b3e302a3f378842dc853b28870b",
+    "internal/db/sqlc/auth.sql.go": "ad2814b556194043e28301b44ffedcdca0dd4612084de7b4da1a7c9228db4dde",
+    "internal/db/sqlc/cloud_credential_materialization_outbox_ext.sql.go": "8f4b769ef596a0d5034435720eed6e9be0755edc984ca5e0f521de4ffbcf2dab",
+    "internal/db/sqlc/cloud_credentials.sql.go": "f3c0d36f4691c8a980da66786b279da4262624b95584c9ec0298939f3deb5fa2",
+    "internal/db/sqlc/cluster_decommission.sql.go": "7a6ccd5a74452e311c4626dcc3ed2e01799cb3a75e44eaa2d0a2a19689eb5bf0",
+    "internal/db/sqlc/cluster_registration_step_outbox_ext.sql.go": "63066744be226af92f630ca5055f48000a1f8dcda010b35e5db647e6794e1048",
+    "internal/db/sqlc/clusters.sql.go": "b5e375ecb6213e3c7f4d1e984df6747f4a4c173b51dbd7caa85b6a65c59d61d8",
+    "internal/db/sqlc/compliance.sql.go": "cd59ffb950548212fec97517a4e71dfd49cfbbb9035347464380a94eff8ed343",
+    "internal/db/sqlc/delivery.sql.go": "2880ae5bc01229f4b14b3ca4c791224fd357563073273561612e01f214ff87f1",
+    "internal/db/sqlc/loki_ingest_tokens.sql.go": "72edc473b0bfed55efec81fbe1fafe8a0145bf38f91e0db39c1bbb1eb71ea001",
+    "internal/db/sqlc/quotas.sql.go": "e95edc9888eaf01528d141608cf81f48efa9da3153ec193c02d5ff230b97434f",
+    "internal/db/sqlc/scim.sql.go": "92866fb7fc94e228d131ee93e61807075058e5811d9af93ff1a0e22b9beec361",
+    "internal/db/sqlc/smtp.sql.go": "a752cc47d6fc756256b017f3095a6b96bcfc5e11d7414b1f28490f02d8e6c3be",
+    "internal/db/sqlc/users.sql.go": "5186cdcd8cab01b7ca1a1f6ee52304e3c129ddc2973eda1b516935fb1dbc5f5a",
+    "scripts/fips-mode-probe/main.go": "91611294e3bda418e2fd13f802a45faa809b7f112c739c135be0b6211299aa4b"
+  },
+  "changes": {
+    "added_exact_controls": 63,
+    "unchanged_controls": 3,
+    "removed_obsolete_or_stale_bindings": [
+      "read-audit math/rand sampler replaced with crypto/rand",
+      "audit G109 source changed; proposed new binding remains unaccepted"
+    ]
+  },
+  "authority": "Root static source review; no human/tag/release approval inferred",
+  "commands": [
+    {
+      "argv": [
+        "python3",
+        "/tmp/w02-exact-controls-evidence/replay-before-fixture.py"
+      ],
+      "source_exception_revision": "e3ac5fdf",
+      "exit_code": 1,
+      "result": "Expected named missing-control failure; no fixture error; replayed isolated old exception bytes.",
+      "replay_script": "replay-before-fixture.py"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "scripts.tests.security_source_policy_test",
+        "-v"
+      ],
+      "exit_code": 0,
+      "tests": 20
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/security-source-policy.py",
+        "--gosec",
+        "/tmp/w02-current-rescan-927151be/gosec.json",
+        "--govulncheck",
+        "/tmp/w02-current-rescan-927151be/govulncheck.sarif",
+        "--statuses",
+        "/tmp/w02-current-rescan-927151be/statuses.json",
+        "--exceptions",
+        "deploy/security/source-exceptions.json",
+        "--output",
+        "/tmp/w02-exact-controls-evidence/security-reports",
+        "--scope",
+        "first-party-source-policy"
+      ],
+      "exit_code": 1,
+      "result": "Qualified native report replay remains source-policy FAIL."
+    }
+  ],
+  "qualification_limits": [
+    "No native scanner was rerun for this metadata-only policy slice; exact finding source bytes are unchanged from the qualified native report.",
+    "All retained HIGH/MED findings not covered by reviewed controls remain visible and blocking under existing policy.",
+    "The fixture clock tests dated review lifetime only; production authority clock is unchanged.",
+    "G109 exact changed-source binding is proposed but has no new applied approval."
+  ],
+  "artifacts": {
+    "README.md": "f3b8b6245e796cb9f955f1eb91c9d551fc70ed3a3a06f3276a9e88e56c4ebe8b",
+    "after-policy-fixtures.log": "e9f18c7361205bc9a4f4b939bbe3b947c0248abf714103fc60e676a507d14a48",
+    "after-report-replay.log": "69807779130b2eda8b85bc29963addf51cb6ef1736b0da8c611023d2b48abdd5",
+    "before-control-fixture.log": "c248cb5e02f9b7d62e38afec09724834dcb534b2e98f677bea86d2b7ce61820e",
+    "replay-before-fixture.py": "c4dc67227d61f271e14f2e22234fea28763f4357349890c7197d85b73a3b3eed",
+    "retained-policy-result.json": "0f52fad0021172f98e8ff7de443c9dc786f7d251f4a3ed1ab5549948702b7fa1"
+  }
+}
