@@ -109,8 +109,10 @@ writing that is:
 - `sso_configurations.client_secret_encrypted`
 - `dex_settings.public_clients_encrypted`
 - `backup_storage_configs.encrypted_credentials`
+- `management_backup_destinations.encrypted_credentials`
 - `vault_connections.auth_encrypted`
 - `gitops_registration_sources.auth_encrypted`
+- `gitops_registration_sources.webhook_secret_encrypted`
 - `prometheus_datasources.auth_encrypted`
 - `siem_forwarders.auth_encrypted`
 - `cloud_credentials.data_encrypted`
@@ -130,6 +132,10 @@ writing that is:
 - `delivery_sources.ca_bundle_encrypted`
 - `delivery_sources.credential_encrypted`
 - `delivery_system_releases.registry_credential_encrypted`
+- `loki_ingest_tokens.token_encrypted`
+- `resource_operations.manifest_encrypted`
+- `node_operations.parameters_encrypted`
+- `dex_operations.payload_encrypted`
 
 The authoritative list is `rewriteTargets` in `cmd/keyrotate/main.go`; a build
 test (`cmd/keyrotate/coverage_test.go`) fails if a migration adds an encrypted
@@ -156,10 +162,23 @@ After rewriting, `keyrotate` performs a second primary-only scan of every
 encrypted column, typed connector JSON credential, and static-client envelope.
 It also checks pre-cutover envelope/plaintext equality. Any CAS miss, fallback-
 only ciphertext, malformed JSON, or static-client drift increments `failed` and
-keeps the command non-zero. Only a final `failed=0` result authorizes removing
-the fallback key.
+keeps the command non-zero. A final `failed=0` is necessary evidence about the
+scanned live database. It does not authorize fallback-key retirement: backup
+snapshots, delayed operations and other retained ciphertext may still need it.
 
-### Step 4 — drop the old key
+### Step 4 — assess retirement before dropping the old key
+
+Keep the old key independently recoverable until every backup, retained archive,
+delayed encrypted payload and supported rollback path that needs it has expired
+or been re-encrypted and verified. Inventory these retention periods explicitly;
+the live database's rotation counters cannot determine them. Verify a restored
+historical snapshot using the separately recovered key reference before claiming
+that the recovery procedure works. A newer snapshot does not replace the key
+needed by an older retained one. `keyrotate` neither deletes nor retires keys.
+
+Only after this separate retention review, remove the old key from the active
+read list. Removing it from a deployment and destroying its recoverable backup
+are separate decisions.
 
 ```bash
 helm upgrade --reuse-values astronomer ./deploy/chart \
@@ -173,8 +192,9 @@ kubectl -n astronomer logs deploy/astronomer-server | grep -m1 "encryption keys 
 # → "encryption keys loaded count=1"
 ```
 
-If anything fails to decrypt after this, the row was missed in step 3.
-Add `OLD_KEY` back to the fallback list and re-run `keyrotate`.
+If anything fails to decrypt after this, restore the matching old key to the
+fallback list and diagnose the ciphertext's origin. It may be a missed live row,
+a restored snapshot or a delayed operation. Re-run `keyrotate` where applicable.
 
 ### Rollback
 
@@ -187,8 +207,9 @@ encryptionKey="old-2026q2:${OLD_KEY},new-2026q3:${NEW_KEY}"
 ```
 
 If `keyrotate` already rewrote rows under the new primary, run it again with
-that old-primary/new-fallback ordering and require `failed=0` before removing
-the new fallback. The `/api/v1/admin/key-status` response exposes non-secret
+that old-primary/new-fallback ordering and require `failed=0`; retain the new
+fallback until its backup, delayed-payload and rollback obligations also end.
+The `/api/v1/admin/key-status` response exposes non-secret
 key IDs and marks the primary, so the intended rollback ordering is auditable.
 
 ---
@@ -222,14 +243,19 @@ continue to validate because `OLD_JWT` is still in the validator list.
 ### Step 3 — wait out the refresh-token lifetime
 
 7 days by default (`refreshTokenLifetime` in `internal/auth/jwt.go`).
-At the end of this window, every active session has refreshed at least
-once and now holds a token signed under `NEW_JWT`.
+Measure the window from the last old-key issuer being stopped. Tokens signed by
+that issuer remain valid until their own expiry unless separately revoked;
+refreshing once is not proof that every issued token has expired. The refresh
+lifetime is seven days in the current implementation; account for the configured
+access lifetime and any other issued token purpose when selecting the window.
 
-If you cannot wait 7 days (active compromise, compliance pressure),
-force-invalidate all sessions by deleting the row-level session state
-— but there isn't any: JWTs are stateless. Bumping the secret early
-just kicks every logged-in user back to the login page. Decide which
-hurts more.
+Browser refresh sessions have durable `refresh_session_families` and
+`refresh_session_tokens` state. Refresh reuse revokes the family, and access-token
+validation checks family revocation. Logout and administrative session revocation
+use the supported authenticated operations and mandatory audit paths; do not
+delete session rows manually. If a compromised signing key must be removed
+before its tokens expire, coordinate explicit session revocation and operator
+reauthentication. Removing a verification key rejects tokens still signed by it.
 
 ### Step 4 — drop the old key
 
@@ -375,12 +401,13 @@ keyrotate
   --database-url <DSN>            (or env DATABASE_URL)
   --encryption-key "<new>,<old>"  (or env ENCRYPTION_KEY)
   --dry-run                       no writes, report what would change
-  --batch-size 100                rows per UPDATE
+  --batch-size 100                scan-page size; each CAS UPDATE commits separately
 ```
 
 Exit codes:
-- 0 — all rows re-encrypted (or, with `--dry-run`, all rows would
-  successfully re-encrypt)
-- 1 — at least one row failed to decrypt with the configured key list
-  (an old key is missing from `--encryption-key`)
+- 0 — the selected live rotation and primary-only verification completed without
+  reported failures; dry-run reports candidate rewrites without proving a later
+  write or authorizing key retirement
+- 1 — a scan, decryption, write, concurrent CAS conflict or verification failed;
+  retain all required read keys and retry after resolving the cause
 - 2 — invalid flags or DB connection failure

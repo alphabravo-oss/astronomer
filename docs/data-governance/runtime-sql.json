@@ -10,7 +10,7 @@
     {
       "path": "cmd/keyrotate/main.go",
       "owner": "keyrotate backend",
-      "source_sha256": "f509cfd0fa3658ee5ed11d374ac456e68cf06dde20132ccefa5dde6f2c831b1d"
+      "source_sha256": "7e1afdf4c7f43be29ed4265a0b325b12991432b39028ac34056f8085fe5885a9"
     },
     {
       "path": "cmd/migrator/main.go",
@@ -930,7 +930,7 @@
       "function": "rewriteColumn",
       "operation": "QueryContext",
       "sha256": "2440f19ebcc036f5056ba3d18e42dfc2bee7130ddbac8153b8e904a74cf83544",
-      "scope_sha256": "e8e52a0978d5a70088f65d6a298b305d9d843e08b66894c082eb255de09e4287",
+      "scope_sha256": "37fd0776483d4b7b9e37bf3a6ff86d167cfe706090adac7190c0d6de3d6bc966",
       "classification": "low-level-runtime",
       "control": "Existing explicit execution boundary; exact call, enclosing declaration and module source are bound. This classification does not prove remote dataflow or authorize new SQL."
     },
@@ -939,7 +939,7 @@
       "function": "rewriteColumn",
       "operation": "ExecContext",
       "sha256": "3c8e8a4e4fe47d24832f89555149492a67c9839f5a7607b53a1f477258535af0",
-      "scope_sha256": "e8e52a0978d5a70088f65d6a298b305d9d843e08b66894c082eb255de09e4287",
+      "scope_sha256": "37fd0776483d4b7b9e37bf3a6ff86d167cfe706090adac7190c0d6de3d6bc966",
       "classification": "low-level-runtime",
       "control": "Existing explicit execution boundary; exact call, enclosing declaration and module source are bound. This classification does not prove remote dataflow or authorize new SQL."
     },
