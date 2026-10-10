@@ -11,6 +11,13 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
 
+// Test adapters retain the before/after baseline call shape. Production captures
+// handles once on a validated AgentConnection; late I/O never resolves a vector.
+func recordAgentReconnect(clusterID string) { captureAgentMetrics(clusterID).reconnect.Inc() }
+func recordAgentMessage(clusterID, direction string) {
+	captureAgentMetrics(clusterID).message(direction)
+}
+
 // TestAgentConnectionsSurvivesDisconnect is the O-03 regression: a cluster that
 // transitions connected -> disconnected must STILL emit an agent_connections
 // sample (valued 0), not have its series vanish. The rewritten
@@ -82,7 +89,7 @@ func TestRecordAgentReconnectIncrementsStormMetric(t *testing.T) {
 		observability.SetInstanceID(oldInstanceID)
 	})
 	registerConnectionMetrics()
-	agentReconnectsTotal.Reset()
+	updateConnectionMetrics(nil, time.Now())
 
 	before := reconnectCounterValue(t, "cluster-a")
 	recordAgentReconnect("cluster-a")

@@ -9,6 +9,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
@@ -36,7 +37,9 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 	}
 
 	if err := c.runtime.GoLoop("connection-metrics-reporter", true, func(ctx context.Context) {
-		tunnel.RunConnectionMetricsReporter(ctx, c.queries, logger)
+		tunnel.RunConnectionMetricsCollector(ctx, func(ctx context.Context) ([]sqlc.ListClusterConnectionStatusRow, error) {
+			return collectConnectionMetricsSnapshot(ctx, c.database.Pool().BeginTx)
+		}, logger)
 	}); err != nil {
 		return err
 	}

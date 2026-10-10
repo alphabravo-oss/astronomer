@@ -101,6 +101,7 @@ type AgentConnection struct {
 	Streams      *StreamManager
 	cancel       context.CancelFunc
 	sendCh       chan *protocol.Message
+	metrics      agentMetricHandles
 }
 
 // Hub manages all connected agent tunnels.
@@ -619,6 +620,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		sendCh:       make(chan *protocol.Message, sendChannelSize),
 	}
 	h.persistConnect(ctx, agent)
+	agent.metrics = captureAgentMetrics(agent.ClusterID)
 
 	// Disconnect any existing connection for this cluster. If we replaced one,
 	// surface that as an agent.reconnecting hint so subscribers can show the
@@ -634,10 +636,8 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		existing.Streams.CloseAll()
 		wasReconnect = true
 	}
-	// Always count the register — first-connect and reconnect alike — so
-	// the rate over a window captures "is this cluster flapping?" rather
-	// than just "is anything ever happening at all".
-	recordAgentReconnect(payload.ClusterID)
+	// Captured counter children cannot resurrect a retired cluster on late I/O.
+	agent.metrics.reconnect.Inc()
 	if wasReconnect {
 		h.publish("agent.reconnecting", payload.ClusterID, sessionID, payload.AgentVersion)
 	}
@@ -763,7 +763,7 @@ func (h *Hub) readPump(ctx context.Context, agent *AgentConnection) {
 			agent.cancel()
 			return
 		}
-		recordAgentMessage(agent.ClusterID, "inbound")
+		agent.metrics.message("inbound")
 		h.handleMessage(agent, &msg)
 	}
 }
@@ -821,7 +821,7 @@ func (h *Hub) writePump(ctx context.Context, agent *AgentConnection) {
 				return
 			}
 			writeCancel()
-			recordAgentMessage(agent.ClusterID, "outbound")
+			agent.metrics.message("outbound")
 		}
 	}
 }

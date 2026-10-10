@@ -71,8 +71,9 @@ func Metrics(next http.Handler) http.Handler {
 	registerMetrics()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		route := routePattern(r)
-		httpInflightRequests.WithLabelValues(observability.MetricValues(r.Method, route)...).Inc()
-		defer httpInflightRequests.WithLabelValues(observability.MetricValues(r.Method, route)...).Dec()
+		method := metricMethod(r.Method)
+		httpInflightRequests.WithLabelValues(observability.MetricValues(method, route)...).Inc()
+		defer httpInflightRequests.WithLabelValues(observability.MetricValues(method, route)...).Dec()
 
 		rec := &metricsResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 		start := time.Now()
@@ -80,9 +81,21 @@ func Metrics(next http.Handler) http.Handler {
 
 		route = routePattern(r)
 		statusClass := statusClass(rec.statusCode)
-		httpRequestsTotal.WithLabelValues(observability.MetricValues(r.Method, route, statusClass)...).Inc()
-		httpRequestDuration.WithLabelValues(observability.MetricValues(r.Method, route, statusClass)...).Observe(time.Since(start).Seconds())
+		httpRequestsTotal.WithLabelValues(observability.MetricValues(method, route, statusClass)...).Inc()
+		httpRequestDuration.WithLabelValues(observability.MetricValues(method, route, statusClass)...).Observe(time.Since(start).Seconds())
 	})
+}
+
+// Extension methods retain their routing semantics while sharing one metrics
+// label. Do not normalize r.Method: handlers and authorization use that value.
+func metricMethod(method string) string {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut,
+		http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace, http.MethodPatch:
+		return method
+	default:
+		return "OTHER"
+	}
 }
 
 func statusClass(statusCode int) string {
