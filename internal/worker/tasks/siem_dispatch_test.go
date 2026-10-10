@@ -395,8 +395,14 @@ func TestHTTPClientForForwarder_ReusesPooledClient(t *testing.T) {
 	fid := uuid.New()
 	fwd := sqlc.SiemForwarder{ID: fid, TimeoutSeconds: 10}
 
-	c1 := runtime.httpClientForSIEMForwarder(fwd, 10*time.Second)
-	c2 := runtime.httpClientForSIEMForwarder(fwd, 10*time.Second)
+	c1, err := runtime.httpClientForSIEMForwarder(fwd, 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2, err := runtime.httpClientForSIEMForwarder(fwd, 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if c1 != c2 {
 		t.Fatal("expected the same pooled *http.Client to be reused across drains")
 	}
@@ -404,14 +410,21 @@ func TestHTTPClientForForwarder_ReusesPooledClient(t *testing.T) {
 	// A TLS-relevant change must rebuild the client so stale config is not
 	// silently reused.
 	fwd.TlsSkipVerify = true
-	c3 := runtime.httpClientForSIEMForwarder(fwd, 10*time.Second)
+	c3, err := runtime.httpClientForSIEMForwarder(fwd, 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if c3 == c1 {
 		t.Fatal("expected a new client after tls_skip_verify changed")
 	}
 
 	// Different forwarder id => different client.
 	other := sqlc.SiemForwarder{ID: uuid.New(), TimeoutSeconds: 10}
-	if runtime.httpClientForSIEMForwarder(other, 10*time.Second) == c1 {
+	c4, err := runtime.httpClientForSIEMForwarder(other, 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c4 == c1 {
 		t.Fatal("expected distinct clients per forwarder id")
 	}
 }
