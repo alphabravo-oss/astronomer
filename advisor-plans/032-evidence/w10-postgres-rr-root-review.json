@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "root technical source review; not release approval",
+  "scope": "Connection/registration/Vault bounded repeatable-read collectors on two dedicated owned CNPG databases; deadline post-commit regression",
+  "packetPath": "docs/assurance/technology-guide/w10/postgres-rr-3c9700/packet.json",
+  "packetSHA256": "728f60a0f078e91ff56b0f1b69612d24df42586dccb49c71700f43437248ed10",
+  "sourceCommit": "3c9700dbfcb501d83e656fef42d3b86ebbb4b75a",
+  "integratedSourcePathsExact": 7,
+  "privateOriginalsIndependentlyVerified": 41,
+  "sourceDiffFullyRead": true,
+  "frozenGitFingerprintsIndependentlyReconstructed": [
+    {
+      "schema_version": 2,
+      "source_file_count": 6897,
+      "source_tree_sha256": "3f0e1303ed9d8caf61feb7532eb436bfc0201fbcced27f7884b806fd7538bdf4"
+    },
+    {
+      "schema_version": 2,
+      "source_file_count": 6902,
+      "source_tree_sha256": "845e3bbee8464dcc77f21e4f9815976a935488eaf7734873f6fb09c156152a46"
+    },
+    {
+      "schema_version": 2,
+      "source_file_count": 6902,
+      "source_tree_sha256": "d33bceae081b2341093052f3835f8999d0113bc8b1dc61659f034507afa7f9f5"
+    }
+  ],
+  "postgres": {
+    "majors": [
+      17,
+      18
+    ],
+    "actualServerVersions": [
+      170011,
+      180006
+    ],
+    "schema": 75,
+    "parentsPerMajor": 3,
+    "failures": 0,
+    "skips": 0,
+    "race": true,
+    "actualIsolationReadOnlyAsserted": true,
+    "rowsAcross500Boundary": 501,
+    "independentConcurrentMutationBetweenPages": true,
+    "numericFatalCapacityGuardsVerified": 21
+  },
+  "deadline": {
+    "before": "FAIL",
+    "after": "PASS",
+    "actualCompiler": "go1.27.2",
+    "callerStillLive": true,
+    "derivedContextExpiresDuringCommit": true
+  },
+  "reviewerPythonControls": {
+    "qualification": 18,
+    "allocation": 9,
+    "failures": 0
+  },
+  "wholeW10Complete": false,
+  "limitations": [
+    "No whole-application, collector-stack, fleet-scale, API-to-worker trace or performance qualification.",
+    "Dedicated database templates were cloned from closed owned schema75 fixtures; this is not a backup/restore or migration qualification.",
+    "The four remaining metric-family characterization parents are unexecuted source drafts; no full-package green claim.",
+    "All original receipts/logs and protected database references remain external/private; no UUID-rich runtime logs are copied into public history.",
+    "Capacity never failed during either actual RR run.",
+    "Original external watcher lacked complete no-child/prelaunch, process identity/closure and exception receipt controls; source hardening is required before another run.",
+    "Exact watcher bytes and all maintained/final numeric guards are retained privately and SHA-bound.",
+    "Original RR receipts did not retain a separate contemporaneous actual go version output. The explicit launch selector and source go directive are retained; deadline actual-version receipts are separate evidence, not retrofitted RR proof.",
+    "Vet was captured as an original session result, without independent original log/source fingerprint pair.",
+    "Actual RR capacity stayed healthy; original watchdog failure paths remain unqualified and must be hardened before another run."
+  ]
+}
