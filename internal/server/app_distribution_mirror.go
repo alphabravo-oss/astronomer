@@ -30,6 +30,10 @@ func readDistributionInput(path string) ([]byte, error) {
 	return data, nil
 }
 func distributionMirrorPlan(cfg *config.Config) (*distribution.MirrorPlan, error) {
+	return distributionMirrorPlanWithContext(context.Background(), cfg)
+}
+
+func distributionMirrorPlanWithContext(ctx context.Context, cfg *config.Config) (*distribution.MirrorPlan, error) {
 	if cfg.DistributionMirrorPlanPath == "" {
 		if cfg.DistributionMirrorSignaturePath != "" || cfg.DistributionMirrorKeyRef != "" {
 			return nil, errors.New("mirror endorsement configuration is incomplete")
@@ -51,5 +55,5 @@ func distributionMirrorPlan(cfg *config.Config) (*distribution.MirrorPlan, error
 		return nil, err
 	}
 	defer clear(manifest)
-	return distribution.VerifyMirrorPlan(context.Background(), data, signature, cfg.DistributionMirrorKeyRef, cfg.DeliverySourceTrustDirectory, version.Version, cfg.DeliveryBundleDigest, cfg.DeliveryBundleCatalogDigest, fmt.Sprintf("sha256:%x", sha256.Sum256(manifest)))
+	return distribution.VerifyMirrorPlan(ctx, data, signature, cfg.DistributionMirrorKeyRef, cfg.DeliverySourceTrustDirectory, version.Version, cfg.DeliveryBundleDigest, cfg.DeliveryBundleCatalogDigest, fmt.Sprintf("sha256:%x", sha256.Sum256(manifest)))
 }

@@ -98,6 +98,37 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}
   schemas:
+    CatalogControllerOperationWindow:
+      type: object
+      description: |
+        Recent operations selected within the caller's authorized cluster scope.
+        The list and total are independent observations. A total is not a queue
+        depth, and an equal total does not prove a consistent complete snapshot.
+      required: [scope, windowLimit, returned, total, complete, notice]
+      properties:
+        scope:
+          type: string
+          enum: [global, authorized-clusters]
+          x-go-type: string
+        windowLimit:
+          type: integer
+          enum: [1000]
+        returned:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: Independently observed authorized operation count, or null when unavailable. It may differ from the earlier list after concurrent changes.
+        complete:
+          type: boolean
+          description: True only if the operation window is known to be a complete consistent snapshot. Separate list/count reads report false.
+        notice:
+          type: string
+          maxLength: 512
     CharlieAdminAgentReplicaStateValue:
       type: string
       x-go-type: string
@@ -3249,6 +3280,46 @@ components:
               $ref: '#/components/schemas/PaginationMetadata'
         severity_filter:
           type: string
+    ImageDatabaseScanState:
+      type: string
+      x-go-type: string
+      enum: [pending, failed, complete, unavailable]
+    ImageDatabasePostureState:
+      type: string
+      x-go-type: string
+      enum: [fresh, stale, unknown, unavailable, mirror_unreachable, not_needed, feed_expired]
+    ImageDatabaseJavaApplicability:
+      type: string
+      x-go-type: string
+      enum: [needed, not_needed, unknown]
+    ImageDatabaseStatusV1:
+      type: object
+      additionalProperties: false
+      required: [report_id, scan_state, main_state, java_state, java_applicability, reason, finding_count, observation_revision, witness_revision, cycle, accepted_generation, report_expired, rescan_required, eligible_for_clean_posture, current_workload_checked, resource_capacity_exhausted]
+      properties:
+        report_id: {type: string, format: uuid}
+        scan_state: {type: string, $ref: '#/components/schemas/ImageDatabaseScanState'}
+        main_state: {type: string, $ref: '#/components/schemas/ImageDatabasePostureState'}
+        java_state: {type: string, $ref: '#/components/schemas/ImageDatabasePostureState'}
+        java_applicability: {type: string, $ref: '#/components/schemas/ImageDatabaseJavaApplicability'}
+        reason: {type: string}
+        finding_count: {type: integer, format: int64, minimum: 0}
+        observation_revision: {type: integer, format: int64, minimum: 0}
+        witness_revision: {type: integer, format: int64, minimum: 0}
+        cycle: {type: integer, format: int64, minimum: 0}
+        accepted_generation: {type: integer, format: int64, minimum: 0}
+        accepted_feed_digest: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        report_expired: {type: boolean}
+        rescan_required: {type: boolean}
+        eligible_for_clean_posture: {type: boolean}
+        current_workload_checked: {type: boolean}
+        resource_capacity_exhausted: {type: boolean}
+    ImageDatabaseStatusV1Envelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/ImageDatabaseStatusV1'}
     ImageVulnerabilityReportDetailEnvelope:
       type: object
       additionalProperties: false
@@ -15703,6 +15774,29 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}/database-status:
+    get:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-route-class: public-api
+      operationId: getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus
+      tags: [Clusters]
+      summary: Read verified database provenance separately from findings
+      description: Prior findings remain visible. Unknown Java applicability, missing current-workload observation, stale or changed report/feed revision cannot produce a qualified clean posture. Completion is not a database freshness timestamp.
+      parameters:
+        - {name: cluster_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Current database status and retained findings
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ImageDatabaseStatusV1Envelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{report_id}/history:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -26894,6 +26988,12 @@ paths:
         paginated envelope. Cluster Apps pages use `?cluster_id=` to obtain the
         caller-visible union of global sources plus authorized private project
         sources. `?project_id=` remains available to project administration.
+        Signed global-only cursor requests inspect a bounded authorized candidate
+        window before applying substring/tag filters. A page may contain zero
+        matches with has_more=true and an advancing next_cursor. Follow that
+        token until has_more=false; short or empty data does not prove exhaustion.
+        Limit is the maximum returned matches, not a promise to fill every page.
+        Offset/count and project/cluster repository-union semantics are unchanged.
       tags:
         - catalog
       security:
@@ -27339,7 +27439,10 @@ paths:
       description: |
         Summary document for the catalog operations reconciler: operation
         counts by status, recent operations/failures, chart and installed
-        counts. Counts are RBAC-filtered to the caller's visible clusters.
+        counts. Operation counts describe at most 1000 recent operations selected
+        after authorization. They are not fleet or queue totals. operationSummary
+        states the scope, independent count and snapshot incompleteness explicitly.
+        Installed counts are unavailable for restricted callers.
       tags:
         - catalog
       security:
@@ -27351,32 +27454,38 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [data]
                 properties:
-                  reconciler:
-                    type: object
-                  catalog:
+                  data:
                     type: object
                     properties:
-                      chartCount:
+                      operationSummary:
+                        $ref: '#/components/schemas/CatalogControllerOperationWindow'
+                      reconciler:
+                        type: object
+                      catalog:
+                        type: object
+                        properties:
+                          chartCount:
+                            type: integer
+                            format: int64
+                          installedCount:
+                            type: integer
+                            format: int64
+                            nullable: true
+                      operations:
+                        type: object
+                        additionalProperties:
+                          type: integer
+                      recentFailureCount:
                         type: integer
-                        format: int64
-                      installedCount:
-                        type: integer
-                        format: int64
+                      recentOperations:
+                        type: array
+                        items:
+                          type: object
+                      latestFailure:
+                        type: object
                         nullable: true
-                  operations:
-                    type: object
-                    additionalProperties:
-                      type: integer
-                  recentFailureCount:
-                    type: integer
-                  recentOperations:
-                    type: array
-                    items:
-                      type: object
-                  latestFailure:
-                    type: object
-                    nullable: true
         '500':
           description: Failed to load catalog operations.
           content:

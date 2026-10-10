@@ -88,8 +88,9 @@ type ComplianceQuerier interface {
 
 // ComplianceHandler wraps the /api/v1/admin/compliance/* endpoints.
 type ComplianceHandler struct {
-	queries ComplianceQuerier
-	now     func() time.Time
+	queries      ComplianceQuerier
+	readSnapshot func(context.Context, func(ComplianceQuerier) error) error
+	now          func() time.Time
 }
 
 // NewComplianceHandler returns a wired handler. The second parameter is kept
@@ -100,6 +101,30 @@ func NewComplianceHandler(queries ComplianceQuerier, _ any) *ComplianceHandler {
 		queries: queries,
 		now:     time.Now,
 	}
+}
+
+// SetReadSnapshot injects a transaction-bound, read-only snapshot for the
+// two complete collection sections. Legacy direct writer callers retain their
+// existing diagnostic behavior; production composition supplies this runner.
+func (h *ComplianceHandler) SetReadSnapshot(run func(context.Context, func(ComplianceQuerier) error) error) {
+	h.readSnapshot = run
+}
+
+func (h *ComplianceHandler) readCollectionSnapshot(ctx context.Context, fn func(context.Context, ComplianceQuerier) error) error {
+	ctx, cancel := context.WithTimeout(ctx, complianceCollectionTimeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if h.readSnapshot == nil {
+		return fn(ctx, h.queries)
+	}
+	return h.readSnapshot(ctx, func(q ComplianceQuerier) error {
+		if q == nil {
+			return errors.New("compliance read snapshot query set missing")
+		}
+		return fn(ctx, q)
+	})
 }
 
 // ── HTTP handlers ──────────────────────────────────────────────────────
@@ -228,12 +253,20 @@ func (h *ComplianceHandler) writeAllSections(ctx context.Context, zw *zip.Writer
 		return WriteAccessTokensCSV(ctx, w, h.queries)
 	})
 	emit("backup-drill-history.csv", func(w io.Writer) (int64, error) {
-		return WriteBackupDrillHistoryCSV(ctx, w, h.queries)
+		var rows int64
+		err := h.readCollectionSnapshot(ctx, func(snapshotCtx context.Context, q ComplianceQuerier) error {
+			var writeErr error
+			rows, writeErr = WriteBackupDrillHistoryCSV(snapshotCtx, w, q)
+			return writeErr
+		})
+		return rows, err
 	})
 
 	// policy-snapshot.json has a distinct signature — wrap separately.
 	if fw, err := zw.Create("policy-snapshot.json"); err == nil {
-		log.section("policy-snapshot.json", WritePolicySnapshotJSON(ctx, fw, h.queries, h.queries))
+		log.section("policy-snapshot.json", h.readCollectionSnapshot(ctx, func(snapshotCtx context.Context, q ComplianceQuerier) error {
+			return WritePolicySnapshotJSON(snapshotCtx, fw, q, q)
+		}))
 	} else {
 		log.section("policy-snapshot.json", err)
 	}

@@ -815,7 +815,7 @@ func (q *Queries) ListProjectRoleBindings(ctx context.Context, arg ListProjectRo
 }
 
 const listProjectRoleBindingsByProject = `-- name: ListProjectRoleBindingsByProject :many
-SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id FROM project_role_bindings WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id FROM project_role_bindings WHERE project_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3
 `
 
 type ListProjectRoleBindingsByProjectParams struct {

@@ -605,7 +605,12 @@ func WritePolicySnapshotJSON(ctx context.Context, w io.Writer, q ProjectPolicyQu
 		return err
 	}
 
+	if len(projects) > int(complianceCollectionMaximum) {
+		return errComplianceCollectionIncomplete
+	}
 	out := make([]PolicySnapshotEntry, 0, len(projects))
+	seenProjects := map[uuid.UUID]bool{}
+	totalBindings := 0
 	userCache := map[uuid.UUID]string{}
 	resolve := func(id pgtype.UUID) string {
 		if !id.Valid {
@@ -633,6 +638,13 @@ func WritePolicySnapshotJSON(ctx context.Context, w io.Writer, q ProjectPolicyQu
 	}
 
 	for _, p := range projects {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if seenProjects[p.ID] {
+			return errComplianceCollectionIncomplete
+		}
+		seenProjects[p.ID] = true
 		entry := PolicySnapshotEntry{
 			ID:                       p.ID.String(),
 			Name:                     p.Name,
@@ -649,6 +661,10 @@ func WritePolicySnapshotJSON(ctx context.Context, w io.Writer, q ProjectPolicyQu
 		if err != nil {
 			return err
 		}
+		totalBindings += len(bindings)
+		if totalBindings > int(complianceCollectionMaximum) {
+			return errComplianceCollectionIncomplete
+		}
 		for _, b := range bindings {
 			if b.UserID.Valid {
 				if label := resolve(b.UserID); label != "" {
@@ -661,6 +677,9 @@ func WritePolicySnapshotJSON(ctx context.Context, w io.Writer, q ProjectPolicyQu
 		out = append(out, entry)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)

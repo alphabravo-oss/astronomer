@@ -22,6 +22,7 @@ import type {
 } from "@/lib/api/cluster-vulnerabilities";
 import { HistorySparkline } from "./-history-sparkline";
 import { BareButton } from "@/components/form/bare-button";
+import { ImageDatabaseStatus } from "./-database-status";
 
 export const SEVERITIES: {
   key: keyof ImageVulnSummary;
@@ -330,6 +331,7 @@ export function ImageDrawer({
       }
       bodyClassName="space-y-3"
     >
+      <ImageDatabaseStatus clusterId={clusterId} reportId={openReport.id} />
       <div className="flex items-center gap-3">
         <label
           className="text-sm text-muted-foreground"

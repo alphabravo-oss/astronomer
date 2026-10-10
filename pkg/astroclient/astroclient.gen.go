@@ -251,6 +251,11 @@ const (
 	CatalogApplicationPresentationVerificationStatusVerified       CatalogApplicationPresentationVerificationStatus = "verified"
 )
 
+// Defines values for CatalogControllerOperationWindowWindowLimit.
+const (
+	CatalogControllerOperationWindowWindowLimitN1000 CatalogControllerOperationWindowWindowLimit = 1000
+)
+
 // Defines values for CatalogPrerequisiteCheckStatus.
 const (
 	CatalogPrerequisiteCheckStatusAdvisory CatalogPrerequisiteCheckStatus = "advisory"
@@ -3628,6 +3633,24 @@ type CatalogApplicationPresentationSupportTier string
 
 // CatalogApplicationPresentationVerificationStatus defines model for CatalogApplicationPresentation.VerificationStatus.
 type CatalogApplicationPresentationVerificationStatus string
+
+// CatalogControllerOperationWindow Recent operations selected within the caller's authorized cluster scope.
+// The list and total are independent observations. A total is not a queue
+// depth, and an equal total does not prove a consistent complete snapshot.
+type CatalogControllerOperationWindow struct {
+	// Complete True only if the operation window is known to be a complete consistent snapshot. Separate list/count reads report false.
+	Complete bool   `json:"complete"`
+	Notice   string `json:"notice"`
+	Returned int    `json:"returned"`
+	Scope    string `json:"scope"`
+
+	// Total Independently observed authorized operation count, or null when unavailable. It may differ from the earlier list after concurrent changes.
+	Total       *int64                                      `json:"total"`
+	WindowLimit CatalogControllerOperationWindowWindowLimit `json:"windowLimit"`
+}
+
+// CatalogControllerOperationWindowWindowLimit defines model for CatalogControllerOperationWindow.WindowLimit.
+type CatalogControllerOperationWindowWindowLimit int
 
 // CatalogInstallationAcceptedEnvelope defines model for CatalogInstallationAcceptedEnvelope.
 type CatalogInstallationAcceptedEnvelope struct {
@@ -7704,6 +7727,41 @@ type HelmRepositoryAuthConfig struct {
 	Token                *string                `json:"token,omitempty"`
 	Username             *string                `json:"username,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// ImageDatabaseJavaApplicability defines model for ImageDatabaseJavaApplicability.
+type ImageDatabaseJavaApplicability = string
+
+// ImageDatabasePostureState defines model for ImageDatabasePostureState.
+type ImageDatabasePostureState = string
+
+// ImageDatabaseScanState defines model for ImageDatabaseScanState.
+type ImageDatabaseScanState = string
+
+// ImageDatabaseStatusV1 defines model for ImageDatabaseStatusV1.
+type ImageDatabaseStatusV1 struct {
+	AcceptedFeedDigest        *string                        `json:"accepted_feed_digest,omitempty"`
+	AcceptedGeneration        int64                          `json:"accepted_generation"`
+	CurrentWorkloadChecked    bool                           `json:"current_workload_checked"`
+	Cycle                     int64                          `json:"cycle"`
+	EligibleForCleanPosture   bool                           `json:"eligible_for_clean_posture"`
+	FindingCount              int64                          `json:"finding_count"`
+	JavaApplicability         ImageDatabaseJavaApplicability `json:"java_applicability"`
+	JavaState                 ImageDatabasePostureState      `json:"java_state"`
+	MainState                 ImageDatabasePostureState      `json:"main_state"`
+	ObservationRevision       int64                          `json:"observation_revision"`
+	Reason                    string                         `json:"reason"`
+	ReportExpired             bool                           `json:"report_expired"`
+	ReportId                  openapi_types.UUID             `json:"report_id"`
+	RescanRequired            bool                           `json:"rescan_required"`
+	ResourceCapacityExhausted bool                           `json:"resource_capacity_exhausted"`
+	ScanState                 ImageDatabaseScanState         `json:"scan_state"`
+	WitnessRevision           int64                          `json:"witness_revision"`
+}
+
+// ImageDatabaseStatusV1Envelope defines model for ImageDatabaseStatusV1Envelope.
+type ImageDatabaseStatusV1Envelope struct {
+	Data ImageDatabaseStatusV1 `json:"data"`
 }
 
 // ImageVulnerability defines model for ImageVulnerability.
@@ -22243,6 +22301,9 @@ type ClientInterface interface {
 	// GetClustersByClusterIdVulnerabilitiesReportsById request
 	GetClustersByClusterIdVulnerabilitiesReportsById(ctx context.Context, clusterId string, id string, params *GetClustersByClusterIdVulnerabilitiesReportsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus request
+	GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistory request
 	GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistory(ctx context.Context, clusterId string, reportId string, params *GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -30913,6 +30974,18 @@ func (c *Client) GetClustersByClusterIdVulnerabilitiesProgress(ctx context.Conte
 
 func (c *Client) GetClustersByClusterIdVulnerabilitiesReportsById(ctx context.Context, clusterId string, id string, params *GetClustersByClusterIdVulnerabilitiesReportsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetClustersByClusterIdVulnerabilitiesReportsByIdRequest(c.Server, clusterId, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusRequest(c.Server, clusterId, id)
 	if err != nil {
 		return nil, err
 	}
@@ -59432,6 +59505,47 @@ func NewGetClustersByClusterIdVulnerabilitiesReportsByIdRequest(server string, c
 	return req, nil
 }
 
+// NewGetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusRequest generates requests for GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus
+func NewGetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusRequest(server string, clusterId openapi_types.UUID, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/vulnerabilities/reports/%s/database-status", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetClustersByClusterIdVulnerabilitiesReportsByReportIdHistoryRequest generates requests for GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistory
 func NewGetClustersByClusterIdVulnerabilitiesReportsByReportIdHistoryRequest(server string, clusterId string, reportId string, params *GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistoryParams) (*http.Request, error) {
 	var err error
@@ -81510,6 +81624,9 @@ type ClientWithResponsesInterface interface {
 	// GetClustersByClusterIdVulnerabilitiesReportsByIdWithResponse request
 	GetClustersByClusterIdVulnerabilitiesReportsByIdWithResponse(ctx context.Context, clusterId string, id string, params *GetClustersByClusterIdVulnerabilitiesReportsByIdParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdVulnerabilitiesReportsByIdResponse, error)
 
+	// GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusWithResponse request
+	GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusWithResponse(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse, error)
+
 	// GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistoryWithResponse request
 	GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistoryWithResponse(ctx context.Context, clusterId string, reportId string, params *GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistoryParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistoryResponse, error)
 
@@ -95091,6 +95208,33 @@ func (r GetClustersByClusterIdVulnerabilitiesReportsByIdResponse) Status() strin
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetClustersByClusterIdVulnerabilitiesReportsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ImageDatabaseStatusV1Envelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -110951,6 +111095,15 @@ func (c *ClientWithResponses) GetClustersByClusterIdVulnerabilitiesReportsByIdWi
 		return nil, err
 	}
 	return ParseGetClustersByClusterIdVulnerabilitiesReportsByIdResponse(rsp)
+}
+
+// GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusWithResponse request returning *GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse
+func (c *ClientWithResponses) GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusWithResponse(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse, error) {
+	rsp, err := c.GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus(ctx, clusterId, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse(rsp)
 }
 
 // GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistoryWithResponse request returning *GetClustersByClusterIdVulnerabilitiesReportsByReportIdHistoryResponse
@@ -138623,6 +138776,67 @@ func ParseGetClustersByClusterIdVulnerabilitiesReportsByIdResponse(rsp *http.Res
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ImageVulnerabilityReportDetailEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse parses an HTTP response from a GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusWithResponse call
+func ParseGetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse(rsp *http.Response) (*GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatusResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ImageDatabaseStatusV1Envelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

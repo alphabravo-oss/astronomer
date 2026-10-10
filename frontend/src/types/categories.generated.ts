@@ -241,6 +241,17 @@ export const categoricalValues = {
   ],
   CharlieOnboardingStatusStateValue: ["validated", "consumed"],
   CharlieThreadMetadataStateValue: ["active", "archived"],
+  ImageDatabaseScanState: ["pending", "failed", "complete", "unavailable"],
+  ImageDatabasePostureState: [
+    "fresh",
+    "stale",
+    "unknown",
+    "unavailable",
+    "mirror_unreachable",
+    "not_needed",
+    "feed_expired",
+  ],
+  ImageDatabaseJavaApplicability: ["needed", "not_needed", "unknown"],
 } as const;
 export const rolloutActionMatrix = {
   draft: [],

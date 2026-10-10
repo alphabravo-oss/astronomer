@@ -2,14 +2,17 @@ package handler
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/userpreferences"
@@ -21,8 +24,56 @@ import (
 // both transactions. Run only through the live UID-fenced owned cursor runner.
 // The internal database/major/schema guard is an additional fail-closed check,
 // not a replacement for the harness's Kubernetes ownership authorization.
+type preferenceConcurrencyDatabaseIdentity struct {
+	name, lease, comment string
+	major, schema        int
+	oid                  uint64
+	explicit             bool
+}
+
+func preferenceConcurrencyExpectedDatabase(getenv func(string) string) (preferenceConcurrencyDatabaseIdentity, bool) {
+	name := getenv("PREFERENCE_ROUTE_TEST_DATABASE_NAME")
+	majorText := getenv("PREFERENCE_ROUTE_TEST_DATABASE_MAJOR")
+	oidText := getenv("PREFERENCE_TEST_DATABASE_OID")
+	leaseText := getenv("PREFERENCE_TEST_DATABASE_LEASE_UUID")
+	comment := getenv("PREFERENCE_TEST_DATABASE_COMMENT")
+	schemaText := getenv("PREFERENCE_TEST_DATABASE_SCHEMA")
+	sourceText := getenv("PREFERENCE_TEST_DATABASE_SOURCE")
+	if name == "" && majorText == "" && oidText == "" && leaseText == "" && comment == "" && schemaText == "" && sourceText == "" {
+		return preferenceConcurrencyDatabaseIdentity{}, true
+	}
+	major, majorErr := strconv.Atoi(majorText)
+	oid, oidErr := strconv.ParseUint(oidText, 10, 32)
+	lease, leaseErr := uuid.Parse(leaseText)
+	schema, schemaErr := strconv.Atoi(schemaText)
+	sourceDigest, sourceErr := hex.DecodeString(sourceText)
+	if majorErr != nil || (major != 17 && major != 18) || strconv.Itoa(major) != majorText || oidErr != nil || oid == 0 || strconv.FormatUint(oid, 10) != oidText || leaseErr != nil || lease == uuid.Nil || lease.String() != leaseText || schemaErr != nil || schemaText != strconv.FormatInt(db.ExpectedSchemaVersion, 10) || schema != int(db.ExpectedSchemaVersion) || len(sourceText) != 40 || sourceErr != nil || hex.EncodeToString(sourceDigest) != sourceText || sourceText == "0000000000000000000000000000000000000000" {
+		return preferenceConcurrencyDatabaseIdentity{}, false
+	}
+	expectedName := "plan032_w13w07_" + majorText + "_" + lease.String()[:8] + lease.String()[9:13]
+	expectedComment := "plan032-20261009 w13-w07 qualification lease " + leaseText + " schema" + schemaText + " source" + sourceText[:8]
+	if name != expectedName || comment != expectedComment {
+		return preferenceConcurrencyDatabaseIdentity{}, false
+	}
+	return preferenceConcurrencyDatabaseIdentity{name: name, major: major, schema: schema, oid: oid, lease: leaseText, comment: comment, explicit: true}, true
+}
+
+func (expected preferenceConcurrencyDatabaseIdentity) matches(database string, major, version int, dirty bool, oid uint64, owner, comment string) bool {
+	if dirty || oid == 0 || owner != "astronomer" {
+		return false
+	}
+	if !expected.explicit {
+		return version == 77 && ((database == "plan032_w07_cursor17" && major == 17) || (database == "plan032_w07_cursor18" && major == 18))
+	}
+	return database == expected.name && major == expected.major && version == expected.schema && expected.schema == int(db.ExpectedSchemaVersion) && oid == expected.oid && comment == expected.comment
+}
+
 func preferenceConcurrencyConnection(t *testing.T, ctx context.Context) *pgx.Conn {
 	t.Helper()
+	expected, valid := preferenceConcurrencyExpectedDatabase(os.Getenv)
+	if !valid {
+		t.Fatal("committed preference fixture owned database identity is incomplete")
+	}
 	dsn := os.Getenv("PAGINATION_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("PAGINATION_TEST_DATABASE_URL is not set")
@@ -38,10 +89,11 @@ func preferenceConcurrencyConnection(t *testing.T, ctx context.Context) *pgx.Con
 			t.Error("preference fixture connection cleanup failed")
 		}
 	})
-	var database string
+	var database, owner, comment string
+	var oid uint64
 	var major, version int
 	var dirty bool
-	if err := conn.QueryRow(ctx, `SELECT current_database(), current_setting('server_version_num')::int / 10000, version, dirty FROM schema_migrations`).Scan(&database, &major, &version, &dirty); err != nil || version != 77 || dirty || !(database == "plan032_w07_cursor17" && major == 17 || database == "plan032_w07_cursor18" && major == 18) {
+	if err := conn.QueryRow(ctx, `SELECT current_database(), current_setting('server_version_num')::int / 10000, m.version, m.dirty, d.oid::bigint, pg_get_userbyid(d.datdba), COALESCE(shobj_description(d.oid,'pg_database'),'') FROM schema_migrations m JOIN pg_database d ON d.datname=current_database()`).Scan(&database, &major, &version, &dirty, &oid, &owner, &comment); err != nil || !expected.matches(database, major, version, dirty, oid, owner, comment) {
 		t.Fatal("committed preference fixture requires exact owned cursor database and schema")
 	}
 	return conn
@@ -262,4 +314,102 @@ func TestPreferencePostgresConcurrentKeysSerializeActualReplacementAndAudit(t *t
 			}
 		})
 	}
+}
+
+func TestPreferenceConcurrencyOwnedDatabaseIdentity(t *testing.T) {
+	good := map[string]string{
+		"PREFERENCE_ROUTE_TEST_DATABASE_NAME":  "plan032_w13w07_17_53a2b55b9273",
+		"PREFERENCE_ROUTE_TEST_DATABASE_MAJOR": "17",
+		"PREFERENCE_TEST_DATABASE_OID":         "60512",
+		"PREFERENCE_TEST_DATABASE_LEASE_UUID":  "53a2b55b-9273-405a-b067-32f70a7d0a79",
+		"PREFERENCE_TEST_DATABASE_COMMENT":     "plan032-20261009 w13-w07 qualification lease 53a2b55b-9273-405a-b067-32f70a7d0a79 schema" + strconv.FormatInt(db.ExpectedSchemaVersion, 10) + " source5c4d273f",
+		"PREFERENCE_TEST_DATABASE_SCHEMA":      strconv.FormatInt(db.ExpectedSchemaVersion, 10),
+		"PREFERENCE_TEST_DATABASE_SOURCE":      "5c4d273ff564aab0ede8bb9265c789380f6f640d",
+	}
+	t.Run("owned-current-schema", func(t *testing.T) {
+		expected, ok := preferenceConcurrencyExpectedDatabase(func(key string) string { return good[key] })
+		if !ok || !expected.matches(good["PREFERENCE_ROUTE_TEST_DATABASE_NAME"], 17, int(db.ExpectedSchemaVersion), false, 60512, "astronomer", good["PREFERENCE_TEST_DATABASE_COMMENT"]) {
+			t.Fatal("exact owned canonical schema identity rejected")
+		}
+	})
+	for _, tc := range []struct{ name, key, value string }{
+		{"partial", "PREFERENCE_TEST_DATABASE_OID", ""},
+		{"wrong-name", "PREFERENCE_ROUTE_TEST_DATABASE_NAME", "customer"},
+		{"wrong-major", "PREFERENCE_ROUTE_TEST_DATABASE_MAJOR", "18"},
+		{"malformed-major", "PREFERENCE_ROUTE_TEST_DATABASE_MAJOR", "+17"},
+		{"zero-oid", "PREFERENCE_TEST_DATABASE_OID", "0"},
+		{"overflow-oid", "PREFERENCE_TEST_DATABASE_OID", "4294967296"},
+		{"wrong-lease", "PREFERENCE_TEST_DATABASE_LEASE_UUID", "53a2b55b-9273-405a-b067-32f70a7d0a78"},
+		{"noncanonical-lease", "PREFERENCE_TEST_DATABASE_LEASE_UUID", "53A2B55B-9273-405A-B067-32F70A7D0A79"},
+		{"missing-schema", "PREFERENCE_TEST_DATABASE_SCHEMA", ""},
+		{"stale-schema", "PREFERENCE_TEST_DATABASE_SCHEMA", strconv.FormatInt(db.ExpectedSchemaVersion-1, 10)},
+		{"missing-source", "PREFERENCE_TEST_DATABASE_SOURCE", ""},
+		{"malformed-source", "PREFERENCE_TEST_DATABASE_SOURCE", "not-a-commit"},
+		{"zero-source", "PREFERENCE_TEST_DATABASE_SOURCE", "0000000000000000000000000000000000000000"},
+		{"uppercase-source", "PREFERENCE_TEST_DATABASE_SOURCE", "5C4D273FF564AAB0EDE8BB9265C789380F6F640D"},
+		{"source-comment-mismatch", "PREFERENCE_TEST_DATABASE_SOURCE", "6c4d273ff564aab0ede8bb9265c789380f6f640d"},
+		{"wrong-comment", "PREFERENCE_TEST_DATABASE_COMMENT", "wrong"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, ok := preferenceConcurrencyExpectedDatabase(func(key string) string {
+				if key == tc.key {
+					return tc.value
+				}
+				return good[key]
+			})
+			if ok {
+				t.Fatal("inconsistent owned expectation accepted")
+			}
+		})
+	}
+	expected, _ := preferenceConcurrencyExpectedDatabase(func(key string) string { return good[key] })
+	for _, tc := range []struct {
+		name, database, owner, comment string
+		major, version                 int
+		oid                            uint64
+		dirty                          bool
+	}{
+		{"actual-name", "customer", "astronomer", expected.comment, 17, int(db.ExpectedSchemaVersion), 60512, false},
+		{"actual-major", expected.name, "astronomer", expected.comment, 18, int(db.ExpectedSchemaVersion), 60512, false},
+		{"actual-schema", expected.name, "astronomer", expected.comment, 17, int(db.ExpectedSchemaVersion) - 1, 60512, false},
+		{"actual-oid", expected.name, "astronomer", expected.comment, 17, int(db.ExpectedSchemaVersion), 60513, false},
+		{"actual-owner", expected.name, "customer", expected.comment, 17, int(db.ExpectedSchemaVersion), 60512, false},
+		{"actual-comment", expected.name, "astronomer", "wrong", 17, int(db.ExpectedSchemaVersion), 60512, false},
+		{"actual-dirty", expected.name, "astronomer", expected.comment, 17, int(db.ExpectedSchemaVersion), 60512, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if expected.matches(tc.database, tc.major, tc.version, tc.dirty, tc.oid, tc.owner, tc.comment) {
+				t.Fatal("actual database identity drift accepted")
+			}
+		})
+	}
+	t.Run("nil-lease", func(t *testing.T) {
+		_, ok := preferenceConcurrencyExpectedDatabase(func(key string) string {
+			switch key {
+			case "PREFERENCE_TEST_DATABASE_LEASE_UUID":
+				return uuid.Nil.String()
+			case "PREFERENCE_ROUTE_TEST_DATABASE_NAME":
+				return "plan032_w13w07_17_000000000000"
+			case "PREFERENCE_TEST_DATABASE_COMMENT":
+				return "plan032-20261009 w13-w07 qualification lease " + uuid.Nil.String() + " schema" + strconv.FormatInt(db.ExpectedSchemaVersion, 10) + " source5c4d273f"
+			default:
+				return good[key]
+			}
+		})
+		if ok {
+			t.Fatal("nil lease identity accepted")
+		}
+	})
+	t.Run("legacy-zero-oid", func(t *testing.T) {
+		legacy, _ := preferenceConcurrencyExpectedDatabase(func(string) string { return "" })
+		if legacy.matches("plan032_w07_cursor17", 17, 77, false, 0, "astronomer", "") {
+			t.Fatal("impossible legacy database OID accepted")
+		}
+	})
+	t.Run("legacy77", func(t *testing.T) {
+		legacy, ok := preferenceConcurrencyExpectedDatabase(func(string) string { return "" })
+		if !ok || !legacy.matches("plan032_w07_cursor17", 17, 77, false, 1, "astronomer", "") || !legacy.matches("plan032_w07_cursor18", 18, 77, false, 1, "astronomer", "") || legacy.matches(expected.name, 17, 77, false, 60512, "astronomer", expected.comment) || legacy.matches("plan032_w07_cursor17", 17, int(db.ExpectedSchemaVersion), false, 1, "astronomer", "") {
+			t.Fatal("legacy exact schema77 boundary changed")
+		}
+	})
 }

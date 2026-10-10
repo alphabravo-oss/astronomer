@@ -30,6 +30,7 @@ it("preserves explicit initial and opaque continuation queries, scope and cancel
         cluster_id: undefined,
         project_id: "project",
         search: "literal",
+        tag: undefined,
         limit: 25,
         offset: undefined,
         cursor,

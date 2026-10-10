@@ -91,10 +91,9 @@ func (h *CatalogHandler) controllerSummary(ctx context.Context) (map[string]any,
 	for _, count := range opSummary.Counts {
 		returned += count
 	}
+	// List and count are separate reads. Equality cannot prove a complete
+	// observation across concurrent writes; keep this recent window incomplete.
 	complete := false
-	if count, known := total.(int64); known {
-		complete = count == int64(returned)
-	}
 	notice := ""
 	if !complete {
 		notice = "Operation counts and queue depth summarize a bounded recent authorized window; complete totals are not represented by those fields."

@@ -55,6 +55,25 @@ func streamPinnedDatabaseLayer(ctx context.Context, client *http.Client, reposit
 	if ctx == nil || client == nil || expected.Digest.Validate() != nil || expected.Digest.Algorithm() != digest.SHA256 || expected.Size <= 0 || expected.Size > 2<<30 || len(expected.URLs) != 0 || len(expected.Data) != 0 || (expected.MediaType != "application/vnd.aquasec.trivy.db.layer.v1.tar+gzip" && expected.MediaType != "application/vnd.aquasec.trivy.javadb.layer.v1.tar+gzip") {
 		return errors.New("streamed database claim invalid")
 	}
+	return streamPinnedOCILayer(ctx, client, repositoryName, expected, destination)
+}
+
+// StreamWorkloadImageLayer is a complete immutable content check only. The
+// owned worker must independently bind the source manifest to the actual
+// current workload image ID. This is not a signature or DB freshness verifier.
+func StreamWorkloadImageLayer(ctx context.Context, client *http.Client, repositoryName string, expected ocispec.Descriptor, destination io.Writer) error {
+	if !workloadImageLayerMedia(expected.MediaType) {
+		return errors.New("workload image layer media unsupported")
+	}
+	return streamPinnedOCILayer(ctx, client, repositoryName, expected, destination)
+}
+
+// Shared exact Range/auth/digest core; DB wrappers retain their narrower media
+// and signature rules. No public constructor can bypass descriptor bounds.
+func streamPinnedOCILayer(ctx context.Context, client *http.Client, repositoryName string, expected ocispec.Descriptor, destination io.Writer) error {
+	if ctx == nil || client == nil || expected.Digest.Validate() != nil || expected.Digest.Algorithm() != digest.SHA256 || expected.Size <= 0 || expected.Size > 2<<30 || len(expected.URLs) != 0 || len(expected.Data) != 0 {
+		return errors.New("streamed immutable OCI blob claim invalid")
+	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
 	defer cancel()
 	if err := ctx.Err(); err != nil {

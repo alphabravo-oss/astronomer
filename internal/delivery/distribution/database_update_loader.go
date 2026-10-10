@@ -28,6 +28,10 @@ type DatabaseUpdateOptions struct {
 
 type DatabaseUpdateLoader struct {
 	options DatabaseUpdateOptions
+	mirror  *MirrorPlan
+	// Set only by the operator-only closed-store constructor. No public option or
+	// feed flag can disable runtime destination checks or select this transport.
+	offline *offlineRegistry
 }
 
 // AuthenticatedDatabaseUpdate proves original signed feed/child descriptors,
@@ -35,8 +39,10 @@ type DatabaseUpdateLoader struct {
 // release/catalog revocation state or authorization to mutate desired state.
 // Durable composition must establish those separate preconditions first.
 type AuthenticatedDatabaseUpdate struct {
-	digest   string
-	document DatabaseUpdateDocument
+	digest       string
+	document     DatabaseUpdateDocument
+	timing       DatabaseUpdateTiming
+	javaRequired bool
 }
 
 func NewDatabaseUpdateLoader(options DatabaseUpdateOptions) (*DatabaseUpdateLoader, error) {
@@ -57,7 +63,7 @@ func (loader *DatabaseUpdateLoader) Load(ctx context.Context, now time.Time) (*A
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if options.Network.ValidateURL(ctx, "https://"+options.Repository) != nil {
+	if loader.offline == nil && options.Network.ValidateURL(ctx, "https://"+options.Repository) != nil {
 		return nil, errors.New("database update feed outside operator network policy")
 	}
 	payload, verification, err := resolver.FetchVerifiedOCIArtifact(ctx, options.Client, options.Repository, options.Digest, DatabaseUpdateMediaType, options.Policy, options.TrustDirectory, MaximumDatabaseUpdateBytes)
@@ -80,12 +86,20 @@ func (loader *DatabaseUpdateLoader) Load(ctx context.Context, now time.Time) (*A
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return &AuthenticatedDatabaseUpdate{digest: options.Digest, document: document}, nil
+	return &AuthenticatedDatabaseUpdate{digest: options.Digest, document: document, timing: options.Timing, javaRequired: options.JavaRequired}, nil
 }
 
 func (loader *DatabaseUpdateLoader) verifySnapshot(ctx context.Context, snapshot DatabaseUpdateSnapshot) error {
-	repository, subject, ok := strings.Cut(snapshot.PublishedSubject, "@")
-	if !ok || loader.options.Network.ValidateURL(ctx, "https://"+repository) != nil {
+	location := snapshot.PublishedSubject
+	if loader.offline == nil {
+		var err error
+		location, err = databaseMirrorSubject(loader.mirror, loader.options.Binding, location)
+		if err != nil {
+			return err
+		}
+	}
+	repository, subject, ok := strings.Cut(location, "@")
+	if !ok || (loader.offline == nil && loader.options.Network.ValidateURL(ctx, "https://"+repository) != nil) {
 		return errors.New("database update child outside operator network policy")
 	}
 	metadata, verification, err := resolver.FetchVerifiedOCIArtifactMetadata(ctx, loader.options.Client, repository, subject, snapshot.Layer.MediaType, loader.options.Policy, loader.options.TrustDirectory, MaximumDatabaseLayerBytes)
@@ -111,4 +125,16 @@ func (update *AuthenticatedDatabaseUpdate) Snapshot() (string, DatabaseUpdateDoc
 	document := update.document
 	document.Databases = append([]DatabaseUpdateSnapshot(nil), update.document.Databases...)
 	return update.digest, document, true
+}
+
+// ValidateCurrentMetadata reevaluates finite clocks on this constructor's
+// authenticated immutable document. It does not revalidate physical trust,
+// durable revocation, payload bytes or scan-used provenance. Durable owners
+// perform those independent checks before accepting and committing state.
+func (update *AuthenticatedDatabaseUpdate) ValidateCurrentMetadata(now time.Time) error {
+	if _, _, valid := update.Snapshot(); !valid {
+		return errors.New("database update authenticated metadata unavailable")
+	}
+	_, err := validateDatabaseUpdateDocument(update.document, update.document.Binding, update.timing, now, update.javaRequired)
+	return err
 }

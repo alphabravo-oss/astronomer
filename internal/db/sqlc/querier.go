@@ -117,6 +117,7 @@ type Querier interface {
 	ClaimManagementBackupDestinationGeneration(ctx context.Context, arg ClaimManagementBackupDestinationGenerationParams) (ManagementBackupDestination, error)
 	ClaimManagementBackupOperation(ctx context.Context, id uuid.UUID) (WorkloadOperation, error)
 	ClaimNodeOperationGeneration(ctx context.Context, arg ClaimNodeOperationGenerationParams) (NodeOperation, error)
+	ClaimOwnedVulnerabilityDatabaseScan(ctx context.Context, arg ClaimOwnedVulnerabilityDatabaseScanParams) (VulnerabilityDatabaseScanClaim, error)
 	// Atomically claims a fair, bounded batch for a periodic sweep. Live leases
 	// are excluded before LIMIT, so an old in-flight prefix cannot starve later
 	// rows. updated_at is advanced on every attempt/completion and is the primary
@@ -153,6 +154,7 @@ type Querier interface {
 	CloseRunningStepsForCluster(ctx context.Context, arg CloseRunningStepsForClusterParams) error
 	CompleteDeliverySourceResolution(ctx context.Context, arg CompleteDeliverySourceResolutionParams) (DeliverySourceResolution, error)
 	CompleteManagementBackupDestinationGeneration(ctx context.Context, arg CompleteManagementBackupDestinationGenerationParams) (ManagementBackupDestination, error)
+	CompleteVulnerabilityDatabaseScanClaim(ctx context.Context, arg CompleteVulnerabilityDatabaseScanClaimParams) (int64, error)
 	ConfirmCharlieKubernetesVisibilityRediscovery(ctx context.Context, arg ConfirmCharlieKubernetesVisibilityRediscoveryParams) (CharlieConnection, error)
 	ConsumeCharlieActionApproval(ctx context.Context, arg ConsumeCharlieActionApprovalParams) (CharlieActionApproval, error)
 	// One-shot disarm of the mass-decommission override (E3/H10). The worker
@@ -492,6 +494,10 @@ type Querier interface {
 	CreateNetworkPolicyTemplate(ctx context.Context, arg CreateNetworkPolicyTemplateParams) (NetworkPolicyTemplate, error)
 	CreateNodeOperationIdempotent(ctx context.Context, arg CreateNodeOperationIdempotentParams) (NodeOperation, error)
 	CreateNotificationChannel(ctx context.Context, arg CreateNotificationChannelParams) (NotificationChannel, error)
+	// Only private constructor-owned participant calls this after physical, signed
+	// current feed, source/model/target locks and canonical actual receipt checks.
+	// SELECT copies relational identity, never caller-selected binding fields.
+	CreateOwnedVulnerabilityDatabaseScanClaim(ctx context.Context, arg CreateOwnedVulnerabilityDatabaseScanClaimParams) (VulnerabilityDatabaseScanClaim, error)
 	// ----- Password reset tokens -----
 	// Issues a new reset token. The handler caller hashes the plaintext
 	// token (returned to the user via email) before calling this; we never
@@ -538,6 +544,21 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateUserTableView(ctx context.Context, arg CreateUserTableViewParams) (UserTableView, error)
 	CreateVaultConnection(ctx context.Context, arg CreateVaultConnectionParams) (VaultConnection, error)
+	CreateVulnerabilityDatabaseBase(ctx context.Context, arg CreateVulnerabilityDatabaseBaseParams) (VulnerabilityDatabaseBasis, error)
+	// The owning transaction has rechecked current physical/base authority, actual
+	// copied vendor signature readback and pinned complete payloads. No externally
+	// supplied attempt UUID, expiry, approval or disposition bit enters this query.
+	CreateVulnerabilityDatabaseImportedAttempt(ctx context.Context, arg CreateVulnerabilityDatabaseImportedAttemptParams) (VulnerabilityDatabaseUpdateAttempt, error)
+	CreateVulnerabilityDatabaseRescanIntent(ctx context.Context, arg CreateVulnerabilityDatabaseRescanIntentParams) (int64, error)
+	// The authority lock and exact published reservation precede this CAS. Failure
+	// returns no row, and the owning transaction must roll back. A newer accepted
+	// generation permanently bars an older publication; replay compares the existing
+	// immutable row instead of writing or resetting any revocation timestamp.
+	CreateVulnerabilityDatabaseUpdate(ctx context.Context, arg CreateVulnerabilityDatabaseUpdateParams) (VulnerabilityDatabaseUpdate, error)
+	// Recheck measured metadata against database time within the acceptance
+	// transaction. Exactly one affected row per role is mandatory before commit.
+	CreateVulnerabilityDatabaseUpdateAsset(ctx context.Context, arg CreateVulnerabilityDatabaseUpdateAssetParams) (int64, error)
+	CreateVulnerabilityDatabaseUpdateAttempt(ctx context.Context, arg CreateVulnerabilityDatabaseUpdateAttemptParams) (VulnerabilityDatabaseUpdateAttempt, error)
 	CreateWebhookSubscription(ctx context.Context, arg CreateWebhookSubscriptionParams) (WebhookSubscription, error)
 	CreateWorkloadOperation(ctx context.Context, arg CreateWorkloadOperationParams) (WorkloadOperation, error)
 	CreateWorkloadOperationEvent(ctx context.Context, arg CreateWorkloadOperationEventParams) (WorkloadOperationEvent, error)
@@ -782,8 +803,11 @@ type Querier interface {
 	FailComponentBundleVersion(ctx context.Context, arg FailComponentBundleVersionParams) (ComponentBundleVersion, error)
 	FailCreatingCharlieSession(ctx context.Context, id uuid.UUID) (CharlieSession, error)
 	FailDeliverySourceResolution(ctx context.Context, arg FailDeliverySourceResolutionParams) (DeliverySourceResolution, error)
+	FailExpiredOwnedDatabaseScanClaim(ctx context.Context, id uuid.UUID) (int64, error)
 	FailManagementBackupDestinationGeneration(ctx context.Context, arg FailManagementBackupDestinationGenerationParams) (ManagementBackupDestination, error)
+	FailOwnedVulnerabilityDatabaseScanClaim(ctx context.Context, arg FailOwnedVulnerabilityDatabaseScanClaimParams) (int64, error)
 	FailSecurityScanPoll(ctx context.Context, arg FailSecurityScanPollParams) (int64, error)
+	FailVulnerabilityDatabaseUpdateAttempt(ctx context.Context, id uuid.UUID) (int64, error)
 	FenceDeliveryAgentSession(ctx context.Context, arg FenceDeliveryAgentSessionParams) (uuid.UUID, error)
 	FinalizeDeliveryAssignmentSnapshot(ctx context.Context, arg FinalizeDeliveryAssignmentSnapshotParams) (DeliveryAssignmentReceipt, error)
 	FinalizeDeliveryTargetDeletionIfComplete(ctx context.Context, targetID uuid.UUID) (DeliveryTarget, error)
@@ -958,7 +982,21 @@ type Querier interface {
 	GetComponentBundleVersion(ctx context.Context, arg GetComponentBundleVersionParams) (ComponentBundleVersion, error)
 	GetControlPlaneSnapshotByID(ctx context.Context, id uuid.UUID) (ControlPlaneSnapshot, error)
 	GetCurrentDeliverySystemRollout(ctx context.Context) (DeliverySystemRollout, error)
+	// Revision equality is necessary, not sufficient for fresh posture. The owner
+	// must still lock current base/feed/workload/assignment and evaluate age.
+	GetCurrentImageVulnerabilityDatabaseWitnessForUpdate(ctx context.Context, reportID uuid.UUID) (ImageVulnerabilityDatabaseWitness, error)
+	// Discovery supplies only authenticated immutable feed DATA. This lookup is
+	// Published and imported are distinct persisted dispositions. Imported means
+	// original authenticated signatures/bytes were copied and read back, never local
+	// endorsement or a local signing execution. This lookup is not acceptance:
+	// its owning constructor revalidates current physical authority
+	// and Accept locks/rechecks this actual reservation in the canonical finalizer.
+	GetCurrentPublishedVulnerabilityDatabaseAttempt(ctx context.Context, arg GetCurrentPublishedVulnerabilityDatabaseAttemptParams) (VulnerabilityDatabaseUpdateAttempt, error)
 	GetCurrentSystemRolloutRelease(ctx context.Context) (uuid.UUID, error)
+	GetCurrentVulnerabilityDatabaseBaseForUpdate(ctx context.Context) (VulnerabilityDatabaseBasis, error)
+	// A cached signed feed does not bypass current durable revocation, decommission,
+	// active base pointer or target generation/spec identity. No measured-use claim.
+	GetCurrentVulnerabilityDatabaseClusterState(ctx context.Context, arg GetCurrentVulnerabilityDatabaseClusterStateParams) (GetCurrentVulnerabilityDatabaseClusterStateRow, error)
 	GetDashboardWidgetByID(ctx context.Context, id uuid.UUID) (DashboardWidget, error)
 	GetDefaultControlPlanePolicy(ctx context.Context) (ControlPlanePolicy, error)
 	GetDefaultMonitoringBackend(ctx context.Context) (MonitoringBackend, error)
@@ -1005,6 +1043,7 @@ type Querier interface {
 	// Helm Repositories
 	GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (HelmRepository, error)
 	GetHelmRepositoryWithOwner(ctx context.Context, id uuid.UUID) (HelmRepository, error)
+	GetImageVulnerabilityObservation(ctx context.Context, reportID uuid.UUID) (ImageVulnerabilityObservation, error)
 	GetImageVulnerabilityReportByID(ctx context.Context, id uuid.UUID) (ImageVulnerabilityReport, error)
 	// Indexed lookup (cluster_id + tool_slug) for the duplicate-install guard.
 	// Replaces the previous first-200-row in-Go scan, which missed the 409
@@ -1041,6 +1080,9 @@ type Querier interface {
 	// rows the reconciler itself writes every sweep (those are always the newest
 	// row and would otherwise defeat the growing interval).
 	GetLatestNonSkipClusterConditionRemediation(ctx context.Context, arg GetLatestNonSkipClusterConditionRemediationParams) (ClusterConditionRemediationAttempt, error)
+	// Retrieval DATA for the report's actual workload. A new accepted feed/cycle
+	// can be pending even while known findings from the previous report remain.
+	GetLatestOwnedDatabaseScanForReport(ctx context.Context, arg GetLatestOwnedDatabaseScanForReportParams) (VulnerabilityDatabaseScanClaim, error)
 	// Logout fallback for the SLO flow. The row is keyed by the access JTI
 	// captured at login; after the SPA silently refreshes, the caller's
 	// access JTI no longer matches (GetSSOSession returns no rows) even
@@ -1081,6 +1123,14 @@ type Querier interface {
 	GetNodeOperation(ctx context.Context, id uuid.UUID) (NodeOperation, error)
 	// Notification Channels
 	GetNotificationChannelByID(ctx context.Context, id uuid.UUID) (NotificationChannel, error)
+	// Retrieval DATA; no physical/current generation authority is inferred here.
+	GetOwnedDatabaseDiscoveryFeed(ctx context.Context, clusterID uuid.UUID) (string, error)
+	GetOwnedDatabasePodDiscoveryCursor(ctx context.Context, clusterID uuid.UUID) (string, error)
+	GetOwnedDatabaseRescanIntentForUpdate(ctx context.Context, arg GetOwnedDatabaseRescanIntentForUpdateParams) (VulnerabilityDatabaseRescanIntent, error)
+	// Retrieval under the canonical cluster lock; does not grant DELETE/adoption.
+	GetOwnedDatabaseResourceAllocationCount(ctx context.Context, arg GetOwnedDatabaseResourceAllocationCountParams) (GetOwnedDatabaseResourceAllocationCountRow, error)
+	GetOwnedImageVulnerabilityReportForUpdate(ctx context.Context, arg GetOwnedImageVulnerabilityReportForUpdateParams) (ImageVulnerabilityReport, error)
+	GetOwnedVulnerabilityDatabaseScanCycleForUpdate(ctx context.Context, arg GetOwnedVulnerabilityDatabaseScanCycleForUpdateParams) (VulnerabilityDatabaseScanClaim, error)
 	GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetPlatformConfig(ctx context.Context) (PlatformConfiguration, error)
 	// Serializes platform-default changes and reapply decisions against the
@@ -1195,6 +1245,19 @@ type Querier interface {
 	GetUserTableView(ctx context.Context, arg GetUserTableViewParams) (UserTableView, error)
 	GetVaultConnectionByID(ctx context.Context, id uuid.UUID) (VaultConnection, error)
 	GetVaultConnectionByName(ctx context.Context, name string) (VaultConnection, error)
+	GetVulnerabilityDatabaseAttemptByGenerationForUpdate(ctx context.Context, arg GetVulnerabilityDatabaseAttemptByGenerationForUpdateParams) (VulnerabilityDatabaseUpdateAttempt, error)
+	GetVulnerabilityDatabaseBaseByID(ctx context.Context, id uuid.UUID) (VulnerabilityDatabaseBasis, error)
+	// PROPOSED APPEND ONLY. Existing frozen four079 inputs remain unchanged.
+	// Owning transaction holds the global authority advisory lock first.
+	GetVulnerabilityDatabaseBaseHistory(ctx context.Context, distributionDigest string) ([]VulnerabilityDatabaseBasis, error)
+	GetVulnerabilityDatabaseClusterStateForUpdate(ctx context.Context, clusterID uuid.UUID) (VulnerabilityDatabaseClusterState, error)
+	// Unpublished owned 079 scan additions. Canonical generation is still required.
+	// No raw reports, annotations, UUIDs or caller booleans grant these decisions.
+	GetVulnerabilityDatabaseScanClaim(ctx context.Context, id uuid.UUID) (VulnerabilityDatabaseScanClaim, error)
+	GetVulnerabilityDatabaseScanClaimForUpdate(ctx context.Context, id uuid.UUID) (VulnerabilityDatabaseScanClaim, error)
+	GetVulnerabilityDatabaseUpdateAssets(ctx context.Context, updateID uuid.UUID) ([]VulnerabilityDatabaseUpdateAsset, error)
+	GetVulnerabilityDatabaseUpdateAttemptForUpdate(ctx context.Context, id uuid.UUID) (VulnerabilityDatabaseUpdateAttempt, error)
+	GetVulnerabilityDatabaseUpdateByFeedForUpdate(ctx context.Context, feedDigest string) (VulnerabilityDatabaseUpdate, error)
 	GetWebhookDelivery(ctx context.Context, id uuid.UUID) (WebhookDelivery, error)
 	GetWebhookSubscription(ctx context.Context, id uuid.UUID) (WebhookSubscription, error)
 	GetWebhookSubscriptionByName(ctx context.Context, name string) (WebhookSubscription, error)
@@ -1211,6 +1274,9 @@ type Querier interface {
 	// (100) the row is force-deleted via DeleteSIEMQueueByIDs and the
 	// forwarder's dropped_total counter is bumped.
 	IncrementSIEMQueueAttempts(ctx context.Context, dollar_1 []int64) error
+	// Only first initialization. A revoked/different existing pointer is never
+	// replaced by ordinary startup; a separately owned promotion is required.
+	InitializeVulnerabilityDatabaseAuthority(ctx context.Context, arg InitializeVulnerabilityDatabaseAuthorityParams) (int64, error)
 	// Snapshots ------------------------------------------------------------
 	InsertApiserverAllowlistSnapshot(ctx context.Context, arg InsertApiserverAllowlistSnapshotParams) (ApiserverAllowlistSnapshot, error)
 	// kube-apiserver audit-event ingest + read (migration 112).
@@ -1311,6 +1377,7 @@ type Querier interface {
 	// needs (pod_security_profile, network_policy_mode, resource_quota_*).
 	// Distinct from ListProjects to keep the read cheap when there are
 	// thousands of projects.
+	// The writer refuses the lookahead row before allocating the JSON document.
 	ListAllProjectsForCompliance(ctx context.Context) ([]ListAllProjectsForComplianceRow, error)
 	// All-users variant of ListUserBindingsWithRoles. Used by the
 	// rbac-snapshot.csv writer. UNION across the three binding tables
@@ -1364,6 +1431,11 @@ type Querier interface {
 	ListBackupsByStorage(ctx context.Context, arg ListBackupsByStorageParams) ([]Backup, error)
 	ListCRDOwnedClusters(ctx context.Context, limit int32) ([]ListCRDOwnedClustersRow, error)
 	ListCatalogApplicationRevisions(ctx context.Context, id uuid.UUID) ([]ListCatalogApplicationRevisionsRow, error)
+	ListCatalogGlobalCandidateWindowAfter(ctx context.Context, arg ListCatalogGlobalCandidateWindowAfterParams) ([]ListCatalogGlobalCandidateWindowAfterRow, error)
+	// Candidate selection precedes every residual predicate. This MATERIALIZED
+	// boundary and per-key LATERAL LIMIT retain bounded lookup plans in generic
+	// and custom preparation; actual EXPLAIN ANALYZE remains the authority.
+	ListCatalogGlobalCandidateWindowFirst(ctx context.Context, arg ListCatalogGlobalCandidateWindowFirstParams) ([]ListCatalogGlobalCandidateWindowFirstRow, error)
 	ListCatalogOperationEvents(ctx context.Context, operationID uuid.UUID) ([]CatalogOperationEvent, error)
 	ListCatalogOperations(ctx context.Context, arg ListCatalogOperationsParams) ([]CatalogOperation, error)
 	ListCatalogOperationsForScopes(ctx context.Context, arg ListCatalogOperationsForScopesParams) ([]CatalogOperation, error)
@@ -1839,6 +1911,11 @@ type Querier interface {
 	// transactional audit receipts are never eviction candidates.
 	ListOldestSIEMQueue(ctx context.Context, arg ListOldestSIEMQueueParams) ([]int64, error)
 	ListOutputsByCluster(ctx context.Context, arg ListOutputsByClusterParams) ([]LoggingOutput, error)
+	ListOwnedDatabaseResourcesForUpdate(ctx context.Context, claimID uuid.UUID) ([]VulnerabilityDatabaseScanResource, error)
+	// Retrieval DATA only; complete current authority is locked by the participant.
+	ListOwnedDatabaseScanClusters(ctx context.Context, arg ListOwnedDatabaseScanClustersParams) ([]uuid.UUID, error)
+	ListOwnedDatabaseTerminalClaimsForCleanup(ctx context.Context, afterID uuid.UUID) ([]uuid.UUID, error)
+	ListOwnedVulnerabilityDatabaseScanClaims(ctx context.Context, arg ListOwnedVulnerabilityDatabaseScanClaimsParams) ([]ListOwnedVulnerabilityDatabaseScanClaimsRow, error)
 	ListPendingCatalogOperations(ctx context.Context, limit int32) ([]CatalogOperation, error)
 	// Page enrichment is scoped to the rows already authorized and returned. Keep
 	// tenant filtering in SQL and avoid scanning the estate-wide in-flight set.
@@ -1993,6 +2070,10 @@ type Querier interface {
 	// Severity filter is empty-string-treated-as-no-filter so callers can
 	// pass an empty string for the unfiltered list.
 	ListVulnerabilitiesForReport(ctx context.Context, arg ListVulnerabilitiesForReportParams) ([]ImageVulnerability, error)
+	// Candidate retrieval DATA only. Presence uses the canonical compiler name,
+	// never source/trust/spec/owner/generation/phase eligibility. Locked acceptance
+	// rechecks all those fields; a mutated materialized target must not be skipped.
+	ListVulnerabilityDatabaseRefreshClusters(ctx context.Context, arg ListVulnerabilityDatabaseRefreshClustersParams) ([]uuid.UUID, error)
 	ListVulnerableImagesByNamespace(ctx context.Context, arg ListVulnerableImagesByNamespaceParams) ([]ImageVulnerabilityReport, error)
 	// Admin "recent deliveries" view. Newest-first; the handler caps
 	// limit + offset.
@@ -2033,6 +2114,17 @@ type Querier interface {
 	LockUser(ctx context.Context, arg LockUserParams) error
 	// Serializes the per-table view cap for one user and table.
 	LockUserTableViewScope(ctx context.Context, dollar_1 string) error
+	// Constructor-owned repository transactions only. No API caller can substitute
+	// authorization booleans. Accept must hold the builtin per-cluster session lock
+	// before Serializable begins, then lock this singleton/base before delivery rows.
+	LockVulnerabilityDatabaseAuthority(ctx context.Context) error
+	LockVulnerabilityDatabaseCurrentUpdate(ctx context.Context, arg LockVulnerabilityDatabaseCurrentUpdateParams) (uuid.UUID, error)
+	LockVulnerabilityDatabaseScannerDeployment(ctx context.Context, arg LockVulnerabilityDatabaseScannerDeploymentParams) (LockVulnerabilityDatabaseScannerDeploymentRow, error)
+	// Exact unconfigured builtin scope. These comparisons consume compilation DATA
+	// from the private physical catalog, never request fields. The session lock
+	// precedes Serializable; lock source credentials and immutable desired rows
+	// before canonical provider finalization changes the assignment receipt.
+	LockVulnerabilityDatabaseScannerTarget(ctx context.Context, arg LockVulnerabilityDatabaseScannerTargetParams) (int64, error)
 	// This durable phase is written before Redis mutation. A retry target that is
 	// absent before this phase never existed; absence after this phase is a
 	// converged outcome because RunTask may have succeeded and been consumed.
@@ -2119,6 +2211,7 @@ type Querier interface {
 	MarkNodeOperationFailed(ctx context.Context, arg MarkNodeOperationFailedParams) (NodeOperation, error)
 	MarkNodeOperationRetrying(ctx context.Context, arg MarkNodeOperationRetryingParams) (NodeOperation, error)
 	MarkNodeOperationSucceeded(ctx context.Context, arg MarkNodeOperationSucceededParams) (NodeOperation, error)
+	MarkOwnedDatabaseResourceRemoved(ctx context.Context, arg MarkOwnedDatabaseResourceRemovedParams) (int64, error)
 	MarkProjectNamespaceReconciled(ctx context.Context, arg MarkProjectNamespaceReconciledParams) (int64, error)
 	MarkRegistrationTokenUsed(ctx context.Context, id uuid.UUID) error
 	MarkResourceOperationFailed(ctx context.Context, arg MarkResourceOperationFailedParams) (ResourceOperation, error)
@@ -2160,6 +2253,11 @@ type Querier interface {
 	ObserveDeliverySystemAssignment(ctx context.Context, arg ObserveDeliverySystemAssignmentParams) (ObserveDeliverySystemAssignmentRow, error)
 	PromoteDeliverySystemBootstrapRelease(ctx context.Context, releaseID string) error
 	PromoteSystemRolloutRelease(ctx context.Context, arg PromoteSystemRolloutReleaseParams) (int64, error)
+	// Only the owning constructor transaction supplies a newly authenticated base
+	// and exact physical fingerprint. Lock current authority before this CAS;
+	// revoke the previous base and enqueue superseding intents in the same commit.
+	// Existing/revoked base rows cannot be reconstructed or automatically reused.
+	PromoteVulnerabilityDatabaseAuthority(ctx context.Context, arg PromoteVulnerabilityDatabaseAuthorityParams) (int64, error)
 	// Retain live sessions regardless of age. Terminal connection rows are useful
 	// operational history, but must not grow forever on reconnect-heavy estates.
 	PruneAgentConnectionHistoryBefore(ctx context.Context, cutoff time.Time) (int64, error)
@@ -2176,6 +2274,7 @@ type Querier interface {
 	PruneStaleMirroredLimitRanges(ctx context.Context, lastSeenAt time.Time) (int64, error)
 	PruneStaleMirroredNetworkPolicies(ctx context.Context, lastSeenAt time.Time) (int64, error)
 	PruneStaleMirroredResourceQuotas(ctx context.Context, lastSeenAt time.Time) (int64, error)
+	PublishVulnerabilityDatabaseUpdateAttempt(ctx context.Context, arg PublishVulnerabilityDatabaseUpdateAttemptParams) (int64, error)
 	// Called by the nightly retention worker so the deny list doesn't grow
 	// without bound. Returning the rowcount lets the worker emit it as a
 	// metric.
@@ -2185,7 +2284,11 @@ type Querier interface {
 	// Bounded by the JWT's natural expiry — once the JWT is unusable, the
 	// row's id_token_hint is moot too.
 	PurgeExpiredSSOSessions(ctx context.Context) (int64, error)
+	PutOwnedDatabasePodDiscoveryCursor(ctx context.Context, arg PutOwnedDatabasePodDiscoveryCursorParams) error
 	QueueDexOperation(ctx context.Context, arg QueueDexOperationParams) (QueueDexOperationRow, error)
+	// No cluster session locks or assignment writes after global authority lock.
+	// Pending intents are not report/job witnesses and grant no scan authority.
+	QueueVulnerabilityDatabaseBaseRevocationIntents(ctx context.Context, baseID uuid.UUID) error
 	RecomputeDeliveryRolloutCounters(ctx context.Context, id uuid.UUID) (DeliveryRollout, error)
 	// A single statement owns the complete catalog snapshot: malformed input is
 	// rejected in Go before this runs, and any SQL failure rolls back catalog,
@@ -2209,9 +2312,23 @@ type Querier interface {
 	// against the row-locked current count, so concurrent bad passwords cannot
 	// both observe the same stale pre-increment value and evade the threshold.
 	RecordFailedLoginAttempt(ctx context.Context, arg RecordFailedLoginAttemptParams) (User, error)
+	RecordOwnedDatabasePreparation(ctx context.Context, arg RecordOwnedDatabasePreparationParams) (int64, error)
+	RecordOwnedDatabasePreparationJob(ctx context.Context, arg RecordOwnedDatabasePreparationJobParams) (int64, error)
+	RecordOwnedDatabasePreparationPod(ctx context.Context, arg RecordOwnedDatabasePreparationPodParams) (int64, error)
+	RecordOwnedDatabaseResourceUID(ctx context.Context, arg RecordOwnedDatabaseResourceUIDParams) (int64, error)
+	RecordOwnedDatabaseScanJob(ctx context.Context, arg RecordOwnedDatabaseScanJobParams) (int64, error)
+	RecordOwnedDatabaseScanPod(ctx context.Context, arg RecordOwnedDatabaseScanPodParams) (int64, error)
 	RecoverAuditExportOperationOutbox(ctx context.Context, staleBefore time.Time) (int64, error)
 	RecoverDexOperationOutbox(ctx context.Context, staleBefore time.Time) (int64, error)
 	RecoverSupportBundleOperationOutbox(ctx context.Context, staleBefore time.Time) (int64, error)
+	// This rebinds only the exact current accepted feed. The owning provider
+	// finalization transaction revalidates physical trust, base, source credentials,
+	// chart/spec and target rows before issuing this query. It supplies the actual
+	// finalized canonical receipt, never caller ETag fields. Unrelated assignment
+	// changes advance receipt identity without accepting a DB feed or creating a
+	// rescan; relevant scanner/target changes are assessed separately by that owner.
+	RefreshVulnerabilityDatabaseAssignmentProjection(ctx context.Context, arg RefreshVulnerabilityDatabaseAssignmentProjectionParams) (VulnerabilityDatabaseClusterState, error)
+	RegisterOwnedDatabaseResourceIntent(ctx context.Context, arg RegisterOwnedDatabaseResourceIntentParams) (VulnerabilityDatabaseScanResource, error)
 	// Releases the lease so a sibling pod can re-claim. Used by the HA re-queue
 	// path: when the agent's WS is live on a SIBLING pod, the owning pod must be
 	// able to claim the row, so the current (wrong) pod sets status back to
@@ -2245,6 +2362,12 @@ type Querier interface {
 	RescheduleSecurityScanPoll(ctx context.Context, arg RescheduleSecurityScanPollParams) (int64, error)
 	ReserveCharlieAutoBudget(ctx context.Context, arg ReserveCharlieAutoBudgetParams) (CharlieActionReceipt, error)
 	ReserveDexOperation(ctx context.Context, arg ReserveDexOperationParams) (ReserveDexOperationRow, error)
+	ReserveVulnerabilityDatabaseGeneration(ctx context.Context, arg ReserveVulnerabilityDatabaseGenerationParams) (int64, error)
+	// Only a complete authenticated import owner calls this under the current
+	// authority lock. A signed external generation cannot replace any newer or
+	// same-generation local reservation/acceptance. Exact replays use the locked
+	// existing immutable row instead of changing high-water marks.
+	ReserveVulnerabilityDatabaseImportedGeneration(ctx context.Context, arg ReserveVulnerabilityDatabaseImportedGenerationParams) (int64, error)
 	ResetExpiredAuditOutboxLeases(ctx context.Context, now time.Time) (int64, error)
 	// Called on a successful login. Also clears any expired lock so the next
 	// failed-attempt cycle starts from a clean state.
@@ -2300,6 +2423,9 @@ type Querier interface {
 	RevokeJWT(ctx context.Context, arg RevokeJWTParams) error
 	RevokeRefreshSessionFamily(ctx context.Context, arg RevokeRefreshSessionFamilyParams) (int64, error)
 	RevokeSCIMToken(ctx context.Context, id uuid.UUID) (int64, error)
+	// Revocation is monotonic. No ordinary startup query clears this timestamp.
+	RevokeVulnerabilityDatabaseBase(ctx context.Context, arg RevokeVulnerabilityDatabaseBaseParams) (int64, error)
+	RevokeVulnerabilityDatabaseUpdate(ctx context.Context, id uuid.UUID) (int64, error)
 	// Performs the grace rotation atomically: the current token_hash moves to
 	// previous_token_hash (so the old token keeps validating until the agent
 	// adopts the new one), token/token_hash become the freshly-minted values,
@@ -2590,6 +2716,14 @@ type Querier interface {
 	// promotes any tombstoned row back to active — that's the
 	// "YAML reappears" path under on_delete='tombstone'.
 	UpsertGitOpsRegisteredCluster(ctx context.Context, arg UpsertGitOpsRegisteredClusterParams) (GitopsRegisteredCluster, error)
+	UpsertImageVulnerabilityDatabaseWitness(ctx context.Context, arg UpsertImageVulnerabilityDatabaseWitnessParams) (ImageVulnerabilityDatabaseWitness, error)
+	// Separate upstream observation; never consume legacy receipt-compatible
+	// scanned_at as freshness authority. This statement belongs to the same actual
+	// report/CVE transaction. Report-supplied UID/time do not create a job witness.
+	// Deleting the prior witness is part of this SAME report/CVE transaction.
+	// Deferred revision FK prevents transient statement ordering from granting a
+	// stale witness. Overflow of bigint fails/rolls back; it never wraps or resets.
+	UpsertImageVulnerabilityObservation(ctx context.Context, arg UpsertImageVulnerabilityObservationParams) (ImageVulnerabilityObservation, error)
 	// Sprint 062 — image vulnerability report + per-CVE row CRUD.
 	//
 	// Generated sqlc output is the canonical Go API for this surface.
@@ -2633,6 +2767,10 @@ type Querier interface {
 	// without first calling DeleteUserTOTPEnrollment. confirmed_at is
 	// replaced on the conflict path so the audit detail is accurate.
 	UpsertUserTOTPEnrollment(ctx context.Context, arg UpsertUserTOTPEnrollmentParams) (UserTotpEnrollment, error)
+	// A repeated generation cannot replace source/spec/assignment identity. Only a
+	// strictly newer accepted base/generation may advance this desired projection;
+	// exact idempotency is a read comparison in the owning locked transaction.
+	UpsertVulnerabilityDatabaseClusterState(ctx context.Context, arg UpsertVulnerabilityDatabaseClusterStateParams) (VulnerabilityDatabaseClusterState, error)
 	// Migration 111 — cross-cluster ("fleet-wide") anomaly baselines.
 	// Aggregates the per-cluster anomaly_baselines means across clusters
 	// and records which clusters are outliers vs. the fleet.

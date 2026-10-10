@@ -279,6 +279,13 @@ func systemReleaseMetadata(row sqlc.GetClusterDeliverySystemReleaseRow) (protoco
 }
 
 func (p *Provider) assignmentMetadata(row sqlc.ListClusterDeliveryAssignmentsRow) (protocol.DeliveryAssignmentV2, error) {
+	return compileAssignmentMetadata(row)
+}
+
+// compileAssignmentMetadata is the existing canonical pure wire projection.
+// Ordinary snapshots and private DB expectation DATA share its validation,
+// source, renderer, merged values and policy; it grants no write authority.
+func compileAssignmentMetadata(row sqlc.ListClusterDeliveryAssignmentsRow) (protocol.DeliveryAssignmentV2, error) {
 	var renderer model.RendererSpec
 	if err := decodeStrict(row.RendererSpec, &renderer); err != nil {
 		return protocol.DeliveryAssignmentV2{}, fmt.Errorf("decode renderer: %w", err)

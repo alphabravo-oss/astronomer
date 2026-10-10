@@ -141,6 +141,11 @@ func CursorPage(total int64, limit, seen, pageLen int, nextCursor string) Metada
 func CursorUncounted(limit, seen, pageLen int, nextCursor string) Metadata {
 	metadata := Uncounted(limit, seen, pageLen, nextCursor != "")
 	if nextCursor != "" {
+		// A signed candidate continuation can advance through zero matches.
+		// Offset pagination still uses Uncounted's nonempty-page invariant.
+		metadata.HasMore = true
+		next := metadata.Offset + pageLen
+		metadata.NextOffset = &next
 		metadata.NextCursor = &nextCursor
 	}
 	return metadata

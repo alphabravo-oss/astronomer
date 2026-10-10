@@ -22,6 +22,16 @@ RUN CGO_ENABLED=0 go build \
       -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=${BUILD_DATE}" \
     -o /bin/server ./cmd/server
 
+# Build the optional measurement helper from the exact same candidate source.
+# Released server images without this binary remain unqualified for the role.
+RUN CGO_ENABLED=0 go build \
+    -trimpath \
+    -ldflags "-s -w \
+      -X github.com/alphabravocompany/astronomer-go/pkg/version.Version=${VERSION} \
+      -X github.com/alphabravocompany/astronomer-go/pkg/version.GitCommit=${GIT_COMMIT} \
+      -X github.com/alphabravocompany/astronomer-go/pkg/version.BuildDate=${BUILD_DATE}" \
+    -o /bin/database-cache-helper ./cmd/database-cache-helper
+
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
@@ -37,6 +47,7 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
 RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /bin/server /usr/local/bin/server
+COPY --from=builder /bin/database-cache-helper /usr/local/bin/database-cache-helper
 
 USER nobody
 

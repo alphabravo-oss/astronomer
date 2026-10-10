@@ -1010,6 +1010,53 @@ export const categoricalDefinitions: Record<string, CategoricalNode> = {
   DurableOperationStatus: {
     category: "DurableOperationStatus",
   },
+  ImageDatabaseJavaApplicability: {
+    category: "ImageDatabaseJavaApplicability",
+  },
+  ImageDatabasePostureState: {
+    category: "ImageDatabasePostureState",
+  },
+  ImageDatabaseScanState: {
+    category: "ImageDatabaseScanState",
+  },
+  ImageDatabaseStatusV1: {
+    properties: {
+      scan_state: {
+        required: true,
+        node: {
+          ref: "ImageDatabaseScanState",
+        },
+      },
+      main_state: {
+        required: true,
+        node: {
+          ref: "ImageDatabasePostureState",
+        },
+      },
+      java_state: {
+        required: true,
+        node: {
+          ref: "ImageDatabasePostureState",
+        },
+      },
+      java_applicability: {
+        required: true,
+        node: {
+          ref: "ImageDatabaseJavaApplicability",
+        },
+      },
+    },
+  },
+  ImageDatabaseStatusV1Envelope: {
+    properties: {
+      data: {
+        required: true,
+        node: {
+          ref: "ImageDatabaseStatusV1",
+        },
+      },
+    },
+  },
   LoggingAttachMutationReceipt: {
     properties: {
       operation: {
@@ -1369,6 +1416,11 @@ export const categoricalResponses: Record<
           },
         },
       },
+    },
+  },
+  getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus: {
+    "200": {
+      ref: "ImageDatabaseStatusV1Envelope",
     },
   },
   postClustersByIdLoggingOutputsByOutputIdRotateToken: {

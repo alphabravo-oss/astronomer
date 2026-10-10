@@ -212,3 +212,18 @@ it("bounds previous-token history while preserving unlimited forward traversal a
   expect(result.current.page).toBe(1);
   expect(result.current.params).toEqual({ limit: 50, cursor: "" });
 });
+
+
+it("continues a zero-match candidate window and resets A to B to A", () => {
+  const emptyProgress = { limit: 20, offset: 0, has_more: true, next_offset: 0, next_cursor: "inspected-global-key" };
+  const { rerender } = render(<Fixture scope="global/filter-a/actor-a" metadata={emptyProgress} />);
+  expect(screen.getByRole("button", { name: "Next charts page" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Next charts page" }));
+  expect(screen.getByTestId("request")).toHaveTextContent('"cursor":"inspected-global-key"');
+  rerender(<Fixture scope="global/filter-b/actor-a" metadata={emptyProgress} />);
+  expect(screen.getByTestId("request")).toHaveTextContent('"cursor":""');
+  rerender(<Fixture scope="global/filter-a/actor-a" metadata={emptyProgress} />);
+  expect(screen.getByTestId("request")).toHaveTextContent('"cursor":""');
+  rerender(<Fixture scope="global/filter-a/actor-a" metadata={emptyProgress} error />);
+  expect(screen.getByRole("button", { name: "Next charts page" })).toBeDisabled();
+});

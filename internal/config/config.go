@@ -142,25 +142,43 @@ type Config struct {
 	DeliveryFluxDistributionKeyring    [][]byte `mapstructure:"-"`
 	// DistributionDestinationPolicy is closed operator network authority, independent
 	// of signed artifact content. Restricted mode permits only listed origins.
-	DistributionMirrorPlanPath        string `mapstructure:"distribution_mirror_plan_path"`
-	DistributionMirrorSignaturePath   string `mapstructure:"distribution_mirror_signature_path"`
-	DistributionMirrorKeyRef          string `mapstructure:"distribution_mirror_key_ref"`
-	DistributionDestinationPolicy     string `mapstructure:"distribution_destination_policy"`
-	BackupS3DestinationPolicy         string `mapstructure:"backup_s3_destination_policy"`
-	BackupS3CAFile                    string `mapstructure:"backup_s3_ca_file"`
-	DeliveryBundleRepository          string `mapstructure:"delivery_bundle_repository"`
-	DeliveryBundleCatalogDigest       string `mapstructure:"delivery_bundle_catalog_digest"`
-	DeliveryBundleDigest              string `mapstructure:"delivery_bundle_digest"`
-	DeliveryBundleCertificateIdentity string `mapstructure:"delivery_bundle_certificate_identity"`
-	DeliveryBundleOIDCIssuer          string `mapstructure:"delivery_bundle_oidc_issuer"`
-	DeliverySourceAllowedPrivateHosts string `mapstructure:"delivery_source_allowed_private_hosts"`
-	DeliverySourceEgressCIDRs         string `mapstructure:"delivery_source_egress_cidrs"`
-	DeliverySourceProxyURL            string `mapstructure:"delivery_source_proxy_url"`
-	DeliverySourceAllowSSH            bool   `mapstructure:"delivery_source_allow_ssh"`
-	DeliverySourceCAFile              string `mapstructure:"delivery_source_ca_file"`
-	DeliverySourceMaxArtifactBytes    int64  `mapstructure:"delivery_source_max_artifact_bytes"`
-	DeliverySourceMaxHelmChartBytes   int64  `mapstructure:"delivery_source_max_helm_chart_bytes"`
-	DeliverySourceTrustDirectory      string `mapstructure:"delivery_source_trust_directory"`
+	// Optional owned database-update composition uses explicit registry roots and
+	// selected scanner intent. Disabling it does not qualify DB freshness.
+	// Measured Jobs require the additive signed helper profile. False preserves
+	// ordinary Trivy reports with UNKNOWN database-use provenance.
+	DeliveryDatabaseScanEnabled bool `mapstructure:"delivery_database_scan_enabled"`
+	// Independent Kubelet pull role; never inherited from publisher/HTTP pull.
+	DeliveryDatabaseJobPullCredentialRef string `mapstructure:"delivery_database_job_pull_credential_ref"`
+	DeliveryDatabaseUpdatesEnabled       bool   `mapstructure:"delivery_database_updates_enabled"`
+	DeliveryDatabaseRegistryRootsRef     string `mapstructure:"delivery_database_registry_roots_ref"`
+	DeliveryDatabaseReadCredentialRef    string `mapstructure:"delivery_database_read_credential_ref"`
+	DeliveryDatabaseReadRegistry         string `mapstructure:"delivery_database_read_registry"`
+	DeliveryDatabaseReadRealmURL         string `mapstructure:"delivery_database_read_realm_url"`
+	DeliveryDatabaseReadService          string `mapstructure:"delivery_database_read_service"`
+	DeliveryDatabaseReadRepositories     string `mapstructure:"delivery_database_read_repositories"`
+	DeliveryDatabaseScannerDigest        string `mapstructure:"delivery_database_scanner_digest"`
+	DeliveryDatabaseScannerVersion       string `mapstructure:"delivery_database_scanner_version"`
+	DeliveryDatabaseUpdateRepository     string `mapstructure:"delivery_database_update_repository"`
+	DeliveryDatabaseCacheDirectory       string `mapstructure:"delivery_database_cache_directory"`
+	DistributionMirrorPlanPath           string `mapstructure:"distribution_mirror_plan_path"`
+	DistributionMirrorSignaturePath      string `mapstructure:"distribution_mirror_signature_path"`
+	DistributionMirrorKeyRef             string `mapstructure:"distribution_mirror_key_ref"`
+	DistributionDestinationPolicy        string `mapstructure:"distribution_destination_policy"`
+	BackupS3DestinationPolicy            string `mapstructure:"backup_s3_destination_policy"`
+	BackupS3CAFile                       string `mapstructure:"backup_s3_ca_file"`
+	DeliveryBundleRepository             string `mapstructure:"delivery_bundle_repository"`
+	DeliveryBundleCatalogDigest          string `mapstructure:"delivery_bundle_catalog_digest"`
+	DeliveryBundleDigest                 string `mapstructure:"delivery_bundle_digest"`
+	DeliveryBundleCertificateIdentity    string `mapstructure:"delivery_bundle_certificate_identity"`
+	DeliveryBundleOIDCIssuer             string `mapstructure:"delivery_bundle_oidc_issuer"`
+	DeliverySourceAllowedPrivateHosts    string `mapstructure:"delivery_source_allowed_private_hosts"`
+	DeliverySourceEgressCIDRs            string `mapstructure:"delivery_source_egress_cidrs"`
+	DeliverySourceProxyURL               string `mapstructure:"delivery_source_proxy_url"`
+	DeliverySourceAllowSSH               bool   `mapstructure:"delivery_source_allow_ssh"`
+	DeliverySourceCAFile                 string `mapstructure:"delivery_source_ca_file"`
+	DeliverySourceMaxArtifactBytes       int64  `mapstructure:"delivery_source_max_artifact_bytes"`
+	DeliverySourceMaxHelmChartBytes      int64  `mapstructure:"delivery_source_max_helm_chart_bytes"`
+	DeliverySourceTrustDirectory         string `mapstructure:"delivery_source_trust_directory"`
 
 	LogLevel string `mapstructure:"log_level"`
 

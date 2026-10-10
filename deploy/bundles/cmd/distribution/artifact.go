@@ -150,6 +150,9 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 		return empty, err
 	}
 	bom := distribution.BOM{SchemaVersion: 1, AssetContractVersion: contract, Assets: closedAssets, Release: result.Catalog.Release, CatalogDigest: sha(catalog), Profiles: []distribution.Profile{{Name: "builtins", Qualification: "qualified", ValuesPath: "profiles/builtins.values.json", InventoryPath: "profiles/builtins.images.json", RequiredCategories: assets.RequiredCategories, BlockedCategories: []string{}, Capabilities: assets.Capabilities}}}
+	if _, err := distribution.ValidateDatabaseScanImageProfile(result.Catalog, bom, members, "builtins"); err != nil {
+		return empty, err
+	}
 	index := subjectIndex{SchemaVersion: 1, Release: result.Catalog.Release, Repository: repository, CatalogDigest: bom.CatalogDigest, MediaType: distribution.MediaType, Children: []publishedSubject{}, Assets: []publishedAssetSubject{}}
 	if err := checkPreparedDatabaseCapacity(directory, closedAssets); err != nil {
 		return empty, err

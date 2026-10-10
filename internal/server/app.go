@@ -12,6 +12,9 @@ import (
 // into route composition and background-runtime startup.
 func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Server, error) {
 	composition := &productionComposition{runtime: newRuntimeSupervisor(logger)}
+	// Ownership transfers to the Server before any runtime goroutine starts.
+	// Pre-runtime failures close only the still-composition-owned authority.
+	defer composition.closeUntransferredDatabaseAuthority()
 	phases := []func(context.Context, *config.Config, *slog.Logger) error{
 		composition.initializePersistence,
 		composition.initializeCoreHandlers,

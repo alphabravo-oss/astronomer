@@ -33,6 +33,11 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	store, capable := h.queries.(catalogChartCursorQuerier)
+	globalStore, globalCapable := h.queries.(catalogGlobalWindowQuerier)
+	globalEligible := catalogGlobalWindowEligible(filter)
+	if globalEligible {
+		capable = globalCapable
+	}
 	binding := paging.Binding("catalog-charts:v2", "name:asc,repository_id:asc,id:asc", cursorActor(r), fmt.Sprint(filter.GlobalScope), paging.SortedUUIDs(filter.RepositoryIds), filter.Tag, filter.SearchPattern, r.URL.Query().Get("project_id"), r.URL.Query().Get("cluster_id"))
 	page, ok := readCursorRequest(w, r, 20, h.cursorCodec, capable, binding)
 	if !ok {
@@ -48,6 +53,10 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 		if ok {
 			paging.Write(w, []sqlc.HelmChart{}, metadata)
 		}
+		return
+	}
+	if page.mode && globalEligible {
+		writeCatalogGlobalWindow(w, r, globalStore, filter, page)
 		return
 	}
 	var charts []sqlc.HelmChart

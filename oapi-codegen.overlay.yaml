@@ -99,6 +99,61 @@
       "remove": true
     },
     {
+      "target": "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema.properties.data",
+      "description": "Preserve the released anonymous response struct by removing the canonical data wrapper only from Go generation.",
+      "remove": true
+    },
+    {
+      "target": "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema.required",
+      "description": "Remove the canonical envelope requirement only from the released Go representation.",
+      "remove": true
+    },
+    {
+      "target": "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema",
+      "description": "Restore the exact released six-field inline status layout; the raw-body reader supplies the actual additive wrapped window.",
+      "update": {
+        "type": "object",
+        "properties": {
+          "reconciler": {
+            "type": "object"
+          },
+          "catalog": {
+            "type": "object",
+            "properties": {
+              "chartCount": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "installedCount": {
+                "type": "integer",
+                "format": "int64",
+                "nullable": true
+              }
+            }
+          },
+          "operations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "recentFailureCount": {
+            "type": "integer"
+          },
+          "recentOperations": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "latestFailure": {
+            "type": "object",
+            "nullable": true
+          }
+        }
+      }
+    },
+    {
       "target": "$.components.schemas.ClusterDeployment.properties.phase.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true

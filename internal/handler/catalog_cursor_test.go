@@ -27,6 +27,15 @@ func (q *recordingCatalogCursorQuerier) ListFilteredHelmChartsAfter(context.Cont
 	return nil, nil
 }
 
+func (q *recordingCatalogCursorQuerier) ListCatalogGlobalCandidateWindowFirst(context.Context, sqlc.ListCatalogGlobalCandidateWindowFirstParams) ([]sqlc.ListCatalogGlobalCandidateWindowFirstRow, error) {
+	q.reads++
+	return nil, nil
+}
+func (q *recordingCatalogCursorQuerier) ListCatalogGlobalCandidateWindowAfter(context.Context, sqlc.ListCatalogGlobalCandidateWindowAfterParams) ([]sqlc.ListCatalogGlobalCandidateWindowAfterRow, error) {
+	q.reads++
+	return nil, nil
+}
+
 func TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL(t *testing.T) {
 	q := &recordingCatalogCursorQuerier{minimalCatalogQuerier: &minimalCatalogQuerier{fakeProjectCatalogQuerier: newFakeProjectCatalogQuerier()}}
 	h := NewCatalogHandler(q)
