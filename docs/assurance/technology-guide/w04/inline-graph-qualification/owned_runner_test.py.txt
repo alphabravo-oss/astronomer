@@ -1,0 +1,36 @@
+import os,sys,tempfile,unittest
+from pathlib import Path
+from plan032_w04_owned_runner import run_owned,restore_after_drain
+
+class OwnedRunnerFailures(unittest.TestCase):
+ def setUp(self):
+  self.directory=tempfile.TemporaryDirectory();self.addCleanup(self.directory.cleanup);self.root=Path(self.directory.name)
+ def child(self,source,guard=lambda stage:None,timeout=2):
+  return run_owned([sys.executable,'-c',source],self.root/'child.log',self.root,dict(os.environ),guard,timeout,interval=.02,grace=.1,kill_grace=.3)
+ def test_timeout_retains_partial_log_and_kills_term_ignoring_child(self):
+  result=self.child("import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);print('partial',flush=True);time.sleep(10)",timeout=.2)
+  self.assertEqual(result['reason'],'timeout');self.assertTrue(result['drained']);self.assertIn('KILL',result['cleanupActions']);self.assertIn(b'partial',(self.root/'child.log').read_bytes())
+ def test_capacity_failure_stops_owned_child(self):
+  def guard(stage):
+   if stage=='maintained':raise RuntimeError('controlled capacity failure')
+  result=self.child("import time;time.sleep(10)",guard)
+  self.assertEqual(result['reason'],'guard-or-launch-failure');self.assertTrue(result['launched']);self.assertTrue(result['drained']);self.assertEqual(result['guardException']['message'],'controlled capacity failure')
+ def test_prelaunch_failure_never_starts_child(self):
+  def guard(stage):raise RuntimeError('controlled pre-Go failure')
+  result=self.child("from pathlib import Path;Path('launched').write_text('bad')",guard)
+  self.assertFalse(result['launched']);self.assertTrue(result['drained']);self.assertFalse((self.root/'launched').exists());self.assertEqual((self.root/'child.log').read_bytes(),b'')
+ def test_baseline_restores_only_after_failed_child_is_drained(self):
+  path=self.root/'source.go';path.write_bytes(b'baseline bytes');original={path:b'frozen bytes'}
+  result=self.child("print('original failure',flush=True);raise SystemExit(1)")
+  self.assertEqual(result['exitCode'],1);self.assertTrue(restore_after_drain(original,result));self.assertEqual(path.read_bytes(),b'frozen bytes');self.assertIn(b'original failure',(self.root/'child.log').read_bytes())
+ def test_unconfirmed_drain_preserves_baseline_originals(self):
+  path=self.root/'source.go';path.write_bytes(b'baseline bytes')
+  self.assertFalse(restore_after_drain({path:b'frozen bytes'},{'drained':False}));self.assertEqual(path.read_bytes(),b'baseline bytes')
+ def test_elapsed_overall_deadline_refuses_launch(self):
+  result=self.child("raise SystemExit(0)",timeout=0)
+  self.assertEqual(result['reason'],'timeout');self.assertFalse(result['launched']);self.assertTrue(result['drained'])
+ def test_fast_exit_parent_drains_surviving_inherited_pipe_child(self):
+  source="import os,subprocess,sys;reader,writer=os.pipe();child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(10)'],stdout=writer,pass_fds=(writer,));print('surviving pipe child',child.pid,flush=True);raise SystemExit(0)"
+  result=self.child(source)
+  self.assertEqual(result['exitCode'],0);self.assertEqual(result['reason'],'');self.assertTrue(result['drained']);self.assertTrue(result['leaderHeldUntilDrain']);self.assertEqual(result['liveDescendantsAfterDrain'],[]);self.assertIn('TERM',result['cleanupActions']);self.assertIn(b'surviving pipe child',(self.root/'child.log').read_bytes())
+if __name__=='__main__':unittest.main()
