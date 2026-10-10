@@ -1,0 +1,6 @@
+{
+  "review": "All eight failed-browser artifact paths, bytes/SHA256, shared inodes and permission/ownership independently verified; before/after source unchanged. Closed category removal inventory SHA256 verified, target absent and source/lock unchanged.",
+  "scope": "Exact released dependencies and duplicate physical artifact storage only; no source, lock, evidence bytes or user cluster changed.",
+  "initialVerifierCorrection": "Initial root verifier expected size, but receipt uses bytes. KeyError occurred before any verification mutation; corrected exact field verifies all artifacts.",
+  "reclaimedDuplicateBytes": 200237056
+}
