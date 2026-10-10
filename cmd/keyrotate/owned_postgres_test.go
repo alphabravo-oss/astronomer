@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +38,10 @@ func ownedRotationDatabase(t *testing.T) (*sql.DB, context.Context) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal("read private rotation reference")
+	}
+	identity := sha256.Sum256(raw)
+	if expected := os.Getenv("ASTRONOMER_ROTATION_REFERENCE_SHA256"); expected == "" || expected != hex.EncodeToString(identity[:]) {
+		t.Fatal("reference must match immediately preceding runtime ownership fence")
 	}
 	var ref struct {
 		URL        string `json:"database_url"`
@@ -69,6 +76,10 @@ func ownedRotationDatabase(t *testing.T) (*sql.DB, context.Context) {
 	}
 	if cfg.Database != ref.Database {
 		t.Fatal("owned database parser identity mismatch")
+	}
+	port, err := strconv.ParseUint(u.Port(), 10, 16)
+	if err != nil || cfg.Host != u.Hostname() || cfg.Port != uint16(port) || cfg.RuntimeParams["options"] != "" {
+		t.Fatal("parsed connection differs from the runtime-fenced endpoint")
 	}
 	cfg.RuntimeParams["application_name"] = "plan032-w16-rotation"
 	db := stdlib.OpenDB(*cfg)

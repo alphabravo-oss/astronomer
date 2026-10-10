@@ -98,6 +98,7 @@ def main():
             (artifact / "ownership-before-process.json").write_text(json.dumps(report, indent=2) + "\n")
             env = os.environ.copy()
             env["ASTRONOMER_ROTATION_DATABASE_REF"] = str(Path(args.reference).resolve())
+            env["ASTRONOMER_ROTATION_REFERENCE_SHA256"] = report["privateReferenceSHA256"]
             cmd = ["go", "test", "./cmd/keyrotate", "-run", "^TestPostgresRotation", "-count=1", "-json"] + (["-race"] if args.race else [])
             with (artifact / "go-test.jsonl").open("w") as output:
                 completed = subprocess.run(cmd, cwd=ROOT, env=env, stdout=output, stderr=subprocess.STDOUT, timeout=180)
