@@ -208,7 +208,18 @@ func orderedReplacementDriverFixture(t *testing.T) (*ReleaseDriver, *orderedDriv
 		}
 		var raw []byte
 		if spec.Executable == options.Kubectl.Path {
+			boundRead := func(args ...string) bool {
+				base := []string{"--kubeconfig", fence.options.Kubeconfig, "--context", id.Context}
+				return slices.Equal(spec.Args, append(base, args...))
+			}
+			secretName := "sh.helm.release.v1." + id.Release + ".v" + strconv.FormatUint(fence.options.Revision, 10)
 			switch {
+			case boundRead("config", "view", "--minify", "--raw", "--output", "jsonpath={.clusters[0].cluster.server}"):
+				raw = []byte(id.APIServer)
+			case boundRead("get", "namespace", id.Namespace, "--output", "go-template="+namespaceTemplate):
+				raw = projected(id.NamespaceUID, id.Namespace, "live")
+			case boundRead("get", "secret", secretName, "--namespace", id.Namespace, "--output", "go-template="+releaseTemplate):
+				raw = projected(id.ReleaseUID, secretName, id.Namespace, "helm.sh/release.v1", "helm", id.Release, strconv.FormatUint(fence.options.Revision, 10), "live")
 			case slices.Contains(spec.Args, databaseDumpScript):
 				raw = []byte("synthetic custom archive; no actual PostgreSQL proof")
 			case slices.Contains(spec.Args, archiveListScript):
