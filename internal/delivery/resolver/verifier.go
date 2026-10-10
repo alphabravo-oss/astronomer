@@ -271,6 +271,17 @@ func (v *ExecVerifier) cosignPolicyIdentity(policy model.TrustPolicy) (string, e
 }
 
 func (v *ExecVerifier) readTrustKey(reference, suffix string) ([]byte, string, error) {
+	return v.readTrustKeyWithHook(context.Background(), reference, suffix, nil)
+}
+
+// The hook is package-private fixture control for the precise pre-open window.
+func (v *ExecVerifier) readTrustKeyWithHook(ctx context.Context, reference, suffix string, beforeOpen func()) ([]byte, string, error) {
+	if ctx == nil {
+		return nil, "", errors.New("signature trust context unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
 	if reference == "" || strings.ContainsAny(reference, "/\\\r\n\x00") {
 		return nil, "", errors.New("signature key reference is invalid")
 	}
@@ -279,24 +290,49 @@ func (v *ExecVerifier) readTrustKey(reference, suffix string) ([]byte, string, e
 		return nil, "", errors.New("signature key reference escapes the trust directory")
 	}
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() <= 0 || info.Size() > maxTrustKeyBytes {
+	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxTrustKeyBytes {
 		return nil, "", errors.New("referenced signature verification key is unavailable")
 	}
-	file, err := os.Open(path)
+	if beforeOpen != nil {
+		beforeOpen()
+	}
+	file, err := openTrustRegular(path)
 	if err != nil {
 		return nil, "", errors.New("referenced signature verification key is unavailable")
 	}
 	defer func() { _ = file.Close() }()
 	opened, err := file.Stat()
-	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
+	if err != nil || !sameTrustFile(info, opened) {
 		return nil, "", errors.New("referenced signature verification key changed")
 	}
-	data, err := io.ReadAll(io.LimitReader(file, maxTrustKeyBytes+1))
-	if err != nil || len(data) == 0 || len(data) > maxTrustKeyBytes {
+	data, err := io.ReadAll(io.LimitReader(trustContextReader{ctx: ctx, reader: file}, maxTrustKeyBytes+1))
+	final, statErr := file.Stat()
+	current, pathErr := os.Lstat(path)
+	if ctx.Err() != nil {
 		clearBytes(data)
-		return nil, "", errors.New("referenced signature verification key is unavailable")
+		return nil, "", ctx.Err()
+	}
+	if err != nil || statErr != nil || pathErr != nil || !sameTrustFile(info, final) || !sameTrustFile(info, current) || int64(len(data)) != info.Size() {
+		clearBytes(data)
+		return nil, "", errors.New("referenced signature verification key changed")
 	}
 	return data, path, nil
+}
+
+func sameTrustFile(expected, actual os.FileInfo) bool {
+	return expected != nil && actual != nil && actual.Mode().IsRegular() && os.SameFile(expected, actual) && expected.Size() == actual.Size() && expected.ModTime().Equal(actual.ModTime())
+}
+
+type trustContextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (reader trustContextReader) Read(data []byte) (int, error) {
+	if err := reader.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return reader.reader.Read(data)
 }
 
 func signedEntityFromEvidence(input VerificationInput) (*sigstorebundle.Bundle, error) {

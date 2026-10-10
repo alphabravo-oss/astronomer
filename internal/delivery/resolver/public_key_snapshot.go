@@ -34,12 +34,8 @@ func CaptureMountedPublicKey(directory, reference string) (*PublicKeySnapshot, e
 		return nil, err
 	}
 	defer clear(material)
-	block, rest := pem.Decode(material)
-	if len(material) > protocol.MaxDeliveryCredentialValue || !bytes.HasPrefix(bytes.TrimSpace(material), []byte("-----BEGIN PUBLIC KEY-----")) || block == nil || block.Type != "PUBLIC KEY" || len(block.Headers) != 0 || len(bytes.TrimSpace(rest)) != 0 {
-		return nil, errors.New("mounted public signing key is invalid")
-	}
-	if _, err := cryptoutils.UnmarshalPEMToPublicKey(material); err != nil {
-		return nil, errors.New("mounted public signing key is invalid")
+	if err := validateMountedPublicKey(material); err != nil {
+		return nil, err
 	}
 	owned, err := os.MkdirTemp("", "astronomer-qa-public-trust-")
 	if err != nil {
@@ -67,4 +63,16 @@ func (s *PublicKeySnapshot) Close() {
 		clear(s.material)
 		s.material = nil
 	})
+}
+
+// Shared by the historical keyed adapter and physical authority snapshot.
+func validateMountedPublicKey(material []byte) error {
+	block, rest := pem.Decode(material)
+	if len(material) > protocol.MaxDeliveryCredentialValue || !bytes.HasPrefix(bytes.TrimSpace(material), []byte("-----BEGIN PUBLIC KEY-----")) || block == nil || block.Type != "PUBLIC KEY" || len(block.Headers) != 0 || len(bytes.TrimSpace(rest)) != 0 {
+		return errors.New("mounted public signing key is invalid")
+	}
+	if _, err := cryptoutils.UnmarshalPEMToPublicKey(material); err != nil {
+		return errors.New("mounted public signing key is invalid")
+	}
+	return nil
 }
