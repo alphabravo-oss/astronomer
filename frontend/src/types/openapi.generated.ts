@@ -13919,16 +13919,18 @@ export interface OpenAPIOperations {
     path: "/api/v1/catalog/controller/status/";
     arguments: Record<string, never>;
     response: {
-        "operationSummary"?: OpenAPIComponents['schemas']['CatalogControllerOperationWindow'];
-        "reconciler"?: Record<string, unknown>;
-        "catalog"?: {
-          "chartCount"?: number;
-          "installedCount"?: number | null;
+        "data": {
+          "operationSummary"?: OpenAPIComponents['schemas']['CatalogControllerOperationWindow'];
+          "reconciler"?: Record<string, unknown>;
+          "catalog"?: {
+            "chartCount"?: number;
+            "installedCount"?: number | null;
+          };
+          "operations"?: Record<string, number>;
+          "recentFailureCount"?: number;
+          "recentOperations"?: Record<string, unknown>[];
+          "latestFailure"?: Record<string, unknown> | null;
         };
-        "operations"?: Record<string, number>;
-        "recentFailureCount"?: number;
-        "recentOperations"?: Record<string, unknown>[];
-        "latestFailure"?: Record<string, unknown> | null;
       };
   };
   "getCatalogInstalled": {
@@ -18788,16 +18790,18 @@ export interface OpenAPIReadOperations {
         "data"?: OpenAPIReadComponents['schemas']['ChartRecommendation'][];
       } };
   "getCatalogControllerStatus": { response: {
-        "operationSummary"?: OpenAPIReadComponents['schemas']['CatalogControllerOperationWindow'];
-        "reconciler"?: Record<string, unknown>;
-        "catalog"?: {
-          "chartCount"?: number;
-          "installedCount"?: number | null;
+        "data": {
+          "operationSummary"?: OpenAPIReadComponents['schemas']['CatalogControllerOperationWindow'];
+          "reconciler"?: Record<string, unknown>;
+          "catalog"?: {
+            "chartCount"?: number;
+            "installedCount"?: number | null;
+          };
+          "operations"?: Record<string, number>;
+          "recentFailureCount"?: number;
+          "recentOperations"?: Record<string, unknown>[];
+          "latestFailure"?: Record<string, unknown> | null;
         };
-        "operations"?: Record<string, number>;
-        "recentFailureCount"?: number;
-        "recentOperations"?: Record<string, unknown>[];
-        "latestFailure"?: Record<string, unknown> | null;
       } };
   "getCatalogInstalled": { response: OpenAPIReadComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIReadComponents['schemas']['InstalledChart'][];

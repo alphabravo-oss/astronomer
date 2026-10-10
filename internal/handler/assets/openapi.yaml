@@ -27454,34 +27454,38 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [data]
                 properties:
-                  operationSummary:
-                    $ref: '#/components/schemas/CatalogControllerOperationWindow'
-                  reconciler:
-                    type: object
-                  catalog:
+                  data:
                     type: object
                     properties:
-                      chartCount:
+                      operationSummary:
+                        $ref: '#/components/schemas/CatalogControllerOperationWindow'
+                      reconciler:
+                        type: object
+                      catalog:
+                        type: object
+                        properties:
+                          chartCount:
+                            type: integer
+                            format: int64
+                          installedCount:
+                            type: integer
+                            format: int64
+                            nullable: true
+                      operations:
+                        type: object
+                        additionalProperties:
+                          type: integer
+                      recentFailureCount:
                         type: integer
-                        format: int64
-                      installedCount:
-                        type: integer
-                        format: int64
+                      recentOperations:
+                        type: array
+                        items:
+                          type: object
+                      latestFailure:
+                        type: object
                         nullable: true
-                  operations:
-                    type: object
-                    additionalProperties:
-                      type: integer
-                  recentFailureCount:
-                    type: integer
-                  recentOperations:
-                    type: array
-                    items:
-                      type: object
-                  latestFailure:
-                    type: object
-                    nullable: true
         '500':
           description: Failed to load catalog operations.
           content:
