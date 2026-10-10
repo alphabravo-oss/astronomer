@@ -1,0 +1,37 @@
+{
+  "kind": "RootScopedIntegrationReview",
+  "implementationBranch": "implement/032-technology-guide",
+  "integrationHead": "7e20d393",
+  "sourceCommits": ["03449c87", "5c1f7bed", "2c1367fd", "72b996a7"],
+  "scope": "Validate stored replica counts before both Grafana consumers produce database, Kubernetes or audit effects; preserve representable existing values and public contracts.",
+  "originalsRetained": ["initial fixture compile failure", "genuine unchanged-production invalid-count regression failures", "after runtime and vet pass with stale complexity ratchet failure"],
+  "afterRuntimeReceiptSHA256": "fba80700eaceee86c54db1c11c57e39dc1bf7bfccecc33d59da8318e486d7f0c",
+  "afterRuntimeLogSHA256": "22240db44e187f9c2c0436ed79f7890950b07dc2ba68915beb4a1a7331dbcd42",
+  "rootVerifiedAfter": {
+    "actualParents": 7,
+    "actualLeaves": 29,
+    "uniquePassedTerminals": 36,
+    "passedPackages": 1,
+    "failedOrSkippedTests": 0,
+    "runtimeRace": "PASS",
+    "vet": "PASS",
+    "jsonGovernance": "PASS",
+    "dependencyBoundaries": "PASS",
+    "fatalNumericCapacityGuards": 33,
+    "ownedDrainedGroups": 6
+  },
+  "metadataOnlyFollowup": {
+    "receiptSHA256": "504fb5ff87131a124db7deec22120af923f97ac317502fd31b07feef2f5d25d6",
+    "logSHA256": "b55da56d971e278075255d4b1f2a3b6413242ff5c53a9994bd58efa292f3f8f2",
+    "rootVerified": "PASS",
+    "sourceFiles": 7384,
+    "fatalNumericCapacityGuards": 6,
+    "heldDrainedGroups": 1,
+    "fileCeilingChange": [865, 861],
+    "otherCeilingsChanged": 0,
+    "runtimeSourceChanged": false,
+    "goOrDatabaseCommands": 0
+  },
+  "wholeW02Status": "IN_PROGRESS",
+  "limitations": ["No passing current whole-source security scan is claimed.", "Focused qualification applies to frozen source; whole combined candidate remains pending."]
+}
