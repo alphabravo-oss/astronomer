@@ -1,0 +1,62 @@
+{
+  "observedAt": "2026-10-10T02:25:25.406827+00:00",
+  "sourceCommit": "2047710a945de8d1180df67977118133f4ebe2a6",
+  "reviewedPaths": [
+    {
+      "path": "docs/assurance/technology-guide/w04/database-payload-inspector.md",
+      "sha256": "37180fcf8d7dc11026532e6d78db66495f7746315c9864bf772aa1b5b02f0777"
+    },
+    {
+      "path": "docs/assurance/technology-guide/w04/signed-update-core.md",
+      "sha256": "551f4371fd8d41676cb20ca5286bdab245fc62dafa5c65dbbba78222ae89e597"
+    },
+    {
+      "path": "internal/delivery/distribution/database_update_contract.go",
+      "sha256": "96fb70f4b9f989d73b5a6443af8b5239311abb7ea79cea7293ff7c370293d999"
+    },
+    {
+      "path": "internal/delivery/distribution/database_update_contract_test.go",
+      "sha256": "61bf637f942da9a3334fed7be6aa958585ea45de9b48fe0380294ba2d02854f3"
+    },
+    {
+      "path": "internal/delivery/distribution/database_update_loader.go",
+      "sha256": "2ae1cbcd8f5dd725430161dd217cf42379075488c49a30a362a44f6f28aab955"
+    },
+    {
+      "path": "internal/delivery/distribution/database_update_loader_test.go",
+      "sha256": "5b48a34d4a02a36112ea1671191931ade9fded5f4dd3535322b7825ad36dc520"
+    },
+    {
+      "path": "internal/delivery/distribution/database_update_open_other.go",
+      "sha256": "e007f715c21a5f7ca74cf15ebc017a0ec869ed958fd4abbd2cd5e72bc4571870"
+    },
+    {
+      "path": "internal/delivery/distribution/database_update_open_unix.go",
+      "sha256": "4aaf4dcf0a6ff509e4879d8fd4fbbe4fb4ee9aff6f8024c298b7f6f097745092"
+    },
+    {
+      "path": "internal/delivery/distribution/database_update_open_unix_test.go",
+      "sha256": "13ef2deae21240d2ce384f17c70bfd02f7a1fb0abaf3847174720c350795762b"
+    },
+    {
+      "path": "internal/delivery/distribution/database_update_payload.go",
+      "sha256": "1c58f53af9e30c138731daafd294ae971d47c203ec6bbf93edc52b576e542367"
+    },
+    {
+      "path": "internal/delivery/distribution/database_update_payload_test.go",
+      "sha256": "ac47277f095561c41d60b4890cfdbefdb94ba3ef2bb8aaec9d238d0d35340b01"
+    },
+    {
+      "path": "internal/scanner/database_freshness.go",
+      "sha256": "9f6664bfbead3876b834b8b92065d8351c197be4c31aa3b17bee0fc5eb90dc6a"
+    },
+    {
+      "path": "internal/scanner/database_freshness_test.go",
+      "sha256": "40ed149731d26d353ad69abff8b6037c83dc1e911298f7adc67b194d3a880400"
+    }
+  ],
+  "review": "Full production/tests/docs reviewed: closed feed/base/scanner/candidate binding, canonical descriptor authentication, finite measured freshness and independent report TTL, full compressed hash before metadata interpretation, second hash and pinned FD stability, no-write bounded exact archive/metadata, deterministic FIFO/symlink opener guard",
+  "state": "SOURCE REVIEWED, NOT EXECUTED OR INTEGRATED",
+  "pending": "Actual selected-toolchain race/vet/selected Cosign gates, whole supplier layer measurement, signed producer, durable state/generation/revocations, measured job/report scan use, API/UI/rescan and disconnected qualification",
+  "compatibility": "Only new internal types/functions; released SDK fields and existing default behavior unchanged; non-Unix procedure explicitly unavailable until opener qualified"
+}
