@@ -18,8 +18,8 @@ type registrationMetricOwner struct {
 
 var registrationMetricOwners = struct {
 	sync.Mutex
-	serial uint64
-	rows   map[registrationMetricKey]*registrationMetricOwner
+	serial, observed uint64
+	rows             map[registrationMetricKey]*registrationMetricOwner
 }{rows: make(map[registrationMetricKey]*registrationMetricOwner)}
 
 var registrationMetricAdmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -75,6 +75,7 @@ func (h *RegistrationMetricsHook) CapturePhaseTransition(clusterID, _, to string
 func RegistrationMetricsWatermark() uint64 {
 	registrationMetricOwners.Lock()
 	defer registrationMetricOwners.Unlock()
+	registrationMetricOwners.serial++
 	return registrationMetricOwners.serial
 }
 
@@ -92,6 +93,10 @@ func RetireRegistrationMetrics(current []string, watermark uint64) bool {
 	instance := InstanceID()
 	registrationMetricOwners.Lock()
 	defer registrationMetricOwners.Unlock()
+	if watermark <= registrationMetricOwners.observed {
+		return false
+	}
+	registrationMetricOwners.observed = watermark
 	for key, owner := range registrationMetricOwners.rows {
 		if key.instance != instance || live[key.cluster] || owner.admitted > watermark {
 			continue

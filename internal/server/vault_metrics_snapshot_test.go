@@ -12,7 +12,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-type vaultMetricsSnapshotTx struct{ metricsSnapshotTx }
+type vaultMetricsSnapshotTx struct {
+	metricsSnapshotTx
+	commitCancel context.CancelFunc
+}
 
 func (tx *vaultMetricsSnapshotTx) Query(ctx context.Context, query string, args ...any) (pgx.Rows, error) {
 	if !strings.Contains(query, "AS auth_configured") {
@@ -25,6 +28,15 @@ func (tx *vaultMetricsSnapshotTx) Query(ctx context.Context, query string, args 
 	return &vaultMetricsSnapshotRows{Rows: rows}, nil
 }
 
+func (tx *vaultMetricsSnapshotTx) Commit(ctx context.Context) error {
+	if tx.commitCancel != nil {
+		tx.committed = true
+		tx.commitCancel()
+		return nil
+	}
+	return tx.metricsSnapshotTx.Commit(ctx)
+}
+
 type vaultMetricsSnapshotRows struct{ pgx.Rows }
 
 func (rows *vaultMetricsSnapshotRows) Scan(values ...any) error {
@@ -35,7 +47,7 @@ func (rows *vaultMetricsSnapshotRows) Scan(values ...any) error {
 
 func TestVaultMetricsSnapshotTransactionBoundaries(t *testing.T) {
 	failure := errors.New("synthetic Vault metrics failure")
-	for _, stage := range []string{"success", "begin", "second-page", "iterator", "commit", "cancel", "cancel-in-query", "oversized", "exhausted", "exact-ceiling"} {
+	for _, stage := range []string{"success", "begin", "second-page", "iterator", "commit", "cancel", "cancel-in-query", "cancel-during-commit", "oversized", "exhausted", "exact-ceiling"} {
 		t.Run(stage, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -49,6 +61,8 @@ func TestVaultMetricsSnapshotTransactionBoundaries(t *testing.T) {
 				tx.commitError = failure
 			case "cancel-in-query":
 				tx.cancel = cancel
+			case "cancel-during-commit":
+				tx.commitCancel = cancel
 			case "oversized":
 				tx.oversized = true
 			case "exhausted":
@@ -80,7 +94,7 @@ func TestVaultMetricsSnapshotTransactionBoundaries(t *testing.T) {
 				if err != nil || len(rows) != want || !tx.committed {
 					t.Fatalf("complete Vault snapshot unavailable: rows%d commit%t err%v", len(rows), tx.committed, err)
 				}
-			} else if err == nil || rows != nil || tx.committed {
+			} else if err == nil || rows != nil || (tx.committed && stage != "cancel-during-commit") {
 				t.Fatal("failed Vault snapshot exposed partial rows")
 			}
 			if stage != "begin" && !tx.rolledBack {

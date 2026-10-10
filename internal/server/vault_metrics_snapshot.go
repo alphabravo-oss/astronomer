@@ -54,22 +54,40 @@ func collectVaultMetricsSnapshot(ctx context.Context, begin connectionMetricsBeg
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return complete, nil
 }
 
 func runVaultMetricsCollector(ctx context.Context, begin connectionMetricsBegin, logger *slog.Logger) {
 	collect := func() {
+		started := time.Now().UTC()
 		watermark := observability.VaultMetricsWatermark()
 		rows, err := collectVaultMetricsSnapshot(ctx, begin)
 		if err != nil {
+			result := "failed"
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				result = "canceled"
+			}
+			if errors.Is(err, errVaultMetricsBudget) {
+				result = "owner_budget"
+			}
+			observability.RecordVaultMetricFailure(result)
 			if logger != nil {
 				logger.Warn("Vault metrics observation incomplete", "error_kind", "collection_failed")
 			}
 			return
 		}
-		if ctx.Err() == nil {
-			observability.RetireVaultMetrics(rows, watermark)
+		if ctx.Err() != nil {
+			observability.RecordVaultMetricFailure("canceled")
+			return
 		}
+		if !observability.RetireVaultMetrics(rows, watermark) {
+			observability.RecordVaultMetricFailure("invalid")
+			return
+		}
+		observability.RecordVaultMetricComplete(started)
 	}
 	collect()
 	ticker := time.NewTicker(15 * time.Second)

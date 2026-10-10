@@ -13,7 +13,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
 
@@ -39,17 +38,13 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 
 	if err := c.runtime.GoLoop("connection-metrics-reporter", true, func(ctx context.Context) {
 		tunnel.RunConnectionMetricsCollector(ctx, func(ctx context.Context) ([]sqlc.ListClusterConnectionStatusRow, error) {
-			watermark := observability.RegistrationMetricsWatermark()
-			rows, err := collectConnectionMetricsSnapshot(ctx, c.database.Pool().BeginTx)
-			if err == nil && ctx.Err() == nil {
-				current := make([]string, len(rows))
-				for i, row := range rows {
-					current[i] = row.ClusterID.String()
-				}
-				observability.RetireRegistrationMetrics(current, watermark)
-			}
-			return rows, err
+			return collectConnectionMetricsSnapshot(ctx, c.database.Pool().BeginTx)
 		}, logger)
+	}); err != nil {
+		return err
+	}
+	if err := c.runtime.GoLoop("registration-metrics-reporter", true, func(ctx context.Context) {
+		runRegistrationMetricsCollector(ctx, c.database.Pool().BeginTx, logger)
 	}); err != nil {
 		return err
 	}
