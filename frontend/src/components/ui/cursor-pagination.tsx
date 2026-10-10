@@ -4,8 +4,11 @@ import type { PaginationMetadata } from "@/types";
 
 export function useCursorPagination(scope: string, limit = 25) {
   const [state, setState] = useState({ scope, limit, tokens: [""] });
-  const tokens =
-    state.scope === scope && state.limit === limit ? state.tokens : [""];
+  const matches = state.scope === scope && state.limit === limit;
+  const tokens = matches ? state.tokens : [""];
+  // Persist a scope reset before children commit a request. Deriving initial
+  // params alone would revive an old continuation when the scope changes back.
+  if (!matches) setState({ scope, limit, tokens });
   const accepts = (token: string) =>
     token.length > 0 && token.length <= 4096 && !tokens.includes(token);
   return {

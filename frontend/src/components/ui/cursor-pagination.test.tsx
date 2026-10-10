@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useEffect } from "react";
 import { CursorPagination, useCursorPagination } from "./cursor-pagination";
 import type { PaginationMetadata } from "@/types";
 
@@ -8,14 +9,19 @@ function Fixture({
   metadata,
   fetching = false,
   error = false,
+  onRequest,
 }: {
   scope?: string;
   limit?: number;
   metadata: PaginationMetadata;
   fetching?: boolean;
   error?: boolean;
+  onRequest?: (scope: string, limit: number, cursor: string) => void;
 }) {
   const control = useCursorPagination(scope, limit);
+  useEffect(() => {
+    onRequest?.(scope, control.params.limit, control.params.cursor);
+  }, [scope, control.params.limit, control.params.cursor, onRequest]);
   return (
     <>
       <output data-testid="request">{JSON.stringify(control.params)}</output>
@@ -118,3 +124,36 @@ it("stops on repeated or missing tokens and prevents navigation during fetching"
     screen.getByRole("button", { name: "Previous charts page" }),
   ).toBeEnabled();
 });
+
+it.each(["scope", "limit"])(
+  "does not revive a continuation after a %s roundtrip without navigation",
+  (changed) => {
+    const onRequest = vi.fn();
+    const { rerender } = render(
+      <Fixture metadata={continuation} onRequest={onRequest} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next charts page" }));
+    rerender(
+      <Fixture
+        scope={changed === "scope" ? "project-b" : "project-a"}
+        limit={changed === "limit" ? 50 : 25}
+        metadata={continuation}
+        onRequest={onRequest}
+      />,
+    );
+    expect(screen.getByTestId("request")).toHaveTextContent('"cursor":""');
+    rerender(<Fixture metadata={continuation} onRequest={onRequest} />);
+    expect(screen.getByTestId("request")).toHaveTextContent(
+      '{"limit":25,"cursor":""}',
+    );
+    expect(screen.getByText("Page 1")).toBeInTheDocument();
+    expect(onRequest.mock.calls.slice(2)).toEqual([
+      [
+        changed === "scope" ? "project-b" : "project-a",
+        changed === "limit" ? 50 : 25,
+        "",
+      ],
+      ["project-a", 25, ""],
+    ]);
+  },
+);
