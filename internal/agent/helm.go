@@ -297,8 +297,9 @@ func (h *HelmHandler) HandleInstall(ctx context.Context, msg *protocol.Message) 
 	// The action must finish its worker before this owner is released. Helm4
 	// returns early for a canceled control context, so only bound transport
 	// and waits observe owner cancellation; the control context stays joined.
-	rel, err := install.RunWithContext(context.WithoutCancel(ctx), chart, req.Values)
-	err = errors.Join(err, ctx.Err())
+	rel, err := helmruntime.RunJoined(ctx, func(control context.Context) (releasei.Releaser, error) {
+		return install.RunWithContext(control, chart, req.Values)
+	})
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
@@ -345,8 +346,9 @@ func (h *HelmHandler) HandleUpgrade(ctx context.Context, msg *protocol.Message) 
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
 
-	rel, err := upgrade.RunWithContext(context.WithoutCancel(ctx), req.ReleaseName, chrt, req.Values)
-	err = errors.Join(err, ctx.Err())
+	rel, err := helmruntime.RunJoined(ctx, func(control context.Context) (releasei.Releaser, error) {
+		return upgrade.RunWithContext(control, req.ReleaseName, chrt, req.Values)
+	})
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}

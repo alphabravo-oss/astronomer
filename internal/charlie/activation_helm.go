@@ -17,6 +17,7 @@ import (
 	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/registry"
+	"helm.sh/helm/v4/pkg/release"
 
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 )
@@ -126,8 +127,10 @@ func (r *InClusterHelmReleaser) Apply(ctx context.Context, spec HelmReleaseSpec)
 		}
 		// Keep the SDK control call joined; only its owned transport/waits
 		// receive cancellation until the worker has actually finished.
-		_, err = install.RunWithContext(context.WithoutCancel(ctx), chart, spec.Values)
-		return errors.Join(err, ctx.Err())
+		_, err = helmruntime.RunJoined(ctx, func(control context.Context) (release.Releaser, error) {
+			return install.RunWithContext(control, chart, spec.Values)
+		})
+		return err
 	}
 	upgrade := action.NewUpgrade(cfg)
 	upgrade.Namespace = r.namespace
@@ -145,8 +148,10 @@ func (r *InClusterHelmReleaser) Apply(ctx context.Context, spec HelmReleaseSpec)
 	if err != nil {
 		return fmt.Errorf("load Charlie agent chart: %w", err)
 	}
-	_, err = upgrade.RunWithContext(context.WithoutCancel(ctx), agentReleaseName, chart, spec.Values)
-	return errors.Join(err, ctx.Err())
+	_, err = helmruntime.RunJoined(ctx, func(control context.Context) (release.Releaser, error) {
+		return upgrade.RunWithContext(control, agentReleaseName, chart, spec.Values)
+	})
+	return err
 }
 
 func (r *InClusterHelmReleaser) locateChart(ctx context.Context, options *action.ChartPathOptions, chartRef string, settings *cli.EnvSettings) (string, error) {
