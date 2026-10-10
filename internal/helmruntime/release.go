@@ -15,6 +15,8 @@ var ErrReleaseMetadataUnavailable = errors.New("Helm release metadata unavailabl
 func ReleaseV1(value release.Releaser) (*releasev1.Release, error) {
 	var result *releasev1.Release
 	switch item := value.(type) {
+	case nil:
+		return nil, ErrReleaseMetadataUnavailable
 	case *releasev1.Release:
 		result = item
 	case releasev1.Release:

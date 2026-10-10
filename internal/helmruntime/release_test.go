@@ -24,4 +24,11 @@ func TestHelmV1LayoutGuardPreservesRevisionAndRejectsUnknownRepresentation(t *te
 	if _, err := ReleaseV1(&releasev1.Release{}); !errors.Is(err, ErrReleaseMetadataUnavailable) {
 		t.Fatal("missing-info history distinction lost")
 	}
+	var missing *releasev1.Release
+	if _, err := ReleaseV1(nil); !errors.Is(err, ErrReleaseMetadataUnavailable) {
+		t.Fatal("nil history release must retain the missing-metadata distinction")
+	}
+	if _, err := ReleaseV1(missing); !errors.Is(err, ErrReleaseMetadataUnavailable) {
+		t.Fatal("typed nil history release must retain the missing-metadata distinction")
+	}
 }

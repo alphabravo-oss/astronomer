@@ -40,6 +40,7 @@ Production-specific invariants are enforced at startup by
 | `HELM_PLUGINS` | `HelmPluginsDirectory` | string | `/tmp/helm/data/plugins` | No |
 | `ASTRONOMER_TUNNEL_EGRESS_CIDRS` | `TunnelEgressCIDRs` | string | Go zero value | No |
 | `ASTRONOMER_RC_ALLOW_PRIVATE_WEBHOOKS` | `RCAllowPrivateWebhooks` | boolean | Go zero value | No |
+| `HELM_REPOSITORY_DESTINATION_POLICY` | `HelmRepositoryDestinationPolicy` | string | Go zero value | No |
 | `ASTRONOMER_BOOTSTRAP_PASSWORD` | `BootstrapAdminPassword` | string | Go zero value | Yes |
 | `ASTRONOMER_BOOTSTRAP_USERNAME` | `BootstrapAdminUsername` | string | `admin` | No |
 | `ASTRONOMER_BOOTSTRAP_EMAIL` | `BootstrapAdminEmail` | string | `admin@astronomer.local` | No |

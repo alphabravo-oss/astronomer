@@ -38,6 +38,9 @@ type Config struct {
 	MaxHistory                int
 	BurstLimit                int
 	QPS                       float32
+
+	// Explicit operator authority; never populated from a chart request.
+	RepositoryDestinationPolicy string
 }
 
 // InClusterDefaults returns writable paths and no external kubeconfig or

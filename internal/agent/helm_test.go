@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -51,5 +53,40 @@ func TestHelmUpgradeUsesStoredChartWhenCoordinatesOmitted(t *testing.T) {
 	}
 	if helmUpgradeUsesStoredChart(nil) {
 		t.Fatal("nil request")
+	}
+}
+
+func TestHelmOperationRejectsArithmeticOverflowWithoutChangingValidTimeouts(t *testing.T) {
+	maximumDuration := int64(1<<63 - 1)
+	maximum := int64(time.Duration(maximumDuration) / time.Second)
+	if strconv.IntSize == 64 {
+		ctx, cancel, err := helmOperationContext(context.Background(), int(maximum))
+		if err != nil {
+			t.Fatal("largest representable timeout rejected")
+		}
+		defer cancel()
+		if _, ok := ctx.Deadline(); !ok {
+			t.Fatal("valid timeout lost its finite owner")
+		}
+		for _, seconds := range []int{int(maximum + 1), int(maximumDuration)} {
+			if helmReadyTimeout(seconds) != 0 {
+				t.Fatal("overflow wrapped to an admitted positive timeout")
+			}
+			if _, _, err := helmOperationContext(context.Background(), seconds); err == nil {
+				t.Fatal("overflow operation admitted")
+			}
+		}
+	}
+	parent, stop := context.WithTimeout(context.Background(), time.Second)
+	defer stop()
+	ctx, cancel, err := helmOperationContext(parent, 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+	want, _ := parent.Deadline()
+	actual, _ := ctx.Deadline()
+	if !actual.Equal(want) {
+		t.Fatal("earlier caller deadline extended")
 	}
 }

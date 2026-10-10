@@ -11,7 +11,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
-	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/jackc/pgx/v5"
 )
@@ -198,11 +197,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 		if err != nil {
 			charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.secret_writer_unavailable", "")
 		} else {
-			charlieHelm = charlie.NewInClusterHelmReleaser("astronomer-charlie", helmruntime.Config{
-				Driver: cfg.HelmDriver, RegistryConfig: cfg.HelmRegistryConfig,
-				RepositoryConfig: cfg.HelmRepositoryConfig, RepositoryCache: cfg.HelmRepositoryCache,
-				PluginsDirectory: cfg.HelmPluginsDirectory, BurstLimit: 100,
-			})
+			charlieHelm = charlie.NewInClusterHelmReleaser("astronomer-charlie", helmRuntimeFromConfig(cfg))
 			runtime, runtimeErr := charlie.NewKubernetesRuntimeActivator(localK8s, localNamespace, charlieHelm)
 			if runtimeErr != nil {
 				charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.runtime_activator_unavailable", "")

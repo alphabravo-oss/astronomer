@@ -53,6 +53,10 @@ type Config struct {
 	TunnelEgressCIDRs      string `mapstructure:"astronomer_tunnel_egress_cidrs"`
 	RCAllowPrivateWebhooks bool   `mapstructure:"astronomer_rc_allow_private_webhooks"`
 
+	// HelmRepositoryDestinationPolicy is operator-owned origin/CIDR authority,
+	// independent of chart URLs and catalog/provider destination policies.
+	HelmRepositoryDestinationPolicy string `mapstructure:"helm_repository_destination_policy"`
+
 	BootstrapAdminPassword            string `mapstructure:"astronomer_bootstrap_password"`
 	BootstrapAdminUsername            string `mapstructure:"astronomer_bootstrap_username"`
 	BootstrapAdminEmail               string `mapstructure:"astronomer_bootstrap_email"`
@@ -503,7 +507,7 @@ func Load() (*Config, error) {
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, err
 	}
-	if err := normalizeDeliveryFluxTrust(cfg); err != nil {
+	if err := normalizeHelmAndDeliveryTrust(cfg); err != nil {
 		return nil, err
 	}
 	if err := applyReleaseManifest(cfg); err != nil {

@@ -12,6 +12,7 @@ import (
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"helm.sh/helm/v4/pkg/cli"
 )
 
@@ -145,6 +146,10 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	kubernetesServiceHostConfigured := strings.TrimSpace(os.Getenv("KUBERNETES_SERVICE_HOST")) != ""
 	insecureConfigured := os.Getenv("ASTRONOMER_INSECURE") == "true"
 	helmRuntime := helmruntime.FromSettings(cli.New(), os.Getenv("HELM_DRIVER"))
+	helmRuntime.RepositoryDestinationPolicy = os.Getenv("HELM_REPOSITORY_DESTINATION_POLICY")
+	if _, err := httpclient.ParseDestinationPolicy(helmRuntime.RepositoryDestinationPolicy); err != nil {
+		return nil, err
+	}
 	otelSamplerRatio := 0.05
 	if raw := strings.TrimSpace(os.Getenv("OTEL_TRACES_SAMPLER_ARG")); raw != "" {
 		parsed, err := strconv.ParseFloat(raw, 64)

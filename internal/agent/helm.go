@@ -104,9 +104,20 @@ const defaultHelmReadyTimeout = 5 * time.Minute
 // the caller-provided seconds and falling back to the helm CLI default.
 func helmReadyTimeout(seconds int) time.Duration {
 	if seconds > 0 {
+		if int64(seconds) > int64(time.Duration(1<<63-1)/time.Second) {
+			return 0 // The operation owner rejects unrepresentable arithmetic.
+		}
 		return time.Duration(seconds) * time.Second
 	}
 	return defaultHelmReadyTimeout
+}
+
+func helmOperationContext(parent context.Context, seconds int) (context.Context, context.CancelFunc, error) {
+	timeout := helmReadyTimeout(seconds)
+	if timeout == 0 {
+		return nil, nil, errors.New("Helm timeout cannot be represented")
+	}
+	return helmruntime.OperationContext(parent, timeout)
 }
 
 func helmResult(streamID string, releaseName, namespace, status string, revision int, err error) *protocol.Message {
@@ -240,7 +251,7 @@ func (h *HelmHandler) HandleInstall(ctx context.Context, msg *protocol.Message) 
 		return helmResult(msg.StreamID, "", "", "", 0, err), nil
 	}
 
-	ctx, cancel, err := helmruntime.OperationContext(ctx, helmReadyTimeout(req.Timeout))
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
@@ -301,7 +312,7 @@ func (h *HelmHandler) HandleUpgrade(ctx context.Context, msg *protocol.Message) 
 		return helmResult(msg.StreamID, "", "", "", 0, err), nil
 	}
 
-	ctx, cancel, err := helmruntime.OperationContext(ctx, helmReadyTimeout(req.Timeout))
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
@@ -349,7 +360,7 @@ func (h *HelmHandler) HandleUninstall(ctx context.Context, msg *protocol.Message
 		return helmResult(msg.StreamID, "", "", "", 0, err), nil
 	}
 
-	ctx, cancel, err := helmruntime.OperationContext(ctx, helmReadyTimeout(req.Timeout))
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
@@ -394,7 +405,7 @@ func (h *HelmHandler) HandleRollback(ctx context.Context, msg *protocol.Message)
 		return helmResult(msg.StreamID, "", "", "", 0, err), nil
 	}
 
-	ctx, cancel, err := helmruntime.OperationContext(ctx, helmReadyTimeout(req.Timeout))
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
@@ -456,7 +467,7 @@ func (h *HelmHandler) HandleStatus(ctx context.Context, msg *protocol.Message) (
 		return helmResult(msg.StreamID, "", "", "", 0, err), nil
 	}
 
-	ctx, cancel, err := helmruntime.OperationContext(ctx, helmReadyTimeout(req.Timeout))
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
@@ -486,7 +497,7 @@ func (h *HelmHandler) HandleHistory(ctx context.Context, msg *protocol.Message) 
 		return helmHistoryResult(msg.StreamID, "", "", nil, err), nil
 	}
 
-	ctx, cancel, err := helmruntime.OperationContext(ctx, helmReadyTimeout(req.Timeout))
+	ctx, cancel, err := helmOperationContext(ctx, req.Timeout)
 	if err != nil {
 		return helmHistoryResult(msg.StreamID, req.ReleaseName, req.Namespace, nil, err), nil
 	}
