@@ -3,8 +3,9 @@
 This reviewed source implements original supplier layer transfer before
 endorsement. It was applied from the retained external review patch
 `f8229e7bdb30411132d794d7ef6324e57063456c0e977f13ddb137b471e86391`.
-It has not yet been built or tested. Earlier corrected and failed W04 packets
-retain their original source and qualification scopes.
+The corrected frozen source passed the scoped local gates described in
+[supplier-transfer-qualification.md](supplier-transfer-qualification.md). Earlier
+failed W04 packets retain their original source and qualification scopes.
 
 The constructor-bound capture supplies one exact approved repository and fixed
 role layer. Transfer validates its owned destination policy again, refuses an
@@ -42,11 +43,11 @@ cancellation after staged bytes, existing-output preservation, owned staging
 replacement preservation and normal cleanup. Tiny QA payloads do not qualify
 actual supplier sizes, archive expansion, transport/CDN availability or cadence.
 
-No actual transfer, supplier measurement, publisher execution, durable update,
+No whole upstream supplier transfer, supplier measurement, publisher execution, durable update,
 scan job or disconnected cluster is claimed. Whole W04 remains in progress.
 
 
-## Registry challenge boundary (unqualified source)
+## Registry challenge boundary (local fixture qualification)
 
 The original draft's direct `http.Client.Do` range path did not inherit ORAS's
 anonymous bearer token obtained during metadata capture. That is a concrete
@@ -89,7 +90,7 @@ The new exact JSON reader site is `resolver.boundDatabaseTokenResponse`; its
 source ownership must be annotated in the combined W09 inventory after reviewed
 integration. No existing parser inventory baseline was refreshed.
 
-Unexecuted owned TLS peer fixtures characterize anonymous and configured private
+Executed owned TLS peer fixtures characterize anonymous and configured private
 401 → bounded token → two exact immutable ranges, no mutable-tag requests,
 repository-local token reuse, realm/service/scope expansion, duplicate challenges,
 redirected/duplicate/trailing/oversized token bodies, ambient credentials,
