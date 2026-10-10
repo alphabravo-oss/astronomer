@@ -136,17 +136,7 @@ func main() {
 	// incoming task payloads (planned follow-up in this same sprint),
 	// so when both processes point at the same OTLP endpoint a single
 	// trace can span HTTP → asynq → worker DB queries → tunnel calls.
-	tracingCfg := observability.TracingConfig{
-		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
-		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
-		ServiceName: cfg.OTELServiceName, ServiceVersion: cfg.OTELServiceVersion,
-		SamplerRatio: cfg.OTELSamplerRatio,
-	}
-	tracingCfg.ServiceName = "astronomer-worker"
-	tracingCfg.ServiceVersion = version.Version
-	tracingCfg.Environment = cfg.Env
-	tracingCfg.ServiceNamespace = "astronomer"
-	tracingCfg.ServiceInstanceID = cfg.ProcessHostname
+	tracingCfg := workerTracingConfig(cfg)
 	otelShutdown, err := observability.InitTracing(context.Background(), log, tracingCfg)
 	if err != nil {
 		log.Error("failed to init otel tracing", "error", err)

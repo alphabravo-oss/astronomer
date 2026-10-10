@@ -35,6 +35,24 @@ type Environment struct {
 // protected file/stdin or secret-file environment binding, never an argument.
 // Literal environment is for known public configuration; its safety cannot be
 // inferred by regex for arbitrary caller-provided values.
+// ArtifactOutput opts stdout into private streaming artifact capture. Its finite
+// byte budget must be supplied by the adapter from explicit operator policy and
+// fresh capacity checks; it grants no release/database mutation authority. The
+// zero value preserves the existing diagnostic capture contract.
+type ArtifactOutput struct {
+	MaximumBytes int64
+}
+
+// ArtifactCapture identifies retained private stdout bytes after all owned pipes
+// joined. Acknowledged means the child succeeded, not that the bytes form a
+// valid backup/archive. Partial output is retained on failed/canceled runs.
+type ArtifactCapture struct {
+	Path         string
+	SHA256       string
+	SizeBytes    int64
+	Acknowledged bool
+}
+
 type Spec struct {
 	Executable          string
 	Args                []string
@@ -47,6 +65,7 @@ type Spec struct {
 	Timeout             time.Duration
 	TerminationGrace    time.Duration
 	MaximumCaptureBytes int64
+	StdoutArtifact      ArtifactOutput
 }
 
 type Result struct {
@@ -56,11 +75,12 @@ type Result struct {
 	Started       bool
 	// LeaderReaped means Cmd.Wait returned and joined its pipe-copy goroutines.
 	// It does not certify arbitrary daemonized or escaped descendants.
-	LeaderReaped bool
-	StartedAt    time.Time
-	CompletedAt  time.Time
-	StdoutSHA256 string
-	StderrSHA256 string
+	LeaderReaped   bool
+	StartedAt      time.Time
+	CompletedAt    time.Time
+	StdoutSHA256   string
+	StderrSHA256   string
+	StdoutArtifact *ArtifactCapture
 }
 
 type Error struct {
@@ -83,6 +103,10 @@ func validate(spec Spec) error {
 	if !filepath.IsAbs(spec.Executable) || !filepath.IsAbs(spec.Directory) || !filepath.IsAbs(spec.CaptureDirectory) || !idPattern.MatchString(spec.ID) || spec.Sequence > 1000 || spec.Timeout <= 0 || spec.Timeout > time.Hour || spec.TerminationGrace <= 0 || spec.TerminationGrace > 5*time.Second || spec.MaximumCaptureBytes <= 0 || spec.MaximumCaptureBytes > 16<<20 {
 		return errors.New("explicit absolute process paths and finite capture/lifecycle bounds required")
 	}
+	if spec.StdoutArtifact.MaximumBytes < 0 {
+		return errors.New("private artifact budget must be nonnegative")
+	}
+
 	names := make(map[string]struct{}, len(spec.Environment))
 	for _, env := range spec.Environment {
 		if !envPattern.MatchString(env.Name) || (env.SecretFile != "" && (env.Literal != "" || !filepath.IsAbs(env.SecretFile))) {

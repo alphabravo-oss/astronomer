@@ -19553,6 +19553,11 @@
       "path": "internal/ops/upgrade/store_linux.go",
       "owner": "ops/upgrade",
       "scope": "Private bounded schema1 checkpoint only; explicit owned0700 directory/nonblocking kernel lock, strict plan/identity/stage binding, retained recovery and atomic fsync publication; no release signature/public v1 evidence replacement"
+    },
+    {
+      "path": "internal/ops/upgradecli/release_observation_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Bounded private Helm4.3 latest-release metadata only; explicit owned CLI/input/namespace/revision checks and repeated stable observations, no mutation replay or signer/image/full Driver proof"
     }
   ],
   "json_sites": [
@@ -30087,6 +30092,18 @@
       "owner": "userpreferences",
       "schema": "Canonical normalized Preferences v1 JSON document; private deterministic SHA-256 request identity, unchanged version 1 replay field layout",
       "reader_behavior": "Marshal typed validated preference command; same encoding/json output and sha256:<hex> digest as canonicalOperationRequestDigest before extraction; replay verifies stored document digest, no credential or environment input"
+    },
+    {
+      "path": "internal/ops/upgradecli/release_observation_linux.go",
+      "function": "parseHelmMetadata",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&metadata"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Exact upstream Helm4.3 GetMetadata top-level schema; identity/revision/status/version fields validated, optional labels/annotations/dependencies retained only as private RawMessage; maximum1MiB, no credential diagnostics",
+      "reader_behavior": "Canonical strict Decode rejects duplicate/unknown/trailing/malformed JSON before interpreting exact release/namespace/chart and known lifecycle status. Failed/pending/foreign/changing/automatic-rollback/replacement observations remain unknown; point-in-time reads do not exclude concurrent operator changes. Never grant signer, image, workload or DB authorization from metadata."
     }
   ]
 }

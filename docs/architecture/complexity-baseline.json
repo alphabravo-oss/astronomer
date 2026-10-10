@@ -44,7 +44,7 @@
   },
   "functionCeilings": {
     "cmd/agent/main.go:runConnect": 363,
-    "cmd/worker/main.go:main": 451,
+    "cmd/worker/main.go:main": 444,
     "frontend/src/components/auth/connector-form.tsx:ConnectorForm": 292,
     "frontend/src/components/charlie/settings/connection-tab.tsx:ConnectionTab": 381,
     "frontend/src/components/charlie/settings/mode-tab.tsx:ModeTab": 454,
