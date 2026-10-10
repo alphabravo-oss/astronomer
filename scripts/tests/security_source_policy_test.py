@@ -184,4 +184,48 @@ class ReviewedSourceControlsTest(unittest.TestCase):
                             'unreviewed-release', self.root, self.now)
 
 
+class ReviewedAuditStatusControlTest(unittest.TestCase):
+    def setUp(self):
+        SecurityPolicyTest.setUp(self)
+        findings = json.loads((ROOT/'docs/assurance/technology-guide/w02/current-source-927151be/source-findings.json').read_text())['findings']
+        self.finding = next(row for row in findings if row['rule_id'] == 'G109')
+        target = self.root/self.finding['path']
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ROOT/self.finding['path']).read_bytes())
+        self.g['Issues'] = [{
+            'severity': self.finding['level'], 'rule_id': 'G109',
+            'file': self.finding['path'], 'line': str(self.finding['line']),
+            'column': str(self.finding['column']),
+        }]
+        doc = json.loads((ROOT/'deploy/security/source-exceptions.json').read_text())
+        self.e = {'schema_version': 1, 'exceptions': [
+            row for row in doc['exceptions'] if row['fingerprint'] == self.finding['fingerprint']
+        ]}
+        self.now = dt.datetime(2026, 10, 10, tzinfo=dt.timezone.utc)
+
+    def run_policy(self):
+        return policy.evaluate(self.g, self.v, self.e, self.status,
+                               'first-party-source-policy', self.root, self.now)
+
+    def test_exact_bounded_status_filter_retains_finding(self):
+        result = self.run_policy()
+        self.assertTrue(result['passed'])
+        self.assertEqual(len(result['findings']), 1)
+        self.assertTrue(result['findings'][0]['accepted'])
+
+    def test_different_narrowing_in_same_file_is_blocked(self):
+        self.g['Issues'].append(dict(self.g['Issues'][0], column=str(self.finding['column'] + 1)))
+        result = self.run_policy()
+        self.assertFalse(result['passed'])
+        self.assertEqual(sum(row['accepted'] for row in result['findings']), 1)
+
+    def test_changed_guard_invalidates_control(self):
+        target = self.root/self.finding['path']
+        body = target.read_text()
+        self.assertIn('statusCode > 599', body)
+        target.write_text(body.replace('statusCode > 599', 'statusCode > 999999999999'))
+        with self.assertRaises(ValueError):
+            self.run_policy()
+
+
 if __name__=='__main__': unittest.main()
