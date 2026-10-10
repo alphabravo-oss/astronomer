@@ -1,0 +1,1507 @@
+{
+  "schema_version": 1,
+  "source_commit": "2afa1a2ca50099af99d49ffcdbcbdc43629e5530",
+  "native_source": "927151bebf20c6a8f63fe76ff804b45e86044ded",
+  "scope": "88 exact direct-call type-boundary changes only; no alias-based changes or exceptions",
+  "sink_count": 88,
+  "module_count": 37,
+  "records": [
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/tools_catalog.go",
+        "line": 27,
+        "column": 16,
+        "source_digest": "sha256:5719a61bdd63d9e8c3cd9cde99988da71fda821678e0f1f637918c596b8c5b9a",
+        "level": "HIGH",
+        "fingerprint": "sha256:6771bc23e091489c5151c6b95bd884e463ed10a5d3d5f5e034d5183c1b744cf1",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 11,
+      "matched_column_end": 32
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/tools_catalog.go",
+        "line": 26,
+        "column": 16,
+        "source_digest": "sha256:5719a61bdd63d9e8c3cd9cde99988da71fda821678e0f1f637918c596b8c5b9a",
+        "level": "HIGH",
+        "fingerprint": "sha256:43e88ab2f4006b7395a1272cab5c4285b62123af8cfca81e27279f23ea45f7b8",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/security_templates.go",
+        "line": 43,
+        "column": 17,
+        "source_digest": "sha256:184365133244e6823647212329279af64d73ef84e54213d1f7e8a5a2fad2fc17",
+        "level": "HIGH",
+        "fingerprint": "sha256:a9e304c25d6e944b9841f470b36bf964ea62b43d8a6e19b5bdeade98dec01fb8",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/security_templates.go",
+        "line": 42,
+        "column": 16,
+        "source_digest": "sha256:184365133244e6823647212329279af64d73ef84e54213d1f7e8a5a2fad2fc17",
+        "level": "HIGH",
+        "fingerprint": "sha256:38fc82ca93447b16cb93cb4a3df3b0b33624f692e7cb861556d6e2552612ce1c",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/security_scans.go",
+        "line": 196,
+        "column": 17,
+        "source_digest": "sha256:0a6dc03e0d1b057413e38fc6fb27b498796bb648d03bcc45032854d6c71f660a",
+        "level": "HIGH",
+        "fingerprint": "sha256:a999cfffc0e9ddd8871fd30051f44b63734917eaaea543d42153582571401eec",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/security_scans.go",
+        "line": 195,
+        "column": 16,
+        "source_digest": "sha256:0a6dc03e0d1b057413e38fc6fb27b498796bb648d03bcc45032854d6c71f660a",
+        "level": "HIGH",
+        "fingerprint": "sha256:f8c9b9ccc1d7c9fd3210f0e57218b78c3fe9a81ab715aafe4b0131ddbf3c1de9",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/security_scans.go",
+        "line": 75,
+        "column": 17,
+        "source_digest": "sha256:0a6dc03e0d1b057413e38fc6fb27b498796bb648d03bcc45032854d6c71f660a",
+        "level": "HIGH",
+        "fingerprint": "sha256:90bb0512f10b2ab0c49c36878b321e044157f150eeaa068c9544ae1adf900422",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/security_scans.go",
+        "line": 74,
+        "column": 16,
+        "source_digest": "sha256:0a6dc03e0d1b057413e38fc6fb27b498796bb648d03bcc45032854d6c71f660a",
+        "level": "HIGH",
+        "fingerprint": "sha256:dc9d9df220cf7ee1fa95eee055a5538c664ddf4c5d844b87c1ebc293dfd2543a",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/security_policies.go",
+        "line": 53,
+        "column": 16,
+        "source_digest": "sha256:db78d337db68a41a74f5aaa1b9b21ee25a21f79a1dd3e71fc85a0db0efd673e9",
+        "level": "HIGH",
+        "fingerprint": "sha256:5c302630b5555c168350d32c086b484c378397d84033add6f0656d0d4b967863",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 11,
+      "matched_column_end": 32
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/security_policies.go",
+        "line": 52,
+        "column": 16,
+        "source_digest": "sha256:db78d337db68a41a74f5aaa1b9b21ee25a21f79a1dd3e71fc85a0db0efd673e9",
+        "level": "HIGH",
+        "fingerprint": "sha256:8ab136ddc737c3bc72cbbfbb1f5b8edcfa5e931d62754267eb7c4f0bc59c01e7",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/resources_sql_lists.go",
+        "line": 73,
+        "column": 17,
+        "source_digest": "sha256:590cbc518a45643079576842ab2884e5dd75ea879038dabc40875f027fa1950f",
+        "level": "HIGH",
+        "fingerprint": "sha256:5852cfde2d5cc63c3dcfc0e670d7d5e4b4ad430346ae94b03006e926378c7690",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/resources_sql_lists.go",
+        "line": 72,
+        "column": 16,
+        "source_digest": "sha256:590cbc518a45643079576842ab2884e5dd75ea879038dabc40875f027fa1950f",
+        "level": "HIGH",
+        "fingerprint": "sha256:1ecb1742a08d8f988146afa6d49819044c44d441a0cc0e201978a56b36be9142",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/resources_sql_lists.go",
+        "line": 24,
+        "column": 16,
+        "source_digest": "sha256:590cbc518a45643079576842ab2884e5dd75ea879038dabc40875f027fa1950f",
+        "level": "HIGH",
+        "fingerprint": "sha256:be2837708d899b1ea1947e0096d2352ff695c494e18946cb117a575d48efad5b",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 11,
+      "matched_column_end": 32
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/resources_sql_lists.go",
+        "line": 23,
+        "column": 16,
+        "source_digest": "sha256:590cbc518a45643079576842ab2884e5dd75ea879038dabc40875f027fa1950f",
+        "level": "HIGH",
+        "fingerprint": "sha256:5c988317c006c9deded9a3cccd451965fc58a1fe60b7556dd774a93b2dcad735",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_roles.go",
+        "line": 286,
+        "column": 17,
+        "source_digest": "sha256:3e8d1bcc6b6bdee520b12bb3763d06f5c418ad0aecea030de1aae1ec9fce8d75",
+        "level": "HIGH",
+        "fingerprint": "sha256:927bb5f1f89c19042538690bd2e64b265f5ab311e57f6baa49637d4b44a54cec",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_roles.go",
+        "line": 285,
+        "column": 16,
+        "source_digest": "sha256:3e8d1bcc6b6bdee520b12bb3763d06f5c418ad0aecea030de1aae1ec9fce8d75",
+        "level": "HIGH",
+        "fingerprint": "sha256:47b0824e7c9e765be7b7bc31c098b98c929eb7326bbea4a2b893c36f971837ce",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_roles.go",
+        "line": 156,
+        "column": 17,
+        "source_digest": "sha256:3e8d1bcc6b6bdee520b12bb3763d06f5c418ad0aecea030de1aae1ec9fce8d75",
+        "level": "HIGH",
+        "fingerprint": "sha256:d0afbe59a83e30d5c5659eb24230fe9e05d220f742efac0e6ec2b8013a3603f8",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_roles.go",
+        "line": 155,
+        "column": 16,
+        "source_digest": "sha256:3e8d1bcc6b6bdee520b12bb3763d06f5c418ad0aecea030de1aae1ec9fce8d75",
+        "level": "HIGH",
+        "fingerprint": "sha256:21ad8a1e1271330f6152fe7ca5945bd95aa7791c8d4a28a4c1c591f528210400",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_roles.go",
+        "line": 17,
+        "column": 17,
+        "source_digest": "sha256:3e8d1bcc6b6bdee520b12bb3763d06f5c418ad0aecea030de1aae1ec9fce8d75",
+        "level": "HIGH",
+        "fingerprint": "sha256:59c51b4c5c2c49a340ef44b0c1d2973f1033d4a3370b5bb0493331fbc8718007",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_roles.go",
+        "line": 16,
+        "column": 16,
+        "source_digest": "sha256:3e8d1bcc6b6bdee520b12bb3763d06f5c418ad0aecea030de1aae1ec9fce8d75",
+        "level": "HIGH",
+        "fingerprint": "sha256:3b838c4ecc542bf400a4dd040ca8cc197d321a682b8880bac4ed4f6b5728608a",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_bindings.go",
+        "line": 219,
+        "column": 17,
+        "source_digest": "sha256:728e1dd2ac83f9ce5df5d8329b31a7a6d3e4a9ee7d24acb04168b43d75a62ba1",
+        "level": "HIGH",
+        "fingerprint": "sha256:086731647bb9eecc92bb84e56c82b64384e0dd170b5a085a6a07386391e1010c",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_bindings.go",
+        "line": 218,
+        "column": 16,
+        "source_digest": "sha256:728e1dd2ac83f9ce5df5d8329b31a7a6d3e4a9ee7d24acb04168b43d75a62ba1",
+        "level": "HIGH",
+        "fingerprint": "sha256:e4a09607b8ecfd7ed4702c1e4d954dcfa691e3cdee8cbf114e0e421983653842",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_bindings.go",
+        "line": 104,
+        "column": 17,
+        "source_digest": "sha256:728e1dd2ac83f9ce5df5d8329b31a7a6d3e4a9ee7d24acb04168b43d75a62ba1",
+        "level": "HIGH",
+        "fingerprint": "sha256:94b88872e82cb0971021cec4955e7e33e8f11644248e7e658f1b90d2946b9cf3",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_bindings.go",
+        "line": 103,
+        "column": 16,
+        "source_digest": "sha256:728e1dd2ac83f9ce5df5d8329b31a7a6d3e4a9ee7d24acb04168b43d75a62ba1",
+        "level": "HIGH",
+        "fingerprint": "sha256:da001898341875e9079a6301c0269089efe582b58b9e6f76c2d9d81833961dae",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_bindings.go",
+        "line": 20,
+        "column": 17,
+        "source_digest": "sha256:728e1dd2ac83f9ce5df5d8329b31a7a6d3e4a9ee7d24acb04168b43d75a62ba1",
+        "level": "HIGH",
+        "fingerprint": "sha256:d1e35a2ab022de220b783c0fcb32ea285c76e284054e435115d3b769035a3f6d",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/rbac_bindings.go",
+        "line": 19,
+        "column": 16,
+        "source_digest": "sha256:728e1dd2ac83f9ce5df5d8329b31a7a6d3e4a9ee7d24acb04168b43d75a62ba1",
+        "level": "HIGH",
+        "fingerprint": "sha256:cd7c51d6b5cdf7d72434276d842a5596dcb9afc04d2afe1c927f9df496fe6141",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/projects_crud.go",
+        "line": 28,
+        "column": 17,
+        "source_digest": "sha256:348fc1e29082e60f79ae8054a41caf6a923d7e576086869511d2f2142c2cf944",
+        "level": "HIGH",
+        "fingerprint": "sha256:286054ba0247333dc9563bd942515c513cf4f87e6869c96e356e363c14d3728e",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/projects_crud.go",
+        "line": 27,
+        "column": 16,
+        "source_digest": "sha256:348fc1e29082e60f79ae8054a41caf6a923d7e576086869511d2f2142c2cf944",
+        "level": "HIGH",
+        "fingerprint": "sha256:a0457c7b5b31e563f8249bd2a06a9208354b58a648e8c5ec5b82921b0bd83df9",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/project_navigation.go",
+        "line": 103,
+        "column": 50,
+        "source_digest": "sha256:7dcd1e59e1cd83cebf67d95d9b04ec5497da7e34d63a64bd05c8e35e867280df",
+        "level": "HIGH",
+        "fingerprint": "sha256:a88d769a93566f247cf2300e26a910a8a9b5710292ac97e122178435c3b98f88",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 45,
+      "matched_column_end": 66
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/project_navigation.go",
+        "line": 103,
+        "column": 24,
+        "source_digest": "sha256:7dcd1e59e1cd83cebf67d95d9b04ec5497da7e34d63a64bd05c8e35e867280df",
+        "level": "HIGH",
+        "fingerprint": "sha256:4ad4fe23704b144294483400f1626a5e213ded77735cda95641e74a34e110d59",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 19,
+      "matched_column_end": 43
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/project_catalogs.go",
+        "line": 554,
+        "column": 22,
+        "source_digest": "sha256:6bf6a9238ee7f3ea74ffe71844eff95c29d2c1b7e040b69d54012cd886e36446",
+        "level": "HIGH",
+        "fingerprint": "sha256:9454cdefb84caf8b89d44e76a80c4ae79cd45a099a795fe96b9674b54c7f48fb",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 17,
+      "matched_column_end": 38
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/project_catalogs.go",
+        "line": 553,
+        "column": 22,
+        "source_digest": "sha256:6bf6a9238ee7f3ea74ffe71844eff95c29d2c1b7e040b69d54012cd886e36446",
+        "level": "HIGH",
+        "fingerprint": "sha256:2c03ea2052f331af1fb073932e213130b9be642e79ae29756eecdb5636833ddc",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 100))",
+      "after": "queryLimit32(r, 100)",
+      "matched_column_start": 17,
+      "matched_column_end": 42
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/network_policies_list.go",
+        "line": 18,
+        "column": 16,
+        "source_digest": "sha256:757decc7641cd341dd4c0e1d52c35973b15a90670f6c2db07d0fe2f029815c31",
+        "level": "HIGH",
+        "fingerprint": "sha256:4a23a3d8b82266c33eaa386ac18d96f3102b5269f0e0d0d84a3e2521b77c4a71",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 11,
+      "matched_column_end": 32
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/network_policies_list.go",
+        "line": 17,
+        "column": 16,
+        "source_digest": "sha256:757decc7641cd341dd4c0e1d52c35973b15a90670f6c2db07d0fe2f029815c31",
+        "level": "HIGH",
+        "fingerprint": "sha256:d02e0d541919c351e05df2bc6e3e899f4eeb6503fe75e1f369fe712b23f4b51b",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 50))",
+      "after": "queryLimit32(r, 50)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/native_rbac.go",
+        "line": 269,
+        "column": 59,
+        "source_digest": "sha256:6e17b06c746a80ad0d2da25c23adad4e0ab8c1c977ed38f13d474f5465309724",
+        "level": "HIGH",
+        "fingerprint": "sha256:2a45ce173400f65f6755319f5e7e011e1c5b140ab9b1314b9290ee947c77b921",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 54,
+      "matched_column_end": 75
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/native_rbac.go",
+        "line": 269,
+        "column": 24,
+        "source_digest": "sha256:6e17b06c746a80ad0d2da25c23adad4e0ab8c1c977ed38f13d474f5465309724",
+        "level": "HIGH",
+        "fingerprint": "sha256:3a9fe9fb003837f0738068d4441871843392a77b78718d624a6ef876c3c031b6",
+        "accepted": false
+      },
+      "before": "int32(queryLimitMax(r, 100, 500))",
+      "after": "queryLimitMax32(r, 100, 500)",
+      "matched_column_start": 19,
+      "matched_column_end": 52
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/monitoring_operations.go",
+        "line": 72,
+        "column": 17,
+        "source_digest": "sha256:3e94fcfa4530b034b3f188b90d7516cac1a0986af87ead61d63a28c1768ad1e7",
+        "level": "HIGH",
+        "fingerprint": "sha256:4eb1f010e4983ea8ed2c0552f125a924a1a40dd7ea919465b8eda60268725ae9",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/monitoring_operations.go",
+        "line": 71,
+        "column": 16,
+        "source_digest": "sha256:3e94fcfa4530b034b3f188b90d7516cac1a0986af87ead61d63a28c1768ad1e7",
+        "level": "HIGH",
+        "fingerprint": "sha256:c36fb2f1a22de54ed481f91b72e1b121ffe4d6491a1cfee29d39d0a8d95f7b70",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 50))",
+      "after": "queryLimit32(r, 50)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/logging_pipelines.go",
+        "line": 32,
+        "column": 17,
+        "source_digest": "sha256:72a4497cddecfca120eb5679742f509448ed574ea7a0b1e3c99cf6067fa46fb1",
+        "level": "HIGH",
+        "fingerprint": "sha256:412195674b78462d85adb9477d25e92681f669d7c7f5b9e365352dece8e58e0b",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/logging_pipelines.go",
+        "line": 31,
+        "column": 16,
+        "source_digest": "sha256:72a4497cddecfca120eb5679742f509448ed574ea7a0b1e3c99cf6067fa46fb1",
+        "level": "HIGH",
+        "fingerprint": "sha256:be017c8b3bbc6dc0652d561ce31ffbea0895e22a1b7eb49753fa159cc293da5a",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/logging_outputs.go",
+        "line": 31,
+        "column": 17,
+        "source_digest": "sha256:c5c3a3ae93c9aae2a192e0177287132cc4b0f3372e95919d90adf4c2f43d506a",
+        "level": "HIGH",
+        "fingerprint": "sha256:f0f57af38dc9f1dfd17affb4115c3ebb3c999eec511769ef5cae46a8283c6de9",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/logging_outputs.go",
+        "line": 30,
+        "column": 16,
+        "source_digest": "sha256:c5c3a3ae93c9aae2a192e0177287132cc4b0f3372e95919d90adf4c2f43d506a",
+        "level": "HIGH",
+        "fingerprint": "sha256:4c04f4eb110d6eb4994cc4841df0b9bde24280445860c352bf0e45ed82dbc500",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/logging.go",
+        "line": 476,
+        "column": 17,
+        "source_digest": "sha256:086438fd3f6244e08ba5983144a9d98bb7770b2815ab3381aed7697019720abf",
+        "level": "HIGH",
+        "fingerprint": "sha256:bdcbfc174bbf07e1fd9eaf4879434be5fa97535acd736f2fb75b56c785e98337",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/logging.go",
+        "line": 475,
+        "column": 16,
+        "source_digest": "sha256:086438fd3f6244e08ba5983144a9d98bb7770b2815ab3381aed7697019720abf",
+        "level": "HIGH",
+        "fingerprint": "sha256:103038258fb6ba7e2631d98efff890184de969f028180d625c336663c115d9a2",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 50))",
+      "after": "queryLimit32(r, 50)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/image_vulns_history.go",
+        "line": 268,
+        "column": 16,
+        "source_digest": "sha256:21bc100f2c1fdc8aaf904c03f09182c0ad4ee856ad1fb559b8a7c4bdaab2c0d3",
+        "level": "HIGH",
+        "fingerprint": "sha256:cad974acbb698be4492d076ec32a2bb791acb0375bfffd1f4755c5bd0621ec6b",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 100))",
+      "after": "queryLimit32(r, 100)",
+      "matched_column_start": 11,
+      "matched_column_end": 36
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/image_vulns_history.go",
+        "line": 73,
+        "column": 16,
+        "source_digest": "sha256:21bc100f2c1fdc8aaf904c03f09182c0ad4ee856ad1fb559b8a7c4bdaab2c0d3",
+        "level": "HIGH",
+        "fingerprint": "sha256:99ea9ef6c7a666845785cce86c217e0e2dea423560dfa1b5f2b5c087115b4582",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 200))",
+      "after": "queryLimit32(r, 200)",
+      "matched_column_start": 11,
+      "matched_column_end": 36
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/image_vulns.go",
+        "line": 329,
+        "column": 16,
+        "source_digest": "sha256:97ee667e3078d8155ec543ab88a43312348c7d74e5ff166986df8e8781bdecf8",
+        "level": "HIGH",
+        "fingerprint": "sha256:4398e18ef8e17ca3d0f8b8d16254b66e5b13297a3b9ab5c024dde32d623ea7e6",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 10))",
+      "after": "queryLimit32(r, 10)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/image_vulns.go",
+        "line": 193,
+        "column": 17,
+        "source_digest": "sha256:97ee667e3078d8155ec543ab88a43312348c7d74e5ff166986df8e8781bdecf8",
+        "level": "HIGH",
+        "fingerprint": "sha256:d52a2bbc387abc736ce1317a3ab19329b5639b53932582061f7c5caebfb27a75",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/image_vulns.go",
+        "line": 189,
+        "column": 16,
+        "source_digest": "sha256:97ee667e3078d8155ec543ab88a43312348c7d74e5ff166986df8e8781bdecf8",
+        "level": "HIGH",
+        "fingerprint": "sha256:56e1b7e775958101ffe723efc5651b2f2578bebbedbd04607f1abac5019bc3d2",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 50))",
+      "after": "queryLimit32(r, 50)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/image_vulns.go",
+        "line": 124,
+        "column": 17,
+        "source_digest": "sha256:97ee667e3078d8155ec543ab88a43312348c7d74e5ff166986df8e8781bdecf8",
+        "level": "HIGH",
+        "fingerprint": "sha256:817ed6868d48021b8dd63afe9cb99b07d4ac1e9849f595d6257eef895ef0a9d4",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/image_vulns.go",
+        "line": 120,
+        "column": 16,
+        "source_digest": "sha256:97ee667e3078d8155ec543ab88a43312348c7d74e5ff166986df8e8781bdecf8",
+        "level": "HIGH",
+        "fingerprint": "sha256:00977160fcaef3fbb5b32f318cffd0a27165ec783766de263bd2ff35de61ddc7",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/cluster_templates_registry.go",
+        "line": 38,
+        "column": 16,
+        "source_digest": "sha256:63bad02cb797ba733b82a3231fca76bbc26dd5b6fc890557ada27ef9813a51e1",
+        "level": "HIGH",
+        "fingerprint": "sha256:25654ff5661c6082e67037aded115f1ddd4536ded6d4ad5129feb5205315fa17",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 11,
+      "matched_column_end": 32
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/cluster_templates_registry.go",
+        "line": 37,
+        "column": 16,
+        "source_digest": "sha256:63bad02cb797ba733b82a3231fca76bbc26dd5b6fc890557ada27ef9813a51e1",
+        "level": "HIGH",
+        "fingerprint": "sha256:a1b31bd816fe2c63a8b4f91b4dd6f4c2e0c4e82440f954ee524866796adbe9a4",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/cluster_agents_upgrade.go",
+        "line": 191,
+        "column": 17,
+        "source_digest": "sha256:14d89faca50c91ea5151a340c6704516dae89a05221c6156b679551b61a56c6a",
+        "level": "HIGH",
+        "fingerprint": "sha256:632dd73c1a5a22f70802f29136bd963e8c26b263fcb826f52374f717df7565dc",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/cluster_agents_upgrade.go",
+        "line": 190,
+        "column": 16,
+        "source_digest": "sha256:14d89faca50c91ea5151a340c6704516dae89a05221c6156b679551b61a56c6a",
+        "level": "HIGH",
+        "fingerprint": "sha256:7660010d0a35dba600de23a7187d7ca73a2ddeb527ae7730bb7f93e47b8f7160",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/cluster_agents_inventory.go",
+        "line": 47,
+        "column": 17,
+        "source_digest": "sha256:004b27ef100d9384a4a87a74c551e5ed84e214ecffcc9f5373da46921dbb7361",
+        "level": "HIGH",
+        "fingerprint": "sha256:e4baa8da45ca83b53be0bef7f9a011ee94e8865af017bddfea63101aa3195a5a",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/cluster_agents_inventory.go",
+        "line": 46,
+        "column": 16,
+        "source_digest": "sha256:004b27ef100d9384a4a87a74c551e5ed84e214ecffcc9f5373da46921dbb7361",
+        "level": "HIGH",
+        "fingerprint": "sha256:46f2e51f04cfd473dde8a837d3901887c83d2df8bb7731b14a98b653f50e6a4a",
+        "accepted": false
+      },
+      "before": "int32(queryLimitMax(r, 100, 500))",
+      "after": "queryLimitMax32(r, 100, 500)",
+      "matched_column_start": 11,
+      "matched_column_end": 44
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/chart_ratings.go",
+        "line": 411,
+        "column": 17,
+        "source_digest": "sha256:ec4baeca78ae93446bac62290fe712b42eaa190a68fe2c006f47fe84d6477ae0",
+        "level": "HIGH",
+        "fingerprint": "sha256:330b33aaf0afa2da7e2caff52c3253ff787e28ac3eea1576a2d2e1dcf248ea02",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/chart_ratings.go",
+        "line": 410,
+        "column": 16,
+        "source_digest": "sha256:ec4baeca78ae93446bac62290fe712b42eaa190a68fe2c006f47fe84d6477ae0",
+        "level": "HIGH",
+        "fingerprint": "sha256:fda7f0aa653739f1fae4101f1e53c6dea6f03e6be0633058bc0597013c31080b",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/catalog_repositories.go",
+        "line": 48,
+        "column": 17,
+        "source_digest": "sha256:51df540ed27408574761167f51383059e8b8f270957484ab80631b4df03328f0",
+        "level": "HIGH",
+        "fingerprint": "sha256:2586e7f3a1ad127a540ef7d8bad22915e56382b979a09cda45dd5e6d3a4744fc",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/catalog_repositories.go",
+        "line": 47,
+        "column": 16,
+        "source_digest": "sha256:51df540ed27408574761167f51383059e8b8f270957484ab80631b4df03328f0",
+        "level": "HIGH",
+        "fingerprint": "sha256:d90348374ff6eb4debaaa9aaaf96f3bed8b2338649718672c4ac2c5d2377566c",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/catalog_installed_enriched.go",
+        "line": 49,
+        "column": 17,
+        "source_digest": "sha256:2d7709639742f2a43ec6a7204366c5640a89acdceaf9becbc775bf18a611c241",
+        "level": "HIGH",
+        "fingerprint": "sha256:46468ce85cd21d7c7eaecfd7195b4f13ceb3262d4a5c782d5af8a71cd6818ba2",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/catalog_installed_enriched.go",
+        "line": 45,
+        "column": 16,
+        "source_digest": "sha256:2d7709639742f2a43ec6a7204366c5640a89acdceaf9becbc775bf18a611c241",
+        "level": "HIGH",
+        "fingerprint": "sha256:8dfb9827d3f9fae50dc643bba180de734bbf0948c5884f11e9c21a5a887cf6a5",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 50))",
+      "after": "queryLimit32(r, 50)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/catalog_installations.go",
+        "line": 50,
+        "column": 17,
+        "source_digest": "sha256:98fe8ba41e53bcf2e7f527313d12a373288b347e0766feffd15a464cba799f30",
+        "level": "HIGH",
+        "fingerprint": "sha256:00794a41478e963046791506a68563d12998509a4a8e5f65f42cf9e8822f8d12",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/catalog_installations.go",
+        "line": 49,
+        "column": 16,
+        "source_digest": "sha256:98fe8ba41e53bcf2e7f527313d12a373288b347e0766feffd15a464cba799f30",
+        "level": "HIGH",
+        "fingerprint": "sha256:9359f598562a92746136257430a08e88a23ae21e44693d4cf2746bf1529531b8",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/backups_storage.go",
+        "line": 30,
+        "column": 17,
+        "source_digest": "sha256:c4f7dda4b3c873e93a925403406855c888a03b7b4effa267123bab89fedc0714",
+        "level": "HIGH",
+        "fingerprint": "sha256:8ba86acd5301f80ff0ac3afb31810075fd90c4985d459376e5f809ed59e8e83e",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/backups_storage.go",
+        "line": 29,
+        "column": 16,
+        "source_digest": "sha256:c4f7dda4b3c873e93a925403406855c888a03b7b4effa267123bab89fedc0714",
+        "level": "HIGH",
+        "fingerprint": "sha256:03452a2b253a5ff61ecab2403568e192739f2807e7e18c3aec6cf587b7921280",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/backups_schedules.go",
+        "line": 29,
+        "column": 17,
+        "source_digest": "sha256:e424bb8fa41451cd2787f550e17dec86e2746e57661433ba2a247f3a71d81076",
+        "level": "HIGH",
+        "fingerprint": "sha256:8d33cf282e6be7793a8bf9cf8394e4a91277b0bb6061bb9fafd3210a1171a64f",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/backups_schedules.go",
+        "line": 28,
+        "column": 16,
+        "source_digest": "sha256:e424bb8fa41451cd2787f550e17dec86e2746e57661433ba2a247f3a71d81076",
+        "level": "HIGH",
+        "fingerprint": "sha256:6d50dbf377d07dd8af305f9afb700c7acce669f0410f83333d2467cf0f813b33",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/backups_runs.go",
+        "line": 26,
+        "column": 17,
+        "source_digest": "sha256:c9bb139e782c81dea4af79c304689f84aa7f6a25bcbd9fa2ef37fb823f2992a9",
+        "level": "HIGH",
+        "fingerprint": "sha256:ba36b0c718426a372a029d870c9d8df42bb885191c5f96f84cf60345fe8ef1d3",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/backups_runs.go",
+        "line": 25,
+        "column": 16,
+        "source_digest": "sha256:c9bb139e782c81dea4af79c304689f84aa7f6a25bcbd9fa2ef37fb823f2992a9",
+        "level": "HIGH",
+        "fingerprint": "sha256:72647f1fe4c630441aaa45abaa88ddd39cf8c3ebb8e3f77a3f67a5bc4e731e5f",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/backups_restores.go",
+        "line": 144,
+        "column": 17,
+        "source_digest": "sha256:b7d62bccf9f6cc0e1f5560cf75d3064a0e83506dfbf1f1bb8462e83604c1358f",
+        "level": "HIGH",
+        "fingerprint": "sha256:ed2ff4f97918a8688b4562f82f6380d014ea5dd96ef7c5bf1af019dda49c9706",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/backups_restores.go",
+        "line": 143,
+        "column": 16,
+        "source_digest": "sha256:b7d62bccf9f6cc0e1f5560cf75d3064a0e83506dfbf1f1bb8462e83604c1358f",
+        "level": "HIGH",
+        "fingerprint": "sha256:b618785a5d744edb2f768f5b88b6c3585aefe76ae7060789eafee01250b73f4e",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/auth_tokens.go",
+        "line": 254,
+        "column": 17,
+        "source_digest": "sha256:af5eaf37a5a263a1faba0875ec470e10fbbc998e5b34ab7fef2c1cfd2447b744",
+        "level": "HIGH",
+        "fingerprint": "sha256:914b20602f1f72a9ad70f2f474ac037405cafa29f0e8905e8890b3fb6dddbdaa",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/auth_tokens.go",
+        "line": 253,
+        "column": 16,
+        "source_digest": "sha256:af5eaf37a5a263a1faba0875ec470e10fbbc998e5b34ab7fef2c1cfd2447b744",
+        "level": "HIGH",
+        "fingerprint": "sha256:d58d3882a5670d277a6da1db97776990701c2c870dbebf69e31a2160dd6c6460",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/audit.go",
+        "line": 168,
+        "column": 17,
+        "source_digest": "sha256:840531e2004b113c50793d6419bd41d779805e39c9bef690c6e9d6a8e4f7ef93",
+        "level": "HIGH",
+        "fingerprint": "sha256:c1232eef0067b1137db1c5d64f6d378da93806f9bc6a117b9ea5803742623094",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/apiserver_audit.go",
+        "line": 272,
+        "column": 17,
+        "source_digest": "sha256:8d9be42e88c342885f0351505d674856cd312b7764ce78d9e219d255d4401e03",
+        "level": "HIGH",
+        "fingerprint": "sha256:3f6ff7f4cef361352a111d8ee5c4d4dde02d49719498beb1f07c523c834c1e2b",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/apiserver_audit.go",
+        "line": 265,
+        "column": 16,
+        "source_digest": "sha256:8d9be42e88c342885f0351505d674856cd312b7764ce78d9e219d255d4401e03",
+        "level": "HIGH",
+        "fingerprint": "sha256:a22c479a55718bac132a70c24ea12191dc47be219202e9c71acea6f7cb91253b",
+        "accepted": false
+      },
+      "before": "int32(queryLimitMax(r, 50, 500))",
+      "after": "queryLimitMax32(r, 50, 500)",
+      "matched_column_start": 11,
+      "matched_column_end": 43
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/alerting_silences.go",
+        "line": 24,
+        "column": 17,
+        "source_digest": "sha256:c2741f924d4ceeb45fe8eff1e8edb91a945f02af79ad8feba8bcd19b3ea90ee5",
+        "level": "HIGH",
+        "fingerprint": "sha256:898c87c1b9423c1b5bbd90b80daf5e63fcd3ebb5339e77f10b5ab17150e4a9bc",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/alerting_silences.go",
+        "line": 23,
+        "column": 16,
+        "source_digest": "sha256:c2741f924d4ceeb45fe8eff1e8edb91a945f02af79ad8feba8bcd19b3ea90ee5",
+        "level": "HIGH",
+        "fingerprint": "sha256:db69a6b803529e4b464906f846aa146f7ff021ebcd5b64984a6e851f8e8b2a14",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/alerting_rules.go",
+        "line": 23,
+        "column": 17,
+        "source_digest": "sha256:1becde16d4c739a83b300d1600d9e452c7feaa7d72ba775316b598adf9ce3c8b",
+        "level": "HIGH",
+        "fingerprint": "sha256:e610a0aee13dcff4244aa1eded3a48a3605365879f35256d70c14e68fcd8eccd",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/alerting_rules.go",
+        "line": 22,
+        "column": 16,
+        "source_digest": "sha256:1becde16d4c739a83b300d1600d9e452c7feaa7d72ba775316b598adf9ce3c8b",
+        "level": "HIGH",
+        "fingerprint": "sha256:06e07c2532d9a1570276f484549d0b09a4bca629812f91d131e9e47ef499a7f5",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/alerting_inhibitions.go",
+        "line": 28,
+        "column": 17,
+        "source_digest": "sha256:59c13035b91b26bf60a46cefd877e89c7156adb177a4e91d55a08639789bb024",
+        "level": "HIGH",
+        "fingerprint": "sha256:366640bb8a1f44880877b1285d56e681af0793456f35c193b3609f3acf9e28ae",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/alerting_inhibitions.go",
+        "line": 27,
+        "column": 16,
+        "source_digest": "sha256:59c13035b91b26bf60a46cefd877e89c7156adb177a4e91d55a08639789bb024",
+        "level": "HIGH",
+        "fingerprint": "sha256:08605b0f6dedd5fe9320e8f202376905bc2b87ea78623daf5f50ea7768a809a6",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 50))",
+      "after": "queryLimit32(r, 50)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/alerting_events.go",
+        "line": 41,
+        "column": 17,
+        "source_digest": "sha256:d2a936937fb9272bc72de4b1b9063b4d79d934b5426264669364d4442017f222",
+        "level": "HIGH",
+        "fingerprint": "sha256:74c8094a9e8a9207f797f68b1f445430189b361f6fa0cbe85081af5c2de0c3cc",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/alerting_events.go",
+        "line": 40,
+        "column": 16,
+        "source_digest": "sha256:d2a936937fb9272bc72de4b1b9063b4d79d934b5426264669364d4442017f222",
+        "level": "HIGH",
+        "fingerprint": "sha256:98d8ffe430e0aae7b1ab87ef5b87f31d6eb6710d7ae694ce498fb1ac9ccd4474",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/alerting_channels.go",
+        "line": 26,
+        "column": 17,
+        "source_digest": "sha256:4511f0f52d50caab242d22b248dfc5c3221e30728248572376bef07d0c1e83b8",
+        "level": "HIGH",
+        "fingerprint": "sha256:4180e7f794cb11c1ecf4a4490d14e8c647efd1358fc3032a241060d0531a8b55",
+        "accepted": false
+      },
+      "before": "int32(queryOffset(r))",
+      "after": "queryOffset32(r)",
+      "matched_column_start": 12,
+      "matched_column_end": 33
+    },
+    {
+      "finding": {
+        "tool": "gosec",
+        "rule_id": "G115",
+        "path": "internal/handler/alerting_channels.go",
+        "line": 25,
+        "column": 16,
+        "source_digest": "sha256:4511f0f52d50caab242d22b248dfc5c3221e30728248572376bef07d0c1e83b8",
+        "level": "HIGH",
+        "fingerprint": "sha256:a3a5458bdda074ac118400aeca49b58e85c35eb2c4130c0af587efc3127513bb",
+        "accepted": false
+      },
+      "before": "int32(queryLimit(r, 20))",
+      "after": "queryLimit32(r, 20)",
+      "matched_column_start": 11,
+      "matched_column_end": 35
+    }
+  ],
+  "qualification": "DRAFT ONLY: not applied, compiled, tested or rescanned"
+}
