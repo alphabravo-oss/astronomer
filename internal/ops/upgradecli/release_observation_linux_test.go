@@ -19,6 +19,9 @@ import (
 func releaseStateFixture(t *testing.T) (*HelmStateObservation, *int) {
 	t.Helper()
 	r := helmReleaseFixture(t)
+	// The complete upstream metadata fixture exceeds the inherited256B unit
+	// diagnostic budget. Explicit1KiB remains below the parser's1MiB bound.
+	r.fence.commands.options.MaximumCaptureBytes = 1 << 10
 	manifest, _ := canonicalHelmManifestFixture(r.plan.Target)
 	raw, err := json.Marshal(manifest)
 	if err != nil {

@@ -20,6 +20,9 @@ func helmRecoveryFixture(t *testing.T) (*HelmRecovery, *int) {
 	t.Helper()
 	observation, _ := releaseStateFixture(t)
 	r := observation.release
+	// This recovery fixture emits a smaller metadata projection and keeps its
+	// independently asserted256B diagnostic budget unchanged.
+	r.fence.commands.options.MaximumCaptureBytes = 256
 	r.fence.commands.verified[r.fence.kubectl] = struct{}{}
 	calls := 0
 	r.fence.commands.artifactCapacity = func(string, int64) error { return nil }
