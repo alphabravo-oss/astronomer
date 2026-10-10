@@ -3,6 +3,7 @@
 package process
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -29,6 +31,7 @@ func TestOwnedProcessHelper(t *testing.T) {
 		_, _ = os.Stdout.Write([]byte(strings.Repeat("x", 8192)))
 	case "descendant":
 		child := exec.Command(os.Args[0], "-test.run=^TestOwnedProcessHelper$")
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
 		child.Env = []string{"OPS_PROCESS_HELPER=wait", "OPS_PROCESS_PID=" + os.Getenv("OPS_PROCESS_PID")}
 		if child.Start() != nil {
 			os.Exit(2)
@@ -52,7 +55,8 @@ func TestOwnedProcessHelper(t *testing.T) {
 			}
 		}
 		for {
-			time.Sleep(time.Second)
+			_, _ = os.Stdout.Write([]byte("synthetic pipe tick\n"))
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
 }
@@ -109,7 +113,7 @@ func TestOwnedProcessUsesExplicitPrivateInputsWithoutAmbientEnvironment(t *testi
 	}
 }
 func TestOwnedProcessRejectsPrivateAliasBeforeChild(t *testing.T) {
-	for _, kind := range []string{"symlink_input", "public_input", "symlink_directory", "public_directory"} {
+	for _, kind := range []string{"symlink_input", "public_input", "fifo_input", "symlink_directory", "public_directory"} {
 		t.Run(kind, func(t *testing.T) {
 			spec := processFixture(t, "wait")
 			private := filepath.Join(spec.Directory, "private")
@@ -123,6 +127,11 @@ func TestOwnedProcessRejectsPrivateAliasBeforeChild(t *testing.T) {
 					t.Fatal("alias unavailable")
 				}
 				spec.StdinFile = alias
+			case "fifo_input":
+				if os.Remove(private) != nil || syscall.Mkfifo(private, 0o600) != nil {
+					t.Fatal("fifo fixture unavailable")
+				}
+				spec.StdinFile = private
 			case "public_input":
 				if os.Chmod(private, 0o644) != nil {
 					t.Fatal("mode unavailable")
@@ -172,6 +181,7 @@ func TestOwnedProcessBoundsCaptureAndRetiresSurvivingDescendant(t *testing.T) {
 		if e != nil || parse != nil {
 			t.Fatal("descendant did not start")
 		}
+		assertCaptureStable(t, spec)
 		deadline := time.Now().Add(time.Second)
 		for {
 			// An unreaped orphan zombie has stopped executing and cannot mutate fixture
@@ -220,6 +230,12 @@ func TestOwnedProcessPreservesCancellationAndDeadline(t *testing.T) {
 			if kind == "preexpired" && result.Started {
 				t.Fatal("preexpired child admitted")
 			}
+			if result.Started {
+				if !result.LeaderReaped {
+					t.Fatal("cancellation did not join child/pipe writers")
+				}
+				assertCaptureStable(t, spec)
+			}
 		})
 	}
 }
@@ -235,5 +251,36 @@ func TestOwnedProcessRejectsMissingDependencyAndDuplicateEnvironment(t *testing.
 	result, err = Run(context.Background(), spec)
 	if err == nil || result.Started {
 		t.Fatal("duplicate binding admitted")
+	}
+}
+
+func TestOwnedProcessRejectsNilContextAndOversizedSecret(t *testing.T) {
+	spec := processFixture(t, "wait")
+	result, err := Run(nil, spec)
+	if err == nil || result.Started {
+		t.Fatal("nil context admitted")
+	}
+	path := filepath.Join(spec.Directory, "oversized-secret")
+	if os.WriteFile(path, []byte(strings.Repeat("x", (64<<10)+1)), 0o600) != nil {
+		t.Fatal("private secret fixture unavailable")
+	}
+	spec.Environment = append(spec.Environment, Environment{Name: "OPS_PROCESS_SECRET", SecretFile: path})
+	result, err = Run(context.Background(), spec)
+	if err == nil || result.Started {
+		t.Fatal("oversized private binding admitted")
+	}
+}
+
+func assertCaptureStable(t *testing.T, spec Spec) {
+	t.Helper()
+	path := filepath.Join(spec.CaptureDirectory, "fixture-000.stdout")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal("private capture unavailable")
+	}
+	time.Sleep(50 * time.Millisecond)
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("pipe writer remained active after bounded return")
 	}
 }

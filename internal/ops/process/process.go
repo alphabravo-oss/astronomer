@@ -54,11 +54,13 @@ type Result struct {
 	ExitCode      int
 	ChildExitCode int
 	Started       bool
-	LeaderReaped  bool
-	StartedAt     time.Time
-	CompletedAt   time.Time
-	StdoutSHA256  string
-	StderrSHA256  string
+	// LeaderReaped means Cmd.Wait returned and joined its pipe-copy goroutines.
+	// It does not certify arbitrary daemonized or escaped descendants.
+	LeaderReaped bool
+	StartedAt    time.Time
+	CompletedAt  time.Time
+	StdoutSHA256 string
+	StderrSHA256 string
 }
 
 type Error struct {
@@ -98,6 +100,10 @@ func validate(spec Spec) error {
 }
 
 func Run(ctx context.Context, spec Spec) (Result, error) {
+	if ctx == nil {
+		result := Result{Kind: StartFailed, ExitCode: 1, ChildExitCode: -1}
+		return result, &Error{Result: result, cause: errors.New("explicit context required")}
+	}
 	if err := validate(spec); err != nil {
 		r := Result{Kind: StartFailed, ExitCode: 1, ChildExitCode: -1}
 		return r, &Error{Result: r, cause: err}

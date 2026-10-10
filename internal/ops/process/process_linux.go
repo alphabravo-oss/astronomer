@@ -52,13 +52,13 @@ func privateInput(path string) (*os.File, error) {
 	if err != nil || !before.Mode().IsRegular() || before.Mode().Perm() != 0o600 {
 		return nil, errors.New("private regular0600 input required")
 	}
-	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, errors.New("open private input")
 	}
 	file := os.NewFile(uintptr(fd), "private-input")
 	actual, err := file.Stat()
-	if err != nil || !os.SameFile(before, actual) || actual.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+	if err != nil || !actual.Mode().IsRegular() || actual.Mode().Perm() != 0o600 || !os.SameFile(before, actual) || actual.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
 		_ = file.Close()
 		return nil, errors.New("private input owner or identity differs")
 	}
@@ -145,7 +145,7 @@ func runOwned(ctx context.Context, spec Spec) (result Result, runErr error) {
 			runErr = &Error{Result: result, cause: runErr}
 		}
 	}()
-	command, captures, closeInput, err := prepareCommand(spec, stdout, stderr)
+	command, captures, closeInput, err := prepareCommand(ctx, spec, stdout, stderr)
 	defer closeInput()
 	if err != nil {
 		return result, err
@@ -210,7 +210,7 @@ func waitLeader(ctx context.Context, fd int) error {
 	}
 }
 
-func prepareCommand(spec Spec, stdout, stderr *os.File) (*exec.Cmd, []*limitedCapture, func(), error) {
+func prepareCommand(ctx context.Context, spec Spec, stdout, stderr *os.File) (*exec.Cmd, []*limitedCapture, func(), error) {
 	closeInput := func() {}
 	command := exec.Command(spec.Executable, spec.Args...)
 	command.Dir = spec.Directory
@@ -222,7 +222,7 @@ func prepareCommand(spec Spec, stdout, stderr *os.File) (*exec.Cmd, []*limitedCa
 			if openErr != nil {
 				return nil, nil, closeInput, openErr
 			}
-			bytes, readErr := io.ReadAll(io.LimitReader(file, 64<<10+1))
+			bytes, readErr := readPrivateEnvironment(ctx, file)
 			_ = file.Close()
 			if readErr != nil || len(bytes) > 64<<10 {
 				return nil, nil, closeInput, errors.New("bounded private environment read failed")
@@ -310,4 +310,29 @@ func waitCommand(command *exec.Cmd, grace time.Duration) (error, bool) {
 	case <-timer.C:
 		return errors.New("owned child wait did not close within bound"), false
 	}
+}
+
+// Context checks surround bounded reads of a revalidated regular file. This
+// excludes blocking FIFO/device inputs; it cannot promise arbitrary kernel I/O
+// is interruptible in a failed filesystem.
+func readPrivateEnvironment(ctx context.Context, file *os.File) ([]byte, error) {
+	result := make([]byte, 0, 4096)
+	buffer := make([]byte, 4096)
+	for len(result) <= 64<<10 {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		count, err := file.Read(buffer)
+		result = append(result, buffer[:count]...)
+		if canceled := ctx.Err(); canceled != nil {
+			return nil, canceled
+		}
+		if errors.Is(err, io.EOF) {
+			return result, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	return nil, errors.New("private environment exceeds byte budget")
 }
