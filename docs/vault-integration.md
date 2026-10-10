@@ -148,6 +148,17 @@ next install/upgrade with no operator action on the astronomer side.
 * `astronomer_vault_connection_health{connection}` — gauge, 1 when the
   most recent /health/ or /test/ probe succeeded.
 
+The `connection` label now contains the verified connection UUID, rather than
+its display name. Unresolved references share `unknown`; their supplied names
+remain in audit context and cannot create metric children. Dashboards that
+selected a display-name label must switch to the UUID. The process admits at
+most 10,000 current Vault metric owners; budget overflow drops only metrics,
+with `vault_metric_admissions_total{result="budget_dropped"}` telemetry. Current
+owners preserve counter values across credential updates/cache invalidation.
+Committed deletion and complete bounded database observations retire owners;
+late captured callbacks cannot recreate their metric children. Collection
+failures preserve the preceding owner set.
+
 ## Audit events
 
 * `admin.vault_connection.created` / `.updated` / `.deleted`

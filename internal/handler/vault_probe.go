@@ -22,11 +22,13 @@ func (h *VaultHandler) Test(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid connection ID")
 		return
 	}
+	lookup := observability.BeginVaultMetricLookup()
 	conn, err := h.queries.GetVaultConnectionByID(r.Context(), id)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Vault connection not found")
 		return
 	}
+	metrics := lookup.Bind(conn.ID, conn.Name)
 	if h.probe == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Vault probe not configured")
 		return
@@ -66,7 +68,7 @@ func (h *VaultHandler) Test(w http.ResponseWriter, r *http.Request) {
 			respondTransactionalMutationError(w, r, persistErr, http.StatusInternalServerError, apierror.WriteError, "Failed to persist Vault test result")
 			return
 		}
-		observability.RecordVaultHealth(conn.Name, false)
+		metrics.RecordHealth(false)
 		RespondJSON(w, http.StatusOK, TestResult{OK: false, Message: safeErr, ProbePath: body.ProbePath})
 		return
 	}
@@ -77,6 +79,6 @@ func (h *VaultHandler) Test(w http.ResponseWriter, r *http.Request) {
 		respondTransactionalMutationError(w, r, persistErr, http.StatusInternalServerError, apierror.WriteError, "Failed to persist Vault test result")
 		return
 	}
-	observability.RecordVaultHealth(conn.Name, res.OK)
+	metrics.RecordHealth(res.OK)
 	RespondJSON(w, http.StatusOK, res)
 }

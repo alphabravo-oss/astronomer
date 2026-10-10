@@ -5,7 +5,7 @@
 //   - astronomer_vault_connection_health{connection}
 //
 // "outcome" is one of "succeeded" | "failed". Connection label is the
-// human-readable vault_connections.name. Histogram buckets cover the
+// immutable verified vault_connections.id; unresolved names share unknown. Histogram buckets cover the
 // realistic range of a Vault GET — most are <100ms, slow ones hit a few
 // seconds, anything beyond that is a misconfigured Vault that the
 // install path should fail fast on.
@@ -61,22 +61,21 @@ func init() {
 }
 
 // RecordVaultResolve emits the resolves_total + duration metrics for
-// one reference. Safe to call from multiple goroutines.
-func RecordVaultResolve(connection, outcome string, durationSeconds float64) {
-	if connection == "" {
-		connection = "unknown"
-	}
+// one unbound reference. Unverified names share unknown; the production
+// resolver binds a verified connection ID with VaultMetricLookup instead.
+// Safe to call from multiple goroutines.
+func RecordVaultResolve(_ string, outcome string, durationSeconds float64) {
+	connection := "unknown"
 	vaultResolvesTotal.WithLabelValues(MetricValues(connection, vaultOutcomeLabel(outcome))...).Inc()
 	if outcome == VaultOutcomeSucceeded && durationSeconds > 0 {
 		vaultResolveDuration.WithLabelValues(MetricValues(connection)...).Observe(durationSeconds)
 	}
 }
 
-// RecordVaultHealth flips the connection_health gauge for a connection.
-func RecordVaultHealth(connection string, ok bool) {
-	if connection == "" {
-		connection = "unknown"
-	}
+// RecordVaultHealth records unbound health as unknown. Production probes use
+// a verified VaultMetricLease captured before their database lookup.
+func RecordVaultHealth(_ string, ok bool) {
+	connection := "unknown"
 	v := 0.0
 	if ok {
 		v = 1.0

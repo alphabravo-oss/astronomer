@@ -53,6 +53,11 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 	}); err != nil {
 		return err
 	}
+	if err := c.runtime.GoLoop("vault-metrics-reporter", true, func(ctx context.Context) {
+		runVaultMetricsCollector(ctx, c.database.Pool().BeginTx, logger)
+	}); err != nil {
+		return err
+	}
 	if cfg.DeliveryEnabled && cfg.DeliveryLocalFluxBootstrap {
 		if err := c.runtime.Task("local-flux-bootstrap", func(ctx context.Context) error {
 			return ensureLocalFluxUntilReady(ctx, logger)
