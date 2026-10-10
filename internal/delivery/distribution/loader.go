@@ -41,6 +41,10 @@ type Options struct {
 	Client         *http.Client
 	Network        httpclient.DestinationPolicy
 	MirrorPlan     *MirrorPlan
+	// UpdateBinding is independently injected build/base/scanner intent. A
+	// successful signed catalog must match it before granting base provenance.
+	// Its absence preserves ordinary distribution loading without update authority.
+	UpdateBinding *DatabaseUpdateBinding
 }
 type Loader struct {
 	mutex         sync.Mutex
@@ -61,6 +65,13 @@ type artifactFetcher func(context.Context, *http.Client, string, string, string,
 // assignments. Production never falls back to embedded development fixtures.
 func New(options Options) (*Loader, error) {
 	options.Network = options.Network.Clone()
+	if options.UpdateBinding != nil {
+		binding := *options.UpdateBinding
+		if options.Development || binding.validate() != nil || binding.BaseRelease != options.Release || binding.BaseDistributionDigest != options.Digest || binding.CatalogDigest != options.CatalogDigest || binding.Profile != options.Profile || options.Policy.Provider != model.SignatureCosignKey && options.Policy.Provider != model.SignatureCosignKeyless {
+			return nil, errors.New("database update base differs from distribution constructor")
+		}
+		options.UpdateBinding = &binding
+	}
 	if options.MirrorPlan != nil {
 		copyPlan := *options.MirrorPlan
 		copyPlan.Rewrites = append([]Rewrite(nil), copyPlan.Rewrites...)
