@@ -129,11 +129,12 @@ func joinObserverCleanup(t *testing.T, done <-chan error, cancel context.CancelF
 
 func TestDatabaseJobObserverWaitsForReadyThenFinalSignal(t *testing.T) {
 	root, coord, value := syntheticPreparedCache(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	signal := make(chan struct{})
 	writer := &measurementOutput{initial: make(chan struct{})}
 	done := make(chan error, 1)
+	readinessStart := time.Now()
 	go func() { defer close(done); done <- ObserveCache(ctx, root, coord, writer, signal) }()
 	markJoined := joinObserverCleanup(t, done, cancel)
 	if err := WaitInitialMeasurement(ctx, coord, value); err != nil {
@@ -141,6 +142,9 @@ func TestDatabaseJobObserverWaitsForReadyThenFinalSignal(t *testing.T) {
 		_ = joinedObserver(t, done, cancel)
 		markJoined()
 		t.Fatal(err)
+	}
+	if time.Since(readinessStart) < 2*time.Second {
+		t.Fatal("initial readiness did not preserve monotonic precision separation")
 	}
 	// Readiness publication follows the completed initial output/hash. A prepare
 	// init process can now exit, which is the first chance the scanner can start.
@@ -155,11 +159,15 @@ func TestDatabaseJobObserverWaitsForReadyThenFinalSignal(t *testing.T) {
 		t.Fatalf("observer exited before final signal: %v", err)
 	default:
 	}
+	finalStart := time.Now()
 	close(signal)
 	err := joinedObserver(t, done, cancel)
 	markJoined()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if time.Since(finalStart) < 2*time.Second {
+		t.Fatal("final measurement did not preserve monotonic precision separation")
 	}
 	rows := bytes.Split(bytes.TrimSpace(writer.bytes()), []byte{'\n'})
 	if len(rows) != 2 {
@@ -184,7 +192,7 @@ func TestDatabaseJobObserverRefusesChangedFinalOrCancellation(t *testing.T) {
 	for _, mode := range []string{"changed", "cancel", "missing-preparation"} {
 		t.Run(mode, func(t *testing.T) {
 			root, coord, value := syntheticPreparedCache(t)
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			signal := make(chan struct{})
 			writer := &measurementOutput{initial: make(chan struct{})}
@@ -292,9 +300,27 @@ func TestDatabaseJobOwnedRecordsRejectReplacementLinksAndModes(t *testing.T) {
 			}
 		})
 	}
-	canceled, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	canceled, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	cancel()
 	if _, _, err := readPreparation(canceled, root); !errors.Is(err, context.Canceled) {
 		t.Fatal("canceled record read lost identity")
+	}
+}
+
+func TestDatabaseJobMeasurementSeparationCancellationAndEarlyStop(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := waitMeasurementSeparation(ctx, nil); !errors.Is(err, context.Canceled) {
+		t.Fatal("cancellation became a successful measurement")
+	}
+	early := make(chan struct{})
+	close(early)
+	if err := waitMeasurementSeparation(t.Context(), early); err == nil {
+		t.Fatal("early shutdown became successful readiness")
+	}
+	ctx, cancel = context.WithTimeout(t.Context(), 30*time.Millisecond)
+	defer cancel()
+	if err := waitMeasurementSeparation(ctx, nil); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("measurement delay lost actual deadline")
 	}
 }

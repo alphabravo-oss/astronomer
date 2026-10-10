@@ -276,15 +276,18 @@ func databaseScanCompletedStatuses(job *batchv1.Job, pod *corev1.Pod) (databaseS
 	for index, status := range pod.Status.InitContainerStatuses {
 		helpers[index] = status.ImageID
 	}
+	// Equal second endpoints are structurally valid after JSON precision loss;
+	// they never establish a positive scalar duration. Final logs must still
+	// follow the complete scanner finish interval in DecodeOrderedMeasurements.
 	result := databaseScanStatus{scannerImageID: scanner.ImageID, helperImageID: helper.ImageID, helperImageIDs: helpers, runtimeDigest: runtimeDigest, scannerStarted: scannerState.StartedAt.Time.UTC(), scannerFinished: scannerState.FinishedAt.Time.UTC(), helperFinished: helperState.FinishedAt.Time.UTC()}
-	if !result.scannerFinished.After(result.scannerStarted) || result.helperFinished.Before(result.scannerFinished) || result.helperFinished.After(time.Now().UTC()) {
+	if result.scannerFinished.Before(result.scannerStarted) || result.helperFinished.Before(result.scannerFinished) || result.helperFinished.After(time.Now().UTC()) {
 		return empty, errors.New("owned database runtime clock ordering invalid")
 	}
 	return result, nil
 }
 func databaseScanTerminatedCleanly(status corev1.ContainerStatus) bool {
 	value := status.State.Terminated
-	return status.RestartCount == 0 && status.ImageID != "" && status.ContainerID != "" && value != nil && value.ExitCode == 0 && value.Signal == 0 && value.Reason == "Completed" && !value.StartedAt.IsZero() && !value.FinishedAt.IsZero() && value.FinishedAt.After(value.StartedAt.Time) && status.LastTerminationState.Terminated == nil
+	return status.RestartCount == 0 && status.ImageID != "" && status.ContainerID != "" && value != nil && value.ExitCode == 0 && value.Signal == 0 && value.Reason == "Completed" && !value.StartedAt.IsZero() && !value.FinishedAt.IsZero() && !value.FinishedAt.Time.Before(value.StartedAt.Time) && status.LastTerminationState.Terminated == nil
 }
 func databaseScanGetBytes(ctx context.Context, requester databaseScanRequester, cluster uuid.UUID, path string, maximum int) ([]byte, error) {
 	if ctx == nil || requester == nil || maximum <= 0 || maximum > databaseScanMaximumReportBytes {

@@ -2,9 +2,12 @@ package databasejob
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestDatabaseJobLogOrderingNeedsActualPostScannerMeasurement(t *testing.T) {
@@ -54,5 +57,48 @@ func TestDatabaseJobLogOrderingNeedsActualPostScannerMeasurement(t *testing.T) {
 				t.Fatal("foreign current comparison accepted")
 			}
 		})
+	}
+}
+
+func TestDatabaseJobPrecisionIntervalRejectsAmbiguousPostTermination(t *testing.T) {
+	value := preparationData()
+	actual := time.Date(2026, 10, 10, 2, 0, 5, 900000000, time.UTC)
+	body, err := json.Marshal(metav1.NewTime(actual))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded metav1.Time
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	floor := actual.Truncate(time.Second)
+	if !decoded.Time.Equal(floor) {
+		t.Fatal("selected Kubernetes serializer precision differs")
+	}
+	started := floor.Add(-time.Second)
+	line := func(phase string, clock time.Time) []byte {
+		var buffer bytes.Buffer
+		if err := emitMeasurement(&buffer, value, phase, value.Cache, clock); err != nil {
+			t.Fatal(err)
+		}
+		return append([]byte(clock.Format(time.RFC3339Nano)+" "), buffer.Bytes()...)
+	}
+	initial := line("initial", started.Add(-time.Millisecond))
+	for _, offset := range []time.Duration{0, 100 * time.Millisecond, 900 * time.Millisecond, time.Second - time.Nanosecond} {
+		logs := append(append([]byte(nil), initial...), line("final", floor.Add(offset))...)
+		if _, err := DecodeOrderedMeasurements(logs, value, started, decoded.Time.UTC(), floor.Add(time.Second)); err == nil {
+			t.Fatal("same finish interval granted post-termination authority")
+		}
+	}
+	valid := append(append([]byte(nil), initial...), line("final", floor.Add(time.Second+100*time.Millisecond))...)
+	if _, err := DecodeOrderedMeasurements(valid, value, started, decoded.Time.UTC(), floor.Add(time.Second)); err != nil {
+		t.Fatal("fractional log before exclusive helper upper bound rejected", err)
+	}
+	if _, err := DecodeOrderedMeasurements(valid, value, started, floor.Add(2*time.Second), floor.Add(3*time.Second)); err == nil {
+		t.Fatal("later actual scanner termination inherited earlier final measurement")
+	}
+	tooLate := append(append([]byte(nil), initial...), line("final", floor.Add(2*time.Second))...)
+	if _, err := DecodeOrderedMeasurements(tooLate, value, started, decoded.Time.UTC(), floor.Add(time.Second)); err == nil {
+		t.Fatal("exclusive helper interval upper bound accepted")
 	}
 }

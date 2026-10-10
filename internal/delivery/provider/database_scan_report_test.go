@@ -15,7 +15,7 @@ import (
 
 func nativeDatabaseReportFixture(t *testing.T) (databaseNativeReport, databaseNativeReportTarget, databaseScanObservation) {
 	t.Helper()
-	finished := time.Now().UTC().Add(-time.Minute)
+	finished := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 	target := databaseNativeReportTarget{podUID: uuid.New(), namespace: "tenant", pod: "running-workload", container: "application", repository: "registry.example/tenant/application", manifestDigest: digest.FromString("manifest").String(), configDigest: digest.FromString("config").String(), scannerVersion: "0.75.0"}
 	observation := databaseScanObservation{scannerStarted: finished.Add(-time.Minute), scannerFinished: finished}
 	report := databaseNativeReport{SchemaVersion: 2, ArtifactType: "container_image", CreatedAt: finished.Add(-time.Second)}
@@ -157,5 +157,22 @@ func TestOwnedNativeReportClosedJSONPrivacyAndCancellation(t *testing.T) {
 	stop()
 	if _, _, err := normalizeDatabaseNativeReport(canceled, []byte(original), target, observation); !errors.Is(err, context.Canceled) {
 		t.Fatal("actual cancellation identity lost")
+	}
+}
+
+func TestOwnedNativeReportCreatedAtWithinTerminationPrecisionInterval(t *testing.T) {
+	for _, offset := range []time.Duration{0, time.Nanosecond, 900 * time.Millisecond, time.Second - time.Nanosecond} {
+		native, target, observation := nativeDatabaseReportFixture(t)
+		native.CreatedAt = observation.scannerFinished.Add(offset)
+		if _, _, err := normalizeDatabaseNativeReport(t.Context(), encodeNativeReport(t, native), target, observation); err != nil {
+			t.Fatal("structurally consistent fractional CreatedAt rejected", err)
+		}
+	}
+	for _, offset := range []time.Duration{time.Second, time.Second + time.Nanosecond} {
+		native, target, observation := nativeDatabaseReportFixture(t)
+		native.CreatedAt = observation.scannerFinished.Add(offset)
+		if _, _, err := normalizeDatabaseNativeReport(t.Context(), encodeNativeReport(t, native), target, observation); err == nil {
+			t.Fatal("CreatedAt outside actual finish interval accepted")
+		}
 	}
 }

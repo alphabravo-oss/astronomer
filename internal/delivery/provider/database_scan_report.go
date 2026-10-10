@@ -17,6 +17,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
+	"github.com/alphabravocompany/astronomer-go/internal/scanner/databasejob"
 )
 
 // Native wire structs describe the selected Trivy JSON report. Supplier
@@ -97,7 +98,11 @@ func normalizeDatabaseNativeReport(ctx context.Context, payload []byte, target d
 	}
 	defer clear(report.Metadata.ImageConfig)
 	defer clear(report.Metadata.Reference)
-	if report.CreatedAt.IsZero() || report.CreatedAt.Location() != time.UTC || report.CreatedAt.Before(observation.scannerStarted) || report.CreatedAt.After(observation.scannerFinished) || observation.scannerFinished.After(time.Now().UTC()) {
+	startedFloor, _ := databasejob.KubernetesTerminationInterval(observation.scannerStarted)
+	finishedFloor, finishedUpper := databasejob.KubernetesTerminationInterval(observation.scannerFinished)
+	// Native CreatedAt may lie in the finish interval. This is structural report
+	// consistency, not proof of an exact termination instant or positive duration.
+	if report.CreatedAt.IsZero() || report.CreatedAt.Location() != time.UTC || report.CreatedAt.Before(startedFloor) || !report.CreatedAt.Before(finishedUpper) || finishedFloor.After(time.Now().UTC()) {
 		return empty, "", errors.New("owned database native report clock differs from actual termination")
 	}
 	name := "astronomer-owned-" + uuid.NewSHA1(uuid.NameSpaceOID, []byte("astronomer-owned-image-report-v1\x00"+target.podUID.String()+"\x00"+target.container)).String()

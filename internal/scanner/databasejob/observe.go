@@ -63,6 +63,11 @@ func observeInput(ctx context.Context, cacheRoot, workloadRoot, coordinationRoot
 	if !valid || emitMeasurement(output, prepared, "initial", snapshot, initialTime) != nil {
 		return errors.New("database cache initial observation unavailable")
 	}
+	// Separate initial output from readiness using a monotonic timer. The worker
+	// still requires actual log time <= the scanner start interval's lower bound.
+	if err := waitMeasurementSeparation(bounded, finalSignal); err != nil {
+		return err
+	}
 	if err := publishInitialMeasurement(bounded, coordinationRoot, prepared, snapshot, initialTime); err != nil {
 		return err
 	}
@@ -75,6 +80,11 @@ func observeInput(ctx context.Context, cacheRoot, workloadRoot, coordinationRoot
 	// reserve enough terminationGracePeriodSeconds; missing output stays UNKNOWN.
 	final, stop := context.WithTimeout(bounded, 15*time.Minute)
 	defer stop()
+	// Native sidecar SIGTERM follows scanner exit. Delay before reading, rather
+	// than backdating output; actual Kubernetes timestamps still decide ordering.
+	if err := waitMeasurementSeparation(final, nil); err != nil {
+		return err
+	}
 	snapshot, err = owner.Measure(final)
 	if err != nil {
 		return err
@@ -150,6 +160,31 @@ func WaitInitialMeasurement(ctx context.Context, coordinationRoot string, expect
 		case <-bounded.Done():
 			return bounded.Err()
 		case <-ticker.C:
+		}
+	}
+}
+
+// A nil earlyStop disables that branch during the final phase. Cancellation is
+// always a failure and never produces a successful measurement/readiness ACK.
+func waitMeasurementSeparation(ctx context.Context, earlyStop <-chan struct{}) error {
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-earlyStop:
+		return errors.New("database cache observer stopped before readiness")
+	case <-timer.C:
+		// A ready timer does not outrank an already-delivered early final signal.
+		// Select may choose either ready branch; recheck before granting readiness.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		select {
+		case <-earlyStop:
+			return errors.New("database cache observer stopped before readiness")
+		default:
+			return nil
 		}
 	}
 }

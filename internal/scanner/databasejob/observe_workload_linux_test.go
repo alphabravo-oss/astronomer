@@ -29,7 +29,7 @@ func syntheticPreparedFullScan(t *testing.T) (string, string, string, Preparatio
 }
 func TestOwnedScanHelperReadinessAndFinalBindBothPhysicalInputs(t *testing.T) {
 	root, workloadRoot, coord, value := syntheticPreparedFullScan(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	final := make(chan struct{})
 	writer := &measurementOutput{initial: make(chan struct{})}
@@ -81,7 +81,7 @@ func TestOwnedScanHelperRejectsChangedWorkloadAndLegacyMeasurement(t *testing.T)
 	for _, name := range []string{"changed", "linked", "cancel", "legacy-record", "DB-only-observer"} {
 		t.Run(name, func(t *testing.T) {
 			root, workloadRoot, coord, value := syntheticPreparedFullScan(t)
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			final := make(chan struct{})
 			writer := &measurementOutput{initial: make(chan struct{})}

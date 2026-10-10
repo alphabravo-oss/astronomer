@@ -245,3 +245,20 @@ func TestOwnedDatabaseScanObservationBoundsReadPrivacyAndCancellation(t *testing
 		})
 	}
 }
+
+func TestOwnedDatabaseTerminationSecondPrecisionDoesNotInventDuration(t *testing.T) {
+	clock := time.Date(2026, 10, 10, 1, 0, 0, 0, time.UTC)
+	status := corev1.ContainerStatus{ImageID: "containerd://selected", ContainerID: "containerd://owned", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: "Completed", StartedAt: metav1.NewTime(clock), FinishedAt: metav1.NewTime(clock)}}}
+	if !databaseScanTerminatedCleanly(status) {
+		t.Fatal("equal serialized endpoints wrongly require an invented positive duration")
+	}
+	status.State.Terminated.FinishedAt = metav1.NewTime(clock.Add(-time.Second))
+	if databaseScanTerminatedCleanly(status) {
+		t.Fatal("backwards serialized termination accepted")
+	}
+	status.State.Terminated.FinishedAt = metav1.NewTime(clock)
+	status.State.Terminated.ExitCode = 1
+	if databaseScanTerminatedCleanly(status) {
+		t.Fatal("precision handling hid actual scanner failure")
+	}
+}
