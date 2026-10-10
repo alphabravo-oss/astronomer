@@ -1,0 +1,76 @@
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/netip"
+	"os"
+	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"oras.land/oras-go/v2/registry/remote/auth"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	result := map[string]any{"schemaVersion": 1, "observedAt": time.Now().UTC().Format(time.RFC3339), "qualification": false, "requestedRange": "bytes=0-0", "layerDigest": "sha256:1254cf73abd98d76f23b23ee716a8e65fa721e04d2da4b9a27c7de21ec45585f", "expectedTotalBytes": int64(980383808), "result": "approved-origin-discovery-failed"}
+	policy := httpclient.DestinationPolicy{Restricted: true}
+	approvedCounts := map[string]int{}
+	result["approvedPublicDNSCounts"] = approvedCounts
+	// Only these two literal, independently attributed origins are candidates.
+	// Capture public DNS answers into immutable exact address ranges; a later
+	// different/mixed answer fails rather than widening permission.
+	for _, host := range []string{"ghcr.io", "pkg-containers.githubusercontent.com"} {
+		addresses, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+		if err != nil || len(addresses) == 0 {
+			_ = json.NewEncoder(os.Stdout).Encode(result)
+			return
+		}
+		origin := httpclient.TrustedOrigin{URL: "https://" + host}
+		for _, address := range addresses {
+			address = address.Unmap()
+			if !(httpclient.DestinationPolicy{}).AllowsAddress(host, address) {
+				_ = json.NewEncoder(os.Stdout).Encode(result)
+				return
+			}
+			origin.CIDRs = append(origin.CIDRs, netip.PrefixFrom(address, address.BitLen()))
+		}
+		policy.Origins = append(policy.Origins, origin)
+		approvedCounts[host] = len(origin.CIDRs)
+	}
+	client, err := httpclient.NewDestinationClient(policy, httpclient.DestinationOptions{Timeout: 30 * time.Second, MaxResponseBytes: 64 << 10, RedirectOriginPairs: []httpclient.RedirectOriginPair{{From: "https://ghcr.io", To: "https://pkg-containers.githubusercontent.com"}}})
+	if err != nil {
+		result["result"] = "guarded-client-constructor-failed"
+	} else {
+		defer client.CloseIdleConnections()
+		guarded := &auth.Client{Client: client, Cache: auth.NewCache(), Credential: auth.StaticCredential("ghcr.io", auth.EmptyCredential)}
+		request, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://ghcr.io/v2/aquasecurity/trivy-java-db/blobs/sha256:1254cf73abd98d76f23b23ee716a8e65fa721e04d2da4b9a27c7de21ec45585f", nil)
+		request.Header.Set("Range", "bytes=0-0")
+		request.Header.Set("Accept-Encoding", "identity")
+		response, fetchErr := guarded.Do(request)
+		result["result"] = "guarded-fetch-denied-or-unavailable"
+		if response != nil {
+			result["statusCode"] = response.StatusCode
+			if response.Header.Get("Content-Range") == "bytes 0-0/980383808" {
+				result["contentRange"] = "bytes 0-0/980383808"
+			} else {
+				result["contentRange"] = "unexpected-or-absent"
+			}
+			if fetchErr == nil && response.StatusCode == http.StatusPartialContent && len(response.Header.Values("Content-Range")) == 1 && response.Header.Get("Content-Range") == "bytes 0-0/980383808" && response.ContentLength == 1 && !response.Uncompressed && (response.Header.Get("Content-Encoding") == "" || response.Header.Get("Content-Encoding") == "identity") {
+				payload, readErr := io.ReadAll(io.LimitReader(response.Body, 2))
+				if readErr == nil && len(payload) == 1 {
+					result["result"] = "one-byte-range-routing-verified"
+					result["oneByteSha256"] = fmt.Sprintf("%x", sha256.Sum256(payload))
+				}
+			}
+			_ = response.Body.Close()
+		}
+	}
+	_ = json.NewEncoder(os.Stdout).Encode(result)
+}
