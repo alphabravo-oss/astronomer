@@ -20,7 +20,7 @@ func retainedBackupInventoryFixture(t *testing.T) *ReleaseBackup {
 	t.Helper()
 	commands, _ := commandFixture(t)
 	commands.artifactCapacity = func(string, int64) error { return nil }
-	b := &ReleaseBackup{source: &SourceDatabaseBackup{fence: &OwnershipFence{commands: commands}}, recovery: &HelmRecovery{policy: ArtifactPolicy{MaximumBytes: 1024}}, policy: ArtifactPolicy{MaximumBytes: 1024}, captures: make(map[string]process.ArtifactCapture)}
+	b := &ReleaseBackup{source: &SourceDatabaseBackup{fence: &OwnershipFence{commands: commands}}, recovery: &HelmRecovery{policy: ArtifactPolicy{MaximumBytes: 1024}, observation: &HelmStateObservation{release: &HelmRelease{fence: &OwnershipFence{commands: commands}}}}, policy: ArtifactPolicy{MaximumBytes: 1024}, captures: make(map[string]process.ArtifactCapture)}
 	for _, name := range releaseBackupNames {
 		artifact := artifactFixture(t, commands.options.CaptureDirectory, name, []byte("retained synthetic "+name))
 		b.captures[name] = *artifact.StdoutArtifact

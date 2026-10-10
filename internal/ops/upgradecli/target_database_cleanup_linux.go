@@ -77,6 +77,9 @@ func (b *ReleaseBackup) cleanupWithTarget(ctx context.Context, target *TargetDat
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.cnpgRestore != nil {
+		return b.cnpgRestore.Cleanup(ctx)
+	}
 	if b.temporary == nil {
 		return ctx.Err()
 	}

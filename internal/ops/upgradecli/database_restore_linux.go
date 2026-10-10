@@ -26,6 +26,10 @@ SELECT datname AS bound_name FROM pg_database WHERE datname = :'restore' AND oid
 DROP DATABASE :"bound_name";
 SQL`
 
+const temporaryEncryptedProofScript = `psql -X -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --dbname="$1" -At --set=proof_id="$2" <<'SQL'
+SELECT count(*) FROM webhook_subscriptions WHERE id=:'proof_id'::uuid AND secret_encrypted <> '';
+SQL`
+
 // TemporaryDatabase verifies one exact retained backup in a separate database.
 // It never replaces the source database. CREATE+COMMENT are not atomic: a child
 // failure may leave an unmarked database that must be assessed, never dropped
@@ -44,7 +48,7 @@ type TemporaryDatabase struct {
 }
 
 func NewTemporaryDatabase(backup *DatabaseBackup) (*TemporaryDatabase, error) {
-	if backup == nil || backup.source == nil || backup.source.fence == nil || backup.source.fence.commands == nil || !backup.artifact.Acknowledged || backup.artifact.SizeBytes <= 0 {
+	if backup == nil || backup.source == nil || backup.source.fence == nil || backup.source.fence.commands == nil || backup.source.cnpg != nil || !backup.artifact.Acknowledged || backup.artifact.SizeBytes <= 0 {
 		return nil, errors.New("acknowledged bound backup required for temporary restore")
 	}
 	owner := backup.source.options.Owner
@@ -156,6 +160,11 @@ func (v *TemporaryDatabase) Verify(ctx context.Context) error {
 	if err := v.sourceState(ctx); err != nil {
 		return err
 	}
+	if b.options.DecryptProofWebhookID != "" {
+		if err := v.verifyEncryptedProof(ctx); err != nil {
+			return err
+		}
+	}
 	v.restored = true
 	return nil
 }
@@ -241,4 +250,31 @@ func parseTemporaryIdentity(raw []byte) (uint32, bool, error) {
 		return 0, false, errors.New("temporary database OID differs")
 	}
 	return uint32(oid), true, nil
+}
+
+// verifyEncryptedProof preserves the old RC proof query: an exact encrypted
+// row survived the actual restore. It does not export or assert decryption of
+// Secret bytes; the application's historical-key lane remains independent.
+func (v *TemporaryDatabase) verifyEncryptedProof(ctx context.Context) error {
+	if v == nil || v.backup == nil || ctx == nil {
+		return errors.New("explicit restored proof owner/context required")
+	}
+	b := v.backup.source
+	if b.options.DecryptProofWebhookID == "" {
+		return errors.New("explicit encrypted restore proof UUID required")
+	}
+	if err := v.requirePresent(ctx); err != nil {
+		return err
+	}
+	raw, err := b.fence.execute(ctx, b.fence.kubectl, v.arguments(false, temporaryEncryptedProofScript, b.options.RestoreDatabase, b.options.DecryptProofWebhookID))
+	if err != nil {
+		return err
+	}
+	if string(raw) != "1\n" && string(raw) != "1" {
+		return errors.New("retained temporary restore encrypted proof row missing or ambiguous")
+	}
+	if err := v.requirePresent(ctx); err != nil {
+		return err
+	}
+	return ctx.Err()
 }

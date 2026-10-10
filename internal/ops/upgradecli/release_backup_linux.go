@@ -26,16 +26,18 @@ var releaseBackupNames = []string{"values-all.yaml", "values-user.yaml", "manife
 // No method deletes private backup material. External database confirmations
 // are deliberately not accepted as equivalent to this actual restore proof.
 type ReleaseBackup struct {
-	chart     *TargetChartContent
-	recovery  *HelmRecovery
-	source    *SourceDatabaseBackup
-	policy    ArtifactPolicy
-	mu        sync.Mutex
-	attempted bool
-	complete  bool
-	captures  map[string]process.ArtifactCapture
-	inventory process.ArtifactCapture
-	temporary *TemporaryDatabase
+	chart       *TargetChartContent
+	recovery    *HelmRecovery
+	source      *SourceDatabaseBackup
+	external    *externalBackupBinding
+	policy      ArtifactPolicy
+	mu          sync.Mutex
+	attempted   bool
+	complete    bool
+	captures    map[string]process.ArtifactCapture
+	inventory   process.ArtifactCapture
+	temporary   *TemporaryDatabase
+	cnpgRestore *CloudNativePGRestore
 }
 
 func NewReleaseBackup(chart *TargetChartContent, recovery *HelmRecovery, source *SourceDatabaseBackup, policy ArtifactPolicy) (*ReleaseBackup, error) {
@@ -62,6 +64,9 @@ func (b *ReleaseBackup) Capture(ctx context.Context) error {
 		return err
 	}
 	b.attempted = true
+	if b.external != nil {
+		return b.captureExternal(ctx)
+	}
 	bounds, compatibility, err := b.chart.Verify(ctx)
 	if err != nil {
 		return err
@@ -81,18 +86,33 @@ func (b *ReleaseBackup) Capture(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	temporary, err := NewTemporaryDatabase(dump)
-	if err != nil {
-		return err
+	var temporary *TemporaryDatabase
+	if dump.cnpg != nil {
+		restore, err := NewCloudNativePGRestore(ctx, b.chart, dump.cnpg, b.source.cnpgRestore)
+		if err != nil {
+			return err
+		}
+		b.cnpgRestore = restore
+		if err := restore.Verify(ctx); err != nil {
+			return err
+		}
+		temporary = restore.temporary
+	} else {
+		var err error
+		temporary, err = NewTemporaryDatabase(dump)
+		if err != nil {
+			return err
+		}
+		b.temporary = temporary
+		if err := temporary.Verify(ctx); err != nil {
+			return err
+		}
 	}
-	b.temporary = temporary // retain the attempted handle even when Verify fails
-	if err := temporary.Verify(ctx); err != nil {
-		return err
-	}
+	b.temporary = temporary
 	if !temporary.restored || len(temporary.archiveList) == 0 {
 		return errors.New("actual readable temporary restore not established")
 	}
-	directory := b.source.fence.commands.options.CaptureDirectory
+	directory := b.commands().options.CaptureDirectory
 	if err := b.source.fence.commands.artifactCapacity(directory, b.policy.MaximumBytes); err != nil {
 		return err
 	}
@@ -154,6 +174,9 @@ func (b *ReleaseBackup) VerifyBeforeMutation(ctx context.Context) error {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.external != nil {
+		return b.verifyExternalBeforeMutation(ctx)
+	}
 	if !b.complete || b.temporary == nil || !b.temporary.restored {
 		return errors.New("complete readable backup not acknowledged")
 	}
@@ -186,6 +209,9 @@ func (b *ReleaseBackup) Cleanup(ctx context.Context) error {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.cnpgRestore != nil {
+		return b.cnpgRestore.Cleanup(ctx)
+	}
 	if b.temporary == nil {
 		return ctx.Err()
 	}
@@ -207,11 +233,15 @@ func (b *ReleaseBackup) ChecksumDigest() (string, error) {
 	return b.inventory.SHA256, nil
 }
 func (b *ReleaseBackup) verifyFiles(ctx context.Context) error {
-	if len(b.captures) != len(releaseBackupNames) {
+	names := releaseBackupNames
+	if b.external != nil {
+		names = releaseBackupNames[:6]
+	}
+	if len(b.captures) != len(names) {
 		return errors.New("complete legacy backup file set missing")
 	}
-	directory := b.source.fence.commands.options.CaptureDirectory
-	for _, name := range releaseBackupNames {
+	directory := b.commands().options.CaptureDirectory
+	for _, name := range names {
 		capture, ok := b.captures[name]
 		if !ok || filepath.Base(capture.Path) != name || !capture.Acknowledged {
 			return errors.New("exact retained backup file binding missing")
@@ -223,7 +253,7 @@ func (b *ReleaseBackup) verifyFiles(ctx context.Context) error {
 		if name == "target-release-compatibility.json" {
 			maximum = 1 << 20
 		} else if name == "astronomer.pgcustom.list" {
-			maximum = b.source.fence.commands.options.MaximumCaptureBytes
+			maximum = b.commands().options.MaximumCaptureBytes
 		}
 		if err := verifyArtifactInput(ctx, directory, &capture, maximum); err != nil {
 			return err
@@ -235,7 +265,7 @@ func (b *ReleaseBackup) verifyInventory(ctx context.Context) error {
 	if err := b.verifyFiles(ctx); err != nil {
 		return err
 	}
-	directory := b.source.fence.commands.options.CaptureDirectory
+	directory := b.commands().options.CaptureDirectory
 	if filepath.Base(b.inventory.Path) != "BACKUP_SHA256SUMS" {
 		return errors.New("backup inventory file binding missing")
 	}
@@ -256,7 +286,11 @@ func (b *ReleaseBackup) verifyInventory(ctx context.Context) error {
 }
 func (b *ReleaseBackup) checksumBytes() []byte {
 	var text strings.Builder
-	for _, name := range releaseBackupNames {
+	names := releaseBackupNames
+	if b.external != nil {
+		names = releaseBackupNames[:6]
+	}
+	for _, name := range names {
 		capture := b.captures[name]
 		text.WriteString(strings.TrimPrefix(capture.SHA256, "sha256:"))
 		text.WriteString("  ")

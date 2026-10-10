@@ -1,0 +1,23 @@
+{
+  "url": "https://get.helm.sh/helm-v4.3.0-linux-arm64.tar.gz",
+  "method": "HEAD",
+  "status": 200,
+  "headers": {
+    "Date": "Sat, 10 Oct 2026 17:47:29 GMT",
+    "Content-Type": "application/x-tar",
+    "Content-Length": "17889190",
+    "Connection": "close",
+    "Content-MD5": "ce08GtnLHvMTe4kvAAkXAw==",
+    "Last-Modified": "Wed, 09 Sep 2026 22:28:56 GMT",
+    "ETag": "0x8DF0EC1BC4DC6F5",
+    "x-ms-request-id": "b0e2e505-201e-002b-2d99-5875f8000000",
+    "x-ms-version": "2009-09-19",
+    "x-ms-lease-status": "unlocked",
+    "x-ms-blob-type": "BlockBlob",
+    "x-azure-ref": "20261010T174729Z-158f675cdf66tgx2hC1FRAy40w00000011g000000000154e",
+    "x-fd-int-roxy-purgeid": "0",
+    "X-Cache-Info": "L2_T2",
+    "X-Cache": "TCP_REMOTE_HIT",
+    "Accept-Ranges": "bytes"
+  }
+}

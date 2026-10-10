@@ -62,6 +62,15 @@ def validate_executable_artifacts(component, now):
             expected_name = f"helm-v{selected}-linux-{arch}.tar.gz"
             expected_url = f"https://get.helm.sh/{expected_name}"
             expected_kind, expected_member = "tar.gz", f"linux-{arch}/helm"
+        elif name == "github-cli":
+            directory = f"gh_{selected}_linux_{arch}"
+            expected_name = directory + ".tar.gz"
+            expected_url = f"https://github.com/cli/cli/releases/download/v{selected}/{expected_name}"
+            expected_kind, expected_member = "tar.gz", directory + "/bin/gh"
+        elif name == "kubectl-shell":
+            expected_name = "kubectl"
+            expected_url = f"https://dl.k8s.io/release/v{selected}/bin/linux/{arch}/kubectl"
+            expected_kind, expected_member = "binary", None
         else:
             raise ValueError(f"{name}: executable identity has no owned template")
         if artifact.get("name") != expected_name or artifact.get("url") != expected_url:

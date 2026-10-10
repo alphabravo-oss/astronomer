@@ -19573,6 +19573,51 @@
       "path": "internal/ops/upgradecli/target_chart_linux.go",
       "owner": "ops/upgradecli",
       "scope": "Verified pinned OCI chart archive, bounded strict metadata and exact manifest compatibility; archive integrity/identity checked before values escape, no ambient or caller default authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_initial_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Selected original Helm values and captured CNPG database/app-secret identity; typed nested chart values retain unrelated extension fields."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_restore_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Generated restricted-PSS same-major temporary restore Pod and UID-precondition DeleteOptions only; no source CNPG mutation."
+    },
+    {
+      "path": "internal/ops/upgradecli/database_replacement_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Private bounded explicit disposable database lease; strict scope reader and independently reobserved UID/OID/role/marker mutation gates."
+    },
+    {
+      "path": "internal/ops/upgradecli/initial_observation_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Original bounded Helm metadata and observed database-backend values; explicit bundled/CNPG/external routing with captured ownership."
+    },
+    {
+      "path": "internal/ops/upgradecli/release_assets_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Bounded explicit release-asset inventory and exact release manifest for selected online/offline kit bytes; independent cryptographic/identity gates remain."
+    },
+    {
+      "path": "internal/ops/upgradecli/sanitized_report_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Fixed legacy12-field public report derived from already completed Run plus revalidated exact retained checksum/manifest bytes; no new stage or backup assurance."
+    },
+    {
+      "path": "internal/ops/upgradecli/tool_bootstrap_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Canonical signed selected executable authority exception reader; only explicit unexpired kubectl-shell skew exception supported."
+    },
+    {
+      "path": "internal/ops/upgradecli/tool_resolution_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Bounded exact canonical authority/resolution content binding after canonical offline signature verification; compiled source and freshness matched."
+    },
+    {
+      "path": "internal/ops/upgradecli/toolkit_install_linux.go",
+      "owner": "ops/upgradecli",
+      "scope": "Cryptographically authenticated bounded platform/source/target toolkit inventory plus exact archive/member/executable/bootstrap validation before private installation."
     }
   ],
   "json_sites": [
@@ -30167,6 +30212,291 @@
       "owner": "ops/upgradecli",
       "schema": "Exact private chartCompatibility schema1, maximum1MiB",
       "reader_behavior": "Strict Decode rejects malformed/unknown/duplicate/trailing JSON before complete protocol/agent/PostgreSQL-major/schema comparison to authenticated release manifest. Returns only verified chart schema bounds; no implicit PostgreSQL major migration or product authorization."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_initial_linux.go",
+      "function": "initialCNPGDatabaseValues",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&values"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Original Helm postgres/cloudNativePG selected configuration fields; bounded duplicate-aware JSON maps/scalars.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing values; selected nested maps/scalars are typed before exact database/name/appSecret requirements and UID-bound CNPG observation. Unrelated chart values remain extensions; no missing-legacy-pod external inference."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_initial_linux.go",
+      "function": "initialCNPGDatabaseValues",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "values[\"postgres\"]",
+        "&postgres"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Original Helm postgres/cloudNativePG selected configuration fields; bounded duplicate-aware JSON maps/scalars.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing values; selected nested maps/scalars are typed before exact database/name/appSecret requirements and UID-bound CNPG observation. Unrelated chart values remain extensions; no missing-legacy-pod external inference."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_initial_linux.go",
+      "function": "initialCNPGDatabaseValues",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "postgres[\"cloudNativePG\"]",
+        "&cnpg"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Original Helm postgres/cloudNativePG selected configuration fields; bounded duplicate-aware JSON maps/scalars.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing values; selected nested maps/scalars are typed before exact database/name/appSecret requirements and UID-bound CNPG observation. Unrelated chart values remain extensions; no missing-legacy-pod external inference."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_initial_linux.go",
+      "function": "initialCNPGDatabaseValues",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "value",
+        "&external"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Original Helm postgres/cloudNativePG selected configuration fields; bounded duplicate-aware JSON maps/scalars.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing values; selected nested maps/scalars are typed before exact database/name/appSecret requirements and UID-bound CNPG observation. Unrelated chart values remain extensions; no missing-legacy-pod external inference."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_initial_linux.go",
+      "function": "initialCNPGDatabaseValues",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "value",
+        "&secret"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Original Helm postgres/cloudNativePG selected configuration fields; bounded duplicate-aware JSON maps/scalars.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing values; selected nested maps/scalars are typed before exact database/name/appSecret requirements and UID-bound CNPG observation. Unrelated chart values remain extensions; no missing-legacy-pod external inference."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_initial_linux.go",
+      "function": "initialCNPGDatabaseValues",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "value",
+        "&name"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Original Helm postgres/cloudNativePG selected configuration fields; bounded duplicate-aware JSON maps/scalars.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing values; selected nested maps/scalars are typed before exact database/name/appSecret requirements and UID-bound CNPG observation. Unrelated chart values remain extensions; no missing-legacy-pod external inference."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_initial_linux.go",
+      "function": "initialCNPGDatabaseValues",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "postgres[\"database\"]",
+        "&database"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Original Helm postgres/cloudNativePG selected configuration fields; bounded duplicate-aware JSON maps/scalars.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing values; selected nested maps/scalars are typed before exact database/name/appSecret requirements and UID-bound CNPG observation. Unrelated chart values remain extensions; no missing-legacy-pod external inference."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_initial_linux.go",
+      "function": "initialCNPGDatabaseValues",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "value",
+        "&cluster"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Original Helm postgres/cloudNativePG selected configuration fields; bounded duplicate-aware JSON maps/scalars.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing values; selected nested maps/scalars are typed before exact database/name/appSecret requirements and UID-bound CNPG observation. Unrelated chart values remain extensions; no missing-legacy-pod external inference."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_restore_linux.go",
+      "function": "*CloudNativePGRestore.podManifest",
+      "operation": "json.Marshal",
+      "arguments": [
+        "pod"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Generated core/v1 Pod or UID-precondition metav1.DeleteOptions.",
+      "reader_behavior": "Marshal produces only the typed owned temporary restore Pod or exact captured PodUID deletion precondition. Fresh namespace/Cluster/primary/PVC/source observations and restore lifecycle checks remain separate; serialization grants no ownership."
+    },
+    {
+      "path": "internal/ops/upgradecli/cloudnativepg_restore_linux.go",
+      "function": "*CloudNativePGRestore.Cleanup",
+      "operation": "json.Marshal",
+      "arguments": [
+        "metav1.DeleteOptions{TypeMeta: metav1.TypeMeta{APIVersion: \"v1\", Kind: \"DeleteOptions\"}, Preconditions: &metav1.Preconditions{UID: &uid}}"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Generated core/v1 Pod or UID-precondition metav1.DeleteOptions.",
+      "reader_behavior": "Marshal produces only the typed owned temporary restore Pod or exact captured PodUID deletion precondition. Fresh namespace/Cluster/primary/PVC/source observations and restore lifecycle checks remain separate; serialization grants no ownership."
+    },
+    {
+      "path": "internal/ops/upgradecli/database_replacement_linux.go",
+      "function": "ReadDisposableReplacementLease",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&lease"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Exact upgrade.DisposableLease private JSON, maximum8KiB.",
+      "reader_behavior": "Canonical strict Decode follows private retained-input binding and precedes exact original namespace/database PodUID/name/restore prefix/owner matching, final file identity/hash recheck and copied lease. No arbitrary caller or parsed JSON alone grants DROP authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/initial_observation_linux.go",
+      "function": "*InitialObserver.Observe",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&metadata"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Bounded Helm4 release metadata or original Helm postgres backend selected configuration fields.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing JSON; typed critical Helm fields are checked against requested identity, and nested value maps preserve unrelated extensions while only typed bundled/external/CNPG mode is selected. Repeated exact values hashes and ownership observations are required; absent legacy pods cannot imply external authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/initial_observation_linux.go",
+      "function": "parseHelmDatabaseBackend",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&values"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Bounded Helm4 release metadata or original Helm postgres backend selected configuration fields.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing JSON; typed critical Helm fields are checked against requested identity, and nested value maps preserve unrelated extensions while only typed bundled/external/CNPG mode is selected. Repeated exact values hashes and ownership observations are required; absent legacy pods cannot imply external authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/initial_observation_linux.go",
+      "function": "parseHelmDatabaseBackend",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "values[\"postgres\"]",
+        "&postgres"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Bounded Helm4 release metadata or original Helm postgres backend selected configuration fields.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing JSON; typed critical Helm fields are checked against requested identity, and nested value maps preserve unrelated extensions while only typed bundled/external/CNPG mode is selected. Repeated exact values hashes and ownership observations are required; absent legacy pods cannot imply external authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/initial_observation_linux.go",
+      "function": "parseHelmDatabaseBackend",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "value",
+        "&mode"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Bounded Helm4 release metadata or original Helm postgres backend selected configuration fields.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing JSON; typed critical Helm fields are checked against requested identity, and nested value maps preserve unrelated extensions while only typed bundled/external/CNPG mode is selected. Repeated exact values hashes and ownership observations are required; absent legacy pods cannot imply external authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/initial_observation_linux.go",
+      "function": "parseHelmDatabaseBackend",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "postgres[\"bundled\"]",
+        "&bundled"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Bounded Helm4 release metadata or original Helm postgres backend selected configuration fields.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing JSON; typed critical Helm fields are checked against requested identity, and nested value maps preserve unrelated extensions while only typed bundled/external/CNPG mode is selected. Repeated exact values hashes and ownership observations are required; absent legacy pods cannot imply external authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/initial_observation_linux.go",
+      "function": "parseHelmDatabaseBackend",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "value",
+        "&enabled"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Bounded Helm4 release metadata or original Helm postgres backend selected configuration fields.",
+      "reader_behavior": "Canonical Decode rejects malformed/duplicate/trailing JSON; typed critical Helm fields are checked against requested identity, and nested value maps preserve unrelated extensions while only typed bundled/external/CNPG mode is selected. Repeated exact values hashes and ownership observations are required; absent legacy pods cannot imply external authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/release_assets_linux.go",
+      "function": "selectedReleaseAssets",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&record"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Selected GitHub release-asset response fields or releasekit.Manifest, bounded by the retained reader.",
+      "reader_behavior": "Canonical Decode precedes exact asset names/positive sizes/canonical repository URLs and manifest target/compatibility/image contract validation. Offline retained byte hashes/identity and signature verification remain separate; unauthenticated response/manifest JSON alone grants no execution trust."
+    },
+    {
+      "path": "internal/ops/upgradecli/release_assets_linux.go",
+      "function": "copyOfflineReleaseAssets",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "bodies[\"release-manifest.json\"]",
+        "&manifest"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Selected GitHub release-asset response fields or releasekit.Manifest, bounded by the retained reader.",
+      "reader_behavior": "Canonical Decode precedes exact asset names/positive sizes/canonical repository URLs and manifest target/compatibility/image contract validation. Offline retained byte hashes/identity and signature verification remain separate; unauthenticated response/manifest JSON alone grants no execution trust."
+    },
+    {
+      "path": "internal/ops/upgradecli/sanitized_report_linux.go",
+      "function": "*Invocation.SanitizedReport",
+      "operation": "json.Marshal",
+      "arguments": [
+        "report"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "SanitizedReportV1 fixed schema1 with12 public fields.",
+      "reader_behavior": "Marshal only serializes the completed supported invocation and sealed inventory after context-bound manifest/file verification. External mode states operator_confirmed_external, replacement mode requires actual acknowledged replacement, and private paths/UIDs/diagnostics are excluded. Report grants no resume/replacement authority."
+    },
+    {
+      "path": "internal/ops/upgradecli/tool_bootstrap_linux.go",
+      "function": "bootstrapSelectionAllowed",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "json.RawMessage(component.Exception)",
+        "&exception"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "Exact canonical kubectl-shell exception object, including reason/owner/evidence/reviewBy/exitCondition/createdAt.",
+      "reader_behavior": "Strict Decode is applied only to the component exception inside the authenticated canonical resolution/authority. Helm/GH cannot borrow it; all required fields, past creation and future review time checked. It does not infer trust from environment/PATH/self-hash."
+    },
+    {
+      "path": "internal/ops/upgradecli/tool_resolution_linux.go",
+      "function": "verifyResolutionBinding",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "authority",
+        "&selected"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "bootstrapAuthority schema1 and bootstrapResolution schema1, each maximum1MiB.",
+      "reader_behavior": "Canonical strict Decode follows independent offline signature verification; exact authority digest, compiled source commit, generated/expiry times and ordered component selections/artifact digests are matched. Resolution helper alone has no trust authority; raw operator JSON cannot provision executable trust."
+    },
+    {
+      "path": "internal/ops/upgradecli/tool_resolution_linux.go",
+      "function": "verifyResolutionBinding",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "raw",
+        "&receipt"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "bootstrapAuthority schema1 and bootstrapResolution schema1, each maximum1MiB.",
+      "reader_behavior": "Canonical strict Decode follows independent offline signature verification; exact authority digest, compiled source commit, generated/expiry times and ordered component selections/artifact digests are matched. Resolution helper alone has no trust authority; raw operator JSON cannot provision executable trust."
+    },
+    {
+      "path": "internal/ops/upgradecli/toolkit_install_linux.go",
+      "function": "InstallUpgradeToolkit",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "inventoryRaw",
+        "&inventory"
+      ],
+      "owner": "ops/upgradecli",
+      "schema": "ToolkitInventory schema1 maximum1MiB.",
+      "reader_behavior": "Canonical strict Decode occurs after offline verification with the compiled root and exact target release-workflow signer. Exact archive/platform/source/target/size/hash matches precede bounded archive/member validation and selected tool-content resolution checks; no arbitrary archive/path/PATH trust."
     }
   ]
 }

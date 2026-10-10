@@ -100,7 +100,7 @@ var (
 )
 
 func validate(spec Spec) error {
-	if !filepath.IsAbs(spec.Executable) || !filepath.IsAbs(spec.Directory) || !filepath.IsAbs(spec.CaptureDirectory) || !idPattern.MatchString(spec.ID) || spec.Sequence > 1000 || spec.Timeout <= 0 || spec.Timeout > time.Hour || spec.TerminationGrace <= 0 || spec.TerminationGrace > 5*time.Second || spec.MaximumCaptureBytes <= 0 || spec.MaximumCaptureBytes > 16<<20 {
+	if !filepath.IsAbs(spec.Executable) || !filepath.IsAbs(spec.Directory) || !filepath.IsAbs(spec.CaptureDirectory) || !idPattern.MatchString(spec.ID) || spec.Sequence > 1000 || spec.Timeout <= 0 || spec.TerminationGrace <= 0 || spec.TerminationGrace > 5*time.Second || spec.MaximumCaptureBytes <= 0 || spec.MaximumCaptureBytes > 16<<20 {
 		return errors.New("explicit absolute process paths and finite capture/lifecycle bounds required")
 	}
 	if spec.StdoutArtifact.MaximumBytes < 0 {

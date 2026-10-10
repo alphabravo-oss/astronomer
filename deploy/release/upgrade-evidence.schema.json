@@ -14,7 +14,7 @@
     "api_identity_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
     "release_manifest_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
     "backup_manifest_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
-    "database_restore_mode": {"enum": ["verified_copy", "live_replaced"]},
+    "database_restore_mode": {"enum": ["verified_copy", "live_replaced", "operator_confirmed_external"]},
     "rollback_attempted": {"type": "boolean"},
     "completed_at": {"type": "string", "format": "date-time"}
   }

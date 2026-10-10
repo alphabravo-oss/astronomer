@@ -45,6 +45,10 @@ import (
 // "operator clicks Test → result in <10s" is the UX contract.
 const defaultCloudTesterTimeout = 10 * time.Second
 
+// STS identity/error XML is a small document. This caps response collection
+// independently of the existing request timeout and never exposes read errors.
+const maximumAWSIdentityResponseBytes int64 = 1 << 20
+
 // DefaultCloudTester is the production implementation of CloudTester.
 // Constructed once at server startup (or once per request — it's
 // stateless) and wired via CloudCredentialHandler.SetTester.
@@ -477,6 +481,6 @@ func signedGet(ctx context.Context, client *http.Client, accessKey, secretKey, s
 	defer func() {
 		_ = resp.Body.Close()
 	}()
-	body, _ := io.ReadAll(resp.Body)
-	return body, resp.StatusCode, nil
+	body, err := httpclient.ReadBoundedResponse(ctx, resp, maximumAWSIdentityResponseBytes)
+	return body, resp.StatusCode, err
 }

@@ -775,7 +775,7 @@
     {
       "path": "internal/ops/upgrade/plan.go",
       "owner": "ops/upgrade backend",
-      "source_sha256": "6cacb23a5f7fe1a8ee356cf665b1678f5304366c7fa1579db0420863c780e014"
+      "source_sha256": "3f90ca2d67e78f9b94f791fdf5201c1c076ca923dd2670b7c19a40843b981ed7"
     },
     {
       "path": "internal/rbac/types.go",

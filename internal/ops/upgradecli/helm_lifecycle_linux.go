@@ -37,6 +37,8 @@ type HelmRelease struct {
 	manifestFile     string
 	manifestIdentity os.FileInfo
 	manifestHash     [32]byte
+	chartReference   string
+	chartInput       *metadataInput
 	arguments        map[upgrade.Stage][]string
 	execute          func(context.Context, Tool, []string) ([]byte, process.Result, error)
 }
@@ -64,6 +66,14 @@ func NewHelmRelease(ctx context.Context, fence *OwnershipFence, tool Tool, optio
 	if err != nil {
 		return nil, errors.New("canonical release manifest contract differs")
 	}
+	var chartInput *metadataInput
+	if filepath.IsAbs(options.ChartReference) {
+		bound, err := bindMetadataArtifact(ctx, options.ChartReference, targetChartCompressedMaximum)
+		if err != nil || "sha256:"+hex.EncodeToString(bound.hash[:]) != manifest.Astronomer.Chart.ContentDigest {
+			return nil, errors.New("local chart archive differs from signed content")
+		}
+		chartInput = &bound
+	}
 	input := upgrade.HelmInputs{Tool: upgrade.HelmToolBinding{Path: tool.Path, Version: tool.Version, SHA256: tool.SHA256}, Plan: options.Plan, ChartReference: options.ChartReference, ManifestFile: options.ManifestFile, Manifest: manifest, RuntimeSources: options.RuntimeSources}
 	arguments := make(map[upgrade.Stage][]string, 3)
 	arguments[upgrade.DryRun], err = input.DryRunArguments()
@@ -80,8 +90,11 @@ func NewHelmRelease(ctx context.Context, fence *OwnershipFence, tool Tool, optio
 			return nil, err
 		}
 	}
-	release := &HelmRelease{fence: fence, tool: tool, plan: options.Plan, manifestFile: options.ManifestFile, manifestIdentity: identity, manifestHash: hash, arguments: arguments, execute: fence.commands.Execute}
+	release := &HelmRelease{fence: fence, tool: tool, plan: options.Plan, manifestFile: options.ManifestFile, manifestIdentity: identity, manifestHash: hash, chartReference: options.ChartReference, chartInput: chartInput, arguments: arguments, execute: fence.commands.Execute}
 	if err := release.manifestBinding(); err != nil {
+		return nil, err
+	}
+	if err := release.chartBinding(ctx); err != nil {
 		return nil, err
 	}
 	return release, ctx.Err()
@@ -101,6 +114,9 @@ func (r *HelmRelease) RunStage(ctx context.Context, stage upgrade.Stage) (upgrad
 	if err := r.manifestBinding(); err != nil {
 		return upgrade.Outcome{Known: true}, err
 	}
+	if err := r.chartBinding(ctx); err != nil {
+		return upgrade.Outcome{Known: true}, err
+	}
 	if err := r.fence.Fence(ctx, r.plan.Identity, r.plan.Replace); err != nil {
 		return upgrade.Outcome{Known: true}, err
 	}
@@ -111,6 +127,9 @@ func (r *HelmRelease) RunStage(ctx context.Context, stage upgrade.Stage) (upgrad
 	}
 	outcome := upgrade.Outcome{Known: true, Applied: stage == upgrade.Apply}
 	if err := r.manifestBinding(); err != nil {
+		return outcome, err
+	}
+	if err := r.chartBinding(ctx); err != nil {
 		return outcome, err
 	}
 	// Repeat immutable owner/input checks after the joined acknowledgment. A
@@ -127,4 +146,22 @@ func (r *HelmRelease) manifestBinding() error {
 		return errors.New("initial release manifest binding changed")
 	}
 	return nil
+}
+
+// chartBinding never authorizes bytes merely because they are local. The
+// constructor compared them with the signed manifest, and the complete Driver
+// independently verified canonical OCI equality. Every use repeats the initial
+// private file identity/hash under the owning context; originals are retained.
+func (r *HelmRelease) chartBinding(ctx context.Context) error {
+	if ctx == nil || r == nil {
+		return errors.New("explicit chart input ownership required")
+	}
+	if r.chartInput == nil {
+		return ctx.Err()
+	}
+	current, err := bindMetadataArtifact(ctx, r.chartReference, targetChartCompressedMaximum)
+	if err != nil || !sameArtifact(r.chartInput.identity, current.identity) || r.chartInput.hash != current.hash {
+		return errors.New("initial local chart content or identity changed")
+	}
+	return ctx.Err()
 }
