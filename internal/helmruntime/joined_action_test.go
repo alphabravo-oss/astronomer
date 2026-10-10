@@ -30,15 +30,19 @@ func TestHelmSDKDirectCanceledControlReturnsBeforeHookWorker(t *testing.T) {
 	defer cancel()
 	stage, cfg := joinedSDKFixture(t, owner, "hook")
 	install := joinedInstall(cfg, owner)
+	stage.expectHookCleanup = true
+	controlChart := joinedChart("1.0.0", "pre-install")
+	controlChart.Templates[0].Data = append(controlChart.Templates[0].Data, []byte("    helm.sh/hook-delete-policy: hook-failed\n")...)
 	result := make(chan error, 1)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, err := install.RunWithContext(owner, joinedChart("1.0.0", "pre-install"), nil)
+		_, err := install.RunWithContext(owner, controlChart, nil)
 		result <- err
 	}()
-	joinSDKCleanup(t, cancel, stage, done, 3)
+	joinSDKCleanup(t, cancel, stage, done)
 	waitJoinedSignal(t, stage.entered, "SDK hook never entered owned transfer")
+	waitJoinedSignal(t, stage.networkEntered, "owned hook response never established")
 	cancel()
 	waitJoinedSignal(t, stage.canceled, "SDK hook did not observe owned body cancellation")
 	waitJoinedSignal(t, stage.networkStopped, "owned server did not observe hook cancellation")
@@ -57,7 +61,12 @@ func TestHelmSDKDirectCanceledControlReturnsBeforeHookWorker(t *testing.T) {
 	}
 	stage.release()
 	waitJoinedSignal(t, stage.exited, "direct-control worker was not explicitly drained")
-	waitSDKUpdates(t, stage, 3)
+	waitJoinedSignal(t, stage.hookCleanupDone, "direct-control failed-hook cleanup was not drained")
+	// Official4.3 records hook-start and outer failRelease, while failed-hook
+	// deletion has no third recordRelease. This is a source-bound exact count.
+	if stage.updateCount.Load() != 2 || stage.hookCleanupCount.Load() != 1 {
+		t.Fatal("direct-control hook storage/deletion sequence changed")
+	}
 	// The upstream API deliberately returns early. This negative control is
 	// not product behavior or a claim that a remote mutation was rolled back.
 }
@@ -120,8 +129,9 @@ func joinedSDKLifecycle(t *testing.T, owner context.Context, cancel context.Canc
 	result := make(chan error, 1)
 	done := make(chan struct{})
 	go func() { defer close(done); _, err := RunJoined(owner, run); result <- err }()
-	joinSDKCleanup(t, cancel, stage, done, 0)
+	joinSDKCleanup(t, cancel, stage, done)
 	waitJoinedSignal(t, stage.entered, "SDK stage did not start")
+	waitJoinedSignal(t, stage.networkEntered, "owned wait/hook response never established")
 	value, err := cfg.Releases.Get("fixture", revision)
 	if err != nil {
 		t.Fatal(err)
@@ -170,6 +180,10 @@ type heldSDKStage struct {
 	allowExit                 chan struct{}
 	once                      sync.Once
 	networkStopped            <-chan struct{}
+	networkEntered            <-chan struct{}
+	expectHookCleanup         bool
+	hookCleanupDone           chan struct{}
+	hookCleanupCount          atomic.Int32
 	updateCount               atomic.Int32
 	updated                   chan struct{}
 }
@@ -221,12 +235,28 @@ func (waiter *heldSDKWaiter) WatchUntilReady(resources kube.ResourceList, timeou
 	return waiter.PrintingKubeWaiter.WatchUntilReady(resources, timeout)
 }
 
+// Only the direct negative control requests hook-failed deletion. This last
+// backend callback runs after Helm sets failed-hook phase; its completion marks
+// the end of the remaining remote/release mutation callbacks, not an invented
+// third storage update or a public SDK goroutine-counter API.
+func (waiter *heldSDKWaiter) WaitForDelete(resources kube.ResourceList, timeout time.Duration) error {
+	err := waiter.PrintingKubeWaiter.WaitForDelete(resources, timeout)
+	if waiter.stage.expectHookCleanup {
+		if waiter.stage.hookCleanupCount.Add(1) == 1 {
+			close(waiter.stage.hookCleanupDone)
+		}
+	}
+	return err
+}
+
 func joinedSDKFixture(t *testing.T, owner context.Context, kind string) (*heldSDKStage, *action.Configuration) {
 	t.Helper()
 	serverDone := make(chan struct{})
+	serverEntered := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer close(serverDone)
 		w.(http.Flusher).Flush()
+		close(serverEntered)
 		<-r.Context().Done()
 	}))
 	t.Cleanup(server.Close)
@@ -242,7 +272,7 @@ func joinedSDKFixture(t *testing.T, owner context.Context, kind string) (*heldSD
 	if err != nil {
 		t.Fatal(err)
 	}
-	stage := &heldSDKStage{kind: kind, client: client, url: server.URL, owner: owner, entered: make(chan struct{}), canceled: make(chan struct{}), exited: make(chan struct{}), allowExit: make(chan struct{}), networkStopped: serverDone, updated: make(chan struct{}, 8)}
+	stage := &heldSDKStage{kind: kind, client: client, url: server.URL, owner: owner, entered: make(chan struct{}), canceled: make(chan struct{}), exited: make(chan struct{}), allowExit: make(chan struct{}), networkStopped: serverDone, networkEntered: serverEntered, hookCleanupDone: make(chan struct{}), updated: make(chan struct{}, 8)}
 	t.Cleanup(stage.release)
 	memory := driver.NewMemory()
 	memory.SetNamespace("owned")
@@ -295,20 +325,7 @@ func (observer *joinedStorageObserver) Update(key string, value release.Releaser
 	return err
 }
 
-func waitSDKUpdates(t *testing.T, stage *heldSDKStage, minimum int32) {
-	t.Helper()
-	deadline := time.NewTimer(2 * time.Second)
-	defer deadline.Stop()
-	for stage.updateCount.Load() < minimum {
-		select {
-		case <-stage.updated:
-		case <-deadline.C:
-			t.Fatal("SDK's held hook did not complete its final storage callback")
-		}
-	}
-}
-
-func joinSDKCleanup(t *testing.T, cancel context.CancelFunc, stage *heldSDKStage, done <-chan struct{}, minimumUpdates int32) {
+func joinSDKCleanup(t *testing.T, cancel context.CancelFunc, stage *heldSDKStage, done <-chan struct{}) {
 	t.Helper()
 	t.Cleanup(func() {
 		cancel()
@@ -325,14 +342,11 @@ func joinSDKCleanup(t *testing.T, cancel context.CancelFunc, stage *heldSDKStage
 			case <-time.After(2 * time.Second):
 				t.Error("SDK held callback did not drain during failed-fixture cleanup")
 			}
-			deadline := time.NewTimer(2 * time.Second)
-			defer deadline.Stop()
-			for stage.updateCount.Load() < minimumUpdates {
+			if stage.expectHookCleanup {
 				select {
-				case <-stage.updated:
-				case <-deadline.C:
-					t.Error("SDK final hook storage callback did not drain during cleanup")
-					return
+				case <-stage.hookCleanupDone:
+				case <-time.After(2 * time.Second):
+					t.Error("SDK failed-hook terminal deletion callback did not drain during cleanup")
 				}
 			}
 		default:
