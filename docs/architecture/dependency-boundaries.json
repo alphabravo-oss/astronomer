@@ -82,6 +82,27 @@
       ],
       "exclude_suffixes": ["_test.go"],
       "rationale": "Project policy, namespace lifecycle planning, and worker runtime composition are shared domain concerns and cannot depend on HTTP delivery or router composition."
+    },
+    {
+      "name": "owned-process-core-has-no-runtime-domain-dependency",
+      "root": "internal/ops/process",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/"
+      ],
+      "rationale": "Owned child execution is a leaf primitive. It receives explicit argv, scoped private files and ownership bounds; CLI/server/environment/database/cloud composition remains outside it."
+    },
+    {
+      "name": "typed-upgrade-core-depends-on-contracts-only",
+      "root": "internal/ops/upgrade",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/"
+      ],
+      "allowed_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+        "github.com/alphabravocompany/astronomer-go/internal/releasecontract",
+        "github.com/alphabravocompany/astronomer-go/internal/jsoncontract"
+      ],
+      "rationale": "The upgrade state machine receives stage drivers and identity fences. Only owned process execution and canonical release/JSON contracts sit below it; handlers, ambient configuration, persistence and cloud/domain clients must be composed by a separate adapter."
     }
   ],
   "frontend": [
