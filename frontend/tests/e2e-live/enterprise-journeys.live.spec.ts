@@ -575,9 +575,14 @@ test("terminal disconnect cancels the real tunnel and deletes its scoped pod", a
   // The marker is not present contiguously in the echoed command. Seeing it
   // proves stdin reached the real remote process and stdout returned through
   // the authenticated tunnel before Disconnect cancels the long-running task.
-  await page
-    .getByRole("textbox", { name: "Cluster terminal input", exact: true })
-    .click();
+  const terminalInput = page.getByRole("textbox", {
+    name: "Cluster terminal input",
+    exact: true,
+  });
+  // WTerm's keyboard textarea sits behind the painted grid. Enter through its
+  // supported focus/keyboard path instead of clicking through that overlay.
+  await terminalInput.focus();
+  await expect(terminalInput).toBeFocused();
   await page.keyboard.type("printf '%s%s\\n' w12- remote-ready; sleep 120");
   await page.keyboard.press("Enter");
   await expect(page.locator(".wterm")).toContainText("w12-remote-ready");
