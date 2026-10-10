@@ -151,7 +151,7 @@ func TestCatalogControllerSummaryScopedWindowAndUnknownCounts(t *testing.T) {
 		t.Run(narrow+"-binding-does-not-widen",func(t *testing.T) {
 			cluster:=uuid.New();q:=&catalogControllerSummaryQuerier{minimalCatalogQuerier:&minimalCatalogQuerier{}}
 			q.rows=[]sqlc.CatalogOperation{catalogControllerSummaryOperation(t,cluster,"failed")};bindings:=catalogReadBindings(cluster)
-			if narrow=="namespace" {bindings[0].Namespace="owned-namespace"} else {bindings[0].ProjectID=uuid.NewString()}
+			if narrow=="namespace" {bindings[0].Namespace="owned-namespace"} else {bindings[0].ClusterID="";bindings[0].ProjectID=uuid.NewString()}
 			h:=NewCatalogHandler(q);h.SetAuthorization(rbac.NewEngine(),stubMonitoringRBACQuerier{bindings:bindings})
 			summary,err:=h.controllerSummary(authedCatalogReq(http.MethodGet,"/api/v1/catalog/controller/status/",nil).Context())
 			if err!=nil || q.globalCalls!=0 || q.scopeCalls!=1 || len(summary["operations"].(map[string]int))!=0 {t.Fatal("catalog summary widened a namespace or project binding into a cluster operation window")}
