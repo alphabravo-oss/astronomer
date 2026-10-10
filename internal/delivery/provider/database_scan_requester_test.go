@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
@@ -50,7 +51,7 @@ func TestOwnedDatabaseScanOriginScopesActualRequestsAndPreservesForwarding(t *te
 	}
 	// Existing user attribution remains authoritative across a transport hop.
 	user := protocol.CallerIdentity{User: callerid.UserSubject(uuid.New()), Origin: protocol.OriginUser}
-	if callerid.Fill(callerid.WithMachine(machine, callerid.SourceCrossPodTransport), user) != user {
+	if !reflect.DeepEqual(callerid.Fill(callerid.WithMachine(machine, callerid.SourceCrossPodTransport), user), user) {
 		t.Fatal("machine hop overwrote actual user forwarding identity")
 	}
 	// Scope ownership survives mutation of the private builder's source inputs.
