@@ -1,0 +1,999 @@
+{
+  "schemaVersion": 1,
+  "scope": "Historical core, original digest panic and corrected84 synthetic adapter race/vet only; observer/recovery source artifacts unqualified",
+  "rows": [
+    {
+      "scope": "historical-core-summary",
+      "originalPath": "/root/astronomer-all/astronomer/docs/assurance/technology-guide/w14/core-ece59583/packet.json",
+      "originalSHA256": "sha256:e9365abf2bc2e75bbd0a3ffcaf7361f45d9dc1ed235185803c0e3f21cb20a497",
+      "originalSizeBytes": 32860,
+      "storedPath": "originals/e9365abf2bc2e75bbd0a3ffcaf7361f45d9dc1ed235185803c0e3f21cb20a497.gz",
+      "storedSHA256": "sha256:9619565f8ccbab9f5d6baf6fca35795ae6ec43e463727f558c98f8735767baa9",
+      "storedSizeBytes": 5510,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/boundaries.log",
+      "originalSHA256": "sha256:80d9c80536cbbfd7fb3e33f0086a1823adb44ee7d7025deaf46481f9a68d749b",
+      "originalSizeBytes": 65,
+      "storedPath": "originals/80d9c80536cbbfd7fb3e33f0086a1823adb44ee7d7025deaf46481f9a68d749b.gz",
+      "storedSHA256": "sha256:63ba345b98bdf35922087c4361a2600b94bfa1d1ae9a23b87b7625e589d492da",
+      "storedSizeBytes": 81,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-001.json",
+      "originalSHA256": "sha256:3d5043ba7ff43c6569847ed1a4a9000ab134be6ca5711fee084d2fa2cfa18ba2",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/3d5043ba7ff43c6569847ed1a4a9000ab134be6ca5711fee084d2fa2cfa18ba2.gz",
+      "storedSHA256": "sha256:aa1ad735ece25266a3e8cc8695b95bf26ec1b557a731e722b83d94ed5fa49a65",
+      "storedSizeBytes": 148,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-002.json",
+      "originalSHA256": "sha256:c4b4ade7ecfbc5d69879cabe08d932d7a4be708b1448223fddd295be36126ea0",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/c4b4ade7ecfbc5d69879cabe08d932d7a4be708b1448223fddd295be36126ea0.gz",
+      "storedSHA256": "sha256:5ac36adda5af6c48246ebbea74f28d0732856b34e8a41e83f82444ff38d65921",
+      "storedSizeBytes": 149,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-003.json",
+      "originalSHA256": "sha256:f7190ef2088e5ffe0e2bb4e81b2132ea6f6412aef430a719b4fd1b541eb73830",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/f7190ef2088e5ffe0e2bb4e81b2132ea6f6412aef430a719b4fd1b541eb73830.gz",
+      "storedSHA256": "sha256:565ed30b2d6c06ed0e6b94ded3bb7377b2f4e759067576872b4db0b1928d2f06",
+      "storedSizeBytes": 148,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-004.json",
+      "originalSHA256": "sha256:2c46dbacf23db988b7f9de8f92c532cb76de8d956404e0afb2ab4e643a332288",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/2c46dbacf23db988b7f9de8f92c532cb76de8d956404e0afb2ab4e643a332288.gz",
+      "storedSHA256": "sha256:e403538ee7ecb5f62a468629fe3ab793455601611c3a7b8bc4fa81d7e3fec74b",
+      "storedSizeBytes": 147,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-005.json",
+      "originalSHA256": "sha256:2d5641f4970a0f1ec6eba585039d45ce7270a1fe27a071ed33d42782aa4e19f5",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/2d5641f4970a0f1ec6eba585039d45ce7270a1fe27a071ed33d42782aa4e19f5.gz",
+      "storedSHA256": "sha256:2f7659f6ba4798a666f213ee65e6632319e09a71fca3852a6f92e2c6744e7c85",
+      "storedSizeBytes": 149,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-006.json",
+      "originalSHA256": "sha256:22d7a030b45ea0115de6b7eb8fa3c674a2bc946c508195d6c7a5215263a095a6",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/22d7a030b45ea0115de6b7eb8fa3c674a2bc946c508195d6c7a5215263a095a6.gz",
+      "storedSHA256": "sha256:51601aa3d23c5c30e224aabf6e94320b0c997f46e03fa0cb550ef44d858b63db",
+      "storedSizeBytes": 150,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-007.json",
+      "originalSHA256": "sha256:ccaf76774c608edd029e2715a92a9b15cbc9bb2608d4a624efdc30263ba7f8f6",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/ccaf76774c608edd029e2715a92a9b15cbc9bb2608d4a624efdc30263ba7f8f6.gz",
+      "storedSHA256": "sha256:c337170d8e41d8cb70dce158d295145bea22e5211f8507dc64f58096ea4e6403",
+      "storedSizeBytes": 149,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-008.json",
+      "originalSHA256": "sha256:163efd384d9d31b545550f261e50cecb6214d99b585b51ceec1cbac3b02f7acc",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/163efd384d9d31b545550f261e50cecb6214d99b585b51ceec1cbac3b02f7acc.gz",
+      "storedSHA256": "sha256:8f6ee4c044bad9c374a824889c385214d24fccef112ec0303bfe2c2e1f468dbb",
+      "storedSizeBytes": 150,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-009.json",
+      "originalSHA256": "sha256:022b11588bdb559db2a9a0f1926ad775657e697e711b9f972ddfd647c23520bb",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/022b11588bdb559db2a9a0f1926ad775657e697e711b9f972ddfd647c23520bb.gz",
+      "storedSHA256": "sha256:a83086e8e1e59621321b735e6ce17b36fbf0e7535f1b56eee897d39e1724c51e",
+      "storedSizeBytes": 150,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-010.json",
+      "originalSHA256": "sha256:2942facc2e0350fc5629620249a0f5fde97f4b87d1d94fe0cb4c0b65396c7f56",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/2942facc2e0350fc5629620249a0f5fde97f4b87d1d94fe0cb4c0b65396c7f56.gz",
+      "storedSHA256": "sha256:46327a1ec7c9804287760d0d0af42da81af40ea0deea0c4eb6d72caa54fd2462",
+      "storedSizeBytes": 150,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-011.json",
+      "originalSHA256": "sha256:25c019609a4c2ce5aa2b1fe18f88def02ade72624cb73a642c8b2a091f436d8b",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/25c019609a4c2ce5aa2b1fe18f88def02ade72624cb73a642c8b2a091f436d8b.gz",
+      "storedSHA256": "sha256:efed71d373f25ecfa12212c5627fdc0ae1251bb4714d7cd87476e1b24d01924f",
+      "storedSizeBytes": 148,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-012.json",
+      "originalSHA256": "sha256:bb8daafdc0148306688e645e60f0376c85c93b48a787d300dbf5b53010e383c0",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/bb8daafdc0148306688e645e60f0376c85c93b48a787d300dbf5b53010e383c0.gz",
+      "storedSHA256": "sha256:b84f23a59ef9f98250e308524e3c74c447385de37d5f116edae05228dd29d2f6",
+      "storedSizeBytes": 149,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-013.json",
+      "originalSHA256": "sha256:479a59ba46e626cff43111c69017d4aa059b3459636dcf75a211bb4920b579ac",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/479a59ba46e626cff43111c69017d4aa059b3459636dcf75a211bb4920b579ac.gz",
+      "storedSHA256": "sha256:6e1d4169dda46d29930ade3831a0e33f669a0841d79d40b798394f133eea3c2b",
+      "storedSizeBytes": 149,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-014.json",
+      "originalSHA256": "sha256:b9b80069f901635441bc75218da6826218cdaa126cb2dd977226edb547d92eea",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/b9b80069f901635441bc75218da6826218cdaa126cb2dd977226edb547d92eea.gz",
+      "storedSHA256": "sha256:75a2191c11e19fb0cbe0840cba301f6d01ef95b974f3ac1ccdb7f23912525071",
+      "storedSizeBytes": 150,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-015.json",
+      "originalSHA256": "sha256:d56fc362caccee8420cc3a31f952c5bb5e90b61c1e02d8490bd078081072bc15",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/d56fc362caccee8420cc3a31f952c5bb5e90b61c1e02d8490bd078081072bc15.gz",
+      "storedSHA256": "sha256:214a34fcc4bcb6784ae3519e0c41bd87d571347d27592a7eaa7cf245be3523b2",
+      "storedSizeBytes": 148,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-016.json",
+      "originalSHA256": "sha256:e4dc72183ac6d6c1533cd7a78091c00f4091e2046586ba6d873af87200f6319f",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/e4dc72183ac6d6c1533cd7a78091c00f4091e2046586ba6d873af87200f6319f.gz",
+      "storedSHA256": "sha256:0de5fe6100ae1f8fc00412c784a09203017951654370ab983bd25f11c5a79f03",
+      "storedSizeBytes": 147,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-017.json",
+      "originalSHA256": "sha256:13e66d71c0a2ab21ad4bd3232842ae1ee366c0091e6c2b9ce1873a4b768e371a",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/13e66d71c0a2ab21ad4bd3232842ae1ee366c0091e6c2b9ce1873a4b768e371a.gz",
+      "storedSHA256": "sha256:d9d815a5bdf64ba07b7b81bdd0926486cd84d999d2596983282bc3c7c8f16488",
+      "storedSizeBytes": 149,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-018.json",
+      "originalSHA256": "sha256:26d5f469fe1546226cf5c4d32f368b11a959371a037b294a52242de06b4e44e0",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/26d5f469fe1546226cf5c4d32f368b11a959371a037b294a52242de06b4e44e0.gz",
+      "storedSHA256": "sha256:ad67298a32691de71d841b63430468b917ef1e9c20554c8f338675f0270fc686",
+      "storedSizeBytes": 149,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-019.json",
+      "originalSHA256": "sha256:20e47cca90bbd8c2238a1b8ae3ab61287a7ce10df466455c27227f8dc5097637",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/20e47cca90bbd8c2238a1b8ae3ab61287a7ce10df466455c27227f8dc5097637.gz",
+      "storedSHA256": "sha256:661c7699a8eb588327cf9cb5d68e21de31f69bb5a04c153273ce27d80dc78f33",
+      "storedSizeBytes": 149,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-020.json",
+      "originalSHA256": "sha256:d30995921585723463bc6f6368b2bb03220a4a8c1bebb01e39cad681698616f4",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/d30995921585723463bc6f6368b2bb03220a4a8c1bebb01e39cad681698616f4.gz",
+      "storedSHA256": "sha256:14064065b7f944a5124fd947e209cb555192ac9a0fd4618160e79d2a68d6fc2b",
+      "storedSizeBytes": 149,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-021.json",
+      "originalSHA256": "sha256:fd367d7d05f3cd2277230a91d46d195bb281ccf55b2ceb1fd5f9af6ab48c2299",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/fd367d7d05f3cd2277230a91d46d195bb281ccf55b2ceb1fd5f9af6ab48c2299.gz",
+      "storedSHA256": "sha256:18c972dfa8d4c926751fc95815710f4b7035b862c90f37ee35406b3fd87426ef",
+      "storedSizeBytes": 150,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-022.json",
+      "originalSHA256": "sha256:d65351e4de7980f4daa90ea5540e7eb8c750498bb86046ccb678afab95f42a58",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/d65351e4de7980f4daa90ea5540e7eb8c750498bb86046ccb678afab95f42a58.gz",
+      "storedSHA256": "sha256:d6ef88c972b0f806a4e193257df805405120e0c080fc1616b932f0dd3c10a0b3",
+      "storedSizeBytes": 148,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/capacity-023.json",
+      "originalSHA256": "sha256:12a8a951180ed0eb4fa6a46547052ee3b720af105597b8e8b4166cdaefb502df",
+      "originalSizeBytes": 204,
+      "storedPath": "originals/12a8a951180ed0eb4fa6a46547052ee3b720af105597b8e8b4166cdaefb502df.gz",
+      "storedSHA256": "sha256:9f30abd0019f7cd1221d4ab6e5d13f2b9332bac68bbe9897151a0516361cfa36",
+      "storedSizeBytes": 150,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/complexity.log",
+      "originalSHA256": "sha256:00ac08260ad13abe1edc71f873cc3d1277a1f2ef9912f759eeb969622c38c5b7",
+      "originalSizeBytes": 101,
+      "storedPath": "originals/00ac08260ad13abe1edc71f873cc3d1277a1f2ef9912f759eeb969622c38c5b7.gz",
+      "storedSHA256": "sha256:21a2e37f628c01a82399232dc74ed015b0df18b76a5ec0320e757d02d8abb0b7",
+      "storedSizeBytes": 102,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/go-version.log",
+      "originalSHA256": "sha256:ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "originalSizeBytes": 32,
+      "storedPath": "originals/ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376.gz",
+      "storedSHA256": "sha256:f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+      "storedSizeBytes": 52,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/json-governance.log",
+      "originalSHA256": "sha256:a506c7d6c67bde11fc0bdbcf05f2f826ba2b12791d92f507528faae6586cb107",
+      "originalSizeBytes": 153,
+      "storedPath": "originals/a506c7d6c67bde11fc0bdbcf05f2f826ba2b12791d92f507528faae6586cb107.gz",
+      "storedSHA256": "sha256:2617791bc963806d599b2b824a4415bf1a7b6aa74d4aa0587081d756773b1343",
+      "storedSizeBytes": 140,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/tests.log",
+      "originalSHA256": "sha256:e0bb6ad9ed6244c5e868522cabd0683903972c0b196224b477fa5583505025ec",
+      "originalSizeBytes": 86326,
+      "storedPath": "originals/e0bb6ad9ed6244c5e868522cabd0683903972c0b196224b477fa5583505025ec.gz",
+      "storedSHA256": "sha256:8fdda8d434bc23556524c21dd3a375141ef1f798374501143bf3c731b62fee24",
+      "storedSizeBytes": 5644,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/vet.log",
+      "originalSHA256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "originalSizeBytes": 0,
+      "storedPath": "originals/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "storedSHA256": "sha256:9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "storedSizeBytes": 20,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-core-ece59583/receipt.json",
+      "originalSHA256": "sha256:50c00357a548f39bd95282be520a6580ec1f93b9de92ee3698bf905e0b792f44",
+      "originalSizeBytes": 25388,
+      "storedPath": "originals/50c00357a548f39bd95282be520a6580ec1f93b9de92ee3698bf905e0b792f44.gz",
+      "storedSHA256": "sha256:2d8f1276abe5004b64cb0170b9ef286c299a47c884fac0b1509a85c8fc67f0fd",
+      "storedSizeBytes": 3932,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/tmp/plan032_w14_core_qualification.py",
+      "originalSHA256": "sha256:f1829344fa1b515f9c87d2732e74812fdad630bc62142f39249661ee2b98427c",
+      "originalSizeBytes": 5948,
+      "storedPath": "originals/f1829344fa1b515f9c87d2732e74812fdad630bc62142f39249661ee2b98427c.gz",
+      "storedSHA256": "sha256:5bbd9a5013f956663b1e695a9c528497eaa7c88fb0eaae688e5b98ae59c27874",
+      "storedSizeBytes": 2454,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "historical-core-original",
+      "originalPath": "/tmp/plan032_w04_owned_runner.py",
+      "originalSHA256": "sha256:60c3790c8931a5d9986979f9fec5416b1f5e1f697b2c115272db8b40acd8000d",
+      "originalSizeBytes": 4144,
+      "storedPath": "originals/60c3790c8931a5d9986979f9fec5416b1f5e1f697b2c115272db8b40acd8000d.gz",
+      "storedSHA256": "sha256:f5868d3f31c3ff4d428c4b000b4958191f79374ae766f7f767977503adbf2de3",
+      "storedSizeBytes": 1670,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-receipt",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/receipt.json",
+      "originalSHA256": "sha256:f93bfc02c360e1b9bd2fd507013fe40a4c58b2a21f33bb23c8b7214635987e4e",
+      "originalSizeBytes": 92968,
+      "storedPath": "originals/f93bfc02c360e1b9bd2fd507013fe40a4c58b2a21f33bb23c8b7214635987e4e.gz",
+      "storedSHA256": "sha256:1cbbf57a4b1ce13edd8bb8bfdbc5bf04c426503e3475450aeda35aae43c8b825",
+      "storedSizeBytes": 6934,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/capacity-001.json",
+      "originalSHA256": "sha256:cbd184f9c9f7f135b1544348923efd8a40b6749867a1817f9e11d2cd3888a7a7",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/cbd184f9c9f7f135b1544348923efd8a40b6749867a1817f9e11d2cd3888a7a7.gz",
+      "storedSHA256": "sha256:e549013b45120e0d9d089aaf17b4d026fddbe130b023e146ff808dff1565fdad",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/capacity-002.json",
+      "originalSHA256": "sha256:fae7710854ecb3c2812d7ffc60eff4e1c29b1663a4d8b70088451cb077b72537",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/fae7710854ecb3c2812d7ffc60eff4e1c29b1663a4d8b70088451cb077b72537.gz",
+      "storedSHA256": "sha256:8b3206524ba2a7563e88aec85b44766cc25d40ca4ef35adfaabc8b493bb678da",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/capacity-003.json",
+      "originalSHA256": "sha256:5a5c838774d698c98ed1954b8f3355dea3f2fdb560f5cdf59321e37b9b7b7fd9",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/5a5c838774d698c98ed1954b8f3355dea3f2fdb560f5cdf59321e37b9b7b7fd9.gz",
+      "storedSHA256": "sha256:f59b27290b32519c253738deeb3a0f97ef0fe2301f46315973710d0fda5eec1e",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/capacity-004.json",
+      "originalSHA256": "sha256:ce28c393318bfcc30bd96d32e6fb63d5be18656200300f71911fd69c0348aef2",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/ce28c393318bfcc30bd96d32e6fb63d5be18656200300f71911fd69c0348aef2.gz",
+      "storedSHA256": "sha256:f32463d31b46af263b47bdc2aced4bbf4297a386f8bf6219bed87a774aed521b",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/capacity-005.json",
+      "originalSHA256": "sha256:e943a254cf9ff2a1b3b16951ad3265acc4ffb8ea5ff9bcc2547e29f0424d5632",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/e943a254cf9ff2a1b3b16951ad3265acc4ffb8ea5ff9bcc2547e29f0424d5632.gz",
+      "storedSHA256": "sha256:1d3870e3f4bf03a02a5e2004857b3435285748bbce980f789dce778cc46d52c7",
+      "storedSizeBytes": 175,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/capacity-006.json",
+      "originalSHA256": "sha256:eb08b089874f94b7bc1aaaef3cdcd0b9a386c8a45ae0a5549a7cf77138d48056",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/eb08b089874f94b7bc1aaaef3cdcd0b9a386c8a45ae0a5549a7cf77138d48056.gz",
+      "storedSHA256": "sha256:8ce4556fe3fce48d34d9fa748772601f45459d72bcc8cf2e1f2803baf094b938",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/capacity-007.json",
+      "originalSHA256": "sha256:f1d234e1bfe9621445b82c572e1f2de6fe2d1a13700311429de50985dd104046",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/f1d234e1bfe9621445b82c572e1f2de6fe2d1a13700311429de50985dd104046.gz",
+      "storedSHA256": "sha256:b8330605f1804de67c9c156fce0914d9b7d25664709d719842e28617a7e24f58",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/capacity-008.json",
+      "originalSHA256": "sha256:1cbafeff4bfd15971986e3ccb606b315586e80f702a63c01e3a8ed659297049b",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/1cbafeff4bfd15971986e3ccb606b315586e80f702a63c01e3a8ed659297049b.gz",
+      "storedSHA256": "sha256:818b683d6a760e52cfbba1034885ac5145afeaefacb3bc855567f4c653bb4e78",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/capacity-009.json",
+      "originalSHA256": "sha256:64acc9137dd23a63bbb73e715a373ce7b26414b03ccfd33e043102f6892d1c42",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/64acc9137dd23a63bbb73e715a373ce7b26414b03ccfd33e043102f6892d1c42.gz",
+      "storedSHA256": "sha256:dca1150401c2a31a3c2126c88c83a08e8e8bb209b8f23f5a9496c8eedaedfa7c",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/focused-tests.log",
+      "originalSHA256": "sha256:bac4870d150a3413b9d5f4c0870d71a69f32dbd0e734faa18d3cc4dd1bf5e515",
+      "originalSizeBytes": 179113,
+      "storedPath": "originals/bac4870d150a3413b9d5f4c0870d71a69f32dbd0e734faa18d3cc4dd1bf5e515.gz",
+      "storedSHA256": "sha256:31e12273062bf62cce9c1b3b414adf9c900509034d47a601d1d26f6ca4601a54",
+      "storedSizeBytes": 11205,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/go-version.log",
+      "originalSHA256": "sha256:ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "originalSizeBytes": 32,
+      "storedPath": "originals/ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376.gz",
+      "storedSHA256": "sha256:f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+      "storedSizeBytes": 52,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/tracked-after.json",
+      "originalSHA256": "sha256:b694aca2061b251c164df355b3e15c8a9f716ef2e4ed7e3f2b3be21747ddc4a6",
+      "originalSizeBytes": 1583652,
+      "storedPath": "originals/b694aca2061b251c164df355b3e15c8a9f716ef2e4ed7e3f2b3be21747ddc4a6.gz",
+      "storedSHA256": "sha256:165346e663e02f904f9acd623574f28cc4de375ef89d3a5eb394ab3a3792f043",
+      "storedSizeBytes": 377695,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-7c9d9237-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-7c9d9237/tracked-before.json",
+      "originalSHA256": "sha256:b694aca2061b251c164df355b3e15c8a9f716ef2e4ed7e3f2b3be21747ddc4a6",
+      "originalSizeBytes": 1583652,
+      "storedPath": "originals/b694aca2061b251c164df355b3e15c8a9f716ef2e4ed7e3f2b3be21747ddc4a6.gz",
+      "storedSHA256": "sha256:165346e663e02f904f9acd623574f28cc4de375ef89d3a5eb394ab3a3792f043",
+      "storedSizeBytes": 377695,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-receipt",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/receipt.json",
+      "originalSHA256": "sha256:3cc6db8e3d2558f92b7662a618f1c0c4e91003b03d8df6248380bd3b7130d2b4",
+      "originalSizeBytes": 118916,
+      "storedPath": "originals/3cc6db8e3d2558f92b7662a618f1c0c4e91003b03d8df6248380bd3b7130d2b4.gz",
+      "storedSHA256": "sha256:3ddf255a2da1962c31b02d1a9cee72ed4cdb648862445cd957516f52d95d4506",
+      "storedSizeBytes": 8432,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-001.json",
+      "originalSHA256": "sha256:8eeca717a2b08a65bc9e60f50ca054923fbff981d6895bbf9abebacdc7967eca",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/8eeca717a2b08a65bc9e60f50ca054923fbff981d6895bbf9abebacdc7967eca.gz",
+      "storedSHA256": "sha256:3bf7da8c35c3644a79569a6324151bd86bd9cdf86067b7f888d3189c80f43035",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-002.json",
+      "originalSHA256": "sha256:0fc8f5bf5f40c94238982da475d768f7d5d435b75fb6206be8a2b22d76cbba6d",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/0fc8f5bf5f40c94238982da475d768f7d5d435b75fb6206be8a2b22d76cbba6d.gz",
+      "storedSHA256": "sha256:f4338109cb127db5a4732e7e24e81a73ac37a2c473d9c4cde399f49433a174c5",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-003.json",
+      "originalSHA256": "sha256:fcd13d29a945f0bd33b8059e8f0e435214f911fb6f44fced6307e5f298b53f54",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/fcd13d29a945f0bd33b8059e8f0e435214f911fb6f44fced6307e5f298b53f54.gz",
+      "storedSHA256": "sha256:64de207314d78746d173aed417019470006153b5dca44623574b62cf7a328c2f",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-004.json",
+      "originalSHA256": "sha256:8905012aaaa4a83539f2e75b2c3be9538efdebff362ae2d30ab37f8fea5f65e2",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/8905012aaaa4a83539f2e75b2c3be9538efdebff362ae2d30ab37f8fea5f65e2.gz",
+      "storedSHA256": "sha256:d4081838d72b7b16f0c634460805da218b3802bad246108fa8032fa58f88151a",
+      "storedSizeBytes": 173,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-005.json",
+      "originalSHA256": "sha256:7ccc334d258d6137b0db7ffdea6d28bf1f0b9c0575e6e2c97733e1a95d92d34f",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/7ccc334d258d6137b0db7ffdea6d28bf1f0b9c0575e6e2c97733e1a95d92d34f.gz",
+      "storedSHA256": "sha256:ff2f3c2b6ecca0f4e490731affaa7ab3d7141611759ddaafad405be228ede211",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-006.json",
+      "originalSHA256": "sha256:ee9f0ecc8ca7f1a196a4ab9661ee80761e2babf31ac6cbe36e5dd7341cc76854",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/ee9f0ecc8ca7f1a196a4ab9661ee80761e2babf31ac6cbe36e5dd7341cc76854.gz",
+      "storedSHA256": "sha256:26fe537694ef5a4c8b66a4540fca0b6bb19164dae20952df81d139e9f3a993f1",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-007.json",
+      "originalSHA256": "sha256:16c5214c395800edf0b4683593c1992a9144e39fc244c7b5cbc358bbe5ff2605",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/16c5214c395800edf0b4683593c1992a9144e39fc244c7b5cbc358bbe5ff2605.gz",
+      "storedSHA256": "sha256:37dd568872e64a7346e1c7fab24b5726a8d173f0c87469f29624fa5951d97743",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-008.json",
+      "originalSHA256": "sha256:2201561fa1711c87712dfdc1584c05398a85513d4066e17ab34fde14c5622a9c",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/2201561fa1711c87712dfdc1584c05398a85513d4066e17ab34fde14c5622a9c.gz",
+      "storedSHA256": "sha256:f6e0fb52f8ccf232aae86c89370c4a3e4320da7451f193055a40497a24c989ca",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-009.json",
+      "originalSHA256": "sha256:1fcf4cdd6abc313b3e91153e36ae00cdc1a0c607b3531d3b212367e79006cd60",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/1fcf4cdd6abc313b3e91153e36ae00cdc1a0c607b3531d3b212367e79006cd60.gz",
+      "storedSHA256": "sha256:096fa6954988aec777c8ba5591cdadc5f3996a63ab2658ec6cc4180478725d02",
+      "storedSizeBytes": 172,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-010.json",
+      "originalSHA256": "sha256:fb77e14a397a82c510474551ed71c75b050e71b21f8ff984b4eed526522ab549",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/fb77e14a397a82c510474551ed71c75b050e71b21f8ff984b4eed526522ab549.gz",
+      "storedSHA256": "sha256:f33d1b282887852979a2ccd22f6e77f5d4764586c69838a7a6b5868449becb0b",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-011.json",
+      "originalSHA256": "sha256:fe5bd63e9b3be4a29346dd4c23730151e458dd75f3f8264d095e6d1637ae1de0",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/fe5bd63e9b3be4a29346dd4c23730151e458dd75f3f8264d095e6d1637ae1de0.gz",
+      "storedSHA256": "sha256:5f6562de1926bd26e69993b1b31f8b29ab14f7a4f27922e3bc9037e61537ebda",
+      "storedSizeBytes": 174,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-012.json",
+      "originalSHA256": "sha256:1700951e65d7cb1bd53cdbd219d80ae7aa400c3396cc135329d5bae83bc0b24d",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/1700951e65d7cb1bd53cdbd219d80ae7aa400c3396cc135329d5bae83bc0b24d.gz",
+      "storedSHA256": "sha256:34b821831d56cd4a00987721583910ab65df141043b26e0047d6b4ae348ef16c",
+      "storedSizeBytes": 175,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/capacity-013.json",
+      "originalSHA256": "sha256:751b3d3bedc302f08ac5f3d70a905211c04bd681ac9bce64e1ca7ed709353ec9",
+      "originalSizeBytes": 250,
+      "storedPath": "originals/751b3d3bedc302f08ac5f3d70a905211c04bd681ac9bce64e1ca7ed709353ec9.gz",
+      "storedSHA256": "sha256:439c01af82e6e729e9362fc3ac2f1c882e9ed9936c3d9dc003acfaaabf31291a",
+      "storedSizeBytes": 175,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/consumer-vet.log",
+      "originalSHA256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "originalSizeBytes": 0,
+      "storedPath": "originals/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "storedSHA256": "sha256:9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "storedSizeBytes": 20,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/focused-tests.log",
+      "originalSHA256": "sha256:7580778d28ba44c4496b859f9d0df242e828cfa6b5bebf23f39b7690f7fd0be6",
+      "originalSizeBytes": 251577,
+      "storedPath": "originals/7580778d28ba44c4496b859f9d0df242e828cfa6b5bebf23f39b7690f7fd0be6.gz",
+      "storedSHA256": "sha256:f3a426110545fac473a0fafec44ac5bf0db176a2b076a6b63ebf8a4869ac3f11",
+      "storedSizeBytes": 15269,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/go-version.log",
+      "originalSHA256": "sha256:ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "originalSizeBytes": 32,
+      "storedPath": "originals/ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376.gz",
+      "storedSHA256": "sha256:f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+      "storedSizeBytes": 52,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/tracked-after.json",
+      "originalSHA256": "sha256:845dc41f9cc21b86e4acf82f13eac4244ba47b91607348e9e94c03439d3fdad8",
+      "originalSizeBytes": 1583652,
+      "storedPath": "originals/845dc41f9cc21b86e4acf82f13eac4244ba47b91607348e9e94c03439d3fdad8.gz",
+      "storedSHA256": "sha256:8428652d85ee63d4b668a7f015849de1fbb0cf74d2723ef884b57ba27cb327bf",
+      "storedSizeBytes": 377693,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "w14-adapter-0b79d78f-artifact",
+      "originalPath": "/root/.cache/astronomer-032/qualification/w14-adapter-0b79d78f/tracked-before.json",
+      "originalSHA256": "sha256:845dc41f9cc21b86e4acf82f13eac4244ba47b91607348e9e94c03439d3fdad8",
+      "originalSizeBytes": 1583652,
+      "storedPath": "originals/845dc41f9cc21b86e4acf82f13eac4244ba47b91607348e9e94c03439d3fdad8.gz",
+      "storedSHA256": "sha256:8428652d85ee63d4b668a7f015849de1fbb0cf74d2723ef884b57ba27cb327bf",
+      "storedSizeBytes": 377693,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "review-index",
+      "originalPath": "/tmp/plan032_w14_adapter_current_review_index.json",
+      "originalSHA256": "sha256:b54a7ae74c35f1f09368bd654768e980212fe18abeb1fb6558d78707723c064b",
+      "originalSizeBytes": 8446,
+      "storedPath": "originals/b54a7ae74c35f1f09368bd654768e980212fe18abeb1fb6558d78707723c064b.gz",
+      "storedSHA256": "sha256:bee37416c39f3d1e47bdd03a47b0c1b24d14f37e23b61a42f2f670f5d511d261",
+      "storedSizeBytes": 2958,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-driver-input",
+      "originalPath": "/tmp/plan032_w14_adapter_qualification.py",
+      "originalSHA256": "sha256:6e453977c2dea0c25089900e7718308cdfb59cb4b465e5235c6bb1d2554ae3ca",
+      "originalSizeBytes": 21196,
+      "storedPath": "originals/6e453977c2dea0c25089900e7718308cdfb59cb4b465e5235c6bb1d2554ae3ca.gz",
+      "storedSHA256": "sha256:affcdad95e1cd32bdb592dfe9f5084fe047da03faf8572a4e57f142cbbe4873b",
+      "storedSizeBytes": 7067,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-driver-input",
+      "originalPath": "/tmp/plan032_w14_adapter_qualification.patch",
+      "originalSHA256": "sha256:b1c0ab7000b12cd54c5a8c214f103c23df92ae980a739f504b13233cd90905b5",
+      "originalSizeBytes": 17258,
+      "storedPath": "originals/b1c0ab7000b12cd54c5a8c214f103c23df92ae980a739f504b13233cd90905b5.gz",
+      "storedSHA256": "sha256:8f1863da21de68f0228cf3a6a3403663ff45aaa60d9a1d67c1fc63474fda03aa",
+      "storedSizeBytes": 5498,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-driver-input",
+      "originalPath": "/tmp/plan032_w14_adapter_qualification_bindings.json",
+      "originalSHA256": "sha256:fb6e10a8132516cb77e11f24005cca31109ccd30e95c6b42d6d0eb6963adc87a",
+      "originalSizeBytes": 2608,
+      "storedPath": "originals/fb6e10a8132516cb77e11f24005cca31109ccd30e95c6b42d6d0eb6963adc87a.gz",
+      "storedSHA256": "sha256:8ffd1ec04f70ad7983338580d4e89c4f1165b634f5054b094780450ddf6884ec",
+      "storedSizeBytes": 1222,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-driver-input",
+      "originalPath": "/tmp/plan032_w14_adapter_current_qualification.py",
+      "originalSHA256": "sha256:996c64767bd76b9b87af1ac8371dcb9af9d8e746ab274f5cdc97cb58b5f12a27",
+      "originalSizeBytes": 21672,
+      "storedPath": "originals/996c64767bd76b9b87af1ac8371dcb9af9d8e746ab274f5cdc97cb58b5f12a27.gz",
+      "storedSHA256": "sha256:748f05285a52e1ac55b70866fcf4164a7fe4613292937384f665aaa436bd0520",
+      "storedSizeBytes": 7171,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-driver-input",
+      "originalPath": "/tmp/plan032_w14_adapter_current_qualification.patch",
+      "originalSHA256": "sha256:17c50820ca167ef5c7c5e7c0ec649ba2b74b4e35cb493e8d419d70fbde88a384",
+      "originalSizeBytes": 19348,
+      "storedPath": "originals/17c50820ca167ef5c7c5e7c0ec649ba2b74b4e35cb493e8d419d70fbde88a384.gz",
+      "storedSHA256": "sha256:0d3b75d29aacd8440d25d81b87a6e161408125c9d8f4e3b9d2c0180eee2b7c5d",
+      "storedSizeBytes": 3895,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-driver-input",
+      "originalPath": "/tmp/plan032_w14_adapter_current_qualification_bindings.json",
+      "originalSHA256": "sha256:720aafd8926f02826c0641dcca74a26865439689d531a5152b07d56f3e40f1bf",
+      "originalSizeBytes": 2624,
+      "storedPath": "originals/720aafd8926f02826c0641dcca74a26865439689d531a5152b07d56f3e40f1bf.gz",
+      "storedSHA256": "sha256:54dedc1e140ceb7d0bc088068c482f56dfc7e9d6fb9f1773b43c84461d1456b8",
+      "storedSizeBytes": 1227,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-driver-input",
+      "originalPath": "/tmp/plan032_w14_adapter_current_controls.py",
+      "originalSHA256": "sha256:c9b11ff2aea21078962034bb780de8cf8d51ff1d09e7c57f2198589eb9e3389c",
+      "originalSizeBytes": 5092,
+      "storedPath": "originals/c9b11ff2aea21078962034bb780de8cf8d51ff1d09e7c57f2198589eb9e3389c.gz",
+      "storedSHA256": "sha256:e86fd363a156f2b7e5165271ab4fada2f1dc788155f3d59b0bdfae5e01ad6d45",
+      "storedSizeBytes": 1614,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-driver-input",
+      "originalPath": "/tmp/plan032_w14_adapter_current_controls.log",
+      "originalSHA256": "sha256:81fc78e335b27d4a66a37aab1b89a3a8ae6f3707fd905c6d13cffa1b07fa1c68",
+      "originalSizeBytes": 117,
+      "storedPath": "originals/81fc78e335b27d4a66a37aab1b89a3a8ae6f3707fd905c6d13cffa1b07fa1c68.gz",
+      "storedSHA256": "sha256:fdb4d4a26191943f0467bad7876cd44bca4c1daf6e9e2959d9272a5baa775e2a",
+      "storedSizeBytes": 55,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-driver-input",
+      "originalPath": "/tmp/plan032-w14-source-contract-applied-bindings.json",
+      "originalSHA256": "sha256:ef809efedb4a9c8522a4b4ec6197932cbc86e1582313adedeb71bdbe617f3a45",
+      "originalSizeBytes": 425,
+      "storedPath": "originals/ef809efedb4a9c8522a4b4ec6197932cbc86e1582313adedeb71bdbe617f3a45.gz",
+      "storedSHA256": "sha256:362f82497c2527d1f485bc9169bb0252cdcab341bcb787b61200e1d7393b8c11",
+      "storedSizeBytes": 304,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-driver-input",
+      "originalPath": "/tmp/plan032-w14-temporary-restore-applied-bindings.json",
+      "originalSHA256": "sha256:65f11340dcc7146b048f4fb32410ea5178afaf0e1602f5fb1602450800e31e8e",
+      "originalSizeBytes": 586,
+      "storedPath": "originals/65f11340dcc7146b048f4fb32410ea5178afaf0e1602f5fb1602450800e31e8e.gz",
+      "storedSHA256": "sha256:ed2724811d5aa42cc33a47e96c2510dcf37e96c68dc4b317741a512d63fee45a",
+      "storedSizeBytes": 365,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-corrected-driver-or-binding",
+      "originalPath": "/tmp/plan032_w14_adapter_digest_corrected_qualification.py",
+      "originalSHA256": "sha256:424aa830557ceb2cac2e1c54b2117c38812b96b70aa691989852c05a2970b2a7",
+      "originalSizeBytes": 21672,
+      "storedPath": "originals/424aa830557ceb2cac2e1c54b2117c38812b96b70aa691989852c05a2970b2a7.gz",
+      "storedSHA256": "sha256:efafb23c575b220e58499b3656488a5d28c7364a89c5a8b2864daf42123153bc",
+      "storedSizeBytes": 7172,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-corrected-driver-or-binding",
+      "originalPath": "/tmp/plan032_w14_adapter_digest_corrected_qualification.patch",
+      "originalSHA256": "sha256:639968d4412e41fb9d785306f5236db5ecaccf4ce851a53e711d6f590c9b9734",
+      "originalSizeBytes": 874,
+      "storedPath": "originals/639968d4412e41fb9d785306f5236db5ecaccf4ce851a53e711d6f590c9b9734.gz",
+      "storedSHA256": "sha256:23f53f9ed2036d8473a017fd5143763127d178d86cce4b87da46d80e61c43477",
+      "storedSizeBytes": 518,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-corrected-driver-or-binding",
+      "originalPath": "/tmp/plan032-w14-digest-rejection-applied-bindings.json",
+      "originalSHA256": "sha256:5e6a7ee010e46ca8ed4d1cdb75b4f9098c10eccf0c54c2f2968a9a8bf6203423",
+      "originalSizeBytes": 945,
+      "storedPath": "originals/5e6a7ee010e46ca8ed4d1cdb75b4f9098c10eccf0c54c2f2968a9a8bf6203423.gz",
+      "storedSHA256": "sha256:30554d0a3e1ca9ec54480e588108297d51919e783b26e124531ab27e44814820",
+      "storedSizeBytes": 543,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-corrected-driver-or-binding",
+      "originalPath": "/tmp/plan032-w14-release-observation-applied-bindings.json",
+      "originalSHA256": "sha256:581c132797ee7a54397d5533d4b134238c33aca7c386559eeae346313ff6516d",
+      "originalSizeBytes": 704,
+      "storedPath": "originals/581c132797ee7a54397d5533d4b134238c33aca7c386559eeae346313ff6516d.gz",
+      "storedSHA256": "sha256:5961f40ac26914bece78f6cd6a2d7cbda9b27c1198d5ec8e42985356e5018f24",
+      "storedSizeBytes": 429,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-corrected-driver-or-binding",
+      "originalPath": "/tmp/plan032-w14-helm-recovery-applied-bindings.json",
+      "originalSHA256": "sha256:ead7a7daedc8271b29263ccd89982594cb97e1eb71a6c183df90a8a2734863ec",
+      "originalSizeBytes": 692,
+      "storedPath": "originals/ead7a7daedc8271b29263ccd89982594cb97e1eb71a6c183df90a8a2734863ec.gz",
+      "storedSHA256": "sha256:21df62ecb3385068fb6d9fd218a4773d2cd15f68301c9f91b07e9c98fd7c14ee",
+      "storedSizeBytes": 427,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-source-proposal",
+      "originalPath": "/tmp/plan032-w14-digest-rejection-fix-proposal-v2/review.patch",
+      "originalSHA256": "sha256:02f46f31c6f2aeade6f41d0c750c4e971a7cee6ee2b2bd3c5a7d3da043b3d2f2",
+      "originalSizeBytes": 2759,
+      "storedPath": "originals/02f46f31c6f2aeade6f41d0c750c4e971a7cee6ee2b2bd3c5a7d3da043b3d2f2.gz",
+      "storedSHA256": "sha256:6283d8f31f09f3c117529c468bb1af77891383188758d816b064bdb8c8007124",
+      "storedSizeBytes": 877,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-source-proposal",
+      "originalPath": "/tmp/plan032-w14-digest-rejection-fix-proposal-v2/bindings.json",
+      "originalSHA256": "sha256:a1062e08b2977918ea275e0c7f1e052e946e8c9cfd8895d603cbd93a56032dcd",
+      "originalSizeBytes": 1083,
+      "storedPath": "originals/a1062e08b2977918ea275e0c7f1e052e946e8c9cfd8895d603cbd93a56032dcd.gz",
+      "storedSHA256": "sha256:17cfae66da84a69395fcc26f33244b9f0ad25a8fa97f30732b4f157cd7051141",
+      "storedSizeBytes": 640,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-source-proposal",
+      "originalPath": "/tmp/plan032-w14-release-observation-proposal/review.patch",
+      "originalSHA256": "sha256:d1457c1178dc094cb659da17e648919b88d06699930b5d9c18bc8f4cca7a1a67",
+      "originalSizeBytes": 18907,
+      "storedPath": "originals/d1457c1178dc094cb659da17e648919b88d06699930b5d9c18bc8f4cca7a1a67.gz",
+      "storedSHA256": "sha256:fe31e6e14c95bc0fc3db69f4fa379d5c087e3b8f71cd82b1b1470e7bd2d77353",
+      "storedSizeBytes": 5061,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-source-proposal",
+      "originalPath": "/tmp/plan032-w14-release-observation-proposal/bindings.json",
+      "originalSHA256": "sha256:0eb57acc178f820c1e84d2b86638e3761ee663145c2a7ba99131155293e16d63",
+      "originalSizeBytes": 1579,
+      "storedPath": "originals/0eb57acc178f820c1e84d2b86638e3761ee663145c2a7ba99131155293e16d63.gz",
+      "storedSHA256": "sha256:7706e0d8bd322e75b0068e54dfeef7d0e4f9bf8e22f98939d1dc1aa5ff674b96",
+      "storedSizeBytes": 848,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-source-proposal",
+      "originalPath": "/tmp/plan032-w14-observer-json-owner-proposal/review.patch",
+      "originalSHA256": "sha256:9833c45338adaf95af96def05928cc7a22722c57c5f96df28abe9e7e8d3a8ab6",
+      "originalSizeBytes": 2408,
+      "storedPath": "originals/9833c45338adaf95af96def05928cc7a22722c57c5f96df28abe9e7e8d3a8ab6.gz",
+      "storedSHA256": "sha256:3d5fbffdc4ae5dad0f45b81b23f8131c762672251e475f30763a4a9c5c458e67",
+      "storedSizeBytes": 1113,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-source-proposal",
+      "originalPath": "/tmp/plan032-w14-observer-json-owner-proposal/bindings.json",
+      "originalSHA256": "sha256:b90dae5d4a962740dd81ca3d3c812047a554312f58bd717457350fd74190ae18",
+      "originalSizeBytes": 1962,
+      "storedPath": "originals/b90dae5d4a962740dd81ca3d3c812047a554312f58bd717457350fd74190ae18.gz",
+      "storedSHA256": "sha256:be59c22aa404df5990c3e37443d024894ee9f52125b22bb895989cad21c6cb8b",
+      "storedSizeBytes": 1060,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-source-proposal",
+      "originalPath": "/tmp/plan032-w14-helm-recovery-proposal/review.patch",
+      "originalSHA256": "sha256:2c54278200d1758515f99c01ff11fbb8fdcbbd70ce6944a52870eee35a1fc288",
+      "originalSizeBytes": 16728,
+      "storedPath": "originals/2c54278200d1758515f99c01ff11fbb8fdcbbd70ce6944a52870eee35a1fc288.gz",
+      "storedSHA256": "sha256:3ad1d6bacf20eb0959b06d3f33bf40a3f0196cb88896dab84688d22f8c43553e",
+      "storedSizeBytes": 4443,
+      "gzipMtime": 0
+    },
+    {
+      "scope": "reviewed-source-proposal",
+      "originalPath": "/tmp/plan032-w14-helm-recovery-proposal/bindings.json",
+      "originalSHA256": "sha256:39992b52fef6182f4997be9d6f4f0b2e2d024b76e805ec89358cd106789f530b",
+      "originalSizeBytes": 3899,
+      "storedPath": "originals/39992b52fef6182f4997be9d6f4f0b2e2d024b76e805ec89358cd106789f530b.gz",
+      "storedSHA256": "sha256:2ec9df978239a2d85ce35dea6785193fa3f8094467c06290a241e93ff83c6bc8",
+      "storedSizeBytes": 1724,
+      "gzipMtime": 0
+    }
+  ],
+  "runs": [
+    {
+      "sourceCommit": "7c9d92370e86f8306a5a1e6970de2b1240ca7532",
+      "originalReceiptSHA256": "sha256:f93bfc02c360e1b9bd2fd507013fe40a4c58b2a21f33bb23c8b7214635987e4e",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "expectedParents": 84,
+      "terminalParents": 54,
+      "caseCounts": {
+        "pass": 153,
+        "fail": 2,
+        "skip": 0
+      },
+      "packageTerminals": [
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+          "action": "fail"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+          "action": "pass"
+        }
+      ],
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": 1,
+          "drained": true
+        }
+      ],
+      "guardCount": 9,
+      "status": "ORIGINAL_DIGEST_PANIC_TRUNCATED_FAIL"
+    },
+    {
+      "sourceCommit": "0b79d78fe7c27b7dc9dff24eeb4ba61b8e8a07ec",
+      "originalReceiptSHA256": "sha256:3cc6db8e3d2558f92b7662a618f1c0c4e91003b03d8df6248380bd3b7130d2b4",
+      "originalExitCode": 0,
+      "sourceStable": true,
+      "expectedParents": 84,
+      "terminalParents": 84,
+      "caseCounts": {
+        "pass": 228,
+        "fail": 0,
+        "skip": 0
+      },
+      "packageTerminals": [
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+          "action": "pass"
+        }
+      ],
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": 0,
+          "drained": true
+        },
+        {
+          "name": "consumer-vet",
+          "exitCode": 0,
+          "drained": true
+        }
+      ],
+      "guardCount": 13,
+      "status": "SCOPED84_PASS"
+    }
+  ],
+  "historicalCoreSourceCommit": "ece59583d37a43afaa1c0ccd5683f3f011e50ebb",
+  "originalHistoricalPacketSHA256": "sha256:e9365abf2bc2e75bbd0a3ffcaf7361f45d9dc1ed235185803c0e3f21cb20a497"
+}

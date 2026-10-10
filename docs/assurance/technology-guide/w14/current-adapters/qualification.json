@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "status": "SCOPED_CORRECTED84_PASS",
+  "sourceCommit": "0b79d78fe7c27b7dc9dff24eeb4ba61b8e8a07ec",
+  "portableIndexSHA256": "sha256:b56eb6c2c049f3d3c36c51455c7674f4700418adbe36773a472151cad57916f0",
+  "historicalCore": {
+    "sourceCommit": "ece59583d37a43afaa1c0ccd5683f3f011e50ebb",
+    "parents": 33,
+    "terminals": 79,
+    "scope": "Earlier process/upgrade/private checkpoint core only"
+  },
+  "runs": [
+    {
+      "sourceCommit": "7c9d92370e86f8306a5a1e6970de2b1240ca7532",
+      "originalReceiptSHA256": "sha256:f93bfc02c360e1b9bd2fd507013fe40a4c58b2a21f33bb23c8b7214635987e4e",
+      "originalExitCode": 1,
+      "sourceStable": true,
+      "expectedParents": 84,
+      "terminalParents": 54,
+      "caseCounts": {
+        "pass": 153,
+        "fail": 2,
+        "skip": 0
+      },
+      "packageTerminals": [
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+          "action": "fail"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+          "action": "pass"
+        }
+      ],
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": 1,
+          "drained": true
+        }
+      ],
+      "guardCount": 9,
+      "status": "ORIGINAL_DIGEST_PANIC_TRUNCATED_FAIL"
+    },
+    {
+      "sourceCommit": "0b79d78fe7c27b7dc9dff24eeb4ba61b8e8a07ec",
+      "originalReceiptSHA256": "sha256:3cc6db8e3d2558f92b7662a618f1c0c4e91003b03d8df6248380bd3b7130d2b4",
+      "originalExitCode": 0,
+      "sourceStable": true,
+      "expectedParents": 84,
+      "terminalParents": 84,
+      "caseCounts": {
+        "pass": 228,
+        "fail": 0,
+        "skip": 0
+      },
+      "packageTerminals": [
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/process",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgrade",
+          "action": "pass"
+        },
+        {
+          "package": "github.com/alphabravocompany/astronomer-go/internal/ops/upgradecli",
+          "action": "pass"
+        }
+      ],
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "results": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": 0,
+          "drained": true
+        },
+        {
+          "name": "consumer-vet",
+          "exitCode": 0,
+          "drained": true
+        }
+      ],
+      "guardCount": 13,
+      "status": "SCOPED84_PASS"
+    }
+  ],
+  "sourceOnlyAfterQualification": {
+    "observerCommit": "eae2212b6bb662f8b9652fef9d1dc394164a311f",
+    "recoveryCommit": "439848c5c901ea8de398844f5764c0674024f15e",
+    "status": "UNCOMPILED_UNRUN"
+  },
+  "limits": [
+    "The original54-parent155-terminal digest panic is retained with its failed exit; vet unrun in that failed stage",
+    "Corrected84parents228cases3packages allPASS without skips; three-consumer vet passed on frozen0b79 only",
+    "No actual Helm/kubectl/PostgreSQL/cluster/release mutation, archive readability or upgrade rollback credit",
+    "Observer/private Helm recovery/new offline metadata verifier/current-main composition not qualified by these historical results",
+    "Complete signer/chart/archive/seven image checks, checksum/compatibility/PG/key gates, full Driver/public schema-v1 evidence/wrapper/disposable rehearsal remain open"
+  ]
+}
