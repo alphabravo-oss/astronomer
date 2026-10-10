@@ -1,0 +1,45 @@
+{
+  "kind": "RootScopedProgressReview",
+  "implementationBranch": "implement/032-technology-guide",
+  "integrationHead": "c0fb907d",
+  "checkedPagination": {
+    "sourceAndEvidenceIntegratedThrough": "dd907ae6",
+    "afterReceiptSHA256": "45f0854780f8426244165e2c8713586ac86c71e8c1c7b913a8caed005419c193",
+    "rootVerified": "54 named passes, zero failures/skips, race and vet, six held drained groups, 30 numeric fatal capacity guards; 29 lossless originals and three actual 7413-file frozen Git inventories",
+    "metadataIntegratedThrough": "c0fb907d",
+    "metadataReview": "Exactly nine existing owner file hashes and sixteen existing non-SQL candidate enclosing-scope hashes updated. Candidate identities, controls, classifications, ordering, SQL ceilings, builders and unrelated fields are unchanged.",
+    "limit": "Four route families have runtime coverage. The remaining reviewed consumers have typed compilation and vet coverage, not every handler behavior. Whole SQL ownership currently retains unrelated provider drift."
+  },
+  "httpLifecycle": {
+    "sourceAndEvidenceIntegratedThrough": "63e42b3e",
+    "afterReceiptSHA256": "4dbbabac67b6448ed7a84967362165325d0c55a7476d925fcfbe98ceebbc3e4c",
+    "rootVerified": "Eight lifecycle parents across three packages pass under race, plus one environment-contract parent. Seven gates, seven held drained groups and 38 numeric fatal guards pass. All 21 retained originals and actual 7409/7411-file frozen Git inventories independently match.",
+    "before": "Failed bind leaves a context waiter; blocked shutdown returns before its owner joins. Both genuine unchanged-production failures retained.",
+    "limit": "Server shutdown ownership is qualified in the scoped fixtures; this does not assert that arbitrary application handlers drain."
+  },
+  "helmProxyAfter": {
+    "isolatedSourceCommit": "d29a7a5de995bb0ae57d74b4c26007642eb8b4d3",
+    "afterReceiptSHA256": "5775e17ec3f52e03b2053a3ff2ac6fcf67b057b35114b537c1637ad08fcf65b6",
+    "rootVerified": "68 parents and 97 unique named terminals across four packages pass under race with zero failures/skips. All 40 artifact hashes, 35 numeric fatal guards, two held drained groups and all 7347 actual frozen Git bindings independently match. All 156 retained originals match; earlier 105 index entries remain unchanged.",
+    "composition": "Reviewed isolated source composition preserves current newer modules and refines cli-runtime/kubectl to 0.37.1. Actual current-graph tidy/build/runtime qualification remains pending.",
+    "limit": "Synthetic Kubernetes action storage and real local TLS/CONNECT fixtures do not qualify live CNPG/Flux adoption, repositories or the combined application."
+  },
+  "preferencesBefore17": {
+    "sourceCommit": "8c2bd83f6927c15ce26715ce0d4677942bb7c806",
+    "receiptSHA256": "c80b3c35d8eceb504fc3f59d242ed4f07237e16270be30fda9ef2564749df723",
+    "rootVerified": "Strict raw parser confirms seven characterization passes and actual PostgreSQL three passes/eight expected failures with all six precise integrity diagnostics, zero skips. Three held drained groups, 17 numeric fatal guards, source and selected Go identity remain stable.",
+    "postChildObservation": "Actual scoped read-only counts are 0 other clients, 0 idle-in-transaction clients and 0 clients with pending locks, excluding the observing backend.",
+    "limit": "The original characterization fixture errors remain retained. Production preferences code is unchanged at this freeze; correction and extraction are still pending."
+  },
+  "databaseAuthorityGeneration": {
+    "sourceFreeze": "61363a39841a5f989cb277d6848141bca8051ac0",
+    "receiptSHA256": "c7b27423b1f74020cf242269394c738519422fa2fe703aa496df60c409f2420f",
+    "rootVerified": "Five generator/governance gates, 21 numeric fatal guards, all 119 canonical generated outputs and unchanged 205 storage candidates pass; exactly the two approved generated files change.",
+    "generatedCommit": "4bc18f701809d0bf73a46be588321c589f94034a",
+    "limit": "Application compilation, actual acceptance/witness composition and PostgreSQL 79 qualification remain pending."
+  },
+  "wholePlanStatus": "IN_PROGRESS",
+  "combinedCandidateQualified": false,
+  "deploymentQualified": false,
+  "published": false
+}
