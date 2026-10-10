@@ -1,0 +1,303 @@
+{
+  "schemaVersion": 1,
+  "status": "module-resolution source approved; native qualification pending",
+  "frozenSourceBefore": "cfcfa1c8e8f4ee108925605315849eba057b624b",
+  "moduleCommit": "1c370688f7b6afd6de63bb79c5bb5fb61d570a22",
+  "runnerOriginal": "/tmp/plan032_w11_module_resolution.py",
+  "runnerSHA256": "sha256:f856f30092dbd17727e5d2ca04eb02317c65bea47edd93f3816148a3d28bc518",
+  "wrapperSHA256": "sha256:60c3790c8931a5d9986979f9fec5416b1f5e1f697b2c115272db8b40acd8000d",
+  "actualGoVersion": "go version go1.27.2 linux/amd64",
+  "actualGoExecutableBefore": {
+    "path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+    "sha256": "sha256:548d3c32f83fa81152f543eb1526be7884cfe0526eb5e9ce29d3eca14786e7e0",
+    "sizeBytes": 17164055,
+    "mode": 365,
+    "device": 2049,
+    "inode": 2360704
+  },
+  "actualGoExecutableAfter": {
+    "path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+    "sha256": "sha256:548d3c32f83fa81152f543eb1526be7884cfe0526eb5e9ce29d3eca14786e7e0",
+    "sizeBytes": 17164055,
+    "mode": 365,
+    "device": 2049,
+    "inode": 2360704
+  },
+  "goExecutableStable": true,
+  "results": [
+    {
+      "name": "go-version",
+      "command": [
+        "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+        "version"
+      ],
+      "timeoutSeconds": 30,
+      "launched": true,
+      "exitCode": 0,
+      "reason": "",
+      "guardException": null,
+      "drained": true,
+      "cleanupActions": [],
+      "leaderHeldUntilDrain": true,
+      "liveDescendantsAfterDrain": [],
+      "seconds": 0.137
+    },
+    {
+      "name": "go-mod-tidy",
+      "command": [
+        "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/bin/go",
+        "mod",
+        "tidy",
+        "-v"
+      ],
+      "timeoutSeconds": 600,
+      "launched": true,
+      "exitCode": 0,
+      "reason": "",
+      "guardException": null,
+      "drained": true,
+      "cleanupActions": [],
+      "leaderHeldUntilDrain": true,
+      "liveDescendantsAfterDrain": [],
+      "seconds": 2.645
+    }
+  ],
+  "changedPaths": [
+    "go.mod",
+    "go.sum"
+  ],
+  "nonModuleSourceStable": true,
+  "moduleModesStable": true,
+  "sourceBefore": "sha256:30c11d11edf6370bd05bab435e6b64c9df7563a4dd2e64c54295a624313287be",
+  "sourceAfter": "sha256:d086b9129cfe9cc0e29ced0951794724d5498739cd9387e754d6ea5b6ff298be",
+  "moduleDiffSHA256": "sha256:3b8cfed3a7a046e34e0bb34fc8785708094c268b0210efaec3ad8a9d356baac1",
+  "guards": [
+    {
+      "label": "initial",
+      "returnCode": 0,
+      "numeric": {
+        "path": "/root/astronomer-all/astronomer-032-w11",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 271261364,
+        "available_kib": 68355596,
+        "available_gib": 65,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      },
+      "artifact": "capacity-001.json"
+    },
+    {
+      "label": "prelaunch",
+      "returnCode": 0,
+      "numeric": {
+        "path": "/root/astronomer-all/astronomer-032-w11",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 271263052,
+        "available_kib": 68353908,
+        "available_gib": 65,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      },
+      "artifact": "capacity-002.json"
+    },
+    {
+      "label": "maintained",
+      "returnCode": 0,
+      "numeric": {
+        "path": "/root/astronomer-all/astronomer-032-w11",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 271263060,
+        "available_kib": 68353900,
+        "available_gib": 65,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      },
+      "artifact": "capacity-003.json"
+    },
+    {
+      "label": "go-version-final",
+      "returnCode": 0,
+      "numeric": {
+        "path": "/root/astronomer-all/astronomer-032-w11",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 271263064,
+        "available_kib": 68353896,
+        "available_gib": 65,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      },
+      "artifact": "capacity-004.json"
+    },
+    {
+      "label": "prelaunch",
+      "returnCode": 0,
+      "numeric": {
+        "path": "/root/astronomer-all/astronomer-032-w11",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 271263068,
+        "available_kib": 68353892,
+        "available_gib": 65,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      },
+      "artifact": "capacity-005.json"
+    },
+    {
+      "label": "maintained",
+      "returnCode": 0,
+      "numeric": {
+        "path": "/root/astronomer-all/astronomer-032-w11",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 271263128,
+        "available_kib": 68353832,
+        "available_gib": 65,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      },
+      "artifact": "capacity-006.json"
+    },
+    {
+      "label": "go-mod-tidy-final",
+      "returnCode": 0,
+      "numeric": {
+        "path": "/root/astronomer-all/astronomer-032-w11",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 271442732,
+        "available_kib": 68174228,
+        "available_gib": 65,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      },
+      "artifact": "capacity-007.json"
+    },
+    {
+      "label": "final",
+      "returnCode": 0,
+      "numeric": {
+        "path": "/root/astronomer-all/astronomer-032-w11",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 271444404,
+        "available_kib": 68172556,
+        "available_gib": 65,
+        "free_percent": 20,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      },
+      "artifact": "capacity-008.json"
+    }
+  ],
+  "retainedReceipt": {
+    "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/receipt.json",
+    "sha256": "sha256:ae6e118a7823b46690dc494b1de881aa66f0d9b2aa28e0f259dff291a0710f30"
+  },
+  "retainedOriginals": [
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/capacity-001.json",
+      "sha256": "sha256:1b4e3ca09ed7fb9d251f5130b9d85cf01987ba295172678897632a1f97680266"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/capacity-002.json",
+      "sha256": "sha256:fb3f1ac84df4382b32f5a71bbb5ece8963353bea5f1e0790b5c0ac0428f9b2db"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/capacity-003.json",
+      "sha256": "sha256:c9d65b234c230ff0d997e18072f49534b03aaac7b745d172eba55ae627721d5c"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/capacity-004.json",
+      "sha256": "sha256:bdab6e09da3b3111b3d2005952732e1a51fd4c2b2d62be11a574eaa9c1c1f440"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/capacity-005.json",
+      "sha256": "sha256:49b4bdfbc74bff66b1fc1d19c11fb428b1448fc80805725c1e944edadaed7fd8"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/capacity-006.json",
+      "sha256": "sha256:6449a832378db6764815ad83564f39deb0e1708032bf880096b52409dac0dbf5"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/capacity-007.json",
+      "sha256": "sha256:43fceda49ffd10d7989573de5d011b02ad8d8fd2f4709cacfd614575dbae694e"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/capacity-008.json",
+      "sha256": "sha256:aaf9fa4eb8512e30987c7fe9b826ac9d46d6b092da584040af2022bc88d6270b"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/go-mod-tidy.log",
+      "sha256": "sha256:42c6d09ee399a3f8fab6bf639737189b0f95533941dbf1dee618648bac41ec01"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/go-version.log",
+      "sha256": "sha256:ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/go.mod.after",
+      "sha256": "sha256:05eaee48665d2d74e91658d0079eb1df14473383c5dd148e4a26261cc9244090"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/go.mod.before",
+      "sha256": "sha256:2274824863e079cb6b6a65010ff67144fa99ac86f687fa96ccd729fb269ba5fa"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/go.sum.after",
+      "sha256": "sha256:4c7eabc1c0b519ab9de01de67fc3ee5d0e316cc2ce187da1e276ad1152cf4cb9"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/go.sum.before",
+      "sha256": "sha256:4e27e056e6cd2e2b96343746eeca53661f5caf302eec2ce719afe20ce400e25d"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/module.diff",
+      "sha256": "sha256:3b8cfed3a7a046e34e0bb34fc8785708094c268b0210efaec3ad8a9d356baac1"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/tracked-after.json",
+      "sha256": "sha256:1fdf198bb465f20ea3aa001e78b0e8369cf4291ca0517c58a745da82d0115fc8"
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w11-module-cfcfa1c8/tracked-before.json",
+      "sha256": "sha256:b3951564e757f48af9b9dec28211f6910edc2584a31be409c88a70bc7b411136"
+    }
+  ],
+  "committedModules": [
+    {
+      "path": "go.mod",
+      "sha256": "sha256:05eaee48665d2d74e91658d0079eb1df14473383c5dd148e4a26261cc9244090"
+    },
+    {
+      "path": "go.sum",
+      "sha256": "sha256:4c7eabc1c0b519ab9de01de67fc3ee5d0e316cc2ce187da1e276ad1152cf4cb9"
+    }
+  ],
+  "limits": [
+    "Go module resolution only: no compile/native tests/generation/build/runtime evidence",
+    "upstream Helm closure includes k8s.io/cli-runtime and kubectl0.37.0; selected Kubernetes group0.37.1 patch alignment remains a qualification residual",
+    "three added upstream pseudo-version dependencies are not described as tagged stable",
+    "version authority still retains old qualified SDK exception until actual consumer qualification",
+    "private/proxy/plugin/real Kubernetes/storage/wait/coexistence/rollback work remains unqualified"
+  ]
+}
