@@ -48,6 +48,15 @@ type Driver interface {
 	// Reconcile observes a started apply/replacement after interruption; it must
 	// not replay a potentially committed mutation or assume cancellation rolled it back.
 	Reconcile(context.Context, Checkpoint) (Outcome, error)
+	// Cleanup retires owned ephemeral handles only. Recovery material remains
+	// private and retained on success, failure, unknown outcome and failed rollback.
+	Cleanup(context.Context, Plan, CleanupPolicy) error
+}
+
+type CleanupPolicy struct {
+	OwnedEphemeralOnly bool
+	PreserveBackup     bool
+	PreserveCheckpoint bool
 }
 
 type Result struct {
@@ -205,7 +214,7 @@ func (m Machine) finish(ctx context.Context, plan Plan, state *Checkpoint, resul
 	if m.Driver.Fence(cleanup, plan.Identity, plan.Replace) != nil {
 		result.CleanupFailed = true
 	} else {
-		_, err := m.Driver.Step(cleanup, Cleanup, plan)
+		err := m.Driver.Cleanup(cleanup, plan, CleanupPolicy{OwnedEphemeralOnly: true, PreserveBackup: true, PreserveCheckpoint: true})
 		result.CleanupFailed = err != nil || cleanup.Err() != nil
 	}
 	result.RollbackAttempted = result.RollbackAttempted || state.RollbackAttempted

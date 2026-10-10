@@ -83,6 +83,14 @@ func (d *recordingDriver) Reconcile(context.Context, Checkpoint) (Outcome, error
 	return Outcome{Known: !d.unknownReconciliation, Applied: true}, nil
 }
 
+func (d *recordingDriver) Cleanup(ctx context.Context, plan Plan, policy CleanupPolicy) error {
+	if !policy.OwnedEphemeralOnly || !policy.PreserveBackup || !policy.PreserveCheckpoint {
+		return errors.New("recovery retention policy missing")
+	}
+	_, err := d.Step(ctx, Cleanup, plan)
+	return err
+}
+
 func TestUnknownMutationReconcilesBeforeRollbackAndPreservesRecoveryIfUnresolved(t *testing.T) {
 	for _, unknown := range []bool{false, true} {
 		t.Run(fmt.Sprintf("unresolved_%t", unknown), func(t *testing.T) {
