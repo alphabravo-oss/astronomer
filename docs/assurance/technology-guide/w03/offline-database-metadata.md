@@ -36,8 +36,12 @@ and decoding, original layer round trips, changed/truncated/extra bytes,
 cancellation, missing config/signature, tampered parent, wrong key, orphan
 content and caller mutation. Separate unit fixtures cover exact media/size
 conflicts, zero-value objects, external/inline descriptors and copy-loop error
-semantics. These source tests are not qualified yet while the shared heavy
-window is occupied.
+semantics. Frozen source `388ccad0` passed six focused parents and the two-package
+race suite with the selected official Cosign 3.1.3 binary: 50 parents, 187 passing
+cases and zero skips/failures. Vet passed. The
+[source-bound receipt](offline-database-metadata-evidence.json) retains the exact
+commands, environments and raw logs. This is bounded QA metadata/copy coverage,
+not supplier or release qualification.
 
 The outer metadata-first streamed kit reader, owned file import/export, disk
 reserve, actual large supplier payload and freshness checks remain separate
