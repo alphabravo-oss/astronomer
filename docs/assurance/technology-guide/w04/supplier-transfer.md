@@ -1,8 +1,10 @@
-# Reviewed supplier layer transfer draft
+# Bounded supplier layer transfer
 
-These external drafts have not been applied, built or tested. Frozen W04 source
-and its corrected/failed packets remain unchanged. This implements the next
-producer prerequisite: original supplier layer transfer before endorsement.
+This reviewed source implements original supplier layer transfer before
+endorsement. It was applied from the retained external review patch
+`f8229e7bdb30411132d794d7ef6324e57063456c0e977f13ddb137b471e86391`.
+It has not yet been built or tested. Earlier corrected and failed W04 packets
+retain their original source and qualification scopes.
 
 The constructor-bound capture supplies one exact approved repository and fixed
 role layer. Transfer validates its owned destination policy again, refuses an
@@ -44,7 +46,7 @@ No actual transfer, supplier measurement, publisher execution, durable update,
 scan job or disconnected cluster is claimed. Whole W04 remains in progress.
 
 
-## Registry challenge boundary (unqualified draft)
+## Registry challenge boundary (unqualified source)
 
 The original draft's direct `http.Client.Do` range path did not inherit ORAS's
 anonymous bearer token obtained during metadata capture. That is a concrete
