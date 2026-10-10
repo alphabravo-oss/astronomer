@@ -70,9 +70,13 @@ func (a *ClusterAgentCapabilityAdapter) Execute(ctx context.Context, capability 
 		return marshalBounded(map[string]any{"summary": row, "pattern": pattern}, capability.MaxResponseBytes)
 	case "astronomer.cluster_agents.list":
 		page, pageSize := pagination(arguments, 50)
+		limit, offset, err := capabilitySQLPage(page, pageSize)
+		if err != nil {
+			return nil, err
+		}
 		rows, err := a.queries.CharlieClusterAgentList(ctx, sqlc.CharlieClusterAgentListParams{
 			Environment: optionalPGText(arguments, "environment"), Region: optionalPGText(arguments, "region"),
-			ConnectionState: optionalPGText(arguments, "state"), PageOffset: int32((page - 1) * pageSize), PageLimit: int32(pageSize),
+			ConnectionState: optionalPGText(arguments, "state"), PageOffset: offset, PageLimit: limit,
 		})
 		if err != nil {
 			return nil, err

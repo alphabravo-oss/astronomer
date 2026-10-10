@@ -1,0 +1,9 @@
+# Charlie checked pagination qualification
+
+The unchanged-production baseline passed all 86 selected checks under race. The checked helper and four adapters preserve existing validated schema, authorization, context and metadata semantics, while validating structural pagination before the owned SQL lookup. The bundle project lookup still precedes page parsing; this does not claim zero SQL across every adapter.
+
+Focused AFTER race passed 95 tests. Full Charlie race passed 4367 test and fuzz-seed terminals with one explicit owned database skip: TestAdminVisibilityQueriesAgainstMigratedPostgres reports CHARLIE_VISIBILITY_TEST_DATABASE_URL is not set. The original runner receipt remains failed because its inventory omitted two existing fuzz parents. The independently reviewed read-only supplement replays the original bytes against the complete Test/Fuzz inventory; it does not change that receipt.
+
+All five previously unlaunched gates completed. Vet, boundaries, complexity and JSON governance passed. Coupled SQL governance failed on the changed operational adapter owner. The supplement receipt remains failed because its expected first coupled diagnostic differed from this actual error. The completed proof preserves the exact diagnostic and every original log. A separately reviewed one-owner metadata correction binds the current operational adapter source without changing its six lexical SQL candidates or any other policy authority. Provider and Grafana source drift remains open on this isolated ancestry; no whole SQL, security, live database or candidate gate is claimed.
+
+The SHA index retains baseline, both failed runner receipts, actual completed gates, drivers, controls and reviewed source proofs as lossless gzip with mtime zero. Every original remains at its recorded external path.

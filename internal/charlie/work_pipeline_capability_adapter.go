@@ -152,8 +152,12 @@ func (a *WorkPipelineCapabilityAdapter) outboxSummary(ctx context.Context) (map[
 
 func (a *WorkPipelineCapabilityAdapter) outboxList(ctx context.Context, arguments map[string]json.RawMessage) (map[string]any, error) {
 	page, size := pagination(arguments, 50)
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
 	status, taskType := stringArgument(arguments, "status"), stringArgument(arguments, "task_type")
-	rows, err := a.queries.ListTaskOutboxFiltered(ctx, sqlc.ListTaskOutboxFilteredParams{Status: status, TaskType: taskType, Limit: int32(size), Offset: int32((page - 1) * size)})
+	rows, err := a.queries.ListTaskOutboxFiltered(ctx, sqlc.ListTaskOutboxFilteredParams{Status: status, TaskType: taskType, Limit: limit, Offset: offset})
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +297,11 @@ func (a *WorkPipelineCapabilityAdapter) controllerSummary(ctx context.Context) (
 
 func (a *WorkPipelineCapabilityAdapter) controllerAlerts(ctx context.Context, arguments map[string]json.RawMessage) (map[string]any, error) {
 	page, size := pagination(arguments, 50)
-	params := sqlc.ListControlPlaneAlertsParams{Limit: int32(size), Offset: int32((page - 1) * size)}
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
+	params := sqlc.ListControlPlaneAlertsParams{Limit: limit, Offset: offset}
 	if status := stringArgument(arguments, "status"); status != "" {
 		params.Status = pgtype.Text{String: status, Valid: true}
 	}
@@ -336,7 +344,10 @@ func (a *WorkPipelineCapabilityAdapter) listOperations(ctx context.Context, doma
 	if status != "" {
 		filter = pgtype.Text{String: status, Valid: true}
 	}
-	limit, offset := int32(size), int32((page-1)*size)
+	limit, offset, err := capabilitySQLPage(page, size)
+	if err != nil {
+		return nil, err
+	}
 	items := []map[string]any{}
 	switch domain {
 	case "catalog":

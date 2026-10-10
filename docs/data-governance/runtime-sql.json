@@ -120,7 +120,7 @@
     {
       "path": "internal/charlie/operational_capability_adapter.go",
       "owner": "Charlie backend",
-      "source_sha256": "2f5655d45a439cc7a86dd61cced1fe4d51d76b898451976f871aaa5568d04f1d"
+      "source_sha256": "a3850352827c696aec5be9c038f17465fc0e05fb92b7c64b04bd6d0567cc8bc2"
     },
     {
       "path": "internal/charlie/queue_capability_adapter.go",
