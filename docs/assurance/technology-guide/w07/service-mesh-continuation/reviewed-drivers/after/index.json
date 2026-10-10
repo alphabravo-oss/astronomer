@@ -1,0 +1,41 @@
+{
+  "source": "4f52252f7e215562c582be134b0d8de62c695c20",
+  "scope": "unlaunched finite focused mesh AFTER; no whole handler or live Kubernetes claim",
+  "artifacts": [
+    {
+      "path": "/tmp/w07-service-mesh-after-runner-4f52252f/README.md",
+      "sha256": "e85d5f185534ce25eccc9dc8c1c234c900b60611085b2a009597631483c15d8e",
+      "bytes": 1516
+    },
+    {
+      "path": "/tmp/w07-service-mesh-after-runner-4f52252f/check_cached.py",
+      "sha256": "3106b642857ef6789b46b1845e76ff10587a09a989e254a53b62bb861a64aaa0",
+      "bytes": 1484
+    },
+    {
+      "path": "/tmp/w07-service-mesh-after-runner-4f52252f/current-fingerprint.json",
+      "sha256": "bb0fb27a70e8840fb9271ee1c71fc3969eb2c04a2c35cebbb2ceaf5cc8aef92f",
+      "bytes": 147
+    },
+    {
+      "path": "/tmp/w07-service-mesh-after-runner-4f52252f/expected.json",
+      "sha256": "bb4e222f9ee3884236aaaaeee51bb7bb06de6d9c747c0bb7344db988bd126f3a",
+      "bytes": 4487
+    },
+    {
+      "path": "/tmp/w07-service-mesh-after-runner-4f52252f/run_after.py",
+      "sha256": "7f61c2248089b622c87411e761e8a7a63d3fe6f7f52e61a8988ef5bada8a9d28",
+      "bytes": 10559
+    },
+    {
+      "path": "/tmp/w07-service-mesh-after-runner-4f52252f/source-bindings.json",
+      "sha256": "95eae6295c36bfc7b018e2b72aedf5c3ba988a02232d5438fa94463c968447d7",
+      "bytes": 7343
+    },
+    {
+      "path": "/tmp/w07-service-mesh-after-runner-4f52252f/test_controls.py",
+      "sha256": "3014272d7ec06805f6ff105e1507d7ecf03d6164949cfce476d0411c1af85cbf",
+      "bytes": 3069
+    }
+  ]
+}

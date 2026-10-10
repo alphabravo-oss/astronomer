@@ -18865,6 +18865,11 @@
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
     },
     {
+      "path": "internal/handler/service_mesh_pagination.go",
+      "owner": "/handler",
+      "scope": "Finite Kubernetes additive supplier-list envelope; canonical document validation then typed item projection, no durable storage schema"
+    },
+    {
       "path": "internal/handler/service_proxy.go",
       "owner": "/handler",
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
@@ -26006,22 +26011,22 @@
       "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
     },
     {
-      "path": "internal/handler/service_mesh.go",
-      "function": "*ServiceMeshHandler.istioMTLSRows",
-      "operation": "json.Unmarshal",
-      "arguments": ["body", "&envelope"],
+      "path": "internal/handler/service_mesh_pagination.go",
+      "function": "collectMeshPages",
+      "operation": "jsoncontract.Decode",
+      "arguments": ["body", "&document"],
       "owner": "/handler",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+      "schema": "Additive Kubernetes CRD list supplier document, bounded 2 MiB; duplicate/depth/trailing validation before typed projection",
+      "reader_behavior": "Fail incomplete on invalid canonical document; no partial item results or inferred complete totals"
     },
     {
-      "path": "internal/handler/service_mesh.go",
-      "function": "*ServiceMeshHandler.listMeshInventoryItems",
+      "path": "internal/handler/service_mesh_pagination.go",
+      "function": "collectMeshPages",
       "operation": "json.Unmarshal",
       "arguments": ["body", "&envelope"],
       "owner": "/handler",
-      "schema": "Existing domain-owned v1 DTO/value; schema and opaque fields owned by named function",
-      "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
+      "schema": "Already canonical-validated Kubernetes list metadata/items envelope with required non-null items; additive supplier fields remain accepted",
+      "reader_behavior": "Typed projection after jsoncontract.Decode; reject type mismatch or null items, no partial results"
     },
     {
       "path": "internal/handler/service_mesh.go",

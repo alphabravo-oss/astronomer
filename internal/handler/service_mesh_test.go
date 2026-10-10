@@ -131,6 +131,9 @@ func (s *stubServiceMeshDetector) DetectAndUpsert(ctx context.Context, clusterID
 type stubSMRequester struct{}
 
 func (stubSMRequester) Do(_ context.Context, _, _, path string, _ []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
+	if idx := strings.Index(path, "?"); idx >= 0 {
+		path = path[:idx]
+	}
 	if path == "/apis/security.istio.io/v1beta1/peerauthentications" {
 		body := map[string]any{
 			"items": []map[string]any{
