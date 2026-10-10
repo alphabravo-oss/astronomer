@@ -494,6 +494,10 @@ export const queryKeys = {
     queues: ["admin", "queues"] as const,
     dlq: (queue: string) => ["admin", "queues", queue, "dlq"] as const,
     outbox: (status: string) => ["admin", "task-outbox", status] as const,
+    dlqPage: (queue: string, page: number) =>
+      ["admin", "queues", queue, "dlq", page] as const,
+    outboxPage: (status: string, offset: number) =>
+      ["admin", "task-outbox", status, offset] as const,
   },
   // F-05 — superuser security diagnostics.
   adminSecurity: {

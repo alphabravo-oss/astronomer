@@ -89,6 +89,16 @@
       "remove": true
     },
     {
+      "target": "$.paths['/api/v1/admin/queues/{queue}/dlq'].get.parameters[?(@.name == 'page')]",
+      "description": "Retain the released Go method signature; WithAdminDLQPage supplies the canonical native page parameter.",
+      "remove": true
+    },
+    {
+      "target": "$.paths['/api/v1/admin/queues/{queue}/dlq'].get.responses['200'].content['application/json'].schema.allOf[1].properties.pagination",
+      "description": "Retain the released anonymous response struct layout; existing SDK users follow native pages using unchanged per-page count.",
+      "remove": true
+    },
+    {
       "target": "$.components.schemas.ClusterDeployment.properties.phase.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true

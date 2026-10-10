@@ -7813,9 +7813,13 @@ export interface OpenAPIOperations {
         "path": {
           "queue": string;
         };
+        "query"?: {
+          "page"?: number;
+        };
       };
     response: OpenAPIComponents['schemas']['DataEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['AdminQueueDLQWire'];
+        "pagination"?: OpenAPIComponents['schemas']['PaginationMetadata'];
       };
   };
   "deleteAdminQueuesByQueueDlqById": {
@@ -17808,6 +17812,7 @@ export interface OpenAPIReadOperations {
       } };
   "getAdminQueuesByQueueDlq": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
         "data"?: OpenAPIReadComponents['schemas']['AdminQueueDLQWire'];
+        "pagination"?: OpenAPIReadComponents['schemas']['PaginationMetadata'];
       } };
   "deleteAdminQueuesByQueueDlqById": { response: OpenAPIReadComponents['schemas']['AdminQueueOperationEnvelope'] };
   "postAdminQueuesByQueueDlqByIdRetry": { response: OpenAPIReadComponents['schemas']['AdminQueueOperationEnvelope'] };
