@@ -1,0 +1,407 @@
+{
+  "schema_version": 1,
+  "scope": "Single preference service extraction; exact domain/HTTP/owned PostgreSQL qualification, not integrated whole-backend or W02/W07/program acceptance",
+  "original_service_source": "e032668c",
+  "corrected_service_source": "427bcf141ccb252ab76f29f420162671008c61c3",
+  "results": {
+    "original_service": "12 handler cases passed; domain fixture compilation failed; no PostgreSQL or vet step launched",
+    "corrected_each_major": {
+      "handler_pass": 12,
+      "domain_pass": 31,
+      "postgres_pass": 16,
+      "package_pass": 3,
+      "skips": 0,
+      "failures": 0,
+      "vet_exit": 0
+    },
+    "postgres18_all_test_steps_race": true,
+    "guards": {
+      "postgres17": 23,
+      "postgres18": 27,
+      "observation17": 6,
+      "observation18": 6
+    },
+    "observations": "Separate read-only observations after child groups joined returned owned current_database client-backend counts 0/0/0; not attribution or all-cluster absence proof"
+  },
+  "shared_helpers": "../preferences-integrity/drivers-and-source/shared/ retains exact owned process and live-fence helper bytes reused by these drivers",
+  "originals": [
+    {
+      "original_path": "/tmp/w13-preference-service-after-e032668c-postgres17-run1/capacity.jsonl",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/original-service-compile-failure/capacity.jsonl.gz",
+      "original_bytes": 5415,
+      "original_sha256": "3f0a86292ba37981e3c3dadc4f08fc8cec35036ee074acb768e67bf75042634d",
+      "retained_bytes": 533,
+      "retained_sha256": "edddf3012d9a45310f4258de709e71b84a294a493b866c31431ed932e77d7a81",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-e032668c-postgres17-run1/domain-pure.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/original-service-compile-failure/domain-pure.log.gz",
+      "original_bytes": 3244,
+      "original_sha256": "da2d977c40d1ac9e83fcb070e1c55a15f4d4a4c834734d1a410f482c52c05526",
+      "retained_bytes": 530,
+      "retained_sha256": "fb81b33d105a6eb1209b7d368da5d6413add566f7d4c510683cfb6a4e5b4f1eb",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-e032668c-postgres17-run1/go-version.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/original-service-compile-failure/go-version.log.gz",
+      "original_bytes": 32,
+      "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "retained_bytes": 52,
+      "retained_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-e032668c-postgres17-run1/handler-pure.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/original-service-compile-failure/handler-pure.log.gz",
+      "original_bytes": 13436,
+      "original_sha256": "a35e968ac2853c5081d67eadc5c097a6e4b505536d6808a54f24e8fa0d73887d",
+      "retained_bytes": 1086,
+      "retained_sha256": "8f025f5263d4251a7a44de66d9642781be1c3be8157f80f93502281543758e8b",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-e032668c-postgres17-run1/receipt.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/original-service-compile-failure/receipt.json.gz",
+      "original_bytes": 6297,
+      "original_sha256": "c6ae82bfb79a8e0b19afebdb3d801f7249bb212d88c04ecd1dc45ba9517ad97d",
+      "retained_bytes": 1785,
+      "retained_sha256": "985ab77b54c9ae2ec917de29d2c20a31d0e783d25a7c555c80e29e289b24fbd0",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres17-run1/capacity.jsonl",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service17/capacity.jsonl.gz",
+      "original_bytes": 7321,
+      "original_sha256": "fcb71cbafb2e7ac0a4cc51681d5c376b170234f7b595b1b5cbbde4f026a98ccc",
+      "retained_bytes": 631,
+      "retained_sha256": "a1b54ba3495eb5e4dc7af69b1ffe86b93ff148bf6a7a85b9929f831f156bd1ad",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres17-run1/domain-pure.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service17/domain-pure.log.gz",
+      "original_bytes": 35746,
+      "original_sha256": "c68b12c0dd3c8affb5385f7a3a805ed64cd5a01e96167da5bdb3eae7daf77573",
+      "retained_bytes": 2151,
+      "retained_sha256": "727374d8f63564dbcebb7f4e6b794c2d330bf7c15e0c827b2ca639fa5a42e63a",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres17-run1/go-version.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service17/go-version.log.gz",
+      "original_bytes": 32,
+      "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "retained_bytes": 52,
+      "retained_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres17-run1/handler-pure.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service17/handler-pure.log.gz",
+      "original_bytes": 13430,
+      "original_sha256": "229a498d89117f730ffac6f8698830b270eb6f85131315526f999c9bc0dea6a9",
+      "retained_bytes": 1074,
+      "retained_sha256": "560a5c8c4c03f4428e2d63bd77ba6a44865d6e8c51381dc1a4cd82d73601dac3",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres17-run1/postgres-after.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service17/postgres-after.log.gz",
+      "original_bytes": 19224,
+      "original_sha256": "8e358bd77bde6f2db752c844de1a296f8a2a4755730af69a9dd3b9de1f367af2",
+      "retained_bytes": 1669,
+      "retained_sha256": "1aaaa23f727df1583e8149b35d1ed18a722fd8520c58c67b9cdb2535b770bba5",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres17-run1/receipt.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service17/receipt.json.gz",
+      "original_bytes": 9284,
+      "original_sha256": "a4c14c834923e41d7b9db5c626bf97084d22b811dfaffffad0574657a3d429c9",
+      "retained_bytes": 2128,
+      "retained_sha256": "14ddcaf9a18d7309352a4afcc84465c3262d3760a28461e9f61576b6148c43b0",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres17-run1/vet.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service17/vet.log.gz",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retained_bytes": 20,
+      "retained_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres18-run1/capacity.jsonl",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service18/capacity.jsonl.gz",
+      "original_bytes": 8596,
+      "original_sha256": "36b8ec0acf373396d21cf1e616eb2d47397c6ebca12be9e99ff32f160016d5a9",
+      "retained_bytes": 728,
+      "retained_sha256": "8725bd4cbde274b3bbff55f2a83a01449b46e7dcab3875b735635912a40a192a",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres18-run1/domain-pure.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service18/domain-pure.log.gz",
+      "original_bytes": 35754,
+      "original_sha256": "2bd27ef41a835d57be7aa52035f797971152c8689a43c46a92f3e1129cc71603",
+      "retained_bytes": 2236,
+      "retained_sha256": "af37b1050e4695822a13871a0565e070286c69b34bfaba7c6a28ee14ff0bee46",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres18-run1/go-version.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service18/go-version.log.gz",
+      "original_bytes": 32,
+      "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "retained_bytes": 52,
+      "retained_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres18-run1/handler-pure.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service18/handler-pure.log.gz",
+      "original_bytes": 13434,
+      "original_sha256": "bcfc11b636ea2216a55aca8ab1e21837d95760bc959dcf2850b1cbeddc21f7b8",
+      "retained_bytes": 1105,
+      "retained_sha256": "d0853932ee60df5097c67023892883defa43d6961ca515ed9cd08f92c832fd6e",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres18-run1/postgres-after.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service18/postgres-after.log.gz",
+      "original_bytes": 19237,
+      "original_sha256": "1a28f5ea0716870148ff25e8bc31f9e948705d3e4973209cf12b9f4fa96681b3",
+      "retained_bytes": 1688,
+      "retained_sha256": "402e8b2780c89f56969c0097e42caba1f621307e02624874cd3c2c3a5bc8f88c",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres18-run1/receipt.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service18/receipt.json.gz",
+      "original_bytes": 9344,
+      "original_sha256": "8acf780e5761cbd67657ca4a16d4ba3e42f866349935876ef525e993a4fd4fc9",
+      "retained_bytes": 2138,
+      "retained_sha256": "8a325f2b97d81dcda97fb0ec9b1bc7b44a04f3140a4a23e9832f699acbdbeb95",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-427bcf14-postgres18-run1/vet.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/service18/vet.log.gz",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retained_bytes": 20,
+      "retained_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-observation-427bcf14-postgres17-run1/capacity.jsonl",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/observation17/capacity.jsonl.gz",
+      "original_bytes": 1744,
+      "original_sha256": "c9994d8fbcfd6f77ea73369f62f8c7d0df384511d2764bbde83a9ec310037684",
+      "retained_bytes": 279,
+      "retained_sha256": "5c3c73e16177d96115538631529efc8a41643014b2c95f2e8a6599b6d6b8e687",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-observation-427bcf14-postgres17-run1/counts.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/observation17/counts.log.gz",
+      "original_bytes": 6,
+      "original_sha256": "32a5f4aed1fa7d00084915161bde6b6e7c2d99a8c29febed0de55e4fb6146f36",
+      "retained_bytes": 26,
+      "retained_sha256": "e1fe8b7550e70988dea835fba87632ad845236faf32b1504730995c720a0d4c2",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-observation-427bcf14-postgres17-run1/receipt.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/observation17/receipt.json.gz",
+      "original_bytes": 2839,
+      "original_sha256": "681c8189d4fe19ee9cdb722413316e098e807a4a8e9bff6cd4472466140479ab",
+      "retained_bytes": 1166,
+      "retained_sha256": "68723dff0d0f96da5021d795ef32800a39f93f03ca088654beb6d697d07e3b91",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-observation-427bcf14-postgres18-run1/capacity.jsonl",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/observation18/capacity.jsonl.gz",
+      "original_bytes": 1744,
+      "original_sha256": "101fb89ffada5011afc860e5215b0b6dfb3c9fd7d3023bfafd978385cae9e097",
+      "retained_bytes": 285,
+      "retained_sha256": "5a7db902dedce6c2d76b2ec357e2a374ae9446fb1364912b1dfc601434b983fb",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-observation-427bcf14-postgres18-run1/counts.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/observation18/counts.log.gz",
+      "original_bytes": 6,
+      "original_sha256": "32a5f4aed1fa7d00084915161bde6b6e7c2d99a8c29febed0de55e4fb6146f36",
+      "retained_bytes": 26,
+      "retained_sha256": "e1fe8b7550e70988dea835fba87632ad845236faf32b1504730995c720a0d4c2",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-after-observation-427bcf14-postgres18-run1/receipt.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/originals/observation18/receipt.json.gz",
+      "original_bytes": 2846,
+      "original_sha256": "693720d70bfbaa362d1323cb3a3ec5db95e90ae44ada3ddbeca3d4dee19fa58f",
+      "retained_bytes": 1167,
+      "retained_sha256": "02d22ef2531858cecaa586d332ce4487cbb2bf0b303d6ce7175612b4e816bbfd",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-runner-e032668c/run_after.py",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/original-driver/run_after.py.gz",
+      "original_bytes": 10610,
+      "original_sha256": "fd42c4b95bc20b8e816011c81ec801e497f0e416113ee85939e461aec623ec08",
+      "retained_bytes": 4032,
+      "retained_sha256": "2c486724aa69de998102b0af6ac00f03b0e50b317b3cf583a05095d076984f82",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-runner-427bcf14/run_after.py",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/corrected-driver/run_after.py.gz",
+      "original_bytes": 10610,
+      "original_sha256": "eeadd37a1ca83a283f5403a5667413e84e32126310b2ca049ab62232b1c55db7",
+      "retained_bytes": 4032,
+      "retained_sha256": "ee78cd9986202b8e70c84937a7bad20a112c4162a8bb43ddfc5b5aa31f4ec739",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-runner-427bcf14/test_runner.py",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/corrected-driver/test_runner.py.gz",
+      "original_bytes": 2573,
+      "original_sha256": "27a536de2b819a66e6c252bb2be9f23cf853aa1a85fde5337ca2afedce4985b3",
+      "retained_bytes": 849,
+      "retained_sha256": "b78ec41127c95f51f7fa82493f6ea1c77c6ddd49fbfdc95fdbe7b374af3ac64f",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-runner-427bcf14/successor.patch",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/corrected-driver/successor.patch.gz",
+      "original_bytes": 508,
+      "original_sha256": "1bb81d5ac278d392c71b9550f894e07377bfdd8730572112c7b42b5c58494e73",
+      "retained_bytes": 354,
+      "retained_sha256": "a433d2ffffd32bc7c76ae6e779374e8591d3dac901100514fe090162b49c0b6f",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-backend-observation/observe.py",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/observer/observe.py.gz",
+      "original_bytes": 5167,
+      "original_sha256": "8f690d24ddf0d2a947b0280595b409155dde84fe83bcc1fa1efc9d9dcf761a18",
+      "retained_bytes": 2159,
+      "retained_sha256": "4fceb4565e33b23efc92a8c0e90e540096ca49b3939bccbd3ceb12aa8ec28068",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-proposal/review.patch",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/source/review.patch.gz",
+      "original_bytes": 43448,
+      "original_sha256": "7e7648e6afd91e5321b179aca8fb628bb1936ca78475b53d91ef69d12b2dd6fb",
+      "retained_bytes": 8894,
+      "retained_sha256": "5915e13f4d6b2f144269cb87fb76b901f4a6cb60fa8dfddf1c2e81d61d5af30e",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-proposal/bindings.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/source/bindings.json.gz",
+      "original_bytes": 2566,
+      "original_sha256": "4db140d3f944ddb626639edbff111c51c83649efbc0afc4edbb3a211c16a5dd7",
+      "retained_bytes": 983,
+      "retained_sha256": "048bcac5ca819d82aab6c7b59697714bd532119d91e0f2c05f3628d6833c6d98",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-proposal/json-ownership.patch",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/source/json-ownership.patch.gz",
+      "original_bytes": 10205,
+      "original_sha256": "8405daa73a1de95a115ee63e34032eddd2caf42bd82e8ebc0c54cafbc68a801e",
+      "retained_bytes": 1802,
+      "retained_sha256": "b122feabcbf31f4014e73940729bc83722e575f13754c831e6a7024c767b4316",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-proposal/json-relocation-proof.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/source/json-relocation-proof.json.gz",
+      "original_bytes": 681,
+      "original_sha256": "7e469ded0b4b23bf07dd706c67b0cbbc96c2f834f947f2f1566e714e62ffce8d",
+      "retained_bytes": 424,
+      "retained_sha256": "c4cda7a19beca560dc91ba5fbde0a7af00b5278647120ca3909ff4990e3526d7",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-fixture-correction/review.patch",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/fixture-correction/review.patch.gz",
+      "original_bytes": 1855,
+      "original_sha256": "2666751a9cbff27bc7478fbfad9e9fdfcd8d50010157bcd30b030e0b794a2e09",
+      "retained_bytes": 686,
+      "retained_sha256": "f97e0e0a308a68856bfec0b83c2c6886ac03833067ce84308adb8d8f902774d6",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-fixture-correction/bindings.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/drivers-and-source/fixture-correction/bindings.json.gz",
+      "original_bytes": 286,
+      "original_sha256": "f1246cf9049f33023dae4b2aacbdae80cb45698e8523d43bc1c9e02c1bd8cae5",
+      "retained_bytes": 221,
+      "retained_sha256": "cc8691fe58439c6c8678cb03cdbb9aa21c91cf0e7928d4f05a7ef3bf1480e475",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-packet/e032668c-git-inputs.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/source-inputs/e032668c-git-inputs.json.gz",
+      "original_bytes": 2152332,
+      "original_sha256": "1cc114902ba7a69d864f9eee8b00a26cd915aaeaf925ea0f1ad8128558d258ec",
+      "retained_bytes": 584771,
+      "retained_sha256": "453ed9ffc8e38c47dbb6e98784a73d23a1b5e7b939117390baff1db71138c4b4",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-packet/427bcf14-git-inputs.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/source-inputs/427bcf14-git-inputs.json.gz",
+      "original_bytes": 2152332,
+      "original_sha256": "d001c91a7c3688c473cddd983cdd810f703954eb342a8a718f9af7f7647eeee1",
+      "retained_bytes": 584771,
+      "retained_sha256": "7e510a579f4f1e459cd945d7f82e49dbe6aa8e14dcdfd3c8371e9f640a18b313",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-packet/documentation/original-missing-dependency.json",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/documentation/original-missing-dependency.json.gz",
+      "original_bytes": 421,
+      "original_sha256": "a74846cae45e2188b9e3ed9e4763d0da310d5e14209ac5be1dc68b21dbc9e737",
+      "retained_bytes": 317,
+      "retained_sha256": "80c8410184f3a1cb5a65c00afbdd93e22f3d515cb4d369da6094458eff846f01",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-packet/documentation/original-missing-dependency.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/documentation/original-missing-dependency.log.gz",
+      "original_bytes": 1268,
+      "original_sha256": "0fdf4484e29b47f518ba676fac6a795c5691fefc2d5e0e24ab4cf468d65a1641",
+      "retained_bytes": 520,
+      "retained_sha256": "0b00cadb781a84e4cc7ace97d4b145fbfe68d04c04af155f512dd37ef061227c",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w13-preference-service-packet/documentation/read-only-dependency-docs-pass.log",
+      "retained": "docs/assurance/technology-guide/w13/preferences-service/documentation/read-only-dependency-docs-pass.log.gz",
+      "original_bytes": 73,
+      "original_sha256": "6e87af2c19a4f0692083acf8aef937b107a95a845160f3b539dc20e46d162eee",
+      "retained_bytes": 86,
+      "retained_sha256": "61a8552a71f0d68767d383251afb2a07f5115265d08c3ba1cd31b9fe1a4a5b84",
+      "encoding": "lossless gzip"
+    }
+  ],
+  "documentation_verification": {
+    "initial_exit": 1,
+    "initial_limitation": "Missing local js-yaml install, retained as dependency failure; no source failure claimed",
+    "read_only_dependency_path": "/root/astronomer-all/astronomer-032-w07/frontend/node_modules",
+    "successor_exit": 0,
+    "current_documents": 123,
+    "relative_links": 621,
+    "scope": "Documentation check after rendered evidence docs; no additional runtime qualification or install"
+  }
+}

@@ -97,7 +97,28 @@ func Defaults() Preferences {
 	}
 }
 
+// NormalizeOptional preserves the released optional-field defaults. Favorites
+// remains required and is validated separately; nil must not become SQL null.
+func (p Preferences) NormalizeOptional() Preferences {
+	if p.PinnedClusters == nil {
+		p.PinnedClusters = []string{}
+	}
+	if p.StarredTypes == nil {
+		p.StarredTypes = []string{}
+	}
+	if p.RowsPerPage == 0 {
+		p.RowsPerPage = DefaultRowsPerPage
+	}
+	if p.DateFormat == "" {
+		p.DateFormat = DefaultDateFormat
+	}
+	return p
+}
+
 func (p Preferences) Validate() error {
+	if p.Favorites == nil {
+		return errors.New("favorites must be an array")
+	}
 	if err := validateStarredTypes(p.StarredTypes); err != nil {
 		return err
 	}

@@ -896,6 +896,11 @@
       "path": "pkg/astroclient/astroclient.gen.go",
       "owner": "paired generated public SDK",
       "source_sha256": "27c07eb5aeaf40089a93e87e3e859dfc1810db8adcf888a2032d520d345ae19c"
+    },
+    {
+      "path": "internal/handler/user_preferences.go",
+      "owner": "handler/user-preferences",
+      "source_sha256": "4997960b67b8f449a78aee593f43e9c1cdc39a5b2c65bae3835ddb30aca161d3"
     }
   ],
   "sites": [
@@ -8935,6 +8940,15 @@
       "scope_sha256": "b0bac573725b3000a6bf957baa98050d0f28bda02fe95db9a0656ccd183efcb4",
       "classification": "non-sql-candidate",
       "control": "The rollback literal is a typed upgrade Stage enum value. It is not a SQL statement or execution; the exact declaration and module source are bound."
+    },
+    {
+      "path": "internal/handler/user_preferences.go",
+      "function": "*AuthHandler.PutUserPreferences",
+      "operation": "Prepare",
+      "sha256": "975790bdadfd8cb16f0538c9ff4368adda3e46989aced7a66d1e5a0f96de1e48",
+      "scope_sha256": "085cd4c4359a22af813b9d2a3424e5046b51e1a8cca32a53b02589fbbfdde9cb",
+      "classification": "non-sql-candidate",
+      "control": "Exact userpreferences.Prepare(prefs) call prepares a validated normalized preference command and canonical JSON/digest before the injected mutation transaction; not database/sql Prepare, raw SQL or a query builder. Domain Prepare performs no transaction, pool or SQL operation."
     }
   ],
   "builders": [
