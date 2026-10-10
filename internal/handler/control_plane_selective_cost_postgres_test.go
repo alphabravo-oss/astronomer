@@ -34,6 +34,8 @@ func explainCachedControlPlanePlan(t *testing.T, ctx context.Context, tx pgx.Tx,
 		case int32:
 			args = append(args, strconv.FormatInt(int64(value), 10))
 			continue
+		case string:
+			text, cast = value, "::text"
 		case pgtype.Text:
 			if !value.Valid {
 				args = append(args, "NULL::text")
@@ -81,10 +83,10 @@ func readCachedControlPlaneCounters(t *testing.T, ctx context.Context, tx pgx.Tx
 	return result
 }
 
-func assertCachedControlPlaneDelta(t *testing.T, mode string, before, after cachedControlPlaneCounters) {
+func assertCachedControlPlaneDelta(t *testing.T, mode, queryName string, before, after cachedControlPlaneCounters) {
 	t.Helper()
 	generic, custom := after.generic-before.generic, after.custom-before.custom
-	t.Logf("eight production executions mode=%s counters before=(generic:%d custom:%d) after=(generic:%d custom:%d) delta=(generic:%d custom:%d)", mode, before.generic, before.custom, after.generic, after.custom, generic, custom)
+	t.Logf("eight production executions query=%s mode=%s counters before=(generic:%d custom:%d) after=(generic:%d custom:%d) delta=(generic:%d custom:%d)", queryName, mode, before.generic, before.custom, after.generic, after.custom, generic, custom)
 	if generic < 0 || custom < 0 || generic+custom != 8 {
 		t.Fatalf("expected exactly eight cached production executions, got generic=%d custom=%d", generic, custom)
 	}
@@ -143,16 +145,16 @@ FROM generate_series(1,100000)n`, rare, common)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, filter := range []struct{ name, status, controller string }{
-		{"unfiltered", "", ""},
-		{"common status", "resolved", ""},
-		{"sparse status", "active", ""},
-		{"common controller", "", common},
-		{"sparse controller", "", rare},
-		{"common status and controller", "resolved", common},
-		{"sparse status and controller", "active", rare},
-		{"no matching controller", "", absent},
-		{"no matching combination", "active", absent},
+	for _, filter := range []struct{ name, status, controller, variant string }{
+		{"unfiltered", "", "", "All"},
+		{"common status", "resolved", "", "Status"},
+		{"sparse status", "active", "", "Status"},
+		{"common controller", "", common, "Controller"},
+		{"sparse controller", "", rare, "Controller"},
+		{"common status and controller", "resolved", common, "StatusController"},
+		{"sparse status and controller", "active", rare, "StatusController"},
+		{"no matching controller", "", absent, "Controller"},
+		{"no matching combination", "active", absent, "StatusController"},
 	} {
 		for _, mode := range []string{"auto", "force_generic_plan", "force_custom_plan"} {
 			t.Run(filter.name+"/"+mode, func(t *testing.T) {
@@ -167,7 +169,8 @@ FROM generate_series(1,100000)n`, rare, common)
 					values.Set("controller", filter.controller)
 				}
 				actor := uuid.New()
-				for _, name := range []string{"ListControlPlaneAlerts", "ListControlPlaneAlertsAfter"} {
+				for _, phase := range []string{"First", "After"} {
+					name := "ListControlPlaneCursorAlerts" + filter.variant + phase
 					capture := &controlPlaneSQLCapture{DBTX: tx, queryName: name}
 					h := NewControlPlaneHandler(sqlc.New(capture), nil)
 					h.SetCursorCodec(codec)
@@ -178,7 +181,7 @@ FROM generate_series(1,100000)n`, rare, common)
 					for warm := 0; warm < 7; warm++ {
 						controlPlaneCursorPage(t, h, actor, "alerts", values)
 					}
-					assertCachedControlPlaneDelta(t, mode, before, readCachedControlPlaneCounters(t, ctx, tx, name))
+					assertCachedControlPlaneDelta(t, mode, name, before, readCachedControlPlaneCounters(t, ctx, tx, name))
 					if capture.statement == "" {
 						t.Fatal("actual generated statement was not captured")
 					}
@@ -208,19 +211,14 @@ FROM generate_series(1,100000)n`, rare, common)
 						// An empty/short page honestly emits no continuation. Measure the
 						// exact typed After SQL separately with a fixture upper anchor,
 						// without claiming an HTTP producer advertised another page.
-						if name == "ListControlPlaneAlerts" {
-							shortCapture := &controlPlaneSQLCapture{DBTX: tx, queryName: "ListControlPlaneAlertsAfter"}
+						if phase == "First" {
+							afterName := "ListControlPlaneCursorAlerts" + filter.variant + "After"
+							shortCapture := &controlPlaneSQLCapture{DBTX: tx, queryName: afterName}
 							query := sqlc.New(shortCapture)
-							params := sqlc.ListControlPlaneAlertsAfterParams{
-								Status:       pgtype.Text{String: filter.status, Valid: filter.status != ""},
-								Controller:   pgtype.Text{String: filter.controller, Valid: filter.controller != ""},
-								AfterFiredAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).Add(50001 * time.Second),
-								AfterID:      uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
-								QueryLimit:   201,
-							}
-							before := readCachedControlPlaneCounters(t, ctx, tx, "ListControlPlaneAlertsAfter")
+							upper := paging.NewCursor(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).Add(50001*time.Second), uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff"), "fixture-only-upper-anchor", 0)
+							before := readCachedControlPlaneCounters(t, ctx, tx, afterName)
 							for warm := 0; warm < 8; warm++ {
-								rows, err := query.ListControlPlaneAlertsAfter(ctx, params)
+								rows, err := listControlPlaneCursorAlerts(ctx, query, filter.status, filter.controller, &upper, 201)
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -233,10 +231,10 @@ FROM generate_series(1,100000)n`, rare, common)
 									t.Fatal("no-match continuation returned data")
 								}
 							}
-							assertCachedControlPlaneDelta(t, mode, before, readCachedControlPlaneCounters(t, ctx, tx, "ListControlPlaneAlertsAfter"))
+							assertCachedControlPlaneDelta(t, mode, afterName, before, readCachedControlPlaneCounters(t, ctx, tx, afterName))
 							raw := explainCachedControlPlanePlan(t, ctx, tx, shortCapture)
 							assertRepresentativeControlPlaneCost(t, raw)
-							t.Logf("representative100k %s %s synthetic upper anchor exact After SQL (no advertised continuation): %s", filter.name, mode, raw)
+							t.Logf("representative100k %s %s synthetic upper anchor %s exact After SQL (no advertised continuation): %s", filter.name, mode, afterName, raw)
 						}
 						break
 					}

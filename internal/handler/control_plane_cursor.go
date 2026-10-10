@@ -26,7 +26,7 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 	}
 	status, controller := r.URL.Query().Get("status"), r.URL.Query().Get("controller")
 	binding := paging.Binding("control-plane-alerts:v2", "global-administration", "fired_at:desc,id:desc", cursorActor(r), status, controller)
-	store, capable := h.queries.(controlPlaneCursorQuerier)
+	store, capable := h.queries.(controlPlaneAlertCursorQuerier)
 	page, ok := readCursorRequest(w, r, 50, h.cursorCodec, capable, binding)
 	if !ok {
 		return
@@ -44,8 +44,12 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 	}
 	var rows []sqlc.ControlPlaneAlert
 	var err error
-	if page.provided {
-		rows, err = store.ListControlPlaneAlertsAfter(r.Context(), sqlc.ListControlPlaneAlertsAfterParams{Status: arg.Status, Controller: arg.Controller, AfterFiredAt: page.cursor.Time, AfterID: page.cursor.ID, QueryLimit: page.queryLimit()})
+	if page.mode {
+		var after *paging.Cursor
+		if page.provided {
+			after = &page.cursor
+		}
+		rows, err = listControlPlaneCursorAlerts(r.Context(), store, status, controller, after, page.queryLimit())
 	} else {
 		rows, err = h.queries.ListControlPlaneAlerts(r.Context(), arg)
 	}

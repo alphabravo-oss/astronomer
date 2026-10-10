@@ -92,9 +92,9 @@ func TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor(t *testing.T) {
 				paginationExec(t, ctx, tx, `INSERT INTO control_plane_silences(controller,reason,starts_at,ends_at,created_at) SELECT $1,'fixture',TIMESTAMPTZ '2020-01-01',TIMESTAMPTZ '2020-01-02',TIMESTAMPTZ '2020-01-01' + (n/2)*INTERVAL '1 second' FROM generate_series(1,10042)n`, controller)
 				paginationExec(t, ctx, tx, `ANALYZE control_plane_silences`)
 			}
-			initialCapture := &controlPlaneSQLCapture{DBTX: tx, queryName: "ListControlPlaneAlerts"}
-			capture := &controlPlaneSQLCapture{DBTX: initialCapture, queryName: "ListControlPlaneAlertsAfter"}
-			index := "idx_control_plane_alerts_keyset"
+			initialCapture := &controlPlaneSQLCapture{DBTX: tx, queryName: "ListControlPlaneCursorAlertsStatusControllerFirst"}
+			capture := &controlPlaneSQLCapture{DBTX: initialCapture, queryName: "ListControlPlaneCursorAlertsStatusControllerAfter"}
+			index := "idx_control_plane_alerts_controller_status_keyset"
 			if collection == "silences" {
 				initialCapture.queryName = "ListControlPlaneSilences"
 				capture.queryName = "ListControlPlaneSilencesAfter"
@@ -196,10 +196,10 @@ func TestControlPlaneCursorPostgresSelectiveFilterPlans(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, filters := range []struct{ name, status, controller string }{
-		{"status", "resolved", ""},
-		{"controller", "", controller},
-		{"status and controller", "resolved", controller},
+	for _, filters := range []struct{ name, status, controller, variant string }{
+		{"status", "resolved", "", "Status"},
+		{"controller", "", controller, "Controller"},
+		{"status and controller", "resolved", controller, "StatusController"},
 	} {
 		t.Run(filters.name, func(t *testing.T) {
 			actor := uuid.New()
@@ -210,7 +210,8 @@ func TestControlPlaneCursorPostgresSelectiveFilterPlans(t *testing.T) {
 			if filters.controller != "" {
 				values.Set("controller", filters.controller)
 			}
-			for _, queryName := range []string{"ListControlPlaneAlerts", "ListControlPlaneAlertsAfter"} {
+			for _, phase := range []string{"First", "After"} {
+				queryName := "ListControlPlaneCursorAlerts" + filters.variant + phase
 				capture := &controlPlaneSQLCapture{DBTX: tx, queryName: queryName}
 				h := NewControlPlaneHandler(sqlc.New(capture), nil)
 				h.SetCursorCodec(codec)

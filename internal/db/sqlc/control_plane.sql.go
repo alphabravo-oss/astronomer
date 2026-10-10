@@ -443,6 +443,385 @@ func (q *Queries) ListControlPlaneAlerts(ctx context.Context, arg ListControlPla
 	return items, nil
 }
 
+const listControlPlaneCursorAlertsAllAfter = `-- name: ListControlPlaneCursorAlertsAllAfter :many
+SELECT id, controller, condition_type, status, message, detail, fired_at, resolved_at, created_at, updated_at, acknowledged_by_id, acknowledged_at FROM control_plane_alerts
+WHERE (fired_at, id) < ($1::timestamptz, $2::uuid)
+ORDER BY fired_at DESC, id DESC
+LIMIT $3
+`
+
+type ListControlPlaneCursorAlertsAllAfterParams struct {
+	AfterFiredAt time.Time `json:"after_fired_at"`
+	AfterID      uuid.UUID `json:"after_id"`
+	QueryLimit   int32     `json:"query_limit"`
+}
+
+func (q *Queries) ListControlPlaneCursorAlertsAllAfter(ctx context.Context, arg ListControlPlaneCursorAlertsAllAfterParams) ([]ControlPlaneAlert, error) {
+	rows, err := q.db.Query(ctx, listControlPlaneCursorAlertsAllAfter, arg.AfterFiredAt, arg.AfterID, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ControlPlaneAlert{}
+	for rows.Next() {
+		var i ControlPlaneAlert
+		if err := rows.Scan(
+			&i.ID,
+			&i.Controller,
+			&i.ConditionType,
+			&i.Status,
+			&i.Message,
+			&i.Detail,
+			&i.FiredAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AcknowledgedByID,
+			&i.AcknowledgedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listControlPlaneCursorAlertsAllFirst = `-- name: ListControlPlaneCursorAlertsAllFirst :many
+SELECT id, controller, condition_type, status, message, detail, fired_at, resolved_at, created_at, updated_at, acknowledged_by_id, acknowledged_at FROM control_plane_alerts
+ORDER BY fired_at DESC, id DESC
+LIMIT $1
+`
+
+func (q *Queries) ListControlPlaneCursorAlertsAllFirst(ctx context.Context, queryLimit int32) ([]ControlPlaneAlert, error) {
+	rows, err := q.db.Query(ctx, listControlPlaneCursorAlertsAllFirst, queryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ControlPlaneAlert{}
+	for rows.Next() {
+		var i ControlPlaneAlert
+		if err := rows.Scan(
+			&i.ID,
+			&i.Controller,
+			&i.ConditionType,
+			&i.Status,
+			&i.Message,
+			&i.Detail,
+			&i.FiredAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AcknowledgedByID,
+			&i.AcknowledgedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listControlPlaneCursorAlertsControllerAfter = `-- name: ListControlPlaneCursorAlertsControllerAfter :many
+SELECT id, controller, condition_type, status, message, detail, fired_at, resolved_at, created_at, updated_at, acknowledged_by_id, acknowledged_at FROM control_plane_alerts
+WHERE controller = $1::text AND (fired_at, id) < ($2::timestamptz, $3::uuid)
+ORDER BY fired_at DESC, id DESC
+LIMIT $4
+`
+
+type ListControlPlaneCursorAlertsControllerAfterParams struct {
+	Controller   string    `json:"controller"`
+	AfterFiredAt time.Time `json:"after_fired_at"`
+	AfterID      uuid.UUID `json:"after_id"`
+	QueryLimit   int32     `json:"query_limit"`
+}
+
+func (q *Queries) ListControlPlaneCursorAlertsControllerAfter(ctx context.Context, arg ListControlPlaneCursorAlertsControllerAfterParams) ([]ControlPlaneAlert, error) {
+	rows, err := q.db.Query(ctx, listControlPlaneCursorAlertsControllerAfter,
+		arg.Controller,
+		arg.AfterFiredAt,
+		arg.AfterID,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ControlPlaneAlert{}
+	for rows.Next() {
+		var i ControlPlaneAlert
+		if err := rows.Scan(
+			&i.ID,
+			&i.Controller,
+			&i.ConditionType,
+			&i.Status,
+			&i.Message,
+			&i.Detail,
+			&i.FiredAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AcknowledgedByID,
+			&i.AcknowledgedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listControlPlaneCursorAlertsControllerFirst = `-- name: ListControlPlaneCursorAlertsControllerFirst :many
+SELECT id, controller, condition_type, status, message, detail, fired_at, resolved_at, created_at, updated_at, acknowledged_by_id, acknowledged_at FROM control_plane_alerts
+WHERE controller = $1::text
+ORDER BY fired_at DESC, id DESC
+LIMIT $2
+`
+
+type ListControlPlaneCursorAlertsControllerFirstParams struct {
+	Controller string `json:"controller"`
+	QueryLimit int32  `json:"query_limit"`
+}
+
+func (q *Queries) ListControlPlaneCursorAlertsControllerFirst(ctx context.Context, arg ListControlPlaneCursorAlertsControllerFirstParams) ([]ControlPlaneAlert, error) {
+	rows, err := q.db.Query(ctx, listControlPlaneCursorAlertsControllerFirst, arg.Controller, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ControlPlaneAlert{}
+	for rows.Next() {
+		var i ControlPlaneAlert
+		if err := rows.Scan(
+			&i.ID,
+			&i.Controller,
+			&i.ConditionType,
+			&i.Status,
+			&i.Message,
+			&i.Detail,
+			&i.FiredAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AcknowledgedByID,
+			&i.AcknowledgedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listControlPlaneCursorAlertsStatusAfter = `-- name: ListControlPlaneCursorAlertsStatusAfter :many
+SELECT id, controller, condition_type, status, message, detail, fired_at, resolved_at, created_at, updated_at, acknowledged_by_id, acknowledged_at FROM control_plane_alerts
+WHERE status = $1::text AND (fired_at, id) < ($2::timestamptz, $3::uuid)
+ORDER BY fired_at DESC, id DESC
+LIMIT $4
+`
+
+type ListControlPlaneCursorAlertsStatusAfterParams struct {
+	Status       string    `json:"status"`
+	AfterFiredAt time.Time `json:"after_fired_at"`
+	AfterID      uuid.UUID `json:"after_id"`
+	QueryLimit   int32     `json:"query_limit"`
+}
+
+func (q *Queries) ListControlPlaneCursorAlertsStatusAfter(ctx context.Context, arg ListControlPlaneCursorAlertsStatusAfterParams) ([]ControlPlaneAlert, error) {
+	rows, err := q.db.Query(ctx, listControlPlaneCursorAlertsStatusAfter,
+		arg.Status,
+		arg.AfterFiredAt,
+		arg.AfterID,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ControlPlaneAlert{}
+	for rows.Next() {
+		var i ControlPlaneAlert
+		if err := rows.Scan(
+			&i.ID,
+			&i.Controller,
+			&i.ConditionType,
+			&i.Status,
+			&i.Message,
+			&i.Detail,
+			&i.FiredAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AcknowledgedByID,
+			&i.AcknowledgedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listControlPlaneCursorAlertsStatusControllerAfter = `-- name: ListControlPlaneCursorAlertsStatusControllerAfter :many
+SELECT id, controller, condition_type, status, message, detail, fired_at, resolved_at, created_at, updated_at, acknowledged_by_id, acknowledged_at FROM control_plane_alerts
+WHERE status = $1::text AND controller = $2::text AND (fired_at, id) < ($3::timestamptz, $4::uuid)
+ORDER BY fired_at DESC, id DESC
+LIMIT $5
+`
+
+type ListControlPlaneCursorAlertsStatusControllerAfterParams struct {
+	Status       string    `json:"status"`
+	Controller   string    `json:"controller"`
+	AfterFiredAt time.Time `json:"after_fired_at"`
+	AfterID      uuid.UUID `json:"after_id"`
+	QueryLimit   int32     `json:"query_limit"`
+}
+
+func (q *Queries) ListControlPlaneCursorAlertsStatusControllerAfter(ctx context.Context, arg ListControlPlaneCursorAlertsStatusControllerAfterParams) ([]ControlPlaneAlert, error) {
+	rows, err := q.db.Query(ctx, listControlPlaneCursorAlertsStatusControllerAfter,
+		arg.Status,
+		arg.Controller,
+		arg.AfterFiredAt,
+		arg.AfterID,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ControlPlaneAlert{}
+	for rows.Next() {
+		var i ControlPlaneAlert
+		if err := rows.Scan(
+			&i.ID,
+			&i.Controller,
+			&i.ConditionType,
+			&i.Status,
+			&i.Message,
+			&i.Detail,
+			&i.FiredAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AcknowledgedByID,
+			&i.AcknowledgedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listControlPlaneCursorAlertsStatusControllerFirst = `-- name: ListControlPlaneCursorAlertsStatusControllerFirst :many
+SELECT id, controller, condition_type, status, message, detail, fired_at, resolved_at, created_at, updated_at, acknowledged_by_id, acknowledged_at FROM control_plane_alerts
+WHERE status = $1::text AND controller = $2::text
+ORDER BY fired_at DESC, id DESC
+LIMIT $3
+`
+
+type ListControlPlaneCursorAlertsStatusControllerFirstParams struct {
+	Status     string `json:"status"`
+	Controller string `json:"controller"`
+	QueryLimit int32  `json:"query_limit"`
+}
+
+func (q *Queries) ListControlPlaneCursorAlertsStatusControllerFirst(ctx context.Context, arg ListControlPlaneCursorAlertsStatusControllerFirstParams) ([]ControlPlaneAlert, error) {
+	rows, err := q.db.Query(ctx, listControlPlaneCursorAlertsStatusControllerFirst, arg.Status, arg.Controller, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ControlPlaneAlert{}
+	for rows.Next() {
+		var i ControlPlaneAlert
+		if err := rows.Scan(
+			&i.ID,
+			&i.Controller,
+			&i.ConditionType,
+			&i.Status,
+			&i.Message,
+			&i.Detail,
+			&i.FiredAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AcknowledgedByID,
+			&i.AcknowledgedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listControlPlaneCursorAlertsStatusFirst = `-- name: ListControlPlaneCursorAlertsStatusFirst :many
+SELECT id, controller, condition_type, status, message, detail, fired_at, resolved_at, created_at, updated_at, acknowledged_by_id, acknowledged_at FROM control_plane_alerts
+WHERE status = $1::text
+ORDER BY fired_at DESC, id DESC
+LIMIT $2
+`
+
+type ListControlPlaneCursorAlertsStatusFirstParams struct {
+	Status     string `json:"status"`
+	QueryLimit int32  `json:"query_limit"`
+}
+
+func (q *Queries) ListControlPlaneCursorAlertsStatusFirst(ctx context.Context, arg ListControlPlaneCursorAlertsStatusFirstParams) ([]ControlPlaneAlert, error) {
+	rows, err := q.db.Query(ctx, listControlPlaneCursorAlertsStatusFirst, arg.Status, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ControlPlaneAlert{}
+	for rows.Next() {
+		var i ControlPlaneAlert
+		if err := rows.Scan(
+			&i.ID,
+			&i.Controller,
+			&i.ConditionType,
+			&i.Status,
+			&i.Message,
+			&i.Detail,
+			&i.FiredAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.AcknowledgedByID,
+			&i.AcknowledgedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listControlPlaneSilences = `-- name: ListControlPlaneSilences :many
 SELECT id, controller, condition_type, reason, starts_at, ends_at, created_by_id, created_at, updated_at FROM control_plane_silences
 ORDER BY created_at DESC, id DESC

@@ -155,3 +155,50 @@ DELETE FROM alert_inhibitions WHERE id = $1;
 
 -- name: CountAlertInhibitions :one
 SELECT count(*) FROM alert_inhibitions;
+
+-- name: ListControlPlaneCursorAlertsAllFirst :many
+SELECT * FROM control_plane_alerts
+ORDER BY fired_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
+
+-- name: ListControlPlaneCursorAlertsAllAfter :many
+SELECT * FROM control_plane_alerts
+WHERE (fired_at, id) < (sqlc.arg(after_fired_at)::timestamptz, sqlc.arg(after_id)::uuid)
+ORDER BY fired_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
+
+-- name: ListControlPlaneCursorAlertsStatusFirst :many
+SELECT * FROM control_plane_alerts
+WHERE status = sqlc.arg(status)::text
+ORDER BY fired_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
+
+-- name: ListControlPlaneCursorAlertsStatusAfter :many
+SELECT * FROM control_plane_alerts
+WHERE status = sqlc.arg(status)::text AND (fired_at, id) < (sqlc.arg(after_fired_at)::timestamptz, sqlc.arg(after_id)::uuid)
+ORDER BY fired_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
+
+-- name: ListControlPlaneCursorAlertsControllerFirst :many
+SELECT * FROM control_plane_alerts
+WHERE controller = sqlc.arg(controller)::text
+ORDER BY fired_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
+
+-- name: ListControlPlaneCursorAlertsControllerAfter :many
+SELECT * FROM control_plane_alerts
+WHERE controller = sqlc.arg(controller)::text AND (fired_at, id) < (sqlc.arg(after_fired_at)::timestamptz, sqlc.arg(after_id)::uuid)
+ORDER BY fired_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
+
+-- name: ListControlPlaneCursorAlertsStatusControllerFirst :many
+SELECT * FROM control_plane_alerts
+WHERE status = sqlc.arg(status)::text AND controller = sqlc.arg(controller)::text
+ORDER BY fired_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
+
+-- name: ListControlPlaneCursorAlertsStatusControllerAfter :many
+SELECT * FROM control_plane_alerts
+WHERE status = sqlc.arg(status)::text AND controller = sqlc.arg(controller)::text AND (fired_at, id) < (sqlc.arg(after_fired_at)::timestamptz, sqlc.arg(after_id)::uuid)
+ORDER BY fired_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
