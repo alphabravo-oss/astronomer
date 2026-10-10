@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import axios, { type AxiosAdapter } from "axios";
+import { AxiosError, type AxiosAdapter } from "axios";
 import api from "@/lib/api/transport";
 import { Route } from "./index";
 
@@ -46,7 +46,7 @@ beforeEach(() => {
     let data: unknown;
     if (url.pathname === "/api/v1/admin/queues/") {
       if (queueUnavailable)
-        throw new axios.AxiosError(
+        throw new AxiosError(
           "Queue inspection unavailable",
           undefined,
           config,
@@ -105,7 +105,7 @@ beforeEach(() => {
     } else if (url.pathname === "/api/v1/admin/task-outbox/") {
       const offset = Number(url.searchParams.get("offset") ?? "0");
       if (rejectedOutboxPage && offset > 0)
-        throw new axios.AxiosError(
+        throw new AxiosError(
           "Permission revoked",
           undefined,
           config,
