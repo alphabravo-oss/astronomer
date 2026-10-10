@@ -42,6 +42,19 @@ func descriptorFixture(t *testing.T, fixture *registryFixture, signer signature.
 			payloads[layer.Digest.String()] = true
 			config := []byte(`{}`)
 			manifest := ocispec.Manifest{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageManifest, Config: ocispec.Descriptor{MediaType: "application/vnd.oci.empty.v1+json", Digest: digest.FromBytes(config), Size: 2}, Layers: []ocispec.Descriptor{layer}}
+			if mutation == "inline-config" || strings.HasPrefix(mutation, "inline-") {
+				manifest.Config.Data = append([]byte(nil), config...)
+				switch mutation {
+				case "inline-data":
+					manifest.Config.Data = []byte("[]")
+				case "inline-size":
+					manifest.Config.Size++
+				case "inline-media":
+					manifest.Config.MediaType = "application/vnd.aquasec.trivy.config.v1+json"
+				case "inline-url":
+					manifest.Config.URLs = []string{"https://unapproved.example.test/config"}
+				}
+			}
 			manifestBytes, _ := json.Marshal(manifest)
 			subject := contentDigest(manifestBytes)
 			manifestPath := "assets/" + role + ".manifest.json"
@@ -104,7 +117,7 @@ func TestDescriptorContractAuthenticatesRuntimeChildrenWithoutPayloadQualificati
 	if err := os.WriteFile(filepath.Join(trust, "qa.pub"), public, 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"valid", "missing-claim", "changed-layer", "changed-size", "oversized", "wrong-media", "member-collision", "embedded-in-v2", "changed-config", "changed-source", "untrusted-child"} {
+	for _, name := range []string{"valid", "inline-config", "inline-data", "inline-size", "inline-media", "inline-url", "missing-claim", "changed-layer", "changed-size", "oversized", "wrong-media", "member-collision", "embedded-in-v2", "changed-config", "changed-source", "untrusted-child"} {
 		t.Run(name, func(t *testing.T) {
 			fixture := &registryFixture{manifests: map[string][]byte{}, blobs: map[string][]byte{}}
 			archive, release, catalogDigest, payloads := descriptorFixture(t, fixture, signer, name)
@@ -120,7 +133,7 @@ func TestDescriptorContractAuthenticatesRuntimeChildrenWithoutPayloadQualificati
 				t.Fatal(err)
 			}
 			catalog, err := loader.Load(t.Context())
-			if name == "valid" {
+			if name == "valid" || name == "inline-config" {
 				if err != nil || len(catalog.Components) != 3 || loader.Status().Verification != "verified" || loader.Status().DatabasePayloadVerification != "descriptor-only" || loader.Status().DatabaseFreshness != "not-assessed" {
 					t.Fatalf("metadata-only consumer positive: %+v %v", loader.Status(), err)
 				}

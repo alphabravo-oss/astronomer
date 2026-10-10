@@ -3,6 +3,7 @@ package distribution
 import (
 	"errors"
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"strings"
 )
@@ -197,7 +198,7 @@ func validateArtifactAssets(version int, assets []Asset, members map[string][]by
 		}
 		payload := members[asset.MemberPath]
 		config := members[asset.ArtifactConfigPath]
-		if len(config) == 0 || len(config) > 1<<20 || manifest.Config.Digest.String() != contentDigest(config) || manifest.Config.Size != int64(len(config)) || len(manifest.Config.URLs) != 0 || len(manifest.Config.Data) != 0 {
+		if !resolver.ArtifactConfigurationMatches(manifest.Config, config) || (version == EmbeddedAssetContract && len(manifest.Config.Data) != 0) {
 			return blocked("vulnerability_database", "database OCI configuration binding invalid")
 		}
 		if version == DescriptorAssetContract {

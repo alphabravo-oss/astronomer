@@ -13,6 +13,7 @@ import (
 
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -132,9 +133,10 @@ func validateStoredManifestGraph(blobs map[string][]byte, used map[string]bool, 
 		return errors.New("offline OCI layer count invalid")
 	}
 	used[subject] = true
-	if err := validateStoredDescriptor(blobs, used, manifest.Config, 1<<20); err != nil {
-		return err
+	if !resolver.ArtifactConfigurationMatches(manifest.Config, blobs[manifest.Config.Digest.String()]) {
+		return errors.New("offline OCI configuration missing or changed")
 	}
+	used[manifest.Config.Digest.String()] = true
 	for _, layer := range manifest.Layers {
 		if databases != nil && !signature && databaseLayerMedia(layer.MediaType) {
 			if err := retainMissingDatabaseDescriptor(blobs, databases, layer); err != nil {

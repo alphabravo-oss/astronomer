@@ -67,16 +67,20 @@ func (transport *publicationRoutingTransport) RoundTrip(request *http.Request) (
 }
 
 func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testing.T) {
-	actualPublisherFixture(t, false, false)
+	actualPublisherFixture(t, false, false, false)
 }
 func TestActualPublisherClosesScannerDatabaseSubjectsAndOfflineGraph(t *testing.T) {
-	actualPublisherFixture(t, true, false)
+	actualPublisherFixture(t, true, false, false)
 }
 func TestActualPublisherVerifiesDescriptorDatabasePayloadReadback(t *testing.T) {
-	actualPublisherFixture(t, true, true)
+	actualPublisherFixture(t, true, true, false)
 }
 
-func actualPublisherFixture(t *testing.T, scanner, descriptors bool) {
+func TestActualPublisherInlineDatabaseConfigPreservesSignedOfflineGraph(t *testing.T) {
+	actualPublisherFixture(t, true, true, true)
+}
+
+func actualPublisherFixture(t *testing.T, scanner, descriptors, inline bool) {
 	t.Helper()
 	binary := os.Getenv("COSIGN_BIN")
 	if binary == "" {
@@ -84,7 +88,11 @@ func actualPublisherFixture(t *testing.T, scanner, descriptors bool) {
 	}
 	catalog, charts, assets, platforms := producerFixture(t, "apiVersion: v1\nkind: Pod\nspec:\n  containers:\n  - image: {{ .Values.image }}\n")
 	if descriptors {
-		configureDescriptorDatabaseFixture(t, catalog, assets, false)
+		if inline {
+			configureInlineDescriptorDatabaseFixture(t, catalog, assets)
+		} else {
+			configureDescriptorDatabaseFixture(t, catalog, assets, false)
+		}
 	} else if scanner {
 		configureScannerDatabaseFixture(t, catalog, assets)
 	}

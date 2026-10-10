@@ -97,6 +97,18 @@ func captureManifestGraph(ctx context.Context, repository *remote.Repository, re
 		limit := maximum
 		if index == 0 {
 			limit = 1 << 20
+			if len(child.Data) != 0 {
+				if !resolver.ArtifactConfigurationMatches(child, child.Data) {
+					return "", errors.New("exported inline configuration differs from exact empty object")
+				}
+				if existing := graph.blobs[child.Digest.String()]; existing != nil && !resolver.ArtifactConfigurationMatches(child, existing) {
+					return "", errors.New("exported inline configuration conflicts with captured bytes")
+				}
+				if err := graph.retain(child, append([]byte(nil), child.Data...)); err != nil {
+					return "", err
+				}
+				continue
+			}
 		}
 		if databaseMetadata && index > 0 {
 			limit = distribution.MaximumDatabaseLayerBytes

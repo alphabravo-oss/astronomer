@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -530,15 +531,15 @@ func validateSubjectBlob(directory, subject, archiveDigest, media string) error 
 		return errors.New("emitted OCI payload descriptor changed")
 	}
 	configuration := manifest.Config
-	if configuration.Digest.Algorithm() != digest.SHA256 || configuration.Size <= 0 || configuration.Size > 1<<20 || len(configuration.URLs) != 0 || len(configuration.Data) != 0 {
+	if configuration.Digest.Validate() != nil || configuration.Digest.Algorithm() != digest.SHA256 || configuration.Size <= 0 || configuration.Size > 1<<20 || len(configuration.URLs) != 0 {
 		return errors.New("OCI layout config descriptor invalid")
 	}
 	config, err := boundedFile(filepath.Join(directory, "blobs", "sha256", configuration.Digest.Encoded()), 1<<20)
-	if err != nil || sha(config) != configuration.Digest.String() || int64(len(config)) != configuration.Size {
+	if err != nil || !resolver.ArtifactConfigurationMatches(configuration, config) {
 		return errors.New("OCI layout configuration missing or changed")
 	}
 	layer := manifest.Layers[0]
-	if layer.Digest.Algorithm() != digest.SHA256 {
+	if layer.Digest.Validate() != nil || layer.Digest.Algorithm() != digest.SHA256 {
 		return errors.New("emitted OCI payload digest is invalid")
 	}
 	bytes, err := boundedFile(filepath.Join(directory, "blobs", "sha256", layer.Digest.Encoded()), distribution.MaximumArchiveBytes)

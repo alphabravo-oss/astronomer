@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/resolver"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -65,7 +66,7 @@ func loadPreparedAsset(input assetInput, contract int, members map[string][]byte
 			return empty, errors.New("descriptor database input requires its exact manifest member")
 		}
 		layer := manifest.Layers[0]
-		if input.Digest != layer.Digest.String() || layer.Digest.Algorithm() != digest.SHA256 || layer.Size <= 0 || layer.Size > distribution.MaximumDatabaseLayerBytes || len(layer.URLs) != 0 || len(layer.Data) != 0 {
+		if input.Digest != layer.Digest.String() || layer.Digest.Validate() != nil || layer.Digest.Algorithm() != digest.SHA256 || layer.Size <= 0 || layer.Size > distribution.MaximumDatabaseLayerBytes || len(layer.URLs) != 0 || len(layer.Data) != 0 {
 			return empty, errors.New("descriptor database payload input differs from exact child")
 		}
 		asset.DatabaseDescriptor = &distribution.DatabaseDescriptor{Digest: layer.Digest.String(), Size: layer.Size, MediaType: layer.MediaType}
@@ -185,11 +186,11 @@ func validatePreparedDatabase(directory string, published publishedAssetSubject,
 	}
 	layer := manifest.Layers[0]
 	claim := asset.DatabaseDescriptor
-	if claim == nil || layer.Digest.String() != claim.Digest || layer.Size != claim.Size || layer.MediaType != claim.MediaType || published.ArchiveDigest != claim.Digest || published.MediaType != claim.MediaType || manifest.Config.Digest.Algorithm() != digest.SHA256 {
+	if claim == nil || layer.Digest.String() != claim.Digest || layer.Size != claim.Size || layer.MediaType != claim.MediaType || published.ArchiveDigest != claim.Digest || published.MediaType != claim.MediaType || layer.Digest.Validate() != nil || manifest.Config.Digest.Validate() != nil || manifest.Config.Digest.Algorithm() != digest.SHA256 {
 		return errors.New("prepared database differs from signed descriptor")
 	}
 	config, err := boundedFile(filepath.Join(directory, "blobs", "sha256", manifest.Config.Digest.Encoded()), 1<<20)
-	if err != nil || sha(config) != manifest.Config.Digest.String() || int64(len(config)) != manifest.Config.Size || len(manifest.Config.URLs) != 0 || len(manifest.Config.Data) != 0 {
+	if err != nil || !resolver.ArtifactConfigurationMatches(manifest.Config, config) {
 		return errors.New("prepared database configuration changed")
 	}
 	return streamPreparedDatabase(filepath.Join(directory, "blobs", "sha256", layer.Digest.Encoded()), "", layer)
