@@ -25,7 +25,7 @@ type controlPlaneSQLCapture struct {
 }
 
 func (c *controlPlaneSQLCapture) Query(ctx context.Context, statement string, args ...any) (pgx.Rows, error) {
-	if c.statement == "" && strings.Contains(statement, "-- name: "+c.queryName) {
+	if c.statement == "" && strings.Contains(statement, "-- name: "+c.queryName+" :many") {
 		c.statement = statement
 		c.args = append([]any(nil), args...)
 	}
@@ -92,9 +92,11 @@ func TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor(t *testing.T) {
 				paginationExec(t, ctx, tx, `INSERT INTO control_plane_silences(controller,reason,starts_at,ends_at,created_at) SELECT $1,'fixture',TIMESTAMPTZ '2020-01-01',TIMESTAMPTZ '2020-01-02',TIMESTAMPTZ '2020-01-01' + (n/2)*INTERVAL '1 second' FROM generate_series(1,10042)n`, controller)
 				paginationExec(t, ctx, tx, `ANALYZE control_plane_silences`)
 			}
-			capture := &controlPlaneSQLCapture{DBTX: tx, queryName: "ListControlPlaneAlertsAfter"}
+			initialCapture := &controlPlaneSQLCapture{DBTX: tx, queryName: "ListControlPlaneAlerts"}
+			capture := &controlPlaneSQLCapture{DBTX: initialCapture, queryName: "ListControlPlaneAlertsAfter"}
 			index := "idx_control_plane_alerts_keyset"
 			if collection == "silences" {
+				initialCapture.queryName = "ListControlPlaneSilences"
 				capture.queryName = "ListControlPlaneSilencesAfter"
 				index = "idx_control_plane_silences_keyset"
 			}
@@ -162,18 +164,21 @@ func TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor(t *testing.T) {
 			if len(seen) != 10042 || !seen[deleted] {
 				t.Fatalf("traversed%d rows, want10042 including previously read deleted anchor", len(seen))
 			}
-			var plan json.RawMessage
-			if err := tx.QueryRow(ctx, "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) "+capture.statement, capture.args...).Scan(&plan); err != nil {
-				t.Fatal(err)
+			for _, measuredCapture := range []*controlPlaneSQLCapture{initialCapture, capture} {
+				var plan json.RawMessage
+				if err := tx.QueryRow(ctx, "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) "+measuredCapture.statement, measuredCapture.args...).Scan(&plan); err != nil {
+					t.Fatal(err)
+				}
+				t.Logf("%s %s generated keyset plan: %s", collection, measuredCapture.queryName, plan)
+				var measured []paginationQueryPlan
+				if err := json.Unmarshal(plan, &measured); err != nil {
+					t.Fatal(err)
+				}
+				if len(measured) != 1 || !assertControlPlanePlan(t, measured[0].Plan.Plans, index) {
+					t.Fatal("control-plane continuation lacks complete ordering index")
+				}
 			}
-			t.Logf("%s generated keyset plan: %s", collection, plan)
-			var measured []paginationQueryPlan
-			if err := json.Unmarshal(plan, &measured); err != nil {
-				t.Fatal(err)
-			}
-			if len(measured) != 1 || !assertControlPlanePlan(t, measured[0].Plan.Plans, index) {
-				t.Fatal("control-plane continuation lacks complete ordering index")
-			}
+
 		})
 	}
 }

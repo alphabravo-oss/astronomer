@@ -109,7 +109,7 @@ func (page cursorRequest) metadata(w http.ResponseWriter, r *http.Request, lengt
 	return paging.CursorUncounted(int(page.limit), page.seen, length, token), true
 }
 
-// Parse query syntax once before scope resolution. URL.Query silently drops
+// Parse query syntax strictly before scope resolution. URL.Query silently drops
 // malformed values, which could otherwise restart an invalid continuation.
 func readCursorQuery(w http.ResponseWriter, r *http.Request) (url.Values, bool) {
 	query, err := url.ParseQuery(r.URL.RawQuery)

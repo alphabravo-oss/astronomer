@@ -32,6 +32,10 @@ import {
   OffsetPagination,
   useOffsetPagination,
 } from "@/components/ui/offset-pagination";
+import {
+  CursorPagination,
+  useCursorPagination,
+} from "@/components/ui/cursor-pagination";
 import { catalogTabs } from "./-tabs";
 import { InstalledTab } from "./-installed-tab";
 import { RepositoriesTab } from "./-repositories-tab";
@@ -79,7 +83,9 @@ function CatalogPage() {
   } | null>(null);
   const [operationId, setOperationId] = useState<string | null>(null);
 
-  const chartsPaging = useOffsetPagination(projectId);
+  const chartsPaging = useCursorPagination(
+    JSON.stringify([projectId, searchQuery.trim(), selectedCategory]),
+  );
   const installedPaging = useOffsetPagination("installed");
   const reposPaging = useOffsetPagination("repositories");
   const chartsQuery = useHelmCharts({
@@ -230,7 +236,7 @@ function CatalogPage() {
             ))}
 
           {activeTab === "browse" && projectId && (
-            <OffsetPagination
+            <CursorPagination
               control={chartsPaging}
               query={chartsQuery}
               label="charts"

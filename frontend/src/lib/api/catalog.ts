@@ -371,9 +371,16 @@ export async function getHelmCharts(
     search?: string;
     limit?: number;
     offset?: number;
+    cursor?: string;
   },
   signal?: AbortSignal,
 ): Promise<PaginatedResponse<HelmChart>> {
+  if (
+    params.cursor !== undefined &&
+    (params.offset !== undefined || params.cursor.length > 4096)
+  ) {
+    throw new Error("Chart cursor must be one bounded value without offset");
+  }
   const response = await getCatalogCharts({
     query: {
       cluster_id: params.projectId ? undefined : params.clusterId,
@@ -381,6 +388,7 @@ export async function getHelmCharts(
       search: params.search?.trim() || undefined,
       limit: params.limit ?? CATALOG_PAGE_LIMIT,
       offset: params.offset,
+      cursor: params.cursor,
     },
     signal,
   });

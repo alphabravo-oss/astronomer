@@ -9196,6 +9196,7 @@ export interface OpenAPIOperations {
     path: "/api/v1/controllers/alerts";
     arguments: {
         "query"?: {
+          "cursor"?: string;
           "status"?: string;
           "controller"?: string;
           "limit"?: number;
@@ -9233,6 +9234,7 @@ export interface OpenAPIOperations {
     path: "/api/v1/controllers/silences";
     arguments: {
         "query"?: {
+          "cursor"?: string;
           "limit"?: number;
           "offset"?: number;
         };
@@ -13691,6 +13693,7 @@ export interface OpenAPIOperations {
     path: "/api/v1/catalog/charts/";
     arguments: {
         "query"?: {
+          "cursor"?: string;
           "search"?: string;
           "limit"?: number;
           "offset"?: number;
