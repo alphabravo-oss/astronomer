@@ -1,0 +1,35 @@
+{
+  "kind": "RootScopedIntegrationReview",
+  "reviewedAtUTC": "2026-10-10T06:54:50Z",
+  "implementationBranch": "implement/032-technology-guide",
+  "sourceIntegrationHead": "68dc1b0e",
+  "retainedEvidenceCommit": "3cb5b79a",
+  "qualifiedFrozenCommit": "24d9904de4599aa22ec342ae5a2d0bebccdfdb97",
+  "originalQualifiedReceiptSHA256": "9c7a3f231625c2682cea575f9e82a4664078ae6b4218ad6eb7b7d81f416311a3",
+  "rootVerified": {
+    "fullFrozenGitBytesAndModes": 7150,
+    "rawSuccessfulGateAndGuardBindings": 65,
+    "fatalCapacityGuards": 53,
+    "ownedGateGroups": 12,
+    "historicalProviderParentsAndTerminals": [3, 3],
+    "focusedRaceParentsAndTerminals": [20, 62],
+    "coupledRaceParentsAndTerminals": [143, 480],
+    "publisherRaceParentsAndTerminals": [34, 187],
+    "failures": 0,
+    "skips": 0,
+    "changedSourcePathsExactlyEqualQualifiedBytes": 30,
+    "preservedNewerMainArtifactMetadataGovernanceAndModulePaths": 7,
+    "retainedOriginalArtifacts": 149,
+    "independentPacketVerification": "PASS",
+    "packetNegativeTamperControls": 22,
+    "packetPositiveControls": 1
+  },
+  "integrationPatchSHA256": "1f6c7465381f8719c1e7e118615566b8304928eae25f89f6a3658df447026aea",
+  "limitations": [
+    "Qualification applies to the exact frozen source, not the composed current branch.",
+    "Durable migration 079, initial acceptance, participant wiring, revocation, freshness cadence and job/report scan-used provenance remain open.",
+    "Whole supplier transfer, production OIDC publication and full disconnected application qualification remain open.",
+    "Original failed attempts remain original evidence. No release authority or human approval is asserted."
+  ],
+  "wholeW04Status": "IN_PROGRESS"
+}
