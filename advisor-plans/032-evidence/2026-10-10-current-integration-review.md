@@ -1,0 +1,29 @@
+# Current implementation review, 2026-10-10
+
+Reviewed quota source and its lossless qualification packet have been fast-forwarded from `4d442da2` to `ba886ea6420f8583f542e1c97e368b620877fd59` on `implement/032-technology-guide`. Whole-plan completion, combined candidate verification, deployment, pull requests and publication remain open.
+
+## Quota writer
+
+The shared compliance writer validates all eight signed quota limits before writing settings, quotas or status. Representable negative values, defaults and public contracts remain intact. Genuine baseline `c96c17d3` reproduced the invalid-limit failures. Initial after runs retain their unused-import compilation failure and stale complexity-ceiling failure. Final frozen `a965f053` passed 50 focused and 68 full package race terminals, vet, boundaries, complexity and JSON governance, with zero skips or test failures. Coupled SQL ownership still fails on separately tracked provider metadata; this is not a whole-source SQL pass.
+
+Root reviewed all source and the final composition, reconstructed actual test events, checked all 34 numeric fatal guards and eight drained gate groups, and verified all 49 portable originals against stored and expanded bytes. Integrated production and test bytes match the qualified freeze. Only the compliance ceiling changes, from 856 to the measured 847; current dependencies and governance changes are preserved. [Packet](../../docs/assurance/technology-guide/w02/compliance-quota/README.md).
+
+## Telemetry generations and schema 078
+
+Genuine baseline `a6e39ac7` reproduced all four parent failures: SSO children retained after deletion, group count loss after partial reads, Velero children retained after disappearance and unbounded SIEM category children. Root verified the actual failure events, 37 artifacts, 33 fatal numeric guards, unchanged source and drained groups.
+
+The complete generation and committed snapshot source is reviewed, including ordering before database reads, cancellation while awaiting publication, decommission predicates and refusal to publish snapshots containing any uncaptured handle. Schema 078 is a real lifecycle migration. Application and PostgreSQL qualification remain open.
+
+First SQLC generation succeeded but compatibility generation failed because the chart declared schema 77. Final checks detected the existing extension generator changing 28 modes from 0644 to 0600. Both failures remain retained. Root verified all originals and reviewed the complete three-file SQLC output. The narrow successor sets chart target 78, preserves existing generated-file modes, and tests preservation and failure cleanup. Restoration changes only the verified original 28 modes. Clean `fd87ce9f` and its driver, differing only in commit and exclusive output binding, are approved for canonical generation. Runtime and database verification remain open.
+
+## Durable scanner authority
+
+Frozen `17412679` passed 31 focused parents/194 terminals and 173 full provider, distribution, resolver and scanner parents/761 terminals under race, plus explicit pure builtin and selected Cosign fixtures. Vet, governance, complexity, boundaries and docs passed. Root verified all 12 logs, 52 fatal numeric guards, drained groups, 8,503 source identities, executable bindings and 78 lossless originals. [Packet](../../docs/assurance/technology-guide/w04/current-durable-qualification/README.md).
+
+This qualifies pure and cryptographic consumer paths. Schema 079 sequencing, database initialization, acceptance/projection atomicity, restart revocation, outbox execution, publication, measured scan-used identity, production startup and fresh-cache egress denial remain open. The separately reviewed restart owner and typed startup composition have not executed. Startup allows only a genuinely absent locked base or confirmed healthy material to proceed to independent authenticated initialization. It never automatically promotes or resurrects a revoked base. Unknown I/O, policy and context errors stop.
+
+## Snapshot status counts
+
+Genuine baseline `c8af6757` ran actual snapshot and restore pollers: 14 failed and seven passed named terminals, with all 12 invalid-count diagnostics reproduced. Root verified raw events, source and compiler identities, 13 fatal numeric guards and drained groups. Frozen `6bee4184` checks four observed counts before phase writes, completion metrics or change events. Its after driver is fully reviewed; nine parser controls and all source bindings pass. Native after verification is queued behind telemetry generation. No decoder repair or broader worker/database qualification is inferred.
+
+Fatal thresholds remain 20 GiB and 20 percent. Failed attempts and qualified freezes are preserved. One native compiler, database, generation or scan lane runs at a time.
