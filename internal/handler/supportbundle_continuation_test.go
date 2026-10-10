@@ -10,7 +10,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -44,6 +46,9 @@ func supportPagePeer(t *testing.T, resource string, expire bool) (*kubernetes.Cl
 		mu.Unlock()
 		if r.URL.Query().Get("limit") != "500" {
 			t.Errorf("unbounded %s list limit %q", kind, r.URL.Query().Get("limit"))
+		}
+		if r.URL.Query().Get("resourceVersion") != "" {
+			t.Error("snapshot resourceVersion was incorrectly added to a continued list request")
 		}
 		token := r.URL.Query().Get("continue")
 		if token != "" && token != supportContinuationToken {
@@ -165,5 +170,118 @@ func TestSupportBundleExpiredSecretContinuationNeverClaimsAbsent(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(strings.Join(sections, "\n")), "incomplete") {
 		t.Fatalf("expired upstream snapshot not reported incomplete: %v", sections)
+	}
+}
+
+func TestSupportBundleIncompleteNamespaceSnapshotIsExplicit(t *testing.T) {
+	for _, scenario := range []struct {
+		name     string
+		requests int
+	}{
+		{"cycle", 2},
+		{"changed-version", 2},
+		{"missing-version", 1},
+		{"page-budget", 10},
+		{"oversized-page", 1},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			var requests atomic.Int32
+			peer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				request := requests.Add(1)
+				if r.URL.Query().Get("limit") != "500" || r.URL.Query().Get("resourceVersion") != "" {
+					t.Errorf("invalid list options: %s", r.URL.RawQuery)
+				}
+				version, continuation, count := "101", "same-token", 1
+				switch scenario.name {
+				case "changed-version":
+					if request > 1 {
+						version, continuation = "102", ""
+					}
+				case "missing-version":
+					version = ""
+				case "page-budget":
+					continuation = fmt.Sprintf("page-%d", request)
+				case "oversized-page":
+					count, continuation = 501, ""
+				}
+				items := make([]map[string]any, count)
+				for i := range items {
+					items[i] = map[string]any{"message": "fixture event"}
+				}
+				if err := json.NewEncoder(w).Encode(map[string]any{
+					"apiVersion": "v1", "kind": "EventList", "items": items,
+					"metadata": map[string]any{"resourceVersion": version, "continue": continuation},
+				}); err != nil {
+					t.Error(err)
+				}
+			}))
+			defer peer.Close()
+			client, err := kubernetes.NewForConfig(&rest.Config{Host: peer.URL})
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, sections := supportContinuationSection(t, client, "Event")
+			if _, ok := files["events.json"]; ok {
+				t.Fatal("incomplete snapshot was emitted as a complete event list")
+			}
+			if int(requests.Load()) != scenario.requests || !strings.Contains(strings.Join(sections, "\n"), "incomplete Kubernetes snapshot") {
+				t.Fatalf("incomplete state missing or unbounded requests: requests=%d sections=%v", requests.Load(), sections)
+			}
+		})
+	}
+}
+
+func TestSupportBundleContinuationStopsOnCallerCancellation(t *testing.T) {
+	secondStarted, secondStopped := make(chan struct{}), make(chan struct{})
+	peer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("continue") != "" {
+			close(secondStarted)
+			<-r.Context().Done()
+			close(secondStopped)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"apiVersion": "v1", "kind": "EventList", "items": []any{},
+			"metadata": map[string]any{"resourceVersion": "101", "continue": supportContinuationToken},
+		}); err != nil {
+			t.Error(err)
+		}
+	}))
+	defer peer.Close()
+	client, err := kubernetes.NewForConfig(&rest.Config{Host: peer.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var buffer bytes.Buffer
+	archive := zip.NewWriter(&buffer)
+	log := newSectionLog()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		NewSupportBundleHandler(nil, nil, client, "management").writeEvents(ctx, archive, log)
+	}()
+	select {
+	case <-secondStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("continued request did not reach actual HTTP peer")
+	}
+	cancel()
+	for _, stopped := range []<-chan struct{}{done, secondStopped} {
+		select {
+		case <-stopped:
+		case <-time.After(2 * time.Second):
+			t.Fatal("caller cancellation did not stop continued request and collector")
+		}
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := readZipFiles(t, buffer.Bytes())["events.json"]; ok {
+		t.Fatal("cancelled partial snapshot emitted a complete event list")
+	}
+	if !strings.Contains(strings.Join(log.lines, "\n"), "incomplete Kubernetes snapshot") {
+		t.Fatalf("cancelled snapshot not reported incomplete: %v", log.lines)
 	}
 }

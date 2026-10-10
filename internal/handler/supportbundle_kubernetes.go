@@ -7,6 +7,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -88,13 +89,19 @@ func (h *SupportBundleHandler) writeEvents(ctx context.Context, zw *zip.Writer, 
 	}
 	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	events, err := h.k8s.CoreV1().Events(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
+	events, err := collectSupportPages(lctx, func(ctx context.Context, options metav1.ListOptions) ([]corev1.Event, metav1.ListMeta, error) {
+		page, err := h.k8s.CoreV1().Events(h.namespace).List(ctx, options)
+		if err != nil {
+			return nil, metav1.ListMeta{}, err
+		}
+		return page.Items, page.ListMeta, nil
+	})
 	if err != nil {
 		log.section("events.json", err)
 		return
 	}
-	out := make([]map[string]any, 0, len(events.Items))
-	for _, e := range events.Items {
+	out := make([]map[string]any, 0, len(events))
+	for _, e := range events {
 		out = append(out, map[string]any{
 			"type":            e.Type,
 			"reason":          e.Reason,
@@ -151,13 +158,19 @@ func (h *SupportBundleHandler) writeNetworkPolicies(ctx context.Context, zw *zip
 	}
 	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	policies, err := h.k8s.NetworkingV1().NetworkPolicies(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
+	policies, err := collectSupportPages(lctx, func(ctx context.Context, options metav1.ListOptions) ([]networkingv1.NetworkPolicy, metav1.ListMeta, error) {
+		page, err := h.k8s.NetworkingV1().NetworkPolicies(h.namespace).List(ctx, options)
+		if err != nil {
+			return nil, metav1.ListMeta{}, err
+		}
+		return page.Items, page.ListMeta, nil
+	})
 	if err != nil {
 		log.section("networkpolicies.json", err)
 		return
 	}
-	out := make([]map[string]any, 0, len(policies.Items))
-	for _, p := range policies.Items {
+	out := make([]map[string]any, 0, len(policies))
+	for _, p := range policies {
 		out = append(out, summarizeNetworkPolicy(p))
 	}
 	log.section("networkpolicies.json", writeBundleJSON(zw, "networkpolicies.json", out))
@@ -173,26 +186,38 @@ func (h *SupportBundleHandler) writeIngressCertificates(ctx context.Context, zw 
 	}
 	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	ingresses, err := h.k8s.NetworkingV1().Ingresses(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
+	ingresses, err := collectSupportPages(lctx, func(ctx context.Context, options metav1.ListOptions) ([]networkingv1.Ingress, metav1.ListMeta, error) {
+		page, err := h.k8s.NetworkingV1().Ingresses(h.namespace).List(ctx, options)
+		if err != nil {
+			return nil, metav1.ListMeta{}, err
+		}
+		return page.Items, page.ListMeta, nil
+	})
 	if err != nil {
 		log.section("ingress-certificates.json", err)
 		return
 	}
-	secrets, err := h.k8s.CoreV1().Secrets(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
+	secrets, err := collectSupportPages(lctx, func(ctx context.Context, options metav1.ListOptions) ([]corev1.Secret, metav1.ListMeta, error) {
+		page, err := h.k8s.CoreV1().Secrets(h.namespace).List(ctx, options)
+		if err != nil {
+			return nil, metav1.ListMeta{}, err
+		}
+		return page.Items, page.ListMeta, nil
+	})
 	if err != nil {
 		log.section("ingress-certificates.json", err)
 		return
 	}
 	tlsSecrets := map[string]corev1.Secret{}
-	for _, s := range secrets.Items {
+	for _, s := range secrets {
 		if s.Type == corev1.SecretTypeTLS {
 			tlsSecrets[s.Name] = s
 		}
 	}
 
 	secretRefs := map[string]bool{}
-	ingressOut := make([]map[string]any, 0, len(ingresses.Items))
-	for _, ing := range ingresses.Items {
+	ingressOut := make([]map[string]any, 0, len(ingresses))
+	for _, ing := range ingresses {
 		entry := summarizeIngress(ing)
 		for _, name := range ingressTLSSecretNames(ing) {
 			secretRefs[name] = true
