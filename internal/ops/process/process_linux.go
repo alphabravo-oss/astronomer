@@ -133,12 +133,25 @@ func runOwned(ctx context.Context, spec Spec) (result Result, runErr error) {
 		var outErr, diagErr error
 		result.StdoutSHA256, outErr = captureDigest(root, stdout, name+".stdout")
 		result.StderrSHA256, diagErr = captureDigest(root, stderr, name+".stderr")
-		captureErr := errors.Join(outErr, diagErr, stdout.Close(), stderr.Close(), root.Close())
+		// Bind streaming output while the exclusive root/file handles remain open.
+		// Never allocate archive bytes or treat failed child output as a backup.
+		var artifactErr error
+		if spec.StdoutArtifact.MaximumBytes > 0 && outErr == nil {
+			info, statErr := stdout.Stat()
+			artifactErr = statErr
+			if statErr == nil {
+				result.StdoutArtifact = &ArtifactCapture{Path: filepath.Join(spec.CaptureDirectory, name+".stdout"), SHA256: result.StdoutSHA256, SizeBytes: info.Size()}
+			}
+		}
+		captureErr := errors.Join(outErr, diagErr, artifactErr, stdout.Close(), stderr.Close(), root.Close())
 		if captureErr != nil {
 			if result.Kind == Success {
 				result.Kind, result.ExitCode = CaptureFailed, 1
 			}
 			runErr = errors.Join(runErr, captureErr)
+		}
+		if result.StdoutArtifact != nil {
+			result.StdoutArtifact.Acknowledged = result.Kind == Success && runErr == nil
 		}
 		result.CompletedAt = time.Now().UTC()
 		if runErr != nil {
@@ -239,7 +252,11 @@ func prepareCommand(ctx context.Context, spec Spec, stdout, stderr *os.File) (*e
 		command.Stdin = input
 		closeInput = func() { _ = input.Close() }
 	}
-	out := &limitedCapture{file: stdout, maximum: spec.MaximumCaptureBytes}
+	stdoutLimit := spec.MaximumCaptureBytes
+	if spec.StdoutArtifact.MaximumBytes > 0 {
+		stdoutLimit = spec.StdoutArtifact.MaximumBytes
+	}
+	out := &limitedCapture{file: stdout, maximum: stdoutLimit}
 	diagnostic := &limitedCapture{file: stderr, maximum: spec.MaximumCaptureBytes}
 	command.Stdout, command.Stderr = out, diagnostic
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
