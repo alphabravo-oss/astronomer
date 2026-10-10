@@ -420,7 +420,7 @@
     {
       "path": "internal/handler/catalog_operations.go",
       "owner": "HTTP backend",
-      "source_sha256": "1e7d3326b9b44c3a6da958ed4075c7ed2e37b2d8eacc538bc82e79b13768cd2e"
+      "source_sha256": "f7b320b1f294d0855a60f48c2ad65cc79118eff2fa03fea92c547caea5d77224"
     },
     {
       "path": "internal/handler/catalog_project_cursor.go",
