@@ -1,0 +1,28 @@
+=== RUN   TestCatalogLegacyRequestPreservesReleasedCursorBoundAndCount
+    catalog_cursor_test.go:84: released next_cursor maxLength1024 violated: length1363
+--- FAIL: TestCatalogLegacyRequestPreservesReleasedCursorBoundAndCount (0.00s)
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/legacy_absent_cursor
+    cursor_request_test.go:45: empty initial cursor was decoded as a position or lost signed sentinel mode
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/explicit_initial
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/repeated_initial
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/offset_with_initial
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_continuation
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_cursor_query
+    cursor_request_test.go:38: status200 oktrue; want400
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_filter_query
+    cursor_request_test.go:38: status200 oktrue; want400
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/authority_unavailable
+2026/10/10 00:13:20 ERROR request failed request_id=5d8889e4-cc0e-427c-a11a-dce82a059663 status=503 code=store_unavailable internal_detail="Signed cursor listing is unavailable"
+--- FAIL: TestCursorRequestEmptyInitialAndInvalidContinuation (0.00s)
+    --- FAIL: TestCursorRequestEmptyInitialAndInvalidContinuation/legacy_absent_cursor (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/explicit_initial (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/repeated_initial (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/offset_with_initial (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_continuation (0.00s)
+    --- FAIL: TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_cursor_query (0.00s)
+    --- FAIL: TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_filter_query (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/authority_unavailable (0.00s)
+FAIL
+FAIL	github.com/alphabravocompany/astronomer-go/internal/handler	0.070s
+FAIL

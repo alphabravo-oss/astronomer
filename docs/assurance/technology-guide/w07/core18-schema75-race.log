@@ -1,0 +1,938 @@
+=== RUN   TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL
+--- PASS: TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL (0.00s)
+=== RUN   TestCatalogLegacyRequestPreservesReleasedCursorBoundAndCount
+--- PASS: TestCatalogLegacyRequestPreservesReleasedCursorBoundAndCount (0.00s)
+=== RUN   TestCatalogProjectCursorRejectsAuthenticatedWrongPositionBeforeSQL
+--- PASS: TestCatalogProjectCursorRejectsAuthenticatedWrongPositionBeforeSQL (0.00s)
+=== RUN   TestCatalogProjectCursorPostgresSQLVisibilityWithoutRepositoryMaterialization
+--- PASS: TestCatalogProjectCursorPostgresSQLVisibilityWithoutRepositoryMaterialization (2.81s)
+=== RUN   TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor
+=== RUN   TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor/alerts
+    control_plane_pagination_postgres_test.go:169: alerts generated keyset plan: [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 0.29,
+              "Total Cost": 6.06,
+              "Plan Rows": 1,
+              "Plan Width": 125,
+              "Actual Startup Time": 0.018,
+              "Actual Total Time": 0.236,
+              "Actual Rows": 201.00,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 204,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "idx_control_plane_alerts_keyset",
+                  "Relation Name": "control_plane_alerts",
+                  "Alias": "control_plane_alerts",
+                  "Startup Cost": 0.29,
+                  "Total Cost": 6.06,
+                  "Plan Rows": 1,
+                  "Plan Width": 125,
+                  "Actual Startup Time": 0.018,
+                  "Actual Total Time": 0.214,
+                  "Actual Rows": 201.00,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Index Cond": "(ROW(fired_at, id) < ROW('2020-01-01 00:00:00+00'::timestamp with time zone, 'fa7e54e7-304e-4c82-956f-baf20a7b05ba'::uuid))",
+                  "Rows Removed by Index Recheck": 0,
+                  "Filter": "(((status)::text = 'resolved'::text) AND ((controller)::text = 'p-5e04e926ea4641768a59'::text))",
+                  "Rows Removed by Filter": 0,
+                  "Index Searches": 1,
+                  "Shared Hit Blocks": 204,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 1,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.088,
+            "Triggers": [
+            ],
+            "Execution Time": 0.262
+          }
+        ]
+=== RUN   TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor/silences
+    control_plane_pagination_postgres_test.go:169: silences generated keyset plan: [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 0.29,
+              "Total Cost": 17.89,
+              "Plan Rows": 201,
+              "Plan Width": 96,
+              "Actual Startup Time": 0.010,
+              "Actual Total Time": 0.061,
+              "Actual Rows": 201.00,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 12,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "idx_control_plane_silences_keyset",
+                  "Relation Name": "control_plane_silences",
+                  "Alias": "control_plane_silences",
+                  "Startup Cost": 0.29,
+                  "Total Cost": 862.06,
+                  "Plan Rows": 9841,
+                  "Plan Width": 96,
+                  "Actual Startup Time": 0.009,
+                  "Actual Total Time": 0.045,
+                  "Actual Rows": 201.00,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Index Cond": "(ROW(created_at, id) < ROW('2020-01-01 01:22:01+00'::timestamp with time zone, 'c5f68c88-0325-4e5c-b907-e8d43148e7e4'::uuid))",
+                  "Rows Removed by Index Recheck": 0,
+                  "Index Searches": 1,
+                  "Shared Hit Blocks": 12,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 0,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.061,
+            "Triggers": [
+            ],
+            "Execution Time": 0.079
+          }
+        ]
+--- PASS: TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor (3.30s)
+    --- PASS: TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor/alerts (2.20s)
+    --- PASS: TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor/silences (1.09s)
+=== RUN   TestControlPlaneCursorPostgresSelectiveFilterPlans
+=== RUN   TestControlPlaneCursorPostgresSelectiveFilterPlans/status
+    control_plane_pagination_postgres_test.go:242: ListControlPlaneAlerts selective actual plan (output plus filter/recheck removals count toward examined rows): [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 0.29,
+              "Total Cost": 64.20,
+              "Plan Rows": 201,
+              "Plan Width": 124,
+              "Actual Startup Time": 0.011,
+              "Actual Total Time": 0.109,
+              "Actual Rows": 201.00,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 13,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "idx_control_plane_alerts_keyset",
+                  "Relation Name": "control_plane_alerts",
+                  "Alias": "control_plane_alerts",
+                  "Startup Cost": 0.29,
+                  "Total Cost": 1596.83,
+                  "Plan Rows": 5021,
+                  "Plan Width": 124,
+                  "Actual Startup Time": 0.010,
+                  "Actual Total Time": 0.088,
+                  "Actual Rows": 201.00,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Filter": "((status)::text = 'resolved'::text)",
+                  "Rows Removed by Filter": 200,
+                  "Index Searches": 1,
+                  "Shared Hit Blocks": 13,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 1,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.153,
+            "Triggers": [
+            ],
+            "Execution Time": 0.133
+          }
+        ]
+    control_plane_pagination_postgres_test.go:242: ListControlPlaneAlertsAfter selective actual plan (output plus filter/recheck removals count toward examined rows): [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 0.29,
+              "Total Cost": 66.24,
+              "Plan Rows": 201,
+              "Plan Width": 124,
+              "Actual Startup Time": 0.018,
+              "Actual Total Time": 0.162,
+              "Actual Rows": 201.00,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 12,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "idx_control_plane_alerts_keyset",
+                  "Relation Name": "control_plane_alerts",
+                  "Alias": "control_plane_alerts",
+                  "Startup Cost": 0.29,
+                  "Total Cost": 1582.64,
+                  "Plan Rows": 4822,
+                  "Plan Width": 124,
+                  "Actual Startup Time": 0.017,
+                  "Actual Total Time": 0.140,
+                  "Actual Rows": 201.00,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Index Cond": "(ROW(fired_at, id) < ROW('2020-01-01 02:40:44+00'::timestamp with time zone, '8a09b3b6-0949-47c7-b6c4-7097fec4c4bd'::uuid))",
+                  "Rows Removed by Index Recheck": 0,
+                  "Filter": "((status)::text = 'resolved'::text)",
+                  "Rows Removed by Filter": 201,
+                  "Index Searches": 1,
+                  "Shared Hit Blocks": 12,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 1,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.184,
+            "Triggers": [
+            ],
+            "Execution Time": 0.206
+          }
+        ]
+=== RUN   TestControlPlaneCursorPostgresSelectiveFilterPlans/controller
+    control_plane_pagination_postgres_test.go:242: ListControlPlaneAlerts selective actual plan (output plus filter/recheck removals count toward examined rows): [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 0.29,
+              "Total Cost": 96.16,
+              "Plan Rows": 201,
+              "Plan Width": 124,
+              "Actual Startup Time": 0.013,
+              "Actual Total Time": 0.198,
+              "Actual Rows": 201.00,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 18,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "idx_control_plane_alerts_keyset",
+                  "Relation Name": "control_plane_alerts",
+                  "Alias": "control_plane_alerts",
+                  "Startup Cost": 0.29,
+                  "Total Cost": 1596.83,
+                  "Plan Rows": 3347,
+                  "Plan Width": 124,
+                  "Actual Startup Time": 0.012,
+                  "Actual Total Time": 0.154,
+                  "Actual Rows": 201.00,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Filter": "((controller)::text = 'f-018b294430d84815a632'::text)",
+                  "Rows Removed by Filter": 401,
+                  "Index Searches": 1,
+                  "Shared Hit Blocks": 18,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 1,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.100,
+            "Triggers": [
+            ],
+            "Execution Time": 0.221
+          }
+        ]
+    control_plane_pagination_postgres_test.go:242: ListControlPlaneAlertsAfter selective actual plan (output plus filter/recheck removals count toward examined rows): [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 0.29,
+              "Total Cost": 100.08,
+              "Plan Rows": 201,
+              "Plan Width": 124,
+              "Actual Startup Time": 0.014,
+              "Actual Total Time": 0.128,
+              "Actual Rows": 201.00,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 18,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Index Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Scan Direction": "Forward",
+                  "Index Name": "idx_control_plane_alerts_keyset",
+                  "Relation Name": "control_plane_alerts",
+                  "Alias": "control_plane_alerts",
+                  "Startup Cost": 0.29,
+                  "Total Cost": 1563.29,
+                  "Plan Rows": 3148,
+                  "Plan Width": 124,
+                  "Actual Startup Time": 0.013,
+                  "Actual Total Time": 0.111,
+                  "Actual Rows": 201.00,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Index Cond": "(ROW(fired_at, id) < ROW('2020-01-01 02:37:24+00'::timestamp with time zone, 'd6e55c10-52d7-41da-9101-ac3772d02cd9'::uuid))",
+                  "Rows Removed by Index Recheck": 0,
+                  "Filter": "((controller)::text = 'f-018b294430d84815a632'::text)",
+                  "Rows Removed by Filter": 402,
+                  "Index Searches": 1,
+                  "Shared Hit Blocks": 18,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 1,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.114,
+            "Triggers": [
+            ],
+            "Execution Time": 0.148
+          }
+        ]
+=== RUN   TestControlPlaneCursorPostgresSelectiveFilterPlans/status_and_controller
+    control_plane_pagination_postgres_test.go:242: ListControlPlaneAlerts selective actual plan (output plus filter/recheck removals count toward examined rows): [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 1.15,
+              "Total Cost": 182.31,
+              "Plan Rows": 201,
+              "Plan Width": 124,
+              "Actual Startup Time": 0.058,
+              "Actual Total Time": 0.326,
+              "Actual Rows": 201.00,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 27,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Incremental Sort",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Startup Cost": 1.15,
+                  "Total Cost": 1509.94,
+                  "Plan Rows": 1674,
+                  "Plan Width": 124,
+                  "Actual Startup Time": 0.057,
+                  "Actual Total Time": 0.307,
+                  "Actual Rows": 201.00,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Sort Key": ["fired_at DESC", "id DESC"],
+                  "Presorted Key": ["fired_at"],
+                  "Full-sort Groups": {
+                    "Group Count": 7,
+                    "Sort Methods Used": ["quicksort"],
+                    "Sort Space Memory": {
+                      "Average Sort Space Used": 29,
+                      "Peak Sort Space Used": 29
+                    }
+                  },
+                  "Shared Hit Blocks": 27,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0,
+                  "Plans": [
+                    {
+                      "Node Type": "Index Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Scan Direction": "Forward",
+                      "Index Name": "idx_control_plane_alerts_status",
+                      "Relation Name": "control_plane_alerts",
+                      "Alias": "control_plane_alerts",
+                      "Startup Cost": 0.29,
+                      "Total Cost": 1434.61,
+                      "Plan Rows": 1674,
+                      "Plan Width": 124,
+                      "Actual Startup Time": 0.021,
+                      "Actual Total Time": 0.252,
+                      "Actual Rows": 202.00,
+                      "Actual Loops": 1,
+                      "Disabled": false,
+                      "Index Cond": "((status)::text = 'resolved'::text)",
+                      "Rows Removed by Index Recheck": 0,
+                      "Filter": "((controller)::text = 'f-018b294430d84815a632'::text)",
+                      "Rows Removed by Filter": 404,
+                      "Index Searches": 1,
+                      "Shared Hit Blocks": 27,
+                      "Shared Read Blocks": 0,
+                      "Shared Dirtied Blocks": 0,
+                      "Shared Written Blocks": 0,
+                      "Local Hit Blocks": 0,
+                      "Local Read Blocks": 0,
+                      "Local Dirtied Blocks": 0,
+                      "Local Written Blocks": 0,
+                      "Temp Read Blocks": 0,
+                      "Temp Written Blocks": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 1,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.120,
+            "Triggers": [
+            ],
+            "Execution Time": 0.356
+          }
+        ]
+    control_plane_pagination_postgres_test.go:242: ListControlPlaneAlertsAfter selective actual plan (output plus filter/recheck removals count toward examined rows): [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 1.27,
+              "Total Cost": 205.56,
+              "Plan Rows": 201,
+              "Plan Width": 124,
+              "Actual Startup Time": 0.052,
+              "Actual Total Time": 0.220,
+              "Actual Rows": 201.00,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 29,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Incremental Sort",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Startup Cost": 1.27,
+                  "Total Cost": 1499.45,
+                  "Plan Rows": 1474,
+                  "Plan Width": 124,
+                  "Actual Startup Time": 0.051,
+                  "Actual Total Time": 0.204,
+                  "Actual Rows": 201.00,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Sort Key": ["fired_at DESC", "id DESC"],
+                  "Presorted Key": ["fired_at"],
+                  "Full-sort Groups": {
+                    "Group Count": 7,
+                    "Sort Methods Used": ["quicksort"],
+                    "Sort Space Memory": {
+                      "Average Sort Space Used": 29,
+                      "Peak Sort Space Used": 29
+                    }
+                  },
+                  "Shared Hit Blocks": 29,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0,
+                  "Plans": [
+                    {
+                      "Node Type": "Index Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Scan Direction": "Forward",
+                      "Index Name": "idx_control_plane_alerts_status",
+                      "Relation Name": "control_plane_alerts",
+                      "Alias": "control_plane_alerts",
+                      "Startup Cost": 0.29,
+                      "Total Cost": 1433.12,
+                      "Plan Rows": 1474,
+                      "Plan Width": 124,
+                      "Actual Startup Time": 0.015,
+                      "Actual Total Time": 0.165,
+                      "Actual Rows": 202.00,
+                      "Actual Loops": 1,
+                      "Disabled": false,
+                      "Index Cond": "(((status)::text = 'resolved'::text) AND (fired_at <= '2020-01-01 02:27:24+00'::timestamp with time zone))",
+                      "Rows Removed by Index Recheck": 0,
+                      "Filter": "(((controller)::text = 'f-018b294430d84815a632'::text) AND (ROW(fired_at, id) < ROW('2020-01-01 02:27:24+00'::timestamp with time zone, 'a107aace-eea6-4c4d-b0ee-b53e380b829a'::uuid)))",
+                      "Rows Removed by Filter": 405,
+                      "Index Searches": 1,
+                      "Shared Hit Blocks": 29,
+                      "Shared Read Blocks": 0,
+                      "Shared Dirtied Blocks": 0,
+                      "Shared Written Blocks": 0,
+                      "Local Hit Blocks": 0,
+                      "Local Read Blocks": 0,
+                      "Local Dirtied Blocks": 0,
+                      "Local Written Blocks": 0,
+                      "Temp Read Blocks": 0,
+                      "Temp Written Blocks": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 1,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.125,
+            "Triggers": [
+            ],
+            "Execution Time": 0.243
+          }
+        ]
+--- PASS: TestControlPlaneCursorPostgresSelectiveFilterPlans (1.28s)
+    --- PASS: TestControlPlaneCursorPostgresSelectiveFilterPlans/status (0.16s)
+    --- PASS: TestControlPlaneCursorPostgresSelectiveFilterPlans/controller (0.17s)
+    --- PASS: TestControlPlaneCursorPostgresSelectiveFilterPlans/status_and_controller (0.17s)
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/legacy_absent_cursor
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/explicit_initial
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/repeated_initial
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/offset_with_initial
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_continuation
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_cursor_query
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_filter_query
+=== RUN   TestCursorRequestEmptyInitialAndInvalidContinuation/authority_unavailable
+2026/10/10 00:19:14 ERROR request failed request_id=061d161e-6948-4037-8df2-38a624a5cd67 status=503 code=store_unavailable internal_detail="Signed cursor listing is unavailable"
+--- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/legacy_absent_cursor (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/explicit_initial (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/repeated_initial (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/offset_with_initial (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_continuation (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_cursor_query (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/malformed_filter_query (0.00s)
+    --- PASS: TestCursorRequestEmptyInitialAndInvalidContinuation/authority_unavailable (0.00s)
+=== RUN   TestCatalogCursorPostgresTraversalBeyondLegacyCeiling
+    pagination_postgres_test.go:209: final strict keyset generated query plan: [
+          {
+            "Plan": {
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Startup Cost": 0.56,
+              "Total Cost": 87.94,
+              "Plan Rows": 201,
+              "Plan Width": 113,
+              "Actual Startup Time": 0.035,
+              "Actual Total Time": 0.327,
+              "Actual Rows": 201.00,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Shared Hit Blocks": 211,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Plans": [
+                {
+                  "Node Type": "Nested Loop",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Join Type": "Inner",
+                  "Startup Cost": 0.56,
+                  "Total Cost": 3936.56,
+                  "Plan Rows": 9053,
+                  "Plan Width": 113,
+                  "Actual Startup Time": 0.035,
+                  "Actual Total Time": 0.308,
+                  "Actual Rows": 201.00,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Inner Unique": true,
+                  "Shared Hit Blocks": 211,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0,
+                  "Plans": [
+                    {
+                      "Node Type": "Index Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Scan Direction": "Forward",
+                      "Index Name": "idx_helm_charts_keyset",
+                      "Relation Name": "helm_charts",
+                      "Alias": "c",
+                      "Startup Cost": 0.41,
+                      "Total Cost": 3701.03,
+                      "Plan Rows": 9749,
+                      "Plan Width": 113,
+                      "Actual Startup Time": 0.012,
+                      "Actual Total Time": 0.192,
+                      "Actual Rows": 201.00,
+                      "Actual Loops": 1,
+                      "Disabled": false,
+                      "Index Cond": "(ROW((name)::text, repository_id, id) > ROW('cursor-7f57b130-1957-4f82-9a6d-4a7c7bc1950a-00100'::text, 'a1c94e7a-1767-45fd-9a35-0c04314bd6dc'::uuid, '6fc15a7e-a92a-4950-9bf5-7fe4940b51bc'::uuid))",
+                      "Rows Removed by Index Recheck": 0,
+                      "Filter": "(((name)::text ~~* '%cursor-7f57b130-1957-4f82-9a6d-4a7c7bc1950a%'::text) OR ((COALESCE(display_name, ''::character varying))::text ~~* '%cursor-7f57b130-1957-4f82-9a6d-4a7c7bc1950a%'::text) OR (COALESCE(description, ''::text) ~~* '%cursor-7f57b130-1957-4f82-9a6d-4a7c7bc1950a%'::text))",
+                      "Rows Removed by Filter": 0,
+                      "Index Searches": 1,
+                      "Shared Hit Blocks": 207,
+                      "Shared Read Blocks": 0,
+                      "Shared Dirtied Blocks": 0,
+                      "Shared Written Blocks": 0,
+                      "Local Hit Blocks": 0,
+                      "Local Read Blocks": 0,
+                      "Local Dirtied Blocks": 0,
+                      "Local Written Blocks": 0,
+                      "Temp Read Blocks": 0,
+                      "Temp Written Blocks": 0
+                    },
+                    {
+                      "Node Type": "Memoize",
+                      "Parent Relationship": "Inner",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Startup Cost": 0.15,
+                      "Total Cost": 0.16,
+                      "Plan Rows": 1,
+                      "Plan Width": 16,
+                      "Actual Startup Time": 0.000,
+                      "Actual Total Time": 0.000,
+                      "Actual Rows": 1.00,
+                      "Actual Loops": 201,
+                      "Disabled": false,
+                      "Cache Key": "c.repository_id",
+                      "Cache Mode": "logical",
+                      "Cache Hits": 199,
+                      "Cache Misses": 2,
+                      "Cache Evictions": 0,
+                      "Cache Overflows": 0,
+                      "Peak Memory Usage": 1,
+                      "Shared Hit Blocks": 4,
+                      "Shared Read Blocks": 0,
+                      "Shared Dirtied Blocks": 0,
+                      "Shared Written Blocks": 0,
+                      "Local Hit Blocks": 0,
+                      "Local Read Blocks": 0,
+                      "Local Dirtied Blocks": 0,
+                      "Local Written Blocks": 0,
+                      "Temp Read Blocks": 0,
+                      "Temp Written Blocks": 0,
+                      "Plans": [
+                        {
+                          "Node Type": "Index Scan",
+                          "Parent Relationship": "Outer",
+                          "Parallel Aware": false,
+                          "Async Capable": false,
+                          "Scan Direction": "Forward",
+                          "Index Name": "helm_repositories_pkey",
+                          "Relation Name": "helm_repositories",
+                          "Alias": "r",
+                          "Startup Cost": 0.14,
+                          "Total Cost": 0.15,
+                          "Plan Rows": 1,
+                          "Plan Width": 16,
+                          "Actual Startup Time": 0.010,
+                          "Actual Total Time": 0.010,
+                          "Actual Rows": 1.00,
+                          "Actual Loops": 2,
+                          "Disabled": false,
+                          "Index Cond": "(id = c.repository_id)",
+                          "Rows Removed by Index Recheck": 0,
+                          "Filter": "(owner_project_id IS NULL)",
+                          "Rows Removed by Filter": 0,
+                          "Index Searches": 2,
+                          "Shared Hit Blocks": 4,
+                          "Shared Read Blocks": 0,
+                          "Shared Dirtied Blocks": 0,
+                          "Shared Written Blocks": 0,
+                          "Local Hit Blocks": 0,
+                          "Local Read Blocks": 0,
+                          "Local Dirtied Blocks": 0,
+                          "Local Written Blocks": 0,
+                          "Temp Read Blocks": 0,
+                          "Temp Written Blocks": 0
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "Planning": {
+              "Shared Hit Blocks": 340,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            "Planning Time": 0.432,
+            "Triggers": [
+            ],
+            "Execution Time": 0.357
+          }
+        ]
+--- PASS: TestCatalogCursorPostgresTraversalBeyondLegacyCeiling (2.26s)
+=== RUN   TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation
+=== RUN   TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/actor
+=== RUN   TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/filter
+=== RUN   TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/project
+--- PASS: TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation (0.06s)
+    --- PASS: TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/actor (0.00s)
+    --- PASS: TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/filter (0.00s)
+    --- PASS: TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation/project (0.00s)
+PASS
+ok  	github.com/alphabravocompany/astronomer-go/internal/handler	10.908s

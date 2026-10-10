@@ -1,0 +1,26 @@
+{
+  "migration_source": "575a880098ffc8062e6abe392d3056d4bb59515a",
+  "binary_source": "53162d7d",
+  "binary_sha256": "4d4b16c218f5f03c6be2ae77ddbbcbdf6c9a00331444298651fa2eb09a3f8b48",
+  "cmd_migrator_and_module_graph_unchanged": true,
+  "steps": [
+    {
+      "major": 17,
+      "database": "plan032_w07_cursor17",
+      "server_version_num": 170011,
+      "from_schema": 73,
+      "final_schema": 75,
+      "exit_code": 0,
+      "log_sha256": "529d8a2422cdbbcb53f3382de95ce6f19d633d16e56582c1271b6051af525036"
+    },
+    {
+      "major": 18,
+      "database": "plan032_w07_cursor18",
+      "server_version_num": 180006,
+      "from_schema": 73,
+      "final_schema": 75,
+      "exit_code": 0,
+      "log_sha256": "c9bf73f80b1ec520cf05025ffa9aad5caf4419c7dc7b2725ccef6cf0304fe2fa"
+    }
+  ]
+}

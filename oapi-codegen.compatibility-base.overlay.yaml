@@ -46,3 +46,33 @@ actions:
     description: Retain *bool with omitempty in the v1 SDK.
     update:
       nullable: false
+
+  # Preserve released v1 parameter struct layouts. The canonical browser/wire
+  # contract includes cursor; Go callers use the compatible WithPaginationCursor
+  # request editor with their existing generated method and parameter values.
+  - target: $.paths['/api/v1/catalog/charts/'].get.parameters[?(@.name == 'cursor')]
+    description: Keep the released Go parameter layout while the explicit cursor request editor supplies the new wire parameter.
+    remove: true
+  - target: $.paths['/api/v1/controllers/alerts'].get.parameters[?(@.name == 'cursor')]
+    description: Keep the released Go parameter layout while the explicit cursor request editor supplies the new wire parameter.
+    remove: true
+  - target: $.paths['/api/v1/controllers/silences'].get.parameters[?(@.name == 'cursor')]
+    description: Keep the released Go parameter layout while the explicit cursor request editor supplies the new wire parameter.
+    remove: true
+
+  # Signed mode changes wire bounds without changing released Go field types.
+  # Request editors explicitly select the new mode; existing response models
+  # already hold arbitrary Go strings and preserve their released layouts.
+  - target: $.components.schemas.ControlPlaneAlertPage.properties.pagination
+    update:
+      $ref: "#/components/schemas/PaginationMetadata"
+  - target: $.components.schemas.ControlPlaneSilencePage.properties.pagination
+    update:
+      $ref: "#/components/schemas/PaginationMetadata"
+  - target: $.paths['/api/v1/catalog/charts/'].get.responses['200'].content['application/json'].schema.allOf[0]
+    update:
+      $ref: "#/components/schemas/PageEnvelope"
+  - target: $.components.schemas.SignedCursorPaginationMetadata
+    remove: true
+  - target: $.components.schemas.SignedCursorPageEnvelope
+    remove: true

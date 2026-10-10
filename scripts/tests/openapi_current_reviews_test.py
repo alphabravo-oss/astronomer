@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import copy
 import datetime as dt
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -19,7 +20,9 @@ class CurrentReviewTests(unittest.TestCase):
         self.rows = [{key: row[key] for key in module.IDENTITY} for row in self.registry["entries"]]
         self.source = self.registry["sourceSpecificationDigest"]
         self.base = self.registry["baselineSpecifications"][0]["digest"]
-        self.now = dt.datetime(2026, 10, 9, tzinfo=dt.timezone.utc)
+        # The fixture observes every recorded review at its review instant;
+        # production continues to use the actual UTC authority clock.
+        self.now = max(module.instant(row["reviewedAt"]) for row in self.registry["entries"])
 
     def run_review(self):
         return module.effective_review(self.registry, self.review, self.rows, self.source, self.base, self.now)
@@ -28,8 +31,43 @@ class CurrentReviewTests(unittest.TestCase):
         effective = self.run_review()
         history = self.review.split(self.registry["historicalBoundary"])[0]
         self.assertTrue(effective.startswith(history))
-        self.assertEqual(len(self.rows), 76)
+        self.assertEqual(len(self.rows), 82)
+        inherited = self.registry["entries"][:76]
+        # Canonical entry digest from reviewed e0f92cf7; includes every old
+        # identity, owner, review/expiry instant and evidence disposition.
+        self.assertEqual(hashlib.sha256(json.dumps(inherited, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+                         "bd351949f443534299ddcd135d9b1e4924bc3ef42b397c47861903eaca43ec84")
+        self.assertEqual(len(self.registry["entries"][76:]), 6)
+        self.assertEqual({(row["id"], row["operation"], row["path"], row["level"]) for row in self.rows[76:]}, {
+            ("request-parameter-max-set", "GET", "/api/v1/catalog/charts/", 3),
+            ("request-parameter-max-set", "GET", "/api/v1/controllers/alerts", 3),
+            ("response-property-max-length-increased", "GET", "/api/v1/controllers/alerts", 3),
+            ("request-parameter-max-set", "GET", "/api/v1/controllers/silences", 3),
+            ("response-property-max-length-increased", "GET", "/api/v1/controllers/silences", 3),
+            ("response-body-all-of-removed", "GET", "/api/v1/catalog/charts/", 2),
+        })
         self.assertTrue(all(row["ignoreLine"] in effective for row in self.registry["entries"]))
+
+    def test_signed_cursor_reviews_expire_at_their_own_deadline(self):
+        current = self.registry["entries"][76:]
+        self.rows = [{key: row[key] for key in module.IDENTITY} for row in current]
+        self.assertEqual({row["path"] for row in self.rows}, {
+            "/api/v1/catalog/charts/", "/api/v1/controllers/alerts", "/api/v1/controllers/silences",
+        })
+        self.assertTrue(all(row["operation"] == "GET" for row in self.rows))
+        self.now = dt.datetime(2026, 11, 8, 23, 59, 59, tzinfo=dt.timezone.utc)
+        self.run_review()
+        self.now = dt.datetime(2026, 11, 9, tzinfo=dt.timezone.utc)
+        with self.assertRaisesRegex(ValueError, "expired"):
+            self.run_review()
+
+    def test_new_cursor_dispositions_never_ignore_changed_findings(self):
+        for entry in self.registry["entries"][76:]:
+            with self.subTest(path=entry["path"], rule=entry["id"]):
+                row = {key: entry[key] for key in module.IDENTITY}
+                row["text"] += " unreviewed variation"
+                self.rows = [row]
+                self.assertNotIn(entry["ignoreLine"], self.run_review())
 
     def test_expired_response_review_rejected_at_exact_deadline(self):
         self.now = dt.datetime(2026, 10, 16, tzinfo=dt.timezone.utc)

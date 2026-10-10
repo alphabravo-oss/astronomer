@@ -305,7 +305,7 @@
     {
       "path": "internal/db/schema_version.go",
       "owner": "db backend",
-      "source_sha256": "58f584e82d42577568f8d9c8c50c5f478c5710a15707001aca5b9b97f1199a0f"
+      "source_sha256": "55905e12af286300d0baf9140cc9d0f3b8a7948a4577ccbb3b5144dc8fabd735"
     },
     {
       "path": "internal/delivery/catalogapp/service.go",
@@ -395,12 +395,12 @@
     {
       "path": "internal/handler/catalog_chart_search.go",
       "owner": "HTTP backend",
-      "source_sha256": "46b55bc5e3b7e7852ff9f650cc96658a3de657e7529141420b80ac8062c32353"
+      "source_sha256": "62526b9c3d73478856e0c8717a6ba853d7d03e3e090ca24bfb6451d430df5ee3"
     },
     {
       "path": "internal/handler/catalog_cursor.go",
       "owner": "handler backend: reviewed W07 collection request/continuation boundary",
-      "source_sha256": "7f64e69787f0764854d659b1f817dafa2a850eda55ec5359c0116a8cd848a47a"
+      "source_sha256": "1f2851d7cd16f1fbedf1fd26fd1ca74c6759e73d39d5d7429b186c750f3e26b5"
     },
     {
       "path": "internal/handler/catalog_installations.go",
@@ -411,6 +411,11 @@
       "path": "internal/handler/catalog_operations.go",
       "owner": "HTTP backend",
       "source_sha256": "ee3d96dec0b0fe69962be9d502abf1b25073cc96c786725bcfaf4142217f48ba"
+    },
+    {
+      "path": "internal/handler/catalog_project_cursor.go",
+      "owner": "catalog backend",
+      "source_sha256": "7b303ac0369ea5da37d5b13ef748f8739dcee02428f80ed6283f39754828d5c8"
     },
     {
       "path": "internal/handler/catalog_queries.go",
@@ -470,12 +475,7 @@
     {
       "path": "internal/handler/control_plane_cursor.go",
       "owner": "handler backend: reviewed W07 collection request/continuation boundary",
-      "source_sha256": "6281096a124909995a99ab262e4d4ef0c5a0c23aefac0f4e39006fad66efe6a7"
-    },
-    {
-      "path": "internal/handler/cursor_request.go",
-      "owner": "handler backend: reviewed W07 collection request/continuation boundary",
-      "source_sha256": "6e13d3cc44db6fe840c9f7265b767b10fb5abe66e82b3d39b099a561b33c74b1"
+      "source_sha256": "fd699e3e2b27fc7669747622bb8fc819822fc8c61e66aec2c6e7e009a9107a51"
     },
     {
       "path": "internal/handler/dashboards_render.go",
@@ -4770,28 +4770,28 @@
     },
     {
       "path": "internal/handler/catalog_chart_search.go",
-      "function": "*CatalogHandler.catalogChartFilter",
+      "function": "catalogChartSearchFilter",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "85f534372936786206400658eac745e20a3d56eda49c723fd2bd1c7a8e600560",
+      "scope_sha256": "9f2602fbcbe6b761c59aa3cc67f0abce67a904c49c124d42703e7b7a95a0d6be",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
     {
       "path": "internal/handler/catalog_chart_search.go",
-      "function": "*CatalogHandler.catalogChartFilter",
+      "function": "catalogChartSearchFilter",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "85f534372936786206400658eac745e20a3d56eda49c723fd2bd1c7a8e600560",
+      "scope_sha256": "9f2602fbcbe6b761c59aa3cc67f0abce67a904c49c124d42703e7b7a95a0d6be",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
     {
       "path": "internal/handler/catalog_chart_search.go",
-      "function": "*CatalogHandler.catalogChartFilter",
+      "function": "catalogChartSearchFilter",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "85f534372936786206400658eac745e20a3d56eda49c723fd2bd1c7a8e600560",
+      "scope_sha256": "9f2602fbcbe6b761c59aa3cc67f0abce67a904c49c124d42703e7b7a95a0d6be",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -4800,7 +4800,7 @@
       "function": "*CatalogHandler.ListCharts",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "d02017b56cbba2a0d0b261538bc595d598f947f2ea4bdac565fb9822d148d476",
+      "scope_sha256": "3d552c9d317531c7f92a2300bd67cae0541d71f44d45e97955558f522e7675b4",
       "classification": "non-sql-candidate",
       "control": "Exact HTTP URL.Query parameter access in reviewed W07 bounded-offset/keyset request handling; not a database call. Canonical sqlc owns the actual typed list queries."
     },
@@ -4809,7 +4809,7 @@
       "function": "*CatalogHandler.ListCharts",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "d02017b56cbba2a0d0b261538bc595d598f947f2ea4bdac565fb9822d148d476",
+      "scope_sha256": "3d552c9d317531c7f92a2300bd67cae0541d71f44d45e97955558f522e7675b4",
       "classification": "non-sql-candidate",
       "control": "Exact HTTP URL.Query parameter access in reviewed W07 bounded-offset/keyset request handling; not a database call. Canonical sqlc owns the actual typed list queries."
     },
@@ -4866,6 +4866,24 @@
       "scope_sha256": "e83face383c004c2b351b348e8d00db9acc01c26eb979aa9291e9512875373af",
       "classification": "non-sql-candidate",
       "control": "Exact lexical candidate is existing prose/CLI input, not a SQL statement; enclosing source is bound."
+    },
+    {
+      "path": "internal/handler/catalog_project_cursor.go",
+      "function": "*CatalogHandler.tryProjectChartCursor",
+      "operation": "Query",
+      "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
+      "scope_sha256": "e831053fb80d767e2bf61302fac4b4229cb584b0ea3c591c52f5f5b3c8d5056b",
+      "classification": "non-sql-candidate",
+      "control": "HTTP URL query extraction after strict route query validation; current project authorization and canonical generated pagination SQL remain owned by the handler. Exact module/declaration binding rejects same-name database SQL replacement."
+    },
+    {
+      "path": "internal/handler/catalog_project_cursor.go",
+      "function": "*CatalogHandler.tryProjectChartCursor",
+      "operation": "Query",
+      "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
+      "scope_sha256": "e831053fb80d767e2bf61302fac4b4229cb584b0ea3c591c52f5f5b3c8d5056b",
+      "classification": "non-sql-candidate",
+      "control": "HTTP URL query extraction after strict route query validation; current project authorization and canonical generated pagination SQL remain owned by the handler. Exact module/declaration binding rejects same-name database SQL replacement."
     },
     {
       "path": "internal/handler/catalog_queries.go",
@@ -5151,7 +5169,7 @@
       "function": "*ControlPlaneHandler.ListAlerts",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "9c0833944046dde8322e2eb461a8ce2f30e8508beb772815cdf2fff8ff4e864a",
+      "scope_sha256": "2b776b9ed1122cd9be0161fc792d884599b5466d40b6ba5ae91889444c1d345f",
       "classification": "non-sql-candidate",
       "control": "Exact HTTP URL.Query parameter access in reviewed W07 bounded-offset/keyset request handling; not a database call. Canonical sqlc owns the actual typed list queries."
     },
@@ -5160,34 +5178,7 @@
       "function": "*ControlPlaneHandler.ListAlerts",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "9c0833944046dde8322e2eb461a8ce2f30e8508beb772815cdf2fff8ff4e864a",
-      "classification": "non-sql-candidate",
-      "control": "Exact HTTP URL.Query parameter access in reviewed W07 bounded-offset/keyset request handling; not a database call. Canonical sqlc owns the actual typed list queries."
-    },
-    {
-      "path": "internal/handler/cursor_request.go",
-      "function": "readCursorRequest",
-      "operation": "Query",
-      "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "43c147c08f7b19d8d99190e5d0474423d72c7b3ad6f518499747c8ed2ae39f09",
-      "classification": "non-sql-candidate",
-      "control": "Exact HTTP URL.Query parameter access in reviewed W07 bounded-offset/keyset request handling; not a database call. Canonical sqlc owns the actual typed list queries."
-    },
-    {
-      "path": "internal/handler/cursor_request.go",
-      "function": "readCursorRequest",
-      "operation": "Query",
-      "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "43c147c08f7b19d8d99190e5d0474423d72c7b3ad6f518499747c8ed2ae39f09",
-      "classification": "non-sql-candidate",
-      "control": "Exact HTTP URL.Query parameter access in reviewed W07 bounded-offset/keyset request handling; not a database call. Canonical sqlc owns the actual typed list queries."
-    },
-    {
-      "path": "internal/handler/cursor_request.go",
-      "function": "readCursorRequest",
-      "operation": "Query",
-      "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "43c147c08f7b19d8d99190e5d0474423d72c7b3ad6f518499747c8ed2ae39f09",
+      "scope_sha256": "2b776b9ed1122cd9be0161fc792d884599b5466d40b6ba5ae91889444c1d345f",
       "classification": "non-sql-candidate",
       "control": "Exact HTTP URL.Query parameter access in reviewed W07 bounded-offset/keyset request handling; not a database call. Canonical sqlc owns the actual typed list queries."
     },

@@ -690,3 +690,12 @@ compatibility checks.
 - PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `equal_labels/items/`
 - PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `source_matchers/items/label`
 - PUT /api/v1/admin/alerting/inhibitions/{id}/ added the pattern `\S` to the request property `target_matchers/items/label`
+
+Reviewed 2026-10-10 by the Plan032 W07 executor for release integration review; exact findings expire 2026-11-09. The three legacy offset ceilings reject expensive or repeating traversal with `offset_not_supported`; explicit `cursor=` selects the compatible signed continuation extension. Absent-cursor requests preserve released counted mode and the old cursor bound. The larger response bound applies only to three cursor-capable collections, and the chart envelope reference preserves its fields while selecting that bound. The [bounded compatibility review](assurance/technology-guide/w07/api-cursor-compatibility-review.md) retains the before-fix legacy failure and scoped actual database/SDK evidence. This review does not approve other collections or whole W07 completion.
+
+- GET /api/v1/catalog/charts/ for the `query` request parameter `offset`, the max was set to `10000.00`
+- GET /api/v1/controllers/alerts for the `query` request parameter `offset`, the max was set to `10000.00`
+- GET /api/v1/controllers/alerts the `pagination/next_cursor` response property's maxLength was increased from `1024` to `4096` for the response status `200`
+- GET /api/v1/controllers/silences for the `query` request parameter `offset`, the max was set to `10000.00`
+- GET /api/v1/controllers/silences the `pagination/next_cursor` response property's maxLength was increased from `1024` to `4096` for the response status `200`
+- GET /api/v1/catalog/charts/ removed `#/components/schemas/PageEnvelope` from the response body `allOf` list for the response status `200`

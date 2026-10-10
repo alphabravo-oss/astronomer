@@ -1853,6 +1853,8 @@ type Querier interface {
 	// string.
 	ListPlatformSettingsByPrefix(ctx context.Context, prefix string) ([]PlatformSetting, error)
 	ListPodSecurityTemplates(ctx context.Context, arg ListPodSecurityTemplatesParams) ([]PodSecurityTemplate, error)
+	ListProjectHelmChartsAfter(ctx context.Context, arg ListProjectHelmChartsAfterParams) ([]HelmChart, error)
+	ListProjectHelmChartsPage(ctx context.Context, arg ListProjectHelmChartsPageParams) ([]HelmChart, error)
 	// Only the already authorized page of projects; no estate-wide namespace scan.
 	ListProjectNamespaceScopes(ctx context.Context, projectIds []uuid.UUID) ([]ProjectNamespace, error)
 	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]ProjectNamespace, error)

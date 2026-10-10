@@ -48,6 +48,47 @@
       }
     },
     {
+      "target": "$.paths['/api/v1/catalog/charts/'].get.parameters[?(@.name == 'cursor')]",
+      "description": "Keep the released Go parameter layout while the explicit cursor request editor supplies the new wire parameter.",
+      "remove": true
+    },
+    {
+      "target": "$.paths['/api/v1/controllers/alerts'].get.parameters[?(@.name == 'cursor')]",
+      "description": "Keep the released Go parameter layout while the explicit cursor request editor supplies the new wire parameter.",
+      "remove": true
+    },
+    {
+      "target": "$.paths['/api/v1/controllers/silences'].get.parameters[?(@.name == 'cursor')]",
+      "description": "Keep the released Go parameter layout while the explicit cursor request editor supplies the new wire parameter.",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.ControlPlaneAlertPage.properties.pagination",
+      "update": {
+        "$ref": "#/components/schemas/PaginationMetadata"
+      }
+    },
+    {
+      "target": "$.components.schemas.ControlPlaneSilencePage.properties.pagination",
+      "update": {
+        "$ref": "#/components/schemas/PaginationMetadata"
+      }
+    },
+    {
+      "target": "$.paths['/api/v1/catalog/charts/'].get.responses['200'].content['application/json'].schema.allOf[0]",
+      "update": {
+        "$ref": "#/components/schemas/PageEnvelope"
+      }
+    },
+    {
+      "target": "$.components.schemas.SignedCursorPaginationMetadata",
+      "remove": true
+    },
+    {
+      "target": "$.components.schemas.SignedCursorPageEnvelope",
+      "remove": true
+    },
+    {
       "target": "$.components.schemas.ClusterDeployment.properties.phase.$ref",
       "description": "Retain v1 Go SDK inline enum type identity.",
       "remove": true

@@ -139,6 +139,7 @@ export type HelmChartQuery = Record<string, unknown> & {
   search?: string;
   limit?: number;
   offset?: number;
+  cursor?: string;
 };
 
 export function useHelmCharts(params: HelmChartQuery) {
