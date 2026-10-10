@@ -19618,6 +19618,11 @@
       "path": "internal/ops/upgradecli/toolkit_install_linux.go",
       "owner": "ops/upgradecli",
       "scope": "Cryptographically authenticated bounded platform/source/target toolkit inventory plus exact archive/member/executable/bootstrap validation before private installation."
+    },
+    {
+      "path": "pkg/astroclient/catalog_controller_window.go",
+      "owner": "sdk/catalog",
+      "scope": "Typed additive recent-operation summary reader for the actual v1 data envelope and released flat response compatibility; 2 MiB response bound, six required known fields, no persistence or authority escalation"
     }
   ],
   "json_sites": [
@@ -30497,6 +30502,53 @@
       "owner": "ops/upgradecli",
       "schema": "ToolkitInventory schema1 maximum1MiB.",
       "reader_behavior": "Canonical strict Decode occurs after offline verification with the compiled root and exact target release-workflow signer. Exact archive/platform/source/target/size/hash matches precede bounded archive/member validation and selected tool-content resolution checks; no arbitrary archive/path/PATH trust."
+    },
+    {
+      "path": "pkg/astroclient/catalog_controller_window.go",
+      "function": "CatalogControllerWindowFromResponse",
+      "operation": "json.Unmarshal",
+      "arguments": [
+        "response.Body",
+        "&body"
+      ],
+      "owner": "sdk/catalog",
+      "schema": "Additive v1 CatalogControllerWindow with scope, windowLimit, returned, total(nullable), complete and notice; actual data wrapper plus released flat compatibility",
+      "reader_behavior": "Bound response bytes to 2 MiB and require HTTP200/nonempty object. Unmarshal syntax/type errors return a content-free typed error; duplicates retain encoding/json last-value behavior and no independent nesting limit is claimed."
+    },
+    {
+      "path": "pkg/astroclient/catalog_controller_window.go",
+      "function": "CatalogControllerWindowFromResponse",
+      "operation": "json.Unmarshal",
+      "arguments": [
+        "envelope",
+        "&status"
+      ],
+      "owner": "sdk/catalog",
+      "schema": "Additive v1 CatalogControllerWindow with scope, windowLimit, returned, total(nullable), complete and notice; actual data wrapper plus released flat compatibility",
+      "reader_behavior": "If data is present it exclusively owns the summary; require an object, reject null/array/string and return content-free error. Compatible extra status fields are ignored; released flat shape remains supported only when data is absent."
+    },
+    {
+      "path": "pkg/astroclient/catalog_controller_window.go",
+      "function": "CatalogControllerWindowFromResponse",
+      "operation": "json.Unmarshal",
+      "arguments": [
+        "raw",
+        "&fields"
+      ],
+      "owner": "sdk/catalog",
+      "schema": "Additive v1 CatalogControllerWindow with scope, windowLimit, returned, total(nullable), complete and notice; actual data wrapper plus released flat compatibility",
+      "reader_behavior": "Require six known operationSummary fields; total alone permits null/unknown. Missing required fields/null known scalars reject. Compatible additional fields are ignored; no total is inferred from page length."
+    },
+    {
+      "path": "pkg/astroclient/catalog_controller_window.go",
+      "function": "CatalogControllerWindowFromResponse",
+      "operation": "json.NewDecoder",
+      "arguments": [
+        "bytes.NewReader(raw)"
+      ],
+      "owner": "sdk/catalog",
+      "schema": "Additive v1 CatalogControllerWindow with scope, windowLimit, returned, total(nullable), complete and notice; actual data wrapper plus released flat compatibility",
+      "reader_behavior": "Decode the typed six-field summary then require EOF, validate scope/global-or-authorized-clusters, window1000, returned0..1000, nonnegative nullable total, notice<=512 runes and complete only when known total equals returned. Compatible extra fields are ignored; syntax/type/range errors are content-free."
     }
   ]
 }

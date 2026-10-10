@@ -1,6 +1,6 @@
 {
   "status": "SCOPED_SOURCE_INTEGRATED_CANDIDATE_OPEN",
-  "mainProductHead": "a766a7c4ea7784c75f586e42ce8164984d2a0225",
+  "mainProductHead": "bdf0f4457bd0ef909bb74e74217dc6eb11c6415e",
   "cli": {
     "sourceCommit": "35cab186a02782f1252c255558a67f99a7584412",
     "integratedAt": "7f2625705dc967213056875f35111573ce9bf464",
@@ -106,11 +106,51 @@
       "branchCommitsAndOriginalEvidenceRetained": true,
       "capacityBefore": "Filesystem     1024-blocks      Used Available Capacity Mounted on\n/dev/sda1        354066236 267913268  71703692      79% /\n",
       "capacityAfter": "Filesystem     1024-blocks      Used Available Capacity Mounted on\n/dev/sda1        354066236 267653828  71963132      79% /\n"
+    },
+    "additionalSeven": {
+      "receiptSHA256": "12f84323b3634e984b203f9ad11445c25c7b8c0ca52708ce6a09838b24fc84b2",
+      "retired": 7,
+      "availableBytesRecovered": 699154432,
+      "force": false,
+      "branchesObjectsAndEvidenceRetained": true,
+      "sparseAbsentPathsExplicitlyVerified": true
     }
   },
   "limits": [
     "Entire Plan032 incomplete.",
     "Fresh whole-source security, current PostgreSQL81, offline scan graph, observability/browser/currentKubernetes/combinedcandidate remain open.",
     "No customer deployment, PR or release publication."
-  ]
+  ],
+  "w07": {
+    "source": "f70a934b6c99f56e0568912169ca6271339a5030",
+    "integratedAt": "bdf0f4457bd0ef909bb74e74217dc6eb11c6415e",
+    "affectedGenerationReceiptSHA256": "3788f06ee7a0a48913a22e3302eb655464d36cef53bf86bc97ee9ef99d16e3d5",
+    "affectedGates": 9,
+    "uiTests": 19,
+    "sdkNamedRaceResults": 23,
+    "pureReceiptSHA256": "c95221f87795cc7c3e27b9340b6c5393103888e835ea743debe1c6384d924bb2",
+    "pureParents": 30,
+    "pureNamedRaceResults": 107,
+    "pureGates": 7,
+    "zeroSkips": true,
+    "currentMainPolicyQualified": false,
+    "postgres81Qualified": false,
+    "postgres17Schema79Status": "ROOT_NATIVE_RUNNING_ACTUAL_OID66617",
+    "limits": [
+      "Frozen source qualification retains its original source identity; main is reviewed composition, not whole candidate acceptance.",
+      "Original failed results are unchanged.",
+      "Disposable schema79 allocation does not qualify080/081 or PostgreSQL application behavior."
+    ]
+  },
+  "catalog": {
+    "integratedHead": "665d4deec75a2ced2f3d630bb5a23d4267110452",
+    "source": "afd3af678a0c7ab70a1d03b526b6b1b1f6a96135",
+    "distributions": 62,
+    "lockRecords": 63,
+    "artifactHashes": 386,
+    "portableArtifactsAuthenticated": 69,
+    "defaultGuardObservationsAuthenticated": 86,
+    "currentCombinedInteropQualified": false,
+    "ciArmOidcQualified": false
+  }
 }
