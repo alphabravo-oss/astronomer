@@ -25,7 +25,7 @@
     {
       "path": "cmd/worker/main.go",
       "owner": "worker backend",
-      "source_sha256": "7135f2ee2221f85ae89fa2af76e003b3747b055f9cfc09549982ac2e7a055001"
+      "source_sha256": "f2ddd68c8da39a4631da371b00b805e05ccf0dae758c707e7e4e00606722d907"
     },
     {
       "path": "internal/agent/delivery/materializer.go",
@@ -305,7 +305,7 @@
     {
       "path": "internal/db/schema_version.go",
       "owner": "db backend",
-      "source_sha256": "ded4d7cfc0c2b3b6cbf263e44f0b7f9fe4fcdc1d138dd40080bf63a00a011563"
+      "source_sha256": "9f474a8caa800786f5ef8f40f14f3ffb55b59dde3491e60e37d6dc15ed90489f"
     },
     {
       "path": "internal/delivery/catalogapp/service.go",
@@ -323,9 +323,14 @@
       "source_sha256": "35e0e89c3503732c2a928e2af17068cd4b8c13714da98ba7d7efaee786d1de14"
     },
     {
+      "path": "internal/delivery/provider/owned_snapshot.go",
+      "owner": "delivery relational-authority snapshot coordinator",
+      "source_sha256": "636d786a401ef0521fa8e5f298ecdc4b27d28bc0d1f821ffb41967bde7161c07"
+    },
+    {
       "path": "internal/delivery/provider/provider.go",
       "owner": "delivery backend",
-      "source_sha256": "83babf8bed8929b75c4b0950e98a919ce6a4c7684518e10cf84de7ec924163f9"
+      "source_sha256": "b2ddfb0aeb83424a1c00c8cb1e297c0ed04697388aaa9c7c29d93aada672f85b"
     },
     {
       "path": "internal/delivery/resolver/database_registry_auth.go",
@@ -390,7 +395,7 @@
     {
       "path": "internal/handler/auth_sessions.go",
       "owner": "HTTP backend",
-      "source_sha256": "0d8cfc8b2285f2fe5be5014dda5321032b4c3ca8c020688f7af3cf9cc36548a7"
+      "source_sha256": "6aa83cd6653a43848394112eb94457b073a479827925d7ed1350f4dcc72c5f00"
     },
     {
       "path": "internal/handler/backups_helpers.go",
@@ -595,7 +600,7 @@
     {
       "path": "internal/handler/monitoring_stack_grafana.go",
       "owner": "HTTP backend",
-      "source_sha256": "d99fa04fc66785e70e70453983d38197f340ceb8d277a3eff6a4bca2686787a1"
+      "source_sha256": "56baa49549be5508f710ce51a0f763cb70414549969d30db7c7df7ca4d36fe8b"
     },
     {
       "path": "internal/handler/monitoring_stack_loki.go",
@@ -1125,7 +1130,7 @@
       "function": "main",
       "operation": "SQLLiteral",
       "sha256": "9505cacb7c710ed17125fcc6cb3669e8ddca6c8cd8af6a31f6b3cd64604c3098",
-      "scope_sha256": "d55ae2ca5404b7bed241bbcae9c260d9adfabc5475f325dcd566bbcef16ddcc2",
+      "scope_sha256": "182465a4e2c272db1690510d0357d0df13c7f277c0ec936b9924d74bceaf7421",
       "classification": "non-sql-candidate",
       "control": "Exact lexical candidate is existing prose/CLI input, not a SQL statement; enclosing source is bound."
     },
@@ -4512,6 +4517,24 @@
       "scope_sha256": "82756346a307aaf06c180379cb54450709f127012964c71b11693762a25f0818",
       "classification": "non-sql-candidate",
       "control": "Exact lexical candidate is existing prose/CLI input, not a SQL statement; enclosing source is bound."
+    },
+    {
+      "path": "internal/delivery/provider/owned_snapshot.go",
+      "function": "*ownedSnapshotCoordinator.snapshotTransaction",
+      "operation": "SQLLiteral",
+      "sha256": "e6f07d43b5c21db0fbb9a31feac2dc599787763393dd5acbfad80e247eb02ad5",
+      "scope_sha256": "377548567f33e7ed1f124213bcf5925f64c6f28f24c41cabe66506079c5e0591",
+      "classification": "non-sql-candidate",
+      "control": "Fixed begin/commit diagnostic stage argument to safeOwnedSnapshotError; database transaction is performed by pgx BeginTx/Commit and relational reads/writes use canonical sqlc queries. Exact enclosing declaration and module bytes are bound; this lexical label is not executed SQL."
+    },
+    {
+      "path": "internal/delivery/provider/owned_snapshot.go",
+      "function": "*ownedSnapshotCoordinator.snapshotTransaction",
+      "operation": "SQLLiteral",
+      "sha256": "9505cacb7c710ed17125fcc6cb3669e8ddca6c8cd8af6a31f6b3cd64604c3098",
+      "scope_sha256": "377548567f33e7ed1f124213bcf5925f64c6f28f24c41cabe66506079c5e0591",
+      "classification": "non-sql-candidate",
+      "control": "Fixed begin/commit diagnostic stage argument to safeOwnedSnapshotError; database transaction is performed by pgx BeginTx/Commit and relational reads/writes use canonical sqlc queries. Exact enclosing declaration and module bytes are bound; this lexical label is not executed SQL."
     },
     {
       "path": "internal/delivery/provider/provider.go",
