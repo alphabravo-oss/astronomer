@@ -1,6 +1,11 @@
 import copy
 import importlib.util
+import json
+import os
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 from urllib.parse import urlsplit
 
@@ -63,6 +68,27 @@ class RotationOwnershipTests(unittest.TestCase):
         self.address = urlsplit("postgres://192.0.2.2:30433/plan032_w16_rotation")
         with self.assertRaisesRegex(ValueError, "owned cluster node"):
             self.check()
+
+    def test_zero_skipped_missing_duplicate_or_unexpected_parents_rejected(self):
+        passing = [{"Action": "pass", "Test": name} for name in sorted(fence.PARENTS)]
+        mutations = [[], passing[:-1], passing + [passing[0]], passing + [{"Action": "pass", "Test": "TestPostgresRotationFuture"}], [{**event, "Action": "skip"} if i == 0 else event for i, event in enumerate(passing)]]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "go.jsonl"
+            for events in mutations:
+                path.write_text("\n".join(json.dumps(event) for event in events))
+                self.assertFalse(fence.parent_results(path)["qualified"])
+            path.write_text("\n".join(json.dumps(event) for event in passing))
+            self.assertTrue(fence.parent_results(path)["qualified"])
+
+    def test_outer_timeout_terminates_owned_process_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output"
+            with output.open("w") as handle:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    fence.run_test_process([sys.executable, "-c", "import os,time;print(os.getpgrp(),flush=True);time.sleep(30)"], os.environ.copy(), handle, timeout=0.2)
+            group = int(output.read_text().strip())
+            with self.assertRaises(ProcessLookupError):
+                os.killpg(group, 0)
 
 
 if __name__ == "__main__":

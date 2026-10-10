@@ -5,6 +5,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -16,6 +17,39 @@ CLUSTER_UID = "ea0f410a-e1ea-4cb4-9fe5-40a35a020d3e"
 OWNER = "plan032-20261009"
 DATABASE = "plan032_w16_rotation"
 NAMESPACE = "plan032-recovery"
+PARENTS = frozenset({
+    "TestPostgresRotationCatalogCoversActualEncryptedColumns",
+    "TestPostgresRotationDryRunPreservesRowsAndHistoricalKey",
+    "TestPostgresRotationInterruptionResumesCommittedPages",
+    "TestPostgresRotationCASPreservesConcurrentWriter",
+})
+
+
+def run_test_process(command, env, output, timeout=180):
+    process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+    try:
+        return process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGTERM)
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait(timeout=5)
+        raise
+
+
+def parent_results(path):
+    terminal = []
+    for line in path.read_text().splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if event.get("Test") and event.get("Action") in {"pass", "fail", "skip"}:
+            terminal.append((event["Test"], event["Action"]))
+    passed = [name for name, action in terminal if action == "pass"]
+    return {"expected": sorted(PARENTS), "terminal": terminal, "qualified": len(terminal) == len(PARENTS) and len(passed) == len(PARENTS) and set(passed) == PARENTS}
 
 
 def private_reference(path):
@@ -99,10 +133,15 @@ def main():
             env = os.environ.copy()
             env["ASTRONOMER_ROTATION_DATABASE_REF"] = str(Path(args.reference).resolve())
             env["ASTRONOMER_ROTATION_REFERENCE_SHA256"] = report["privateReferenceSHA256"]
-            cmd = ["go", "test", "./cmd/keyrotate", "-run", "^TestPostgresRotation", "-count=1", "-json"] + (["-race"] if args.race else [])
+            cmd = ["go", "test", "./cmd/keyrotate", "-run", "^TestPostgresRotation", "-count=1", "-timeout=2m", "-json"] + (["-race"] if args.race else [])
+            before = subprocess.check_output([sys.executable, "scripts/hash-source-tree.py", "--root", str(ROOT)], cwd=ROOT)
             with (artifact / "go-test.jsonl").open("w") as output:
-                completed = subprocess.run(cmd, cwd=ROOT, env=env, stdout=output, stderr=subprocess.STDOUT, timeout=180)
-            return completed.returncode
+                exit_code = run_test_process(cmd, env, output)
+            after = subprocess.check_output([sys.executable, "scripts/hash-source-tree.py", "--root", str(ROOT)], cwd=ROOT)
+            results = parent_results(artifact / "go-test.jsonl")
+            receipt = {"sourceCommit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(), "sourceBefore": json.loads(before), "sourceAfter": json.loads(after), "sourceStable": before == after, "command": cmd, "exitCode": exit_code, "parents": results, "logSHA256": hashlib.sha256((artifact / "go-test.jsonl").read_bytes()).hexdigest(), "completedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "scope": "Four real-DB rotation parents on exclusively owned DB; no whole application/FIPS qualification"}
+            (artifact / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+            return 0 if exit_code == 0 and before == after and results["qualified"] else exit_code or 1
         print("rotation qualification: owned live cluster, primary and service endpoint verified; no writes")
         return 0
     except (ValueError, KeyError, OSError, TypeError, subprocess.SubprocessError):
