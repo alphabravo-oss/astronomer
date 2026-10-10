@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -312,28 +311,8 @@ func rotationResult(t *testing.T, result <-chan stats) stats {
 
 func TestPostgresRotationInterruptionResumesCommittedPages(t *testing.T) {
 	db, ctx := ownedRotationDatabase(t)
-	keys := syntheticRotationKeys(t)
-	ids, _ := seedRotationRows(t, ctx, db, keys)
-	unlock := pauseRotationRow(t, ctx, db, ids[1])
-	run, cancel := context.WithCancel(ctx)
-	defer cancel()
-	result := make(chan stats, 1)
-	go func() { result <- rotateFixture(run, db, keys, false) }()
-	waitRotationBlocked(t, ctx, db)
-	if !keys.primary.IsPrimaryCiphertext(fixtureCiphertext(t, ctx, db, ids[0])) {
-		t.Fatal("first CAS did not commit before second row interruption")
-	}
-	cancel()
-	s := rotationResult(t, result)
-	if s.rewrote != 1 || s.failed == 0 {
-		t.Fatalf("interrupted progress=%+v", s)
-	}
-	unlock()
-	if !strings.HasPrefix(fixtureCiphertext(t, ctx, db, ids[1]), "astronomer:v1:fernet:old:") {
-		t.Fatal("cancelled UPDATE changed uncommitted row")
-	}
-	if s := rotateFixture(ctx, db, keys, false); s.failed != 0 || s.rewrote != 1 || s.skipped != 1 {
-		t.Fatalf("resume progress=%+v", s)
+	for _, serverCancel := range []bool{false, true} {
+		characterizeRotationCancellation(t, ctx, db, serverCancel)
 	}
 }
 

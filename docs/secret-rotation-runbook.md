@@ -158,6 +158,15 @@ Rows already carrying the primary v1 envelope are counted as `skipped`; legacy
 tokens and fallback-key envelopes are counted as `rewrote`. These per-table and
 final counters are the batch-migration progress contract.
 
+Each successful CAS commits separately. A process interruption preserves those
+committed rows. A client cancellation or lost connection can return an error
+before PostgreSQL finishes an autocommit statement, so its outcome can be
+unknown; cancellation is not a rollback guarantee. Keep both keys configured,
+wait for the prior server statement to terminate, and resume the sweep. It
+reads the persisted envelopes, skips current-key rows, and CAS-rewrites remaining
+old-key rows. Require the final primary-only verification before considering
+the live sweep complete. Retained historical data still has separate key needs.
+
 After rewriting, `keyrotate` performs a second primary-only scan of every
 encrypted column, typed connector JSON credential, and static-client envelope.
 It also checks pre-cutover envelope/plaintext equality. Any CAS miss, fallback-
