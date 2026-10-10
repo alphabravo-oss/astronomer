@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T00:33:42.310483+00:00",
+  "sourceCommit": "33b47ec846c6b2e16ba62b2314aa92811a3f8ec3",
+  "sourceDirty": false,
+  "sourceIdentity": {
+    "schema_version": 2,
+    "source_file_count": 6462,
+    "source_tree_sha256": "a5c6b905d16a247338d1499e566597368904ed188a27b5527c20ae5f50039b5f"
+  },
+  "sourceStableDuringGates": true,
+  "sourceFiles": [
+    {
+      "path": "internal/observability/otel_tracing.go",
+      "sha256": "a4ecde99060e6b4821f8636a87215cbd0c94371e7ab77dabf7f8deba702e7255"
+    },
+    {
+      "path": "internal/observability/tracing_metrics.go",
+      "sha256": "ae9b8dfa9b5676d20e30d609fc285d16a57aac495e16fd6003bbf0a35f9befb3"
+    },
+    {
+      "path": "internal/observability/tracing_metrics_test.go",
+      "sha256": "27ee38f5cc92b4f69e248d0d9149ebdc4521da331fddbda713a5077af8739813"
+    },
+    {
+      "path": "internal/observability/otel_sdk_diagnostics_test.go",
+      "sha256": "75f8d63ab6ca68d892b1ae87a6779529920303e70d83437c1c9e00e26c313f8a"
+    },
+    {
+      "path": "internal/observability/otel_pipeline_test.go",
+      "sha256": "c4bee749903204399236882872bd5b3ed9874df2f411cf28ad4a432713ba909e"
+    },
+    {
+      "path": "deploy/chart/templates/prometheus-rules.yaml",
+      "sha256": "53eb3dce3b839a2b3dd2cb11e171c55d5e9958817ba487bdd6f46f2c782468a4"
+    },
+    {
+      "path": "deploy/trace_export_render_test.go",
+      "sha256": "7a41ba69555b19b9b137013777c5f3352be30942e480410601a2a481943e373b"
+    },
+    {
+      "path": "docs/runbooks/trace-export-failing.md",
+      "sha256": "d906cd3e438209c4a1830a3552f14cc4fade47b0130c741a46d1a44d34cb330c"
+    },
+    {
+      "path": "docs/metrics-v1.md",
+      "sha256": "bdc61be97be842fe47489e7e90c3ffc5160a6fcf11246c7435b04b09fd87ee84"
+    }
+  ],
+  "baseline": {
+    "sourceCommit": "ebf5e27b605b476d0d4b70d9256a6d329b10ca75",
+    "overriddenPath": "internal/observability/otel_tracing.go",
+    "sourceSha256": "ef65861069f31b0c3c121de12ee99d92b6cedfbd86c8349c89b8d89719dc7881",
+    "expectedFailure": true,
+    "actualDefaultSDKStderrContainsSyntheticCollectorBody": true,
+    "log": "sdk-background-baseline.log",
+    "logSha256": "18d02145c50317b236abb526876b60516b632f13f5433b2f49857eec3e5c9bce"
+  },
+  "steps": [
+    {
+      "name": "sdk-background-baseline",
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "[private baseline overlay]",
+        "./internal/observability",
+        "-run",
+        "^TestBackgroundOTLPErrorBodyDoesNotBypassDiagnosticPolicy$"
+      ],
+      "startedAt": "2026-10-10T00:32:14.744358+00:00",
+      "endedAt": "2026-10-10T00:32:19.117124+00:00",
+      "exitCode": 1,
+      "logSha256": "18d02145c50317b236abb526876b60516b632f13f5433b2f49857eec3e5c9bce",
+      "log": "sdk-background-baseline.log"
+    },
+    {
+      "name": "observability-race",
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "-count=1",
+        "-json",
+        "./internal/observability"
+      ],
+      "startedAt": "2026-10-10T00:32:19.117223+00:00",
+      "endedAt": "2026-10-10T00:32:31.578552+00:00",
+      "exitCode": 0,
+      "logSha256": "4be3664088f38e7da57e8eeedf23c549157049789955ebde877aa487e128dcc7",
+      "log": "observability-race.log"
+    },
+    {
+      "name": "observability-vet",
+      "command": [
+        "go",
+        "vet",
+        "./internal/observability"
+      ],
+      "startedAt": "2026-10-10T00:32:31.578678+00:00",
+      "endedAt": "2026-10-10T00:32:31.970599+00:00",
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "observability-vet.log"
+    },
+    {
+      "name": "rendered-export-alert",
+      "command": [
+        "go",
+        "test",
+        "-count=1",
+        "-json",
+        "./deploy",
+        "-run",
+        "^TestTraceExportRuleUsesRenderedMetricsServiceLabels$"
+      ],
+      "startedAt": "2026-10-10T00:32:31.970682+00:00",
+      "endedAt": "2026-10-10T00:32:34.871652+00:00",
+      "exitCode": 0,
+      "logSha256": "12eb9157787878c0f6fab8904a4f1d0e921540e65c7fe33c82402ea53c7d609a",
+      "log": "rendered-export-alert.log"
+    }
+  ],
+  "tests": {
+    "observability-race": {
+      "parents": 32,
+      "cases": 32,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "rendered-export-alert": {
+      "parents": 1,
+      "cases": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "limits": [
+    "Exporter counters count completed SDK ExportSpans calls; they do not count transport retries, queue drops or durable trace delivery.",
+    "Sampling zero is configured-enabled with no local or sampled-remote-parent span exports; an empty endpoint is disabled.",
+    "No collector stack, production workflow propagation, trace overhead budget or production deployment qualification is claimed."
+  ],
+  "privateArtifactDirectory": "/root/.cache/astronomer-032/qualification/w10/health-33b47ec8"
+}
