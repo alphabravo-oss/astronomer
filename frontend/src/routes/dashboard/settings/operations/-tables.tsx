@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, type DataTableProps } from "@/components/ui/data-table";
 import type {
   QueueSummary,
   DLQEntry,
@@ -13,11 +13,17 @@ export function QueueTable({
   rows,
   activeQueue,
   onSelect,
+  isError,
+  error,
+  onRefetch,
 }: {
   loading: boolean;
   rows: QueueSummary[];
   activeQueue: string;
   onSelect: (queue: string) => void;
+  isError: boolean;
+  error: unknown;
+  onRefetch: () => unknown;
 }) {
   const columns = useMemo(() => queueColumns(activeQueue), [activeQueue]);
   return (
@@ -28,6 +34,11 @@ export function QueueTable({
       density="compact"
       layout="scroll"
       loading={loading}
+      isError={isError}
+      error={error}
+      onRetry={onRefetch}
+      permission="admin_operations:read"
+      errorMessage="Queue inspection unavailable"
       onRowClick={(r) => onSelect(r.name)}
       searchPlaceholder="Search queues..."
       emptyState={{
@@ -46,6 +57,10 @@ export function DLQTable({
   onDiscard,
   pendingRetry,
   pendingDiscard,
+  serverSide,
+  isError,
+  error,
+  onRefetch,
 }: {
   loading: boolean;
   queue: string;
@@ -54,9 +69,16 @@ export function DLQTable({
   onDiscard: (id: string) => void;
   pendingRetry: boolean;
   pendingDiscard: boolean;
+  serverSide: NonNullable<DataTableProps<DLQEntry>["serverSide"]>;
+  isError: boolean;
+  error: unknown;
+  onRefetch: () => unknown;
 }) {
   const columns = useMemo(
-    () => dlqColumns(onRetry, onDiscard, pendingRetry, pendingDiscard),
+    () =>
+      dlqColumns(onRetry, onDiscard, pendingRetry, pendingDiscard).map(
+        (column) => ({ ...column, sortable: false, filter: undefined }),
+      ),
     [onRetry, onDiscard, pendingRetry, pendingDiscard],
   );
   if (!queue) {
@@ -74,10 +96,16 @@ export function DLQTable({
       density="compact"
       layout="scroll"
       loading={loading}
+      isError={isError}
+      error={error}
+      onRetry={onRefetch}
+      permission="admin_operations:read"
+      searchable={false}
+      serverSide={serverSide}
       searchPlaceholder="Search dead-letter tasks..."
       emptyState={{
-        title: "No archived tasks",
-        description: `Queue ${queue} has no dead-letter entries.`,
+        title: "No archived tasks on this page",
+        description: `This page of queue ${queue} has no dead-letter entries.`,
       }}
     />
   );
@@ -89,15 +117,28 @@ export function TaskOutboxTable({
   status,
   onRetry,
   pendingRetry,
+  serverSide,
+  isError,
+  error,
+  onRefetch,
 }: {
   loading: boolean;
   rows: TaskOutboxEntry[];
   status: TaskOutboxStatus | "";
   onRetry: (id: string) => void;
   pendingRetry: boolean;
+  serverSide: NonNullable<DataTableProps<TaskOutboxEntry>["serverSide"]>;
+  isError: boolean;
+  error: unknown;
+  onRefetch: () => unknown;
 }) {
   const columns = useMemo(
-    () => taskOutboxColumns(onRetry, pendingRetry),
+    () =>
+      taskOutboxColumns(onRetry, pendingRetry).map((column) => ({
+        ...column,
+        sortable: false,
+        filter: undefined,
+      })),
     [onRetry, pendingRetry],
   );
   return (
@@ -108,10 +149,16 @@ export function TaskOutboxTable({
       density="compact"
       layout="scroll"
       loading={loading}
+      isError={isError}
+      error={error}
+      onRetry={onRefetch}
+      permission="admin_operations:read"
+      searchable={false}
+      serverSide={serverSide}
       searchPlaceholder="Search task outbox..."
       emptyState={{
-        title: "No matching task outbox rows",
-        description: `No ${status || "matching"} task outbox rows.`,
+        title: "No matching task outbox rows on this page",
+        description: `No ${status || "matching"} task outbox rows on this page.`,
       }}
     />
   );

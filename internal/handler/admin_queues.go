@@ -30,6 +30,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -111,19 +112,31 @@ func (h *AdminQueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "asynq inspector not wired")
 		return
 	}
+	if !adminQueueRequestActive(w, r) {
+		return
+	}
 	queues, err := h.inspector.Queues()
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AsynqError, err.Error())
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "queue inspection unavailable")
+		return
+	}
+	if len(queues) > maxInspectedAdminQueues {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "queue inspection exceeds the supported bound")
 		return
 	}
 	now := time.Now().UTC()
 	out := make([]QueueSummary, 0, len(queues))
 	for _, q := range queues {
+		if !adminQueueRequestActive(w, r) {
+			return
+		}
 		info, ierr := h.inspector.GetQueueInfo(q)
-		if ierr != nil {
-			// Surface one bad queue without nuking the whole listing.
-			out = append(out, QueueSummary{Name: q, AsOf: now})
-			continue
+		if !adminQueueRequestActive(w, r) {
+			return
+		}
+		if ierr != nil || !validAdminQueueInfo(info) {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.InspectorUnavailable, "queue inspection unavailable")
+			return
 		}
 		out = append(out, QueueSummary{
 			Name:      q,
@@ -137,6 +150,9 @@ func (h *AdminQueuesHandler) List(w http.ResponseWriter, r *http.Request) {
 			Paused:    info.Paused,
 			AsOf:      now,
 		})
+	}
+	if !adminQueueRequestActive(w, r) {
+		return
 	}
 	RespondJSON(w, http.StatusOK, out)
 }
@@ -164,9 +180,19 @@ func (h *AdminQueuesHandler) DLQ(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.QueueRequired, "queue name is required")
 		return
 	}
-	// Page size of 100 — big enough to spot patterns, small enough to
-	// keep the response under a scrolled UI panel.
-	archived, err := h.inspector.ListArchivedTasks(queueName, asynq.PageSize(100))
+	page, supplied, ok := readAdminDLQPage(w, r)
+	if !ok {
+		return
+	}
+	if !adminQueueRequestActive(w, r) {
+		return
+	}
+	// Redis exposes native mutable pages, not an immutable SQL cursor. Keep
+	// the released first-page response unless the caller explicitly opts in.
+	archived, err := h.inspector.ListArchivedTasks(queueName, asynq.PageSize(adminDLQPageSize), asynq.Page(page))
+	if !adminQueueRequestActive(w, r) {
+		return
+	}
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AsynqError, err.Error())
 		return
@@ -181,11 +207,15 @@ func (h *AdminQueuesHandler) DLQ(w http.ResponseWriter, r *http.Request) {
 			LastFailedAt: t.LastFailedAt,
 		})
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{
-		"queue": queueName,
-		"dlq":   out,
-		"count": len(out),
-	})
+	payload := map[string]any{"queue": queueName, "dlq": out, "count": len(out)}
+	if supplied {
+		// A full page offers a further native read; only a short/empty page
+		// proves exhaustion. No exact total or stable snapshot is claimed.
+		metadata := paging.FromPage(adminDLQPageSize, (page-1)*adminDLQPageSize, len(out))
+		RespondJSONUnwrapped(w, http.StatusOK, map[string]any{"data": payload, "pagination": metadata})
+		return
+	}
+	RespondJSON(w, http.StatusOK, payload)
 }
 
 // RetryDLQ handles POST /api/v1/admin/queues/{queue}/dlq/{id}/retry/.
