@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "SCOPED_FIVE_PACKAGE_RUNTIME_AND_OWNED_PG17_PG18_PASS",
+  "status": "SCOPED_RUNTIME_OWNED_PG17_PG18_AND_COMBINED_COUNT_GENERATION_PASS",
   "qualifiedRuntimeSourceCommit": "92ca98753527d2ece8248837218ff7c8fc9995cd",
   "runs": [
     {
@@ -345,6 +345,113 @@
         "minimum_free_percent": 20,
         "meets_minimum": true
       }
+    },
+    {
+      "group": "combined-capacity-stop",
+      "sourceCommit": "677176cfbf1d0d956d04e26ba904efae42f86420",
+      "receiptSHA256": "sha256:50af25ec06a417852759b62d3b5eed96748bef4aebca13983078a0ab10c0bdd4",
+      "exitCode": 1,
+      "sourceStable": true,
+      "partialParentCounts": {
+        "pass": 8
+      },
+      "requiredParentCount": 22,
+      "vetExecuted": false,
+      "guards": 18,
+      "heldGroups": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "reason": "",
+          "liveDescendantsAfterDrain": []
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": -15,
+          "drained": true,
+          "reason": "guard-or-launch-failure",
+          "liveDescendantsAfterDrain": []
+        }
+      ],
+      "finalCapacity": {
+        "path": "/root/astronomer-all/astronomer-032-w10-generations-composition",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 271712340,
+        "available_kib": 67904620,
+        "available_gib": 64,
+        "free_percent": 19,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": false
+      }
+    },
+    {
+      "group": "combined-current-main-pass",
+      "sourceCommit": "677176cfbf1d0d956d04e26ba904efae42f86420",
+      "receiptSHA256": "sha256:63f0e891842550d50d067891d9137458860355f84f51efcdad6f475c5d56a677",
+      "exitCode": 0,
+      "sourceStable": true,
+      "actualGoVersion": "go version go1.27.2 linux/amd64",
+      "goExecutableStable": true,
+      "expectedParentCount": 22,
+      "actualParentCount": 22,
+      "testTerminalCounts": {
+        "pass": 40,
+        "fail": 0,
+        "skip": 0
+      },
+      "packageCount": 4,
+      "vetConsumers": [
+        "./internal/observability",
+        "./internal/handler",
+        "./internal/siem",
+        "./internal/worker/tasks",
+        "./internal/server",
+        "./cmd/server",
+        "./cmd/worker"
+      ],
+      "vetExitCode": 0,
+      "guards": 42,
+      "heldGroups": [
+        {
+          "name": "go-version",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 0.135
+        },
+        {
+          "name": "focused-tests",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 60.283
+        },
+        {
+          "name": "consumer-vet",
+          "exitCode": 0,
+          "drained": true,
+          "leaderHeldUntilDrain": true,
+          "liveDescendantsAfterDrain": [],
+          "seconds": 37.376
+        }
+      ],
+      "finalCapacity": {
+        "path": "/root/astronomer-all/astronomer-032-w10-generations-composition",
+        "mountpoint": "/",
+        "total_kib": 354066236,
+        "used_kib": 267923372,
+        "available_kib": 71693588,
+        "available_gib": 68,
+        "free_percent": 21,
+        "minimum_free_gib": 20,
+        "minimum_free_percent": 20,
+        "meets_minimum": true
+      }
     }
   ],
   "limits": [
@@ -352,7 +459,9 @@
     "Original138 full lane genuinely panicked in a stale route-query fake and truncated server testing; consumer vet did not execute.",
     "Corrected92 changes only two fake method signatures to the actual specialized query seam. All existing actual-route RBAC/sentinel/continuation assertions remain.",
     "Corrected92 focused19parents PASS without skips. Full2341parents includes2309PASS32SKIP;4474terminals include4432PASS42 explicit source-bound skips. The separate owned PostgreSQL lanes each passed three parents/seven terminals without skips; these do not retroactively execute the full-unit skipped cases.",
-    "Consumer vet covers the five selected packages and cmd/server/cmd/worker. No whole repository/security-scanner/collector/live-Kubernetes/product-build/combined-current-main claim.",
-    "Dedicated owned PostgreSQL17 and18 canonical75\u219277\u219278 migrations and three actual generation lifecycle/captured-callback/RR race parents per major passed without skips. Each dedicated database is now clean78; no blind75 recipe replay. Current-main checked-count composition and combined qualification remain pending."
-  ]
+    "Consumer vet covers the five selected packages and cmd/server/cmd/worker. The separate combined 677 lane passed22 focused checked-count/generation parents and 40 terminals/four packages under race and all seven consumer vet. No whole repository/security-scanner/collector/live-Kubernetes/whole-product qualification.",
+    "Dedicated owned PostgreSQL17 and18 canonical75\u219277\u219278 migrations and three actual generation lifecycle/captured-callback/RR race parents per major passed without skips. Each dedicated database is now clean78; no blind75 recipe replay. The combined 677 checked-count/generation focused lane passed separately; these original 92 PostgreSQL receipts retain their original source identities.",
+    "Current-main677 combined 22-parent lane stopped on maintained capacity19% after only eight observability parents passed; other focused parents incomplete and seven-consumer vet unrun. Both owned groups were drained. Source677 remained frozen; the original failed run remains separate and unchanged. A reviewed output-only successor passed after exact closed archive recovery; thresholds and source were unchanged."
+  ],
+  "qualifiedCombinedSourceCommit": "677176cfbf1d0d956d04e26ba904efae42f86420"
 }
