@@ -106,11 +106,19 @@ func inspectDatabaseUpdateFile(ctx context.Context, update *AuthenticatedDatabas
 }
 
 func openDatabaseInspectionFile(path string, size int64) (*os.File, os.FileInfo, error) {
+	return openDatabaseInspectionFileWithHook(path, size, nil)
+}
+
+// beforeOpen is an internal deterministic path-substitution fixture hook.
+func openDatabaseInspectionFileWithHook(path string, size int64, beforeOpen func()) (*os.File, os.FileInfo, error) {
 	before, err := os.Lstat(path)
 	if err != nil || !before.Mode().IsRegular() || size <= 0 || size > MaximumDatabaseLayerBytes || before.Size() != size {
 		return nil, nil, errors.New("database payload owned regular file unavailable")
 	}
-	file, err := os.Open(path)
+	if beforeOpen != nil {
+		beforeOpen()
+	}
+	file, err := openDatabaseInspectionRegular(path)
 	if err != nil {
 		return nil, nil, errors.New("database payload file open failed")
 	}

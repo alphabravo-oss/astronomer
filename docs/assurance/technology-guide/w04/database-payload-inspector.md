@@ -10,6 +10,11 @@ The role must select an authenticated main or Java child. The caller supplies an
 absolute operator-owned regular file; signed data cannot select a filesystem path.
 Symlinks, missing/nonregular files and size mismatches are rejected. The opened
 file descriptor and path must retain the same inode, size and modification time.
+The Unix opener uses no-follow/nonblocking flags and immediately checks the
+descriptor type, so a regular path swapped to a FIFO cannot block before reads.
+Other platforms refuse the procedure until an equivalent opener is qualified;
+there is no blocking fallback. A deterministic fixture swaps FIFO/symlink paths
+after Lstat and before open and requires prompt refusal.
 
 The first pass hashes the complete compressed layer with fixed 64 KiB buffers,
 the exact signed size and existing two GiB ceiling. No archive or metadata is
