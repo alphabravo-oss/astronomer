@@ -1,0 +1,279 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "c997325932b3a0e982177bee126aa9ea276b7b91",
+  "sourceFingerprint": {
+    "schema_version": 2,
+    "source_file_count": 6847,
+    "source_tree_sha256": "d2d93a2436f88c08d793a600f256f7ec38487eb9035cfd593fd461491dba52d0"
+  },
+  "sourceFilesChanged": 32,
+  "qualifiedScope": "In-process category, registration/Vault owner lifecycle, atomic bounded publication and read-only snapshot transaction control; full eight-package race with existing skips.",
+  "originalFailure": {
+    "sourceCommit": "7c39e6e03787eea0d8034638faeb8a177c19f87c",
+    "reason": "Unused internal/redaction import in internal/handler/vault.go after extracting Health handler. Server compilation failed;18 named parents passed and8 were absent.",
+    "retained": true,
+    "sourceStable": true
+  },
+  "focused": {
+    "requiredParents": 26,
+    "passedParents": 26,
+    "totalCases": 48,
+    "skipped": 0,
+    "failed": 0,
+    "sourceStable": true
+  },
+  "full": {
+    "packages": 8,
+    "exitCode": 0,
+    "parentCounts": {
+      "pass": 2426,
+      "fail": 0,
+      "skip": 18
+    },
+    "totalCaseCounts": {
+      "pass": 4572,
+      "fail": 0,
+      "skip": 20
+    },
+    "sourceStable": true,
+    "durationSeconds": 299.787895
+  },
+  "checks": [
+    "focused race",
+    "full eight-package race",
+    "eight-package vet",
+    "dependency boundaries",
+    "complexity",
+    "JSON governance",
+    "SQL ownership"
+  ],
+  "limitations": [
+    "No real PostgreSQL snapshot or fleet-scale certification in this packet. Embedded database operands are inventory only.",
+    "All20 existing skip events and reasons retained;18 parent skips and2 subtest skips. Includes inherited synchronous Dex tests and opt-in database/network paths.",
+    "Ten-thousand-owner and21-page/10-second bounds are engineering limits; actual snapshot and workload overhead remain unmeasured.",
+    "SSO/SIEM/snapshot/group metric lifetimes, collector isolation/readback, durable workflow propagation and tracing overhead remain open.",
+    "Vault connection metric label values now use verified UUIDs; label name remains connection and audit/display names remain unchanged."
+  ],
+  "artifacts": [
+    {
+      "path": "README.md",
+      "sha256": "ef50d859fc5e64f5b286ef7696c3a2394a6aa4348dcba8eea7cb49e3af010a64",
+      "size": 1835
+    },
+    {
+      "path": "failed-7c39/driver.log",
+      "sha256": "c469c7aa16fa92da9a94388d6736d094af4ac35c7d5ca6130cc53675a07d8a5b",
+      "size": 3206
+    },
+    {
+      "path": "failed-7c39/exit-code.txt",
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "size": 2
+    },
+    {
+      "path": "failed-7c39/expected-parents.json",
+      "sha256": "0dc6ec56359da12edb1b959e61802053e6adcedd1d42cc03c21ba7f15afc9a41",
+      "size": 1461
+    },
+    {
+      "path": "failed-7c39/final-capacity-after-failed-run.json",
+      "sha256": "c1903e627d6a274953bea6c30f72a6fc7e4ac5c69c29ca3ea7ced3c726a00b7b",
+      "size": 204
+    },
+    {
+      "path": "failed-7c39/focused-after/console.log",
+      "sha256": "19da88db4ab08ab7a2e2fc754d5d7bf164cd1cbbe169460d1e518a336c0c8820",
+      "size": 3082
+    },
+    {
+      "path": "failed-7c39/focused-after/evidence.json",
+      "sha256": "56e57a4e74787abed1c17bcd09a8b305c100fc72422f23953eb5798c2a01832c",
+      "size": 8648
+    },
+    {
+      "path": "failed-7c39/focused-after/go-test.json",
+      "sha256": "a7db4551fd757d2f9b80e4fa48cbffbc6fb16d005d5b9a1cff425cf4fe1b6c08",
+      "size": 21812
+    },
+    {
+      "path": "failed-7c39/focused-after/junit.xml",
+      "sha256": "70c6f319e6709e12c09bfd332c6306c189ed1674dd3dafd2b8a316d72f756c92",
+      "size": 5053
+    },
+    {
+      "path": "failed-7c39/prelaunch-capacity.json",
+      "sha256": "4cf5a39b346fe64238bd500fc67581da01dd4ff73ca418fbac52782284c50c61",
+      "size": 204
+    },
+    {
+      "path": "failed-7c39/source-files.json",
+      "sha256": "86dc256ff3d641fef2e4391b928ab0271c765a7c8c3881e395d94c2dfc5a63a2",
+      "size": 731
+    },
+    {
+      "path": "focused-c997/driver.log",
+      "sha256": "03fa6bdc19bda6a8a56d7c17d01a021d90621d685555c9c403cd09b1e8ccefd4",
+      "size": 8677
+    },
+    {
+      "path": "focused-c997/exit-code.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "focused-c997/expected-parents.json",
+      "sha256": "0dc6ec56359da12edb1b959e61802053e6adcedd1d42cc03c21ba7f15afc9a41",
+      "size": 1461
+    },
+    {
+      "path": "focused-c997/final-capacity.json",
+      "sha256": "dfc6b48b46f51f8d881b6c19ac7719c2061c91be6987c7737a67bc15a73acef5",
+      "size": 204
+    },
+    {
+      "path": "focused-c997/focused-after/console.log",
+      "sha256": "2fd4b2538a40630cd39ec48b9f8531658d039dbbafd4165c972e2a1849f3ee0a",
+      "size": 8553
+    },
+    {
+      "path": "focused-c997/focused-after/evidence.json",
+      "sha256": "1a5c083be97235a0db2f21bee710d409fcea42b4494ebd10588c81edd4da3613",
+      "size": 8635
+    },
+    {
+      "path": "focused-c997/focused-after/go-test.json",
+      "sha256": "a02ba401d074754910632aa54c1348217a6d951bb6c6b21ad49c2526427df5bc",
+      "size": 54865
+    },
+    {
+      "path": "focused-c997/focused-after/junit.xml",
+      "sha256": "0e52958fd88bb7bae8bd6adb6733b66360191c6d7032cd2641156f61791bc7ed",
+      "size": 9894
+    },
+    {
+      "path": "focused-c997/prelaunch-capacity.json",
+      "sha256": "39454436cdb3cb4a2658e8b0ca17e2b1e3a553fb7a1757a73be6b52a658c1ca5",
+      "size": 204
+    },
+    {
+      "path": "full-c997/console.log",
+      "sha256": "3341d0b3177935ea1c25c348749822a8afa4ef7bcf4c852960f8ee5f35f0fb01",
+      "size": 1235671
+    },
+    {
+      "path": "full-c997/evidence.json",
+      "sha256": "0a4f9e896da03fad707f45d8a1102a97e63640320780f4bc1367b9ccbb3ca50b",
+      "size": 12205
+    },
+    {
+      "path": "full-c997/final-capacity.json",
+      "sha256": "1ee04980a726816b474c1d35d85dd1ee0c11ab7645aa07b1d78c62ac3ba1e21f",
+      "size": 204
+    },
+    {
+      "path": "full-c997/go-test.json",
+      "sha256": "cf70346cc639d3bd39c6ccf04e82ecdebb0b50732571100fb2c7f10ceb175ab3",
+      "size": 5742249
+    },
+    {
+      "path": "full-c997/junit.xml",
+      "sha256": "6dbc50db42ac128623aaf570d5e6de5c2ea678b66a5ad57082fde99a1595d24f",
+      "size": 813475
+    },
+    {
+      "path": "full-c997/prelaunch-capacity.json",
+      "sha256": "e7d29adbedbe250d62a9a9fbf2c89db0e4fcd25ac407f350113c9ccff1300439",
+      "size": 204
+    },
+    {
+      "path": "full-c997/skip-reasons.json",
+      "sha256": "3e0a6856073f103c3105600436b7fabf621b1c34d4b81718e6d84c24ca182c4b",
+      "size": 8207
+    },
+    {
+      "path": "full-c997/terminal-parent-inventory.json",
+      "sha256": "ab86b974ad8faa27174bb49b2c1947139898a85aa46246ab72eeb882faba71a5",
+      "size": 458502
+    },
+    {
+      "path": "source-map.json",
+      "sha256": "f375fb6b49185718613e68b7015bae2fcf04f4fdbe0cbfd0338a8a1b7c0696eb",
+      "size": 5835
+    },
+    {
+      "path": "static-c997/boundary-exit.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "static-c997/boundary.log",
+      "sha256": "c2558f6180056c08febab5538013b375164a72c930534c2c28518e31ba02d80c",
+      "size": 65
+    },
+    {
+      "path": "static-c997/complexity-exit.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "static-c997/complexity.log",
+      "sha256": "a2b581bf2349ea6afca3f311ca089087cb0b707d616ee711611257d6c5492b0e",
+      "size": 101
+    },
+    {
+      "path": "static-c997/evidence.json",
+      "sha256": "4cf59aab2efb5403dc1092bf74d73d807b6b527e3518e02b782aabb9c6068dbc",
+      "size": 2740
+    },
+    {
+      "path": "static-c997/final-capacity.json",
+      "sha256": "8949be865979b41cccbe5e386b846788104590b0f2f05198649404b518d51ea9",
+      "size": 204
+    },
+    {
+      "path": "static-c997/json-governance-capacity.json",
+      "sha256": "4f00da9738f87e9f1762286f1912774eab24cf02126efb5b217e165cf7e60378",
+      "size": 204
+    },
+    {
+      "path": "static-c997/json-governance-exit.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "static-c997/json-governance.log",
+      "sha256": "bb2db5927c972e5423344847c6ee1065ff4fe94d07c8bcca33f3479eeeebafa8",
+      "size": 153
+    },
+    {
+      "path": "static-c997/sql-governance-capacity.json",
+      "sha256": "6922bc36eb840a9302a2c32b242286c696c421e014ae9e6bb1bcac7dcae8e74f",
+      "size": 204
+    },
+    {
+      "path": "static-c997/sql-governance-exit.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "static-c997/sql-governance.log",
+      "sha256": "2029dada2ca920d58d01eabacdb88d0097dccecd38b45c7f0bbd5cd67cf37a58",
+      "size": 122
+    },
+    {
+      "path": "static-c997/vet-capacity.json",
+      "sha256": "6f8dd9fa3e11ca031926e599e421be51a87aef87d3c9cde7f3818935164fbdbb",
+      "size": 204
+    },
+    {
+      "path": "static-c997/vet-exit.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "static-c997/vet.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    }
+  ]
+}
