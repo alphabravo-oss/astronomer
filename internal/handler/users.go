@@ -597,22 +597,23 @@ func (h *ResourceHandler) finalizeUserSessionRevocation(ctx context.Context, id 
 	succeeded := 0
 	failed := 0
 	for _, session := range sessions {
+		metric := auth.CaptureSSOLogoutMetric(ctx, h.queries, session.ProviderName)
 		if session.EndSessionEndpoint == "" {
 			continue
 		}
 		idToken, err := h.encryptor.Decrypt(session.UpstreamIDTokenEncrypted)
 		if err != nil {
 			failed++
-			auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "encrypt_error")...).Inc()
+			metric.Record(ctx, "encrypt_error")
 			continue
 		}
 		if err := h.ssoBackchannel.PostEndSession(ctx, session.EndSessionEndpoint, idToken); err != nil {
 			failed++
-			auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "backchannel_failed")...).Inc()
+			metric.Record(ctx, "backchannel_failed")
 			continue
 		}
 		succeeded++
-		auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "backchannel_ok")...).Inc()
+		metric.Record(ctx, "backchannel_ok")
 	}
 	return succeeded, failed
 }

@@ -29,7 +29,7 @@ type controlPlaneCursorRouteQuerier struct {
 	firstReads, afterReads int
 }
 
-func (q *controlPlaneCursorRouteQuerier) ListControlPlaneAlerts(context.Context, sqlc.ListControlPlaneAlertsParams) ([]sqlc.ControlPlaneAlert, error) {
+func (q *controlPlaneCursorRouteQuerier) ListControlPlaneCursorAlertsAllFirst(context.Context, int32) ([]sqlc.ControlPlaneAlert, error) {
 	q.firstReads++
 	rows := make([]sqlc.ControlPlaneAlert, 3)
 	for i := range rows {
@@ -45,7 +45,7 @@ func (q *controlPlaneCursorRouteQuerier) ListControlPlaneSilences(context.Contex
 	}
 	return rows, nil
 }
-func (q *controlPlaneCursorRouteQuerier) ListControlPlaneAlertsAfter(context.Context, sqlc.ListControlPlaneAlertsAfterParams) ([]sqlc.ControlPlaneAlert, error) {
+func (q *controlPlaneCursorRouteQuerier) ListControlPlaneCursorAlertsAllAfter(context.Context, sqlc.ListControlPlaneCursorAlertsAllAfterParams) ([]sqlc.ControlPlaneAlert, error) {
 	q.afterReads++
 	return nil, nil
 }

@@ -8,9 +8,9 @@
 //     scripts, manual DB fixups).
 //
 //   - astronomer_cluster_group_clusters{group_slug} — gauge of clusters
-//     parented to each enabled group. The slug is used (not the id) so
-//     dashboard panels stay readable; the cardinality is bounded by the
-//     number of operator-defined groups (typical fleet: < 100).
+//     parented to each enabled group. The historical group_slug label key
+//     now carries verified UUIDs, preserving one owner across rename. Complete
+//     observations and admission enforce a10k family budget.
 //
 // Both gauges are refreshed by RefreshClusterGroupMetrics — called from
 // a small periodic task every ~5m (membership doesn't churn hot).
@@ -23,6 +23,7 @@ package handler
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -72,21 +73,45 @@ type ClusterGroupMetricsQuerier interface {
 // doesn't churn fast enough to need tighter cadence and the recursive
 // CTE walks the whole tree each time. Errors are non-fatal (the
 // previous gauge values stay until the next successful refresh).
+// This legacy helper buffers every count before publishing. Production uses
+// the bounded read-only RR helper; callers lacking durable ownership reads
+// cannot allocate name-based gauges. No error resets another active instance.
 func RefreshClusterGroupMetrics(ctx context.Context, q ClusterGroupMetricsQuerier) {
-	if q == nil {
+	if ctx == nil || ctx.Err() != nil || q == nil {
 		return
 	}
-	groups, err := q.ListClusterGroups(ctx)
-	if err != nil {
+	bounded, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	started := time.Now().UTC()
+	lookup := observability.BeginMetricGenerationLookup(observability.MetricClusterGroup)
+	groups, err := q.ListClusterGroups(bounded)
+	if err != nil || bounded.Err() != nil || len(groups) > observability.MetricOwnerMax {
 		return
 	}
-	clusterGroupsTotal.Set(float64(len(groups)))
-	clusterGroupClusters.Reset()
-	for _, g := range groups {
-		n, err := q.CountClustersInGroup(ctx, g.ID)
-		if err != nil {
-			continue
+	counts := make(map[uuid.UUID]int64, len(groups))
+	for _, group := range groups {
+		if bounded.Err() != nil {
+			return
 		}
-		clusterGroupClusters.WithLabelValues(observability.MetricValues(g.Slug)...).Set(float64(n))
+		count, err := q.CountClustersInGroup(bounded, group.ID)
+		if err != nil || count < 0 || bounded.Err() != nil {
+			return
+		}
+		counts[group.ID] = count
 	}
+	reader, ok := q.(observability.MetricGenerationReader)
+	if !ok {
+		return
+	}
+	rows := make([]observability.MetricGenerationRow, 0, len(groups))
+	for _, group := range groups {
+		token, err := reader.GetMetricOwnerGeneration(bounded, sqlc.GetMetricOwnerGenerationParams{Family: string(observability.MetricClusterGroup), OwnerID: group.ID})
+		if err != nil || bounded.Err() != nil {
+			return
+		}
+		rows = append(rows, observability.MetricGenerationRow{ID: group.ID, Generation: token})
+	}
+	lookup.PublishValuesAndComplete(rows, started, func(instance, id string) {
+		clusterGroupClusters.WithLabelValues(instance, id).Set(float64(counts[uuid.MustParse(id)]))
+	}, func() { clusterGroupsTotal.Set(float64(len(rows))) })
 }

@@ -136,7 +136,7 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 	clusterGroupsHandler.SetRunTx(sqlcMutationTxRunner[handler.ClusterGroupMutationTx](database))
 	handler.RegisterClusterGroupMetrics()
 	tasks.ClusterGroupMetricsRefresher = func(ctx context.Context) {
-		handler.RefreshClusterGroupMetrics(ctx, queries)
+		handler.RefreshClusterGroupMetricSnapshot(ctx, database.Pool().BeginTx)
 	}
 	// Vault integration (migration 067). Resolver wired into each
 	// install path so ${vault://...} markers in operator-supplied values

@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "status": "SOURCE_COMPOSED_RUNTIME_REVIEW_PENDING",
+  "compositionBaseCommit": "03e332643fb63b4dcbe651b8add1aeca4745d1c1",
+  "qualifiedIncomingCommit": "92ca98753527d2ece8248837218ff7c8fc9995cd",
+  "reviewed32Paths": [
+    {
+      "path": "cmd/worker/main.go",
+      "appliedSHA256": "f2ddd68c8da39a4631da371b00b805e05ccf0dae758c707e7e4e00606722d907",
+      "reviewedSHA256": "f2ddd68c8da39a4631da371b00b805e05ccf0dae758c707e7e4e00606722d907",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "cmd/worker/metric_generation_reporter.go",
+      "appliedSHA256": "6f0ea27d4c0d959024124a29c14d14ddf2eb1d10ad2869fd47769f679f3be446",
+      "reviewedSHA256": "6f0ea27d4c0d959024124a29c14d14ddf2eb1d10ad2869fd47769f679f3be446",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "deploy/release/compatibility.yaml",
+      "appliedSHA256": "eef19b59cdf686ee4d12a89b3aead1fbb01a819a707f5a679e50861df8d3a351",
+      "reviewedSHA256": "eef19b59cdf686ee4d12a89b3aead1fbb01a819a707f5a679e50861df8d3a351",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/auth/sso_logout_metrics.go",
+      "appliedSHA256": "414e147ee8326f28ec72a283153cef70d6cfbb435a285b868eb444dbb4c0098c",
+      "reviewedSHA256": "414e147ee8326f28ec72a283153cef70d6cfbb435a285b868eb444dbb4c0098c",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/db/migrations/078_metric_owner_generations.down.sql",
+      "appliedSHA256": "50eb14802611a5a736c220abf94e95722b60feb6bb1ae620097a49b189b381dd",
+      "reviewedSHA256": "50eb14802611a5a736c220abf94e95722b60feb6bb1ae620097a49b189b381dd",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/db/migrations/078_metric_owner_generations.up.sql",
+      "appliedSHA256": "ae1e08d03ae9dfc1755f3c269782d7d4339ea27639c18ae2f8e77aa74832c3e4",
+      "reviewedSHA256": "ae1e08d03ae9dfc1755f3c269782d7d4339ea27639c18ae2f8e77aa74832c3e4",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/db/queries/metric_owners.sql",
+      "appliedSHA256": "6875df79bf9a460738e5a6c98bfe53c7d5f0002ae199f3409db6653fe6492a84",
+      "reviewedSHA256": "6875df79bf9a460738e5a6c98bfe53c7d5f0002ae199f3409db6653fe6492a84",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/db/schema_version.go",
+      "appliedSHA256": "9f474a8caa800786f5ef8f40f14f3ffb55b59dde3491e60e37d6dc15ed90489f",
+      "reviewedSHA256": "9f474a8caa800786f5ef8f40f14f3ffb55b59dde3491e60e37d6dc15ed90489f",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/handler/auth_sessions.go",
+      "appliedSHA256": "6aa83cd6653a43848394112eb94457b073a479827925d7ed1350f4dcc72c5f00",
+      "reviewedSHA256": "6aa83cd6653a43848394112eb94457b073a479827925d7ed1350f4dcc72c5f00",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/handler/cluster_group_metric_snapshot.go",
+      "appliedSHA256": "b1b2143e31f83065a3779a480b1c7b99ff197355f4b49d15d9e716c0210ecaed",
+      "reviewedSHA256": "b1b2143e31f83065a3779a480b1c7b99ff197355f4b49d15d9e716c0210ecaed",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/handler/cluster_groups_metrics.go",
+      "appliedSHA256": "2fc195db61e64b59bdbf87743fa18ea657703fed0fc4340bcb23d6c5614caf05",
+      "reviewedSHA256": "2fc195db61e64b59bdbf87743fa18ea657703fed0fc4340bcb23d6c5614caf05",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/handler/cluster_snapshot_metric_generation.go",
+      "appliedSHA256": "bace58d05430cd77c134df562ed89d2c1092a7d4f38fbbb78ccb53dfe8dd7db0",
+      "reviewedSHA256": "bace58d05430cd77c134df562ed89d2c1092a7d4f38fbbb78ccb53dfe8dd7db0",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/handler/cluster_snapshots_crud.go",
+      "appliedSHA256": "61a22a870ad141122184bbb98937b861b3dbda169117e9f9252ee771641edaa7",
+      "reviewedSHA256": "61a22a870ad141122184bbb98937b861b3dbda169117e9f9252ee771641edaa7",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/handler/cluster_snapshots_operations.go",
+      "appliedSHA256": "ceaddd9215919b43d33438674e4902a97040ce1ecaf515c05b1febfac378b991",
+      "reviewedSHA256": "ceaddd9215919b43d33438674e4902a97040ce1ecaf515c05b1febfac378b991",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/handler/cluster_snapshots_worker_bridge.go",
+      "appliedSHA256": "89b1f3b7b8ba5f66f0213d83b006a1a57d8fbaa1dad78a9c692786b533d66588",
+      "reviewedSHA256": "89b1f3b7b8ba5f66f0213d83b006a1a57d8fbaa1dad78a9c692786b533d66588",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/handler/metric_owner_baseline_test.go",
+      "appliedSHA256": "05fa9d03d7505d1363efe7413830285bed0676833d720a363c8e7aa7e6daf13a",
+      "reviewedSHA256": "05fa9d03d7505d1363efe7413830285bed0676833d720a363c8e7aa7e6daf13a",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/handler/users.go",
+      "appliedSHA256": "d8a461596aeac4d338684f561ed1de10b2d43ca360dd176c2978428612e2dceb",
+      "reviewedSHA256": "d8a461596aeac4d338684f561ed1de10b2d43ca360dd176c2978428612e2dceb",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/observability/metric_generation_snapshot.go",
+      "appliedSHA256": "bf775c34b7be7da08a0b23e5c8273d3415b265ae8e577991f1b066f6c5957972",
+      "reviewedSHA256": "bf775c34b7be7da08a0b23e5c8273d3415b265ae8e577991f1b066f6c5957972",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/observability/metric_generations.go",
+      "appliedSHA256": "803aded9df9408ec73f9346dd91d8835c0a1bf37993a621201e4a30fb36f4a0b",
+      "reviewedSHA256": "803aded9df9408ec73f9346dd91d8835c0a1bf37993a621201e4a30fb36f4a0b",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/observability/metric_generations_test.go",
+      "appliedSHA256": "0403f8364ebfbc4d1f41addf3c4cdb3f0ad39632c41ae696269182c5ab70808f",
+      "reviewedSHA256": "0403f8364ebfbc4d1f41addf3c4cdb3f0ad39632c41ae696269182c5ab70808f",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/server/app_cluster_handlers.go",
+      "appliedSHA256": "ee7eb6236b7f0645dd45b09e56dfe8bd6192bb19767d70d2c608ea67beb88e40",
+      "reviewedSHA256": "ee7eb6236b7f0645dd45b09e56dfe8bd6192bb19767d70d2c608ea67beb88e40",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/server/app_runtime_services.go",
+      "appliedSHA256": "09562351a15c45042a1ba23f8dde1bb7cc9c116a901979ebe9edac3f070edc86",
+      "reviewedSHA256": "09562351a15c45042a1ba23f8dde1bb7cc9c116a901979ebe9edac3f070edc86",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/server/app_tenant_handlers.go",
+      "appliedSHA256": "68286be76976fa01daf63794864b472a241abf067c45265c6388a40447d50144",
+      "reviewedSHA256": "68286be76976fa01daf63794864b472a241abf067c45265c6388a40447d50144",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/server/metric_generation_postgres_test.go",
+      "appliedSHA256": "6efba8ef279654233aeac9a065b431538370e658c53f9d61117e4c68e6f2cca8",
+      "reviewedSHA256": "6efba8ef279654233aeac9a065b431538370e658c53f9d61117e4c68e6f2cca8",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/siem/bus_tap.go",
+      "appliedSHA256": "ef82dc10d8d2e8b41f2d8fbf2684c0b0c41389a0cc39752ec106ce3338f89b5e",
+      "reviewedSHA256": "ef82dc10d8d2e8b41f2d8fbf2684c0b0c41389a0cc39752ec106ce3338f89b5e",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/siem/metric_categories_baseline_test.go",
+      "appliedSHA256": "2872b121fd3ae24c940e66d38358c6a0bb951993e20e1da8335aa98b62d402df",
+      "reviewedSHA256": "2872b121fd3ae24c940e66d38358c6a0bb951993e20e1da8335aa98b62d402df",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/siem/metric_generation_lease.go",
+      "appliedSHA256": "1ef313170330a25732f5c2c3081d4bfe92849cb3d445d911c1f4822867f34ef2",
+      "reviewedSHA256": "1ef313170330a25732f5c2c3081d4bfe92849cb3d445d911c1f4822867f34ef2",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/siem/metrics.go",
+      "appliedSHA256": "dc68b505f498e23245c649887454f1ae47f1e8dabe686fe492708bda65c6a7aa",
+      "reviewedSHA256": "dc68b505f498e23245c649887454f1ae47f1e8dabe686fe492708bda65c6a7aa",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/worker/tasks/cluster_snapshot_metric_capture.go",
+      "appliedSHA256": "a8456c72021bcf2ade8525acad472698e1f046c8bb707ffb06eca9fe86d58a3d",
+      "reviewedSHA256": "a8456c72021bcf2ade8525acad472698e1f046c8bb707ffb06eca9fe86d58a3d",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/worker/tasks/cluster_snapshot_metric_capture_test.go",
+      "appliedSHA256": "2bb79d46e888d36d13727b1bff2d9c88efc207d1f4e5d9ac5a4e3747939ffac3",
+      "reviewedSHA256": "2bb79d46e888d36d13727b1bff2d9c88efc207d1f4e5d9ac5a4e3747939ffac3",
+      "method": "exact reviewed incoming source"
+    },
+    {
+      "path": "internal/worker/tasks/cluster_snapshot_poll.go",
+      "appliedSHA256": "194d67e3ef43189ed64c4e5f79fe341105f8eaf372a71ef08330f1eb55065234",
+      "reviewedSHA256": "194d67e3ef43189ed64c4e5f79fe341105f8eaf372a71ef08330f1eb55065234",
+      "method": "reviewed three-way composition preserving current checked-count guards"
+    },
+    {
+      "path": "internal/worker/tasks/siem_dispatch.go",
+      "appliedSHA256": "428a6f58acf808603c416881293911914c4d0016080132838be4342182a2c207",
+      "reviewedSHA256": "428a6f58acf808603c416881293911914c4d0016080132838be4342182a2c207",
+      "method": "exact reviewed incoming source"
+    }
+  ],
+  "additionalFixtureCorrection": {
+    "path": "internal/server/control_plane_cursor_routes_test.go",
+    "commit": "92ca98753527d2ece8248837218ff7c8fc9995cd",
+    "afterSHA256": "a71ec651f748e337d7339add052951d271a040ebc484ebbaeedc0784b7614888"
+  },
+  "preservedCurrentMainChangesSinceOriginalProposal": [
+    "deploy/security/source-exceptions.json",
+    "scripts/tests/security_operator_cli_policy_test.py",
+    "scripts/tests/security_qualification_cli_policy_test.py",
+    "scripts/tests/security_source_policy_test.py",
+    "advisor-plans/032-evidence/2026-10-10-current-integration-review.md",
+    "advisor-plans/032-evidence/README.md",
+    "advisor-plans/032-evidence/audit-status-current-static-binding.json",
+    "advisor-plans/032-evidence/qualification-cli-path-static-review.json"
+  ],
+  "limits": [
+    "Incoming92 pure and dedicatedPG17/18 qualifications are retained. This source-only composition has not run combined checked-count+generation qualification or current-main governance gates.",
+    "Preserve all snapshot count guards/helpers/tests, quota and unrelated modules/governance. Current schema77\u2192078 only; later independent079 remains separate."
+  ]
+}

@@ -480,6 +480,8 @@ func main() {
 	defer stop()
 	db.StartMetricsReporter(ctx, database.Pool(), log)
 	worker.StartQueueMetricsReporter(ctx, queueInspector, log)
+	stopGenerationReporter := startMetricGenerationReporter(ctx, database.Pool().BeginTx)
+	defer stopGenerationReporter()
 
 	// Start worker and scheduler in background goroutines.
 	errCh := make(chan error, 3)
@@ -521,6 +523,7 @@ func main() {
 		observability.WithEvent(log, "worker_runtime_error").Error("fatal error", "error", err)
 	}
 
+	stopGenerationReporter()
 	w.Shutdown()
 	s.Shutdown()
 

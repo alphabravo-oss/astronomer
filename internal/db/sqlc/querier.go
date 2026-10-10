@@ -1066,6 +1066,11 @@ type Querier interface {
 	GetMaintenanceWindowForUpdate(ctx context.Context, id uuid.UUID) (MaintenanceWindow, error)
 	GetManagementBackupDestination(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error)
 	GetManagementBackupDestinationForUpdate(ctx context.Context, id uuid.UUID) (ManagementBackupDestination, error)
+	// These are telemetry ownership reads, never actor authorization. Metric
+	// labels use bounded verified owner IDs; names/config/endpoints are excluded.
+	// Event callbacks capture a generation before work and compare it again before
+	// recording. Failure to observe ownership drops telemetry, not product work.
+	GetMetricOwnerGeneration(ctx context.Context, arg GetMetricOwnerGenerationParams) (uuid.UUID, error)
 	GetMonitoringOperation(ctx context.Context, id uuid.UUID) (MonitoringOperation, error)
 	GetNativeRBACRuleByID(ctx context.Context, id uuid.UUID) (NativeRbacRule, error)
 	GetNativeRBACRuleForUpdate(ctx context.Context, id uuid.UUID) (NativeRbacRule, error)
@@ -1150,6 +1155,8 @@ type Querier interface {
 	// and mandatory audit intent share one serialization point.
 	GetSSOConfigurationByIDForUpdate(ctx context.Context, id uuid.UUID) (SsoConfiguration, error)
 	GetSSOConfigurationByProvider(ctx context.Context, provider string) (SsoConfiguration, error)
+	// Historical session provider names are NOT themselves ownership proof.
+	GetSSOProviderMetricIdentity(ctx context.Context, provider string) (GetSSOProviderMetricIdentityRow, error)
 	// Lookup the upstream session row for an Astronomer JWT's JTI. Used by
 	// Logout to mint the end-session redirect URL. Returns sql.ErrNoRows
 	// when the user logged in via local password (no upstream session) —
@@ -1448,6 +1455,9 @@ type Querier interface {
 	// one row per enabled group with its direct cluster count and its subtree
 	// (self + all enabled descendants) cluster count.
 	ListClusterGroupCountsRollup(ctx context.Context) ([]ListClusterGroupCountsRollupRow, error)
+	// Direct membership semantics match the existing CountClustersInGroup; this
+	// telemetry query does not change subtree semantics or tenant authorization.
+	ListClusterGroupMetricValuesPage(ctx context.Context, arg ListClusterGroupMetricValuesPageParams) ([]ListClusterGroupMetricValuesPageRow, error)
 	// Migration 066 — cluster groups CRUD + tree expansion.
 	//
 	// The Go shim in internal/db/sqlc/cluster_groups.sql.go hand-implements
@@ -1751,6 +1761,9 @@ type Querier interface {
 	// Management-plane (Astronomer-itself) backup destinations.
 	// Read/written by /api/v1/admin/management-backup/destinations/.
 	ListManagementBackupDestinations(ctx context.Context) ([]ManagementBackupDestination, error)
+	// The consumer completes every page of one family in a single read-only
+	// repeatable-read transaction and commits successfully before any retirement.
+	ListMetricOwnerGenerationsPage(ctx context.Context, arg ListMetricOwnerGenerationsPageParams) ([]ListMetricOwnerGenerationsPageRow, error)
 	// ---------------------------------------------------------------------
 	// mirrored_gateway_classes
 	// ---------------------------------------------------------------------

@@ -2335,6 +2335,12 @@ type ManagementBackupDestination struct {
 	LastReconciledAt     pgtype.Timestamptz `json:"last_reconciled_at"`
 }
 
+type MetricOwnerGeneration struct {
+	Family     string    `json:"family"`
+	OwnerID    uuid.UUID `json:"owner_id"`
+	Generation uuid.UUID `json:"generation"`
+}
+
 type MirroredGatewayClass struct {
 	ID             uuid.UUID       `json:"id"`
 	ClusterID      uuid.UUID       `json:"cluster_id"`

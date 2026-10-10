@@ -12,6 +12,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
 
@@ -49,6 +50,11 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 	}
 	if err := c.runtime.GoLoop("vault-metrics-reporter", true, func(ctx context.Context) {
 		runVaultMetricsCollector(ctx, c.database.Pool().BeginTx, logger)
+	}); err != nil {
+		return err
+	}
+	if err := c.runtime.GoLoop("metric-generation-reporter", true, func(ctx context.Context) {
+		observability.RunMetricGenerationCollector(ctx, c.database.Pool().BeginTx, []observability.MetricOwnerFamily{observability.MetricSSOProvider, observability.MetricSIEMForwarder, observability.MetricCluster})
 	}); err != nil {
 		return err
 	}

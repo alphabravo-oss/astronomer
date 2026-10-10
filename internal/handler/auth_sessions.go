@@ -279,13 +279,14 @@ func (h *AuthHandler) buildSSOLogoutRedirect(r *http.Request, jti string, userID
 		// sql.ErrNoRows is the dominant case here — local-password
 		// users, or an SSO session row already cleaned up by a
 		// concurrent admin force-logout. Either way: no redirect.
-		auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues("", "no_session")...).Inc()
+		auth.SSOLogoutMetric{}.Record(r.Context(), "no_session")
 		return ""
 	}
 	if *auditDetail == nil {
 		*auditDetail = map[string]any{}
 	}
 	(*auditDetail)["sso_provider"] = session.ProviderName
+	metric := auth.CaptureSSOLogoutMetric(r.Context(), h.ssoSessions, session.ProviderName)
 
 	// Drop the row regardless of whether we end up returning a
 	// redirect URL: the JWT is already revoked, the row's id_token
@@ -302,13 +303,13 @@ func (h *AuthHandler) buildSSOLogoutRedirect(r *http.Request, jti string, userID
 		// IdP doesn't advertise RP-initiated logout (or discovery
 		// failed at callback time). Local revocation is the best we
 		// can do — record the gap so the SOC 2 dashboard sees it.
-		auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "no_endpoint")...).Inc()
+		metric.Record(r.Context(), "no_endpoint")
 		(*auditDetail)["sso_logout"] = "no_endpoint"
 		return ""
 	}
 	idToken, err := h.encryptor.Decrypt(session.UpstreamIDTokenEncrypted)
 	if err != nil {
-		auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "encrypt_error")...).Inc()
+		metric.Record(r.Context(), "encrypt_error")
 		(*auditDetail)["sso_logout"] = "decrypt_failed"
 		if h.log != nil {
 			h.log.Warn("failed to decrypt upstream id_token", "jti", jti, "provider", session.ProviderName, "error", err)
@@ -318,11 +319,11 @@ func (h *AuthHandler) buildSSOLogoutRedirect(r *http.Request, jti string, userID
 
 	redirectURL, err := buildEndSessionURL(session.EndSessionEndpoint, idToken, h.postLogoutRedirectURL)
 	if err != nil {
-		auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "encrypt_error")...).Inc()
+		metric.Record(r.Context(), "encrypt_error")
 		(*auditDetail)["sso_logout"] = "invalid_endpoint"
 		return ""
 	}
-	auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "redirected")...).Inc()
+	metric.Record(r.Context(), "redirected")
 	(*auditDetail)["sso_logout"] = "redirected"
 	return redirectURL
 }

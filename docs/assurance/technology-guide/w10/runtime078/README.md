@@ -1,0 +1,9 @@
+# Scoped migration078 runtime qualification
+
+Frozen source `92ca9875` passes the 19 focused ownership/publication parents under race, the complete compiled test-parent inventory of five affected packages, and consumer vet. The full unit lane contains 2,309 passing parents and 32 explicitly skipped parents; its 4,474 test terminals contain 4,432 passes and 42 source-bound skips. Separate owned PostgreSQL17 and18 lanes passed canonical schema75→77→78 migration and three generation lifecycle/captured-callback/repeatable-read race parents (seven terminals) per major with no skips. Both dedicated databases are now clean78. Collector, whole-repository and combined-current-main qualification remain pending.
+
+The original `13863f51` failure is retained separately. A stale actual-route fake embedded nil generated queries after its production selector adopted specialized cursor methods, causing a nil-query panic and truncating the server suite. The corrected source changes only the fake first/after method signatures; existing route, authorization, sentinel and continuation expectations remain.
+
+`portable-original-index.json` losslessly binds every original receipt/artifact plus the reviewed drivers and controls to deterministic gzip objects. Verify each stored hash, expand it, and compare the original hash/size. Exact original private files remain unchanged. The sibling historical generation packet is unchanged and retains its generation-only scope.
+
+The original247 portable rows remain identical. The appended PostgreSQL originals retain fresh namespace/cluster/primary/service/endpoint ownership, actual major/schema checks, current compiler identity, maintained capacity guards and joined child results. Their scope is the exclusive metrics databases and disposable test schemas, without application/recovery database, Cluster or PVC mutation, schema079, rolling deployment or whole-product claims.

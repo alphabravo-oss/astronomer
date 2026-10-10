@@ -78,10 +78,11 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	handler.RegisterClusterSnapshotsMetrics()
 	handler.WireSnapshotWorkerMetrics()
 	clusterSnapshotRuntime := tasks.ClusterSnapshotRuntime{Deps: tasks.ClusterSnapshotDeps{
-		Queries: queries,
-		Driver:  handler.NewVeleroDriverAdapter(requester),
-		Log:     logger,
-		Bus:     c.bus,
+		Queries:        queries,
+		Driver:         handler.NewVeleroDriverAdapter(requester),
+		Log:            logger,
+		Bus:            c.bus,
+		CaptureMetrics: handler.CaptureSnapshotWorkerMetrics(queries),
 	}}
 	// Migration 071 — service mesh detector. The handler's POST /detect/
 	// path delegates to tasks.DetectAndUpsert, so the deps need to be

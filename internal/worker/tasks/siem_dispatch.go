@@ -153,6 +153,7 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		return
 	}
 	defer l.Unlock()
+	metric := siem.CaptureMetricLease(ctx, runtime.SIEM.Queries, sub.ID)
 
 	batchSize := int32(100)
 	if sub.BatchSize > 0 {
@@ -169,7 +170,7 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		ids := rowIDs(exhausted)
 		_ = runtime.SIEM.Queries.MarkSIEMTestOperationsFailedByQueueIDs(ctx, ids, "retries_exhausted")
 		_ = runtime.SIEM.Queries.DeleteSIEMQueueByIDs(ctx, ids)
-		siem.RecordDropped(sub.Name, "retries_exhausted", len(ids))
+		metric.Dropped(ctx, "retries_exhausted", len(ids))
 		_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID:  sub.ID,
 			LastError:    fmt.Sprintf("dropped %d rows past retry cap (%d)", len(ids), SIEMRetryCap),
@@ -194,7 +195,7 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 			ForwarderID: sub.ID,
 			QueueDepth:  0,
 		})
-		siem.RecordQueueDepth(sub.Name, 0)
+		metric.QueueDepth(ctx, 0)
 		return
 	}
 
@@ -239,7 +240,7 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		}
 		bytes := siem.FormatForID(formatID, ev)
 		if len(bytes) == 0 {
-			siem.RecordDropped(sub.Name, "format_error", 1)
+			metric.Dropped(ctx, "format_error", 1)
 			continue
 		}
 		formatted = append(formatted, bytes)
@@ -269,8 +270,8 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		// record the error on the status row.
 		_ = runtime.SIEM.Queries.IncrementSIEMQueueAttempts(ctx, ids)
 		depth, _ := runtime.SIEM.Queries.CountSIEMQueueByForwarder(ctx, sub.ID)
-		siem.RecordDispatched(sub.Name, formatID, "failed", len(rows))
-		siem.RecordQueueDepth(sub.Name, int(depth))
+		metric.Dispatched(ctx, formatID, "failed", len(rows))
+		metric.QueueDepth(ctx, int(depth))
 		_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 			ForwarderID: sub.ID,
 			LastError:   truncateDispatchLastError(sendErr.Error(), 1024),
@@ -298,8 +299,8 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		return
 	}
 	depth, _ := runtime.SIEM.Queries.CountSIEMQueueByForwarder(ctx, sub.ID)
-	siem.RecordDispatched(sub.Name, formatID, "delivered", len(rows))
-	siem.RecordQueueDepth(sub.Name, int(depth))
+	metric.Dispatched(ctx, formatID, "delivered", len(rows))
+	metric.QueueDepth(ctx, int(depth))
 	_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
 		ForwarderID:     sub.ID,
 		LastSentAt:      pgtype.Timestamptz{Time: now, Valid: true},
