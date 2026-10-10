@@ -885,7 +885,7 @@
     {
       "path": "internal/worker/tasks/gitops_sync.go",
       "owner": "worker backend",
-      "source_sha256": "93bfcbe4e30dc719e52d74c549ae802d56f091f5926653ac844bd231a7863541"
+      "source_sha256": "4957954f9e6ae9680c2dffdcb3c244a5d3cf717c0b9017583508837d92f48b49"
     },
     {
       "path": "internal/worker/tasks/notification_dispatch.go",

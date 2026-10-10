@@ -142,10 +142,12 @@ func classifyFrame(t protocol.MessageType) frameClass {
 
 // TunnelClient manages the WebSocket connection to the server.
 type TunnelClient struct {
-	config   *AgentConfig
-	conn     *websocket.Conn
-	log      *slog.Logger
-	handlers map[protocol.MessageType]MessageHandler
+	config              *AgentConfig
+	conn                *websocket.Conn
+	log                 *slog.Logger
+	handlers            map[protocol.MessageType]MessageHandler
+	decommissionMu      sync.Mutex
+	decommissionReplies map[*protocol.Message]*decommissionReply
 	// sendCh carries stream + best-effort frames; controlCh carries control
 	// frames. writeLoop drains controlCh with strict priority, which is what
 	// makes "a saturated data path can never collapse the control channel"
@@ -477,6 +479,7 @@ func (tc *TunnelClient) run(ctx context.Context) {
 
 		wg.Wait()
 		loopCancel()
+		tc.discardDecommissionReplies()
 		tc.setConnected(false)
 		// Wake any apiserver-audit sender blocked on an ack for this now-dead
 		// connection so it returns an error and holds its checkpoint instead of
@@ -649,6 +652,11 @@ func (tc *TunnelClient) readLoop(ctx context.Context) {
 		go func(m *protocol.Message, c dispatchClass, p *dispatchPermit) {
 			defer p.finishHandler()
 			handlerCtx, span := tc.startMessageSpan(dispatchCtx, m)
+			if m.Type == protocol.MsgDecommission {
+				var owner *decommissionReply
+				handlerCtx, owner = withDecommissionReply(handlerCtx)
+				defer owner.discardUnlessQueued()
+			}
 			defer span.End()
 			logger := observability.WithTraceID(tc.log, handlerCtx)
 			resp, err := handler(handlerCtx, m)
@@ -710,34 +718,6 @@ func handlerErrorReply(msg *protocol.Message, err error) *protocol.Message {
 	}
 }
 
-// sendHandlerReply queues a handler's reply, choosing the send-path class from
-// the DISPATCH class the request was admitted under rather than from the reply's
-// own type. It blocks: this always runs on the handler's own goroutine, never on
-// readLoop, and a handler reply is the only answer a server-side originator will
-// get.
-//
-// A synthesized error reply for an EXEMPT message is deliberately forced onto
-// the DATA queue. MsgError classifies as frameControl, and an exhausted control
-// queue force-closes the tunnel — a policy that is only sound for the bounded
-// producers the queue is sized for (one reply per in-flight permit). Exempt
-// types are ungated by construction, and ExecHandler.HandleExecInput returns an
-// error for EVERY frame naming an unknown stream, so a run of EXEC_INPUT /
-// EXEC_RESIZE for a dead session is an unbounded producer. On the control queue
-// that would turn a congested socket into the teardown of every watch, exec
-// session and heartbeat on the connection — precisely what shedInbound refuses
-// to do, one branch away. On the data queue the reply is counted and dropped,
-// costing that one originator its own timeout and nothing else.
-//
-// A real (non-synthesized) reply keeps its own class: those are produced one per
-// permit even for exempt types (DECOMMISSION_ACK, AGENT_UPGRADE_RESULT), and
-// they are exactly the frames the control queue exists to protect.
-func (tc *TunnelClient) sendHandlerReply(ctx context.Context, resp *protocol.Message, class dispatchClass, synthesized bool) error {
-	if synthesized && class == dispatchExempt {
-		return tc.enqueueClass(ctx, resp, frameStream, sendQueueWait)
-	}
-	return tc.SendBlocking(ctx, resp)
-}
-
 // writeLoop sends messages from the send channels to the WebSocket, draining
 // controlCh with strict priority over sendCh. Control frames come from a
 // bounded set of producers (one reply per in-flight request plus the health
@@ -780,12 +760,14 @@ func (tc *TunnelClient) writeQueued(ctx context.Context, msg *protocol.Message) 
 		return true
 	}
 	if err := tc.writeMessage(ctx, tc.conn, msg); err != nil {
+		tc.discardDecommissionReply(msg)
 		if ctx.Err() != nil {
 			return false
 		}
 		tc.log.Error("write error", "error", err)
 		return false
 	}
+	tc.runDecommissionReply(msg)
 	return true
 }
 
