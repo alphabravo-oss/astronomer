@@ -537,6 +537,8 @@ Expected: all required cases execute, no expected test is silently skipped, publ
 
 W04 component qualification (2026-10-10): signed feed/immutable descriptor contracts, complete two-pass no-write payload inspection, reviewed-origin supplier capture and the pure freshness model are integrated through `acd5c334`. Root verifies all2,576 frozen Git/source input hashes and15 retained gate logs; corrected75parents/294race cases plus four freshness parents/48cases pass with zero failures/skips. The original mutable-reference/oversized-fixture failures are retained. [Root review](032-evidence/w04-core-qualified-root-review.json). Whole supplier transfer/cadence, configured publication, durable generation acceptance, measured scan-used provenance, API/UI wiring and fresh-cache no-egress qualification remain open; these component results do not close W04 tasks or qualify the combined application.
 
+W04 registry-auth/transfer follow-up is integrated through `27090f81`: operator-constructor Bearer challenge/token authority and bounded original-byte supplier staging pass50focused/345full package race events with zero failures/skips. Root independently verifies2590+2590 frozen source bindings,30 gate logs,16 capacity guards and eleven exact integrated source/inventory paths. Initial19 fixture failures remain immutable. [Root transfer review](032-evidence/w04-transfer-auth-qualified-root-review.json). These controlled registry peers do not qualify a complete upstream pull or any later producer/durable/scan-used/no-egress path.
+
 ### W05 — Bound browser authentication, propagate cancellation, and finish modal forms
 
 **Priority:** P1. **Effort/risk:** M/MED. **Dependencies:** W00; W01 for frontend tooling updates. **Owner:** frontend/API.
