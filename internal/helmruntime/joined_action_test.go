@@ -31,10 +31,13 @@ func TestHelmSDKDirectCanceledControlReturnsBeforeHookWorker(t *testing.T) {
 	stage, cfg := joinedSDKFixture(t, owner, "hook")
 	install := joinedInstall(cfg, owner)
 	result := make(chan error, 1)
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		_, err := install.RunWithContext(owner, joinedChart("1.0.0", "pre-install"), nil)
 		result <- err
 	}()
+	joinSDKCleanup(t, cancel, stage, done, 3)
 	waitJoinedSignal(t, stage.entered, "SDK hook never entered owned transfer")
 	cancel()
 	waitJoinedSignal(t, stage.canceled, "SDK hook did not observe owned body cancellation")
@@ -115,7 +118,9 @@ func TestHelmJoinedActionRejectsExpiredOrMissingOwnerWithoutStartingSDK(t *testi
 func joinedSDKLifecycle(t *testing.T, owner context.Context, cancel context.CancelFunc, stage *heldSDKStage, cfg *action.Configuration, revision int, pending releasecommon.Status, run func(context.Context) (release.Releaser, error)) {
 	t.Helper()
 	result := make(chan error, 1)
-	go func() { _, err := RunJoined(owner, run); result <- err }()
+	done := make(chan struct{})
+	go func() { defer close(done); _, err := RunJoined(owner, run); result <- err }()
+	joinSDKCleanup(t, cancel, stage, done, 0)
 	waitJoinedSignal(t, stage.entered, "SDK stage did not start")
 	value, err := cfg.Releases.Get("fixture", revision)
 	if err != nil {
@@ -301,4 +306,36 @@ func waitSDKUpdates(t *testing.T, stage *heldSDKStage, minimum int32) {
 			t.Fatal("SDK's held hook did not complete its final storage callback")
 		}
 	}
+}
+
+func joinSDKCleanup(t *testing.T, cancel context.CancelFunc, stage *heldSDKStage, done <-chan struct{}, minimumUpdates int32) {
+	t.Helper()
+	t.Cleanup(func() {
+		cancel()
+		stage.release()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Error("SDK action caller did not drain during failed-fixture cleanup")
+		}
+		select {
+		case <-stage.entered:
+			select {
+			case <-stage.exited:
+			case <-time.After(2 * time.Second):
+				t.Error("SDK held callback did not drain during failed-fixture cleanup")
+			}
+			deadline := time.NewTimer(2 * time.Second)
+			defer deadline.Stop()
+			for stage.updateCount.Load() < minimumUpdates {
+				select {
+				case <-stage.updated:
+				case <-deadline.C:
+					t.Error("SDK final hook storage callback did not drain during cleanup")
+					return
+				}
+			}
+		default:
+		}
+	})
 }
