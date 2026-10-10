@@ -19,8 +19,10 @@ import (
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"helm.sh/helm/v4/pkg/action"
+	helmchart "helm.sh/helm/v4/pkg/chart"
+	"helm.sh/helm/v4/pkg/chart/common"
+	chartutil "helm.sh/helm/v4/pkg/chart/common/util"
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
-	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 	"helm.sh/helm/v4/pkg/engine"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	ociregistry "oras.land/oras-go/v2/registry"
@@ -219,7 +221,11 @@ func renderReviewedChart(compressed []byte, overrides map[string]any, releaseNam
 	if err != nil {
 		return renderedProfile{}, errors.New("chart archive cannot be loaded")
 	}
-	if err := action.CheckDependencies(chart, chart.Metadata.Dependencies); err != nil {
+	accessor, err := helmchart.NewAccessor(chart)
+	if err != nil {
+		return renderedProfile{}, errors.New("chart metadata cannot be read")
+	}
+	if err := action.CheckDependencies(chart, accessor.MetaDependencies()); err != nil {
 		return renderedProfile{}, errors.New("recursive chart dependencies are incomplete")
 	}
 	values, err := chartutil.CoalesceValues(chart, overrides)
@@ -231,13 +237,13 @@ func renderReviewedChart(compressed []byte, overrides map[string]any, releaseNam
 			return renderedProfile{}, err
 		}
 	}
-	capabilities := chartutil.DefaultCapabilities.Copy()
-	parsedVersion, err := chartutil.ParseKubeVersion(kubernetesVersion)
+	capabilities := common.DefaultCapabilities.Copy()
+	parsedVersion, err := common.ParseKubeVersion(kubernetesVersion)
 	if err != nil {
 		return renderedProfile{}, errors.New("profile Kubernetes version invalid")
 	}
 	capabilities.KubeVersion = *parsedVersion
-	renderValues, err := chartutil.ToRenderValues(chart, values, chartutil.ReleaseOptions{Name: releaseName, Namespace: namespace, Revision: 1, IsInstall: true}, capabilities)
+	renderValues, err := chartutil.ToRenderValues(chart, values, common.ReleaseOptions{Name: releaseName, Namespace: namespace, Revision: 1, IsInstall: true}, capabilities)
 	if err != nil {
 		return renderedProfile{}, errors.New("chart values cannot be rendered")
 	}
