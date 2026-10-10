@@ -55,6 +55,7 @@ func TestRegistryToolsRequireBothIndependentLiteralOriginApprovals(t *testing.T)
 func TestRegistryToolsKeepStrictRedirectDefaultWithoutExactPair(t *testing.T) {
 	cases := map[string][]httpclient.TrustedOrigin{
 		"public default":          nil,
+		"empty query spelling":    {registryToolOrigin("https://ghcr.io?"), registryToolOrigin("https://pkg-containers.githubusercontent.com")},
 		"registry only":           {registryToolOrigin("https://ghcr.io")},
 		"CDN only":                {registryToolOrigin("https://pkg-containers.githubusercontent.com")},
 		"different CDN":           {registryToolOrigin("https://ghcr.io"), registryToolOrigin("https://other.githubusercontent.com")},

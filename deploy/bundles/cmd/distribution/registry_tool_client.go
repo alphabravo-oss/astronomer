@@ -22,7 +22,7 @@ func registryToolDestinationOptions(network httpclient.DestinationPolicy, trust 
 	registry, cdn := false, false
 	for _, approved := range network.Origins {
 		origin, err := url.Parse(approved.URL)
-		if err != nil || origin.Scheme != "https" || origin.Port() != "" && origin.Port() != "443" {
+		if err != nil || origin.Scheme != "https" || origin.ForceQuery || origin.Port() != "" && origin.Port() != "443" {
 			continue
 		}
 		switch strings.ToLower(origin.Hostname()) {
