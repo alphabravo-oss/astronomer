@@ -3,11 +3,15 @@ import copy
 import datetime as dt
 import importlib.util
 import json
+import os
+import subprocess
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(os.environ.get('ASTRONOMER_POLICY_REPO', Path(__file__).resolve().parents[2])).resolve()
+EXCEPTIONS = Path(os.environ.get('PROPOSED_SOURCE_EXCEPTIONS', ROOT/'deploy/security/source-exceptions.json'))
 spec = importlib.util.spec_from_file_location('policy', ROOT/'scripts/security-source-policy.py')
 policy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(policy)
@@ -122,7 +126,7 @@ class ReviewedSourceControlsTest(unittest.TestCase):
                 'file': finding['path'], 'line': str(finding['line']),
                 'column': str(finding['column']),
             })
-        self.e = json.loads((ROOT/'deploy/security/source-exceptions.json').read_text())
+        self.e = json.loads(EXCEPTIONS.read_text())
         known = {row['fingerprint'] for row in self.controls}
         self.e['exceptions'] = [row for row in self.e['exceptions'] if row['fingerprint'] in known]
         # Production uses the real clock. This fixture evaluates the dated reviews
@@ -184,23 +188,44 @@ class ReviewedSourceControlsTest(unittest.TestCase):
                             'unreviewed-release', self.root, self.now)
 
 
+def immutable_git_blob(commit, relative):
+    """Read only a bounded immutable fixture blob; never print its contents."""
+    target = commit + ':' + relative
+    size = int(subprocess.check_output(['git', 'cat-file', '-s', target], cwd=ROOT, timeout=10))
+    if not 0 < size <= 1024 * 1024:
+        raise ValueError('historical fixture blob outside bound')
+    data = subprocess.check_output(['git', 'cat-file', 'blob', target], cwd=ROOT, timeout=10)
+    if len(data) != size:
+        raise ValueError('historical fixture blob size drift')
+    return data
+
+
+def historical_audit_control():
+    document = json.loads(immutable_git_blob(
+        '49fb11df0ed3a7c9214caf2b2d41ce2889ebdb71', 'deploy/security/source-exceptions.json'))
+    controls = [row for row in document['exceptions'] if row['rule_id'] == 'G109']
+    if len(controls) != 1:
+        raise ValueError('historical audit control inventory drift')
+    return controls[0]
+
+
 class ReviewedAuditStatusControlTest(unittest.TestCase):
+    """Positive evidence belongs to the immutable 927 native source, not today."""
     def setUp(self):
         SecurityPolicyTest.setUp(self)
         findings = json.loads((ROOT/'docs/assurance/technology-guide/w02/current-source-927151be/source-findings.json').read_text())['findings']
         self.finding = next(row for row in findings if row['rule_id'] == 'G109')
         target = self.root/self.finding['path']
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes((ROOT/self.finding['path']).read_bytes())
+        original = immutable_git_blob('927151bebf20c6a8f63fe76ff804b45e86044ded', self.finding['path'])
+        self.assertEqual('sha256:' + hashlib.sha256(original).hexdigest(), self.finding['source_digest'])
+        target.write_bytes(original)
         self.g['Issues'] = [{
             'severity': self.finding['level'], 'rule_id': 'G109',
             'file': self.finding['path'], 'line': str(self.finding['line']),
             'column': str(self.finding['column']),
         }]
-        doc = json.loads((ROOT/'deploy/security/source-exceptions.json').read_text())
-        self.e = {'schema_version': 1, 'exceptions': [
-            row for row in doc['exceptions'] if row['fingerprint'] == self.finding['fingerprint']
-        ]}
+        self.e = {'schema_version': 1, 'exceptions': [historical_audit_control()]}
         self.now = dt.datetime(2026, 10, 10, tzinfo=dt.timezone.utc)
 
     def run_policy(self):
@@ -212,6 +237,7 @@ class ReviewedAuditStatusControlTest(unittest.TestCase):
         self.assertTrue(result['passed'])
         self.assertEqual(len(result['findings']), 1)
         self.assertTrue(result['findings'][0]['accepted'])
+        self.assertEqual(result['findings'][0]['fingerprint'], self.finding['fingerprint'])
 
     def test_different_narrowing_in_same_file_is_blocked(self):
         self.g['Issues'].append(dict(self.g['Issues'][0], column=str(self.finding['column'] + 1)))
@@ -226,6 +252,47 @@ class ReviewedAuditStatusControlTest(unittest.TestCase):
         target.write_text(body.replace('statusCode > 599', 'statusCode > 999999999999'))
         with self.assertRaises(ValueError):
             self.run_policy()
+
+    def test_historical_control_rejects_changed_current_source(self):
+        (self.root/self.finding['path']).write_bytes((ROOT/self.finding['path']).read_bytes())
+        with self.assertRaises(ValueError):
+            self.run_policy()
+
+
+class ReviewedCurrentAuditStatusControlTest(ReviewedAuditStatusControlTest):
+    """Current static identity is separate from a fresh native collection."""
+    def setUp(self):
+        SecurityPolicyTest.setUp(self)
+        review_bytes = (ROOT/'advisor-plans/032-evidence/audit-status-current-static-binding.json').read_bytes()
+        self.assertEqual(hashlib.sha256(review_bytes).hexdigest(),
+                         '790895ea8beb5f8116678feda457e2751f14bf398dbb3afc0dbeb6fd37c3554e')
+        self.finding = json.loads(review_bytes)['finding']
+        target = self.root/self.finding['path']
+        target.parent.mkdir(parents=True, exist_ok=True)
+        current = (ROOT/self.finding['path']).read_bytes()
+        self.assertEqual('sha256:' + hashlib.sha256(current).hexdigest(), self.finding['source_digest'])
+        target.write_bytes(current)
+        self.g['Issues'] = [{'severity': self.finding['level'], 'rule_id': 'G109',
+                             'file': self.finding['path'], 'line': str(self.finding['line']),
+                             'column': str(self.finding['column'])}]
+        controls = json.loads(EXCEPTIONS.read_text())['exceptions']
+        self.e = {'schema_version': 1, 'exceptions': [
+            row for row in controls if row['fingerprint'] == self.finding['fingerprint']]}
+        self.assertEqual(len(self.e['exceptions']), 1)
+        self.now = dt.datetime(2026, 10, 10, tzinfo=dt.timezone.utc)
+
+    def test_historical_control_rejects_changed_current_source(self):
+        self.e['exceptions'] = [historical_audit_control()]
+        with self.assertRaises(ValueError):
+            self.run_policy()
+
+    def test_expiry_and_scope_fail_closed(self):
+        self.now = dt.datetime(2026, 10, 16, tzinfo=dt.timezone.utc)
+        with self.assertRaises(ValueError):
+            self.run_policy()
+        self.now = dt.datetime(2026, 10, 10, tzinfo=dt.timezone.utc)
+        with self.assertRaises(ValueError):
+            policy.evaluate(self.g, self.v, self.e, self.status, 'release-tag', self.root, self.now)
 
 
 if __name__=='__main__': unittest.main()
