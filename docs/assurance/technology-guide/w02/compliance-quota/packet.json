@@ -1,0 +1,483 @@
+{
+  "schema_version": 1,
+  "scope": "Eight compliance quota snapshot count conversions; actual shared restore writer correctness and preserved representable signed limits, not current whole W02/native scanner/program release qualification",
+  "genuine_before_source": "c96c17d3",
+  "original_after_source": "2bbd1a60",
+  "import_corrected_source": "c979cdab",
+  "final_after_source": "a965f053faef8fc762c13b7d867b132e2c318b85",
+  "results": {
+    "before": {
+      "named_fail": 17,
+      "named_pass": 33,
+      "package_fail": 1,
+      "skips": 0
+    },
+    "original_after": "Compilation failed at unused cmp import; no named tests qualified",
+    "import_corrected_after": "Focused50 and full68 compliance race tests, vet and boundaries passed; complexity correctly rejected stale848 ceiling after source dropped to847; JSON and SQL not launched",
+    "final_after": {
+      "focused_named_pass": 50,
+      "full_named_pass": 68,
+      "full_parents": 20,
+      "full_subcases": 48,
+      "package_pass": 2,
+      "skips": 0,
+      "failures": 0,
+      "vet": "PASS",
+      "boundaries": "PASS",
+      "complexity": "PASS",
+      "json_governance": "PASS",
+      "coupled_sql_governance": "FAIL: existing provider owner drift; exact actual inventory bound separately, no generic exemption"
+    },
+    "fatal_guard_count": {
+      "before": 10,
+      "original_after": 10,
+      "import_corrected_after": 26,
+      "final_after": 34
+    },
+    "all_child_groups_held_and_drained": true
+  },
+  "originals": [
+    {
+      "original_path": "/tmp/w02-compliance-quota-before-c96c17d3-run1/before.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/genuine-before/before.log.gz",
+      "original_bytes": 97419,
+      "original_sha256": "ca27e2671a7e49c264c3d9c4eb99ed81bfd65d8965600c565bfdbc319ada3349",
+      "retained_bytes": 4242,
+      "retained_sha256": "a80b2295b4313ce2b207a094de3e72a0f29929c11185af1ff815aae6119ad18d",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-before-c96c17d3-run1/capacity.jsonl",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/genuine-before/capacity.jsonl.gz",
+      "original_bytes": 3183,
+      "original_sha256": "ccf75806af2eabee285d415a18c0c84589e060c96e596fcf5452b99e001d2b34",
+      "retained_bytes": 379,
+      "retained_sha256": "5c32f07be12562e61d57831ab8ea55819bdbbc1fbe327ec0df28fc02afc3b8d4",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-before-c96c17d3-run1/go-version.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/genuine-before/go-version.log.gz",
+      "original_bytes": 32,
+      "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "retained_bytes": 52,
+      "retained_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-before-c96c17d3-run1/receipt.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/genuine-before/receipt.json.gz",
+      "original_bytes": 3670,
+      "original_sha256": "8de5698baa2f2e3961963bfeee622cb6ab0f65c5221e9cbb23537060b345801f",
+      "retained_bytes": 1010,
+      "retained_sha256": "e8fa08c9d35642254b351e9cdfcd79ac871bf087cf974704637f40e80f5b15c8",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-2bbd1a60-run1/capacity.jsonl",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/original-after-compile-failure/capacity.jsonl.gz",
+      "original_bytes": 3181,
+      "original_sha256": "2915f4c120189531519ab860303815abc1670b10e22a5bd8976035a511a422c5",
+      "retained_bytes": 378,
+      "retained_sha256": "b4d76768f169f6f939f5e7558027c49c9e8ea346b900d3bbd482bbe39b2dd8fc",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-2bbd1a60-run1/focused-race.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/original-after-compile-failure/focused-race.log.gz",
+      "original_bytes": 1425,
+      "original_sha256": "712d607c1a4ac708e639caff5c550fc68d3a146a8183d7cfe2f75e4317b8576d",
+      "retained_bytes": 316,
+      "retained_sha256": "6aaf48a73528dc77fac0ca0c0524f0eeabe0616503fd07d20ebc0a483852bb35",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-2bbd1a60-run1/go-version.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/original-after-compile-failure/go-version.log.gz",
+      "original_bytes": 32,
+      "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "retained_bytes": 52,
+      "retained_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-2bbd1a60-run1/receipt.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/original-after-compile-failure/receipt.json.gz",
+      "original_bytes": 3831,
+      "original_sha256": "3f8cabf3cc4db02c9a5132b2f342e089147c7c17cccaa9b5ff7e919ef86bb967",
+      "retained_bytes": 1146,
+      "retained_sha256": "89e5f6b7a1d9d943a7e180ed3748a6843dc5c18d52bd9acabf27141752f96c8c",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-c979cdab-run1/boundaries.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/corrected-runtime-stale-ratchet/boundaries.log.gz",
+      "original_bytes": 65,
+      "original_sha256": "33d6e6b2cc354373ee115da460fc0cef08c6c590f09e406f9cbce90bbdc6cc94",
+      "retained_bytes": 81,
+      "retained_sha256": "4fe11abded6fa9d2497d1ef029bef7d7cd397d052dc50a17f8aeb1bc6c8b1b30",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-c979cdab-run1/capacity.jsonl",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/corrected-runtime-stale-ratchet/capacity.jsonl.gz",
+      "original_bytes": 8275,
+      "original_sha256": "a7b3c706324a99c4c508f1aa76eb42992a3bb7f76e2bce656730089934e158b6",
+      "retained_bytes": 605,
+      "retained_sha256": "8e5f3707dc9315c3f41112d238cfe046829147172f6f98a0c86f85bd7d45193d",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-c979cdab-run1/complexity.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/corrected-runtime-stale-ratchet/complexity.log.gz",
+      "original_bytes": 138,
+      "original_sha256": "a95d903efa5c4cd38d9450327f66c889a67af0c83c7a916c409eff0fd6fd5d5b",
+      "retained_bytes": 132,
+      "retained_sha256": "d94cea43180b3b793b4b8415cd66f2084e5a4f850e556353110e809bee4343d5",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-c979cdab-run1/focused-race.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/corrected-runtime-stale-ratchet/focused-race.log.gz",
+      "original_bytes": 85889,
+      "original_sha256": "4f4c70924c5a743285191a54cd792bc08a7dad54d7403ca11e5b0c54dff0e0a7",
+      "retained_bytes": 3802,
+      "retained_sha256": "e6f7d3272e1a27614240acd8c3babb6c6747fa3ab19aa9a42c7d0a9c2d3ac911",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-c979cdab-run1/full-race.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/corrected-runtime-stale-ratchet/full-race.log.gz",
+      "original_bytes": 105167,
+      "original_sha256": "ba56b94b09e1d0bd400346971adf4537208ca7506a8832981a41075e872eecb4",
+      "retained_bytes": 5182,
+      "retained_sha256": "e3c193adbb4f2fde43f1d5df1e371b22fc87718f965862d354776d45e1a03a37",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-c979cdab-run1/go-version.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/corrected-runtime-stale-ratchet/go-version.log.gz",
+      "original_bytes": 32,
+      "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "retained_bytes": 52,
+      "retained_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-c979cdab-run1/receipt.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/corrected-runtime-stale-ratchet/receipt.json.gz",
+      "original_bytes": 8423,
+      "original_sha256": "6c428947f173e08f47410a68472903b7aa14f1868882f95bca452c390fcf3dbe",
+      "retained_bytes": 1607,
+      "retained_sha256": "1e5e98d0456f9f646c3f8562b538baee7901a48d6713db33ae99df36882ea5d8",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-c979cdab-run1/vet.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/corrected-runtime-stale-ratchet/vet.log.gz",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retained_bytes": 20,
+      "retained_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-a965f053-run1/boundaries.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/final-after/boundaries.log.gz",
+      "original_bytes": 65,
+      "original_sha256": "33d6e6b2cc354373ee115da460fc0cef08c6c590f09e406f9cbce90bbdc6cc94",
+      "retained_bytes": 81,
+      "retained_sha256": "4fe11abded6fa9d2497d1ef029bef7d7cd397d052dc50a17f8aeb1bc6c8b1b30",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-a965f053-run1/capacity.jsonl",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/final-after/capacity.jsonl.gz",
+      "original_bytes": 10815,
+      "original_sha256": "2bd940b2bf816a27f9b6f2dd66cb22da6498efa015b6bd62d22995add62b88bb",
+      "retained_bytes": 696,
+      "retained_sha256": "4da17e20b6ff2ac1e7560341098de9632d2f72218c5acea1ee7dd6480f8d0ae8",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-a965f053-run1/complexity.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/final-after/complexity.log.gz",
+      "original_bytes": 101,
+      "original_sha256": "e27cbfa0e0ab9ef29eb43b4c8be810b92c192fd997e8999e75e4c5f8a3f5b1e5",
+      "retained_bytes": 102,
+      "retained_sha256": "bc48f0989818442f8b54d15e834ff331673772c6af39fb5f404832459093a724",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-a965f053-run1/focused-race.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/final-after/focused-race.log.gz",
+      "original_bytes": 85895,
+      "original_sha256": "6bac98db0a5aa1b74fecc2bf94b2ce9cdb89abb63e45b0e21ba509acde95b810",
+      "retained_bytes": 3781,
+      "retained_sha256": "ee9ed69d2100e09aa19a432640922ab25a920cceb92906b5ed82ed0cfd4f0d03",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-a965f053-run1/full-race.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/final-after/full-race.log.gz",
+      "original_bytes": 105168,
+      "original_sha256": "fb71af759995caf18cd288687c5c8daefe15187d7b5e4731a9ee5686c9ec49e5",
+      "retained_bytes": 5201,
+      "retained_sha256": "f1fa3a96aa681c66977046382c4142e965c3a4a3d2fca5aff7345abb18382b77",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-a965f053-run1/go-version.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/final-after/go-version.log.gz",
+      "original_bytes": 32,
+      "original_sha256": "ed4307d760c597256afdc696a61d47d13e832615d7741ead11c64966a440b376",
+      "retained_bytes": 52,
+      "retained_sha256": "f2281444c2b18b3ca6e068b8007908f935e0aab935d6ebde816bb1af9a8d1b88",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-a965f053-run1/json-governance.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/final-after/json-governance.log.gz",
+      "original_bytes": 153,
+      "original_sha256": "649ee4339a083c90408218ef94eb6427f14956231d2d1c9de71389291c5e773f",
+      "retained_bytes": 140,
+      "retained_sha256": "15288f42de7d6bf64c59bf3d9867d4124cf37cbfb56124dfbca57748a9535555",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-a965f053-run1/receipt.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/final-after/receipt.json.gz",
+      "original_bytes": 10945,
+      "original_sha256": "5238bfd55b5196fea8db2cab25baf0b597173305ed4b39cc4517f88d43784d99",
+      "retained_bytes": 1975,
+      "retained_sha256": "3bec1e15855a8450b648eefa73ad3250161e725eb7228eb25eb10dcdebe35ef5",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-a965f053-run1/sql-governance.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/final-after/sql-governance.log.gz",
+      "original_bytes": 81,
+      "original_sha256": "bfab00217937e44911b420e0b41f9ab60399e37ae4b37a5af30a925c43b13206",
+      "retained_bytes": 90,
+      "retained_sha256": "4fa5fe9119ac41724c130b22e46c07d60979f616c1a201fc4c0979355a24c36e",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-a965f053-run1/vet.log",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/originals/final-after/vet.log.gz",
+      "original_bytes": 0,
+      "original_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "retained_bytes": 20,
+      "retained_sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-before-runner-c96c17d3-refined/run_before.py",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/before-driver/run_before.py.gz",
+      "original_bytes": 9092,
+      "original_sha256": "f53a0b00c42ed30a64644c56588b824e98f2b5c951c5a9c2a6dc0bdf65365d38",
+      "retained_bytes": 3571,
+      "retained_sha256": "e693020796ebca3dfe3ffbd9af2f47cc9a369a0700382e502bd68c19bf9bdb5c",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-before-runner-c96c17d3-refined/test_run_before.py",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/before-driver/test_run_before.py.gz",
+      "original_bytes": 5242,
+      "original_sha256": "1b37acfcbdadd491455afc4c5f473753c638fe4c230de54a8cf08ae1dcc0576b",
+      "retained_bytes": 1609,
+      "retained_sha256": "565439c25b553bc6840b925d77c2879f13836cdc3c06b0a809ded7d2a30b7b25",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-runner-2bbd1a60-readonly/run_after.py",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/original-after-driver/run_after.py.gz",
+      "original_bytes": 11937,
+      "original_sha256": "acc54999164b0b31964d67694174891d758d63b576c6c1d487e4b8d7e9b475f2",
+      "retained_bytes": 4560,
+      "retained_sha256": "2ca887f9ee0fd05e8ce430b0637c2f4670699a9f0c013e1d19571ebb31a14e0c",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-runner-2bbd1a60-readonly/source-bindings.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/original-after-driver/source-bindings.json.gz",
+      "original_bytes": 3149,
+      "original_sha256": "4140715bc903a85379a406fff02fa51a388f35f08a935bf6dccd6b51a0e6ec66",
+      "retained_bytes": 1323,
+      "retained_sha256": "3d5dbabdee40067adcae8705c76b80da9e06db87189737d0eceea1473f4fa34c",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-runner-c979cdab/run_after.py",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/import-corrected-driver/run_after.py.gz",
+      "original_bytes": 11937,
+      "original_sha256": "d743405bb271729bdf1433f5b7166e85cae1902be2e502005820396bca2a1106",
+      "retained_bytes": 4560,
+      "retained_sha256": "667c07a8763976c93ff26e56ac08cdcce151f174c4df953ed816ee2640104ea1",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-runner-c979cdab/source-bindings.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/import-corrected-driver/source-bindings.json.gz",
+      "original_bytes": 3149,
+      "original_sha256": "6bfcbba3bc42233eae0d914927b0276c132fa29e59e7d046262e729b2be05b35",
+      "retained_bytes": 1323,
+      "retained_sha256": "941110c472b75ca1ce758fc8156fef34db15475d06c75f59468018d6ae36ff5e",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-runner-c979cdab/successor.patch",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/import-corrected-driver/successor.patch.gz",
+      "original_bytes": 530,
+      "original_sha256": "59b18b56b16acb5f2b1793f808fe622a90de4e1595feaee213bc080af20e9a96",
+      "retained_bytes": 369,
+      "retained_sha256": "505a29aed33787c1015089c0d30157099bee8c5be1643a5861c051feb386c760",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-runner-a965f053/run_after.py",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/final-driver/run_after.py.gz",
+      "original_bytes": 11937,
+      "original_sha256": "ed398ae17bf92f1a11621ca2e69522eaf63d32ade0fa76540901342034346b3d",
+      "retained_bytes": 4560,
+      "retained_sha256": "118041b2df56c0c18537804518e8d3cc60a783fab403d494b1275d0b8a797c5e",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-runner-a965f053/test_run_after.py",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/final-driver/test_run_after.py.gz",
+      "original_bytes": 3937,
+      "original_sha256": "89ef1da4ba7e5d33062452ede72263c1579964e753a9422ab8e6186d0d2cd2fc",
+      "retained_bytes": 1421,
+      "retained_sha256": "4541a6615a85f104b76644f4e648839d05bbce4c0934edc02ace883135a14f04",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-runner-a965f053/source-bindings.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/final-driver/source-bindings.json.gz",
+      "original_bytes": 3149,
+      "original_sha256": "fcff27c11a4048d119aec6e8c79916c4db1fe7d546c1051b3db0678c7007adb1",
+      "retained_bytes": 1322,
+      "retained_sha256": "8f2b08f1251119db3cf6d0897f7f807bbd6dc3f9cd33108f8f934c009660fe11",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-runner-a965f053/check_cached.py",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/final-driver/check_cached.py.gz",
+      "original_bytes": 1689,
+      "original_sha256": "aacced12fb2534a4c15d1f7b2898f1b94e2c154dbb8c8182292161755285130b",
+      "retained_bytes": 882,
+      "retained_sha256": "c38226e585d60cb08d56abce69599b53ef4202b425fddbd2dccc005b7eb83d2c",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-after-runner-a965f053/successor.patch",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/final-driver/successor.patch.gz",
+      "original_bytes": 546,
+      "original_sha256": "0e2d510aa291e54c9a12a72cd4738e1f8760eac065cad0ba9841351c9a9ce7c8",
+      "retained_bytes": 371,
+      "retained_sha256": "899f3202f1bfea9b5c8f3392dfec652166003e8f544e36d3d52c0bf97d08b1c8",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-import-correction/review.patch",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/import-correction/review.patch.gz",
+      "original_bytes": 167,
+      "original_sha256": "3b8105006db8254f8cdb7f88922f061d50d04e4cf02ccda645878cfe57a98107",
+      "retained_bytes": 133,
+      "retained_sha256": "34c7b61e7c7dfcb103be5bba08a673a12d09e4964f3718b60eb1e0d3eca9031c",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-import-correction/index.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/import-correction/index.json.gz",
+      "original_bytes": 668,
+      "original_sha256": "35c54bb50cf21dbdcceadd5f6bb7c64d4943ad5d86dffdcbda2262a5413a767b",
+      "retained_bytes": 397,
+      "retained_sha256": "83fadae07948a9de1669fad54854088b795bf1da9b847fa84a6194f4ba64ca6b",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-ratchet-c979cdab/review.patch",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/ratchet-correction/review.patch.gz",
+      "original_bytes": 497,
+      "original_sha256": "b4f5daaa9f59ee2e243bcc6381b57a5d3db9d18dd822d1715080231dc357a51d",
+      "retained_bytes": 243,
+      "retained_sha256": "3da4899f43c12bee73622ff0ba014b34c4ce373c964ef804591050457a622929",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-ratchet-c979cdab/index.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/ratchet-correction/index.json.gz",
+      "original_bytes": 602,
+      "original_sha256": "55e43525c4693b5e795bce05b381a87abc6248dc4af2d1e197184b9e142cf3e5",
+      "retained_bytes": 399,
+      "retained_sha256": "ca46e3d5cee42111ccb5b3282e89e19903436b63057f5d8270def143edbc653d",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/plan032_w04_owned_runner.py",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/shared/plan032_w04_owned_runner.py.gz",
+      "original_bytes": 4144,
+      "original_sha256": "60c3790c8931a5d9986979f9fec5416b1f5e1f697b2c115272db8b40acd8000d",
+      "retained_bytes": 1670,
+      "retained_sha256": "f5868d3f31c3ff4d428c4b000b4958191f79374ae766f7f767977503adbf2de3",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w07-after-query-ee2c52d8/run_after.py",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/shared/run_after.py.gz",
+      "original_bytes": 10947,
+      "original_sha256": "4b1037ee327b96de13338c5ab8ba1366e5a6bec007f0c8cf634faf50dfaace46",
+      "retained_bytes": 3780,
+      "retained_sha256": "bc0f2b8c0f4229dc94b665ffd7c6037b4ca1604e1272e68f2133a114328ab1ba",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-packet/c96c17d3-git-inputs.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/source-inputs/c96c17d3-git-inputs.json.gz",
+      "original_bytes": 2171225,
+      "original_sha256": "7fc3228071fa1186737aff8e7c523f09f46c5feb7c3f6a9c6744c78a759f859f",
+      "retained_bytes": 589070,
+      "retained_sha256": "2e4233fe58a057fe76902b8359417d67633a5eda98b991af3035d743bf44abdb",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-packet/2bbd1a60-git-inputs.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/source-inputs/2bbd1a60-git-inputs.json.gz",
+      "original_bytes": 2328575,
+      "original_sha256": "25c24ffc55892eb88e6cfc807cf07629f7b4d90f8d097cefc090c75eb1678e1b",
+      "retained_bytes": 635770,
+      "retained_sha256": "06fe094232be3f183a27bec090ef4d894795fa026a7b71d2943741b7e11c2734",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-packet/c979cdab-git-inputs.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/source-inputs/c979cdab-git-inputs.json.gz",
+      "original_bytes": 2328575,
+      "original_sha256": "bc9f8ffb4c82243fe2999b5705b4ef8de734de31dc7f326bcb6ca6602c5d8ab5",
+      "retained_bytes": 635770,
+      "retained_sha256": "6d3a516cc9530fa3ce1092d1b212bd63b8732f2b22c3d9c52563565c10ab4ffe",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w02-compliance-quota-packet/a965f053-git-inputs.json",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/source-inputs/a965f053-git-inputs.json.gz",
+      "original_bytes": 2328575,
+      "original_sha256": "6083d2799ff11f42c7ea655510d3996c3bf6e62f75315edf08a550cc04661791",
+      "retained_bytes": 635774,
+      "retained_sha256": "1794c8b2e20210b514817661aff671d0f98334a713f998813e00732c054f2251",
+      "encoding": "lossless gzip"
+    },
+    {
+      "original_path": "/tmp/w07-after-query-ee2c52d8/fences.py",
+      "retained": "docs/assurance/technology-guide/w02/compliance-quota/drivers-and-source/shared/fences.py.gz",
+      "original_bytes": 15333,
+      "original_sha256": "03f0c46e08eb01a539c12f8185700a04ac2bdb291e5bd1471d9d535b947f9b42",
+      "retained_bytes": 5216,
+      "retained_sha256": "0f143385efba8975f2c13e0ba516f6c1355feb18b5985e5125705d9a5bccfe17",
+      "encoding": "lossless gzip"
+    }
+  ],
+  "shared_helpers": "drivers-and-source/shared retains the exact owned process and source-fingerprint fence helper bytes; scripts/hash-source-tree.py is bound in each complete Git input map."
+}
