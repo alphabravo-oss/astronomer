@@ -178,6 +178,96 @@
             ],
             "type": "object"
           },
+          "executableArtifacts": {
+            "items": {
+              "additionalProperties": false,
+              "allOf": [
+                {
+                  "else": {
+                    "not": {
+                      "required": [
+                        "archiveMember"
+                      ]
+                    }
+                  },
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "tar.gz"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "archiveMember"
+                    ]
+                  }
+                }
+              ],
+              "properties": {
+                "archiveMember": {
+                  "pattern": "^linux-(?:amd64|arm64)/helm$",
+                  "type": "string"
+                },
+                "digest": {
+                  "pattern": "^sha256:[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "binary",
+                    "tar.gz"
+                  ]
+                },
+                "name": {
+                  "pattern": "^[A-Za-z0-9._-]+$",
+                  "type": "string"
+                },
+                "platform": {
+                  "enum": [
+                    "linux/amd64",
+                    "linux/arm64"
+                  ]
+                },
+                "provenance": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sizeBytes": {
+                  "maximum": 536870912,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "url": {
+                  "pattern": "^https://[A-Za-z0-9.-]+/[^\\s?#]+$",
+                  "type": "string"
+                },
+                "verifiedAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "version",
+                "name",
+                "platform",
+                "url",
+                "sizeBytes",
+                "digest",
+                "provenance",
+                "verifiedAt"
+              ],
+              "type": "object"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "type": "array"
+          },
           "id": {
             "minLength": 1,
             "type": "string"

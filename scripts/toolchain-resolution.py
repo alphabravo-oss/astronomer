@@ -16,7 +16,7 @@ IDENTITY = r"^https://github\.com/alphabravo-oss/astronomer/\.github/workflows/(
 
 
 def bindings(document):
-    return [{"id": c["id"], "selected": c["selected"], "upstreamStable": c["discovery"]["version"], "observedAt": c["discovery"]["observedAt"], "artifactDigests": [a["digest"] for a in c["artifacts"]]} for c in document["components"]]
+    return [{"id": c["id"], "selected": c["selected"], "upstreamStable": c["discovery"]["version"], "observedAt": c["discovery"]["observedAt"], "artifactDigests": [a["digest"] for a in c["artifacts"]] + [a["digest"] for a in c.get("executableArtifacts", [])]} for c in document["components"]]
 
 
 def verify_binding(receipt, document, authority, now=None):
