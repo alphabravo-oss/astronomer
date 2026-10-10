@@ -200,6 +200,12 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 		h.log.Warn("invalid heartbeat payload", slog.String("error", err.Error()))
 		return
 	}
+	nodeCount, podCount, validCounts := agentInventoryCounts(payload.NodeCount, payload.PodCount)
+	if !validCounts {
+		h.log.Warn("invalid heartbeat inventory counts", slog.String("cluster_id", conn.ClusterID))
+		return
+	}
+
 	conditions, _ := json.Marshal(map[string]any{
 		"connected":                 true,
 		"degraded":                  len(payload.DegradedReasons) > 0,
@@ -220,11 +226,11 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 		ClusterID:          clusterID,
 		AgentVersion:       payload.AgentVersion,
 		KubernetesVersion:  payload.KubernetesVersion,
-		NodeCount:          int32(payload.NodeCount),
+		NodeCount:          nodeCount,
 		Distribution:       payload.Distribution,
 		CpuUsagePercent:    payload.CPUUsagePercent,
 		MemoryUsagePercent: payload.MemoryUsagePercent,
-		PodCount:           int32(payload.PodCount),
+		PodCount:           podCount,
 		Conditions:         conditions,
 	})
 	cancel()
@@ -540,6 +546,12 @@ func (h *Hub) handleMetrics(conn *AgentConnection, msg *protocol.Message) {
 		return
 	}
 
+	nodeCount, podCount, validCounts := agentInventoryCounts(payload.ClusterNodeCount, payload.ClusterPodCount)
+	if !validCounts {
+		h.log.Warn("invalid metrics inventory counts", slog.String("cluster_id", conn.ClusterID))
+		return
+	}
+
 	conditions, _ := json.Marshal(map[string]any{
 		"connected":         true,
 		"source":            "agent-metrics",
@@ -550,8 +562,8 @@ func (h *Hub) handleMetrics(conn *AgentConnection, msg *protocol.Message) {
 		ClusterID:          clusterID,
 		CpuUsagePercent:    payload.ClusterCPUUsage,
 		MemoryUsagePercent: payload.ClusterMemoryUsage,
-		PodCount:           int32(payload.ClusterPodCount),
-		NodeCount:          int32(payload.ClusterNodeCount),
+		PodCount:           podCount,
+		NodeCount:          nodeCount,
 		Conditions:         conditions,
 	}); err != nil {
 		h.log.Warn("failed to upsert cluster health from metrics", slog.String("error", err.Error()))
