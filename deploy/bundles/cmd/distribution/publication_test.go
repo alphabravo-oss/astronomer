@@ -36,6 +36,8 @@ type publicationRegistry struct {
 	uploadCount  int
 	writeCount   int
 	payloadReads int
+	rangeReads   int
+	denyRanges   bool
 	corruptBlob  string
 }
 
@@ -64,20 +66,25 @@ func (transport *publicationRoutingTransport) RoundTrip(request *http.Request) (
 }
 
 func TestActualPublisherCopiesSignsVerifiesAndRetriesImmutableChildren(t *testing.T) {
-	actualPublisherFixture(t, false)
+	actualPublisherFixture(t, false, false)
 }
 func TestActualPublisherClosesScannerDatabaseSubjectsAndOfflineGraph(t *testing.T) {
-	actualPublisherFixture(t, true)
+	actualPublisherFixture(t, true, false)
+}
+func TestActualPublisherVerifiesDescriptorDatabasePayloadReadback(t *testing.T) {
+	actualPublisherFixture(t, true, true)
 }
 
-func actualPublisherFixture(t *testing.T, scanner bool) {
+func actualPublisherFixture(t *testing.T, scanner, descriptors bool) {
 	t.Helper()
 	binary := os.Getenv("COSIGN_BIN")
 	if binary == "" {
 		t.Skip("COSIGN_BIN selects the qualified actual producer")
 	}
 	catalog, charts, assets, platforms := producerFixture(t, "apiVersion: v1\nkind: Pod\nspec:\n  containers:\n  - image: {{ .Values.image }}\n")
-	if scanner {
+	if descriptors {
+		configureDescriptorDatabaseFixture(t, catalog, assets, false)
+	} else if scanner {
 		configureScannerDatabaseFixture(t, catalog, assets)
 	}
 	catalogBytes, err := os.ReadFile(catalog)
@@ -163,6 +170,21 @@ func actualPublisherFixture(t *testing.T, scanner bool) {
 	}
 	if signed != 2*(len(index.Children)+len(index.Assets)+1) || publicRequests.Load() != 0 || transport.unexpected.Load() != 0 {
 		t.Fatalf("signed=%d public=%d unexpected=%d", signed, publicRequests.Load(), transport.unexpected.Load())
+	}
+	if descriptors {
+		fixture.mutex.Lock()
+		rangeReads := fixture.rangeReads
+		fixture.denyRanges = true
+		fixture.mutex.Unlock()
+		if rangeReads != 4 {
+			t.Fatal("descriptor publication skipped complete payload readback")
+		}
+		if err := publishLayout(t.Context(), options); err == nil {
+			t.Fatal("metadata-only success hid unsupported payload range readback")
+		}
+		fixture.mutex.Lock()
+		fixture.denyRanges = false
+		fixture.mutex.Unlock()
 	}
 	verifyActualKeyedConsumer(t, index, client, directory)
 	verifyActualOfflinePublication(t, fixture, index, options.Trust, directory)
@@ -434,6 +456,19 @@ func (f *publicationRegistry) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.Header().Set("Docker-Content-Digest", sha(data))
+	if r.Method == http.MethodGet && strings.Contains(path, "/blobs/") && r.Header.Get("Range") != "" && !f.denyRanges {
+		var start, end int64
+		if count, err := fmt.Sscanf(r.Header.Get("Range"), "bytes=%d-%d", &start, &end); err != nil || count != 2 || start < 0 || end < start || end >= int64(len(data)) {
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return
+		}
+		f.rangeReads++
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(data)))
+		w.Header().Set("Content-Length", fmt.Sprint(end-start+1))
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write(data[start : end+1])
+		return
+	}
 	w.Header().Set("Content-Length", fmt.Sprint(len(data)))
 	if r.Method != "HEAD" {
 		_, _ = w.Write(data)

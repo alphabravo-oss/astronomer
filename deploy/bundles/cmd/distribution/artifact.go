@@ -75,9 +75,14 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 	}
 	var assets assetIndex
 	data, err := boundedFile(assetPath, 1<<20)
-	if err != nil || closedJSON(data, &assets) != nil || assets.SchemaVersion != 2 || assets.Capabilities == nil || assets.Assets == nil {
+	if err != nil || closedJSON(data, &assets) != nil || (assets.SchemaVersion != 2 && assets.SchemaVersion != 3) || assets.Capabilities == nil || assets.Assets == nil {
 		return empty, errors.New("asset closure schema is invalid")
 	}
+	contract := distribution.EmbeddedAssetContract
+	if assets.SchemaVersion == 3 {
+		contract = distribution.DescriptorAssetContract
+	}
+	payloadSources := map[string]string{}
 	members := map[string][]byte{}
 	kinds := map[string]string{}
 	catalog, err := json.Marshal(result.Catalog)
@@ -127,60 +132,30 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 	members["profiles/builtins.render-evidence.json"], _ = json.Marshal(map[string]any{"render_digests": result.RenderDigests, "dependencies": result.Dependencies})
 	kinds["profiles/builtins.render-evidence.json"] = "values"
 	for _, asset := range assets.Assets {
-		if _, exists := members[asset.Path]; exists || asset.Path == "bom.json" {
-			return empty, errors.New("asset closure duplicates a reserved member")
+		closedAsset, err := loadPreparedAsset(asset, contract, members, kinds)
+		if err != nil {
+			return empty, err
 		}
-		content, err := boundedFile(asset.File, distribution.MaximumArchiveBytes)
-		if err != nil || sha(content) != asset.Digest {
-			return empty, errors.New("asset closure input is unavailable")
+		if closedAsset.DatabaseDescriptor != nil {
+			payloadSources[asset.ID] = asset.File
 		}
-		if asset.Category == "operator" || asset.Category == "plugin" || asset.Category == "database" || asset.Category == "runtime_image" {
-			classified := map[string]bool{}
-			if err := collectRenderedImages(string(content), classified); err != nil || len(classified) != len(asset.Images) {
-				return empty, errors.New("prerequisite manifest image set is not closed")
-			}
-			for _, image := range asset.Images {
-				if !classified[image] {
-					return empty, errors.New("prerequisite manifest differs from declared immutable images")
-				}
-			}
-		}
-		members[asset.Path] = content
-		kinds[asset.Path] = asset.Category
-		closedAsset := distribution.Asset{ID: asset.ID, MemberPath: asset.Path, Images: asset.Images, ArtifactSubject: asset.ArtifactSubject}
-		if asset.ArtifactSubject != "" {
-			manifest, err := boundedFile(asset.ArtifactManifestFile, 1<<20)
-			_, subject, ok := strings.Cut(asset.ArtifactSubject, "@")
-			if err != nil || !ok || sha(manifest) != subject {
-				return empty, errors.New("database manifest capture missing or changed")
-			}
-			path := "assets/" + asset.ID + ".oci-manifest.json"
-			if _, exists := members[path]; exists {
-				return empty, errors.New("database manifest member collision")
-			}
-			members[path] = manifest
-			kinds[path] = "vulnerability_database"
-			closedAsset.ArtifactManifestPath = path
-			config, err := boundedFile(asset.ArtifactConfigFile, 1<<20)
-			if err != nil {
-				return empty, errors.New("database configuration capture missing")
-			}
-			configPath := "assets/" + asset.ID + ".oci-config.json"
-			if _, exists := members[configPath]; exists {
-				return empty, errors.New("database configuration member collision")
-			}
-			members[configPath] = config
-			kinds[configPath] = "vulnerability_database"
-			closedAsset.ArtifactConfigPath = configPath
+		if closedAsset.ArtifactSubject != "" {
+			_, subject, _ := strings.Cut(closedAsset.ArtifactSubject, "@")
 			closedAsset.PublishedSubject = repository + "/assets/" + asset.ID + "@" + subject
 		}
 		closedAssets = append(closedAssets, closedAsset)
 	}
-	if err := distribution.ValidateAssetClosure(distribution.EmbeddedAssetContract, closedAssets, kinds, assets.Capabilities); err != nil {
+	if err := distribution.ValidateAssetClosure(contract, closedAssets, kinds, assets.Capabilities); err != nil {
 		return empty, err
 	}
-	bom := distribution.BOM{SchemaVersion: 1, AssetContractVersion: 1, Assets: closedAssets, Release: result.Catalog.Release, CatalogDigest: sha(catalog), Profiles: []distribution.Profile{{Name: "builtins", Qualification: "qualified", ValuesPath: "profiles/builtins.values.json", InventoryPath: "profiles/builtins.images.json", RequiredCategories: assets.RequiredCategories, BlockedCategories: []string{}, Capabilities: assets.Capabilities}}}
+	bom := distribution.BOM{SchemaVersion: 1, AssetContractVersion: contract, Assets: closedAssets, Release: result.Catalog.Release, CatalogDigest: sha(catalog), Profiles: []distribution.Profile{{Name: "builtins", Qualification: "qualified", ValuesPath: "profiles/builtins.values.json", InventoryPath: "profiles/builtins.images.json", RequiredCategories: assets.RequiredCategories, BlockedCategories: []string{}, Capabilities: assets.Capabilities}}}
 	index := subjectIndex{SchemaVersion: 1, Release: result.Catalog.Release, Repository: repository, CatalogDigest: bom.CatalogDigest, MediaType: distribution.MediaType, Children: []publishedSubject{}, Assets: []publishedAssetSubject{}}
+	if err := checkPreparedDatabaseCapacity(directory, closedAssets); err != nil {
+		return empty, err
+	}
+	if contract == distribution.DescriptorAssetContract {
+		index.SchemaVersion = 2
+	}
 	if err := os.Mkdir(directory, 0700); err != nil {
 		return empty, errors.New("OCI output directory must be new")
 	}
@@ -206,7 +181,11 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 		if _, err := writeBlob(directory, manifest.Config.MediaType, members[asset.ArtifactConfigPath]); err != nil {
 			return empty, err
 		}
-		if _, err := writeBlob(directory, manifest.Layers[0].MediaType, members[asset.MemberPath]); err != nil {
+		if asset.DatabaseDescriptor != nil {
+			if err := streamPreparedDatabase(payloadSources[asset.ID], filepath.Join(directory, "blobs", "sha256", manifest.Layers[0].Digest.Encoded()), manifest.Layers[0]); err != nil {
+				return empty, err
+			}
+		} else if _, err := writeBlob(directory, manifest.Layers[0].MediaType, members[asset.MemberPath]); err != nil {
 			return empty, err
 		}
 		descriptor, err := writeBlob(directory, ocispec.MediaTypeImageManifest, manifestBytes)
@@ -220,7 +199,7 @@ func buildLayout(result output, charts, directory, repository, assetPath, platfo
 		if descriptor.Digest.String() != subject {
 			return empty, errors.New("asset publication invented different manifest bytes")
 		}
-		index.Assets = append(index.Assets, publishedAssetSubject{ID: asset.ID, OriginalSubject: asset.ArtifactSubject, Repository: publishedRepository, Digest: subject, ArchiveDigest: sha(members[asset.MemberPath]), MediaType: manifest.Layers[0].MediaType, LayoutReference: reference})
+		index.Assets = append(index.Assets, publishedAssetSubject{ID: asset.ID, OriginalSubject: asset.ArtifactSubject, Repository: publishedRepository, Digest: subject, ArchiveDigest: manifest.Layers[0].Digest.String(), MediaType: manifest.Layers[0].MediaType, LayoutReference: reference})
 	}
 	for _, component := range result.Catalog.Components {
 		content, err := boundedFile(filepath.Join(charts, component.Slug+".tgz"), distribution.MaximumArchiveBytes)
@@ -423,7 +402,7 @@ func verifyPlatforms(image, directory string) error {
 func validateLayout(directory string) error {
 	data, err := boundedFile(filepath.Join(directory, "subjects.json"), 1<<20)
 	var index subjectIndex
-	if err != nil || closedJSON(data, &index) != nil || index.SchemaVersion != 1 || index.MediaType != distribution.MediaType || len(index.Children) == 0 {
+	if err != nil || closedJSON(data, &index) != nil || (index.SchemaVersion != 1 && index.SchemaVersion != 2) || index.MediaType != distribution.MediaType || len(index.Children) == 0 {
 		return errors.New("emitted distribution metadata is invalid")
 	}
 	payload, err := boundedFile(filepath.Join(directory, "distribution.tar.gz"), distribution.MaximumArchiveBytes)
@@ -433,6 +412,9 @@ func validateLayout(directory string) error {
 	catalog, bom, err := distribution.ReadArchive(payload, index.Release, index.CatalogDigest, "builtins")
 	if err != nil {
 		return err
+	}
+	if (index.SchemaVersion == 1 && bom.AssetContractVersion != distribution.EmbeddedAssetContract) || (index.SchemaVersion == 2 && bom.AssetContractVersion != distribution.DescriptorAssetContract) {
+		return errors.New("prepared metadata/asset contract version mismatch")
 	}
 	catalogBytes, err := boundedFile(filepath.Join(directory, "catalog.json"), 4<<20)
 	if err != nil || sha(catalogBytes) != index.CatalogDigest || len(index.Children) != len(catalog.Components) {
@@ -517,10 +499,17 @@ func validatePublishedAssets(directory string, index subjectIndex, bom distribut
 				memberDigest = member.Digest
 			}
 		}
+		if bom.AssetContractVersion == distribution.DescriptorAssetContract && original.DatabaseDescriptor != nil {
+			memberDigest = original.DatabaseDescriptor.Digest
+		}
 		if asset.ArchiveDigest != memberDigest {
 			return errors.New("emitted prerequisite payload differs from signed BOM")
 		}
-		if err := validateSubjectBlob(directory, asset.Digest, asset.ArchiveDigest, asset.MediaType); err != nil {
+		if original.DatabaseDescriptor != nil {
+			if err := validatePreparedDatabase(directory, asset, original); err != nil {
+				return err
+			}
+		} else if err := validateSubjectBlob(directory, asset.Digest, asset.ArchiveDigest, asset.MediaType); err != nil {
 			return err
 		}
 		delete(expected, asset.ID)

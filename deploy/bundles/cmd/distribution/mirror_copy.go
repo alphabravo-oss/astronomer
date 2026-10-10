@@ -36,7 +36,7 @@ type mirrorExecutionOptions struct {
 func copyOfflineMirror(ctx context.Context, payload []byte, options mirrorExecutionOptions) (mirrorSchedule, error) {
 	var empty mirrorSchedule
 	options.Network = options.Network.Clone()
-	schedule, index, _, err := planOfflineMirror(ctx, payload, options.Vendor, options.TargetBase, options.ReleaseManifestDigest)
+	schedule, index, blobs, err := planOfflineMirror(ctx, payload, options.Vendor, options.TargetBase, options.ReleaseManifestDigest)
 	if err != nil {
 		return empty, err
 	}
@@ -165,6 +165,9 @@ func copyOfflineMirror(ctx context.Context, payload []byte, options mirrorExecut
 	}
 	if !loader.Status().InventoryComplete || loader.Status().Verification != "verified" {
 		return empty, errors.New("mirrored distribution remains unverified")
+	}
+	if err := verifyMirroredDatabasePayloads(ctx, index, blobs, plan, options, authenticated); err != nil {
+		return empty, err
 	}
 	return schedule, nil
 }
