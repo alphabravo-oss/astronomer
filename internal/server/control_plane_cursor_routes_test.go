@@ -74,7 +74,7 @@ func TestControlPlaneCursorProductionRoutesReauthorizeContinuation(t *testing.T)
 				router.ServeHTTP(rec, req)
 				return rec
 			}
-			first := request("limit=2")
+			first := request("limit=2&cursor=")
 			if first.Code != http.StatusOK {
 				t.Fatalf("actual registered route rejected first page: %d %s", first.Code, first.Body.String())
 			}

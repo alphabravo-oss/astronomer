@@ -19,6 +19,9 @@ func (h *CatalogHandler) SetCursorCodec(codec *paging.CursorCodec) { h.cursorCod
 // ListCharts scopes and filters before either the bounded offset or signed
 // indexed continuation query. Cursor pages do not repeat a full-table COUNT.
 func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
+	if _, ok := readCursorQuery(w, r); !ok {
+		return
+	}
 	if !validatePageOffset(w, r) {
 		return
 	}

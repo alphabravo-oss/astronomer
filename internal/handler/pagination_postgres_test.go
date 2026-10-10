@@ -154,7 +154,7 @@ func TestCatalogCursorPostgresTraversalBeyondLegacyCeiling(t *testing.T) {
 	}
 	h.SetCursorCodec(codec)
 	actor := uuid.New()
-	values := url.Values{"limit": {"200"}, "search": {prefix}}
+	values := url.Values{"cursor": {""}, "limit": {"200"}, "search": {prefix}}
 	seen := map[uuid.UUID]bool{}
 	previous := ""
 	var last sqlc.HelmChart
@@ -232,7 +232,7 @@ func TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation(t *testing.T) {
 	h.SetCursorCodec(codec)
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: []rbac.RoleBinding{{ProjectID: project.String(), RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceCatalog), Verbs: []string{string(rbac.VerbRead)}}}}}})
 	actor := uuid.New()
-	values := url.Values{"limit": {"3"}, "search": {prefix}, "project_id": {project.String()}}
+	values := url.Values{"cursor": {""}, "limit": {"3"}, "search": {prefix}, "project_id": {project.String()}}
 	first := catalogCursorPage(t, h, actor, values)
 	if len(first.Data) != 3 || first.Pagination.NextCursor == nil {
 		t.Fatal("first page missing")

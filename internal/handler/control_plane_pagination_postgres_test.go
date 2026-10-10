@@ -105,7 +105,7 @@ func TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor(t *testing.T) {
 			}
 			h.SetCursorCodec(codec)
 			actor := uuid.New()
-			values := url.Values{"limit": {"200"}}
+			values := url.Values{"cursor": {""}, "limit": {"200"}}
 			if collection == "alerts" {
 				values.Set("status", "resolved")
 				values.Set("controller", controller)
