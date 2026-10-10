@@ -21,7 +21,7 @@
     "isolatedSourceCommit": "d29a7a5de995bb0ae57d74b4c26007642eb8b4d3",
     "afterReceiptSHA256": "5775e17ec3f52e03b2053a3ff2ac6fcf67b057b35114b537c1637ad08fcf65b6",
     "rootVerified": "68 parents and 97 unique named terminals across four packages pass under race with zero failures/skips. All 40 artifact hashes, 35 numeric fatal guards, two held drained groups and all 7347 actual frozen Git bindings independently match. All 156 retained originals match; earlier 105 index entries remain unchanged.",
-    "composition": "Reviewed isolated source composition preserves current newer modules and refines cli-runtime/kubectl/component-base to 0.37.1. Canonical current-graph module resolution passed on cb048b70; build/runtime qualification remains pending on clean 00d2cd8b.",
+    "composition": "Canonical Kubernetes module closure applied at00d2cd8b. Distribution renderer corrected using official Helm4.3 common APIs at56729f16; actual full production build passes, focused current-graph race suite remains incomplete after capacity stop.",
     "limit": "Synthetic Kubernetes action storage and real local TLS/CONNECT fixtures do not qualify live CNPG/Flux adoption, repositories or the combined application."
   },
   "preferencesBefore17": {
@@ -59,7 +59,7 @@
     "receiptSHA256": "5de373a6e93fe67517500fd73af9e0699490d3eaf3b4f5463dcc467d67cdce2b",
     "rootVerified": "All 17 original artifact hashes, eight numeric guards, two held drained groups and stable selected Go independently match. Only go.mod/go.sum change: component-base 0.37.1 and six paired selected Kubernetes module checksums.",
     "appliedCommit": "00d2cd8b",
-    "limit": "Dependency resolution is observed; application build and runtime checks remain pending."
+    "limit": "Resolution passes. A later56729f16 full production build passes; full current-graph focused tests and vet remain pending."
   },
   "databaseAuthorityGeneration": {
     "sourceFreeze": "61363a39841a5f989cb277d6848141bca8051ac0",
@@ -79,5 +79,14 @@
   "wholePlanStatus": "IN_PROGRESS",
   "combinedCandidateQualified": false,
   "deploymentQualified": false,
-  "published": false
+  "published": false,
+  "helmCurrentGraphBuild": {
+    "sourceCommit": "56729f16718cdeb08b4b77744310bd186ab1e9d5",
+    "originalBuildFailureReceiptSHA256": "883f22ae9054e8223a9481c3fd882dadca1c2146f978601587270a5e796d13e3",
+    "receiptSHA256": "489ec126f046ee44bd461606936dfd588f4c79b188e01f3a1cb92d19a2f13c7d",
+    "rootVerified": "Full go build ./... passes in38.310 seconds. All46 actual artifact hashes,37 numeric fatal default20/20 guards, three held/joined groups and7909 actual frozen source bindings independently match. Partial396 valid Go events contain67 parent and96 named passes, zero failures/skips. Maintained capacity guard terminates and drains the child; final guard fails.",
+    "overallStatus": "INCOMPLETE_CAPACITY_STOP",
+    "limit": "The104-parent/11-package focused inventory is not complete; vet is unlaunched. Original00d2 build failure and this stopped successor remain retained. No full suite, live cluster or combined candidate qualification is claimed.",
+    "capacityRemediation": "Exact1024 obsolete Go1.26.6 compiler archives removed under separately reviewed identity/hash/process fences. Root review retained atclosed-go1266-ar-cleanup-1024/root-review.json; no guard threshold changes."
+  }
 }
