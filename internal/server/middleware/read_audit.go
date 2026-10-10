@@ -20,8 +20,9 @@ package middleware
 
 import (
 	"context"
+	"crypto/rand"
+	"io"
 	"log/slog"
-	"math/rand"
 	"net/http"
 	"strings"
 	"sync"
@@ -62,8 +63,7 @@ type PolicyEvaluator struct {
 	store     PolicyLister
 	ttl       time.Duration
 	clock     func() time.Time
-	rng       *rand.Rand
-	rngMu     sync.Mutex
+	entropy   io.Reader
 	mu        sync.RWMutex
 	policies  []sqlc.ReadAuditPolicy
 	fetchedAt time.Time
@@ -72,10 +72,10 @@ type PolicyEvaluator struct {
 // NewPolicyEvaluator wires an evaluator with a 30s TTL.
 func NewPolicyEvaluator(store PolicyLister) *PolicyEvaluator {
 	return &PolicyEvaluator{
-		store: store,
-		ttl:   30 * time.Second,
-		clock: time.Now,
-		rng:   rand.New(rand.NewSource(time.Now().UnixNano())),
+		store:   store,
+		ttl:     30 * time.Second,
+		clock:   time.Now,
+		entropy: rand.Reader,
 	}
 }
 
@@ -152,24 +152,6 @@ func (e *PolicyEvaluator) Match(ctx context.Context, routePattern, method string
 // SetReadTierReader wires the shared settings cache before serving requests.
 // A tier adds a coverage floor; it never weakens a configured policy.
 func (e *PolicyEvaluator) SetReadTierReader(read func(context.Context) string) { e.readTier = read }
-
-// Sample returns true when the policy's sample_rate fires for the
-// current draw. SampleRate of 1.0 always fires; 0.0 never does;
-// anything in between fires roughly that fraction over a long window.
-func (e *PolicyEvaluator) Sample(p *sqlc.ReadAuditPolicy) bool {
-	if p == nil {
-		return false
-	}
-	if p.SampleRate >= 1.0 {
-		return true
-	}
-	if p.SampleRate <= 0.0 {
-		return false
-	}
-	e.rngMu.Lock()
-	defer e.rngMu.Unlock()
-	return e.rng.Float64() <= p.SampleRate
-}
 
 // verbMatches checks whether method is in the verbs list. "*" matches
 // any. Verbs is a comma-separated list (typical: "GET" or "GET,HEAD").
