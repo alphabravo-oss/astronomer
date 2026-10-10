@@ -50,15 +50,29 @@ test("real browser refresh rotates HttpOnly credentials and rejects reuse", asyn
     expect(rejected.status()).toBe(401);
     // Reuse revokes the entire family, including the newly rotated access token.
     expect((await context.request.get("/api/v1/auth/me/")).status()).toBe(401);
-    // The revoked session redirects during document loading. Wait for the
-    // document commit, then independently require the completed login UI.
-    await page.goto("/dashboard", { waitUntil: "commit" });
+    // The active page is already redirecting after family revocation. Observe
+    // its completed login UI before initiating an independent protected-page
+    // navigation, rather than racing two navigations in the same document.
     await expect(page).toHaveURL(/\/auth\/login/);
     await expect(
       page.getByRole("button", { name: "Sign in", exact: true }),
     ).toBeVisible();
     await expect(page.locator("#identifier")).toBeVisible();
     await expect(page.locator("#password")).toBeVisible();
+    const protectedPage = await context.newPage();
+    try {
+      await protectedPage.goto(new URL("/dashboard", page.url()).href, {
+        waitUntil: "commit",
+      });
+      await expect(protectedPage).toHaveURL(/\/auth\/login/);
+      await expect(
+        protectedPage.getByRole("button", { name: "Sign in", exact: true }),
+      ).toBeVisible();
+      await expect(protectedPage.locator("#identifier")).toBeVisible();
+      await expect(protectedPage.locator("#password")).toBeVisible();
+    } finally {
+      await protectedPage.close();
+    }
   } finally {
     await replay.close();
   }

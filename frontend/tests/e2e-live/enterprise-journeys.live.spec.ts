@@ -234,8 +234,7 @@ test("resource YAML dry-run gates and then applies the reviewed manifest", async
   // the overview labels action while tab navigation is completing.
   await page.getByRole("button", { name: "Edit YAML", exact: true }).click();
 
-  // JSON is valid YAML and avoids Monaco's interactive auto-indentation
-  // changing whitespace while Playwright inserts a multiline document.
+  // JSON is valid YAML and keeps the native keyboard edit on one line.
   const manifest = JSON.stringify({
     apiVersion: "v1",
     kind: "ConfigMap",
@@ -247,12 +246,30 @@ test("resource YAML dry-run gates and then applies the reviewed manifest", async
     data: { message: "after-live-apply" },
   });
   await page.locator(".monaco-editor").click();
-  await page.keyboard.press("Control+A");
-  await page.keyboard.press("Backspace");
-  // Start with a YAML comment so Monaco does not auto-close the opening JSON
-  // quote/brace around the bulk insertion.
-  await page.keyboard.insertText(`# live-browser apply fixture\n${manifest}\n`);
+  const input = page.locator(".monaco-editor textarea.inputarea");
+  await expect(input).toBeFocused();
+  await input.press("Control+A");
+  await input.press("Backspace");
+  // Use real key events so Monaco handles its paired-character editing. The
+  // Firefox bulk-insertion failure duplicated the entire document before any
+  // dry-run request; verify the visible edit before exercising the transport.
+  await input.pressSequentially(manifest);
+  await expect(page.locator(".view-lines")).toContainText("after-live-apply");
+  expect(
+    (await page.locator(".view-lines").innerText()).match(/after-live-apply/g)
+      ?.length,
+  ).toBe(1);
+  const dryRunResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "PATCH" &&
+      url.pathname ===
+        `/api/v1/clusters/${clusterID}/k8s/api/v1/namespaces/default/configmaps/live-config` &&
+      url.searchParams.get("dryRun") === "All"
+    );
+  });
   await page.getByRole("button", { name: "Dry run" }).click();
+  expect((await dryRunResponse).status()).toBe(200);
   await expect(page.getByText("Dry run passed", { exact: true })).toBeVisible();
   await expect(page.getByText("Apply preview", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Save" }).click();
