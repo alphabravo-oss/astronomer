@@ -225,7 +225,7 @@ func prepareCommand(ctx context.Context, spec Spec, stdout, stderr *os.File) (*e
 			bytes, readErr := readPrivateEnvironment(ctx, file)
 			_ = file.Close()
 			if readErr != nil || len(bytes) > 64<<10 {
-				return nil, nil, closeInput, errors.New("bounded private environment read failed")
+				return nil, nil, closeInput, errors.Join(errors.New("bounded private environment read failed"), readErr)
 			}
 			value = strings.TrimSuffix(strings.TrimSuffix(string(bytes), "\n"), "\r")
 		}

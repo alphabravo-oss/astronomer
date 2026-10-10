@@ -214,3 +214,24 @@ func TestPrivateCheckpointCannotRewindAcknowledgedProgress(t *testing.T) {
 		t.Fatal("nil checkpoint context admitted")
 	}
 }
+
+func TestPrivateCheckpointDoesNotOverwriteUnexpectedRecoveryFile(t *testing.T) {
+	root, plan, state := checkpointFixture(t)
+	store, err := OpenFileStore(root, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	path := filepath.Join(root, "checkpoint.json")
+	sentinel := []byte("synthetic recovery appeared after admission")
+	if os.WriteFile(path, sentinel, 0o600) != nil {
+		t.Fatal("write new recovery fixture")
+	}
+	if store.Save(context.Background(), state) == nil {
+		t.Fatal("unexpected recovery overwritten")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(after, sentinel) {
+		t.Fatal("unobserved recovery bytes changed")
+	}
+}

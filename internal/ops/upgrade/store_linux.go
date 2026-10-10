@@ -33,6 +33,7 @@ type FileStore struct {
 	plan                                                Plan
 	closed                                              bool
 	lastState                                           *Checkpoint
+	initialized                                         bool
 }
 
 func OpenFileStore(directory string, plan Plan) (*FileStore, error) {
@@ -82,6 +83,7 @@ func OpenFileStore(directory string, plan Plan) (*FileStore, error) {
 	if _, err = store.Load(bounded); err != nil {
 		return nil, err
 	}
+	store.initialized = true
 	failed = false
 	return store, nil
 }
@@ -131,6 +133,9 @@ func (s *FileStore) existingCheckpoint() error {
 	}
 	if err != nil || !ownedMode(named, 0o600, false) {
 		return errors.New("private regular0600 checkpoint required")
+	}
+	if s.initialized && s.checkpointIdentity == nil {
+		return errors.New("unobserved checkpoint appeared after ownership admission")
 	}
 	if s.checkpointIdentity != nil && !os.SameFile(named, s.checkpointIdentity) {
 		return errors.New("retained checkpoint identity changed")
