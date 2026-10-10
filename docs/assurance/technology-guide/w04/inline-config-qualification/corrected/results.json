@@ -1,0 +1,163 @@
+[
+  {
+    "gate": "focused-race-capacity",
+    "command": [
+      "bash",
+      "scripts/check-build-capacity.sh"
+    ],
+    "exitCode": 0,
+    "seconds": 0.008,
+    "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5"
+  },
+  {
+    "gate": "focused-race",
+    "command": [
+      "go",
+      "test",
+      "-json",
+      "-race",
+      "./internal/delivery/resolver",
+      "-run",
+      "^(TestArtifactConfigurationMatchesExactInlineEmptyObjectOnly|TestVerifiedArtifactMetadataAuthenticatesLargeDescriptorWithoutFetchingPayload|TestSupplierMetadataPinsOneResolutionWithoutSignatureOrPayloadReads)$",
+      "-count=1"
+    ],
+    "exitCode": 0,
+    "seconds": 6.322,
+    "sha256": "dc79a69d40b0041df74955730db0c1d395e18821a41bafc763400b0c24e25fed",
+    "parents": 3,
+    "cases": 48,
+    "failures": 0,
+    "skips": 0,
+    "producerFixturePassed": false
+  },
+  {
+    "gate": "full-resolver-race-capacity",
+    "command": [
+      "bash",
+      "scripts/check-build-capacity.sh"
+    ],
+    "exitCode": 0,
+    "seconds": 0.008,
+    "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5"
+  },
+  {
+    "gate": "full-resolver-race",
+    "command": [
+      "go",
+      "test",
+      "-json",
+      "-race",
+      "./internal/delivery/resolver",
+      "-count=1"
+    ],
+    "exitCode": 0,
+    "seconds": 11.003,
+    "sha256": "eb70bcdf9c79d2ac17cfd1d9ecdc69a3ec0a8683296d18ac5d168364a5dffc6f",
+    "parents": 42,
+    "cases": 136,
+    "failures": 0,
+    "skips": 0,
+    "producerFixturePassed": false
+  },
+  {
+    "gate": "vet-capacity",
+    "command": [
+      "bash",
+      "scripts/check-build-capacity.sh"
+    ],
+    "exitCode": 0,
+    "seconds": 0.008,
+    "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5"
+  },
+  {
+    "gate": "vet",
+    "command": [
+      "go",
+      "vet",
+      "./internal/delivery/resolver"
+    ],
+    "exitCode": 0,
+    "seconds": 0.898,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "gate": "json-governance-capacity",
+    "command": [
+      "bash",
+      "scripts/check-build-capacity.sh"
+    ],
+    "exitCode": 0,
+    "seconds": 0.008,
+    "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5"
+  },
+  {
+    "gate": "json-governance",
+    "command": [
+      "python3",
+      "scripts/check-json-governance.py"
+    ],
+    "exitCode": 0,
+    "seconds": 1.352,
+    "sha256": "559dbd67379696a743b45bf156e87ff1973fc9d1c1a49bb1e77ce7267691bdb5"
+  },
+  {
+    "gate": "complexity-capacity",
+    "command": [
+      "bash",
+      "scripts/check-build-capacity.sh"
+    ],
+    "exitCode": 0,
+    "seconds": 0.008,
+    "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5"
+  },
+  {
+    "gate": "complexity",
+    "command": [
+      "node",
+      "scripts/check-complexity-budget.mjs"
+    ],
+    "exitCode": 0,
+    "seconds": 0.347,
+    "sha256": "ed567de6b7a3069c9fa9e5dc4bc908c29eb6852d8db2b060908933aeb95ca213"
+  },
+  {
+    "gate": "boundaries-capacity",
+    "command": [
+      "bash",
+      "scripts/check-build-capacity.sh"
+    ],
+    "exitCode": 0,
+    "seconds": 0.007,
+    "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5"
+  },
+  {
+    "gate": "boundaries",
+    "command": [
+      "node",
+      "scripts/check-dependency-boundaries.mjs"
+    ],
+    "exitCode": 0,
+    "seconds": 0.216,
+    "sha256": "2cfb01d0d1c94c381c6b25c9fbf5fc6b8193be6b386ef7c51960a95824732822"
+  },
+  {
+    "gate": "docs-capacity",
+    "command": [
+      "bash",
+      "scripts/check-build-capacity.sh"
+    ],
+    "exitCode": 0,
+    "seconds": 0.007,
+    "sha256": "3c1c1a7dcbba061b8a2720cf8244ddbc4250e38946b7bd9176b0cdc527bbe5d5"
+  },
+  {
+    "gate": "docs",
+    "command": [
+      "make",
+      "docs-check"
+    ],
+    "exitCode": 0,
+    "seconds": 1.844,
+    "sha256": "bbedd1d5a559c43dd412f0643ea04f1bf9624cb51e51c6678c6cc13756d58449"
+  }
+]
