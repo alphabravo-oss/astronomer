@@ -21,7 +21,7 @@ func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 
 	limit := queryLimit(r, 50)
 	offset := queryOffset(r)
-	arg := sqlc.ListToolOperationsParams{Limit: int32(limit), Offset: int32(offset)}
+	arg := sqlc.ListToolOperationsParams{Limit: queryLimit32(r, 50), Offset: queryOffset32(r)}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {
 		arg.TargetType = pgtype.Text{String: v, Valid: true}
 	}
@@ -53,7 +53,7 @@ func (h *ToolHandler) ListOperations(w http.ResponseWriter, r *http.Request) {
 		}
 		ops, err = pager.ListToolOperationsForScopes(r.Context(), sqlc.ListToolOperationsForScopesParams{
 			TargetType: arg.TargetType, TargetKey: arg.TargetKey, Status: arg.Status,
-			ClusterIds: clusterIDs, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterIds: clusterIDs, QueryLimit: queryLimit32(r, 50), QueryOffset: queryOffset32(r),
 		})
 		if err == nil {
 			total, err = pager.CountToolOperationsForScopes(r.Context(), sqlc.CountToolOperationsForScopesParams{

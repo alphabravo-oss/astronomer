@@ -412,10 +412,9 @@ func (h *MaintenanceHandler) ListDeferred(w http.ResponseWriter, r *http.Request
 	if !h.gate(w, r) {
 		return
 	}
-	limit, offset := queryLimitOffset(r, 50)
 	rows, err := h.queries.ListDeferredOperations(r.Context(), sqlc.ListDeferredOperationsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  queryLimit32(r, 50),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())

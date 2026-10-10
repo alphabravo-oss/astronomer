@@ -211,11 +211,9 @@ func (h *AdminDrillHandler) ListHistory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	limit, offset := queryLimitOffset(r, 20)
-
 	rows, err := h.queries.ListBackupDrillResults(r.Context(), sqlc.ListBackupDrillResultsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  queryLimit32(r, 20),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())

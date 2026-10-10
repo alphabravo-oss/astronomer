@@ -52,8 +52,8 @@ func (h *WebhookHandler) Deliveries(w http.ResponseWriter, r *http.Request) {
 	limit, offset := queryLimitOffset(r, 50)
 	rows, err := h.queries.ListWebhookDeliveriesBySubscription(r.Context(), sqlc.ListWebhookDeliveriesBySubscriptionParams{
 		SubscriptionID: id,
-		Limit:          int32(limit),
-		Offset:         int32(offset),
+		Limit:          queryLimit32(r, 50),
+		Offset:         queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read deliveries")

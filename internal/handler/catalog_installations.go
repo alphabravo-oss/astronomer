@@ -380,7 +380,7 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 	var rows []sqlc.InstalledChart
 	var total int64
 	if all {
-		rows, err = h.queries.ListInstalledCharts(r.Context(), sqlc.ListInstalledChartsParams{Limit: int32(limit), Offset: int32(offset)})
+		rows, err = h.queries.ListInstalledCharts(r.Context(), sqlc.ListInstalledChartsParams{Limit: queryLimit32(r, 20), Offset: queryOffset32(r)})
 		if err == nil {
 			total, err = h.queries.CountInstalledCharts(r.Context())
 		}
@@ -391,7 +391,7 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		rows, err = pager.ListInstalledChartsForScopes(r.Context(), sqlc.ListInstalledChartsForScopesParams{
-			ClusterIds: clusterIDs, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			ClusterIds: clusterIDs, QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 		})
 		if err == nil {
 			total, err = pager.CountInstalledChartsForScopes(r.Context(), clusterIDs)

@@ -237,8 +237,8 @@ func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Reques
 	offset := queryOffset(r)
 	versions, err := h.queries.ListChartVersions(r.Context(), sqlc.ListChartVersionsParams{
 		ChartID: chartID,
-		Limit:   int32(limit),
-		Offset:  int32(offset),
+		Limit:   queryLimit32(r, 50),
+		Offset:  queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list chart versions")

@@ -152,10 +152,9 @@ func (h *GroupMappingsHandler) List(w http.ResponseWriter, r *http.Request) {
 	if !h.gate(w, r) {
 		return
 	}
-	limit, offset := queryLimitOffset(r, 20)
 	rows, err := h.queries.ListGroupMappings(r.Context(), sqlc.ListGroupMappingsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  queryLimit32(r, 20),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to list group mappings")

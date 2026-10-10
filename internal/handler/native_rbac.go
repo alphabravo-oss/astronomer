@@ -251,7 +251,7 @@ func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		limit, offset := queryLimitOffset(r, 20)
 		rows, err := h.queries.ListNativeRBACRulesByUserPage(r.Context(), sqlc.ListNativeRBACRulesByUserPageParams{
-			UserID: userID, QueryLimit: int32(limit), QueryOffset: int32(offset),
+			UserID: userID, QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 		})
 		if err != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list native rules")

@@ -245,10 +245,9 @@ func (h *WorkloadHandler) ListOperations(w http.ResponseWriter, r *http.Request)
 	// hostile ?limit=2000000000 can't materialize the whole operations table,
 	// and ?limit=2147483648 can't overflow int32 into a negative LIMIT that
 	// Postgres rejects. Mirrors audit/smtp/webhooks/maintenance handlers.
-	limit, offset := queryLimitOffset(r, 50)
 	arg := sqlc.ListWorkloadOperationsParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  queryLimit32(r, 50),
+		Offset: queryOffset32(r),
 	}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {
 		arg.TargetType = pgtype.Text{String: v, Valid: true}

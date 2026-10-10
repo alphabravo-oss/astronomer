@@ -189,7 +189,7 @@ func (h *SCIMTokenAdminHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	limit, offset := queryLimitOffset(r, 20)
 	rows, err := h.queries.ListSCIMTokenMetadata(r.Context(), sqlc.ListSCIMTokenMetadataParams{
-		QueryLimit: int32(limit), QueryOffset: int32(offset),
+		QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())

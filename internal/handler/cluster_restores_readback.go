@@ -44,7 +44,7 @@ func (h *ClusterSnapshotsHandler) ListRestores(w http.ResponseWriter, r *http.Re
 		return
 	}
 	limit, offset := queryLimitOffset(r, 50)
-	rows, err := pager.ListClusterRestoresPage(r.Context(), sqlc.ListClusterRestoresPageParams{TargetClusterID: clusterID, AllSources: all, SourceClusterIds: sources, QueryLimit: int32(limit), QueryOffset: int32(offset)})
+	rows, err := pager.ListClusterRestoresPage(r.Context(), sqlc.ListClusterRestoresPageParams{TargetClusterID: clusterID, AllSources: all, SourceClusterIds: sources, QueryLimit: queryLimit32(r, 50), QueryOffset: queryOffset32(r)})
 	if err != nil {
 		RespondRequestError(w, r, 500, apierror.ListError, "Failed to list restores")
 		return

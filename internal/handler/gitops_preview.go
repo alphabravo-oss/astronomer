@@ -49,7 +49,7 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 	}
 	limit, offset := queryLimitOffset(r, 20)
 	rows, err := h.queries.ListGitOpsRegisteredClustersBySourcePage(r.Context(), sqlc.ListGitOpsRegisteredClustersBySourcePageParams{
-		SourceID: id, QueryLimit: int32(limit), QueryOffset: int32(offset),
+		SourceID: id, QueryLimit: queryLimit32(r, 20), QueryOffset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
