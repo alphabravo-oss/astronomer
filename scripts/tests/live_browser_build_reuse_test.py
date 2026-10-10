@@ -12,6 +12,7 @@ from unittest.mock import patch
 SPEC = importlib.util.spec_from_file_location("reuse", Path(__file__).parents[1] / "live-browser-build-reuse.py")
 reuse = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(reuse)
+ACTUAL_BOUND_BINARY = reuse.bound_binary
 
 
 class BuildReuseTests(unittest.TestCase):
@@ -25,7 +26,7 @@ class BuildReuseTests(unittest.TestCase):
         self.git("config", "user.email", "fixture@example.invalid")
         self.git("config", "user.name", "Fixture")
         self.put(".gitignore", "frontend/dist/\n")
-        self.put("go.mod", "module fixture\n")
+        self.put("go.mod", "module fixture\n\ngo 1.27.2\n")
         self.put("frontend/package-lock.json", "{}\n")
         self.put("frontend/tests/e2e-live/refresh.live.spec.ts", "old fixture\n")
         self.git("add", ".")
@@ -116,6 +117,39 @@ class BuildReuseTests(unittest.TestCase):
         with patch.object(reuse, "bound_binary", side_effect=ValueError("revision mismatch")):
             with self.assertRaisesRegex(ValueError, "revision mismatch"):
                 self.check()
+
+    def test_declared_compiler_must_match_original_module(self):
+        self.document["expectedCompiler"] = "go1.28.1"
+        with self.assertRaisesRegex(ValueError, "original application module"):
+            self.check()
+
+    def test_compiler_selection_comes_from_original_commit(self):
+        self.commit("go.mod", "module fixture\n\ngo 1.28.1\n")
+        self.assertEqual(reuse.compiler_from_commit(self.root, self.base), "go1.27.2")
+        self.assertEqual(reuse.compiler_from_commit(self.root, "HEAD"), "go1.28.1")
+
+    def test_exact_toolchain_directive_is_selected(self):
+        self.commit("go.mod", "module fixture\n\ngo 1.27.2\n\ntoolchain go1.28.1\n")
+        self.assertEqual(reuse.compiler_from_commit(self.root, "HEAD"), "go1.28.1")
+
+    def test_nonexact_or_prerelease_compiler_is_rejected(self):
+        for module in ("module fixture\n\ngo 1.28\n", "module fixture\n\ngo 1.27.2\n\ntoolchain go1.28rc1\n"):
+            with self.subTest(module=module):
+                self.commit("go.mod", module)
+                with self.assertRaises(ValueError):
+                    reuse.compiler_from_commit(self.root, "HEAD")
+
+    def test_actual_binary_compiler_mismatch_is_rejected(self):
+        info = f"/fixture: go1.27.1\n\tbuild\tvcs.revision={self.base}\n\tbuild\tvcs.modified=false\n"
+        with patch.object(reuse.subprocess, "check_output", return_value=info):
+            with self.assertRaisesRegex(ValueError, "unqualified compiler"):
+                ACTUAL_BOUND_BINARY(Path("/fixture"), self.base, "go1.27.2")
+
+    def test_actual_binary_revision_prefix_or_suffix_is_rejected(self):
+        info = f"/fixture: go1.27.2\n\tbuild\tvcs.revision={self.base}extra\n\tbuild\tvcs.modified=false\n"
+        with patch.object(reuse.subprocess, "check_output", return_value=info):
+            with self.assertRaisesRegex(ValueError, "clean build commit"):
+                ACTUAL_BOUND_BINARY(Path("/fixture"), self.base, "go1.27.2")
 
     def test_frontend_tamper_is_rejected(self):
         self.put("frontend/dist/index.html", "changed frontend")

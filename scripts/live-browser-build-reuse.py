@@ -93,11 +93,25 @@ def distribution(root):
     return result
 
 
-def bound_binary(path, commit):
+def compiler_from_commit(root, commit):
+    module = command(root, "git", "show", f"{commit}:go.mod")
+    versions = re.findall(r"(?m)^go ([0-9]+\.[0-9]+\.[0-9]+)$", module)
+    toolchains = re.findall(r"(?m)^toolchain (\S+)$", module)
+    if len(versions) != 1 or len(toolchains) > 1:
+        raise ValueError("application module lacks an exact compiler selection")
+    compiler = toolchains[0] if toolchains else "go" + versions[0]
+    if not re.fullmatch(r"go[0-9]+\.[0-9]+\.[0-9]+", compiler):
+        raise ValueError("application compiler selection is not an exact stable release")
+    return compiler
+
+
+def bound_binary(path, commit, compiler):
     info = subprocess.check_output(["go", "version", "-m", str(path)], text=True)
-    if f"vcs.revision={commit}" not in info or "vcs.modified=false" not in info:
+    revisions = re.findall(r"(?m)^\s*build\s+vcs.revision=(\S+)\s*$", info)
+    modified = re.findall(r"(?m)^\s*build\s+vcs.modified=(\S+)\s*$", info)
+    if revisions != [commit] or modified != ["false"]:
         raise ValueError("application binary is not bound to the clean build commit")
-    if not re.search(r"\bgo1\.27\.2\b", info):
+    if not info.splitlines() or not info.splitlines()[0].endswith(": " + compiler):
         raise ValueError("application binary uses an unqualified compiler")
     return hashlib.sha256(info.encode()).hexdigest()
 
@@ -116,25 +130,29 @@ def capture(root, run, output, scope=QUALIFICATION):
     run = protected(run, scope)
     original = json.loads((run / "matrix-receipt.json").read_text())
     identity = source_identity(root)
+    compiler = compiler_from_commit(root, commit)
     if original.get("sourceCommit") != commit or original.get("sourceStable") is not True or original.get("sourceBefore") != identity or original.get("sourceAfter") != identity:
         raise ValueError("original run does not bind this unchanged application source")
     artifacts = {}
     for name in BINARIES:
         path = run / "browser/bin" / name
-        artifacts[name] = {"path": str(path), **file_record(path), "buildInfoSHA256": bound_binary(path, commit)}
+        artifacts[name] = {"path": str(path), **file_record(path), "buildInfoSHA256": bound_binary(path, commit, compiler)}
     dist = root / "frontend/dist"
-    document = {"schemaVersion": "astronomer-local-browser-build/v1", "applicationCommit": commit, "applicationFiles": application_files(root),
+    document = {"schemaVersion": "astronomer-local-browser-build/v1", "applicationCommit": commit, "expectedCompiler": compiler, "applicationFiles": application_files(root),
                 "sourceIdentity": identity, "runReceipt": {"path": str(run / "matrix-receipt.json"), **file_record(run / "matrix-receipt.json")},
                 "binaries": artifacts, "frontend": {"path": str(dist), "files": distribution(dist)}}
     write_json(protected(output, scope), document)
 
 
 def check(document, root, scope=QUALIFICATION):
-    if set(document) != {"schemaVersion", "applicationCommit", "applicationFiles", "sourceIdentity", "runReceipt", "binaries", "frontend"} or document["schemaVersion"] != "astronomer-local-browser-build/v1":
+    if set(document) != {"schemaVersion", "applicationCommit", "expectedCompiler", "applicationFiles", "sourceIdentity", "runReceipt", "binaries", "frontend"} or document["schemaVersion"] != "astronomer-local-browser-build/v1":
         raise ValueError("unsupported build reuse schema")
     commit = document["applicationCommit"]
     if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("invalid application commit")
+    compiler = compiler_from_commit(root, commit)
+    if document["expectedCompiler"] != compiler:
+        raise ValueError("compiler selection differs from original application module")
     clean(root)
     command(root, "git", "merge-base", "--is-ancestor", commit, "HEAD")
     # Compare the actual checkout, not just its HEAD or declared fixture label.
@@ -155,14 +173,14 @@ def check(document, root, scope=QUALIFICATION):
         if set(item) != {"path", "sha256", "size", "executable", "buildInfoSHA256"}:
             raise ValueError("unrecognized binary fields")
         path = protected(item["path"], scope)
-        if file_record(path) != {k: item[k] for k in ("sha256", "size", "executable")} or not item["executable"] or bound_binary(path, commit) != item["buildInfoSHA256"]:
+        if file_record(path) != {k: item[k] for k in ("sha256", "size", "executable")} or not item["executable"] or bound_binary(path, commit, compiler) != item["buildInfoSHA256"]:
             raise ValueError("application binary changed")
     frontend = document["frontend"]
     # The dist lives in the original checkout, independently of private run
     # artifacts. Reject symlinks and require the exact complete byte map.
     if set(frontend) != {"path", "files"} or not Path(frontend["path"]).is_absolute() or distribution(Path(frontend["path"])) != frontend["files"]:
         raise ValueError("frontend build changed")
-    return {"applicationCommit": commit, "fixtureCommit": command(root, "git", "rev-parse", "HEAD"),
+    return {"applicationCommit": commit, "expectedCompiler": compiler, "fixtureCommit": command(root, "git", "rev-parse", "HEAD"),
             "fixtureOnlyPaths": sorted(changed), "applicationSourceIdentity": document["sourceIdentity"],
             "fixtureSourceIdentity": source_identity(root), "qualification": "local engineering build reuse; fresh owned stack required"}
 
