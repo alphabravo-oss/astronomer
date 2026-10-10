@@ -9,7 +9,7 @@ WITH candidates AS MATERIALIZED (
     ORDER BY key.name ASC,key.repository_id ASC,key.chart_id ASC
     LIMIT sqlc.arg(candidate_limit)::int
 )
-SELECT sqlc.embed(chart),
+SELECT chart.*,
        ((sqlc.arg(tag)::text='' OR tagged.chart_id IS NOT NULL)
         AND (sqlc.arg(search_pattern)::text='' OR chart.name ILIKE sqlc.arg(search_pattern)::text ESCAPE '\'
              OR chart.display_name ILIKE sqlc.arg(search_pattern)::text ESCAPE '\'
@@ -40,7 +40,7 @@ WITH candidates AS MATERIALIZED (
     ORDER BY key.name ASC,key.repository_id ASC,key.chart_id ASC
     LIMIT sqlc.arg(candidate_limit)::int
 )
-SELECT sqlc.embed(chart),
+SELECT chart.*,
        ((sqlc.arg(tag)::text='' OR tagged.chart_id IS NOT NULL)
         AND (sqlc.arg(search_pattern)::text='' OR chart.name ILIKE sqlc.arg(search_pattern)::text ESCAPE '\'
              OR chart.display_name ILIKE sqlc.arg(search_pattern)::text ESCAPE '\'

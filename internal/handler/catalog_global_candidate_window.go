@@ -47,7 +47,21 @@ func listCatalogGlobalWindow(ctx context.Context, q catalogGlobalWindowQuerier, 
 			return nil, err
 		}
 		for _, row := range rows {
-			out = append(out, catalogGlobalCandidate{chart: row.HelmChart, matches: row.Matches})
+			out = append(out, catalogGlobalCandidate{chart: sqlc.HelmChart{
+				ID:           row.ID,
+				RepositoryID: row.RepositoryID,
+				Name:         row.Name,
+				DisplayName:  row.DisplayName,
+				Description:  row.Description,
+				IconUrl:      row.IconUrl,
+				HomeUrl:      row.HomeUrl,
+				Category:     row.Category,
+				Keywords:     row.Keywords,
+				Maintainers:  row.Maintainers,
+				Deprecated:   row.Deprecated,
+				CreatedAt:    row.CreatedAt,
+				UpdatedAt:    row.UpdatedAt,
+			}, matches: row.Matches})
 		}
 		return out, nil
 	}
@@ -59,7 +73,21 @@ func listCatalogGlobalWindow(ctx context.Context, q catalogGlobalWindowQuerier, 
 		return nil, err
 	}
 	for _, row := range rows {
-		out = append(out, catalogGlobalCandidate{chart: row.HelmChart, matches: row.Matches})
+		out = append(out, catalogGlobalCandidate{chart: sqlc.HelmChart{
+			ID:           row.ID,
+			RepositoryID: row.RepositoryID,
+			Name:         row.Name,
+			DisplayName:  row.DisplayName,
+			Description:  row.Description,
+			IconUrl:      row.IconUrl,
+			HomeUrl:      row.HomeUrl,
+			Category:     row.Category,
+			Keywords:     row.Keywords,
+			Maintainers:  row.Maintainers,
+			Deprecated:   row.Deprecated,
+			CreatedAt:    row.CreatedAt,
+			UpdatedAt:    row.UpdatedAt,
+		}, matches: row.Matches})
 	}
 	return out, nil
 }
