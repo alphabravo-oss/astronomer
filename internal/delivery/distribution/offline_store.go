@@ -37,6 +37,9 @@ type offlineRegistry struct {
 	blobs        map[string][]byte
 	repositories map[string]bool
 	used         map[string]bool
+	// Present only in the constructor-only database metadata verifier. Missing
+	// bytes never become network permissions or successful payload verification.
+	databases map[string]ocispec.Descriptor
 }
 
 // VerifyOfflineStore reuses canonical OCI signature and archive verification
@@ -70,10 +73,17 @@ func VerifyOfflineStore(ctx context.Context, options OfflineOptions, subjects []
 }
 
 func newOfflineRegistry(subjects []StoredSubject, blobs map[string][]byte) (*offlineRegistry, error) {
+	return newOfflineRegistryGraph(subjects, blobs, false)
+}
+
+func newOfflineRegistryGraph(subjects []StoredSubject, blobs map[string][]byte, databaseMetadata bool) (*offlineRegistry, error) {
 	if len(subjects) == 0 || len(subjects) > MaximumMembers || len(blobs) == 0 || len(blobs) > 4*MaximumMembers {
 		return nil, errors.New("offline graph exceeds count bounds")
 	}
 	store := &offlineRegistry{manifests: map[string]string{}, blobs: map[string][]byte{}, repositories: map[string]bool{}, used: map[string]bool{}}
+	if databaseMetadata {
+		store.databases = map[string]ocispec.Descriptor{}
+	}
 	var total int64
 	for subject, content := range blobs {
 		total += int64(len(content))
@@ -91,7 +101,7 @@ func newOfflineRegistry(subjects []StoredSubject, blobs map[string][]byte) (*off
 		if store.manifests[key] != "" {
 			return nil, errors.New("duplicate offline subject")
 		}
-		if err := validateStoredManifest(store.blobs, usedBlobs, subject.Digest, false); err != nil {
+		if err := validateStoredManifestGraph(store.blobs, usedBlobs, subject.Digest, false, store.databases); err != nil {
 			return nil, err
 		}
 		if err := validateStoredManifest(store.blobs, usedBlobs, subject.SignatureDigest, true); err != nil {
@@ -109,6 +119,10 @@ func newOfflineRegistry(subjects []StoredSubject, blobs map[string][]byte) (*off
 }
 
 func validateStoredManifest(blobs map[string][]byte, used map[string]bool, subject string, signature bool) error {
+	return validateStoredManifestGraph(blobs, used, subject, signature, nil)
+}
+
+func validateStoredManifestGraph(blobs map[string][]byte, used map[string]bool, subject string, signature bool, databases map[string]ocispec.Descriptor) error {
 	data := blobs[subject]
 	var manifest ocispec.Manifest
 	if len(data) == 0 || len(data) > 1<<20 || decodeClosed(data, &manifest) != nil || manifest.SchemaVersion != 2 || (manifest.MediaType != "" && manifest.MediaType != ocispec.MediaTypeImageManifest) || manifest.Subject != nil {
@@ -122,6 +136,12 @@ func validateStoredManifest(blobs map[string][]byte, used map[string]bool, subje
 		return err
 	}
 	for _, layer := range manifest.Layers {
+		if databases != nil && !signature && databaseLayerMedia(layer.MediaType) {
+			if err := retainMissingDatabaseDescriptor(blobs, databases, layer); err != nil {
+				return err
+			}
+			continue
+		}
 		maximum := MaximumArchiveBytes
 		if signature {
 			maximum = 1 << 20

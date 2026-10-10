@@ -1,0 +1,164 @@
+{
+  "source": "0b185c9ff6827e9c6af766138e8c47d909afb025",
+  "source_dirty_after": "",
+  "timestamp_utc": "2026-10-10T01:17:58.102655+00:00",
+  "steps": [
+    {
+      "name": "sdk-cursor",
+      "argv": [
+        "go",
+        "test",
+        "-json",
+        "-race",
+        "./pkg/astroclient",
+        "-run",
+        "^TestPaginationCursor",
+        "-count=1",
+        "-timeout=3m"
+      ],
+      "exit_code": 0,
+      "log_sha256": "ca4a434e96a9316d39c8bcf145d518c9bba6219d90235dcb3bf34c9226a6b5fb",
+      "test_events": {
+        "pass": 12,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "name": "sdk-v1",
+      "argv": [
+        "bash",
+        "scripts/check-sdk-v1-compatibility.sh"
+      ],
+      "exit_code": 0,
+      "log_sha256": "a21fd3889521f819fbc41c6601e21543aca2b32912f3d9b78db0c78d3db62745",
+      "test_events": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "name": "sdk-freshness",
+      "argv": [
+        "make",
+        "sdk-check"
+      ],
+      "exit_code": 0,
+      "log_sha256": "d1c054576d76d9ec466d77ba82c35ce6470ed2c091fc40b8c130f9351c5a1510",
+      "test_events": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "name": "current-reviews",
+      "argv": [
+        "python3",
+        "scripts/tests/openapi_current_reviews_test.py"
+      ],
+      "exit_code": 0,
+      "log_sha256": "7066c0f75a6c6d848b6aa413102ffc77f94f706234a0c9e1e9c65a3d929e3152",
+      "test_events": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "name": "sql-policy",
+      "argv": [
+        "python3",
+        "scripts/check-sql-governance.py"
+      ],
+      "exit_code": 0,
+      "log_sha256": "2029dada2ca920d58d01eabacdb88d0097dccecd38b45c7f0bbd5cd67cf37a58",
+      "test_events": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "name": "json-policy",
+      "argv": [
+        "python3",
+        "scripts/check-json-governance.py"
+      ],
+      "exit_code": 0,
+      "log_sha256": "bb2db5927c972e5423344847c6ee1065ff4fe94d07c8bcca33f3479eeeebafa8",
+      "test_events": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "name": "sql-negative",
+      "argv": [
+        "python3",
+        "scripts/tests/sql_governance_test.py"
+      ],
+      "exit_code": 0,
+      "log_sha256": "e15ef9340c541102a5bd6ce7524c95550456a6e85a4db28737afacc4c19a981e",
+      "test_events": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "name": "json-negative",
+      "argv": [
+        "python3",
+        "scripts/check-json-governance-test.py"
+      ],
+      "exit_code": 0,
+      "log_sha256": "72f09eca554e87a45b7156c6109520cf15e8b6ec157dc5c033610649b49b8698",
+      "test_events": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "name": "ast-negative",
+      "argv": [
+        "go",
+        "test",
+        "-json",
+        "./tools/sql-governance",
+        "./tools/json-governance",
+        "-count=1",
+        "-timeout=3m"
+      ],
+      "exit_code": 0,
+      "log_sha256": "7751926642820167dd4da12dd04c079cc5e57237e7c703ba8735b058410adba9",
+      "test_events": {
+        "pass": 14,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    {
+      "name": "pagination",
+      "argv": [
+        "go",
+        "test",
+        "-json",
+        "-race",
+        "./internal/pagination",
+        "-count=1",
+        "-timeout=3m"
+      ],
+      "exit_code": 0,
+      "log_sha256": "4373b4aed521e3f7024c3221cba9122300446be48876b66a2680e990ffb80b19",
+      "test_events": {
+        "pass": 18,
+        "fail": 0,
+        "skip": 0
+      }
+    }
+  ]
+}

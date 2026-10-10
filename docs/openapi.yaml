@@ -2814,7 +2814,7 @@ components:
       required: [data, pagination]
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/ControlPlaneAlert'}}
-        pagination: {$ref: '#/components/schemas/PaginationMetadata'}
+        pagination: {$ref: '#/components/schemas/SignedCursorPaginationMetadata'}
     ControlPlaneSilence:
       type: object
       additionalProperties: false
@@ -2840,7 +2840,7 @@ components:
       required: [data, pagination]
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/ControlPlaneSilence'}}
-        pagination: {$ref: '#/components/schemas/PaginationMetadata'}
+        pagination: {$ref: '#/components/schemas/SignedCursorPaginationMetadata'}
     ControlPlaneSummary:
       type: object
       additionalProperties: false
@@ -9842,6 +9842,24 @@ components:
         has_more: {type: boolean}
         next_offset: {type: integer, minimum: 0, nullable: true}
         next_cursor: {type: string, maxLength: 1024, nullable: true}
+    SignedCursorPaginationMetadata:
+      type: object
+      additionalProperties: false
+      required: [limit, offset, has_more, next_offset]
+      properties:
+        total: {type: integer, format: int64, minimum: 0}
+        limit: {type: integer, minimum: 1}
+        offset: {type: integer, minimum: 0}
+        has_more: {type: boolean}
+        next_offset: {type: integer, minimum: 0, nullable: true}
+        next_cursor: {type: string, maxLength: 4096, nullable: true}
+    SignedCursorPageEnvelope:
+      type: object
+      description: Explicit signed-cursor collection page; only requests with cursor present opt into the larger token contract. Exact total is omitted when unknown.
+      required: [data, pagination]
+      properties:
+        data: {type: array, items: {}}
+        pagination: {$ref: '#/components/schemas/SignedCursorPaginationMetadata'}
     DeliverySourceVerification:
       type: object
       additionalProperties: false
@@ -16087,10 +16105,16 @@ paths:
       description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
       x-astronomer-route-class: public-api
       parameters:
+        - name: cursor
+          in: query
+          required: false
+          allowEmptyValue: true
+          description: Empty value selects the signed initial page; nonempty value is the exact opaque next_cursor. Cannot be combined with offset. Actor, current scope, filters and ordering are checked on every continuation; cursor pages may omit total.
+          schema: {type: string, maxLength: 4096}
         - {name: status, in: query, schema: {type: string}}
         - {name: controller, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
-        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
       responses:
         '200':
           description: Page of control-plane alerts
@@ -16178,8 +16202,14 @@ paths:
       description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
       x-astronomer-route-class: public-api
       parameters:
+        - name: cursor
+          in: query
+          required: false
+          allowEmptyValue: true
+          description: Empty value selects the signed initial page; nonempty value is the exact opaque next_cursor. Cannot be combined with offset. Actor, current scope, filters and ordering are checked on every continuation; cursor pages may omit total.
+          schema: {type: string, maxLength: 4096}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
-        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
       responses:
         '200':
           description: Page of control-plane silences
@@ -26867,6 +26897,12 @@ paths:
       security:
         - bearerJWT: []
       parameters:
+        - name: cursor
+          in: query
+          required: false
+          allowEmptyValue: true
+          description: Empty value selects the signed initial page; nonempty value is the exact opaque next_cursor. Cannot be combined with offset. Actor, current scope, filters and ordering are checked on every continuation; cursor pages may omit total.
+          schema: {type: string, maxLength: 4096}
         - name: search
           in: query
           description: Case-insensitive literal substring of chart name, display name or description; filters authorized repositories before pagination and count.
@@ -26880,6 +26916,7 @@ paths:
           in: query
           schema:
             type: integer
+            maximum: 10000
             default: 0
         - name: tag
           in: query
@@ -26906,14 +26943,14 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PageEnvelope'
+                  - $ref: '#/components/schemas/SignedCursorPageEnvelope'
                   - properties:
                       data:
                         type: array
                         items:
                           $ref: '#/components/schemas/HelmChart'
         '400':
-          description: Invalid project_id.
+          description: Invalid scope/cursor, mixed cursor and offset, or legacy offset outside 0..10000.
           content:
             application/json:
               schema:

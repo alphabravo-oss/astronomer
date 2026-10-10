@@ -37,9 +37,15 @@ type paginationPlanNode struct {
 	NodeType  string `json:"Node Type"`
 	IndexName string `json:"Index Name"`
 	// EXPLAIN reports numeric averages; PostgreSQL18 emits 201.00 for 201 rows.
-	ActualRows  float64              `json:"Actual Rows"`
-	ActualLoops float64              `json:"Actual Loops"`
-	Plans       []paginationPlanNode `json:"Plans"`
+	ActualRows                float64              `json:"Actual Rows"`
+	ActualLoops               float64              `json:"Actual Loops"`
+	RowsRemovedByFilter       float64              `json:"Rows Removed by Filter"`
+	RowsRemovedByIndexRecheck float64              `json:"Rows Removed by Index Recheck"`
+	Plans                     []paginationPlanNode `json:"Plans"`
+}
+
+func (node paginationPlanNode) rowsExamined() float64 {
+	return (node.ActualRows + node.RowsRemovedByFilter + node.RowsRemovedByIndexRecheck) * node.ActualLoops
 }
 
 func assertBoundedChartPlan(t *testing.T, nodes []paginationPlanNode) bool {
@@ -51,8 +57,8 @@ func assertBoundedChartPlan(t *testing.T, nodes []paginationPlanNode) bool {
 		}
 		if node.IndexName == "idx_helm_charts_keyset" {
 			found = true
-			if node.ActualRows < 0 || node.ActualLoops <= 0 || node.ActualRows*node.ActualLoops > 201 {
-				t.Fatalf("chart index read%g rows for201-row sentinel", node.ActualRows*node.ActualLoops)
+			if node.ActualRows < 0 || node.RowsRemovedByFilter < 0 || node.RowsRemovedByIndexRecheck < 0 || node.ActualLoops <= 0 || node.rowsExamined() > 201 {
+				t.Fatalf("chart index read%g rows for201-row sentinel", node.rowsExamined())
 			}
 		}
 		found = assertBoundedChartPlan(t, node.Plans) || found
@@ -148,7 +154,7 @@ func TestCatalogCursorPostgresTraversalBeyondLegacyCeiling(t *testing.T) {
 	}
 	h.SetCursorCodec(codec)
 	actor := uuid.New()
-	values := url.Values{"limit": {"200"}, "search": {prefix}}
+	values := url.Values{"cursor": {""}, "limit": {"200"}, "search": {prefix}}
 	seen := map[uuid.UUID]bool{}
 	previous := ""
 	var last sqlc.HelmChart
@@ -226,7 +232,7 @@ func TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation(t *testing.T) {
 	h.SetCursorCodec(codec)
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: []rbac.RoleBinding{{ProjectID: project.String(), RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceCatalog), Verbs: []string{string(rbac.VerbRead)}}}}}})
 	actor := uuid.New()
-	values := url.Values{"limit": {"3"}, "search": {prefix}, "project_id": {project.String()}}
+	values := url.Values{"cursor": {""}, "limit": {"3"}, "search": {prefix}, "project_id": {project.String()}}
 	first := catalogCursorPage(t, h, actor, values)
 	if len(first.Data) != 3 || first.Pagination.NextCursor == nil {
 		t.Fatal("first page missing")

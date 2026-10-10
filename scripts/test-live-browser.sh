@@ -55,6 +55,10 @@ artifact_dir="${LIVE_BROWSER_ARTIFACT_DIR:-${TMPDIR:-/tmp}/astronomer-live-brows
 mkdir -p "$artifact_dir/bin" "$artifact_dir/playwright-report" "$artifact_dir/test-results"
 bash scripts/check-build-capacity.sh --json >"$artifact_dir/capacity-before.json"
 artifact_dir="$(cd "$artifact_dir" && pwd)"
+if [[ -n "${LIVE_BROWSER_REUSE_BUILD_REF:-}" ]]; then
+  python3 scripts/live-browser-build-reuse.py reuse \
+    --reference "$LIVE_BROWSER_REUSE_BUILD_REF" --artifact "$artifact_dir"
+fi
 if [[ "${LIVE_BROWSER_ENGINEERING:-0}" != "1" ]]; then
   cat >"$artifact_dir/engineering-not-run.json" <<'JSON'
 {"schema_version":"astronomer-browser-engineering/v1","scope":"engineering_browser_measurement","qualification":"not_evaluated","collection_status":"not_run","reason":"engineering_mode_disabled"}
@@ -446,7 +450,9 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
 	-keyout "$flux_tls_key" -out "$flux_tls_cert" >"$artifact_dir/flux-tls.log" 2>&1
 chmod 0600 "$flux_tls_key" "$flux_tls_cert"
 
-CGO_ENABLED=0 go build -trimpath -o "$artifact_dir/bin/flux-fixture-server" ./scripts/fixtures/flux/server >"$artifact_dir/build-flux-fixture.log" 2>&1
+if [[ -z "${LIVE_BROWSER_REUSE_BUILD_REF:-}" ]]; then
+  CGO_ENABLED=0 go build -trimpath -o "$artifact_dir/bin/flux-fixture-server" ./scripts/fixtures/flux/server >"$artifact_dir/build-flux-fixture.log" 2>&1
+fi
 docker build --pull=false -t "$flux_fixture_runtime_image" \
 	-f scripts/fixtures/flux/server/Dockerfile.runtime scripts/fixtures/flux/server \
 	>"$artifact_dir/build-flux-fixture-runtime.log"
@@ -560,12 +566,14 @@ KUBECONFIG="$flux_kubeconfig" kubectl create namespace "$backup_namespace" >/dev
 KUBECONFIG="$flux_kubeconfig" kubectl -n "$backup_namespace" create configmap "$backup_configmap" \
 	--from-literal=message="$backup_message" >/dev/null
 
-echo "test-live-browser: building current migrator, server, worker, live agent fixture, and frontend"
-go build -trimpath -o "$artifact_dir/bin/migrator" ./cmd/migrator >"$artifact_dir/build-migrator.log" 2>&1
-go build -trimpath -o "$artifact_dir/bin/server" ./cmd/server >"$artifact_dir/build-server.log" 2>&1
-go build -trimpath -o "$artifact_dir/bin/worker" ./cmd/worker >"$artifact_dir/build-worker.log" 2>&1
-go build -trimpath -o "$artifact_dir/bin/live-browser-fixture" ./scripts/testdata/live-browser-fixture >"$artifact_dir/build-live-browser-fixture.log" 2>&1
-npm --prefix frontend run build >"$artifact_dir/frontend-build.log" 2>&1
+if [[ -z "${LIVE_BROWSER_REUSE_BUILD_REF:-}" ]]; then
+  echo "test-live-browser: building current migrator, server, worker, live agent fixture, and frontend"
+  go build -trimpath -o "$artifact_dir/bin/migrator" ./cmd/migrator >"$artifact_dir/build-migrator.log" 2>&1
+  go build -trimpath -o "$artifact_dir/bin/server" ./cmd/server >"$artifact_dir/build-server.log" 2>&1
+  go build -trimpath -o "$artifact_dir/bin/worker" ./cmd/worker >"$artifact_dir/build-worker.log" 2>&1
+  go build -trimpath -o "$artifact_dir/bin/live-browser-fixture" ./scripts/testdata/live-browser-fixture >"$artifact_dir/build-live-browser-fixture.log" 2>&1
+  npm --prefix frontend run build >"$artifact_dir/frontend-build.log" 2>&1
+fi
 
 "$artifact_dir/bin/live-browser-fixture" direct-rbac | \
 	KUBECONFIG="$flux_kubeconfig" kubectl apply -f - >"$artifact_dir/direct-reader-install.log"

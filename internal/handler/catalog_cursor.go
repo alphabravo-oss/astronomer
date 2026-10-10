@@ -19,7 +19,13 @@ func (h *CatalogHandler) SetCursorCodec(codec *paging.CursorCodec) { h.cursorCod
 // ListCharts scopes and filters before either the bounded offset or signed
 // indexed continuation query. Cursor pages do not repeat a full-table COUNT.
 func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
+	if _, ok := readCursorQuery(w, r); !ok {
+		return
+	}
 	if !validatePageOffset(w, r) {
+		return
+	}
+	if h.tryProjectChartCursor(w, r) {
 		return
 	}
 	filter, ok := h.catalogChartFilter(w, r)
@@ -55,13 +61,6 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")
 		return
 	}
-	charts, more := trimCursorRows(charts, page)
-	var next *paging.Cursor
-	if more {
-		last := charts[len(charts)-1]
-		position := paging.NewTextCursor(last.Name, last.ID, &last.RepositoryID, binding, page.seen+len(charts))
-		next = &position
-	}
 	var total *int64
 	if !page.mode {
 		count, err := h.queries.CountFilteredHelmCharts(r.Context(), filter)
@@ -70,6 +69,17 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		total = &count
+	}
+	writeCatalogChartPage(w, r, charts, page, total)
+}
+
+func writeCatalogChartPage(w http.ResponseWriter, r *http.Request, charts []sqlc.HelmChart, page cursorRequest, total *int64) {
+	charts, more := trimCursorRows(charts, page)
+	var next *paging.Cursor
+	if more {
+		last := charts[len(charts)-1]
+		position := paging.NewTextCursor(last.Name, last.ID, &last.RepositoryID, page.binding, page.seen+len(charts))
+		next = &position
 	}
 	metadata, ok := page.metadata(w, r, len(charts), next, total)
 	if ok {

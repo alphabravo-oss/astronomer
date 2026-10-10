@@ -18,6 +18,9 @@ type controlPlaneCursorQuerier interface {
 func (h *ControlPlaneHandler) SetCursorCodec(codec *paging.CursorCodec) { h.cursorCodec = codec }
 
 func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request) {
+	if _, ok := readCursorQuery(w, r); !ok {
+		return
+	}
 	if !validatePageOffset(w, r) {
 		return
 	}
@@ -68,6 +71,9 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
+	if _, ok := readCursorQuery(w, r); !ok {
+		return
+	}
 	if !validatePageOffset(w, r) {
 		return
 	}

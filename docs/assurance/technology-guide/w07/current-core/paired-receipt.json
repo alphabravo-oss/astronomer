@@ -1,0 +1,87 @@
+{
+  "source": "0b185c9ff6827e9c6af766138e8c47d909afb025",
+  "source_dirty_after": "",
+  "timestamp_utc": "2026-10-10T01:22:04.071667+00:00",
+  "scope": "Named nine current cursor parents, actual owned CNPG17/18 clean75;18race. No wholeW07/fulltree claim",
+  "steps": [
+    {
+      "major": 17,
+      "server_version_num": 170011,
+      "owned_database": "plan032_w07_cursor17",
+      "cluster_uid": "2f83aaff-dbbf-40ef-8880-542225fec0b4",
+      "service_uid": "b0b61d59-0d4a-4033-a3e3-b34695bf27fc",
+      "current_primary": "plan032-postgres-1",
+      "schema": 75,
+      "argv": [
+        "go",
+        "test",
+        "-json",
+        "-p",
+        "1",
+        "./internal/handler",
+        "-run",
+        "^Test(Catalog.*Cursor.*|CatalogLegacyRequestPreservesReleasedCursorBoundAndCount|CursorRequestEmptyInitialAndInvalidContinuation|ControlPlaneCursorPostgres.*)$",
+        "-count=1",
+        "-timeout=5m"
+      ],
+      "exit_code": 0,
+      "parent_tests": [
+        "TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation",
+        "TestCatalogCursorPostgresTraversalBeyondLegacyCeiling",
+        "TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL",
+        "TestCatalogLegacyRequestPreservesReleasedCursorBoundAndCount",
+        "TestCatalogProjectCursorPostgresSQLVisibilityWithoutRepositoryMaterialization",
+        "TestCatalogProjectCursorRejectsAuthenticatedWrongPositionBeforeSQL",
+        "TestControlPlaneCursorPostgresSelectiveFilterPlans",
+        "TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor",
+        "TestCursorRequestEmptyInitialAndInvalidContinuation"
+      ],
+      "test_events": {
+        "pass": 25,
+        "fail": 0,
+        "skip": 0
+      },
+      "log_sha256": "88d865cb4a6482f169e300668aa2acb2243bc8c4b8c00e37a8eb1018b78a36a1"
+    },
+    {
+      "major": 18,
+      "server_version_num": 180006,
+      "owned_database": "plan032_w07_cursor18",
+      "cluster_uid": "ea0f410a-e1ea-4cb4-9fe5-40a35a020d3e",
+      "service_uid": "7a8f2fe8-5837-45a7-b4d8-83f38e6549c4",
+      "current_primary": "plan032-postgres18-2",
+      "schema": 75,
+      "argv": [
+        "go",
+        "test",
+        "-json",
+        "-race",
+        "-p",
+        "1",
+        "./internal/handler",
+        "-run",
+        "^Test(Catalog.*Cursor.*|CatalogLegacyRequestPreservesReleasedCursorBoundAndCount|CursorRequestEmptyInitialAndInvalidContinuation|ControlPlaneCursorPostgres.*)$",
+        "-count=1",
+        "-timeout=5m"
+      ],
+      "exit_code": 0,
+      "parent_tests": [
+        "TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation",
+        "TestCatalogCursorPostgresTraversalBeyondLegacyCeiling",
+        "TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL",
+        "TestCatalogLegacyRequestPreservesReleasedCursorBoundAndCount",
+        "TestCatalogProjectCursorPostgresSQLVisibilityWithoutRepositoryMaterialization",
+        "TestCatalogProjectCursorRejectsAuthenticatedWrongPositionBeforeSQL",
+        "TestControlPlaneCursorPostgresSelectiveFilterPlans",
+        "TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor",
+        "TestCursorRequestEmptyInitialAndInvalidContinuation"
+      ],
+      "test_events": {
+        "pass": 25,
+        "fail": 0,
+        "skip": 0
+      },
+      "log_sha256": "31b49c85e08d46e8faeb16d933c5428a1f8da0275d3ad67b1b2972a45fde2b02"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceSpecificationDigest": "sha256:90611087d94603dabb5860066e85f2703f4526da4769138dcfe3fefcfdcc27b5",
+  "sourceSpecificationDigest": "sha256:cd2cf33b37ce3414ca63aba299f3b7ffac995cfcb45fc9ec2b2bae194f2dc735",
   "baselineSpecifications": [
     {
       "revision": "v1.2.1",
@@ -1001,6 +1001,84 @@
       "reviewedAt": "2026-10-09T00:00:00Z",
       "expiresAt": "2026-10-16T00:00:00Z",
       "evidence": "docs/assurance/technology-guide/w06/response-compatibility-disposition.json"
+    },
+    {
+      "id": "request-parameter-max-set",
+      "text": "for the `query` request parameter `offset`, the max was set to `10000.00`",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "getCatalogCharts",
+      "path": "/api/v1/catalog/charts/",
+      "ignoreLine": "- GET /api/v1/catalog/charts/ for the `query` request parameter `offset`, the max was set to `10000.00`",
+      "owner": "Plan032 W07 executor / release integration review",
+      "reviewedAt": "2026-10-10T00:00:00Z",
+      "expiresAt": "2026-11-09T00:00:00Z",
+      "evidence": "docs/assurance/technology-guide/w07/api-cursor-compatibility-review.md"
+    },
+    {
+      "id": "request-parameter-max-set",
+      "text": "for the `query` request parameter `offset`, the max was set to `10000.00`",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "getControllersAlerts",
+      "path": "/api/v1/controllers/alerts",
+      "ignoreLine": "- GET /api/v1/controllers/alerts for the `query` request parameter `offset`, the max was set to `10000.00`",
+      "owner": "Plan032 W07 executor / release integration review",
+      "reviewedAt": "2026-10-10T00:00:00Z",
+      "expiresAt": "2026-11-09T00:00:00Z",
+      "evidence": "docs/assurance/technology-guide/w07/api-cursor-compatibility-review.md"
+    },
+    {
+      "id": "response-property-max-length-increased",
+      "text": "the `pagination/next_cursor` response property's maxLength was increased from `1024` to `4096` for the response status `200`",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "getControllersAlerts",
+      "path": "/api/v1/controllers/alerts",
+      "ignoreLine": "- GET /api/v1/controllers/alerts the `pagination/next_cursor` response property's maxLength was increased from `1024` to `4096` for the response status `200`",
+      "owner": "Plan032 W07 executor / release integration review",
+      "reviewedAt": "2026-10-10T00:00:00Z",
+      "expiresAt": "2026-11-09T00:00:00Z",
+      "evidence": "docs/assurance/technology-guide/w07/api-cursor-compatibility-review.md"
+    },
+    {
+      "id": "request-parameter-max-set",
+      "text": "for the `query` request parameter `offset`, the max was set to `10000.00`",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "getControllersSilences",
+      "path": "/api/v1/controllers/silences",
+      "ignoreLine": "- GET /api/v1/controllers/silences for the `query` request parameter `offset`, the max was set to `10000.00`",
+      "owner": "Plan032 W07 executor / release integration review",
+      "reviewedAt": "2026-10-10T00:00:00Z",
+      "expiresAt": "2026-11-09T00:00:00Z",
+      "evidence": "docs/assurance/technology-guide/w07/api-cursor-compatibility-review.md"
+    },
+    {
+      "id": "response-property-max-length-increased",
+      "text": "the `pagination/next_cursor` response property's maxLength was increased from `1024` to `4096` for the response status `200`",
+      "level": 3,
+      "operation": "GET",
+      "operationId": "getControllersSilences",
+      "path": "/api/v1/controllers/silences",
+      "ignoreLine": "- GET /api/v1/controllers/silences the `pagination/next_cursor` response property's maxLength was increased from `1024` to `4096` for the response status `200`",
+      "owner": "Plan032 W07 executor / release integration review",
+      "reviewedAt": "2026-10-10T00:00:00Z",
+      "expiresAt": "2026-11-09T00:00:00Z",
+      "evidence": "docs/assurance/technology-guide/w07/api-cursor-compatibility-review.md"
+    },
+    {
+      "id": "response-body-all-of-removed",
+      "text": "removed `#/components/schemas/PageEnvelope` from the response body `allOf` list for the response status `200`",
+      "level": 2,
+      "operation": "GET",
+      "operationId": "getCatalogCharts",
+      "path": "/api/v1/catalog/charts/",
+      "ignoreLine": "- GET /api/v1/catalog/charts/ removed `#/components/schemas/PageEnvelope` from the response body `allOf` list for the response status `200`",
+      "owner": "Plan032 W07 executor / release integration review",
+      "reviewedAt": "2026-10-10T00:00:00Z",
+      "expiresAt": "2026-11-09T00:00:00Z",
+      "evidence": "docs/assurance/technology-guide/w07/api-cursor-compatibility-review.md"
     }
   ]
 }

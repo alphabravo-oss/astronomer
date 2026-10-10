@@ -183,3 +183,120 @@ func (q *Queries) ListFilteredHelmChartsAfter(ctx context.Context, arg ListFilte
 	}
 	return items, nil
 }
+
+const listProjectHelmChartsAfter = `-- name: ListProjectHelmChartsAfter :many
+SELECT c.id, c.repository_id, c.name, c.display_name, c.description, c.icon_url, c.home_url, c.category, c.keywords, c.maintainers, c.deprecated, c.created_at, c.updated_at FROM helm_charts c
+JOIN helm_repositories r ON r.id = c.repository_id
+WHERE (r.owner_project_id IS NULL OR r.owner_project_id = $1::uuid
+       OR EXISTS (SELECT 1 FROM project_catalog_subscriptions s WHERE s.catalog_id = r.id AND s.project_id = $1::uuid))
+  AND ($2::text = ''
+       OR c.name ILIKE $2::text ESCAPE E'\\'
+       OR COALESCE(c.display_name, '') ILIKE $2::text ESCAPE E'\\'
+       OR COALESCE(c.description, '') ILIKE $2::text ESCAPE E'\\')
+AND (c.name, c.repository_id, c.id) > ($3::text, $4::uuid, $5::uuid)
+ORDER BY c.name ASC, c.repository_id ASC, c.id ASC
+LIMIT $6
+`
+
+type ListProjectHelmChartsAfterParams struct {
+	ProjectID         uuid.UUID `json:"project_id"`
+	SearchPattern     string    `json:"search_pattern"`
+	AfterName         string    `json:"after_name"`
+	AfterRepositoryID uuid.UUID `json:"after_repository_id"`
+	AfterID           uuid.UUID `json:"after_id"`
+	QueryLimit        int32     `json:"query_limit"`
+}
+
+func (q *Queries) ListProjectHelmChartsAfter(ctx context.Context, arg ListProjectHelmChartsAfterParams) ([]HelmChart, error) {
+	rows, err := q.db.Query(ctx, listProjectHelmChartsAfter,
+		arg.ProjectID,
+		arg.SearchPattern,
+		arg.AfterName,
+		arg.AfterRepositoryID,
+		arg.AfterID,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []HelmChart{}
+	for rows.Next() {
+		var i HelmChart
+		if err := rows.Scan(
+			&i.ID,
+			&i.RepositoryID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.IconUrl,
+			&i.HomeUrl,
+			&i.Category,
+			&i.Keywords,
+			&i.Maintainers,
+			&i.Deprecated,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectHelmChartsPage = `-- name: ListProjectHelmChartsPage :many
+SELECT c.id, c.repository_id, c.name, c.display_name, c.description, c.icon_url, c.home_url, c.category, c.keywords, c.maintainers, c.deprecated, c.created_at, c.updated_at FROM helm_charts c
+JOIN helm_repositories r ON r.id = c.repository_id
+WHERE (r.owner_project_id IS NULL OR r.owner_project_id = $1::uuid
+       OR EXISTS (SELECT 1 FROM project_catalog_subscriptions s WHERE s.catalog_id = r.id AND s.project_id = $1::uuid))
+  AND ($2::text = ''
+       OR c.name ILIKE $2::text ESCAPE E'\\'
+       OR COALESCE(c.display_name, '') ILIKE $2::text ESCAPE E'\\'
+       OR COALESCE(c.description, '') ILIKE $2::text ESCAPE E'\\')
+ORDER BY c.name ASC, c.repository_id ASC, c.id ASC
+LIMIT $3
+`
+
+type ListProjectHelmChartsPageParams struct {
+	ProjectID     uuid.UUID `json:"project_id"`
+	SearchPattern string    `json:"search_pattern"`
+	QueryLimit    int32     `json:"query_limit"`
+}
+
+func (q *Queries) ListProjectHelmChartsPage(ctx context.Context, arg ListProjectHelmChartsPageParams) ([]HelmChart, error) {
+	rows, err := q.db.Query(ctx, listProjectHelmChartsPage, arg.ProjectID, arg.SearchPattern, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []HelmChart{}
+	for rows.Next() {
+		var i HelmChart
+		if err := rows.Scan(
+			&i.ID,
+			&i.RepositoryID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.IconUrl,
+			&i.HomeUrl,
+			&i.Category,
+			&i.Keywords,
+			&i.Maintainers,
+			&i.Deprecated,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
