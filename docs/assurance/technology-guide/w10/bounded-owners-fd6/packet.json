@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "fd6ff23e4ebbd43f79e34fb93e0649456e3b0a4f",
+  "sourceFileCount": 6801,
+  "sourceTreeSHA256": "5ee5fea2bc2847249914594d1200b1c21f57bd800dcc44cdeb35607809abf2da",
+  "categoriesBefore": {
+    "parents": 4,
+    "cases": 4,
+    "failures": 4,
+    "skips": 0
+  },
+  "scopedAfter": {
+    "race": true,
+    "parents": 12,
+    "cases": 29,
+    "passed": 29,
+    "skips": 0,
+    "failures": 0
+  },
+  "vet": {
+    "command": "go vet ./internal/tunnel ./internal/server/middleware ./internal/server",
+    "exitCode": 0,
+    "goVersion": "go1.27.2",
+    "sourceStable": true
+  },
+  "artifacts": [
+    {
+      "path": "categories-before/console.log",
+      "sha256": "8030dc50e044852d6510c6b71632a00a6feaa92d70f65f210026bd4b35f1b848",
+      "size": 3851
+    },
+    {
+      "path": "categories-before/driver.log",
+      "sha256": "8e9336d1d5058b130981340e6dca88d5cb237174aa114b438da1be56366baa0b",
+      "size": 3980
+    },
+    {
+      "path": "categories-before/evidence.json",
+      "sha256": "168c03b1996252af7fc4a51012de3cf63f29db227c1f6b310da39709512a80b8",
+      "size": 4910
+    },
+    {
+      "path": "categories-before/exit-code.txt",
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "size": 2
+    },
+    {
+      "path": "categories-before/final-capacity.json",
+      "sha256": "8b64f60ba3c63abc853fc861786c8ae0dfec660428ba275a361d06f1632029ce",
+      "size": 204
+    },
+    {
+      "path": "categories-before/go-test.json",
+      "sha256": "aae5d713792524cd77598163d7e17a0b1bfffd4dc77aba1ab9ecb52fd8313a7d",
+      "size": 7549
+    },
+    {
+      "path": "categories-before/junit.xml",
+      "sha256": "445ad1325fa358a2b8fd7b7aea09e1e153ff11b8581f00e125b4288c783fc27b",
+      "size": 3477
+    },
+    {
+      "path": "categories-before/prelaunch-capacity.json",
+      "sha256": "a2615a3213f16ee9234d853596d504d4fe4e775c2305ec257b7db54da3815b51",
+      "size": 204
+    },
+    {
+      "path": "owners-after/console.log",
+      "sha256": "10ee610e921ada07ed6cacde9a4898a2946f5861bf381c700de0ae002ccaf0d8",
+      "size": 4439
+    },
+    {
+      "path": "owners-after/driver.log",
+      "sha256": "ee4c9333397c73c9f7bf0cde849f97763e7b3ed5c18afbb081e2aeb5953d78b0",
+      "size": 4558
+    },
+    {
+      "path": "owners-after/evidence.json",
+      "sha256": "ac3c34967b5d85eeb4831d316a63b9726e117a47f9b5d620881293743d46627c",
+      "size": 5731
+    },
+    {
+      "path": "owners-after/exit-code.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "owners-after/final-capacity.json",
+      "sha256": "f7898a20fd576e22a32bc32f352c261c38043098cf5034a30b984443d7b4defd",
+      "size": 204
+    },
+    {
+      "path": "owners-after/go-test.json",
+      "sha256": "cb0d76c88f673231df551f6f0ae6ff115008215ead6b9103fb3e219a2d89ba3a",
+      "size": 31453
+    },
+    {
+      "path": "owners-after/junit.xml",
+      "sha256": "9aa1861dba20f70e3524da2551efcb07060a55c8cd4a6b03110b0f5b811d15dc",
+      "size": 6048
+    },
+    {
+      "path": "owners-after/prelaunch-capacity.json",
+      "sha256": "fe6ff3e6987fe69e0e976aa390c006c074bee30c7072bbc36b09250eb8283f55",
+      "size": 204
+    },
+    {
+      "path": "vet/vet-exit-code.txt",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "size": 2
+    },
+    {
+      "path": "vet/vet-final-capacity.json",
+      "sha256": "a91bdcd44048c2a889885d46ca223d567c0169fb89646e5cea1b0c725e0de8f7",
+      "size": 204
+    },
+    {
+      "path": "vet/vet-prelaunch-capacity.json",
+      "sha256": "5e6ae50c857a811960227fa1113baa715a106a55b28e493841f8d2075a97e024",
+      "size": 204
+    },
+    {
+      "path": "vet/vet-source-after.json",
+      "sha256": "ab7eefc8d9f0633cd5e6744928e5f8779c9a8d25b84ca75fd41c67dd29b9ec1f",
+      "size": 139
+    },
+    {
+      "path": "vet/vet-source-before.json",
+      "sha256": "ab7eefc8d9f0633cd5e6744928e5f8779c9a8d25b84ca75fd41c67dd29b9ec1f",
+      "size": 139
+    },
+    {
+      "path": "vet/vet.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "w10-complexity-cf73621a.log",
+      "sha256": "4a563e8fe54722e2c4475f20373273df80886b1de57f95b0f61dd1b6ad7175dc",
+      "size": 151
+    },
+    {
+      "path": "w10-complexity-ratchet-after.log",
+      "sha256": "92ef79cdb481e2ffac43cf70de4253b9f929fe921eb4757ef7b7c2cf1610546d",
+      "size": 101
+    }
+  ],
+  "limitations": [
+    "The four category production fixes are pending; their failing characterization is retained.",
+    "Only the twelve declared after parents were executed; this is not a full observability or full affected-package claim.",
+    "No PostgreSQL, Valkey or Kubernetes endpoint was used by these tests. Runner operands are inventory, not runtime qualification.",
+    "Real repeatable-read database, fleet scale, remaining metric owners and actual collector/workflow/overhead qualification remain open."
+  ]
+}

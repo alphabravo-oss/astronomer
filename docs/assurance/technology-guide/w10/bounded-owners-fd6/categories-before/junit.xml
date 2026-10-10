@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="4" failures="4" errors="0" time="2.334110">
+	<testsuite tests="3" failures="3" time="0.011000" name="github.com/alphabravocompany/astronomer-go/internal/observability" timestamp="2026-10-10T03:07:31Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricsPhaseHasOneCurrentSeries" time="0.000000">
+			<failure message="Failed" type="">=== RUN   TestRegistrationMetricsPhaseHasOneCurrentSeries&#xA;    owner_metrics_baseline_test.go:48: registration retains historical phase labels: [map[astronomer_instance_id:TestRegistrationMetricsPhaseHasOneCurrentSeries cluster:synthetic-current-cluster phase:awaiting_agent] map[astronomer_instance_id:TestRegistrationMetricsPhaseHasOneCurrentSeries cluster:synthetic-current-cluster phase:connected] map[astronomer_instance_id:TestRegistrationMetricsPhaseHasOneCurrentSeries cluster:synthetic-current-cluster phase:created]]&#xA;--- FAIL: TestRegistrationMetricsPhaseHasOneCurrentSeries (0.00s)&#xA;</failure>
+		</testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestRegistrationMetricsDurationBoundsOutcome" time="0.000000">
+			<failure message="Failed" type="">=== RUN   TestRegistrationMetricsDurationBoundsOutcome&#xA;    owner_metrics_baseline_test.go:60: registration accepts unbounded outcome labels: [map[astronomer_instance_id:TestRegistrationMetricsDurationBoundsOutcome baseline:false outcome:synthetic-one] map[astronomer_instance_id:TestRegistrationMetricsDurationBoundsOutcome baseline:false outcome:synthetic-three] map[astronomer_instance_id:TestRegistrationMetricsDurationBoundsOutcome baseline:false outcome:synthetic-two]]&#xA;--- FAIL: TestRegistrationMetricsDurationBoundsOutcome (0.00s)&#xA;</failure>
+		</testcase>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/observability" name="TestVaultResolveMetricsBoundsOutcome" time="0.000000">
+			<failure message="Failed" type="">=== RUN   TestVaultResolveMetricsBoundsOutcome&#xA;    owner_metrics_baseline_test.go:71: Vault accepts unbounded outcome labels: [map[astronomer_instance_id:TestVaultResolveMetricsBoundsOutcome connection:synthetic-existing-vault outcome:synthetic-one] map[astronomer_instance_id:TestVaultResolveMetricsBoundsOutcome connection:synthetic-existing-vault outcome:synthetic-three] map[astronomer_instance_id:TestVaultResolveMetricsBoundsOutcome connection:synthetic-existing-vault outcome:synthetic-two]]&#xA;--- FAIL: TestVaultResolveMetricsBoundsOutcome (0.00s)&#xA;</failure>
+		</testcase>
+	</testsuite>
+	<testsuite tests="1" failures="1" time="0.010000" name="github.com/alphabravocompany/astronomer-go/internal/tunnel" timestamp="2026-10-10T03:07:33Z">
+		<properties>
+			<property name="go.version" value="go1.27.2 linux/amd64"></property>
+		</properties>
+		<testcase classname="github.com/alphabravocompany/astronomer-go/internal/tunnel" name="TestTunnelStateMetricsBoundsKindWithoutChangingEvents" time="0.000000">
+			<failure message="Failed" type="">=== RUN   TestTunnelStateMetricsBoundsKindWithoutChangingEvents&#xA;    state_metrics_budget_test.go:36: finite other-kind metric=0 want3&#xA;--- FAIL: TestTunnelStateMetricsBoundsKindWithoutChangingEvents (0.00s)&#xA;</failure>
+		</testcase>
+	</testsuite>
+</testsuites>
