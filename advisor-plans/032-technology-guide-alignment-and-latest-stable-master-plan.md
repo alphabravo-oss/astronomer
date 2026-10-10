@@ -269,10 +269,10 @@ Do not treat the table as proof an upstream image scans clean or an existing cus
 | W08 | Typed domain SQL and complete governance discovery | P1 | L/MED | W00; W06 where coupled | DONE (scoped) |
 | W09 | Strict request adoption and durable JSON reader validation | P1 | L/MED | W00; W06 for shared state schemas | DONE (scoped) |
 | W10 | Supported observability stack and measured signal coverage | P1/P2 | L/MED | W01; W00 reconciliation with Plan 030 | IN PROGRESS |
-| W11 | Helm 4 migration while preserving Flux and CNPG | P1 | L/HIGH | W01, W03; W12 characterization before migration and qualification before production acceptance | TODO |
+| W11 | Helm 4 migration while preserving Flux and CNPG | P1 | L/HIGH | W01, W03; W12 characterization before migration and qualification before production acceptance | IN PROGRESS (source preparation) |
 | W12 | Production-version DB, CNPG, browser, test report qualification | P1 | XL/HIGH for stateful work | W00, W01; candidate-specific W03–W11 as applicable to final qualification | IN PROGRESS |
 | W13 | Backend domain extraction for v2 | P2 | XL/HIGH | W06, W08, W09; W12 characterization | TODO |
-| W14 | Typed operational CLI and small shell wrappers | P2 | XL/HIGH | W01; W12 characterization; W17 for release rehearsals | IN PROGRESS (source draft; qualification pending) |
+| W14 | Typed operational CLI and small shell wrappers | P2 | XL/HIGH | W01; W12 characterization; W17 for release rehearsals | IN PROGRESS (core qualified; production adapter and rehearsal pending) |
 | W15 | Catalog Python and supporting repo supply chain parity | P1/P2 | L/MED | W01, W03 | TODO |
 | W16 | Explicit crypto/FIPS decision and optional artifact design | P2 | M for decision; XL/HIGH for claimed artifact | W00, W01, W12; product decision before optional implementation | DONE (ordinary v1 scope; conditional artifact not selected) |
 | W17 | Exact candidate integration, deployment, release policy closure | P1 | L/HIGH | Applicable packages above | TODO |
