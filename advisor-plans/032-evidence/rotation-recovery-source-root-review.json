@@ -1,0 +1,79 @@
+{
+  "reviewedAt": "2026-10-10T02:10:29.001077+00:00",
+  "combinedMergeCommit": "2fa10f6734e7bf6c8d25f76c2d480ee7238b61a0",
+  "frozenQualifiedSource": "df5803bc8bf5905827c7e18c0009655bd3f72f9b",
+  "sourceReview": "All15 changed source/test/document files fully reviewed, including closed fixture endpoint/live Cluster UID ownership, exact-parent/process-group bounds, all database diagnostic stages, incomplete-page rejection, backup target and retention obligations; normal merge preserves exact frozen bytes. No algorithm/envelope/public auth change.",
+  "sourceSHA256": {
+    "cmd/keyrotate/coverage_test.go": "4012808f6709f7519d8f7f65bcbc9dabd197b34a0ca328cc4e01dfa21b83802e",
+    "cmd/keyrotate/iterator_test.go": "ff1241c8c7aa46d8663120ee677c4205bf39e11d59201fe8561416d8df6123f0",
+    "cmd/keyrotate/main.go": "7e1afdf4c7f43be29ed4265a0b325b12991432b39028ac34056f8085fe5885a9",
+    "cmd/keyrotate/owned_cancellation_test.go": "3d1800eadf8bb6d6ccd8b4c3e5e44b5649660fc861738edae1cecafce8730845",
+    "cmd/keyrotate/owned_postgres_test.go": "d402952cbd9dc253ebde21f572f4e2d98a31da6c35920918ed2416eb705f088e",
+    "cmd/keyrotate/rotation_diagnostics.go": "b150995fb54aa41a7bfdcfe2cbc8e415b2edefb0946509e35f11ca3f18659893",
+    "cmd/keyrotate/rotation_diagnostics_test.go": "185a04ed0397c9c78980e5440faef474d5d18cc4e479d5d8d9af67cb319fdced",
+    "docs/architecture/fips-cryptography-boundary.md": "11e7f49bffadb1f4116c603ca766ecd85641f4694cddf4e1880e16872e3d927a",
+    "docs/data-governance/runtime-sql.json": "8e27fe97712caa2aafc3a583e05c2885df8a17f93985443e92e8c616e6288d28",
+    "docs/secret-column-inventory.md": "5f383a512fe90dc31ae0299c4e859939708940a64d7aec3ceee571569b57ea4e",
+    "docs/secret-rotation-runbook.md": "180ea6fc8bccface569d09f9e5f4fafaf786e848cc386701897c9b4f8b16d620",
+    "scripts/crypto-inventory/main.go": "198ad37fb407b88c49fe592be778749cd898e48317fbfac8906b86f5ecb3a2b9",
+    "scripts/fips-mode-probe/main.go": "91611294e3bda418e2fd13f802a45faa809b7f112c739c135be0b6211299aa4b",
+    "scripts/rotation-postgres-qualification.py": "3fd39f1e33b1c09289950a61d7f59e9cae649569e1c73bd3f2c01a8654d1ed81",
+    "scripts/tests/rotation_postgres_qualification_test.py": "bb63caf768c6f7026ca066f1999a4ffe72a4c62666414acc7de71d605460782d"
+  },
+  "rootIndependentEvidence": "Three frozen Git object fingerprints reconstructed, equal exact before/after hashes; raw event hashes/counts independently parsed. Root executes nine ownership/timeout/count Python fixtures in executor disposable worktree PASS; hostPython3.14.4 consistency is not latestPython qualification. No root repeated Go compiler/DB execution.",
+  "regressionBaseline": {
+    "source": "f3191eda25ce03616b59cb576927fd37e8fc007d",
+    "failedCases": 3,
+    "skippedCases": 0,
+    "originalLogSHA256": "232a95c17204efd9bfd81f12448f35c0fc2bc029c51702fc53f512dd61d1fc49"
+  },
+  "qualifiedActualGates": [
+    {
+      "gate": "postgres-race",
+      "exitCode": 0,
+      "counts": {
+        "pass": 4
+      },
+      "passParents": 4,
+      "passCountsByPackage": {
+        "keyrotate": 4
+      },
+      "logSHA256": "9c0664dd3a27d0e05a5ec1a16d52af9381fd46b9b1ff749ee4aabf27435d245c"
+    },
+    {
+      "gate": "full-package",
+      "exitCode": 0,
+      "counts": {
+        "pass": 252
+      },
+      "passParents": 166,
+      "passCountsByPackage": {
+        "keyrotate": 27,
+        "credential": 22,
+        "auth": 203
+      },
+      "logSHA256": "ef884e4e3e0743e75cab3f4615e2e6bc246d2d053a5352feb35a8da80df7f863"
+    }
+  ],
+  "cancellationCharacterization": {
+    "naturalClient": "Actual owned backend still active after client error, later commit observed; exact resumed0rewrite/2skip",
+    "serverAbort": "Exact owned backend abort completed before release; exact resumed1rewrite/1skip",
+    "both": "AcknowledgedfirstCAS1, interruptionfailures>0, all2 current envelope/primary decrypt/old-only denial; resume counts derived from settled persisted state. No general cancellation rollback guarantee."
+  },
+  "rootCombinedDocs": {
+    "result": "PASS",
+    "documents": 123,
+    "relativeLinks": 621,
+    "productionFiles": 2168,
+    "fileCeilings": 41,
+    "functionCeilings": 64,
+    "boundaryRules": 14,
+    "boundaryFiles": 1530,
+    "boundaryImports": 9746,
+    "log": "root-2fa10-docs.log",
+    "logSHA256": "22beba9faf12665e7586b6b50a13de57af9659961f47d22ab3f3aef811010d33"
+  },
+  "wholeW16Status": "IN_PROGRESS pending retained source/probe/module/boundary packet and full task reconciliation",
+  "complianceClaim": false,
+  "releaseApproval": false
+}
