@@ -132,7 +132,7 @@ func publishLayout(ctx context.Context, options publicationOptions) error {
 	if loader.Status().Verification != "verified" || !loader.Status().InventoryComplete {
 		return errors.New("published distribution remains unqualified")
 	}
-	return nil
+	return verifyPublishedDatabasePayloads(ctx, options, index, authenticated)
 }
 
 type registryAuthenticationTransport struct{ client *auth.Client }

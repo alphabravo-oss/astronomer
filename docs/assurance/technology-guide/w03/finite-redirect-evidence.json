@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "workPackage": "W03",
+  "slice": "finite-redirects-idle-closure-and-duplicate-database-content",
+  "sourceCommit": "54b6ed612b8f9d41890ccdb9a2e0a471bc7baff5",
+  "sourceGitTree": "ccd16b97689cc2a0f74d0cc95c575c73f1759765",
+  "implementationStatus": "READY_FOR_REVIEW",
+  "packageStatus": "IN_PROGRESS",
+  "authoritativeQualification": false,
+  "workingDirectory": "/root/astronomer-all/astronomer-032-w03",
+  "sourceSha256": {
+    "internal/httpclient/destinations.go": "19fb51c090172b1c82f2b25646b12e94519f164290118bfea895c8992872c061",
+    "internal/httpclient/safeclient.go": "b03c2e66dfae892c0e1c272feb894d9d23d7526b6382d53a3b72db87a8fa625d",
+    "internal/httpclient/redirect_pairs_test.go": "483deeb14afe4869f0f9bc1ed6bf7dc60b293912a2aa287add80f80afa40956a",
+    "internal/httpclient/idle_connections_test.go": "a562522f865b171f402e2ab86cee6923650c275e92b2c6fe20f62211ccfc16fa",
+    "deploy/bundles/cmd/distribution/artifact.go": "e8e0e9a8921e30d14cf065ede2f4ff00fa100ab36e0c2ecb66fc07e1a34d8869",
+    "deploy/bundles/cmd/distribution/database_preparation.go": "368abb515183b232f3ff2f0d4efbe302f6ff781accac394de88420df17227455",
+    "deploy/bundles/cmd/distribution/database_duplicate_test.go": "0513af566c4f61a6c90a83341898bd960f79d24091a9c346e2671701df85d8fd"
+  },
+  "verification": [
+    {
+      "command": "go test -race ./internal/httpclient ./internal/delivery/resolver ./internal/delivery/distribution ./deploy/bundles/cmd/distribution -count=1",
+      "environment": {
+        "GOTOOLCHAIN": "go1.27.2",
+        "GOMAXPROCS": "4",
+        "GOFLAGS": "-p=2",
+        "COSIGN_BIN": "/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3"
+      },
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-compound-race.log",
+      "logSha256": "94d2f1c8550f3887d41cdcb26c51dfab3e495686c59971201d4054b7678735fb"
+    },
+    {
+      "command": "go test ./internal/delivery/builtin ./internal/delivery/resolver ./internal/releasecontract ./internal/config ./deploy/bundles -count=1",
+      "environment": {
+        "GOTOOLCHAIN": "go1.27.2",
+        "GOMAXPROCS": "4",
+        "GOFLAGS": "-p=2"
+      },
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-plan-go.log",
+      "logSha256": "6194095c892b32d74bace824c0993a0fa50f54e0d385006fa5e253e0fce5e0f5"
+    },
+    {
+      "command": "go vet ./internal/httpclient ./internal/delivery/resolver ./internal/delivery/distribution ./deploy/bundles/cmd/distribution",
+      "environment": {
+        "GOTOOLCHAIN": "go1.27.2",
+        "GOMAXPROCS": "4",
+        "GOFLAGS": "-p=2"
+      },
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-compound-vet.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": "make release-contract-check",
+      "environment": {
+        "GOTOOLCHAIN": "go1.27.2",
+        "GOMAXPROCS": "4",
+        "GOFLAGS": "-p=2"
+      },
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-compound-release.log",
+      "logSha256": "2bfcd79da0ba80abe7c81551a7104251f319a7ef2b5a11afa016bb5b955e6f98"
+    },
+    {
+      "command": "make verify-enterprise VERIFY_SCOPE=helm",
+      "environment": {
+        "GOTOOLCHAIN": "go1.27.2",
+        "GOMAXPROCS": "4",
+        "GOFLAGS": "-p=2"
+      },
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-helm.log",
+      "logSha256": "c64df2e788c9bb5096f42576ec226caa41c02b6a27a8670baf5295afc60194ca"
+    },
+    {
+      "command": "python3 scripts/tests/airgap_kit_test.py",
+      "environment": {},
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-airgap.log",
+      "logSha256": "1a50bf96b1ae3c467e73c8bb4177401bf47538d5392909ce9caf728955be333a"
+    },
+    {
+      "command": "python3 scripts/tests/mirror_release_test.py",
+      "environment": {},
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-mirror-python.log",
+      "logSha256": "9f554adca9898bc66cfe8f2f52a320854b0471f4df7cf3f4b6af17474559e710"
+    },
+    {
+      "command": "make docs-check",
+      "environment": {},
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-docs-final.log",
+      "logSha256": "768a3e3779fd887b05e0018f804ca39ebafb19cd0d776946281308ab304f7235"
+    },
+    {
+      "command": "node scripts/check-dependency-boundaries.mjs",
+      "environment": {},
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-boundary.log",
+      "logSha256": "09bd3e06cb59bc74f8306381493c70abacdd3f6a7ebdfbfebc56efdc623fba9d"
+    },
+    {
+      "command": "node scripts/check-complexity-budget.mjs",
+      "environment": {},
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-complexity-final.log",
+      "logSha256": "082aa03bd2475829025ffe4d3486365ea72247320f0f7b4a89b5cf35198557e9"
+    },
+    {
+      "command": "scripts/check-build-capacity.sh --path . --json",
+      "environment": {},
+      "result": "PASS",
+      "exitCode": 0,
+      "logPath": "/tmp/plan032-w03-redirect-capacity.json",
+      "logSha256": "27aa1708211086badc90a6ec9688c76660a5ff6c27e4295e858ee176fb07e186"
+    }
+  ],
+  "tools": {
+    "effectiveGo": "go version go1.27.2 linux/amd64",
+    "nodeForStaticScripts": "v22.22.1",
+    "pythonForFixtures": "Python 3.14.4",
+    "cosignBinary": "/root/.cache/astronomer-032/toolchains/bin/cosign-3.1.3",
+    "cosignBinarySha256": "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71",
+    "toolVersionDoesNotQualifyRuntimeRelease": true
+  },
+  "historicalFailures": [
+    {
+      "sourceCommit": "b95cdd6d",
+      "test": "TestFiniteOriginRedirectPinsConnectionsAndStripsCredentialsOnEveryHop",
+      "result": "FAIL_FIXTURE_CONNECTION_COUNT",
+      "retainedPath": "docs/assurance/technology-guide/w03/finite-redirect-fixture-baseline.log",
+      "sha256": "58446a7240e108f1590ed6a14c81c479d0b964898a7efcae43ef4fff6087b366",
+      "explanation": "A checked pooled connection was reused; no forbidden destination was connected. f0cb2bc7 disables keepalive in the dial-specific fixture."
+    },
+    {
+      "sourceCommit": "865be657",
+      "testSourceSha256": "a562522f865b171f402e2ab86cee6923650c275e92b2c6fe20f62211ccfc16fa",
+      "test": "TestDestinationClientClosesIdleConnectionsThroughBothWrappers",
+      "result": "FAIL_IDLE_SOCKET_NOT_CLOSED",
+      "retainedPath": "docs/assurance/technology-guide/w03/idle-connections-baseline.log",
+      "sha256": "6c6929c6731608eff8a630472a22776de590e4c7722ae2dd766400fd21bfd34d",
+      "explanation": "The new regression was run before forwarding methods existed: one TLS connection remained reused after CloseIdleConnections. 54b6ed61 repairs both wrappers."
+    },
+    {
+      "sourceCommit": "154b03b7",
+      "result": "FAIL_CAPACITY_64_GIB_19_PERCENT",
+      "retainedPath": "docs/assurance/technology-guide/w03/database-stream-release-capacity-baseline.log",
+      "sha256": "ee1d5ab537245d8f52eced9946821a46dc581c50a4e634b2c292d75983f8a802",
+      "explanation": "The prior streamed-producer release gate was blocked by capacity. The exact compound retry on this source passes at 65 GiB and 20%; no guard override."
+    }
+  ],
+  "supplierProbe": {
+    "resultPath": "docs/assurance/technology-guide/w03/finite-range-probe.json",
+    "resultSha256": "f58dc34cd8735d988651ad30bc5ccb1ee3db79cfda8606c808a67129b7ac9cce",
+    "sourcePath": "docs/assurance/technology-guide/w03/finite-range-probe.go.txt",
+    "sourceSha256": "5e47549539863b7446617c0c1530c3f12446cd79eccd40bea153253a2c73f51d",
+    "environment": {
+      "GOTOOLCHAIN": "go1.27.2",
+      "GOMAXPROCS": "4",
+      "GOFLAGS": "-p=2"
+    },
+    "invocation": "Python TemporaryDirectory beneath module root; copy exact retained Go source; subprocess go run ./<owned-temporary-directory>; close and remove only that temporary directory. Anonymous auth.StaticCredential ghcr.io EmptyCredential.",
+    "buildLogPath": "/tmp/plan032-w03-finite-range-probe-build.log",
+    "buildLogSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "exitCode": 0,
+    "routingOnly": true,
+    "wholeSupplierHashVerified": false,
+    "supplierAuthenticityVerified": false,
+    "freshnessAssessed": false,
+    "signedQueriesOrTokensRetained": false,
+    "primaryOriginAttribution": "https://docs.github.com/en/actions/reference/runners/github-hosted-runners"
+  },
+  "controls": [
+    "Both exact HTTPS origins must be explicit independent policy entries; public defaults cannot authorize a finite pair. At most 8 directed pairs and 2 total redirect hops, fewer when requested.",
+    "Policy, pair map and sensitive-header selection are snapshots. All requests, all DNS answers and every connection retain canonical checks and IP pinning; metadata and loopback remain forbidden.",
+    "Authorization, proxy authorization, cookies and declared secret headers stay removed after an origin change, including subsequent same CDN hops. Range survives actual TLS fixture redirects.",
+    "RealTLS positive control reuses one checked socket, closes it through both wrappers and opens a new connection.",
+    "Duplicate database content verifies the second source and existing owned regular blob by exact size and complete digest. Changed, partial or linked outputs reject.",
+    "Actual Cosign 3.1.3 signed producer/readback and canonical offline/mirror fixtures pass under race. Exact plan gates and full release contract pass."
+  ],
+  "limits": [
+    "Operator CLI adoption is the next separate slice; current runtime/catalog composition cannot select redirect authority.",
+    "The real 935 MiB supplier layer has only one-byte range routing evidence; full bytes/hash, signature endorsement, safe metadata extraction and freshness remain unqualified.",
+    "Large authenticated offline kit version 2 remains a separate source slice. Existing caps are preserved.",
+    "Controlled QA key identities do not qualify production tagged OIDC publication or candidate server startup. W03 remains IN_PROGRESS and W04 fresh-empty-cache/no-egress is not claimed.",
+    "W02 actual source-security findings remain unresolved; fixture gate success is not a whole release-security qualification."
+  ]
+}

@@ -31,6 +31,10 @@ func snapshotPreparedLayout(directory string) (string, func(), error) {
 		return "", nil, errors.New("prepared layout index unavailable")
 	}
 	allowed := map[string]int64{"index.json": 1 << 20, "oci-layout": 1024, "subjects.json": 1 << 20, "catalog.json": 4 << 20, "distribution.tar.gz": distribution.MaximumArchiveBytes}
+	streamed, assets, maximumTotal, err := preparedDatabaseStreams(directory)
+	if err != nil {
+		return "", nil, err
+	}
 	for _, descriptor := range index.Manifests {
 		name := "blobs/sha256/" + descriptor.Digest.Encoded()
 		allowed[name] = 1 << 20
@@ -49,6 +53,10 @@ func snapshotPreparedLayout(directory string) (string, func(), error) {
 		return "", nil, errors.New("owned prepared snapshot unavailable")
 	}
 	cleanup := func() { _ = os.RemoveAll(snapshot) }
+	if err := checkPreparedDatabaseCapacity(filepath.Join(snapshot, "pending"), assets); err != nil {
+		cleanup()
+		return "", nil, err
+	}
 	var total int64
 	err = filepath.WalkDir(directory, func(name string, entry fs.DirEntry, walkError error) error {
 		if walkError != nil {
@@ -69,12 +77,23 @@ func snapshotPreparedLayout(directory string) (string, func(), error) {
 		if !exists || !entry.Type().IsRegular() || strings.Contains(relative, "\\") {
 			return errors.New("unexpected or unsafe prepared layout member")
 		}
+		if descriptor, exists := streamed[relative]; exists {
+			total += descriptor.Size
+			if total > maximumTotal {
+				return errors.New("prepared layout exceeds total transfer bound")
+			}
+			if err := streamPreparedDatabase(name, filepath.Join(snapshot, filepath.FromSlash(relative)), descriptor); err != nil {
+				return err
+			}
+			delete(allowed, relative)
+			return nil
+		}
 		data, err := boundedFile(name, maximum)
 		if err != nil {
 			return err
 		}
 		total += int64(len(data))
-		if total > 2*distribution.MaximumExpandedBytes {
+		if total > maximumTotal {
 			return errors.New("prepared layout exceeds total transfer bound")
 		}
 		delete(allowed, relative)

@@ -208,6 +208,41 @@ type DestinationOptions struct {
 	// Redirects always become public-only and lose credential-bearing headers.
 	AllowPublicCrossOriginRedirects bool
 	SensitiveHeaders                []string
+	// RedirectOriginPairs is constructor authority for finite HTTPS redirects.
+	// Both origins must be explicit policy entries; at most two total hops are
+	// permitted. This option cannot be selected by artifact or catalog data.
+	RedirectOriginPairs []RedirectOriginPair
+}
+
+// RedirectOriginPair permits one directed transition between exact origins.
+type RedirectOriginPair struct {
+	From string
+	To   string
+}
+
+func freezeRedirectOriginPairs(policy DestinationPolicy, options DestinationOptions) (map[string]bool, error) {
+	if len(options.RedirectOriginPairs) > 8 || len(options.RedirectOriginPairs) > 0 && (options.AllowPublicCrossOriginRedirects || options.MaxRedirects > 2 || options.MaxRedirects < 0) {
+		return nil, errors.New("destination redirect authority is invalid")
+	}
+	pairs := make(map[string]bool, len(options.RedirectOriginPairs))
+	for _, pair := range options.RedirectOriginPairs {
+		from, fromErr := parseOrigin(pair.From)
+		to, toErr := parseOrigin(pair.To)
+		for _, value := range []*url.URL{from, to} {
+			if value == nil || value.Scheme != "https" || value.Path != "" && value.Path != "/" || value.RawQuery != "" || value.ForceQuery || value.Fragment != "" || policy.origin(value) == nil {
+				return nil, errors.New("destination redirect origins must be explicitly approved HTTPS origins")
+			}
+		}
+		if fromErr != nil || toErr != nil || originIdentity(from) == originIdentity(to) {
+			return nil, errors.New("destination redirect origin pair is invalid")
+		}
+		identity := originIdentity(from) + " " + originIdentity(to)
+		if pairs[identity] {
+			return nil, errors.New("destination redirect origin pair is duplicated")
+		}
+		pairs[identity] = true
+	}
+	return pairs, nil
 }
 
 // NewDestinationClient validates on every request and redirect, resolves every
@@ -243,6 +278,12 @@ func cloneDestinationPolicy(policy DestinationPolicy) DestinationPolicy {
 }
 
 func newDestinationClient(policy DestinationPolicy, options DestinationOptions, lookup destinationLookup, dial func(context.Context, string, string) (net.Conn, error)) (*http.Client, error) {
+	pairs, err := freezeRedirectOriginPairs(policy, options)
+	if err != nil {
+		return nil, err
+	}
+	policy = cloneDestinationPolicy(policy)
+	options.SensitiveHeaders = append([]string(nil), options.SensitiveHeaders...)
 	timeout := options.Timeout
 	if timeout <= 0 {
 		timeout = DefaultExternalTimeout
@@ -250,6 +291,9 @@ func newDestinationClient(policy DestinationPolicy, options DestinationOptions, 
 	redirects := options.MaxRedirects
 	if redirects <= 0 {
 		redirects = 3
+	}
+	if len(pairs) > 0 && options.MaxRedirects == 0 {
+		redirects = 2
 	}
 	transport := SafeTransport(options.TLSConfig)
 	transport.MaxResponseHeaderBytes = 1 << 20
@@ -312,15 +356,32 @@ func newDestinationClient(policy DestinationPolicy, options DestinationOptions, 
 	base := &destinationTransport{policy: policy, lookup: lookup, base: transport}
 	client := &http.Client{Timeout: timeout, Transport: &responseLimitTransport{base: base, maximum: maximum}}
 	client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
-		if len(via) >= redirects {
+		if len(pairs) > 0 && len(via) > redirects || len(pairs) == 0 && len(via) >= redirects {
 			return errors.New("destination redirect limit exceeded")
 		}
-		if len(via) > 0 && originIdentity(via[0].URL) != originIdentity(request.URL) {
+		crossOrigin := len(via) > 0 && originIdentity(via[len(via)-1].URL) != originIdentity(request.URL)
+		// Go may copy headers from the initial request on each hop. Once an
+		// origin changes, credentials must also stay absent on subsequent hops.
+		stripCredentials := crossOrigin
+		for _, prior := range via {
+			if originIdentity(prior.URL) != originIdentity(request.URL) {
+				stripCredentials = true
+			}
+		}
+		if stripCredentials {
 			request.Header.Del("Authorization")
 			request.Header.Del("Proxy-Authorization")
 			request.Header.Del("Cookie")
 			for _, header := range options.SensitiveHeaders {
 				request.Header.Del(header)
+			}
+		}
+		if crossOrigin || options.AllowPublicCrossOriginRedirects && stripCredentials {
+			if len(pairs) > 0 {
+				if !pairs[originIdentity(via[len(via)-1].URL)+" "+originIdentity(request.URL)] {
+					return errors.New("cross-origin destination redirect is not permitted")
+				}
+				return policy.validateURL(request.Context(), request.URL.String(), lookup)
 			}
 			if !options.AllowPublicCrossOriginRedirects || policy.Restricted || request.URL.Scheme != "https" {
 				return errors.New("cross-origin destination redirect is not permitted")
@@ -337,6 +398,12 @@ type destinationTransport struct {
 	policy DestinationPolicy
 	lookup destinationLookup
 	base   http.RoundTripper
+}
+
+func (t *destinationTransport) CloseIdleConnections() {
+	if transport, ok := t.base.(interface{ CloseIdleConnections() }); ok {
+		transport.CloseIdleConnections()
+	}
 }
 
 func (t *destinationTransport) RoundTrip(request *http.Request) (*http.Response, error) {

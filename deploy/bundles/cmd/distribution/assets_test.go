@@ -103,6 +103,8 @@ func TestProducerRejectsUnclassifiedAssetInputContract(t *testing.T) {
 		`{"schema_version":2,"required_categories":["catalog","chart","values","image_inventory"],"assets":[]}`,
 		`{"schema_version":2,"required_categories":["catalog","chart","values","image_inventory"],"capabilities":[]}`,
 		`{"schema_version":2,"required_categories":["catalog","chart","values","image_inventory"],"assets":[],"capabilities":[],"allow_unqualified":true}`,
+		`{"schema_version":3,"required_categories":["catalog","chart","values","image_inventory"],"assets":[]}`,
+		`{"schema_version":4,"required_categories":["catalog","chart","values","image_inventory"],"assets":[],"capabilities":[]}`,
 	} {
 		_ = os.WriteFile(assetFile, []byte(document), 0600)
 		if _, err := buildLayout(result, charts, filepath.Join(t.TempDir(), "layout"), "registry.example.test/distribution", assetFile, platforms); err == nil {
