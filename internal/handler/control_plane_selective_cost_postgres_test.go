@@ -93,6 +93,34 @@ func assertCachedControlPlaneDelta(t *testing.T, mode string, before, after cach
 	}
 }
 
+// This budget describes only the controlled100k fixture, including discarded
+// rows and loops. It is not a response-size or universal fleet-cost claim.
+func assertRepresentativeControlPlaneCost(t *testing.T, raw json.RawMessage) {
+	t.Helper()
+	var plans []struct {
+		Plan paginationPlanNode `json:"Plan"`
+	}
+	if err := json.Unmarshal(raw, &plans); err != nil {
+		t.Fatal(err)
+	}
+	var examined float64
+	var visit func(paginationPlanNode)
+	visit = func(node paginationPlanNode) {
+		if strings.Contains(node.NodeType, "Scan") {
+			examined += node.rowsExamined()
+		}
+		for _, child := range node.Plans {
+			visit(child)
+		}
+	}
+	for _, plan := range plans {
+		visit(plan.Plan)
+	}
+	if examined > 250 {
+		t.Errorf("controlled100k fixture plan exceeded250 total examined scan rows including discarded rows/rechecks/loops: %g", examined)
+	}
+}
+
 func TestControlPlaneCursorPostgresRepresentativeSelectiveCost(t *testing.T) {
 	ctx, tx := paginationPostgresTx(t)
 	if tx.Conn().Config().DefaultQueryExecMode != pgx.QueryExecModeCacheStatement {
@@ -167,6 +195,7 @@ FROM generate_series(1,100000)n`, rare, common)
 						}
 					}
 					raw := explainCachedControlPlanePlan(t, ctx, tx, capture)
+					assertRepresentativeControlPlaneCost(t, raw)
 					var measured []paginationQueryPlan
 					if err := json.Unmarshal(raw, &measured); err != nil {
 						t.Fatal(err)
@@ -206,6 +235,7 @@ FROM generate_series(1,100000)n`, rare, common)
 							}
 							assertCachedControlPlaneDelta(t, mode, before, readCachedControlPlaneCounters(t, ctx, tx, "ListControlPlaneAlertsAfter"))
 							raw := explainCachedControlPlanePlan(t, ctx, tx, shortCapture)
+							assertRepresentativeControlPlaneCost(t, raw)
 							t.Logf("representative100k %s %s synthetic upper anchor exact After SQL (no advertised continuation): %s", filter.name, mode, raw)
 						}
 						break
