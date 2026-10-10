@@ -36,6 +36,53 @@ def timestamp(value, date_only=False):
     return parsed.astimezone(dt.timezone.utc)
 
 
+def validate_executable_artifacts(component, now):
+    if "executableArtifacts" not in component:
+        return
+    artifacts = component["executableArtifacts"]
+    name, selected = component["id"], component["selected"]
+    if not isinstance(artifacts, list) or not artifacts or selected is None:
+        raise ValueError(f"{name}: selected executable tuples required")
+    platforms = set()
+    bindings = {b["path"]: b["digest"] for b in component.get("sourceBindings", [])}
+    for artifact in artifacts:
+        platform = artifact.get("platform")
+        if platform not in ("linux/amd64", "linux/arm64") or platform in platforms:
+            raise ValueError(f"{name}: unsupported or duplicate executable platform")
+        platforms.add(platform)
+        arch = platform.split("/")[1]
+        if artifact.get("version") != selected:
+            raise ValueError(f"{name}: executable version contradiction")
+        if name in ("k3d", "kind"):
+            repository = "k3d-io/k3d" if name == "k3d" else "kubernetes-sigs/kind"
+            expected_name = f"{name}-linux-{arch}"
+            expected_url = f"https://github.com/{repository}/releases/download/v{selected}/{expected_name}"
+            expected_kind, expected_member = "binary", None
+        elif name in ("helm", "helm-cli-ci"):
+            expected_name = f"helm-v{selected}-linux-{arch}.tar.gz"
+            expected_url = f"https://get.helm.sh/{expected_name}"
+            expected_kind, expected_member = "tar.gz", f"linux-{arch}/helm"
+        else:
+            raise ValueError(f"{name}: executable identity has no owned template")
+        if artifact.get("name") != expected_name or artifact.get("url") != expected_url:
+            raise ValueError(f"{name}: executable URL/name contradiction")
+        if artifact.get("kind") != expected_kind or artifact.get("archiveMember") != expected_member:
+            raise ValueError(f"{name}: executable extraction role contradiction")
+        if expected_member is None and "archiveMember" in artifact:
+            raise ValueError(f"{name}: direct executable cannot name archive member")
+        if type(artifact.get("sizeBytes")) is not int or not 0 < artifact["sizeBytes"] <= 512 << 20:
+            raise ValueError(f"{name}: executable size must be finite positive integer")
+        if not isinstance(artifact.get("digest"), str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", artifact["digest"]):
+            raise ValueError(f"{name}: executable digest required")
+        proof = artifact.get("provenance")
+        if not isinstance(proof, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", bindings.get(proof, "")):
+            raise ValueError(f"{name}: executable proof must be source-bound")
+        if timestamp(artifact["verifiedAt"]) > now:
+            raise ValueError(f"{name}: future executable verification")
+    if platforms != set(component["platforms"]):
+        raise ValueError(f"{name}: complete executable platform tuple required")
+
+
 def validate(document, now=None, release=False):
     now = now or dt.datetime.now(dt.timezone.utc)
     ids = set()
@@ -102,6 +149,7 @@ def validate(document, now=None, release=False):
                 raise ValueError(f"{name}: future artifact verification")
             if not artifact["reference"].endswith("@" + artifact["digest"]):
                 raise ValueError(f"{name}: reference/digest contradiction")
+        validate_executable_artifacts(component, now)
         for binding in component.get("sourceBindings", []):
             path = pathlib.PurePosixPath(binding["path"])
             if path.is_absolute() or ".." in path.parts:

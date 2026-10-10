@@ -4174,6 +4174,30 @@
         "version": "5.9.0"
       },
       "ecosystem": "github",
+      "executableArtifacts": [
+        {
+          "digest": "sha256:06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0",
+          "kind": "binary",
+          "name": "k3d-linux-amd64",
+          "platform": "linux/amd64",
+          "provenance": "docs/assurance/technology-guide/w15/supporting-primary/k3d-release-checksums.txt",
+          "sizeBytes": 24887458,
+          "url": "https://github.com/k3d-io/k3d/releases/download/v5.9.0/k3d-linux-amd64",
+          "verifiedAt": "2026-10-10T17:34:27.579728+00:00",
+          "version": "5.9.0"
+        },
+        {
+          "digest": "sha256:03cde5cf23e6e8e67de5a039ecf26e5b85aca82fba3e5d13dadf904cd218a250",
+          "kind": "binary",
+          "name": "k3d-linux-arm64",
+          "platform": "linux/arm64",
+          "provenance": "docs/assurance/technology-guide/w15/supporting-primary/k3d-release-checksums.txt",
+          "sizeBytes": 23134370,
+          "url": "https://github.com/k3d-io/k3d/releases/download/v5.9.0/k3d-linux-arm64",
+          "verifiedAt": "2026-10-10T17:34:27.579728+00:00",
+          "version": "5.9.0"
+        }
+      ],
       "id": "k3d",
       "owner": "platform/backend",
       "platforms": [
@@ -4182,6 +4206,16 @@
       ],
       "qualification": "Official checksum-verified isolated k3d5.9.0 CLI; version probe passes, and integration owner used it to create a disposable3-server qualification cluster. This does not increase supported application Kubernetes range.",
       "selected": "5.9.0",
+      "sourceBindings": [
+        {
+          "digest": "sha256:ed820bf83134bb0e5f0980f44c16e643ae956c1aeeb3f17ca120c9cd0a41262b",
+          "path": "docs/assurance/technology-guide/w15/supporting-primary/k3d-release-checksums.txt"
+        },
+        {
+          "digest": "sha256:c00b23aa1c650feb5bd6d7d44100d9163414377e6a94955314f4248d3a53f120",
+          "path": "docs/assurance/technology-guide/w15/supporting-primary/k3d-release.json"
+        }
+      ],
       "upstream": {
         "kind": "github",
         "url": "https://api.github.com/repos/k3d-io/k3d/releases"
@@ -4322,6 +4356,30 @@
         "version": "0.33.0"
       },
       "ecosystem": "github",
+      "executableArtifacts": [
+        {
+          "digest": "sha256:aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d",
+          "kind": "binary",
+          "name": "kind-linux-amd64",
+          "platform": "linux/amd64",
+          "provenance": "docs/assurance/technology-guide/w15/supporting-primary/kind-release-kind-linux-amd64.sha256sum",
+          "sizeBytes": 10530942,
+          "url": "https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64",
+          "verifiedAt": "2026-10-10T17:34:27.579728+00:00",
+          "version": "0.33.0"
+        },
+        {
+          "digest": "sha256:20022bee6cfcd5086cb7234d218e3454e6090022f2a8f55d1fa7fcf42c3867a2",
+          "kind": "binary",
+          "name": "kind-linux-arm64",
+          "platform": "linux/arm64",
+          "provenance": "docs/assurance/technology-guide/w15/supporting-primary/kind-release-kind-linux-arm64.sha256sum",
+          "sizeBytes": 9764990,
+          "url": "https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-arm64",
+          "verifiedAt": "2026-10-10T17:34:27.579728+00:00",
+          "version": "0.33.0"
+        }
+      ],
       "id": "kind",
       "owner": "platform/QA (W12)",
       "platforms": [
@@ -4330,6 +4388,20 @@
       ],
       "qualification": "Isolated official checksum-verified qualification tool; no cluster range or production runtime claim. W12 exercises new cluster behavior before fixture tooling migration.",
       "selected": "0.33.0",
+      "sourceBindings": [
+        {
+          "digest": "sha256:3836001f81bbf5421e6f231b2ca2df8772ce80d6aad02d318d39220470e95cbc",
+          "path": "docs/assurance/technology-guide/w15/supporting-primary/kind-release-kind-linux-amd64.sha256sum"
+        },
+        {
+          "digest": "sha256:bd011d3df2a96add8327677e09eea29ab018671b4098de4fb08c463bdcbf5d92",
+          "path": "docs/assurance/technology-guide/w15/supporting-primary/kind-release-kind-linux-arm64.sha256sum"
+        },
+        {
+          "digest": "sha256:57f913b53e2456e008fa83b15568d8a7e6f8eb0088d23dea3ac2a2d8ed1f8999",
+          "path": "docs/assurance/technology-guide/w15/supporting-primary/kind-release.json"
+        }
+      ],
       "upstream": {
         "kind": "github",
         "url": "https://api.github.com/repos/kubernetes-sigs/kind/releases"
