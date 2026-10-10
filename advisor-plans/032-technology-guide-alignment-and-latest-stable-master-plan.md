@@ -258,23 +258,23 @@ Do not treat the table as proof an upstream image scans clean or an existing cus
 
 | Package | Outcome | Priority | Effort / risk | Depends on | Status |
 | --- | --- | --- | --- | --- | --- |
-| W00 | Baseline, guide exceptions, product invariants, evidence inventory | P0 | M/LOW |—| TODO |
-| W01 | Latest-stable inventory and runtime/dependency updates | P0 | L/MED | W00 | TODO |
-| W02 | Enforced security gates and policy-bound waivers | P0 | M/MED | W00; tool compat W01 | TODO |
-| W03 | Runtime-consumed signed mirrored catalogs and complete asset closure | P0 | L/HIGH | W00, W02 trust policy | TODO |
+| W00 | Baseline, guide exceptions, product invariants, evidence inventory | P0 | M/LOW |—| DONE |
+| W01 | Latest-stable inventory and runtime/dependency updates | P0 | L/MED | W00 | IMPLEMENTATION READY |
+| W02 | Enforced security gates and policy-bound waivers | P0 | M/MED | W00; tool compat W01 | IN PROGRESS |
+| W03 | Runtime-consumed signed mirrored catalogs and complete asset closure | P0 | L/HIGH | W00, W02 trust policy | IN PROGRESS |
 | W04 | Offline Trivy DB lifecycle and no-public-egress qualification | P0 | L/MED | W03 | TODO |
-| W05 | Bounded refresh, transport cancellation, accessible modal forms | P1 | M/MED | W00; W01 frontend tooling | TODO |
-| W06 | Authoritative delivery and categorical enums | P1 | M/MED for delivery; L for inventory | W00 | TODO |
-| W07 | Complete scope-bound cursor pagination | P1 | L/MED | W00 | TODO |
-| W08 | Typed domain SQL and complete governance discovery | P1 | L/MED | W00; W06 where coupled | TODO |
-| W09 | Strict request adoption and durable JSON reader validation | P1 | L/MED | W00; W06 for shared state schemas | TODO |
-| W10 | Supported observability stack and measured signal coverage | P1/P2 | L/MED | W01; W00 reconciliation with Plan 030 | TODO |
+| W05 | Bounded refresh, transport cancellation, accessible modal forms | P1 | M/MED | W00; W01 frontend tooling | DONE (scoped) |
+| W06 | Authoritative delivery and categorical enums | P1 | M/MED for delivery; L for inventory | W00 | DONE (scoped) |
+| W07 | Complete scope-bound cursor pagination | P1 | L/MED | W00 | IN PROGRESS |
+| W08 | Typed domain SQL and complete governance discovery | P1 | L/MED | W00; W06 where coupled | DONE (scoped) |
+| W09 | Strict request adoption and durable JSON reader validation | P1 | L/MED | W00; W06 for shared state schemas | DONE (scoped) |
+| W10 | Supported observability stack and measured signal coverage | P1/P2 | L/MED | W01; W00 reconciliation with Plan 030 | IN PROGRESS |
 | W11 | Helm 4 migration while preserving Flux and CNPG | P1 | L/HIGH | W01, W03; W12 characterization before migration and qualification before production acceptance | TODO |
-| W12 | Production-version DB, CNPG, browser, test report qualification | P1 | XL/HIGH for stateful work | W00, W01; candidate-specific W03–W11 as applicable to final qualification | TODO |
+| W12 | Production-version DB, CNPG, browser, test report qualification | P1 | XL/HIGH for stateful work | W00, W01; candidate-specific W03–W11 as applicable to final qualification | IN PROGRESS |
 | W13 | Backend domain extraction for v2 | P2 | XL/HIGH | W06, W08, W09; W12 characterization | TODO |
 | W14 | Typed operational CLI and small shell wrappers | P2 | XL/HIGH | W01; W12 characterization; W17 for release rehearsals | TODO |
 | W15 | Catalog Python and supporting repo supply chain parity | P1/P2 | L/MED | W01, W03 | TODO |
-| W16 | Explicit crypto/FIPS decision and optional artifact design | P2 | M for decision; XL/HIGH for claimed artifact | W00, W01, W12; product decision before optional implementation | TODO |
+| W16 | Explicit crypto/FIPS decision and optional artifact design | P2 | M for decision; XL/HIGH for claimed artifact | W00, W01, W12; product decision before optional implementation | IN PROGRESS |
 | W17 | Exact candidate integration, deployment, release policy closure | P1 | L/HIGH | Applicable packages above | TODO |
 
 The effort values are relative sizing, not delivery promises. W13/W14 contain multiple PRs and can span weeks. W16 is a gated design track; no implicit FIPS certification or forced cryptographic rewrite is authorized by this plan.
@@ -1114,7 +1114,7 @@ Consult [CNPG PostgreSQL upgrade guidance](https://cloudnative-pg.io/docs/devel/
 
 ## 12. Progress ledger and completion rules
 
-All work packages are **TODO — not executed by this plan**. Existing product capabilities and historical evidence remain useful; their presence does not mark a new task done. Implementation owners update a ledger adjacent to this plan, proposed location `advisor-plans/032-evidence/README.md`, and put detailed records in appropriate existing evidence storage rather than scattering secrets into this directory.
+Implementation was authorized on 2026-10-09 and is in progress on `implement/032-technology-guide`. The package map above mirrors the [execution ledger](./032-evidence/README.md); detailed records there distinguish scoped source acceptance, actual runtime qualification and whole-candidate release evidence. Existing product capabilities and historical evidence do not mark a new task done. A scoped DONE package retains its stated limits; final candidate deployment and publication remain W17. Keep detailed evidence in the established storage and never record secret values.
 
 | Field | What to record |
 |---|---|
