@@ -906,6 +906,11 @@
       "path": "internal/handler/user_preferences.go",
       "owner": "handler/user-preferences",
       "source_sha256": "4997960b67b8f449a78aee593f43e9c1cdc39a5b2c65bae3835ddb30aca161d3"
+    },
+    {
+      "path": "internal/ops/upgrade/helm_rollback_arguments.go",
+      "owner": "typed upgrade operations core",
+      "source_sha256": "281fce0764a59396982c8df493cc4f7d259141c3b370e04e50d9f2a6484d22c9"
     }
   ],
   "sites": [
@@ -8972,6 +8977,15 @@
       "scope_sha256": "085cd4c4359a22af813b9d2a3424e5046b51e1a8cca32a53b02589fbbfdde9cb",
       "classification": "non-sql-candidate",
       "control": "Exact userpreferences.Prepare(prefs) call prepares a validated normalized preference command and canonical JSON/digest before the injected mutation transaction; not database/sql Prepare, raw SQL or a query builder. Domain Prepare performs no transaction, pool or SQL operation."
+    },
+    {
+      "path": "internal/ops/upgrade/helm_rollback_arguments.go",
+      "function": "HelmInputs.RollbackArguments",
+      "operation": "SQLLiteral",
+      "sha256": "da25480fb483e6ce3d30f1a179c3c07e9f3b045425b0ac54acc6758a97e2db62",
+      "scope_sha256": "579fea5bcd8963b7c3f58f753bc190d026dafba0847a1b94caa75e891aea08df",
+      "classification": "non-sql-candidate",
+      "control": "Exact lexical rollback token is a Helm CLI argv element returned by HelmInputs.RollbackArguments; it is passed to the bound owned Helm executable, never a database API. Plan, explicit anchored numeric revision and actual tool-major contract are validated before argv construction."
     }
   ],
   "builders": [
