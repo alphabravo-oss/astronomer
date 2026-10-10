@@ -31,7 +31,7 @@
     "internal/handler/siem.go": 824,
     "internal/handler/vault.go": 815,
     "internal/server/routes.go": 1284,
-    "internal/tunnel/handler.go": 934,
+    "internal/tunnel/handler.go": 895,
     "internal/tunnel/server.go": 1513,
     "internal/worker/tasks/alert_evaluation.go": 1219,
     "internal/worker/tasks/cluster_decommission.go": 1050,
