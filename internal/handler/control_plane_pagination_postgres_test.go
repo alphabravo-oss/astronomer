@@ -177,3 +177,71 @@ func TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor(t *testing.T) {
 		})
 	}
 }
+
+// Selective predicates can examine more index entries than the response size.
+// Retain actual generated initial/continuation plans without claiming that
+// the 201-row unfiltered seek bound applies to arbitrary selective filters.
+func TestControlPlaneCursorPostgresSelectiveFilterPlans(t *testing.T) {
+	ctx, tx := paginationPostgresTx(t)
+	controller := "f-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
+	other := "o-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
+	paginationExec(t, ctx, tx, `INSERT INTO control_plane_alerts(controller,condition_type,status,message,fired_at) SELECT CASE WHEN n%3=0 THEN $1 ELSE $2 END,'fixture',CASE WHEN n%2=0 THEN 'resolved' ELSE 'firing' END,'fixture',TIMESTAMPTZ '2020-01-01' + n*INTERVAL '1 second' FROM generate_series(1,10042)n`, controller, other)
+	paginationExec(t, ctx, tx, `ANALYZE control_plane_alerts`)
+	codec, err := paging.NewCursorCodec("fixture-cursor-authority")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, filters := range []struct{ name, status, controller string }{
+		{"status", "resolved", ""},
+		{"controller", "", controller},
+		{"status and controller", "resolved", controller},
+	} {
+		t.Run(filters.name, func(t *testing.T) {
+			actor := uuid.New()
+			values := url.Values{"cursor": {""}, "limit": {"200"}}
+			if filters.status != "" {
+				values.Set("status", filters.status)
+			}
+			if filters.controller != "" {
+				values.Set("controller", filters.controller)
+			}
+			for _, queryName := range []string{"ListControlPlaneAlerts", "ListControlPlaneAlertsAfter"} {
+				capture := &controlPlaneSQLCapture{DBTX: tx, queryName: queryName}
+				h := NewControlPlaneHandler(sqlc.New(capture), nil)
+				h.SetCursorCodec(codec)
+				page := controlPlaneCursorPage(t, h, actor, "alerts", values)
+				if len(page.Data) != 200 || page.Pagination.NextCursor == nil {
+					t.Fatal("selective sentinel page unavailable")
+				}
+				for _, row := range page.Data {
+					if filters.controller != "" && row.Controller != filters.controller {
+						t.Fatal("selective controller leaked")
+					}
+					var status string
+					if err := tx.QueryRow(ctx, `SELECT status FROM control_plane_alerts WHERE id=$1`, row.ID).Scan(&status); err != nil {
+						t.Fatal(err)
+					}
+					if filters.status != "" && status != filters.status {
+						t.Fatal("selective status leaked")
+					}
+				}
+				var raw json.RawMessage
+				if capture.statement == "" {
+					t.Fatal("actual generated query not captured")
+				}
+				if err := tx.QueryRow(ctx, "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) "+capture.statement, capture.args...).Scan(&raw); err != nil {
+					t.Fatal(err)
+				}
+				var measured []paginationQueryPlan
+				if err := json.Unmarshal(raw, &measured); err != nil {
+					t.Fatal(err)
+				}
+				if len(measured) != 1 {
+					t.Fatal("unexpected explain shape")
+				}
+				t.Logf("%s selective actual plan (output plus filter/recheck removals count toward examined rows): %s", queryName, raw)
+				values.Set("cursor", *page.Pagination.NextCursor)
+			}
+		})
+	}
+}
