@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T00:31:26.330881+00:00",
+  "authority": "User-authorized implementation cleanup. W07 owner explicitly released historical PG16 container and its owned anonymous volume on 2026-10-10.",
+  "containerName": "astronomer-w09-json-3910309",
+  "containerId": "37c4437aa22b1663c7fda2772751b93d73b7c71ed91eccd71dcef5b9aa55d6de",
+  "volumeName": "772fbd4299098befc62e59c51d0408058800370966ac0db06c92489e90187313",
+  "preStopChecks": "Exactly one /var/lib/postgresql/data anonymous mount; only the released container attached to that volume.",
+  "result": "Docker stop succeeded and the container self-removed. The subsequent explicit docker rm returned removal already in progress; it was not retried. Docker destroy event and absence of both exact container and volume verified.",
+  "initialMutationExitCode": 1,
+  "finalAbsenceVerified": true,
+  "eventsSha256": "c0dfea77e370c0cfe35bee62ac90677031e56f0c28dae8bf2a2728536545f80f",
+  "retained": "Original 0600 private state JSON and all historical source, receipts and logs. No image, other volume or container modified."
+}
