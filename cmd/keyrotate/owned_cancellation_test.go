@@ -34,7 +34,10 @@ func blockedRotationPID(t *testing.T, ctx context.Context, db *sql.DB) int {
 func rotationBackendActive(t *testing.T, ctx context.Context, db *sql.DB, pid int) bool {
 	t.Helper()
 	var active bool
-	if db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND datname=current_database() AND application_name='plan032-w16-rotation' AND state='active')`, pid).Scan(&active) != nil {
+	// A returned pooled connection can later execute the observer itself or a
+	// different query. Observe this exact UPDATE, excluding the observer PID.
+	statement := casUpdateSQL(target{"smtp_settings", "id", "password_encrypted"})
+	if db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND pid<>pg_backend_pid() AND datname=current_database() AND application_name='plan032-w16-rotation' AND state='active' AND query=$2)`, pid, statement).Scan(&active) != nil {
 		t.Fatal("read owned backend statement lifecycle")
 	}
 	return active
