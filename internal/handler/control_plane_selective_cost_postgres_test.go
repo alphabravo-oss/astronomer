@@ -1,6 +1,6 @@
 package handler
 
-// Source-only larger-cardinality characterization draft; not applied or compiled.
+// Larger-cardinality characterization of the production prepared-query cache.
 import (
 	"context"
 	"encoding/json"
@@ -106,7 +106,7 @@ func TestControlPlaneCursorPostgresRepresentativeSelectiveCost(t *testing.T) {
 	// Actual production writer states are active/resolved, not fixture-only
 	// status aliases. The transaction rolls back every inserted row.
 	paginationExec(t, ctx, tx, `INSERT INTO control_plane_alerts(controller,condition_type,status,message,fired_at)
-SELECT CASE WHEN n%100=0 THEN $1 ELSE $2 END, 'fixture',
+SELECT CASE WHEN n%100=0 THEN $1 ELSE $2 END, 'fixture-'||n::text,
 CASE WHEN n%101=0 THEN 'active' ELSE 'resolved' END, 'fixture',
 TIMESTAMPTZ '2020-01-01' + (n/2)*INTERVAL '1 second'
 FROM generate_series(1,100000)n`, rare, common)
