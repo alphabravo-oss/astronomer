@@ -245,3 +245,7 @@ separately. No historic qualification is attributed to a new candidate.
 - Scoped typed upgrade core integrated through `8388d214`; actual33parents/79cases and all original hashes independently verified. No production shell replacement or application upgrade is implied.
 
 - [Completed W04 graph archive cleanup](closed-w04-graph-archive-cleanup/receipt.json) removes95 exact regular Go1.27.2 ar archives after explicit owner release and repeated inode/hash/source-prefix/process/open-FD fences, reclaiming231,826,884 logical bytes. Durable/W14/W07/source/binaries/modules/toolchains/evidence/database/PVC state are preserved; default67GiB/20% guard PASS.
+
+- Exact historical policy source integrated through `e30354e6`: independent17 meaningful fixture parents and19 applied byte bindings PASS; five evidence-only source renames preserve their bytes. [Review](w02-history-policy-integration-root-review.json). Fresh collector provenance/current history/native source security remain open, and W02 remains FAIL.
+
+- Mirrored CA `9a621785` attempt stops before Go execution because the default disk reserve fails. Both guard process groups drain and frozen source stays unchanged; zero native gates execute. [Original packet review](w04-mirrored-ca-capacity-stop-root-review.json). A retry must retain this packet and use a new output after scoped capacity recovery.
