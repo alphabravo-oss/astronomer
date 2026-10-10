@@ -1,0 +1,58 @@
+{
+  "kind": "RootExactDerivedCacheCleanupReview",
+  "inventorySHA256": "11215e864edff1847a3c41e3653f37fe8dc870935dcaba2c69037d39d0f9fbe1",
+  "validationSHA256": "9da024e56647c172ffc65e93bde1b41ee7f9817540f76f716501781c9b892b82",
+  "removalSHA256": "6b5401ac19b030d94d2cc81a23ad0fc4e3ba05eee78598fb4a347b2ce183a4d0",
+  "rootControls": "10 Python-only controls PASS in 2.051 seconds, including an actual joined synthetic child and exact single-fixture removal. No application compilation.",
+  "rootReview": "Complete inventory/remover/control source and minimal successor diffs read. Fresh exact128-object validation passes. All actual removed paths independently absent and each receipt identity exactly equals the approved manifest.",
+  "removedObjects": 128,
+  "removedLogicalBytes": 1535206654,
+  "finalCapacityGiB": 67,
+  "finalCapacityPercent": 20,
+  "scope": "Only exact regular owned single-link Go1.26.6-header ar objects under the derived Go build cache, at most128 objects/3GiB. Selected qualification uses Go1.27.2. Every ELF binary, source, module, toolchain, evidence, image, frontend package and database/PVC is preserved.",
+  "limits": "No active compiler/open-FD/map consumers observed and repeated before each unlink; these checks do not provide an atomic whole-system lock. Historical compiler caches can regenerate from preserved inputs.",
+  "files": [
+    {
+      "original": "inventory.json",
+      "path": "inventory.json.gz",
+      "bytes": 3944711,
+      "sha256": "11215e864edff1847a3c41e3653f37fe8dc870935dcaba2c69037d39d0f9fbe1",
+      "storedSHA256": "52f8f6ac8b326777c7ca0698e49af78a97d6e98a6a252b129be92193b47ceea4"
+    },
+    {
+      "original": "root-validation.json",
+      "path": "root-validation.json.gz",
+      "bytes": 1790,
+      "sha256": "9da024e56647c172ffc65e93bde1b41ee7f9817540f76f716501781c9b892b82",
+      "storedSHA256": "0d1697279bd3bd7043cd3b793dfdb77986519357324545a772dbf471105fd183"
+    },
+    {
+      "original": "root-removal.json",
+      "path": "root-removal.json.gz",
+      "bytes": 3945249,
+      "sha256": "6b5401ac19b030d94d2cc81a23ad0fc4e3ba05eee78598fb4a347b2ce183a4d0",
+      "storedSHA256": "97118cc657cd9e6504e525b5d6de2f4c903d93fb5a623618bb428bfac308e1a4"
+    },
+    {
+      "original": "cleanup.py",
+      "path": "cleanup.py.gz",
+      "bytes": 8682,
+      "sha256": "dda0debdc5b83f902d8878817d051c52b83b04c4cc2fc55af3d68d04564e226d",
+      "storedSHA256": "984ece663414fc263f4fd940033a91ed371c73b3c85119d6d2554d304657f352"
+    },
+    {
+      "original": "controls.py",
+      "path": "controls.py.gz",
+      "bytes": 4644,
+      "sha256": "64ae9539433dabaadbe5cab0cecefa94ffaa960a12b72f08705f5d2bd7e40ab2",
+      "storedSHA256": "7e4dcafc5d596ce36d5d0f4f5d6af5d1469fe4adc7aeb4ae471afcf23498a6d4"
+    },
+    {
+      "original": "inventory.py",
+      "path": "inventory.py.gz",
+      "bytes": 7713,
+      "sha256": "02d9a6b40fcf2ae53a592177ac1cc0f109ba0fe4e9764dfcb1ec984de699663e",
+      "storedSHA256": "b51b0a98bdc97fb02df2274c48266faef852b762aa0de19a7569fbe64c907527"
+    }
+  ]
+}

@@ -32,7 +32,7 @@ func TestStarredTypesRoundTripAndAudit(t *testing.T) {
 		if response.Data.StarredTypes == nil || len(response.Data.StarredTypes) != len(starred) {
 			t.Fatalf("response=%s", w.Body.String())
 		}
-		stored, err := preferencesFromRow(tx.row)
+		stored, err := userpreferences.FromRow(tx.row)
 		if err != nil || len(stored.StarredTypes) != len(starred) {
 			t.Fatalf("stored=%+v error=%v", stored, err)
 		}

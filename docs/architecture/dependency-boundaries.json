@@ -4,6 +4,17 @@
   "description": "Executable dependency-direction rules for the Go control plane and TypeScript frontend. Rules apply recursively to production source files; test-only route imports are excluded explicitly.",
   "go": [
     {
+      "name": "preference-domain-does-not-depend-on-http-delivery",
+      "root": "internal/userpreferences",
+      "forbidden_prefixes": [
+        "net/http",
+        "github.com/alphabravocompany/astronomer-go/internal/handler",
+        "github.com/alphabravocompany/astronomer-go/internal/server",
+        "github.com/alphabravocompany/astronomer-go/internal/reqctx"
+      ],
+      "rationale": "Preference behavior receives explicit actor, replay scope and plain audit intent; HTTP request identity, authentication, header parsing and response mapping stay in transport composition."
+    },
+    {
       "name": "request-context-is-a-leaf-contract",
       "root": "internal/reqctx",
       "forbidden_prefixes": [

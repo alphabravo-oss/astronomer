@@ -271,7 +271,7 @@ Do not treat the table as proof an upstream image scans clean or an existing cus
 | W10 | Supported observability stack and measured signal coverage | P1/P2 | L/MED | W01; W00 reconciliation with Plan 030 | IN PROGRESS |
 | W11 | Helm 4 migration while preserving Flux and CNPG | P1 | L/HIGH | W01, W03; W12 characterization before migration and qualification before production acceptance | IN PROGRESS (source preparation) |
 | W12 | Production-version DB, CNPG, browser, test report qualification | P1 | XL/HIGH for stateful work | W00, W01; candidate-specific W03–W11 as applicable to final qualification | IN PROGRESS |
-| W13 | Backend domain extraction for v2 | P2 | XL/HIGH | W06, W08, W09; W12 characterization | TODO |
+| W13 | Backend domain extraction for v2 | P2 | XL/HIGH | W06, W08, W09; W12 characterization | IN PROGRESS (preferences characterized and corrected; extraction pending) |
 | W14 | Typed operational CLI and small shell wrappers | P2 | XL/HIGH | W01; W12 characterization; W17 for release rehearsals | IN PROGRESS (core qualified; production adapter and rehearsal pending) |
 | W15 | Catalog Python and supporting repo supply chain parity | P1/P2 | L/MED | W01, W03 | TODO |
 | W16 | Explicit crypto/FIPS decision and optional artifact design | P2 | M for decision; XL/HIGH for claimed artifact | W00, W01, W12; product decision before optional implementation | DONE (ordinary v1 scope; conditional artifact not selected) |
@@ -790,7 +790,7 @@ W10 owner/category implementation is integrated through `f7dc3687`: finite HTTP 
 
 - [ ] W13.1 Inventory package imports, handler dependencies, direct database/Kubernetes calls, and ownership of identity, SSO/settings, cluster registration, resources, delivery, operations, and audit.
 - [ ] W13.2 Define explicit service boundaries and narrow interfaces based on real callers. Keep authorization decisions and tenant context visible at each operation boundary.
-- [ ] W13.3 Select one low-coupling domain first; add characterization tests covering authorization, errors, audit records, retries, idempotency, and transaction boundaries.
+- [x] W13.3 Select one low-coupling domain first; add characterization tests covering authorization, errors, audit records, retries, idempotency, and transaction boundaries. Preferences original regressions and corrected behavior qualified on owned PostgreSQL17/18; PostgreSQL18 uses race. See [scoped review](./032-evidence/current-scoped-progress-20261010.json).
 - [ ] W13.4 Extract business behavior while handlers retain HTTP decoding/response mapping. Domain services must not depend on handler packages or browser request types.
 - [ ] W13.5 Centralize construction/configuration validation rather than creating scattered environment reads or a global service locator.
 - [ ] W13.6 Preserve agent tunnel semantics, cancellation, credential SSA/RBAC, generation fencing, tombstone handling, last-intent operation while disconnected, and Charlie bridge contracts.

@@ -1,0 +1,36 @@
+{
+  "kind": "RootExactClosedCacheCleanupReview",
+  "releasedPrefixes": [
+    "/root/astronomer-all/astronomer-032-w11/",
+    "/root/astronomer-all/astronomer-032-w11-proxy-before/"
+  ],
+  "cutoff": "2026-10-10T07:28:05Z",
+  "inventorySHA256": "d4798454a94a7aae912c7f0ca4a1908d5cb6a4a71e282362fcb3cd90bf4b6643",
+  "driverSHA256": "ee7fe22470af2d108ac53bbefacf62d797c69adda5bf202d45e6cbfd53ded0be",
+  "rootControls": "9 PASS in 2.167 seconds; synthetic exact fixture only",
+  "freshRootValidationSHA256": "216526c1a46d87d34bdb4e6e30e94472995ec4da5629db08755c837ca6db05b9",
+  "actualRemovalSHA256": "ace583205156cab05aeb9d2cf49b52448558bf23ca02ded429c3ed50678d25cf",
+  "removedCount": 141,
+  "removedLogicalBytes": 492206910,
+  "scope": "Explicitly released closed first-party Go1.27.2 ar objects only; fresh hash, device/inode/mode/owner/link, source-prefix, process/FD/maps checks repeated before each unlink. Modules, toolchains, ELF tools and test inputs, sources, original evidence, frontend dependencies, images and databases preserved. No blanket cache deletion.",
+  "originals": [
+    {
+      "path": "root-removal.json.gz",
+      "rawSHA256": "ace583205156cab05aeb9d2cf49b52448558bf23ca02ded429c3ed50678d25cf",
+      "rawSizeBytes": 99129,
+      "gzipSHA256": "22baee9e4435f3b552063fafe5cbd1209fb395ffd5fc06012dcffbadc6bb6efd"
+    },
+    {
+      "path": "root-validation.json.gz",
+      "rawSHA256": "216526c1a46d87d34bdb4e6e30e94472995ec4da5629db08755c837ca6db05b9",
+      "rawSizeBytes": 1790,
+      "gzipSHA256": "52b87ef69e4129db991c0a3b6031e2bb6dd81f27220d6c31f4db76e5a143a23e"
+    },
+    {
+      "path": "inventory.json.gz",
+      "rawSHA256": "d4798454a94a7aae912c7f0ca4a1908d5cb6a4a71e282362fcb3cd90bf4b6643",
+      "rawSizeBytes": 98752,
+      "gzipSHA256": "6a396798daa1dbe824e56b8bdbc55faafb3956b5bf2022c47ab9c83835e6dc9b"
+    }
+  ]
+}
