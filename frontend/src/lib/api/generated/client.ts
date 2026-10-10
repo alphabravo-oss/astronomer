@@ -364,6 +364,7 @@ export const operationMetadata = {
   "getClustersByClusterIdVulnerabilitiesHistory": { method: "GET", path: "/api/v1/clusters/{cluster_id}/vulnerabilities/history", pathParameters: ["cluster_id"], responseType: "json" },
   "getClustersByClusterIdVulnerabilitiesProgress": { method: "GET", path: "/api/v1/clusters/{cluster_id}/vulnerabilities/progress", pathParameters: ["cluster_id"], responseType: "json" },
   "getClustersByClusterIdVulnerabilitiesReportsById": { method: "GET", path: "/api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}", pathParameters: ["cluster_id","id"], responseType: "json" },
+  "getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus": { method: "GET", path: "/api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}/database-status", pathParameters: ["cluster_id","id"], responseType: "json" },
   "getClustersByClusterIdVulnerabilitiesReportsByReportIdHistory": { method: "GET", path: "/api/v1/clusters/{cluster_id}/vulnerabilities/reports/{report_id}/history", pathParameters: ["cluster_id","report_id"], responseType: "json" },
   "getClustersByClusterIdWorkloads": { method: "GET", path: "/api/v1/clusters/{cluster_id}/workloads/", pathParameters: ["cluster_id"], responseType: "json" },
   "getClustersByClusterIdWorkloadsByKindByNamespaceByName": { method: "GET", path: "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/", pathParameters: ["cluster_id","kind","namespace","name"], responseType: "json" },
@@ -2569,6 +2570,11 @@ export function getClustersByClusterIdVulnerabilitiesProgress(args: OpenAPIArgum
 
 export function getClustersByClusterIdVulnerabilitiesReportsById(args: OpenAPIArguments<"getClustersByClusterIdVulnerabilitiesReportsById">) {
   const operationId = "getClustersByClusterIdVulnerabilitiesReportsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus(args: OpenAPIArguments<"getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus">) {
+  const operationId = "getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 

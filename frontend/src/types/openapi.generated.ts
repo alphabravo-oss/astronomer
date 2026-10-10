@@ -3442,6 +3442,31 @@ export interface OpenAPIComponents {
           "token"?: string;
           "charts"?: string[];
         } & Record<string, unknown>;
+    ImageDatabaseJavaApplicability: "needed" | "not_needed" | "unknown";
+    ImageDatabasePostureState: "fresh" | "stale" | "unknown" | "unavailable" | "mirror_unreachable" | "not_needed" | "feed_expired";
+    ImageDatabaseScanState: "pending" | "failed" | "complete" | "unavailable";
+    ImageDatabaseStatusV1: {
+          "report_id": string;
+          "scan_state": OpenAPIComponents['schemas']['ImageDatabaseScanState'];
+          "main_state": OpenAPIComponents['schemas']['ImageDatabasePostureState'];
+          "java_state": OpenAPIComponents['schemas']['ImageDatabasePostureState'];
+          "java_applicability": OpenAPIComponents['schemas']['ImageDatabaseJavaApplicability'];
+          "reason": string;
+          "finding_count": number;
+          "observation_revision": number;
+          "witness_revision": number;
+          "cycle": number;
+          "accepted_generation": number;
+          "accepted_feed_digest"?: string;
+          "report_expired": boolean;
+          "rescan_required": boolean;
+          "eligible_for_clean_posture": boolean;
+          "current_workload_checked": boolean;
+          "resource_capacity_exhausted": boolean;
+        };
+    ImageDatabaseStatusV1Envelope: {
+          "data": OpenAPIComponents['schemas']['ImageDatabaseStatusV1'];
+        };
     ImageVulnerability: {
           "id": string;
           "report_id": string;
@@ -6271,7 +6296,7 @@ export interface OpenAPIComponents {
 }
 
 export interface OpenAPIReadComponents {
-  schemas: Omit<OpenAPIComponents['schemas'], "AdminQueueOperation" | "AdminQueueOperationEnvelope" | "AgentCredentialState" | "AgentLifecycleOperation" | "AgentLifecycleOperationState" | "AgentLifecycleOperationsResponse" | "AgentRegistrationState" | "AgentUpgradeOperationResponse" | "AuditExportOperation" | "BackupKnownStatus" | "CISScan" | "CISScanEnvelope" | "CISScanListEnvelope" | "CharlieAdminAgent" | "CharlieAdminAgentReplica" | "CharlieAdminAgentReplicaStateValue" | "CharlieAdminAlertDeliveryProof" | "CharlieAdminAlertDeliveryProofStatusValue" | "CharlieAdminAlertDeliveryProofView" | "CharlieAdminDiagnosticCheck" | "CharlieAdminDiagnosticCheckStateValue" | "CharlieAdminDiagnostics" | "CharlieAdminStatus" | "CharlieAdminTriggerEvent" | "CharlieAdminTriggerEventStateValue" | "CharlieApprovalState" | "CharlieApprovalSummary" | "CharlieApprovalSummaryStateValue" | "CharlieConnectionOnboardingState" | "CharlieFindingDetail" | "CharlieFindingSummary" | "CharlieFindingSummaryStateValue" | "CharlieFindingSummaryWorkflowStateValue" | "CharlieKubernetesVisibility" | "CharlieKubernetesVisibilityStateValue" | "CharlieOnboardingStatus" | "CharlieOnboardingStatusStateValue" | "CharlieReceiptState" | "CharlieSessionMetadata" | "CharlieSessionMetadataStateValue" | "CharlieThreadMetadata" | "CharlieThreadMetadataStateValue" | "CharlieTriggerRetryReceipt" | "Cluster" | "ClusterConnectionStatus" | "ClusterDeployment" | "ClusterDeploymentControl" | "ClusterDeploymentControlEnvelope" | "ClusterDeploymentDetail" | "ClusterDeploymentDetailEnvelope" | "ClusterDeploymentPage" | "ClusterRegistrationPhaseValue" | "ClusterResponse" | "ClusterSecurityPolicy" | "ClusterSecurityPolicyEnvelope" | "ClusterSecurityPolicySyncStatusValue" | "ClusterToolStatus" | "DeliveryApprovalDecision" | "DeliveryBundleState" | "DeliveryBundleVersion" | "DeliveryBundleVersionDraft" | "DeliveryBundleVersionEnvelope" | "DeliveryBundleVersionPage" | "DeliveryBundleVersionWrite" | "DeliveryClusterInventory" | "DeliveryClusterInventoryEnvelope" | "DeliveryConfigurationTemplate" | "DeliveryConfigurationTemplateEnvelope" | "DeliveryConfigurationTemplatePage" | "DeliveryConfigurationTemplateWrite" | "DeliveryDeploymentPhase" | "DeliveryFailureAction" | "DeliveryFrozenRollout" | "DeliveryFrozenRolloutEnvelope" | "DeliveryPlannedCluster" | "DeliveryPreviousDeployment" | "DeliveryRendererKind" | "DeliveryRendererSpec" | "DeliveryResolvedSource" | "DeliveryRollout" | "DeliveryRolloutApproval" | "DeliveryRolloutApprovalRecord" | "DeliveryRolloutCluster" | "DeliveryRolloutClusterPage" | "DeliveryRolloutClusterState" | "DeliveryRolloutControl" | "DeliveryRolloutControlEnvelope" | "DeliveryRolloutDetail" | "DeliveryRolloutDetailEnvelope" | "DeliveryRolloutPage" | "DeliveryRolloutStart" | "DeliveryRolloutState" | "DeliveryRolloutStrategy" | "DeliveryRolloutStrategyInput" | "DeliverySource" | "DeliverySourceAuthModeValue" | "DeliverySourceEnvelope" | "DeliverySourceKind" | "DeliverySourcePage" | "DeliverySourceStatusValue" | "DeliverySourceWrite" | "DeliveryStrategyKind" | "DeliverySystemAssignmentPhase" | "DeliverySystemCompatibility" | "DeliverySystemCompatibilityEnvelope" | "DeliverySystemRelease" | "DeliverySystemReleaseState" | "DeliverySystemRollout" | "DeliverySystemRolloutState" | "DeliveryVerificationStatus" | "DeliveryVersionIdentity" | "DexOperation" | "DurableOperationStatus" | "LoggingAttachMutationReceipt" | "LoggingAttachMutationReceiptEnvelope" | "LoggingControllerStatusEnvelope" | "LoggingOperation" | "LoggingOperationEnvelope" | "LoggingOperationListEnvelope" | "LoggingOutputMutationReceipt" | "LoggingOutputMutationReceiptEnvelope" | "LoggingPipelineMutationReceipt" | "LoggingPipelineMutationReceiptEnvelope" | "LoggingTestEnvelope" | "LoggingTestResult" | "LoggingTokenRotation" | "LoggingTokenRotationEnvelope" | "MonitoringOperation" | "MonitoringOperationEnvelope" | "MonitoringOperationPage" | "MonitoringStackStatus" | "MonitoringStackStatusEnvelope" | "NodeOperation" | "NodeOperationEnvelope" | "NodeOperationState" | "PaginatedClusters" | "PollingOperationStatus" | "RegistrationStatus" | "ResourceOperation" | "ResourceOperationEnvelope" | "RestoreKnownStatus" | "SecurityScannerState" | "SupportBundleOperation" | "ToolOperation"> & {
+  schemas: Omit<OpenAPIComponents['schemas'], "AdminQueueOperation" | "AdminQueueOperationEnvelope" | "AgentCredentialState" | "AgentLifecycleOperation" | "AgentLifecycleOperationState" | "AgentLifecycleOperationsResponse" | "AgentRegistrationState" | "AgentUpgradeOperationResponse" | "AuditExportOperation" | "BackupKnownStatus" | "CISScan" | "CISScanEnvelope" | "CISScanListEnvelope" | "CharlieAdminAgent" | "CharlieAdminAgentReplica" | "CharlieAdminAgentReplicaStateValue" | "CharlieAdminAlertDeliveryProof" | "CharlieAdminAlertDeliveryProofStatusValue" | "CharlieAdminAlertDeliveryProofView" | "CharlieAdminDiagnosticCheck" | "CharlieAdminDiagnosticCheckStateValue" | "CharlieAdminDiagnostics" | "CharlieAdminStatus" | "CharlieAdminTriggerEvent" | "CharlieAdminTriggerEventStateValue" | "CharlieApprovalState" | "CharlieApprovalSummary" | "CharlieApprovalSummaryStateValue" | "CharlieConnectionOnboardingState" | "CharlieFindingDetail" | "CharlieFindingSummary" | "CharlieFindingSummaryStateValue" | "CharlieFindingSummaryWorkflowStateValue" | "CharlieKubernetesVisibility" | "CharlieKubernetesVisibilityStateValue" | "CharlieOnboardingStatus" | "CharlieOnboardingStatusStateValue" | "CharlieReceiptState" | "CharlieSessionMetadata" | "CharlieSessionMetadataStateValue" | "CharlieThreadMetadata" | "CharlieThreadMetadataStateValue" | "CharlieTriggerRetryReceipt" | "Cluster" | "ClusterConnectionStatus" | "ClusterDeployment" | "ClusterDeploymentControl" | "ClusterDeploymentControlEnvelope" | "ClusterDeploymentDetail" | "ClusterDeploymentDetailEnvelope" | "ClusterDeploymentPage" | "ClusterRegistrationPhaseValue" | "ClusterResponse" | "ClusterSecurityPolicy" | "ClusterSecurityPolicyEnvelope" | "ClusterSecurityPolicySyncStatusValue" | "ClusterToolStatus" | "DeliveryApprovalDecision" | "DeliveryBundleState" | "DeliveryBundleVersion" | "DeliveryBundleVersionDraft" | "DeliveryBundleVersionEnvelope" | "DeliveryBundleVersionPage" | "DeliveryBundleVersionWrite" | "DeliveryClusterInventory" | "DeliveryClusterInventoryEnvelope" | "DeliveryConfigurationTemplate" | "DeliveryConfigurationTemplateEnvelope" | "DeliveryConfigurationTemplatePage" | "DeliveryConfigurationTemplateWrite" | "DeliveryDeploymentPhase" | "DeliveryFailureAction" | "DeliveryFrozenRollout" | "DeliveryFrozenRolloutEnvelope" | "DeliveryPlannedCluster" | "DeliveryPreviousDeployment" | "DeliveryRendererKind" | "DeliveryRendererSpec" | "DeliveryResolvedSource" | "DeliveryRollout" | "DeliveryRolloutApproval" | "DeliveryRolloutApprovalRecord" | "DeliveryRolloutCluster" | "DeliveryRolloutClusterPage" | "DeliveryRolloutClusterState" | "DeliveryRolloutControl" | "DeliveryRolloutControlEnvelope" | "DeliveryRolloutDetail" | "DeliveryRolloutDetailEnvelope" | "DeliveryRolloutPage" | "DeliveryRolloutStart" | "DeliveryRolloutState" | "DeliveryRolloutStrategy" | "DeliveryRolloutStrategyInput" | "DeliverySource" | "DeliverySourceAuthModeValue" | "DeliverySourceEnvelope" | "DeliverySourceKind" | "DeliverySourcePage" | "DeliverySourceStatusValue" | "DeliverySourceWrite" | "DeliveryStrategyKind" | "DeliverySystemAssignmentPhase" | "DeliverySystemCompatibility" | "DeliverySystemCompatibilityEnvelope" | "DeliverySystemRelease" | "DeliverySystemReleaseState" | "DeliverySystemRollout" | "DeliverySystemRolloutState" | "DeliveryVerificationStatus" | "DeliveryVersionIdentity" | "DexOperation" | "DurableOperationStatus" | "ImageDatabaseJavaApplicability" | "ImageDatabasePostureState" | "ImageDatabaseScanState" | "ImageDatabaseStatusV1" | "ImageDatabaseStatusV1Envelope" | "LoggingAttachMutationReceipt" | "LoggingAttachMutationReceiptEnvelope" | "LoggingControllerStatusEnvelope" | "LoggingOperation" | "LoggingOperationEnvelope" | "LoggingOperationListEnvelope" | "LoggingOutputMutationReceipt" | "LoggingOutputMutationReceiptEnvelope" | "LoggingPipelineMutationReceipt" | "LoggingPipelineMutationReceiptEnvelope" | "LoggingTestEnvelope" | "LoggingTestResult" | "LoggingTokenRotation" | "LoggingTokenRotationEnvelope" | "MonitoringOperation" | "MonitoringOperationEnvelope" | "MonitoringOperationPage" | "MonitoringStackStatus" | "MonitoringStackStatusEnvelope" | "NodeOperation" | "NodeOperationEnvelope" | "NodeOperationState" | "PaginatedClusters" | "PollingOperationStatus" | "RegistrationStatus" | "ResourceOperation" | "ResourceOperationEnvelope" | "RestoreKnownStatus" | "SecurityScannerState" | "SupportBundleOperation" | "ToolOperation"> & {
     AdminQueueOperation: {
           "id": string;
           "action": "retry" | "discard";
@@ -7066,6 +7091,31 @@ export interface OpenAPIReadComponents {
           "completed_at"?: string;
         };
     DurableOperationStatus: "pending" | "running" | "retrying" | "failed" | "succeeded" | "unsupported";
+    ImageDatabaseJavaApplicability: "needed" | "not_needed" | "unknown" | "unsupported";
+    ImageDatabasePostureState: "fresh" | "stale" | "unknown" | "unavailable" | "mirror_unreachable" | "not_needed" | "feed_expired" | "unsupported";
+    ImageDatabaseScanState: "pending" | "failed" | "complete" | "unavailable" | "unsupported";
+    ImageDatabaseStatusV1: {
+          "report_id": string;
+          "scan_state": OpenAPIReadComponents['schemas']['ImageDatabaseScanState'];
+          "main_state": OpenAPIReadComponents['schemas']['ImageDatabasePostureState'];
+          "java_state": OpenAPIReadComponents['schemas']['ImageDatabasePostureState'];
+          "java_applicability": OpenAPIReadComponents['schemas']['ImageDatabaseJavaApplicability'];
+          "reason": string;
+          "finding_count": number;
+          "observation_revision": number;
+          "witness_revision": number;
+          "cycle": number;
+          "accepted_generation": number;
+          "accepted_feed_digest"?: string;
+          "report_expired": boolean;
+          "rescan_required": boolean;
+          "eligible_for_clean_posture": boolean;
+          "current_workload_checked": boolean;
+          "resource_capacity_exhausted": boolean;
+        };
+    ImageDatabaseStatusV1Envelope: {
+          "data": OpenAPIReadComponents['schemas']['ImageDatabaseStatusV1'];
+        };
     LoggingAttachMutationReceipt: {
           "output": OpenAPIReadComponents['schemas']['LoggingAttachResult'];
           "operation": OpenAPIReadComponents['schemas']['LoggingOperation'];
@@ -9020,6 +9070,17 @@ export interface OpenAPIOperations {
         };
       };
     response: OpenAPIComponents['schemas']['ImageVulnerabilityReportDetailEnvelope'];
+  };
+  "getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus": {
+    method: "GET";
+    path: "/api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}/database-status";
+    arguments: {
+        "path": {
+          "cluster_id": string;
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['ImageDatabaseStatusV1Envelope'];
   };
   "getClustersByClusterIdVulnerabilitiesReportsByReportIdHistory": {
     method: "GET";
@@ -17946,6 +18007,7 @@ export interface OpenAPIReadOperations {
   "getClustersByClusterIdVulnerabilitiesHistory": { response: OpenAPIReadComponents['schemas']['VulnerabilityHistoryEnvelope'] };
   "getClustersByClusterIdVulnerabilitiesProgress": { response: OpenAPIReadComponents['schemas']['VulnerabilityScanProgressEnvelope'] };
   "getClustersByClusterIdVulnerabilitiesReportsById": { response: OpenAPIReadComponents['schemas']['ImageVulnerabilityReportDetailEnvelope'] };
+  "getClustersByClusterIdVulnerabilitiesReportsByIdDatabaseStatus": { response: OpenAPIReadComponents['schemas']['ImageDatabaseStatusV1Envelope'] };
   "getClustersByClusterIdVulnerabilitiesReportsByReportIdHistory": { response: OpenAPIReadComponents['schemas']['VulnerabilityReportHistoryEnvelope'] };
   "postClustersByClusterIdVulnerabilitiesRescan": { response: OpenAPIReadComponents['schemas']['VulnerabilityRescanResultEnvelope'] };
   "getClustersByClusterIdWorkloadsByKindByNamespaceByNameMetrics": { response: OpenAPIReadComponents['schemas']['MonitoringMetricsEnvelope'] };
@@ -20042,6 +20104,11 @@ export type HelmReleaseHistoryEnvelope = OpenAPIComponents['schemas']['HelmRelea
 export type HelmReleaseRevision = OpenAPIComponents['schemas']['HelmReleaseRevision'];
 export type HelmRepository = OpenAPIComponents['schemas']['HelmRepository'];
 export type HelmRepositoryAuthConfig = OpenAPIComponents['schemas']['HelmRepositoryAuthConfig'];
+export type ImageDatabaseJavaApplicability = OpenAPIComponents['schemas']['ImageDatabaseJavaApplicability'];
+export type ImageDatabasePostureState = OpenAPIComponents['schemas']['ImageDatabasePostureState'];
+export type ImageDatabaseScanState = OpenAPIComponents['schemas']['ImageDatabaseScanState'];
+export type ImageDatabaseStatusV1 = OpenAPIComponents['schemas']['ImageDatabaseStatusV1'];
+export type ImageDatabaseStatusV1Envelope = OpenAPIComponents['schemas']['ImageDatabaseStatusV1Envelope'];
 export type ImageVulnerability = OpenAPIComponents['schemas']['ImageVulnerability'];
 export type ImageVulnerabilityReport = OpenAPIComponents['schemas']['ImageVulnerabilityReport'];
 export type ImageVulnerabilityReportDetail = OpenAPIComponents['schemas']['ImageVulnerabilityReportDetail'];
