@@ -360,7 +360,7 @@
     {
       "path": "internal/handler/admin_task_outbox.go",
       "owner": "HTTP backend",
-      "source_sha256": "2ff3219753b4aa4e1451ed5dc0104ea6d83575d8796ba33f0a31cc0d578e7512"
+      "source_sha256": "ab07f55fc411c51d489712de29febdbf3a3a5dcf0b7a0e5a2783b9d584e7fb93"
     },
     {
       "path": "internal/handler/alerting_events.go",
@@ -380,7 +380,7 @@
     {
       "path": "internal/handler/anomaly.go",
       "owner": "HTTP backend",
-      "source_sha256": "8812b706037c17d25a45342406a468d0f9188e981c154e7651f4fe908afd3688"
+      "source_sha256": "501e7fcb1ba1cc9e2102efb94d4010f0c13ee048d55df6f230c75bbb3b23d967"
     },
     {
       "path": "internal/handler/audit.go",
@@ -410,12 +410,12 @@
     {
       "path": "internal/handler/catalog_installations.go",
       "owner": "HTTP backend",
-      "source_sha256": "0b094d6719d368e0922cb940e601b950bb4db9b7dcfb1f50a22e4a0269cfb976"
+      "source_sha256": "4bd6d64c2a5a113ea1c0583730aa267ce5b5eba6b7f26357dca7c44bbc3b18af"
     },
     {
       "path": "internal/handler/catalog_operations.go",
       "owner": "HTTP backend",
-      "source_sha256": "ee3d96dec0b0fe69962be9d502abf1b25073cc96c786725bcfaf4142217f48ba"
+      "source_sha256": "1e7d3326b9b44c3a6da958ed4075c7ed2e37b2d8eacc538bc82e79b13768cd2e"
     },
     {
       "path": "internal/handler/catalog_project_cursor.go",
@@ -425,7 +425,7 @@
     {
       "path": "internal/handler/catalog_queries.go",
       "owner": "HTTP backend",
-      "source_sha256": "b38df1c783ecf9329e4c52aa88200120f19cc80bf8cdfac2a059d682eae183b8"
+      "source_sha256": "418466ac29a3d1ad0a4f57d4fbfa1e6246ac98062b54f83482194ceacf04307a"
     },
     {
       "path": "internal/handler/catalog_repositories.go",
@@ -460,7 +460,7 @@
     {
       "path": "internal/handler/cluster_resources.go",
       "owner": "HTTP backend",
-      "source_sha256": "4f3f6c6738c1454f112ba95c5a6a98889cb25fb83ba738e9766ddb985fbb0b96"
+      "source_sha256": "b899088f336d24c694656d413697ba2d71aa4c2c31260defd89817aa8f939f9a"
     },
     {
       "path": "internal/handler/clusters_inventory.go",
@@ -620,7 +620,7 @@
     {
       "path": "internal/handler/native_rbac.go",
       "owner": "HTTP backend",
-      "source_sha256": "de41bd24d84233b4fa126249a49bcb4c29cc57a605c04947798a2b6924ba1449"
+      "source_sha256": "b62916691e681a30061f882c1d729a446419e35547555c40c366985adc215b75"
     },
     {
       "path": "internal/handler/pagination_request.go",
@@ -750,7 +750,7 @@
     {
       "path": "internal/handler/tools_operations.go",
       "owner": "HTTP backend",
-      "source_sha256": "3ef4de4018ae7be6d6ea3e487ac2d7bb2b35a90b84620d7a2eb22a874d504815"
+      "source_sha256": "eeaaa82c7e112759dd6bfee11d4a39fda8fa50fb2fbc0d85dc2f13b0d2b2e00b"
     },
     {
       "path": "internal/handler/tools_status.go",
@@ -765,7 +765,7 @@
     {
       "path": "internal/handler/workloads_routes.go",
       "owner": "HTTP backend",
-      "source_sha256": "c0fad79349a9ac436a1c63e3c1df9b8d258036f42829e944d939bc37c76c516c"
+      "source_sha256": "d96d3d239bc459b3002dceb5428417843b2e1fcdd0fe2925d96d973a9822f39f"
     },
     {
       "path": "internal/ops/upgrade/plan.go",
@@ -4594,7 +4594,7 @@
       "function": "*AdminTaskOutboxHandler.List",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "2475f1128d2df29af556a74c45f274b3d699af8c5876211478ba2cd96b6fa362",
+      "scope_sha256": "59d0b1ba6634d648c8ac3247ac24558fe6672f5fd9a9c2cab3987b319afb7771",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -4675,7 +4675,7 @@
       "function": "*AnomalyHandler.List",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "cc6cedb37aae1ae1de45d5428cd4e30a379b9beb46f65f4b50782c0f3c340c25",
+      "scope_sha256": "945d79bb8e09544026786f05e0302096319950f1690f5e7b8880183c46d12f40",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -4828,7 +4828,7 @@
       "function": "*CatalogHandler.ListInstalledCharts",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "84b86907db15f268aef5b545eb6a4392c5fcbe8015b47710c535f30d7fdbbd4b",
+      "scope_sha256": "1ff6e9139aa0a5344962c6e25365ae656a39bf6b87d7b6a2a74cbf7cff82036b",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -4846,7 +4846,7 @@
       "function": "*CatalogHandler.ListOperations",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "9a64df371890f58431c0bf635a65b734d0b27d01b8cf9fa8bc3a688928a11bdd",
+      "scope_sha256": "e5558bcd0383ef1bdbb62a4e4562d50930b3078f29b71f4c0b352711ecb9673d",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -4855,7 +4855,7 @@
       "function": "*CatalogHandler.ListOperations",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "9a64df371890f58431c0bf635a65b734d0b27d01b8cf9fa8bc3a688928a11bdd",
+      "scope_sha256": "e5558bcd0383ef1bdbb62a4e4562d50930b3078f29b71f4c0b352711ecb9673d",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -4864,7 +4864,7 @@
       "function": "*CatalogHandler.ListOperations",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "9a64df371890f58431c0bf635a65b734d0b27d01b8cf9fa8bc3a688928a11bdd",
+      "scope_sha256": "e5558bcd0383ef1bdbb62a4e4562d50930b3078f29b71f4c0b352711ecb9673d",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -5062,7 +5062,7 @@
       "function": "*ClusterResourcesHandler.ListNetworkPolicies",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "9f0720508ed724deb74987542359614d07bac9d39363ac89e5b2bd04c9c01fd8",
+      "scope_sha256": "5a4041b40a86149d571d8d62d35fe29ff5f0f5d43077fa2efe01301fa7d9abb1",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -5071,7 +5071,7 @@
       "function": "*ClusterResourcesHandler.ListResourceQuotas",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "b9a596eec571adcbec21051bf6b082636bcdf9c9419aff735ad3a8d134526719",
+      "scope_sha256": "d50af4fc6c64b993d38243d001ac75797983491f6fe3f0509ceb935eff3ba561",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -5080,7 +5080,7 @@
       "function": "*ClusterResourcesHandler.ListLimitRanges",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "6f7db6c0ca85ae53e9761c48c9089b930391a3f90c9e82cde733e8750d68b2b8",
+      "scope_sha256": "17fee16079c577a95e9bf2fcc0f0c05ccd7c520e93eb8f2ce4799931ded00861",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -5854,7 +5854,7 @@
       "function": "*NativeRBACHandler.List",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "658df168572a51a4ca766f1a3b4b491d9e1ca0297cd9d7b6a0f5566bb6106e23",
+      "scope_sha256": "16256700dac938530e0287eddd47f397206b453210f9c42edca49af55765f514",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -6430,7 +6430,7 @@
       "function": "*ToolHandler.ListOperations",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "7dd4079e26651735692c5783cf7e180a3f689b2dd5146cd9efa8ef49c70818a2",
+      "scope_sha256": "9b7c194676efae88145d19a2370c872e47c5de752274537323080a85dc8320a3",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -6439,7 +6439,7 @@
       "function": "*ToolHandler.ListOperations",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "7dd4079e26651735692c5783cf7e180a3f689b2dd5146cd9efa8ef49c70818a2",
+      "scope_sha256": "9b7c194676efae88145d19a2370c872e47c5de752274537323080a85dc8320a3",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -6448,7 +6448,7 @@
       "function": "*ToolHandler.ListOperations",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "7dd4079e26651735692c5783cf7e180a3f689b2dd5146cd9efa8ef49c70818a2",
+      "scope_sha256": "9b7c194676efae88145d19a2370c872e47c5de752274537323080a85dc8320a3",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -6610,7 +6610,7 @@
       "function": "*WorkloadHandler.ListOperations",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "cc09f003e8240f27fd643c12d5f37894902e7bdbd439c6ad5ccf4f2273a576bc",
+      "scope_sha256": "3c4a0ddd3c58fe0c0ece2252ad63a01cd986399b927bbbfcd785c8db8b5b4449",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -6619,7 +6619,7 @@
       "function": "*WorkloadHandler.ListOperations",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "cc09f003e8240f27fd643c12d5f37894902e7bdbd439c6ad5ccf4f2273a576bc",
+      "scope_sha256": "3c4a0ddd3c58fe0c0ece2252ad63a01cd986399b927bbbfcd785c8db8b5b4449",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -6628,7 +6628,7 @@
       "function": "*WorkloadHandler.ListOperations",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "cc09f003e8240f27fd643c12d5f37894902e7bdbd439c6ad5ccf4f2273a576bc",
+      "scope_sha256": "3c4a0ddd3c58fe0c0ece2252ad63a01cd986399b927bbbfcd785c8db8b5b4449",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -8949,9 +8949,7 @@
     },
     {
       "name": "audit-batch",
-      "paths": [
-        "internal/db/queryextensions/audit_v1_manual.go.tmpl"
-      ],
+      "paths": ["internal/db/queryextensions/audit_v1_manual.go.tmpl"],
       "mechanism": "Fixed17-column INSERT prefix; row count selects placeholder numbers only; values are bound separately.",
       "verification": "TestAuditSQLBatchBindsValuesAndPartitionDDLRejectsIdentifiers plus existing batch tests"
     },
