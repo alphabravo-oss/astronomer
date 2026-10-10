@@ -140,5 +140,41 @@
     "observed": "Environment-port navigation returned ERR_CONNECTION_REFUSED; no app observation",
     "listener": "Owned fixture listener observed on loopback; exact browser-network cause not established",
     "manualCertification": false
+  },
+  "compilerBindingFollowup": {
+    "observedAt": "2026-10-10T01:32:57.279092+00:00",
+    "sourceCommit": "1f4c7067da31b316ee50cec1057804eb204b035b",
+    "sourceIdentity": {
+      "schema_version": 2,
+      "source_file_count": 6175,
+      "source_tree_sha256": "fee229a53fd0313ef554b720d5adeb3040f8ae87375d9037fedad154aa27a2cb"
+    },
+    "sourceClean": true,
+    "applicationCommit": "5d8f9729ba356ac687ce89a0871b7a32412b4de9",
+    "expectedCompiler": "go1.27.2",
+    "compilerAuthority": "Original application commit go.mod; optional exact toolchain directive takes precedence",
+    "tests": {
+      "cases": 20,
+      "exitCode": 0,
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/reuse-tests-compiler-bound.log",
+      "sha256": "915f5724f98195f5c28801db5e10289fc9ba4b1b958af2047f5b01d38c8a4dd6",
+      "bytes": 119
+    },
+    "actualBuildCheck": {
+      "exitCode": 0,
+      "binaries": 5,
+      "applicationBytesUnchanged": true,
+      "frontendBytesUnchanged": true,
+      "outputsMaterialized": false,
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/reuse-compiler-binding-check.json",
+      "sha256": "d1cbda5105206feaf5048e3228fc3558969c52a8d4942453e44fa3aff29852fd",
+      "bytes": 1124
+    },
+    "buildReference": {
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-5d-build-reference-compiler-bound.json",
+      "sha256": "dc9e06bcba14d887da6fd7fbbff8ff409607418665f89796230a358ab5bddfae",
+      "bytes": 1512125
+    },
+    "scope": "Compiler selector maintenance and negative tests; no corrected full Firefox stack result"
   }
 }
