@@ -282,6 +282,9 @@ func verifyActualOfflinePublication(t *testing.T, fixture *publicationRegistry, 
 			}
 		}
 	}
+	if index.SchemaVersion == 2 {
+		verifyActualOfflineDatabaseMetadata(t, options, stored, graph)
+	}
 	transfer, err := packOfflineTransfer(t.Context(), options, stored, graph)
 	if err != nil {
 		t.Fatal(err)
