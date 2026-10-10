@@ -127,6 +127,9 @@ func TestFiniteOriginRedirectPinsConnectionsAndStripsCredentialsOnEveryHop(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Force each fixture request through a new connection so dial-time DNS
+	// changes are measured independently of a previously checked pooled socket.
+	client.Transport.(*responseLimitTransport).base.(*destinationTransport).base.(*http.Transport).DisableKeepAlives = true
 	defer client.CloseIdleConnections()
 	// Constructed authority and secret-header selection are snapshots.
 	pairs[0].To = "https://unapproved.example:" + cdnPort
@@ -147,7 +150,7 @@ func TestFiniteOriginRedirectPinsConnectionsAndStripsCredentialsOnEveryHop(t *te
 	}
 	body, err := io.ReadAll(response.Body)
 	_ = response.Body.Close()
-	if err != nil || response.StatusCode != http.StatusPartialContent || string(body) != "x" || received.Load() != 1 || dials.Load() != 2 {
+	if err != nil || response.StatusCode != http.StatusPartialContent || string(body) != "x" || received.Load() != 1 || dials.Load() != 3 {
 		t.Fatalf("approved two-hop range failed: status=%d body=%q received=%d dials=%d err=%v", response.StatusCode, body, received.Load(), dials.Load(), err)
 	}
 	for _, scenario := range []int32{1, 2, 3, 4} {
