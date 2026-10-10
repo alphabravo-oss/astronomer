@@ -16,8 +16,8 @@ func (h *RBACHandler) ListGlobalRoleBindings(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	items, err := h.queries.ListGlobalRoleBindings(r.Context(), sqlc.ListGlobalRoleBindingsParams{Limit: limit, Offset: offset})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list global role bindings")
@@ -100,8 +100,8 @@ func (h *RBACHandler) ListClusterRoleBindings(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	clusterID := r.URL.Query().Get("cluster_id")
 	var (
 		items []sqlc.ClusterRoleBinding
@@ -215,8 +215,8 @@ func (h *RBACHandler) ListProjectRoleBindings(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	projectID := r.URL.Query().Get("project_id")
 	var (
 		items []sqlc.ProjectRoleBinding

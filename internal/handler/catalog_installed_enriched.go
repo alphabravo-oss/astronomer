@@ -42,11 +42,11 @@ func (h *CatalogHandler) ListClusterApps(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	limit := int32(queryLimit(r, 50))
+	limit := queryLimit32(r, 50)
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	offset := int32(queryOffset(r))
+	offset := queryOffset32(r)
 
 	rows, err := h.queries.ListInstalledChartsWithMetadataByCluster(r.Context(), sqlc.ListInstalledChartsWithMetadataByClusterParams{
 		ClusterID: clusterID,

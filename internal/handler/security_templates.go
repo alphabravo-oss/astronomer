@@ -39,8 +39,8 @@ func (h *SecurityHandler) ListTemplates(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	templates, err := h.queries.ListPodSecurityTemplates(r.Context(), sqlc.ListPodSecurityTemplatesParams{
 		Limit:  limit,

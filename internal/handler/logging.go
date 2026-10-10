@@ -472,8 +472,8 @@ func (h *LoggingHandler) ListOperations(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	limit := int32(queryLimit(r, 50))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 50)
+	offset := queryOffset32(r)
 	arg := sqlc.ListLoggingOperationsParams{Limit: limit, Offset: offset}
 	if v := strings.TrimSpace(r.URL.Query().Get("targetType")); v != "" {
 		arg.TargetType = pgtype.Text{String: v, Valid: true}

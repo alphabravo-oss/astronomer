@@ -71,8 +71,8 @@ func (h *SecurityHandler) ListScans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	scans, err := h.queries.ListScansByCluster(r.Context(), sqlc.ListScansByClusterParams{
 		ClusterID: clusterID,
@@ -192,8 +192,8 @@ func (h *SecurityHandler) ListAllScans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	all, clusterIDs, err := h.securityScanVisibility(r.Context())
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.Forbidden, "Failed to retrieve user permissions")

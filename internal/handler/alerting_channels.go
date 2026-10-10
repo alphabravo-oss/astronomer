@@ -22,8 +22,8 @@ func (h *AlertingHandler) ListChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	channels, err := h.queries.ListNotificationChannels(r.Context(), sqlc.ListNotificationChannelsParams{
 		Limit:  limit,

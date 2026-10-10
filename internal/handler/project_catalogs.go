@@ -550,8 +550,8 @@ func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Reques
 	}
 	charts, err := h.queries.ListChartsByRepository(r.Context(), sqlc.ListChartsByRepositoryParams{
 		RepositoryID: catalogID,
-		Limit:        int32(queryLimit(r, 100)),
-		Offset:       int32(queryOffset(r)),
+		Limit:        queryLimit32(r, 100),
+		Offset:       queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")

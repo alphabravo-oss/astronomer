@@ -19,8 +19,8 @@ func (h *AlertingHandler) ListRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	var clusterID pgtype.UUID
 	if v := r.URL.Query().Get("clusterId"); v != "" {

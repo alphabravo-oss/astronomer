@@ -266,7 +266,7 @@ func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
 		paging.Write(w, items, paging.Exact(total, limit, offset, len(items)))
 		return
 	}
-	limit, offset := int32(queryLimitMax(r, 100, 500)), int32(queryOffset(r))
+	limit, offset := queryLimitMax32(r, 100, 500), queryOffset32(r)
 	rows, err := h.queries.ListNativeRBACRules(r.Context(), sqlc.ListNativeRBACRulesParams{Limit: limit, Offset: offset})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list native rules")

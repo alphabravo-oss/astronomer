@@ -24,8 +24,8 @@ func (h *AlertingHandler) ListInhibitions(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	limit := int32(queryLimit(r, 50))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 50)
+	offset := queryOffset32(r)
 
 	inhibitions, err := h.queries.ListAlertInhibitions(r.Context(), sqlc.ListAlertInhibitionsParams{
 		Limit:  limit,

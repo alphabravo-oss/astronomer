@@ -100,7 +100,7 @@ func (h *ProjectHandler) ListByCluster(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, 500, apierror.InternalError, "Scoped cluster project listing is not available")
 		return
 	}
-	limit, offset := int32(queryLimit(r, 20)), int32(queryOffset(r))
+	limit, offset := queryLimit32(r, 20), queryOffset32(r)
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 	rows, err := q.ListClusterProjectsForScopes(r.Context(), sqlc.ListClusterProjectsForScopesParams{SelectedClusterID: clusterID, AllScopes: all, ClusterIds: clusterIDs, ProjectIds: projectIDs, FilterSearch: search, QueryLimit: limit, QueryOffset: offset})
 	if err != nil {

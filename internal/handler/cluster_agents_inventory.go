@@ -43,8 +43,8 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cluster-agent search is not available")
 		return
 	}
-	limit := int32(queryLimitMax(r, 100, 500))
-	offset := int32(queryOffset(r))
+	limit := queryLimitMax32(r, 100, 500)
+	offset := queryOffset32(r)
 	if limit <= 0 {
 		limit = 100
 	}

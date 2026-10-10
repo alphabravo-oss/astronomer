@@ -24,8 +24,8 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 
 	// Scope filter — mirrors ClusterHandler.List. The collection gate admits

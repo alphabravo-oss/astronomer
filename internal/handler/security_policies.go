@@ -49,8 +49,8 @@ func (h *SecurityHandler) ListPolicies(w http.ResponseWriter, r *http.Request) {
 	}
 
 	policies, err := h.queries.ListClusterSecurityPolicies(r.Context(), sqlc.ListClusterSecurityPoliciesParams{
-		Limit:  int32(queryLimit(r, 20)),
-		Offset: int32(queryOffset(r)),
+		Limit:  queryLimit32(r, 20),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list security policies")

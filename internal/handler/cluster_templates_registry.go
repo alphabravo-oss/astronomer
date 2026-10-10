@@ -34,8 +34,8 @@ func (h *ClusterTemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	items, err := h.queries.ListClusterTemplates(r.Context(), sqlc.ListClusterTemplatesParams{
-		Limit:  int32(queryLimit(r, 20)),
-		Offset: int32(queryOffset(r)),
+		Limit:  queryLimit32(r, 20),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster templates")

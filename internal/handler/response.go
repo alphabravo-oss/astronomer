@@ -117,6 +117,11 @@ const maxPaginationOffset = uint64(10_000)
 // bounded range accepted by legacy sqlc pagination queries. Invalid and
 // negative values start at the first page; oversized values clamp before SQL.
 func queryOffset(r *http.Request) int {
+	return int(queryOffset32(r))
+}
+
+// queryOffset32 keeps the SQL boundary in the same bounded parser as wire metadata.
+func queryOffset32(r *http.Request) int32 {
 	s := r.URL.Query().Get("offset")
 	if s == "" {
 		return 0
@@ -124,14 +129,14 @@ func queryOffset(r *http.Request) int {
 	v, err := strconv.ParseUint(s, 10, 64)
 	if err != nil {
 		if numErr, ok := err.(*strconv.NumError); ok && numErr.Err == strconv.ErrRange {
-			return int(maxPaginationOffset)
+			return int32(maxPaginationOffset)
 		}
 		return 0
 	}
 	if v > maxPaginationOffset {
-		return int(maxPaginationOffset)
+		return int32(maxPaginationOffset)
 	}
-	return int(v)
+	return int32(v)
 }
 
 // queryBool parses a boolean query param; accepts true/1/yes (case-insensitive).
@@ -173,6 +178,25 @@ func queryLimitMax(r *http.Request, defaultLimit, max int) int {
 		limit = 1
 	}
 	return limit
+}
+
+// queryLimit32 exposes the existing ordinary page limit as a checked SQL value.
+func queryLimit32(r *http.Request, defaultLimit int32) int32 {
+	return queryLimitMax32(r, defaultLimit, defaultLimitCap)
+}
+
+// queryLimitMax32 preserves legacy Atoi parsing and caller-selected limits while
+// checking representability directly at the SQL boundary. The existing int
+// helpers remain the source of pagination response metadata.
+func queryLimitMax32(r *http.Request, defaultLimit, max int32) int32 {
+	limit := queryLimitMax(r, int(defaultLimit), int(max))
+	if limit < 1 {
+		return 1
+	}
+	if limit > 1<<31-1 {
+		return 1<<31 - 1
+	}
+	return int32(limit)
 }
 
 // queryLimitOffset parses the "limit"/"offset" pagination query params, clamping

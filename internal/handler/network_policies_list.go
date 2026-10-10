@@ -14,8 +14,8 @@ func (h *NetworkPolicyHandler) ListTemplates(w http.ResponseWriter, r *http.Requ
 	}
 
 	items, err := h.queries.ListNetworkPolicyTemplates(r.Context(), sqlc.ListNetworkPolicyTemplatesParams{
-		Limit:  int32(queryLimit(r, 50)),
-		Offset: int32(queryOffset(r)),
+		Limit:  queryLimit32(r, 50),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list network policy templates")

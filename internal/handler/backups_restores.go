@@ -140,8 +140,8 @@ func (h *BackupHandler) ListRestores(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 
 	restores, err := h.queries.ListRestoreOperations(r.Context(), sqlc.ListRestoreOperationsParams{
 		Limit:  limit,

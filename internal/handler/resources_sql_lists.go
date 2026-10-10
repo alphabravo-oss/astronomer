@@ -20,8 +20,8 @@ func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	logs, err := listAuditLogsForResource(r.Context(), h.queries, sqlc.ListAuditLogsParams{
-		Limit:  int32(queryLimit(r, 20)),
-		Offset: int32(queryOffset(r)),
+		Limit:  queryLimit32(r, 20),
+		Offset: queryOffset32(r),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AuditError, "Failed to load audit logs")
@@ -69,8 +69,8 @@ func (h *ResourceHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		paging.Write(w, []any{}, paging.Exact(0, queryLimit(r, 20), queryOffset(r), len([]any{})))
 		return
 	}
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 	if len(search) > 200 {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "search must be at most 200 characters")

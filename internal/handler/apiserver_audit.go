@@ -262,14 +262,14 @@ func (h *ApiserverAuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := int32(queryLimitMax(r, 50, 500))
+	limit := queryLimitMax32(r, 50, 500)
 	if limit < 1 {
 		limit = 50
 	}
 	if limit > 500 {
 		limit = 500
 	}
-	offset := int32(queryOffset(r))
+	offset := queryOffset32(r)
 	if offset < 0 {
 		offset = 0
 	}

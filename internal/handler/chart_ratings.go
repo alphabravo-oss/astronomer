@@ -407,8 +407,8 @@ func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "chart_id must be a UUID")
 		return
 	}
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryOffset(r))
+	limit := queryLimit32(r, 20)
+	offset := queryOffset32(r)
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}

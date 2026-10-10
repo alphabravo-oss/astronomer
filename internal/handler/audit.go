@@ -165,7 +165,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit := auditQueryLimit(r)
-	offset := int32(queryOffset(r))
+	offset := queryOffset32(r)
 	filter, filterErr := auditFilterFromRequest(r, limit, offset)
 	if filterErr != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, filterErr.Error())
