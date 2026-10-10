@@ -4,23 +4,23 @@
       "sha256": "f9aebb5ce388844e998cba3cae4c90f85f6dbdb69b4f6d4e361eb07938680a14",
       "size": 10009
     },
-    "corrected/baseline-originals/deploy/bundles/cmd/distribution/artifact.go": {
+    "corrected/baseline-originals/deploy/bundles/cmd/distribution/artifact.go.txt": {
       "sha256": "fc1f6efb70a7338680515b1fc8d8d0f1f2aac6363a1a34f4335921c2ca95d0a7",
       "size": 24754
     },
-    "corrected/baseline-originals/deploy/bundles/cmd/distribution/database_preparation.go": {
+    "corrected/baseline-originals/deploy/bundles/cmd/distribution/database_preparation.go.txt": {
       "sha256": "cc20f84ed28e613eab07aa2cb945814c092f9ded3e47a863ed5cf89d8e76fbc8",
       "size": 9611
     },
-    "corrected/baseline-originals/deploy/bundles/cmd/distribution/offline_capture.go": {
+    "corrected/baseline-originals/deploy/bundles/cmd/distribution/offline_capture.go.txt": {
       "sha256": "503fb7cf6eac14080eb150de925a5a2a1244cfc5c74e04951c810c83f469417b",
       "size": 6741
     },
-    "corrected/baseline-originals/internal/delivery/distribution/assets.go": {
+    "corrected/baseline-originals/internal/delivery/distribution/assets.go.txt": {
       "sha256": "c3a6d5aa6b32c94489deb25432beed8ffac4cc405ef7531b7f7c8ce8c01712de",
       "size": 11151
     },
-    "corrected/baseline-originals/internal/delivery/distribution/offline_store.go": {
+    "corrected/baseline-originals/internal/delivery/distribution/offline_store.go.txt": {
       "sha256": "4e1b8661828017900a7a60898fc8b90e1ba43cf71f52cf504854bb73dcface59",
       "size": 9220
     },
@@ -436,23 +436,23 @@
       "sha256": "414cb66eb6dea7d0df3801dd889cc0df0993d225a4644e3f0607423f1682793d",
       "size": 10008
     },
-    "failed/baseline-originals/deploy/bundles/cmd/distribution/artifact.go": {
+    "failed/baseline-originals/deploy/bundles/cmd/distribution/artifact.go.txt": {
       "sha256": "fc1f6efb70a7338680515b1fc8d8d0f1f2aac6363a1a34f4335921c2ca95d0a7",
       "size": 24754
     },
-    "failed/baseline-originals/deploy/bundles/cmd/distribution/database_preparation.go": {
+    "failed/baseline-originals/deploy/bundles/cmd/distribution/database_preparation.go.txt": {
       "sha256": "cc20f84ed28e613eab07aa2cb945814c092f9ded3e47a863ed5cf89d8e76fbc8",
       "size": 9611
     },
-    "failed/baseline-originals/deploy/bundles/cmd/distribution/offline_capture.go": {
+    "failed/baseline-originals/deploy/bundles/cmd/distribution/offline_capture.go.txt": {
       "sha256": "503fb7cf6eac14080eb150de925a5a2a1244cfc5c74e04951c810c83f469417b",
       "size": 6741
     },
-    "failed/baseline-originals/internal/delivery/distribution/assets.go": {
+    "failed/baseline-originals/internal/delivery/distribution/assets.go.txt": {
       "sha256": "c3a6d5aa6b32c94489deb25432beed8ffac4cc405ef7531b7f7c8ce8c01712de",
       "size": 11151
     },
-    "failed/baseline-originals/internal/delivery/distribution/offline_store.go": {
+    "failed/baseline-originals/internal/delivery/distribution/offline_store.go.txt": {
       "sha256": "0ad796e98a482bf9e1dd7528e4622c5233f4d6ef1e648efe6cdc5b9aa0d84ab3",
       "size": 9209
     },

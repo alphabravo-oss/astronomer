@@ -152,7 +152,7 @@ def verify_packet(label, receipt):
         match = re.fullmatch(rb'check-build-capacity: path=\. mount=/ available=(\d+)GiB free=(\d+)% required=20GiB/20%\n', data)
         assert match and int(match[1]) >= 20 and int(match[2]) >= 20
     for name in receipt['baselineProductionPaths']:
-        assert sha(raw(label+'/baseline-originals/'+name)) == receipt['frozenSource']['files'][name]
+        assert sha(raw(label+'/baseline-originals/'+name+'.txt')) == receipt['frozenSource']['files'][name]
 
 
 def main():
