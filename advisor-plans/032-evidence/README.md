@@ -3,7 +3,7 @@
 Implementation branch: `implement/032-technology-guide`.
 The scoped typed upgrade core now also has explicit process/upgrade import-direction rules. Both isolated and integrated checks pass with sixteen rules; production adapters and deployment qualification remain open. [Boundary review](w14-core-import-boundary-root-review.json).
 Optional pinned database registry trust is reviewed at isolated `9ee9961e`; physical signing/TLS/destination authority and immutable historical proof bindings are source-approved, with compilation and durable integration still pending. [Source review](w04-registry-trust-source-root-review.json).
-The first Helm4 SDK source stage is reviewed with exact upstream and consumer hash reconstruction; its module closure, bounded HTTP chart locator, actual SDK worker joining, and CNPG/Flux install/rollback qualification remain open. [Source review](w11-first-sdk-source-root-review.json).
+The first Helm4 SDK source stage is reviewed with exact upstream and consumer hash reconstruction; its module closure, bounded HTTP chart locator, actual SDK worker joining, and CNPG/Flux install/rollback qualification remain open. [Source review](w11-first-sdk-source-root-review.json). Followup source review accepts checked timeout conversion, historical nil metadata parity, independently injected operator repository policy and the canonical bounded response reader; these tests are still unexecuted. [Followup review](w11-policy-body-source-root-review.json).
 Application source baseline: `3b378ef16141b9eaac35a1e5fe292e061b69f5f1`.
 Catalog source baseline: `3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5`.
 
