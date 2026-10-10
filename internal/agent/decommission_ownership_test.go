@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
+	kubescheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	k8stesting "k8s.io/client-go/testing"
 
@@ -216,9 +218,22 @@ func TestDecommissionActualACKWriteOwnsContextBoundDeleteAndJoinedTunnel(t *test
 			http.Error(w, "method", http.StatusMethodNotAllowed)
 			return
 		}
-		var opts metav1.DeleteOptions
-		if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
+		if r.Header.Get("Content-Type") != runtime.ContentTypeProtobuf {
+			t.Error("actual canonical DELETE did not use Kubernetes protobuf")
+			http.Error(w, "unexpected DELETE content type", http.StatusUnsupportedMediaType)
+			return
+		}
+		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4<<10))
+		if err != nil {
 			t.Error(err)
+			http.Error(w, "bounded DELETE body unavailable", http.StatusBadRequest)
+			return
+		}
+		var opts metav1.DeleteOptions
+		if err := runtime.DecodeInto(kubescheme.Codecs.UniversalDeserializer(), raw, &opts); err != nil {
+			t.Error(err)
+			http.Error(w, "invalid Kubernetes DELETE body", http.StatusBadRequest)
+			return
 		}
 		if opts.Preconditions == nil || opts.Preconditions.UID == nil || *opts.Preconditions.UID != "original-agent" || opts.Preconditions.ResourceVersion == nil || *opts.Preconditions.ResourceVersion != "7" {
 			t.Error("actual API delete lost original UID/current RV")
