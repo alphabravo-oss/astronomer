@@ -165,50 +165,6 @@ func (h *CatalogHandler) ControllerStatus(w http.ResponseWriter, r *http.Request
 	RespondJSON(w, http.StatusOK, summary)
 }
 
-func (h *CatalogHandler) controllerSummary(ctx context.Context) (map[string]any, error) {
-	ops, err := h.queries.ListCatalogOperations(ctx, sqlc.ListCatalogOperationsParams{Limit: 1000, Offset: 0})
-	if err != nil {
-		return nil, err
-	}
-	bindings, restricted, err := h.authz.bindingsForContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	opSummary := summarizeOperations(ctx, ops, operationStatusSummaryConfig[sqlc.CatalogOperation]{
-		Status:    func(op sqlc.CatalogOperation) string { return op.Status },
-		CreatedAt: func(op sqlc.CatalogOperation) time.Time { return op.CreatedAt },
-		IsStaleRunning: func(op sqlc.CatalogOperation, now time.Time) bool {
-			return op.StartedAt.Valid && now.Sub(op.StartedAt.Time) > time.Minute
-		},
-		Include: func(_ context.Context, op sqlc.CatalogOperation) bool {
-			if !restricted {
-				return true
-			}
-			clusterID, err := catalogOperationClusterID(op)
-			return err == nil && h.authz.allowsCluster(bindings, clusterID, rbac.ResourceCatalog, rbac.VerbRead)
-		},
-		Preview:               func(ctx context.Context, op sqlc.CatalogOperation) map[string]any { return h.operationPreview(ctx, op) },
-		StaleThresholdSeconds: 60,
-	})
-	charts, _ := h.queries.CountHelmCharts(ctx)
-	installed, _ := h.queries.CountInstalledCharts(ctx)
-	return map[string]any{
-		"reconciler": opSummary.reconcilerMap(),
-		"catalog": map[string]any{
-			"chartCount": charts,
-			"installedCount": func() any {
-				if restricted {
-					return nil
-				}
-				return installed
-			}(),
-		},
-		"operations":         opSummary.Counts,
-		"recentFailureCount": opSummary.RecentFailures,
-		"recentOperations":   opSummary.Recent,
-		"latestFailure":      opSummary.LatestFailure,
-	}, nil
-}
 
 type catalogOperationCreator interface {
 	CreateCatalogOperation(context.Context, sqlc.CreateCatalogOperationParams) (sqlc.CatalogOperation, error)
