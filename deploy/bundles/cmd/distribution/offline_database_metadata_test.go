@@ -67,6 +67,7 @@ func verifyActualOfflineDatabaseMetadata(t *testing.T, options distribution.Offl
 	if err != nil {
 		t.Fatal(err)
 	}
+	verifyActualOfflineDatabaseTransfer(t, options, encoded, original)
 	// Return values are copies. Neither caller mutation nor a returned claim can
 	// change the constructor-produced file authority or its captured status.
 	claims := imported.DatabaseLayers()

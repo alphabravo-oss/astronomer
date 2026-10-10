@@ -120,6 +120,17 @@ func importOfflineTransfer(ctx context.Context, archive, destination string, opt
 			return err
 		}
 	}
+	if err := writeOfflineImportedMetadata(destination, index, blobs); err != nil {
+		return err
+	}
+
+	success = true
+	return nil
+}
+
+// Both versioned importers reach this writer only after canonical authentication
+// and complete original-byte capture. Shapes and v1 output remain unchanged.
+func writeOfflineImportedMetadata(destination string, index offlineTransferIndex, blobs map[string][]byte) error {
 	if err := writeJSON(filepath.Join(destination, "offline-index.json"), index); err != nil {
 		return err
 	}
@@ -138,6 +149,5 @@ func importOfflineTransfer(ctx context.Context, archive, destination string, opt
 	if err := writeJSON(filepath.Join(destination, "oci-layout"), map[string]string{"imageLayoutVersion": "1.0.0"}); err != nil {
 		return err
 	}
-	success = true
 	return nil
 }
