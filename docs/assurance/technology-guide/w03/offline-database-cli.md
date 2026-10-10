@@ -37,8 +37,10 @@ neither an accepted output nor owned staging files. Format/action cases include
 an explicit database-v2 selection without an action or combined with a mirror;
 both formats reject offline network/CA/output inputs before input access.
 
-This source freeze has not yet executed Go/race/vet gates. Reader-only and old
-format evidence do not qualify this CLI, exporter, selected supplier payloads,
+The original source freeze preceded execution. The later
+[exporter/CLI qualification](database-export-cli-qualification.md) records its
+full selected-Cosign race, vet, docs and release gates. Reader-only and old
+format evidence do not qualify selected supplier payloads,
 DB schema/freshness, production vendor OIDC, live registry import, startup or a
 fresh-cache/no-egress cluster. Protected production publication and full W04
 runtime qualification remain separate prerequisites.

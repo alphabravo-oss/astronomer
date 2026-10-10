@@ -35,7 +35,10 @@ changed/partial/missing/extra/linked source rejection, wrong-key and unsigned
 metadata rejection, cancellation after bytes reach the actual private staging
 file, changed input mtime after planning, replaced staging-path preservation and
 existing-output preservation. These fixtures use tiny original QA bytes, not
-actual supplier databases. Tests for this source slice have not yet executed;
-the earlier reader evidence does not qualify this exporter or future CLI wiring.
+actual supplier databases. The exporter and versioned CLI now passed the
+[selected-Cosign qualification](database-export-cli-qualification.md), including
+the full seven-package race suites, vet and release contract checks. Earlier
+reader evidence remains scoped to that reader; the new packet records these
+exporter and CLI results separately.
 No production publisher OIDC, upstream DB freshness, protected publication,
 registry import, fresh-cache/no-egress deployment or release approval is claimed.
