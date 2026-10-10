@@ -21,6 +21,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
+	"github.com/alphabravocompany/astronomer-go/internal/userpreferences"
 )
 
 // UserQuerier abstracts the user-related database queries needed by AuthHandler.
@@ -154,11 +155,10 @@ type AuthHandler struct {
 	// reset password (AUTH-R01). Nil falls back to defaults.
 	settingsCache *SettingsCache
 
-	// preferences is intentionally separate from identity queries: console
+	// The preference service is separate from identity queries: console
 	// preferences are a self-service domain with their own typed schema and
 	// transactionally audited mutation boundary.
-	preferences      UserPreferencesQuerier
-	preferencesRunTx userPreferencesRunTxFunc
+	preferenceService *userpreferences.Service
 
 	// emails is the optional email-enqueue hook used by the
 	// lockout + token-created hot paths. Optional and best-effort:
@@ -266,8 +266,7 @@ func (h *AuthHandler) SetRunTx(runTx authRunTxFunc) {
 // authentication; tests can exercise the boundary independently.
 func (h *AuthHandler) SetUserPreferences(q UserPreferencesQuerier, runTx userPreferencesRunTxFunc) {
 	if h != nil {
-		h.preferences = q
-		h.preferencesRunTx = runTx
+		h.preferenceService = userpreferences.New(q, runTx)
 	}
 }
 
