@@ -84,8 +84,42 @@ actions:
   - target: "$.paths['/api/v1/admin/queues/{queue}/dlq'].get.responses['200'].content['application/json'].schema.allOf[1].properties.pagination"
     description: Retain the released anonymous response struct layout; existing SDK users follow native pages using unchanged per-page count.
     remove: true
-  # The additive window is read from Body by CatalogControllerWindowFromResponse.
-  # Preserve the released v1 anonymous response model's positional field layout.
-  - target: "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema.properties.operationSummary"
-    description: Keep the released Go response struct layout while a typed compatible reader exposes the additive window contract.
+  # Canonical v1 wire status has RespondJSON's data envelope. Preserve the
+  # shipped Go SDK's original flat anonymous JSON200 field/pointer layout;
+  # CatalogControllerWindowFromResponse reads the actual wrapped raw Body.
+  - target: "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema.properties.data"
+    description: Preserve the released anonymous response struct by removing the canonical data wrapper only from Go generation.
     remove: true
+  - target: "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema.required"
+    description: Remove the canonical envelope requirement only from the released Go representation.
+    remove: true
+  - target: "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema"
+    description: Restore the exact released six-field inline status layout; the raw-body reader supplies the actual additive wrapped window.
+    update:
+      type: object
+      properties:
+        reconciler:
+          type: object
+        catalog:
+          type: object
+          properties:
+            chartCount:
+              type: integer
+              format: int64
+            installedCount:
+              type: integer
+              format: int64
+              nullable: true
+        operations:
+          type: object
+          additionalProperties:
+            type: integer
+        recentFailureCount:
+          type: integer
+        recentOperations:
+          type: array
+          items:
+            type: object
+        latestFailure:
+          type: object
+          nullable: true

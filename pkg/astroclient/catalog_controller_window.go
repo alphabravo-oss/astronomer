@@ -31,6 +31,15 @@ func CatalogControllerWindowFromResponse(response *GetCatalogControllerStatusRes
 	if err := json.Unmarshal(response.Body, &body); err != nil || body == nil {
 		return nil, invalid
 	}
+	// The actual v1 handler writes RespondJSON's data envelope. Continue
+	// accepting the released flat representation in existing compatible callers.
+	if envelope, present := body["data"]; present {
+		var status map[string]json.RawMessage
+		if err := json.Unmarshal(envelope, &status); err != nil || status == nil {
+			return nil, invalid
+		}
+		body = status
+	}
 	raw, present := body["operationSummary"]
 	if !present {
 		return nil, nil
