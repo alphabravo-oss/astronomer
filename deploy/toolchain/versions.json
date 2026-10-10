@@ -2112,6 +2112,48 @@
           "count": 1,
           "kind": "regex",
           "path": "go.mod",
+          "selector": "^\\s+github\\.com/distribution/reference (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-10T18:32:50.493098+00:00",
+        "provenance": "sha256:d35c40cfdc78a1e281a4777db6477b99934ccef3bf9a57e41a84b26dc501d681",
+        "releasedAt": "2024-03-20T17:09:59Z",
+        "stable": true,
+        "version": "v0.6.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:github.com/distribution/reference",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Current direct go.mod consumer is aligned to the retained selected official proxy metadata; module graph/runtime qualification remains source-bound to the existing W11 current graph evidence. This authority correction does not upgrade or rebuild modules.",
+      "selected": "v0.6.0",
+      "sourceBindings": [
+        {
+          "digest": "sha256:d35c40cfdc78a1e281a4777db6477b99934ccef3bf9a57e41a84b26dc501d681",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/github.com_distribution_reference-latest.json"
+        },
+        {
+          "digest": "sha256:d35c40cfdc78a1e281a4777db6477b99934ccef3bf9a57e41a84b26dc501d681",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/github.com_distribution_reference-selected.json"
+        }
+      ],
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/github.com/distribution/reference/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
           "selector": "^\\s+github\\.com/evanphx/json\\-patch/v5 (\\S+)(?: // indirect)?$",
           "value": "{version}"
         }
@@ -3264,6 +3306,56 @@
           "count": 1,
           "kind": "regex",
           "path": "go.mod",
+          "selector": "^\\s+go\\.opentelemetry\\.io/proto/otlp (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-10T18:32:50.493098+00:00",
+        "provenance": "sha256:8a6eeaf1304e1aa19717acd094aba43deaeecc169fa3e69c2abdb2813cae0969",
+        "releasedAt": "2026-09-30T16:27:58Z",
+        "stable": true,
+        "version": "v1.11.1"
+      },
+      "ecosystem": "gomod",
+      "exception": {
+        "createdAt": "2026-10-10T18:32:50.493098+00:00",
+        "evidence": "docs/assurance/technology-guide/w15/current-gomod-routing.md",
+        "exitCondition": "Resolve the current graph with upstream v1.11.1 and qualify generated protocol consumers, current selected race tests and vet before changing go.mod/go.sum.",
+        "owner": "platform/backend",
+        "reason": "Preserve the exact current integrated v1.11.0 graph while the newly discovered v1.11.1 patch awaits module resolution and consumer qualification; no incompatibility or safety conclusion about the newer patch is inferred.",
+        "reviewBy": "2026-10-16T00:00:00Z"
+      },
+      "id": "gomod:go.opentelemetry.io/proto/otlp",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Current direct go.mod consumer is aligned to the retained selected official proxy metadata; module graph/runtime qualification remains source-bound to the existing W11 current graph evidence. This authority correction does not upgrade or rebuild modules.",
+      "selected": "v1.11.0",
+      "sourceBindings": [
+        {
+          "digest": "sha256:8a6eeaf1304e1aa19717acd094aba43deaeecc169fa3e69c2abdb2813cae0969",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/go.opentelemetry.io_proto_otlp-latest.json"
+        },
+        {
+          "digest": "sha256:cd2bddd447c9ca74202ff0df60bf0aa39dba90beda6153af62d4a0445a25490c",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/go.opentelemetry.io_proto_otlp-selected.json"
+        }
+      ],
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/go.opentelemetry.io/proto/otlp/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
           "selector": "^\\s+golang\\.org/x/crypto (\\S+)(?: // indirect)?$",
           "value": "{version}"
         }
@@ -3287,6 +3379,48 @@
       "upstream": {
         "kind": "gomod",
         "url": "https://proxy.golang.org/golang.org/x/crypto/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+golang\\.org/x/net (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-10T18:32:50.493098+00:00",
+        "provenance": "sha256:a8b6ecea7b7d79152f6f1fc1bbdc8a6877bc0f33c9e4f4e08c79269added7448",
+        "releasedAt": "2026-10-09T17:07:24Z",
+        "stable": true,
+        "version": "v0.61.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:golang.org/x/net",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Current direct go.mod consumer is aligned to the retained selected official proxy metadata; module graph/runtime qualification remains source-bound to the existing W11 current graph evidence. This authority correction does not upgrade or rebuild modules.",
+      "selected": "v0.61.0",
+      "sourceBindings": [
+        {
+          "digest": "sha256:a8b6ecea7b7d79152f6f1fc1bbdc8a6877bc0f33c9e4f4e08c79269added7448",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/golang.org_x_net-latest.json"
+        },
+        {
+          "digest": "sha256:a8b6ecea7b7d79152f6f1fc1bbdc8a6877bc0f33c9e4f4e08c79269added7448",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/golang.org_x_net-selected.json"
+        }
+      ],
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/golang.org/x/net/@latest"
       }
     },
     {
@@ -3360,6 +3494,48 @@
           "count": 1,
           "kind": "regex",
           "path": "go.mod",
+          "selector": "^\\s+golang\\.org/x/sys (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-10T18:32:50.493098+00:00",
+        "provenance": "sha256:b1eeba05824e4c555cee0454171f3dbc0b9bce51e322237b5bd98ceb14a62346",
+        "releasedAt": "2026-10-06T18:35:47Z",
+        "stable": true,
+        "version": "v0.49.0"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:golang.org/x/sys",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Current direct go.mod consumer is aligned to the retained selected official proxy metadata; module graph/runtime qualification remains source-bound to the existing W11 current graph evidence. This authority correction does not upgrade or rebuild modules.",
+      "selected": "v0.49.0",
+      "sourceBindings": [
+        {
+          "digest": "sha256:b1eeba05824e4c555cee0454171f3dbc0b9bce51e322237b5bd98ceb14a62346",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/golang.org_x_sys-latest.json"
+        },
+        {
+          "digest": "sha256:b1eeba05824e4c555cee0454171f3dbc0b9bce51e322237b5bd98ceb14a62346",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/golang.org_x_sys-selected.json"
+        }
+      ],
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/golang.org/x/sys/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
           "selector": "^\\s+golang\\.org/x/term (\\S+)(?: // indirect)?$",
           "value": "{version}"
         }
@@ -3415,6 +3591,48 @@
       "upstream": {
         "kind": "gomod",
         "url": "https://proxy.golang.org/golang.org/x/time/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+google\\.golang\\.org/protobuf (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-10T18:32:50.493098+00:00",
+        "provenance": "sha256:adcdfa99465b9d87edd7d05d540d6e0ce94a04824fe283552410f2c50188f51d",
+        "releasedAt": "2026-08-10T13:29:45Z",
+        "stable": true,
+        "version": "v1.36.12"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:google.golang.org/protobuf",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Current direct go.mod consumer is aligned to the retained selected official proxy metadata; module graph/runtime qualification remains source-bound to the existing W11 current graph evidence. This authority correction does not upgrade or rebuild modules.",
+      "selected": "v1.36.12",
+      "sourceBindings": [
+        {
+          "digest": "sha256:adcdfa99465b9d87edd7d05d540d6e0ce94a04824fe283552410f2c50188f51d",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/google.golang.org_protobuf-latest.json"
+        },
+        {
+          "digest": "sha256:adcdfa99465b9d87edd7d05d540d6e0ce94a04824fe283552410f2c50188f51d",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/google.golang.org_protobuf-selected.json"
+        }
+      ],
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/google.golang.org/protobuf/@latest"
       }
     },
     {
@@ -3488,37 +3706,39 @@
           "count": 1,
           "kind": "regex",
           "path": "go.mod",
-          "selector": "^\\s+helm\\.sh/helm/v3 (\\S+)(?: // indirect)?$",
+          "selector": "^\\s+helm\\.sh/helm/v4 (\\S+)(?: // indirect)?$",
           "value": "{version}"
         }
       ],
       "discovery": {
-        "observedAt": "2026-10-09T18:55:59.772731Z",
-        "provenance": "sha256:c3476c63096394a35589adeac19b4caf355d65c70ca3d725c5178dc00495699c",
-        "releasedAt": "2026-09-09T22:21:05Z",
+        "observedAt": "2026-10-10T18:32:50.493098+00:00",
+        "provenance": "sha256:d404b15a7c17a11c3b38249dc990be13a19e483c78ea5d90d7be382716ccc127",
+        "releasedAt": "2026-09-09T22:08:33Z",
         "stable": true,
-        "version": "v3.22.0"
+        "version": "v4.3.0"
       },
       "ecosystem": "gomod",
-      "exception": {
-        "createdAt": "2026-10-09T19:22:39Z",
-        "evidence": "docs/assurance/technology-guide/w01/README.md",
-        "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
-        "owner": "platform/backend",
-        "reason": "Helm4 SDK migration is owned by W11; retain characterized3.21.4 until install/rollback/Flux/CNPG qualification",
-        "reviewBy": "2026-10-16T00:00:00Z"
-      },
-      "id": "gomod:helm.sh/helm/v3",
+      "id": "gomod:helm.sh/helm/v4",
       "owner": "platform/backend",
       "platforms": [
         "linux/amd64",
         "linux/arm64"
       ],
-      "qualification": "Application build and focused integration gates",
-      "selected": "v3.21.4",
+      "qualification": "Current direct go.mod consumer is aligned to the retained selected official proxy metadata; module graph/runtime qualification remains source-bound to the existing W11 current graph evidence. This authority correction does not upgrade or rebuild modules.",
+      "selected": "v4.3.0",
+      "sourceBindings": [
+        {
+          "digest": "sha256:d404b15a7c17a11c3b38249dc990be13a19e483c78ea5d90d7be382716ccc127",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/helm.sh_helm_v4-latest.json"
+        },
+        {
+          "digest": "sha256:d404b15a7c17a11c3b38249dc990be13a19e483c78ea5d90d7be382716ccc127",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/helm.sh_helm_v4-selected.json"
+        }
+      ],
       "upstream": {
         "kind": "gomod",
-        "url": "https://proxy.golang.org/helm.sh/helm/v3/@latest"
+        "url": "https://proxy.golang.org/helm.sh/helm/v4/@latest"
       }
     },
     {
@@ -3583,6 +3803,48 @@
       "upstream": {
         "kind": "gomod",
         "url": "https://proxy.golang.org/k8s.io/apimachinery/@latest"
+      }
+    },
+    {
+      "artifacts": [],
+      "consumers": [
+        {
+          "count": 1,
+          "kind": "regex",
+          "path": "go.mod",
+          "selector": "^\\s+k8s\\.io/cli\\-runtime (\\S+)(?: // indirect)?$",
+          "value": "{version}"
+        }
+      ],
+      "discovery": {
+        "observedAt": "2026-10-10T18:32:50.493098+00:00",
+        "provenance": "sha256:bc10caf61d152f19bf681c8475b9f288a947a73b3740d75b0b0449a21f505741",
+        "releasedAt": "2026-09-23T23:27:04Z",
+        "stable": true,
+        "version": "v0.37.1"
+      },
+      "ecosystem": "gomod",
+      "id": "gomod:k8s.io/cli-runtime",
+      "owner": "platform/backend",
+      "platforms": [
+        "linux/amd64",
+        "linux/arm64"
+      ],
+      "qualification": "Current direct go.mod consumer is aligned to the retained selected official proxy metadata; module graph/runtime qualification remains source-bound to the existing W11 current graph evidence. This authority correction does not upgrade or rebuild modules.",
+      "selected": "v0.37.1",
+      "sourceBindings": [
+        {
+          "digest": "sha256:bc10caf61d152f19bf681c8475b9f288a947a73b3740d75b0b0449a21f505741",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/k8s.io_cli-runtime-latest.json"
+        },
+        {
+          "digest": "sha256:bc10caf61d152f19bf681c8475b9f288a947a73b3740d75b0b0449a21f505741",
+          "path": "docs/assurance/technology-guide/w15/current-gomod-primary/k8s.io_cli-runtime-selected.json"
+        }
+      ],
+      "upstream": {
+        "kind": "gomod",
+        "url": "https://proxy.golang.org/k8s.io/cli-runtime/@latest"
       }
     },
     {
@@ -3956,7 +4218,7 @@
         "evidence": "docs/assurance/technology-guide/w01/README.md",
         "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
         "owner": "platform/backend",
-        "reason": "W11 must characterize install/upgrade/uninstall/render/rollback behavior across existing CLI3.16.2/3.16.4/3.21.0 and SDK3.21.4 before selecting4.3.0; Local CI/release consumers are checked at their existing exact pins.",
+        "reason": "The current application SDK selects Helm v4.3.0 and its scoped synthetic SDK/proxy/current-graph evidence is retained under W11. Standalone CLI selection and unchanged Local CI/release CLI3.21.0/3.16.2/3.16.4 consumers still need their own exact platform and operation qualification; they are not qualified by the SDK migration. Flux remains a separate upstream controller graph.",
         "reviewBy": "2026-10-16T00:00:00Z"
       },
       "id": "helm",
@@ -4010,7 +4272,7 @@
         "evidence": "docs/assurance/technology-guide/w01/README.md",
         "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
         "owner": "platform/backend",
-        "reason": "W11 must characterize install/upgrade/uninstall/render/rollback behavior across existing CLI3.16.2/3.16.4/3.21.0 and SDK3.21.4 before selecting4.3.0; Local CI/release consumers are checked at their existing exact pins.",
+        "reason": "The current application SDK selects Helm v4.3.0 and its scoped synthetic SDK/proxy/current-graph evidence is retained under W11. Standalone CLI selection and unchanged Local CI/release CLI3.21.0/3.16.2/3.16.4 consumers still need their own exact platform and operation qualification; they are not qualified by the SDK migration. Flux remains a separate upstream controller graph.",
         "reviewBy": "2026-10-16T00:00:00Z"
       },
       "id": "helm-cli-ci",
@@ -4064,7 +4326,7 @@
         "evidence": "docs/assurance/technology-guide/w01/README.md",
         "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
         "owner": "platform/backend",
-        "reason": "W11 must characterize install/upgrade/uninstall/render/rollback behavior across existing CLI3.16.2/3.16.4/3.21.0 and SDK3.21.4 before selecting4.3.0; Local CI/release consumers are checked at their existing exact pins.",
+        "reason": "The current application SDK selects Helm v4.3.0 and its scoped synthetic SDK/proxy/current-graph evidence is retained under W11. Standalone CLI selection and unchanged Local CI/release CLI3.21.0/3.16.2/3.16.4 consumers still need their own exact platform and operation qualification; they are not qualified by the SDK migration. Flux remains a separate upstream controller graph.",
         "reviewBy": "2026-10-16T00:00:00Z"
       },
       "id": "helm-cli-release",
@@ -4104,7 +4366,7 @@
         "evidence": "docs/assurance/technology-guide/w01/README.md",
         "exitCondition": "Adopt target after named compatibility requirement passes; daily discovery tracks upstream fixes",
         "owner": "platform/backend",
-        "reason": "W11 must characterize install/upgrade/uninstall/render/rollback behavior across existing CLI3.16.2/3.16.4/3.21.0 and SDK3.21.4 before selecting4.3.0; Local CI/release consumers are checked at their existing exact pins.",
+        "reason": "The current application SDK selects Helm v4.3.0 and its scoped synthetic SDK/proxy/current-graph evidence is retained under W11. Standalone CLI selection and unchanged Local CI/release CLI3.21.0/3.16.2/3.16.4 consumers still need their own exact platform and operation qualification; they are not qualified by the SDK migration. Flux remains a separate upstream controller graph.",
         "reviewBy": "2026-10-16T00:00:00Z"
       },
       "id": "helm-cli-release-preflight",
