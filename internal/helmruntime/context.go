@@ -110,11 +110,15 @@ func (g *requestGetter) ToRESTMapper() (meta.RESTMapper, error) {
 	return restmapper.NewShortcutExpander(restmapper.NewDeferredDiscoveryRESTMapper(discovery), discovery, nil), nil
 }
 func (g *requestGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
-	return requestLoader{ClientConfig: g.base.ToRawKubeConfigLoader(), getter: g}
+	return requestLoader{loaderConfiguration: g.base.ToRawKubeConfigLoader(), getter: g}
 }
 
+// The alias keeps the embedded field distinct from our owned ClientConfig method.
+// All other loader methods continue to delegate to the original configuration.
+type loaderConfiguration = clientcmd.ClientConfig
+
 type requestLoader struct {
-	clientcmd.ClientConfig
+	loaderConfiguration
 	getter *requestGetter
 }
 

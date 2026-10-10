@@ -266,7 +266,7 @@ func joinedInstall(cfg *action.Configuration, owner context.Context) *action.Ins
 func joinedChart(version, hook string) *chart.Chart {
 	value := &chart.Chart{Metadata: &chart.Metadata{APIVersion: "v2", Name: "fixture", Version: version}}
 	if hook != "" {
-		value.Templates = []*chart.File{{Name: "templates/hook.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture-hook\n  annotations:\n    helm.sh/hook: " + hook + "\n")}}
+		value.Templates = []*chartcommon.File{{Name: "templates/hook.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: fixture-hook\n  annotations:\n    helm.sh/hook: " + hook + "\n")}}
 	}
 	return value
 }
