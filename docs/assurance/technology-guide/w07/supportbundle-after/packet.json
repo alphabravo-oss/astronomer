@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "scope": "W07 finite Kubernetes support-bundle continuation only; whole W07 remains in progress",
+  "before_receipt": "../supportbundle-before/receipt.json",
+  "before_receipt_sha256": "0909ed4aa5b1d8e669c16e31c6ba2cdfac0c68b45c4cc76595357886b126cded",
+  "runs": [
+    {
+      "label": "fixture-failure",
+      "source_commit": "c3cb51c292ccae36a71f4a4ecd3e9a7f3becb3a8",
+      "source_clean_before": true,
+      "source_unchanged_after": true,
+      "source_inputs": {
+        "internal/handler/supportbundle_kubernetes.go": "ce573f4bd484963e83458e098b6408b241933f1bdc64ebcec29d04c0d29964cf",
+        "internal/handler/supportbundle_pagination.go": "e4a4ef45238d96a406db8469f4e07803cef6849be7755051f0ece9347892ddb8",
+        "internal/handler/supportbundle_continuation_test.go": "19493092afb5386a7b050852306bb118dce0caebafac21b0742a0a6eba265a8e",
+        "internal/handler/supportbundle_redaction.go": "36804c363f3669cd0434dd015be1a7a8fa4b63498fdcb0724722403cdcf8f45c",
+        "internal/handler/supportbundle_test.go": "8c75a08669aa2a2f1d3b24beba82a9652280fb1494fa6e1c8db2c3f58303f4ec",
+        "go.mod": "178c129e3a2f2092a563d6553d76c2350f9750d9b9ca69205a7ad59a35d5e09f",
+        "go.sum": "4e27e056e6cd2e2b96343746eeca53661f5caf302eec2ce719afe20ce400e25d"
+      },
+      "environment": {
+        "GOMAXPROCS": "4",
+        "GOFLAGS": "-p=2",
+        "GOWORK": "off"
+      },
+      "stages": [
+        {
+          "name": "focused-race",
+          "argv": [
+            "/usr/local/go/bin/go",
+            "test",
+            "-race",
+            "-json",
+            "-count=1",
+            "-timeout=2m",
+            "./internal/handler",
+            "-run",
+            "^(TestSupportBundleKubernetesContinuesNamespaceLists|TestSupportBundleTLSSecretBeyondFirstPageIsPresent|TestSupportBundleExpiredSecretContinuationNeverClaimsAbsent|TestSupportBundleIncompleteNamespaceSnapshotIsExplicit|TestSupportBundleContinuationStopsOnCallerCancellation)$"
+          ],
+          "started_at": "2026-10-10T02:52:44.061757+00:00",
+          "closed_at": "2026-10-10T02:53:54.220356+00:00",
+          "exit_code": 1,
+          "capacity_stop": null,
+          "parent_count": 5,
+          "leaf_count": 11,
+          "terminal_event_count": 13,
+          "failed_events": [
+            "TestSupportBundleIncompleteNamespaceSnapshotIsExplicit/cycle",
+            "TestSupportBundleIncompleteNamespaceSnapshotIsExplicit/changed-version",
+            "TestSupportBundleIncompleteNamespaceSnapshotIsExplicit/page-budget",
+            "TestSupportBundleIncompleteNamespaceSnapshotIsExplicit",
+            "TestSupportBundleContinuationStopsOnCallerCancellation"
+          ],
+          "skipped_events": {},
+          "artifact": "fixture-failure/focused-race.log"
+        }
+      ],
+      "all_capacity_guards_passed": true,
+      "capacity_guard_count": 15,
+      "original_receipt": "fixture-failure/receipt.json"
+    },
+    {
+      "label": "corrected",
+      "source_commit": "898d94088b1969147f0da63b8d0310638ee1b03a",
+      "source_clean_before": true,
+      "source_unchanged_after": true,
+      "source_inputs": {
+        "internal/handler/supportbundle_kubernetes.go": "ce573f4bd484963e83458e098b6408b241933f1bdc64ebcec29d04c0d29964cf",
+        "internal/handler/supportbundle_pagination.go": "e4a4ef45238d96a406db8469f4e07803cef6849be7755051f0ece9347892ddb8",
+        "internal/handler/supportbundle_continuation_test.go": "e7576e42fe5b87da4342521aba696f2d4f26d65d453069435e0d6fdad52c2a91",
+        "internal/handler/supportbundle_redaction.go": "36804c363f3669cd0434dd015be1a7a8fa4b63498fdcb0724722403cdcf8f45c",
+        "internal/handler/supportbundle_test.go": "8c75a08669aa2a2f1d3b24beba82a9652280fb1494fa6e1c8db2c3f58303f4ec",
+        "go.mod": "178c129e3a2f2092a563d6553d76c2350f9750d9b9ca69205a7ad59a35d5e09f",
+        "go.sum": "4e27e056e6cd2e2b96343746eeca53661f5caf302eec2ce719afe20ce400e25d"
+      },
+      "environment": {
+        "GOMAXPROCS": "4",
+        "GOFLAGS": "-p=2",
+        "GOWORK": "off"
+      },
+      "stages": [
+        {
+          "name": "focused-race",
+          "argv": [
+            "/usr/local/go/bin/go",
+            "test",
+            "-race",
+            "-json",
+            "-count=1",
+            "-timeout=2m",
+            "./internal/handler",
+            "-run",
+            "^(TestSupportBundleKubernetesContinuesNamespaceLists|TestSupportBundleTLSSecretBeyondFirstPageIsPresent|TestSupportBundleExpiredSecretContinuationNeverClaimsAbsent|TestSupportBundleIncompleteNamespaceSnapshotIsExplicit|TestSupportBundleContinuationStopsOnCallerCancellation)$"
+          ],
+          "started_at": "2026-10-10T02:56:26.968540+00:00",
+          "closed_at": "2026-10-10T02:57:17.085870+00:00",
+          "exit_code": 0,
+          "capacity_stop": null,
+          "parent_count": 5,
+          "leaf_count": 11,
+          "terminal_event_count": 13,
+          "failed_events": [],
+          "skipped_events": {},
+          "artifact": "corrected/focused-race.log"
+        },
+        {
+          "name": "handler-full-race",
+          "argv": [
+            "/usr/local/go/bin/go",
+            "test",
+            "-race",
+            "-json",
+            "-count=1",
+            "./internal/handler"
+          ],
+          "started_at": "2026-10-10T02:57:17.116504+00:00",
+          "closed_at": "2026-10-10T03:00:58.243914+00:00",
+          "exit_code": 0,
+          "capacity_stop": null,
+          "parent_count": 1572,
+          "leaf_count": 2394,
+          "terminal_event_count": 2589,
+          "failed_events": [],
+          "skipped_events": {
+            "TestFetchAndIngestOCIRepoLive": [
+              "catalog_oci_test.go:147: network-dependent; run manually against a reachable OCI registry"
+            ],
+            "TestCatalogProjectCursorPostgresSQLVisibilityWithoutRepositoryMaterialization": [
+              "catalog_project_cursor_postgres_test.go:27: PAGINATION_TEST_DATABASE_URL is not set"
+            ],
+            "TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor/alerts": [
+              "control_plane_pagination_postgres_test.go:84: PAGINATION_TEST_DATABASE_URL is not set"
+            ],
+            "TestControlPlaneCursorPostgresTraversalTiesAndDeletedAnchor/silences": [
+              "control_plane_pagination_postgres_test.go:84: PAGINATION_TEST_DATABASE_URL is not set"
+            ],
+            "TestControlPlaneCursorPostgresSelectiveFilterPlans": [
+              "control_plane_pagination_postgres_test.go:190: PAGINATION_TEST_DATABASE_URL is not set"
+            ],
+            "TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion": [
+              "dex_config_test.go:754: synchronous apply contract replaced by durable Dex operation worker"
+            ],
+            "TestApply_FixedPointDoesNotMutateOrRollout": [
+              "dex_config_test.go:867: synchronous apply contract replaced by durable Dex operation worker"
+            ],
+            "TestApply_503WhenNoK8sRequester": [
+              "dex_config_test.go:1043: HTTP apply no longer depends on immediate tunnel availability"
+            ],
+            "TestConnectorMutationApplyRestoresOnlyPreviouslyEnabledSSO": [
+              "dex_config_test.go:1201: synchronous apply contract replaced by durable Dex operation worker"
+            ],
+            "TestRegisterAsSSO_CreatesProviderRow": [
+              "dex_config_test.go:1272: synchronous registration contract replaced by durable Dex operation worker"
+            ],
+            "TestRegisterAsSSO_AtomicFailurePreservesCredentialPair": [
+              "dex_config_test.go:1399: synchronous registration contract replaced by durable Dex operation worker"
+            ],
+            "TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges": [
+              "dex_config_test.go:1433: synchronous registration contract replaced by durable Dex operation worker"
+            ],
+            "TestRegisterAsSSOPlatformConfigFailurePreservesPair": [
+              "dex_config_test.go:1873: synchronous registration contract replaced by durable Dex operation worker"
+            ],
+            "TestCatalogCursorPostgresTraversalBeyondLegacyCeiling": [
+              "pagination_postgres_test.go:133: PAGINATION_TEST_DATABASE_URL is not set"
+            ],
+            "TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation": [
+              "pagination_postgres_test.go:220: PAGINATION_TEST_DATABASE_URL is not set"
+            ],
+            "TestTableViewsPostgresConcurrentCreatesRespectTheCap": [
+              "table_views_postgres_test.go:107: TABLE_VIEWS_TEST_DATABASE_URL is not set"
+            ],
+            "TestTableViewsPostgresConcurrentDuplicateNameYieldsOneWinner": [
+              "table_views_postgres_test.go:138: TABLE_VIEWS_TEST_DATABASE_URL is not set"
+            ],
+            "TestTableViewsPostgresConcurrentDefaultSwitchKeepsOneDefault": [
+              "table_views_postgres_test.go:153: TABLE_VIEWS_TEST_DATABASE_URL is not set"
+            ]
+          },
+          "artifact": "corrected/handler-full-race.log"
+        },
+        {
+          "name": "handler-vet",
+          "argv": [
+            "/usr/local/go/bin/go",
+            "vet",
+            "./internal/handler"
+          ],
+          "started_at": "2026-10-10T03:00:58.280962+00:00",
+          "closed_at": "2026-10-10T03:01:08.308960+00:00",
+          "exit_code": 0,
+          "capacity_stop": null,
+          "parent_count": 0,
+          "leaf_count": 0,
+          "terminal_event_count": 0,
+          "failed_events": [],
+          "skipped_events": {},
+          "artifact": "corrected/handler-vet.log"
+        }
+      ],
+      "all_capacity_guards_passed": true,
+      "capacity_guard_count": 59,
+      "original_receipt": "corrected/receipt.json"
+    }
+  ],
+  "artifacts": {
+    "fixture-failure/receipt.json": "3b227960c575b748cf661cb32034a929aab191bbe58d0d34c223f49b01536aa2",
+    "fixture-failure/run.py": "77432b5c576213ee44a623723b581c202eb9fd09d1919c184fafd7a48f096723",
+    "fixture-failure/focused-race.log": "7db54671c370b9f0f7e03ffd02bb065a32e62d2792b3e00f73ced71b83950e54",
+    "corrected/receipt.json": "58e6755bcfc49413a704ded6dd4002b16da9ed827b73ae9761babd02517cd239",
+    "corrected/run.py": "299bb887561b773674e22e1747a6292f79ab68b9fb1e9c3e181001c12f2d8464",
+    "corrected/focused-race.log": "30f64a891eba26fc147446759cc4c5b063bc24675b01fdbc08f44546db39b112",
+    "corrected/handler-full-race.log": "eb4b6d1e4e088507aae9b3221f25b1a9e508a3d0c7026ab364561e39754f9423",
+    "corrected/handler-vet.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
