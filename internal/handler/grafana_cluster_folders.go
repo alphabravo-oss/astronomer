@@ -67,7 +67,10 @@ func (h *MonitoringHandler) ReconcileGrafanaClusterFolders(ctx context.Context) 
 		return nil
 	}
 	meta := sharedStackMetadata(backend, "sharedGrafana")
-	req := grafanaRequestFromMetadata(meta)
+	req, err := grafanaRequestFromMetadata(meta)
+	if err != nil {
+		return err
+	}
 	mgmtID := defaultString(req.ManagementClusterID, stringFromMap(meta, "managementClusterId"))
 	ns := defaultString(req.Namespace, "monitoring")
 	if mgmtID == "" {

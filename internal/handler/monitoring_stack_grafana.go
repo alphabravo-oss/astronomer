@@ -728,7 +728,7 @@ func grafanaStackPresent(status string) bool {
 	}
 }
 
-func grafanaRequestFromMetadata(meta map[string]any) SharedGrafanaRequest {
+func grafanaRequestFromMetadata(meta map[string]any) (SharedGrafanaRequest, error) {
 	req := SharedGrafanaRequest{
 		ManagementClusterID: stringFromMap(meta, "managementClusterId"),
 		Namespace:           stringFromMap(meta, "namespace"),
@@ -739,23 +739,16 @@ func grafanaRequestFromMetadata(meta map[string]any) SharedGrafanaRequest {
 		IngressHost:         stringFromMap(meta, "ingressHost"),
 		LogDatasourceURL:    stringFromMap(meta, "logDatasourceUrl"),
 	}
-	switch n := meta["replicas"].(type) {
-	case float64:
-		req.Replicas = int32(n)
-	case int:
-		req.Replicas = int32(n)
-	case int32:
-		req.Replicas = n
-	case json.Number:
-		if v, err := n.Int64(); err == nil {
-			req.Replicas = int32(v)
-		}
+	var err error
+	req.Replicas, err = grafanaMetadataReplicas(meta["replicas"])
+	if err != nil {
+		return SharedGrafanaRequest{}, err
 	}
 	if _, ok := meta["autoRollbackOnFailure"]; ok {
 		v := boolFromAny(meta["autoRollbackOnFailure"])
 		req.AutoRollbackOnFailure = &v
 	}
-	return req
+	return req, nil
 }
 
 func (h *MonitoringHandler) stampSharedGrafanaHealth(ctx context.Context, req SharedGrafanaRequest) error {
@@ -789,7 +782,10 @@ func (h *MonitoringHandler) syncGrafanaThanosDatasource(ctx context.Context) err
 	if !ok {
 		return nil
 	}
-	req := grafanaRequestFromMetadata(meta)
+	req, err := grafanaRequestFromMetadata(meta)
+	if err != nil {
+		return err
+	}
 	ns := defaultString(req.Namespace, "monitoring")
 	release := defaultString(req.ReleaseName, sharedGrafanaDefaultRelease)
 	cm := grafanaDatasourceConfigMap(
