@@ -1,0 +1,22 @@
+{
+  "reviewed_commit": "baa9190e36e92e22c3a218f03f3493868b2110ba",
+  "review_timestamp_utc": "2026-10-10T01:15:43.325237+00:00",
+  "inventory_sha256": "32e3d103c09a8920edeaf96184686bb15afacc7b8ca8e46f97b935df0da87c1f",
+  "baseline": "6c3da1882c76662f1b7e01e80f89f5e2978bc7b4",
+  "candidate": "469536d3be9fb8220f1d39c638c8850aea1b6ac3",
+  "checks": {
+    "anchor_hashes": 42,
+    "anchor_change_flags": 21,
+    "metric_file_hashes": 40,
+    "metric_literal_order_and_names": 40,
+    "dashboard_panels_per_revision": 62,
+    "exact_dashboard_panel_equality": true
+  },
+  "verdict": "PASS scoped source reconciliation; no collector or workflow runtime qualification",
+  "remaining": [
+    "collector migration and actual query readback",
+    "complete durable workflow trace propagation",
+    "lifetime retention of tunnel and Vault label families",
+    "matched performance and reviewed overhead budget"
+  ]
+}

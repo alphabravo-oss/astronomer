@@ -695,7 +695,7 @@ Expected: typed generated interfaces, no unintended transaction behavior change,
 
 **Ordered tasks:**
 
-- [ ] W10.1 Reconcile Plan 030 instrumentation and dashboards against the exact baseline; preserve implemented improvements and identify only the remaining gaps.
+- [x] W10.1 Reconcile Plan 030 instrumentation and dashboards against the exact baseline; preserve implemented improvements and identify only the remaining gaps.
 - [ ] W10.2 Update Grafana, Loki, Tempo, Prometheus, and collector versions through W01. Replace Promtail with supported Alloy or an existing Fluent Bit pipeline, selected by configuration ownership and deployment fit.
 - [ ] W10.3 Capture current log labels, tenant-safe fields, trace attributes, and dashboard queries before migrating. Verify collector changes against Loki/Tempo migration notes.
 - [ ] W10.4 Specify context propagation across API request, durable operation, queued task, database call, agent tunnel, Kubernetes operation, and Flux reconciliation observation. Use stable operation correlation when asynchronous work cannot be represented as one synchronous span.
