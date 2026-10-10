@@ -19,7 +19,7 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 ## Hard Gates
 
 - Duplicate direct package declarations across frontend dependency sections: pass
-- Direct `fetch` or `axios` calls outside `frontend/src/lib/api*`: fail
+- Direct `fetch` or `axios` calls outside `frontend/src/lib/api*`: pass
 - Direct `sonner` imports or `toast.*` calls outside `frontend/src/lib/toast.ts`: pass
 - Page-local API `ResponseShape` types in app routes: pass
 - Duplicate frontend API shape type names ending in `Request`, `WriteRequest`, or `Response`: pass
@@ -42,8 +42,7 @@ These are hard-gate failures and should be removed or moved before merge.
 
 ### Direct HTTP Calls Outside API Layer
 
-- [`frontend/src/routes/dashboard/settings/operations/operations-pagination.test.tsx:49`](frontend/src/routes/dashboard/settings/operations/operations-pagination.test.tsx:49) - direct axios call outside frontend API layer
-- [`frontend/src/routes/dashboard/settings/operations/operations-pagination.test.tsx:108`](frontend/src/routes/dashboard/settings/operations/operations-pagination.test.tsx:108) - direct axios call outside frontend API layer
+- None.
 
 ### Direct Toast Calls Outside Toast Wrapper
 
@@ -145,7 +144,7 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 
 ## Summary
 
-- Hard failures: 2
+- Hard failures: 0
 - Duplicate-code candidates: 44
 - Dead-code candidates: 4
 
