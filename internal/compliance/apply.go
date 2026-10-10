@@ -263,6 +263,10 @@ func Diff(ctx context.Context, q Querier, baselineID uuid.UUID) (DiffResult, err
 // fatal. A DB error on a write that SHOULD have succeeded is fatal
 // and returned to the caller for tx rollback.
 func writeSpec(ctx context.Context, q Querier, spec BaselineSpec, userID uuid.UUID, logger *slog.Logger) error {
+	quotaPlans, err := prepareQuotaPlans(spec.QuotaPlans)
+	if err != nil {
+		return err
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -341,7 +345,7 @@ func writeSpec(ctx context.Context, q Querier, spec BaselineSpec, userID uuid.UU
 	}
 
 	// Quota plans.
-	for _, qp := range spec.QuotaPlans {
+	for index, qp := range spec.QuotaPlans {
 		// Guard the "default" plan name — operators may have
 		// customized their default tier; the baseline never
 		// overwrites it. The CLI/test path can still target named
@@ -350,19 +354,7 @@ func writeSpec(ctx context.Context, q Querier, spec BaselineSpec, userID uuid.UU
 			logger.Warn("compliance.apply: skipping baseline quota plan named 'default' (operator-managed)")
 			continue
 		}
-		params := sqlc.UpsertQuotaPlanParams{
-			Name:                    qp.Name,
-			Enforcement:             cmp.Or(qp.Enforcement, "hard"),
-			Description:             qp.Description,
-			MaxClustersPerProject:   int32(qp.MaxClustersPerProject),
-			MaxNamespacesPerProject: int32(qp.MaxNamespacesPerProject),
-			MaxMembersPerProject:    int32(qp.MaxMembersPerProject),
-			MaxProjectsPerUser:      int32(qp.MaxProjectsPerUser),
-			MaxTokensPerUser:        int32(qp.MaxTokensPerUser),
-			MaxStreamsPerUser:       int32(qp.MaxStreamsPerUser),
-			MaxTotalClusters:        int32(qp.MaxTotalClusters),
-			MaxTotalUsers:           int32(qp.MaxTotalUsers),
-		}
+		params := quotaPlans[index]
 		if _, err := q.UpsertQuotaPlan(ctx, params); err != nil {
 			return fmt.Errorf("upsert quota_plan %s: %w", qp.Name, err)
 		}
