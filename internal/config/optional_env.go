@@ -68,6 +68,7 @@ func bindOptionalEnvironment(v *viper.Viper) error {
 		"helm_registry_config",
 		"helm_repository_config",
 		"helm_repository_destination_policy",
+		"helm_repository_proxy_url",
 		"helm_repository_cache",
 		"helm_plugins",
 		"astronomer_tunnel_egress_cidrs",

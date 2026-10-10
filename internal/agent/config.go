@@ -147,7 +147,11 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	insecureConfigured := os.Getenv("ASTRONOMER_INSECURE") == "true"
 	helmRuntime := helmruntime.FromSettings(cli.New(), os.Getenv("HELM_DRIVER"))
 	helmRuntime.RepositoryDestinationPolicy = os.Getenv("HELM_REPOSITORY_DESTINATION_POLICY")
+	helmRuntime.RepositoryProxyURL = os.Getenv("HELM_REPOSITORY_PROXY_URL")
 	if _, err := httpclient.ParseDestinationPolicy(helmRuntime.RepositoryDestinationPolicy); err != nil {
+		return nil, err
+	}
+	if err := httpclient.ValidateProxyOrigin(helmRuntime.RepositoryProxyURL); err != nil {
 		return nil, err
 	}
 	otelSamplerRatio := 0.05

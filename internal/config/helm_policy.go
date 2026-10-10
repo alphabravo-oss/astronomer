@@ -7,6 +7,8 @@ func normalizeHelmAndDeliveryTrust(cfg *Config) error {
 	if err := normalizeDeliveryFluxTrust(cfg); err != nil {
 		return err
 	}
-	_, err := httpclient.ParseDestinationPolicy(cfg.HelmRepositoryDestinationPolicy)
-	return err
+	if _, err := httpclient.ParseDestinationPolicy(cfg.HelmRepositoryDestinationPolicy); err != nil {
+		return err
+	}
+	return httpclient.ValidateProxyOrigin(cfg.HelmRepositoryProxyURL)
 }

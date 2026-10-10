@@ -12,6 +12,7 @@ func helmRuntimeFromConfig(cfg *config.Config) helmruntime.Config {
 		Driver: cfg.HelmDriver, RegistryConfig: cfg.HelmRegistryConfig,
 		RepositoryConfig: cfg.HelmRepositoryConfig, RepositoryCache: cfg.HelmRepositoryCache,
 		RepositoryDestinationPolicy: cfg.HelmRepositoryDestinationPolicy,
+		RepositoryProxyURL:          cfg.HelmRepositoryProxyURL,
 		PluginsDirectory:            cfg.HelmPluginsDirectory, BurstLimit: 100,
 	}
 }

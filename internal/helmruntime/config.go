@@ -41,6 +41,7 @@ type Config struct {
 
 	// Explicit operator authority; never populated from a chart request.
 	RepositoryDestinationPolicy string
+	RepositoryProxyURL          string
 }
 
 // InClusterDefaults returns writable paths and no external kubeconfig or

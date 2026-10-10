@@ -250,6 +250,19 @@ func freezeRedirectOriginPairs(policy DestinationPolicy, options DestinationOpti
 // environment is ignored. The caller's policy is copied and cannot be widened
 // by catalog content or by subsequent changes to caller-owned slices.
 func NewDestinationClient(policy DestinationPolicy, options DestinationOptions) (*http.Client, error) {
+	return NewDestinationClientContext(context.Background(), policy, options)
+}
+
+// NewDestinationClientContext additionally binds constructor-time proxy DNS
+// validation to the caller's owned operation. Requests still use their own
+// contexts; the supplied client never discovers authority from proxy env vars.
+func NewDestinationClientContext(ctx context.Context, policy DestinationPolicy, options DestinationOptions) (*http.Client, error) {
+	if ctx == nil {
+		return nil, errors.New("destination construction context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := policy.Validate(); err != nil {
 		return nil, err
 	}
@@ -264,7 +277,7 @@ func NewDestinationClient(policy DestinationPolicy, options DestinationOptions) 
 		options.TLSConfig = options.TLSConfig.Clone()
 	}
 	policy = cloneDestinationPolicy(policy)
-	return newDestinationClient(policy, options, net.DefaultResolver.LookupNetIP, (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext)
+	return newDestinationClientContext(ctx, policy, options, net.DefaultResolver.LookupNetIP, (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext)
 }
 
 func cloneDestinationPolicy(policy DestinationPolicy) DestinationPolicy {
@@ -278,6 +291,16 @@ func cloneDestinationPolicy(policy DestinationPolicy) DestinationPolicy {
 }
 
 func newDestinationClient(policy DestinationPolicy, options DestinationOptions, lookup destinationLookup, dial func(context.Context, string, string) (net.Conn, error)) (*http.Client, error) {
+	return newDestinationClientContext(context.Background(), policy, options, lookup, dial)
+}
+
+func newDestinationClientContext(ctx context.Context, policy DestinationPolicy, options DestinationOptions, lookup destinationLookup, dial func(context.Context, string, string) (net.Conn, error)) (*http.Client, error) {
+	if ctx == nil {
+		return nil, errors.New("destination construction context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	pairs, err := freezeRedirectOriginPairs(policy, options)
 	if err != nil {
 		return nil, err
@@ -344,8 +367,12 @@ func newDestinationClient(policy DestinationPolicy, options DestinationOptions, 
 		if err != nil || proxy.Scheme != "https" {
 			return nil, errors.New("destination proxy is invalid")
 		}
-		if err := policy.validateURL(context.Background(), options.ProxyURL, lookup); err != nil {
+		validationErr := policy.validateURL(ctx, options.ProxyURL, lookup)
+		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+		if validationErr != nil {
+			return nil, validationErr
 		}
 		transport.Proxy = http.ProxyURL(proxy)
 	}
@@ -391,7 +418,25 @@ func newDestinationClient(policy DestinationPolicy, options DestinationOptions, 
 		}
 		return policy.validateURL(request.Context(), request.URL.String(), lookup)
 	}
+	if err := ctx.Err(); err != nil {
+		client.CloseIdleConnections()
+		return nil, err
+	}
 	return client, nil
+}
+
+// ValidateProxyOrigin validates only the configured proxy shape. Destination
+// permission and actual addresses are enforced by the canonical constructor
+// and dial path; this helper performs no network lookup at process config load.
+func ValidateProxyOrigin(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	value, err := parseOrigin(raw)
+	if err != nil || value.Scheme != "https" || value.Path != "" && value.Path != "/" || value.RawQuery != "" || value.ForceQuery || value.Fragment != "" {
+		return errors.New("destination proxy is invalid")
+	}
+	return nil
 }
 
 type destinationTransport struct {

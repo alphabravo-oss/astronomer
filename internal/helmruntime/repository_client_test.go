@@ -57,3 +57,24 @@ func TestHelmRepositoryPolicyRejectsMalformedOperatorConfiguration(t *testing.T)
 		}
 	}
 }
+
+func TestHelmRepositoryProxyRequiresIndependentOperatorAuthority(t *testing.T) {
+	for _, proxy := range []string{"http://proxy.example:3128", "https://user:fixture@proxy.example", "https://proxy.example/connect", "https://proxy.example?"} {
+		if _, err := RepositoryClient(context.Background(), Config{RepositoryProxyURL: proxy}, nil); err == nil {
+			t.Fatal("unsupported operator proxy admitted")
+		}
+	}
+	// A configured origin cannot turn a loopback proxy into approved access.
+	for _, policy := range []string{"", `{"restricted":true,"origins":[{"url":"https://127.0.0.1:8443","cidrs":["127.0.0.0/8"]}]}`} {
+		if _, err := RepositoryClient(context.Background(), Config{RepositoryProxyURL: "https://127.0.0.1:8443", RepositoryDestinationPolicy: policy}, nil); err == nil {
+			t.Fatal("configured proxy granted loopback access")
+		}
+	}
+	policy, err := httpclient.ParseDestinationPolicy(`{"restricted":true,"origins":[{"url":"https://10.42.0.12:8443","cidrs":["10.42.0.12/32"]}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := policy.ValidateURL(context.Background(), "https://10.42.0.13:8443/chart.tgz"); err == nil {
+		t.Fatal("a proxy origin granted authority to an unrelated repository")
+	}
+}

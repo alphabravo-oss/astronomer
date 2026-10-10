@@ -56,6 +56,9 @@ type Config struct {
 	// HelmRepositoryDestinationPolicy is operator-owned origin/CIDR authority,
 	// independent of chart URLs and catalog/provider destination policies.
 	HelmRepositoryDestinationPolicy string `mapstructure:"helm_repository_destination_policy"`
+	// HelmRepositoryProxyURL is an explicit HTTPS origin, without credentials,
+	// whose addresses must also satisfy the independent Helm destination policy.
+	HelmRepositoryProxyURL string `mapstructure:"helm_repository_proxy_url"`
 
 	BootstrapAdminPassword            string `mapstructure:"astronomer_bootstrap_password"`
 	BootstrapAdminUsername            string `mapstructure:"astronomer_bootstrap_username"`
