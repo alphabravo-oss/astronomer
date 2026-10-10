@@ -114,7 +114,81 @@ def run_test_process(command, env, output, timeout=180):
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGKILL)
             process.wait(timeout=5)
-        raise
+        error = subprocess.TimeoutExpired(command, timeout)
+        error.process_exit_code = process.returncode
+        raise error
+
+
+def source_identity():
+    return json.loads(subprocess.check_output([sys.executable, "scripts/hash-source-tree.py", "--root", str(ROOT)], cwd=ROOT))
+
+
+def capacity_capture(path):
+    result = subprocess.run(["bash", "scripts/check-build-capacity.sh", "--json"], cwd=ROOT, capture_output=True, text=True)
+    path.write_text(result.stdout)
+    return result.returncode
+
+
+def run_lane(args, artifact):
+    before = after = process_exit = None
+    exit_code, stage, error_kind = 1, "source", None
+    results = {"expected": sorted(PARENTS), "qualified": False}
+    cmd = ["go", "test", "./internal/server", "-run", "^TestPostgres(Connection|Registration|Vault)MetricsRepeatableReadAcrossMutation$", "-count=1", "-timeout=2m", "-json"] + (["-race"] if args.race else [])
+    started = dt.datetime.now(dt.timezone.utc)
+    try:
+        before = source_identity()
+        if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT):
+            raise ValueError("dirty source")
+        stage = "capacity_before"
+        if capacity_capture(artifact / "capacity-before.json") != 0:
+            raise ValueError("capacity guard failed")
+        stage = "ownership"
+        report = live_fence(args)
+        (artifact / "ownership-before-process.json").write_text(json.dumps(report, indent=2) + "\n")
+        env = os.environ.copy()
+        env.update(ASTRONOMER_METRICS_DATABASE_REF=str(Path(args.reference).resolve()), ASTRONOMER_METRICS_REFERENCE_SHA256=report["privateReferenceSHA256"], ASTRONOMER_METRICS_POSTGRES_MAJOR=args.major)
+        stage = "test_process"
+        with (artifact / "go-test.jsonl").open("w") as output:
+            process_exit = run_test_process(cmd, env, output)
+        exit_code = process_exit
+        stage = "parent_inventory"
+        results = parent_results(artifact / "go-test.jsonl")
+        if exit_code == 0 and not results["qualified"]:
+            exit_code = 1
+        stage = "complete"
+    except subprocess.TimeoutExpired as error:
+        process_exit = getattr(error, "process_exit_code", None)
+        exit_code, error_kind = 124, "timeout"
+    except (ValueError, KeyError, OSError, TypeError, subprocess.SubprocessError):
+        # Never retain exception text: it may include subprocess args or a DSN.
+        error_kind = "invariant_or_execution_error"
+        if exit_code == 0:
+            exit_code = 1
+    finally:
+        try:
+            after = source_identity()
+        except (ValueError, OSError, subprocess.SubprocessError):
+            error_kind = error_kind or "source_after_unavailable"
+        try:
+            final_capacity_exit = capacity_capture(artifact / "capacity-after.json")
+        except (OSError, subprocess.SubprocessError):
+            final_capacity_exit = 1
+        stable = before is not None and before == after
+        if exit_code == 0 and (not stable or final_capacity_exit != 0):
+            exit_code = 1
+        if (artifact / "go-test.jsonl").exists() and not results["qualified"]:
+            try:
+                results = parent_results(artifact / "go-test.jsonl")
+            except (ValueError, OSError, TypeError):
+                results["error"] = "event_inventory_unavailable"
+        try:
+            commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+        except (OSError, subprocess.SubprocessError):
+            commit = None
+        log = artifact / "go-test.jsonl"
+        receipt = {"sourceCommit": commit, "sourceBefore": before, "sourceAfter": after, "sourceStable": stable, "command": cmd, "exitCode": exit_code, "testProcessExitCode": process_exit, "stage": stage, "errorKind": error_kind, "parents": results, "logSHA256": hashlib.sha256(log.read_bytes()).hexdigest() if log.exists() else None, "finalCapacityExitCode": final_capacity_exit, "startedAt": started.isoformat(), "completedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "scope": "Three canonical read-only RR collectors over501 synthetic rows in exclusively owned cloned schemas; no whole application/fleet qualification"}
+        (artifact / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    return exit_code
 
 
 def main():
@@ -128,34 +202,18 @@ def main():
     parser.add_argument("--race", action="store_true")
     args = parser.parse_args()
     try:
-        if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT):
-            raise ValueError("clean source required")
         artifact = Path(args.artifact_dir).resolve()
         if artifact == ROOT or ROOT in artifact.parents:
             raise ValueError("artifacts must remain outside source")
         artifact.mkdir(parents=True, exist_ok=False)
-        if not args.run:
-            report = live_fence(args)
-            (artifact / "ownership-read-only.json").write_text(json.dumps(report, indent=2) + "\n")
-            print("metrics qualification: live owned endpoint verified; no writes")
-            return 0
-        capacity = subprocess.check_output(["bash", "scripts/check-build-capacity.sh", "--json"], cwd=ROOT)
-        (artifact / "capacity-before.json").write_bytes(capacity)
-        # This is fresh immediately before the single mutating test process.
+        if args.run:
+            return run_lane(args, artifact)
+        if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT):
+            raise ValueError("clean source required")
         report = live_fence(args)
-        (artifact / "ownership-before-process.json").write_text(json.dumps(report, indent=2) + "\n")
-        env = os.environ.copy()
-        env.update(ASTRONOMER_METRICS_DATABASE_REF=str(Path(args.reference).resolve()), ASTRONOMER_METRICS_REFERENCE_SHA256=report["privateReferenceSHA256"], ASTRONOMER_METRICS_POSTGRES_MAJOR=args.major)
-        cmd = ["go", "test", "./internal/server", "-run", "^TestPostgres(Connection|Registration|Vault)MetricsRepeatableReadAcrossMutation$", "-count=1", "-timeout=2m", "-json"] + (["-race"] if args.race else [])
-        before = subprocess.check_output([sys.executable, "scripts/hash-source-tree.py", "--root", str(ROOT)], cwd=ROOT)
-        with (artifact / "go-test.jsonl").open("w") as output:
-            exit_code = run_test_process(cmd, env, output)
-        after = subprocess.check_output([sys.executable, "scripts/hash-source-tree.py", "--root", str(ROOT)], cwd=ROOT)
-        results = parent_results(artifact / "go-test.jsonl")
-        receipt = {"sourceCommit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(), "sourceBefore": json.loads(before), "sourceAfter": json.loads(after), "sourceStable": before == after, "command": cmd, "exitCode": exit_code, "parents": results, "logSHA256": hashlib.sha256((artifact / "go-test.jsonl").read_bytes()).hexdigest(), "completedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "scope": "Three canonical read-only RR collectors over501 synthetic rows in exclusively owned cloned schemas; no whole application/fleet qualification"}
-        (artifact / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-        (artifact / "capacity-after.json").write_bytes(subprocess.check_output(["bash", "scripts/check-build-capacity.sh", "--json"], cwd=ROOT))
-        return 0 if exit_code == 0 and before == after and results["qualified"] else exit_code or 1
+        (artifact / "ownership-read-only.json").write_text(json.dumps(report, indent=2) + "\n")
+        print("metrics qualification: live owned endpoint verified; no writes")
+        return 0
     except (ValueError, KeyError, OSError, TypeError, subprocess.SubprocessError):
         print("metrics qualification: source, ownership or execution invariant failed", file=sys.stderr)
         return 1

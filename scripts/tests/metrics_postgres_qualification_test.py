@@ -7,6 +7,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 SPEC = importlib.util.spec_from_file_location("metrics_fence", Path(__file__).parents[1] / "metrics-postgres-qualification.py")
@@ -135,6 +137,77 @@ class MetricsOwnershipTests(unittest.TestCase):
                 result = fence.parent_results(path)
                 self.assertFalse(result["qualified"])
                 self.assertEqual(result["error"], "invalid_json_event")
+
+
+class MetricsFailureReceiptTests(unittest.TestCase):
+    def exercise(self, process, *, ownership_error=False, final_guard_exit=0, changed_source=False):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory)
+            args = SimpleNamespace(major="18", reference="/private/ref.json", race=True)
+            guards = []
+            def capture(path):
+                guards.append(path.name)
+                path.write_text(json.dumps({"meets_minimum": path.name != "capacity-after.json" or final_guard_exit == 0}))
+                return final_guard_exit if path.name == "capacity-after.json" else 0
+            def git(command, **kwargs):
+                return "source-commit" if "rev-parse" in command else b""
+            source = {"sha256": "same"}
+            identities = [source, {"sha256": "changed"} if changed_source else source]
+            owned = {"privateReferenceSHA256": "hash"}
+            with mock.patch.object(fence, "capacity_capture", side_effect=capture), mock.patch.object(fence, "source_identity", side_effect=identities), mock.patch.object(fence.subprocess, "check_output", side_effect=git), mock.patch.object(fence, "live_fence", side_effect=ValueError("private detail") if ownership_error else None, return_value=owned), mock.patch.object(fence, "run_test_process", side_effect=process):
+                code = fence.run_lane(args, artifact)
+            receipt = json.loads((artifact / "receipt.json").read_text())
+            self.assertEqual(guards[-1], "capacity-after.json")
+            self.assertIsNotNone(receipt["sourceAfter"])
+            self.assertNotIn("private detail", (artifact / "receipt.json").read_text())
+            return code, receipt
+
+    @staticmethod
+    def passing(command, env, output):
+        for name in sorted(fence.PARENTS):
+            output.write(json.dumps({"Action": "pass", "Test": name}) + "\n")
+        return 0
+
+    def test_nonzero_child_exit_retained_despite_final_guard_failure(self):
+        def failure(command, env, output):
+            output.write(json.dumps({"Action": "fail", "Package": "server"}) + "\n")
+            return 2
+        code, receipt = self.exercise(failure, final_guard_exit=1)
+        self.assertEqual(code, 2)
+        self.assertEqual(receipt["testProcessExitCode"], 2)
+        self.assertFalse(receipt["parents"]["qualified"])
+
+    def test_timeout_retains_final_source_and_capacity(self):
+        def timeout(command, env, output):
+            output.write(json.dumps({"Action": "run", "Test": sorted(fence.PARENTS)[0]}) + "\n")
+            error = subprocess.TimeoutExpired(command, 180)
+            error.process_exit_code = -15
+            raise error
+        code, receipt = self.exercise(timeout)
+        self.assertEqual(code, 124)
+        self.assertEqual(receipt["testProcessExitCode"], -15)
+        self.assertEqual(receipt["errorKind"], "timeout")
+        self.assertIsNotNone(receipt["logSHA256"])
+
+    def test_ownership_exception_has_no_test_process_and_preserves_receipt(self):
+        code, receipt = self.exercise(self.passing, ownership_error=True)
+        self.assertEqual(code, 1)
+        self.assertIsNone(receipt["testProcessExitCode"])
+        self.assertIsNone(receipt["logSHA256"])
+        self.assertEqual(receipt["stage"], "ownership")
+
+    def test_successful_tests_fail_for_source_drift_or_final_guard_failure(self):
+        for flags in [{"changed_source": True}, {"final_guard_exit": 1}]:
+            with self.subTest(flags=flags):
+                code, receipt = self.exercise(self.passing, **flags)
+                self.assertEqual(code, 1)
+                self.assertEqual(receipt["testProcessExitCode"], 0)
+                self.assertTrue(receipt["parents"]["qualified"])
+
+    def test_missing_parents_never_pass_on_zero_child_exit(self):
+        code, receipt = self.exercise(lambda command, env, output: 0)
+        self.assertEqual(code, 1)
+        self.assertFalse(receipt["parents"]["qualified"])
 
 
 if __name__ == "__main__":
