@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/hex"
-	"encoding/pem"
 	"errors"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 )
@@ -34,29 +33,11 @@ func NewWithBuiltinCA(queries Querier, decryptor Decryptor, ca []byte, authorize
 }
 
 func validBuiltinCA(ca []byte) bool {
-	if len(ca) == 0 || len(ca) > protocol.MaxDeliveryCredentialValue {
+	if len(ca) > protocol.MaxDeliveryCredentialValue {
 		return false
 	}
-	count := 0
-	for remaining := bytes.TrimSpace(ca); len(remaining) != 0; {
-		if !bytes.HasPrefix(remaining, []byte("-----BEGIN CERTIFICATE-----")) {
-			return false
-		}
-		block, rest := pem.Decode(remaining)
-		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
-			return false
-		}
-		certificate, err := x509.ParseCertificate(block.Bytes)
-		if err != nil || !certificate.IsCA {
-			return false
-		}
-		count++
-		if count > 64 {
-			return false
-		}
-		remaining = bytes.TrimSpace(rest)
-	}
-	return count != 0
+	_, err := httpclient.ParseCertificateAuthorities(ca)
+	return err == nil
 }
 
 func builtinCAEligible(row sqlc.ListClusterDeliveryAssignmentsRow) bool {

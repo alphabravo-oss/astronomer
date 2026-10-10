@@ -2,7 +2,10 @@ package distribution
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -14,24 +17,29 @@ import (
 // keeps its existing API. It does not promote durable epochs, approve publisher
 // attempts or prove scan-used DB provenance.
 type DatabaseAuthority struct {
-	mutex  sync.RWMutex
-	loader *Loader
-	trust  *resolver.CosignTrustSnapshot
-	closed bool
+	mutex    sync.RWMutex
+	loader   *Loader
+	trust    *resolver.CosignTrustSnapshot
+	registry *resolver.DatabaseRegistryTransport
+	closed   bool
 }
 
 type DatabaseAuthoritySnapshot struct {
-	Base                     DatabaseBaseSnapshot
-	TrustMaterialFingerprint string
+	Base                          DatabaseBaseSnapshot
+	TrustMaterialFingerprint      string
+	RegistryRootsFingerprint      string
+	RegistryPolicyFingerprint     string
+	RegistryRootOriginFingerprint string
 }
 
 // VerifiedDatabaseAuthorityBase is provenance from this exact constructor, not
 // caller-supplied snapshot fields. Durable acceptance must Revalidate again
 // before authority reads and immediately before commit/use.
 type VerifiedDatabaseAuthorityBase struct {
-	owner       *DatabaseAuthority
-	base        *VerifiedDatabaseBase
-	fingerprint string
+	owner                                             *DatabaseAuthority
+	base                                              *VerifiedDatabaseBase
+	fingerprint                                       string
+	registryRoots, registryPolicy, registryRootOrigin string
 }
 
 func NewDatabaseAuthority(ctx context.Context, options Options) (*DatabaseAuthority, error) {
@@ -60,17 +68,18 @@ func (authority *DatabaseAuthority) Base(ctx context.Context) (*VerifiedDatabase
 	if authority.closed {
 		return nil, errors.New("database physical authority unavailable")
 	}
-	if err := authority.trust.Revalidate(ctx); err != nil {
+	if err := authority.revalidatePhysicalTrust(ctx); err != nil {
 		return nil, err
 	}
 	base, err := authority.loader.DatabaseBase(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := authority.trust.Revalidate(ctx); err != nil {
+	if err := authority.revalidatePhysicalTrust(ctx); err != nil {
 		return nil, err
 	}
-	return &VerifiedDatabaseAuthorityBase{owner: authority, base: base, fingerprint: authority.trust.Fingerprint()}, nil
+	roots, policy := authority.registry.Fingerprints()
+	return &VerifiedDatabaseAuthorityBase{owner: authority, base: base, fingerprint: authority.physicalFingerprint(), registryRoots: roots, registryPolicy: policy, registryRootOrigin: authority.registry.RootOriginFingerprint()}, nil
 }
 
 func (authority *DatabaseAuthority) Revalidate(ctx context.Context, proof *VerifiedDatabaseAuthorityBase) error {
@@ -79,10 +88,10 @@ func (authority *DatabaseAuthority) Revalidate(ctx context.Context, proof *Verif
 	}
 	authority.mutex.RLock()
 	defer authority.mutex.RUnlock()
-	if authority.closed || proof.base == nil || proof.base.owner != authority.loader || proof.fingerprint != authority.trust.Fingerprint() {
+	if authority.closed || proof.base == nil || proof.base.owner != authority.loader || proof.fingerprint != authority.physicalFingerprint() {
 		return errors.New("database physical authority unavailable")
 	}
-	return authority.trust.Revalidate(ctx)
+	return authority.revalidatePhysicalTrust(ctx)
 }
 
 // LoadUpdate supplies the identical frozen canonical trust/binding/client used
@@ -96,10 +105,10 @@ func (authority *DatabaseAuthority) LoadUpdate(ctx context.Context, proof *Verif
 	}
 	authority.mutex.RLock()
 	defer authority.mutex.RUnlock()
-	if authority.closed || proof.base == nil || proof.base.owner != authority.loader || proof.fingerprint != authority.trust.Fingerprint() {
+	if authority.closed || proof.base == nil || proof.base.owner != authority.loader || proof.fingerprint != authority.physicalFingerprint() {
 		return nil, errors.New("database physical authority unavailable")
 	}
-	if err := authority.trust.Revalidate(ctx); err != nil {
+	if err := authority.revalidatePhysicalTrust(ctx); err != nil {
 		return nil, err
 	}
 	base, valid := proof.base.Snapshot()
@@ -115,7 +124,7 @@ func (authority *DatabaseAuthority) LoadUpdate(ctx context.Context, proof *Verif
 	if err != nil {
 		return nil, err
 	}
-	if err := authority.trust.Revalidate(ctx); err != nil {
+	if err := authority.revalidatePhysicalTrust(ctx); err != nil {
 		return nil, err
 	}
 	return update, nil
@@ -131,7 +140,7 @@ func (proof *VerifiedDatabaseAuthorityBase) Snapshot() (DatabaseAuthoritySnapsho
 	if !valid {
 		return DatabaseAuthoritySnapshot{}, false
 	}
-	return DatabaseAuthoritySnapshot{Base: base, TrustMaterialFingerprint: proof.fingerprint}, true
+	return DatabaseAuthoritySnapshot{Base: base, TrustMaterialFingerprint: proof.fingerprint, RegistryRootsFingerprint: proof.registryRoots, RegistryPolicyFingerprint: proof.registryPolicy, RegistryRootOriginFingerprint: proof.registryRootOrigin}, true
 }
 
 func (authority *DatabaseAuthority) Close() {
@@ -145,4 +154,59 @@ func (authority *DatabaseAuthority) Close() {
 	}
 	authority.closed = true
 	authority.trust.Close()
+	authority.registry.Close()
+}
+
+// NewPinnedDatabaseAuthority captures the registry roots and destination policy
+// before building the canonical private loader. Caller clients are rejected;
+// the ordinary distribution constructor and signing-only authority are unchanged.
+func NewPinnedDatabaseAuthority(ctx context.Context, options Options, registryOptions resolver.DatabaseRegistryTrustOptions) (*DatabaseAuthority, error) {
+	if ctx == nil || options.UpdateBinding == nil || options.Development || options.Client != nil {
+		return nil, errors.New("database pinned authority cannot accept caller transport")
+	}
+	registry, err := resolver.CaptureDatabaseRegistryTransport(ctx, registryOptions)
+	if err != nil {
+		return nil, err
+	}
+	options.Client = registry.Client()
+	options.Network = registry.Network()
+	authority, err := NewDatabaseAuthority(ctx, options)
+	if err != nil {
+		registry.Close()
+		return nil, err
+	}
+	authority.registry = registry
+	if err := authority.revalidatePhysicalTrust(ctx); err != nil {
+		authority.Close()
+		return nil, err
+	}
+	return authority, nil
+}
+
+func (authority *DatabaseAuthority) revalidatePhysicalTrust(ctx context.Context) error {
+	if err := authority.trust.Revalidate(ctx); err != nil {
+		return err
+	}
+	if authority.registry != nil {
+		return authority.registry.Revalidate(ctx)
+	}
+	return nil
+}
+
+func (authority *DatabaseAuthority) physicalFingerprint() string {
+	if authority.registry == nil {
+		return authority.trust.Fingerprint()
+	}
+	roots, policy := authority.registry.Fingerprints()
+	if roots == "" || policy == "" {
+		return ""
+	}
+	hash := sha256.New()
+	for _, field := range []string{"astronomer-database-physical-authority-v2", authority.trust.Fingerprint(), roots, policy, authority.registry.RootOriginFingerprint()} {
+		var size [8]byte
+		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
+		_, _ = hash.Write(size[:])
+		_, _ = hash.Write([]byte(field))
+	}
+	return fmt.Sprintf("sha256:%x", hash.Sum(nil))
 }
