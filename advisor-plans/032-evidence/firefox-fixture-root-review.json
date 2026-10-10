@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T01:39:06.342339+00:00",
+  "fixtureSource": "1f4c7067da31b316ee50cec1057804eb204b035b",
+  "integratedFixtureThrough": "0fd75c36",
+  "applicationSource": "5d8f9729ba356ac687ce89a0871b7a32412b4de9",
+  "fullSourceReview": "PASS",
+  "originalArtifactHashesVerified": 39,
+  "originalReceiptAndGateHashesVerified": 13,
+  "compilerFollowupHashesVerified": 3,
+  "rootIndependentReuseTests": {
+    "cases": 20,
+    "passed": 20
+  },
+  "rootIndependentProtectedReferenceCheck": "PASS five original binaries, full application and frontend bytes, exact original go.mod compiler go1.27.2; no outputs materialized",
+  "sourceIdentitySeparated": true,
+  "originalFirefox": {
+    "passed": 16,
+    "total": 18,
+    "failed": 2,
+    "retry": 0,
+    "skipped": 0
+  },
+  "correctedFreshFirefox": "RUNNING; no result yet",
+  "integratedMainReuse": "NOT_QUALIFIED; original5d assets only match protected fixture exception; later candidate must rebuild/qualify current application",
+  "nativeManualObservation": "NOT_QUALIFIED previous navigation ERR_CONNECTION_REFUSED; current owned preview retry pending"
+}
