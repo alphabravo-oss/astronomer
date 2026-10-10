@@ -3,7 +3,10 @@
 // Helm consumers receive this value and never consult process-global state.
 package helmruntime
 
-import "helm.sh/helm/v4/pkg/cli"
+import (
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"helm.sh/helm/v4/pkg/cli"
+)
 
 const (
 	defaultRegistryConfig   = "/tmp/helm/config/registry/config.json"
@@ -42,6 +45,7 @@ type Config struct {
 	// Explicit operator authority; never populated from a chart request.
 	RepositoryDestinationPolicy string
 	RepositoryProxyURL          string
+	RepositoryProxyRouting      httpclient.ProxyRouting
 }
 
 // InClusterDefaults returns writable paths and no external kubeconfig or

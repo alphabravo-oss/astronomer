@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
+	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -56,9 +57,12 @@ type Config struct {
 	// HelmRepositoryDestinationPolicy is operator-owned origin/CIDR authority,
 	// independent of chart URLs and catalog/provider destination policies.
 	HelmRepositoryDestinationPolicy string `mapstructure:"helm_repository_destination_policy"`
-	// HelmRepositoryProxyURL is an explicit HTTPS origin, without credentials,
-	// whose addresses must also satisfy the independent Helm destination policy.
+	// HelmRepositoryProxyURL overrides both captured operator proxy routes.
+	// Proxy origin/address authority remains the independent Helm policy.
 	HelmRepositoryProxyURL string `mapstructure:"helm_repository_proxy_url"`
+	HelmRepositoryNoProxy  string `mapstructure:"helm_repository_no_proxy"`
+	// Captured once by Load; neither requests nor consumers read proxy env.
+	HelmRepositoryProxyRouting httpclient.ProxyRouting `mapstructure:"-"`
 
 	BootstrapAdminPassword            string `mapstructure:"astronomer_bootstrap_password"`
 	BootstrapAdminUsername            string `mapstructure:"astronomer_bootstrap_username"`
@@ -510,6 +514,7 @@ func Load() (*Config, error) {
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, err
 	}
+	captureHelmOperatorProxy(cfg, v.IsSet("helm_repository_no_proxy"))
 	if err := normalizeHelmAndDeliveryTrust(cfg); err != nil {
 		return nil, err
 	}

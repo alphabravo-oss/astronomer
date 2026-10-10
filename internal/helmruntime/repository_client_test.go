@@ -59,7 +59,7 @@ func TestHelmRepositoryPolicyRejectsMalformedOperatorConfiguration(t *testing.T)
 }
 
 func TestHelmRepositoryProxyRequiresIndependentOperatorAuthority(t *testing.T) {
-	for _, proxy := range []string{"http://proxy.example:3128", "https://user:fixture@proxy.example", "https://proxy.example/connect", "https://proxy.example?"} {
+	for _, proxy := range []string{"http://proxy.example:3128", "https://proxy.example/connect", "https://proxy.example?"} {
 		if _, err := RepositoryClient(context.Background(), Config{RepositoryProxyURL: proxy}, nil); err == nil {
 			t.Fatal("unsupported operator proxy admitted")
 		}
@@ -76,5 +76,16 @@ func TestHelmRepositoryProxyRequiresIndependentOperatorAuthority(t *testing.T) {
 	}
 	if err := policy.ValidateURL(context.Background(), "https://10.42.0.13:8443/chart.tgz"); err == nil {
 		t.Fatal("a proxy origin granted authority to an unrelated repository")
+	}
+}
+
+func TestHelmRepositoryTypedProxyAllowsOperatorAuthAndRejectsAmbiguousInputs(t *testing.T) {
+	client, err := RepositoryClient(context.Background(), Config{RepositoryProxyRouting: httpclient.ProxyRouting{URL: "https://operator:fixture@proxy.example"}}, nil)
+	if err != nil || client == nil {
+		t.Fatal("typed operator proxy authentication shape was rejected")
+	}
+	client.CloseIdleConnections()
+	if _, err := RepositoryClient(context.Background(), Config{RepositoryProxyURL: "https://legacy.example", RepositoryProxyRouting: httpclient.ProxyRouting{HTTPSURL: "https://typed.example"}}, nil); err == nil {
+		t.Fatal("ambiguous legacy/typed repository proxy input admitted")
 	}
 }

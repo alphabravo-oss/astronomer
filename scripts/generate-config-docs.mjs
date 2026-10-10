@@ -75,6 +75,7 @@ const sensitiveKeys = new Set([
   "astronomer_bootstrap_password",
   "database_url",
   "delivery_source_proxy_url",
+  "helm_repository_proxy_url",
   "github_client_secret",
   "google_client_secret",
   "extension_bundle_trusted_key",

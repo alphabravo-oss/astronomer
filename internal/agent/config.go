@@ -147,11 +147,19 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	insecureConfigured := os.Getenv("ASTRONOMER_INSECURE") == "true"
 	helmRuntime := helmruntime.FromSettings(cli.New(), os.Getenv("HELM_DRIVER"))
 	helmRuntime.RepositoryDestinationPolicy = os.Getenv("HELM_REPOSITORY_DESTINATION_POLICY")
-	helmRuntime.RepositoryProxyURL = os.Getenv("HELM_REPOSITORY_PROXY_URL")
-	if _, err := httpclient.ParseDestinationPolicy(helmRuntime.RepositoryDestinationPolicy); err != nil {
+	explicitProxyBypass, explicitProxyBypassSet := os.LookupEnv("HELM_REPOSITORY_NO_PROXY")
+	var bypass *string
+	if explicitProxyBypassSet {
+		bypass = &explicitProxyBypass
+	}
+	helmRuntime.RepositoryProxyRouting = httpclient.CaptureOperatorProxyRouting(os.Getenv("HELM_REPOSITORY_PROXY_URL"), bypass,
+		httpclient.ProxyRouting{HTTPURL: os.Getenv("HTTP_PROXY"), HTTPSURL: os.Getenv("HTTPS_PROXY"), NoProxy: os.Getenv("NO_PROXY")},
+		httpclient.ProxyRouting{HTTPURL: os.Getenv("http_proxy"), HTTPSURL: os.Getenv("https_proxy"), NoProxy: os.Getenv("no_proxy")})
+	policy, err := httpclient.ParseDestinationPolicy(helmRuntime.RepositoryDestinationPolicy)
+	if err != nil {
 		return nil, err
 	}
-	if err := httpclient.ValidateProxyOrigin(helmRuntime.RepositoryProxyURL); err != nil {
+	if err := httpclient.ValidateProxyRouting(helmRuntime.RepositoryProxyRouting, policy); err != nil {
 		return nil, err
 	}
 	otelSamplerRatio := 0.05

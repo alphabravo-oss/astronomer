@@ -7,8 +7,13 @@ func normalizeHelmAndDeliveryTrust(cfg *Config) error {
 	if err := normalizeDeliveryFluxTrust(cfg); err != nil {
 		return err
 	}
-	if _, err := httpclient.ParseDestinationPolicy(cfg.HelmRepositoryDestinationPolicy); err != nil {
+	policy, err := httpclient.ParseDestinationPolicy(cfg.HelmRepositoryDestinationPolicy)
+	if err != nil {
 		return err
 	}
-	return httpclient.ValidateProxyOrigin(cfg.HelmRepositoryProxyURL)
+	routing := cfg.HelmRepositoryProxyRouting
+	if routing.URL == "" && routing.HTTPURL == "" && routing.HTTPSURL == "" && routing.NoProxy == "" {
+		routing = httpclient.ProxyRouting{URL: cfg.HelmRepositoryProxyURL, NoProxy: cfg.HelmRepositoryNoProxy}
+	}
+	return httpclient.ValidateProxyRouting(routing, policy)
 }
