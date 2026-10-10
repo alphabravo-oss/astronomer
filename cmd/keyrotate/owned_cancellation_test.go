@@ -80,7 +80,9 @@ func characterizeRotationCancellation(t *testing.T, ctx context.Context, db *sql
 		cancel()
 	}
 	s := rotationResult(t, result)
-	if s.rewrote != 1 || s.failed != 1 {
+	// A cancelled context can fail both the blocked UPDATE and the subsequent
+	// page SELECT. The contract counts failed operations, not cancellations.
+	if s.scanned != 2 || s.rewrote != 1 || s.failed == 0 {
 		t.Fatalf("interrupted progress=%+v", s)
 	}
 	stillActive := rotationBackendActive(t, ctx, db, pid)
