@@ -6,6 +6,7 @@ import {
   getImageDatabaseStatus,
   getImageVulnReport,
 } from "@/lib/api/cluster-vulnerabilities";
+import { queryKeys } from "@/lib/query-keys";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { ReportCVEs } from "@/components/security/report-cves";
 import { ImageDatabaseStatus } from "./-database-status";
@@ -48,7 +49,7 @@ function mount(status?: Status, findings = false) {
   clients.push(client);
   if (status)
     client.setQueryData(
-      ["image-database-status-v1", clusterId, reportId],
+      queryKeys.clusterPages.imageDatabaseStatus(clusterId, reportId),
       status,
     );
   return render(

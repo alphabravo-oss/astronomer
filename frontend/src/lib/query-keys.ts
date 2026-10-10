@@ -141,6 +141,8 @@ export const queryKeys = {
         severity,
         pageIndex,
       ] as const,
+    imageDatabaseStatus: (id: string, reportId: string) =>
+      ["image-database-status-v1", id, reportId] as const,
     imageVulnHistory: (id: string, hours: number) =>
       ["clusters", id, "image-vulns", "history", hours] as const,
     imageVulnReportHistory: (id: string, reportId: string) =>

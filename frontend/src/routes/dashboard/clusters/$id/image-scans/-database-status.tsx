@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getImageDatabaseStatus } from "@/lib/api/cluster-vulnerabilities";
+import { queryKeys } from "@/lib/query-keys";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { PermissionState } from "@/components/ui/empty-state";
 
@@ -15,7 +16,7 @@ export function ImageDatabaseStatus({
     id: clusterId,
   });
   const query = useQuery({
-    queryKey: ["image-database-status-v1", clusterId, reportId],
+    queryKey: queryKeys.clusterPages.imageDatabaseStatus(clusterId, reportId),
     queryFn: ({ signal }) =>
       getImageDatabaseStatus(clusterId, reportId, signal),
     enabled: read.allowed,
