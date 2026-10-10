@@ -5,7 +5,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { liveFallback } from "@/lib/live/status-store";
 import {
   listQueues,
-  listDLQ,
+  listDLQPage,
   getDLQOperation,
   retryDLQTask,
   discardDLQTask,
@@ -14,6 +14,7 @@ import {
   type TaskOutboxStatus,
 } from "@/lib/api/admin-operations";
 import { useOperationMutation } from "@/lib/hooks/operation-mutation";
+import { useOperationsPage } from "./-pagination";
 
 export function useOperations() {
   const qc = useQueryClient();
@@ -36,21 +37,35 @@ export function useOperations() {
     return withArchived?.name ?? queueNames[0] ?? "";
   }, [queues.data, queueNames]);
   const [selectedQueue, setSelectedQueue] = useState<string>("");
-  const activeQueue = selectedQueue || defaultDLQ;
+  const activeQueue = queues.isError ? "" : selectedQueue || defaultDLQ;
   const [outboxStatus, setOutboxStatus] = useState<TaskOutboxStatus | "">(
     "dead",
   );
 
+  const dlqPage = useOperationsPage(activeQueue);
+  const outboxPage = useOperationsPage(outboxStatus);
   const dlq = useQuery({
-    queryKey: queryKeys.adminOperations.dlq(activeQueue),
-    queryFn: ({ signal }) => listDLQ(activeQueue, signal),
+    queryKey: queryKeys.adminOperations.dlqPage(
+      activeQueue,
+      dlqPage.pagination.pageIndex + 1,
+    ),
+    queryFn: ({ signal }) =>
+      listDLQPage(activeQueue, dlqPage.pagination.pageIndex + 1, signal),
     enabled: !!activeQueue,
     refetchInterval: liveFallback(10_000),
   });
 
   const outbox = useQuery({
-    queryKey: queryKeys.adminOperations.outbox(outboxStatus),
-    queryFn: ({ signal }) => listTaskOutbox(outboxStatus, signal),
+    queryKey: queryKeys.adminOperations.outboxPage(
+      outboxStatus,
+      outboxPage.pagination.pageIndex * 100,
+    ),
+    queryFn: ({ signal }) =>
+      listTaskOutbox(
+        outboxStatus,
+        signal,
+        outboxPage.pagination.pageIndex * 100,
+      ),
     // `admin_queue.changed` routes only the queue summary + DLQ keys, not the
     // task outbox, so this list polls regardless of stream state.
     refetchInterval: 10_000,
@@ -103,6 +118,8 @@ export function useOperations() {
     queues,
     dlq,
     outbox,
+    dlqPage,
+    outboxPage,
     retry,
     discard,
     retryOutbox,

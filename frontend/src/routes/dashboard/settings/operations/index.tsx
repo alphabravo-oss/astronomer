@@ -17,16 +17,18 @@ import { RefreshCw, Database } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import type { TaskOutboxStatus } from "@/lib/api/admin-operations";
-import { QueryStates } from "@/components/ui/query-states";
 import { BareButton } from "@/components/form/bare-button";
 import { DLQTable, QueueTable, TaskOutboxTable } from "./-tables";
 import { useOperations } from "./-use-operations";
+import { pageTableCount } from "@/lib/api/pagination";
 
 function OperationsBody() {
   const {
     queues,
     dlq,
     outbox,
+    dlqPage,
+    outboxPage,
     retry,
     discard,
     retryOutbox,
@@ -52,22 +54,6 @@ function OperationsBody() {
         description="Live view of the asynq worker queues + DLQ. Audited; superuser-only."
       />
 
-      {queues.isError && (
-        <QueryStates query={queues} permission="admin_operations:read">
-          {() => null}
-        </QueryStates>
-      )}
-      {dlq.isError && (
-        <QueryStates query={dlq} permission="admin_operations:read">
-          {() => null}
-        </QueryStates>
-      )}
-      {outbox.isError && (
-        <QueryStates query={outbox} permission="admin_operations:read">
-          {() => null}
-        </QueryStates>
-      )}
-
       <section className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-foreground">Queues</h2>
@@ -84,7 +70,10 @@ function OperationsBody() {
         </div>
         <QueueTable
           loading={queues.isLoading}
-          rows={queues.data ?? []}
+          rows={queues.isError ? [] : (queues.data ?? [])}
+          isError={queues.isError}
+          error={queues.error}
+          onRefetch={queues.refetch}
           activeQueue={activeQueue}
           onSelect={setSelectedQueue}
         />
@@ -115,7 +104,15 @@ function OperationsBody() {
         <DLQTable
           loading={dlq.isLoading && !!activeQueue}
           queue={activeQueue}
-          rows={dlq.data?.dlq ?? []}
+          rows={dlq.isError ? [] : (dlq.data?.data ?? [])}
+          isError={dlq.isError}
+          error={dlq.error}
+          onRefetch={dlq.refetch}
+          serverSide={{
+            ...pageTableCount(dlq.isError ? undefined : dlq.data),
+            pagination: dlqPage.pagination,
+            onPaginationChange: dlqPage.change,
+          }}
           onRetry={(id) => retry.mutate({ queue: activeQueue, id })}
           onDiscard={(id) => discard.mutate({ queue: activeQueue, id })}
           pendingRetry={retry.isPending}
@@ -165,7 +162,15 @@ function OperationsBody() {
         </div>
         <TaskOutboxTable
           loading={outbox.isLoading}
-          rows={outbox.data?.data ?? []}
+          rows={outbox.isError ? [] : (outbox.data?.data ?? [])}
+          isError={outbox.isError}
+          error={outbox.error}
+          onRefetch={outbox.refetch}
+          serverSide={{
+            ...pageTableCount(outbox.isError ? undefined : outbox.data),
+            pagination: outboxPage.pagination,
+            onPaginationChange: outboxPage.change,
+          }}
           status={outboxStatus}
           onRetry={(id) => retryOutbox.mutate(id)}
           pendingRetry={retryOutbox.isPending}

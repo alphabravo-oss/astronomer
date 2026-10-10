@@ -290,7 +290,7 @@
     {
       "path": "internal/db/queryextensions/task_outbox_ext.sql.go.tmpl",
       "owner": "db backend",
-      "source_sha256": "35a909df8be5fd26c06b68ce44f47d329af426cecd145a7cd8f580bcb6bc0b22"
+      "source_sha256": "5d368125d65cc268e9808b80e48422b7483979ec53c1644c53a67f733d002686"
     },
     {
       "path": "internal/db/queryextensions/task_outbox_filter_manual.go.tmpl",
@@ -4226,7 +4226,7 @@
       "function": "package",
       "operation": "SQLLiteral",
       "sha256": "8f01ee09704ccbfe8b8ac48e0647fb785668f314a1e900528b0af233362389ec",
-      "scope_sha256": "5e855a0576dc83a3cecb1cbb162ef08efba1d86ed5cd53bab5d39458cc311aa6",
+      "scope_sha256": "4479c5968f4c8979dd7cefda1828398184b3a7d89dc5819d3fc73c27ed4c4df0",
       "classification": "non-sql-candidate",
       "control": "Exact lexical candidate is existing prose/CLI input, not a SQL statement; enclosing source is bound."
     },
