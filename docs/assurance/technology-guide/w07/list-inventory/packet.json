@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "source_commit": "02897f9c4ecf7d8f56a9652b3dff060e7b3d8c71",
+  "scope": "Source-only finite reconciliation; whole W07 remains in progress. No runtime/auth/client qualification inferred from lexical classifications.",
+  "counts": {
+    "runtime": 189,
+    "openapi": 158,
+    "families": {
+      "guarded-legacy-offset": 83,
+      "aggregate-projection": 9,
+      "provider-registered-queue-catalog": 1,
+      "provider-fixed-first-page": 1,
+      "unpaged-owned-collection": 24,
+      "internal-filter-expansion": 1,
+      "signed-cursor": 3,
+      "mutation-internal-collection": 5,
+      "helm-or-delivery-history-delegate": 1,
+      "signed-cursor-delegate": 1,
+      "charlie-service-delegate": 3,
+      "charlie-bounded-offset-protocol": 2,
+      "charlie-fixed-window": 1,
+      "bounded-recommendation": 2,
+      "fixed-catalog": 4,
+      "existing-cluster-cursor": 2,
+      "detail-embedded-collection": 7,
+      "bounded-page-no-offset": 1,
+      "full-scoped-collection": 6,
+      "cursor-parser-helper": 1,
+      "aggregate-render": 3,
+      "delivery-typed-offset": 11,
+      "bounded-estate-with-sentinel": 1,
+      "selected-input-projection": 1,
+      "kubernetes-collection-delegate": 2,
+      "bounded-ranking": 1,
+      "bounded-time-series": 2,
+      "guarded-parent-delegate": 2,
+      "prometheus-protocol-delegate": 1,
+      "public-settings-projection": 1,
+      "external-directory-search": 1,
+      "bounded-activity-feed": 1,
+      "cross-cluster-search-delegate": 1,
+      "scim-offset-protocol": 2,
+      "full-user-scoped-collection": 1
+    },
+    "linked_openapi": 150,
+    "noncandidate_routes": 6,
+    "raw_proxy_aliases": 2,
+    "every_original_id_has_family": true
+  },
+  "original_input_hashes": {
+    "runtime-handler-candidates.json": "5abbdd4dd78953f9b53cf27fc10bdc8a3d8e93bce8dd64c8915361f5c181ee49",
+    "openapi-list-candidates.json": "892c45a32b4cd0d4b220cd19a2809be17d77f5ac2b9e47a4f206e247fdb0614c",
+    "critical-manual-classification.json": "f957718525238a7e47a327d2ab8c864b180daae53e3357f3220cfa9339ca3857"
+  },
+  "artifacts": {
+    "runtime-handler-candidates.json": {
+      "uncompressed_sha256": "5abbdd4dd78953f9b53cf27fc10bdc8a3d8e93bce8dd64c8915361f5c181ee49",
+      "compressed_sha256": "8c374b1f5440c18e4b5065ae7abd8fbf7c04cd41d169d37f7c9928b507a17d1d",
+      "uncompressed_bytes": 126260,
+      "compressed_bytes": 12064
+    },
+    "openapi-list-candidates.json": {
+      "uncompressed_sha256": "892c45a32b4cd0d4b220cd19a2809be17d77f5ac2b9e47a4f206e247fdb0614c",
+      "compressed_sha256": "9b22a78ccd591e806083dcf7107162fd1bd9fe09356ad95a0eec43f5e24009ec",
+      "uncompressed_bytes": 94222,
+      "compressed_bytes": 6356
+    },
+    "critical-manual-classification.json": {
+      "uncompressed_sha256": "f957718525238a7e47a327d2ab8c864b180daae53e3357f3220cfa9339ca3857",
+      "compressed_sha256": "4b678fdef3e3b0230ef98a92fa4836568a4cc11ccf1a25adbc22f739d894f268",
+      "uncompressed_bytes": 51000,
+      "compressed_bytes": 9057
+    },
+    "finite-reconciliation.json": {
+      "uncompressed_sha256": "891e08d498fac3339f02888c8bd999d6c8cf2940d8e158f0b304989464a9ece9",
+      "compressed_sha256": "84d13c7b8b918a370410205b2ab8e54de53480a50c17a9ee9d26528ec4cff233",
+      "uncompressed_bytes": 1093968,
+      "compressed_bytes": 118876
+    }
+  },
+  "script_sha256": "098ec398d9ed59e401d1231e988a5473f17c8b7b86e4329eb53663c565ba6883",
+  "commands": [
+    "python3 /tmp/w07-wider-inventory/reconcile.py --repo /root/astronomer-all/astronomer-032-w02-current --inputs /tmp/w07-wider-inventory --output /tmp/w07-wider-inventory/finite-reconciliation.json"
+  ],
+  "verification": "All input IDs retained; deterministic gzip decompression equality asserted. Source/route/SQL hashes will be independently reviewed; no compiler or runtime launched."
+}
