@@ -10,9 +10,9 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 - Frontend source files: 1270
 - Frontend source lines: 239038
-- Go source files under `internal/` excluding generated sqlc and tests: 1111
-- Go source files scanned for sqlc query references excluding generated sqlc: 2547
-- sqlc query declarations: 1340
+- Go source files under `internal/` excluding generated sqlc and tests: 1134
+- Go source files scanned for sqlc query references excluding generated sqlc: 2599
+- sqlc query declarations: 1344
 - Component files scanned: 459
 - Helm top-level values scanned: 35
 
@@ -115,8 +115,8 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `missingCapabilities` in [`internal/agentcompat/compat.go:119`](internal/agentcompat/compat.go:119), [`internal/delivery/placement/placement.go:392`](internal/delivery/placement/placement.go:392)
 - `mustJSON` in [`internal/handler/delivery/target.go:712`](internal/handler/delivery/target.go:712), [`internal/worker/tasks/catalog_sync.go:683`](internal/worker/tasks/catalog_sync.go:683)
 - `normalizeDigest` in [`internal/charlie/admin_diagnostics.go:198`](internal/charlie/admin_diagnostics.go:198), [`internal/delivery/catalogapp/service.go:484`](internal/delivery/catalogapp/service.go:484)
-- `nullableTime` in [`internal/charlie/cluster_agent_capability_adapter.go:192`](internal/charlie/cluster_agent_capability_adapter.go:192), [`internal/handler/alerting_responses.go:538`](internal/handler/alerting_responses.go:538)
-- `nullableUUID` in [`internal/charlie/delivery_capability_adapter.go:530`](internal/charlie/delivery_capability_adapter.go:530), [`internal/handler/alerting_responses.go:524`](internal/handler/alerting_responses.go:524), [`internal/handler/delivery/override_set.go:367`](internal/handler/delivery/override_set.go:367)
+- `nullableTime` in [`internal/charlie/cluster_agent_capability_adapter.go:196`](internal/charlie/cluster_agent_capability_adapter.go:196), [`internal/handler/alerting_responses.go:538`](internal/handler/alerting_responses.go:538)
+- `nullableUUID` in [`internal/charlie/delivery_capability_adapter.go:554`](internal/charlie/delivery_capability_adapter.go:554), [`internal/handler/alerting_responses.go:524`](internal/handler/alerting_responses.go:524), [`internal/handler/delivery/override_set.go:367`](internal/handler/delivery/override_set.go:367)
 - `openDatabaseInspectionRegular` in [`internal/delivery/distribution/database_update_open_other.go:12`](internal/delivery/distribution/database_update_open_other.go:12), [`internal/delivery/distribution/database_update_open_unix.go:14`](internal/delivery/distribution/database_update_open_unix.go:14)
 - `openSupplierTransferDirectory` in [`internal/delivery/distribution/database_supplier_transfer_other.go:10`](internal/delivery/distribution/database_supplier_transfer_other.go:10), [`internal/delivery/distribution/database_supplier_transfer_unix.go:13`](internal/delivery/distribution/database_supplier_transfer_unix.go:13)
 - `openTrustRegular` in [`internal/delivery/resolver/trust_open_other.go:12`](internal/delivery/resolver/trust_open_other.go:12), [`internal/delivery/resolver/trust_open_unix.go:14`](internal/delivery/resolver/trust_open_unix.go:14)
