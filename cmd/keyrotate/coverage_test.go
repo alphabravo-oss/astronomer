@@ -37,8 +37,8 @@ func TestRewriteTargetsCoverAllEncryptedColumns(t *testing.T) {
 	// objects as public.<table>. Capture the relation, not the schema name.
 	tableRe := regexp.MustCompile(`(?i)(?:CREATE TABLE(?:\s+IF NOT EXISTS)?|ALTER TABLE(?:\s+IF EXISTS)?(?:\s+ONLY)?)\s+(?:public\.)?([a-zA-Z_][a-zA-Z0-9_]*)`)
 	// Matches "colname TYPE ..." column defs and "ADD COLUMN [IF NOT EXISTS] colname TYPE".
-	colRe := regexp.MustCompile(`(?i)^\s*(?:ADD\s+COLUMN\s+(?:IF NOT EXISTS\s+)?)?([a-zA-Z_][a-zA-Z0-9_]*encrypted[a-zA-Z0-9_]*)\s+(?:TEXT|BYTEA|VARCHAR)`)
-	addColInline := regexp.MustCompile(`(?i)ADD\s+COLUMN\s+(?:IF NOT EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_]*encrypted[a-zA-Z0-9_]*)`)
+	colRe := regexp.MustCompile(`(?i)^\s*(?:ADD\s+COLUMN\s+(?:IF NOT EXISTS\s+)?)?([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:TEXT|BYTEA|VARCHAR|CHARACTER\s+VARYING)`)
+	addColInline := regexp.MustCompile(`(?i)ADD\s+COLUMN\s+(?:IF NOT EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)`)
 
 	found := map[string]string{} // table.column -> migration file
 
@@ -62,7 +62,7 @@ func TestRewriteTargetsCoverAllEncryptedColumns(t *testing.T) {
 			} else if m := addColInline.FindStringSubmatch(line); m != nil {
 				col = m[1]
 			}
-			if col == "" || curTable == "" {
+			if !strings.Contains(strings.ToLower(col), "encrypted") || curTable == "" {
 				continue
 			}
 			found[curTable+"."+col] = name
