@@ -19215,6 +19215,11 @@
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
     },
     {
+      "path": "internal/tunnel/agent_upgrade_payload.go",
+      "owner": "/tunnel",
+      "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
+    },
+    {
       "path": "internal/tunnel/handler.go",
       "owner": "/tunnel",
       "scope": "JSON serializer and reader candidates; domain ownership is declared per durable column"
@@ -27449,7 +27454,7 @@
       "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
     },
     {
-      "path": "internal/tunnel/handler.go",
+      "path": "internal/tunnel/agent_upgrade_payload.go",
       "function": "agentUpgradeConfiguration",
       "operation": "json.Unmarshal",
       "arguments": ["spec", "&envelope"],
@@ -27458,7 +27463,7 @@
       "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
     },
     {
-      "path": "internal/tunnel/handler.go",
+      "path": "internal/tunnel/agent_upgrade_payload.go",
       "function": "agentUpgradeRollbackImage",
       "operation": "json.Unmarshal",
       "arguments": ["spec", "&envelope"],
@@ -27467,7 +27472,7 @@
       "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
     },
     {
-      "path": "internal/tunnel/handler.go",
+      "path": "internal/tunnel/agent_upgrade_payload.go",
       "function": "agentUpgradeTargetPullPolicy",
       "operation": "json.Unmarshal",
       "arguments": ["spec", "&envelope"],
