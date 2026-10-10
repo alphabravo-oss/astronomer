@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T01:24:07.748384+00:00",
+  "sourceCommit": "e6181ff69087d7a0d817c2460da454b2117b5c5a",
+  "sourceIdentity": {
+    "schema_version": 2,
+    "source_file_count": 6173,
+    "source_tree_sha256": "11c7f90d4c9a3fa631a88c907920fae3e231afba60718bf4aed4b2f05e8eba6f"
+  },
+  "sourceClean": true,
+  "qualification": "fixture correction and verified local application build reuse; corrected full Firefox stack not yet run",
+  "originalFirefox": {
+    "sourceCommit": "5d8f9729ba356ac687ce89a0871b7a32412b4de9",
+    "sourceStable": true,
+    "result": {
+      "total": 18,
+      "passed": 16,
+      "failed": 2,
+      "skipped": 0,
+      "flaky": 0,
+      "retries": 0
+    },
+    "receipt": {
+      "path": "/root/.cache/astronomer-032/qualification/w12-frozen-5d8f-live-firefox/matrix-receipt.json",
+      "sha256": "d01ae6c3a04bd9439be70359aca17d4f3f2a05187fc2cbbb7d35197427d6f455",
+      "bytes": 994
+    },
+    "restrictedArtifactManifest": {
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/original-failure-artifact-manifest.json",
+      "sha256": "2d1d996b5042516514aff9e5bea5050cc9c0df787af1e50bf8c6abecbe7969bd",
+      "bytes": 11173
+    },
+    "restrictedArtifactRecords": 39,
+    "observations": [
+      {
+        "journey": "resource YAML dry-run gates and then applies the reviewed manifest",
+        "failure": "Monaco editor absent; retained DOM selects Overview and edits Labels & Annotations after generic Edit click",
+        "correction": "Select explicit masthead Edit YAML; all real editor/dry-run/preview/apply assertions retained"
+      },
+      {
+        "journey": "real browser refresh rotates HttpOnly credentials and rejects reuse",
+        "failure": "Default load wait reports page.goto unknown error after revoked-family access401; trace contains dashboard200 then login200",
+        "correction": "Wait for document commit, then require login URL and rendered Sign in/email/password; every protocol and cookie assertion retained"
+      }
+    ]
+  },
+  "gates": [
+    {
+      "command": "npm run type-check",
+      "exitCode": 0,
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/type-check-corrected.log",
+      "sha256": "74a7dd07a9b000f3cc02194245420185a5d7ebcb0667307d15a6705be3674a67",
+      "bytes": 80
+    },
+    {
+      "command": "npm exec -- eslint tests/e2e-live/refresh.live.spec.ts tests/e2e-live/enterprise-journeys.live.spec.ts src/components/resources/__tests__/resource-detail-edit-actions.test.tsx --max-warnings=0",
+      "exitCode": 0,
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/lint.log",
+      "sha256": "ae5e5a8a53053747e3672fefc2729e2404e76d45e929bf21d73932420fe52bb7",
+      "bytes": 243
+    },
+    {
+      "command": "npm exec -- vitest run src/components/resources/__tests__/resource-detail-edit-actions.test.tsx --maxWorkers=1",
+      "exitCode": 0,
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/mode-characterization-frozen.log",
+      "sha256": "ce02a901e1f45a56ae310014a67876fee4ead75dbb0a6c039910db94ac157d1a",
+      "bytes": 397
+    },
+    {
+      "command": "python3 -m unittest scripts/tests/live_browser_build_reuse_test.py",
+      "exitCode": 0,
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/reuse-tests.log",
+      "sha256": "e73bf33007748c8dc87ccc811b673d013cd2e58213a754fe89ffe043810f6c72",
+      "bytes": 113
+    },
+    {
+      "command": "bash scripts/tests/live-browser-runner-test.sh",
+      "exitCode": 0,
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/runner-contract.log",
+      "sha256": "4b6577c36f82363615371336434d0096dc0be7a66b25b3d65de4a785a51b0b21",
+      "bytes": 29
+    },
+    {
+      "command": "shellcheck -x scripts/test-live-browser.sh",
+      "exitCode": 0,
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/shellcheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "command": "node scripts/check-complexity-budget.mjs",
+      "exitCode": 0,
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/complexity.log",
+      "sha256": "89a88555cbe938166648e327c48d928280135c7293b25e823335c90563f33916",
+      "bytes": 101
+    }
+  ],
+  "focusedCharacterization": {
+    "testFiles": 1,
+    "cases": 2,
+    "scope": "Actual ConfigMap masthead YAML selection and Deployment guided/YAML modes; no full browser qualification"
+  },
+  "reuseTests": {
+    "cases": 14,
+    "scope": "Exact application/source/lock/config/artifact binding; drift, unknown schema, tamper, outside paths, symlinks and overwritten output rejected"
+  },
+  "retainedFixtureDevelopmentFailures": [
+    {
+      "exitCode": 1,
+      "reason": "Initial new unit test incorrectly assumed ConfigMap has a masthead guided action",
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/mode-characterization.log",
+      "sha256": "ed96c968da24837b729452676fc00ce9a776e493c8fa890fd559226309429ccf",
+      "bytes": 6132
+    },
+    {
+      "exitCode": 2,
+      "reason": "New unit test used unsupported Testing Library exact option; exact string matching remains after correction",
+      "path": "/root/.cache/astronomer-032/qualification/w12-firefox-fixture-gates/type-check.log",
+      "sha256": "50e842e6ad095ade5c0f4b996da93f85aa8245f27250c0cbb0a9925a007f30fe",
+      "bytes": 1814
+    }
+  ],
+  "buildReference": {
+    "path": "/root/.cache/astronomer-032/qualification/w12-firefox-5d-build-reference.json",
+    "sha256": "270acd24637d63787050ff8cccd3ee560fec3978816cbcfc352c1629aa1a677d",
+    "bytes": 1512091,
+    "applicationCommit": "5d8f9729ba356ac687ce89a0871b7a32412b4de9",
+    "fixtureCommit": "e6181ff69087d7a0d817c2460da454b2117b5c5a",
+    "separateIdentities": true,
+    "freshOwnedStackRequired": true,
+    "productionOrSignedCandidateClaim": false
+  },
+  "dependencyIsolation": {
+    "path": "/root/.cache/astronomer-032/qualification/w10/dependency-overlays/shared-after-firefox-receipt.json",
+    "sha256": "ec9d9eec9b64e86bb092be445cb9a0fab61400b6285050aa9b5315d3687edb94",
+    "bytes": 345
+  },
+  "nativePreview": {
+    "toolAvailableAndAttached": true,
+    "observed": "Environment-port navigation returned ERR_CONNECTION_REFUSED; no app observation",
+    "listener": "Owned fixture listener observed on loopback; exact browser-network cause not established",
+    "manualCertification": false
+  }
+}
