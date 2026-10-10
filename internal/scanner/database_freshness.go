@@ -96,7 +96,16 @@ type DatabaseFreshnessResult struct {
 // Upstream UpdatedAt is the age clock; completion never refreshes a DB's age.
 func EvaluateDatabaseFreshness(now time.Time, policy DatabaseFreshnessPolicy, target ScanTargetBinding, scan ScanUseObservation, accepted *AcceptedDatabaseState) DatabaseFreshnessResult {
 	result := DatabaseFreshnessResult{ScanState: scan.State, MainState: DatabaseUnknown, JavaState: DatabaseUnknown, FindingsPresent: scan.State == WorkloadScanComplete && scan.FindingCount > 0}
-	if now.IsZero() || !validFreshnessPolicy(policy) || !validScanObservation(now, policy, scan) {
+	if now.IsZero() || !validFreshnessPolicy(policy) {
+		return result
+	}
+	// Report age is independent of feed availability, target identity and DB
+	// provenance. Those failures must not hide an already expired report.
+	if !scan.CompletedAt.IsZero() && !scan.CompletedAt.After(now.Add(policy.ClockSkew)) {
+		result.ReportExpired = now.Sub(scan.CompletedAt) >= policy.ReportTTL
+		result.RescanRequired = result.ReportExpired
+	}
+	if !validScanObservation(now, policy, scan) {
 		return result
 	}
 	if !freshnessDigest.MatchString(target.ImageDigest) || target.AssignmentGeneration <= 0 {
@@ -141,14 +150,14 @@ func EvaluateDatabaseFreshness(now time.Time, policy DatabaseFreshnessPolicy, ta
 		result.RescanRequired = true
 		return result
 	}
-	result.MainState, result.RescanRequired = evaluateUsedDatabase(now, policy.ClockSkew, policy.MainMaximumAge, 2, scan.Main, accepted.Main)
+	var rescan bool
+	result.MainState, rescan = evaluateUsedDatabase(now, policy.ClockSkew, policy.MainMaximumAge, 2, scan.Main, accepted.Main)
+	result.RescanRequired = result.RescanRequired || rescan
 	if scan.JavaApplicability == JavaDatabaseNeeded {
 		var rescan bool
 		result.JavaState, rescan = evaluateUsedDatabase(now, policy.ClockSkew, policy.JavaMaximumAge, 1, scan.Java, accepted.Java)
 		result.RescanRequired = result.RescanRequired || rescan
 	}
-	result.ReportExpired = now.Sub(scan.CompletedAt) >= policy.ReportTTL
-	result.RescanRequired = result.RescanRequired || result.ReportExpired
 	result.EligibleForCleanPosture = scan.State == WorkloadScanComplete && scan.FindingCount == 0 && !result.ReportExpired && result.MainState == DatabaseFresh && (result.JavaState == DatabaseFresh || result.JavaState == DatabaseNotNeeded)
 	return result
 }

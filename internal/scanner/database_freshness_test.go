@@ -157,3 +157,34 @@ func TestScanCompletionAndNextUpdateCannotRefreshOldDatabase(t *testing.T) {
 		t.Fatal("stale database hid known findings or qualified clean")
 	}
 }
+
+func TestExpiredReportRemainsVisibleAcrossIndependentFailures(t *testing.T) {
+	now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	for _, failure := range []string{"mirror", "feed", "revocation", "target", "scanner", "used-provenance", "nil-state"} {
+		t.Run(failure, func(t *testing.T) {
+			policy, target, scan, accepted := freshnessFixture(now)
+			scan.CompletedAt, scan.FindingCount = now.Add(-6*time.Hour), 1
+			state := &accepted
+			switch failure {
+			case "mirror":
+				accepted.MirrorReady = false
+			case "feed":
+				accepted.ExpiresAt = now
+			case "revocation":
+				accepted.Revoked = true
+			case "target":
+				target.AssignmentGeneration++
+			case "scanner":
+				scan.ScannerDigest = "sha256:" + strings.Repeat("b", 64)
+			case "used-provenance":
+				scan.Main.MetadataDigest = ""
+			case "nil-state":
+				state = nil
+			}
+			result := EvaluateDatabaseFreshness(now, policy, target, scan, state)
+			if !result.ReportExpired || !result.RescanRequired || !result.FindingsPresent || result.EligibleForCleanPosture {
+				t.Fatal("independent failure masked expired report or known findings")
+			}
+		})
+	}
+}
