@@ -230,7 +230,9 @@ test("resource YAML dry-run gates and then applies the reviewed manifest", async
     `/dashboard/clusters/${clusterID}/configmaps/default/live-config`,
   );
   await page.getByRole("tab", { name: "YAML" }).click();
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  // The masthead owns YAML mode and tab selection. Generic Edit also names
+  // the overview labels action while tab navigation is completing.
+  await page.getByRole("button", { name: "Edit YAML", exact: true }).click();
 
   // JSON is valid YAML and avoids Monaco's interactive auto-indentation
   // changing whitespace while Playwright inserts a multiline document.
