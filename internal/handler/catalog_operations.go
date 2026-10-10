@@ -165,7 +165,6 @@ func (h *CatalogHandler) ControllerStatus(w http.ResponseWriter, r *http.Request
 	RespondJSON(w, http.StatusOK, summary)
 }
 
-
 type catalogOperationCreator interface {
 	CreateCatalogOperation(context.Context, sqlc.CreateCatalogOperationParams) (sqlc.CatalogOperation, error)
 }
