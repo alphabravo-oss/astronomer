@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-10T00:09:32.192963+00:00",
+  "sourceCommit": "5d8f9729ba356ac687ce89a0871b7a32412b4de9",
+  "sourceIdentity": {
+    "schema_version": 2,
+    "source_file_count": 6170,
+    "source_tree_sha256": "c71bbc91ae93735e2270059d23de47374d759a819717e5d4b1427e15b5a601f5"
+  },
+  "browser": "chromium",
+  "status": "pass",
+  "playwrightStats": {
+    "total": 18,
+    "expected": 18,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0,
+    "ok": true
+  },
+  "workers": 1,
+  "retries": 0,
+  "trivyEnabled": true,
+  "durationSeconds": 421.710603,
+  "provedTerminalStages": [
+    "POST creates real session201",
+    "WebSocketconnected",
+    "named keyboard textarea receives real typed command",
+    "actual remote stdin/stdout marker visible",
+    "Disconnect request200",
+    "persisted sessionstatusclosed",
+    "scoped shellpod lookup404"
+  ],
+  "privateArtifacts": [
+    {
+      "privateRelativePath": "runner.log",
+      "sha256": "7b8424b4385e378364989721b88be413c4435b479c07a384fd989df57bee370d",
+      "bytes": 6554
+    },
+    {
+      "privateRelativePath": "browser/playwright.log",
+      "sha256": "dc681b230bd3e7864252b83452f14a488ca8d400ae9a39f172a7df077dddd179",
+      "bytes": 2847
+    },
+    {
+      "privateRelativePath": "browser/playwright-report/index.html",
+      "sha256": "14388808d287a44da49b367ae6ec75f1605f61e45fd15dfc6e1dc840f67fc7c1",
+      "bytes": 556580
+    },
+    {
+      "privateRelativePath": "browser/capacity-before.json",
+      "sha256": "e9fd8029772eb1c2d2e001c942ab62f524dca862b4a7cd51c1002ff3ca2846fc",
+      "bytes": 204
+    }
+  ],
+  "retainedAttempts": [
+    {
+      "sourceCommit": "08f",
+      "failure": "import-before-clustercreate",
+      "receipt": "docs/assurance/technology-guide/w12/live-browser-attempts/08f-import-order/"
+    },
+    {
+      "sourceCommit": "3c",
+      "failure": "unavailable AlpineGit2.49",
+      "receipt": "docs/assurance/technology-guide/w12/git-fixture/"
+    },
+    {
+      "sourceCommit": "1a87",
+      "passed": 17,
+      "failed": 1,
+      "failure": "shell feature disabled, POST404",
+      "receipt": "docs/assurance/technology-guide/w12/live-browser-attempts/1a87-shell-feature/"
+    },
+    {
+      "sourceCommit": "e141",
+      "passed": 17,
+      "failed": 1,
+      "failure": "incorrect capitalized badge expectation",
+      "receipt": "docs/assurance/technology-guide/w12/live-browser-attempts/e141-shell-label/"
+    },
+    {
+      "sourceCommit": "949",
+      "passed": 17,
+      "failed": 1,
+      "failure": "pointer click intercepted before keyboardinput",
+      "receipt": "docs/assurance/technology-guide/w12/live-browser-attempts/949c-terminal-focus/"
+    }
+  ],
+  "limitations": [
+    "Firefox/WebKit full freshstack journeys pending; component proof is separate.",
+    "Native T3 preview was available and attached, but both environment-port and direct-host navigation returned ERR_CONNECTION_REFUSED. The fixture listener was checked as loopback-only; precise browser network cause was not established. No app observation or manual certification claimed.",
+    "Tracing wasdisabled on this frozenstack; no full collector propagation claim.",
+    "Private artifacts can include synthetic credentials/cookies and are restricted; raw traces are not committed."
+  ]
+}

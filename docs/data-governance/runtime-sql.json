@@ -20,12 +20,12 @@
     {
       "path": "cmd/server/main.go",
       "owner": "server backend",
-      "source_sha256": "43534a7b033107d64525340f5c57647926c536f8d18b23a7051637032a052a93"
+      "source_sha256": "f029e1836fb9a6d484e3d0526749f61199c81fb14dfa85065c684c2acb9b5588"
     },
     {
       "path": "cmd/worker/main.go",
       "owner": "worker backend",
-      "source_sha256": "45153eb9444fee93fca0c23373e279061e0e32bf3c86cc00307b252055d8b845"
+      "source_sha256": "7135f2ee2221f85ae89fa2af76e003b3747b055f9cfc09549982ac2e7a055001"
     },
     {
       "path": "internal/agent/delivery/materializer.go",
@@ -165,7 +165,7 @@
     {
       "path": "internal/db/db.go",
       "owner": "db backend",
-      "source_sha256": "de6d857829de03b4cbb87aa4283430106fade3de099bc8d7ecb5de12efdb31da"
+      "source_sha256": "0e2d3742075bd0fe3d7399404582446a61d0292635c316a063e75d0e731ffdff"
     },
     {
       "path": "internal/db/freshinstall/freshinstall.go",
@@ -1101,7 +1101,7 @@
       "function": "main",
       "operation": "SQLLiteral",
       "sha256": "9505cacb7c710ed17125fcc6cb3669e8ddca6c8cd8af6a31f6b3cd64604c3098",
-      "scope_sha256": "ed5b4ee86a14d31a4850c8fe0776cc8ac2123b0b421820fc2641fee545a0f235",
+      "scope_sha256": "0d39485cc42cfa80a2a9c9c16014c587ba59da20f099f5ed90f5be6c39503faa",
       "classification": "non-sql-candidate",
       "control": "Exact lexical candidate is existing prose/CLI input, not a SQL statement; enclosing source is bound."
     },
@@ -1110,7 +1110,7 @@
       "function": "main",
       "operation": "SQLLiteral",
       "sha256": "9505cacb7c710ed17125fcc6cb3669e8ddca6c8cd8af6a31f6b3cd64604c3098",
-      "scope_sha256": "f1d1444d159ab756882902e15c5f244e8eb22f12997bfb41bd9be2ab3d6c3bbf",
+      "scope_sha256": "d55ae2ca5404b7bed241bbcae9c260d9adfabc5475f325dcd566bbcef16ddcc2",
       "classification": "non-sql-candidate",
       "control": "Exact lexical candidate is existing prose/CLI input, not a SQL statement; enclosing source is bound."
     },

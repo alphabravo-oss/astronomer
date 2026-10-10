@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "observedAt": "2026-10-09T23:59:54.860038+00:00",
+  "scope": "Twelve exact executables/tar files released by the owner of two closed browser attempts, plus remaining compiler-header-verified Go1.26.6 archives in the closed isolated Plan030 cache. Active browser949, frontend dependencies and current caches are excluded.",
+  "ownership": "Executor explicitly released closed1a87/e141 paths; root confirms no executable/file references. No process GOCACHE lease points to the isolated030 cache or alias.",
+  "removedCount": 3716,
+  "removedBytes": 2270904840,
+  "liveArtifacts": 12,
+  "isolatedCompileArchives": 3704,
+  "exactItemInventory": {
+    "path": "advisor-plans/032-evidence/closed-live-and-030-small-cache-items.jsonl.gz",
+    "sha256": "31dfd3fa33a07267be7d993ccede4e889261ee51e45b4c4ca90e7a8562606568",
+    "rows": 3716
+  },
+  "preserved": "All source, branches, raw logs, failure videos/screenshots/traces, signed artifacts, references, toolchains, current cache entries and database/container/image/PVC state. Nonmatching isolated-cache files remain.",
+  "afterGuardExitCode": 0,
+  "afterGuard": {
+    "path": ".",
+    "mountpoint": "/",
+    "total_kib": 354066236,
+    "used_kib": 268913520,
+    "available_kib": 70703440,
+    "available_gib": 67,
+    "free_percent": 20,
+    "minimum_free_gib": 20,
+    "minimum_free_percent": 20,
+    "meets_minimum": true
+  }
+}

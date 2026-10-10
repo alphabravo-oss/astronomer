@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "status": "pass",
+  "database": "plan032_w10_callbacks",
+  "serverVersionNum": 180006,
+  "serverMajor": 18,
+  "actualOTelSpans": {
+    "acquire": 8,
+    "batch": 1,
+    "batchQuery": 2,
+    "connect": 2,
+    "prepare": 1,
+    "query": 11
+  },
+  "committedRows": 2,
+  "boundParameterAndCredentialAbsent": true,
+  "sqlLiteralAbsent": true,
+  "spansShareRootTrace": true,
+  "scope": "Real production pgx tracer closure on dedicated owned CNPG18 database and loopback OTLP protobuf receiver; not whole application/queue/tunnel/collector-stack qualification."
+}

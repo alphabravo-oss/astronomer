@@ -71,13 +71,10 @@ func ConnectWithConfig(ctx context.Context, databaseURL string, pc PoolConfig) (
 	// Prometheus query metrics. otelpgx fires before/after each query;
 	// the historical queryTracer captures duration histograms.
 	//
-	// Deliberately NOT calling otelpgx.WithIncludeQueryParameters():
-	// query args carry user IDs, encrypted token blobs, INSERT bodies,
-	// etc. — recording them on spans both leaks PII/secrets to the
-	// OTLP backend and explodes per-span attribute size. The SQL text
-	// alone is sufficient for trace-driven debugging.
+	// Export operation/timing without SQL text, connection details or bind values.
+	// SQL literals can contain private data even when bound parameters are off.
 	cfg.ConnConfig.Tracer = newCompositeQueryTracer(
-		otelpgx.NewTracer(),
+		otelpgx.NewTracer(otelpgx.WithDisableSQLStatementInAttributes(), otelpgx.WithDisableConnectionDetailsInAttributes()),
 		NewQueryTracer(),
 	)
 

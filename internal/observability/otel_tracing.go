@@ -172,7 +172,7 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 		// Batcher buffers + ships in the background. 5s flush window
 		// keeps lag bounded under steady load; the explicit Shutdown
 		// flushes the rest on graceful exit.
-		sdktrace.WithBatcher(exporter,
+		sdktrace.WithBatcher(diagnosticExporter{exporter},
 			sdktrace.WithBatchTimeout(5*time.Second),
 			sdktrace.WithExportTimeout(tracingExportTimeout),
 		),

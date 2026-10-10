@@ -571,11 +571,18 @@ test("terminal disconnect cancels the real tunnel and deletes its scoped pod", a
   const { data: session } = await response.json();
   expect(typeof session.id).toBe("string");
   expect(typeof session.pod_name).toBe("string");
-  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  await expect(page.getByText("connected", { exact: true })).toBeVisible();
   // The marker is not present contiguously in the echoed command. Seeing it
   // proves stdin reached the real remote process and stdout returned through
   // the authenticated tunnel before Disconnect cancels the long-running task.
-  await page.locator(".wterm").click();
+  const terminalInput = page.getByRole("textbox", {
+    name: "Cluster terminal input",
+    exact: true,
+  });
+  // WTerm's keyboard textarea sits behind the painted grid. Enter through its
+  // supported focus/keyboard path instead of clicking through that overlay.
+  await terminalInput.focus();
+  await expect(terminalInput).toBeFocused();
   await page.keyboard.type("printf '%s%s\\n' w12- remote-ready; sleep 120");
   await page.keyboard.press("Enter");
   await expect(page.locator(".wterm")).toContainText("w12-remote-ready");
@@ -587,7 +594,7 @@ test("terminal disconnect cancels the real tunnel and deletes its scoped pod", a
   );
   await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   expect((await closed).status()).toBe(200);
-  await expect(page.getByText("Disconnected", { exact: true })).toBeVisible();
+  await expect(page.getByText("disconnected", { exact: true })).toBeVisible();
   const sessionPath = `/api/v1/clusters/${clusterID}/shell/sessions/${session.id}/`;
   await expect
     .poll(async () => {

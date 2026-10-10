@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "workPackage": "W07",
+  "status": "SCOPED_REVIEW_ACCEPTED",
+  "packageStatus": "IN_PROGRESS",
+  "sourceCommit": "bd5efe79f631a507fb6ac046ff249f3c681701e0",
+  "integratedThrough": "2dff2b6485aa753fc7d0a78ed67be56f048c8f30",
+  "observedAt": "2026-10-09T23:57:09.960102+00:00",
+  "allSourceAndTestHunksReviewed": true,
+  "rootIndependentChecks": [
+    {
+      "argv": [
+        "go",
+        "test",
+        "./internal/db",
+        "-count=1",
+        "-json"
+      ],
+      "exitCode": 0,
+      "seconds": 4.746,
+      "testActions": {
+        "pass": 16,
+        "fail": 0,
+        "skip": 0
+      },
+      "log": "/tmp/plan032-root-bd5efe79-gates/0.log",
+      "sha256": "4c8f0872bcabca8c93f499bb56dabcd5a8c4609f53adea35dd199368da98181d",
+      "fixtureMajor": null,
+      "passedParentNames": [
+        "TestUpdatePoolMetrics",
+        "TestUpdateDatabaseRuntimeMetrics",
+        "TestUpdateTaskOutboxMetrics",
+        "TestUpdateAuditOutboxMetrics",
+        "TestClassifySQLOperation",
+        "TestQueryTracerRecordsDuration",
+        "TestPoolSaturationStateIsPerDatabase",
+        "TestPoolSaturationStateConcurrentObservation",
+        "TestIsUndefinedTable",
+        "TestSchemaHealth_NilPool",
+        "TestExpectedSchemaVersionMatchesMigrations"
+      ]
+    },
+    {
+      "argv": [
+        "go",
+        "test",
+        "./internal/handler",
+        "-run",
+        "^TestCatalogCursor(Postgres|RejectsAuthenticated)",
+        "-count=1",
+        "-json"
+      ],
+      "exitCode": 0,
+      "seconds": 67.246,
+      "testActions": {
+        "pass": 6,
+        "fail": 0,
+        "skip": 0
+      },
+      "log": "/tmp/plan032-root-bd5efe79-gates/1.log",
+      "sha256": "0b234a96822e8d950725969f99277c0afc305fa5f484ecf0980098e911a284a7",
+      "fixtureMajor": 17,
+      "passedParentNames": [
+        "TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL",
+        "TestCatalogCursorPostgresTraversalBeyondLegacyCeiling",
+        "TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation"
+      ]
+    },
+    {
+      "argv": [
+        "go",
+        "test",
+        "-race",
+        "./internal/handler",
+        "-run",
+        "^TestCatalogCursor(Postgres|RejectsAuthenticated)",
+        "-count=1",
+        "-json"
+      ],
+      "exitCode": 0,
+      "seconds": 119.555,
+      "testActions": {
+        "pass": 6,
+        "fail": 0,
+        "skip": 0
+      },
+      "parentNames": [
+        "TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL",
+        "TestCatalogCursorPostgresTraversalBeyondLegacyCeiling",
+        "TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation"
+      ],
+      "log": "/tmp/plan032-root-bd5efe79-gates/2.log",
+      "sha256": "d6fa0aa9137c04a704baf7f031ead684731c1f43df509f62edd77a949377b42c",
+      "fixtureMajor": 18,
+      "passedParentNames": [
+        "TestCatalogCursorRejectsAuthenticatedWrongPositionBeforeSQL",
+        "TestCatalogCursorPostgresTraversalBeyondLegacyCeiling",
+        "TestCatalogCursorPostgresDeletedAnchorMutationAndRevocation"
+      ]
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/compatibility-contract.py",
+        "check"
+      ],
+      "exitCode": 0,
+      "seconds": 0.11,
+      "testActions": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0
+      },
+      "parentNames": [],
+      "log": "/tmp/plan032-root-bd5efe79-gates/3.log",
+      "sha256": "06f8bef508fbfeceb9d23872382d6a2e999409731618f22f2cb938e39fdb745a",
+      "fixtureMajor": null
+    },
+    {
+      "argv": [
+        "python3",
+        "scripts/check-sql-governance.py"
+      ],
+      "exitCode": 0,
+      "seconds": 2.526,
+      "testActions": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0
+      },
+      "parentNames": [],
+      "log": "/tmp/plan032-root-bd5efe79-gates/4.log",
+      "sha256": "d045f479baa556670b3798069e8619e9b1f1c5b68fb0d55bbd5a1de16adf8502",
+      "fixtureMajor": null
+    }
+  ],
+  "retainedArtifacts": [
+    {
+      "path": "advisor-plans/032-evidence/root-bd5efe79-reviewed/4.log",
+      "sha256": "d045f479baa556670b3798069e8619e9b1f1c5b68fb0d55bbd5a1de16adf8502",
+      "bytes": 122
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-bd5efe79-reviewed/3.log",
+      "sha256": "06f8bef508fbfeceb9d23872382d6a2e999409731618f22f2cb938e39fdb745a",
+      "bytes": 59
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-bd5efe79-reviewed/2.log",
+      "sha256": "d6fa0aa9137c04a704baf7f031ead684731c1f43df509f62edd77a949377b42c",
+      "bytes": 52045
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-bd5efe79-reviewed/driver-count-baseline.log",
+      "sha256": "8cc87bd4a1506cb158c431d3fc39651e4d6841917811b5a12716c67df4d1af2d",
+      "bytes": 269
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-bd5efe79-reviewed/1.log",
+      "sha256": "0b234a96822e8d950725969f99277c0afc305fa5f484ecf0980098e911a284a7",
+      "bytes": 50279
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-bd5efe79-reviewed/receipt.json",
+      "sha256": "6722aa29c730525bfc701d753ce8e66f869578a07f5fa5cf1ef62c289159a5cd",
+      "bytes": 2366
+    },
+    {
+      "path": "advisor-plans/032-evidence/root-bd5efe79-reviewed/0.log",
+      "sha256": "4c8f0872bcabca8c93f499bb56dabcd5a8c4609f53adea35dd199368da98181d",
+      "bytes": 13950
+    }
+  ],
+  "scopeAndLimits": "Readiness expected73matches actual committedmigration73/floor66. Rootpaired actualCNPG17.11/18.6 chart3parents6cases eachPASS0skip,18race. FullfrozenDB11parents16casesPASS0skip; sourcepredates W10composite additions, wholecurrentDB qualifiedseparately. Rootdriver originallycountedparentsincorrectly, stopped after successful17 and before18; originalraw17 retained and corrected continuation18PASS. Actual interrupted18index recovery packet hashes verified, not independentlyrepeated root destructivefault.",
+  "executorArtifactBindingsVerified": 23
+}
