@@ -120,12 +120,8 @@
       "bytes": 846
     },
     "/tmp/w07-budget-before-2aded732-run2/build-packet.py": {
-      "sha256": "99d7548ac0dfb26eed354ac90a185c8db7ce532e22cff821ccec03d896640f3e",
-      "bytes": 5382
-    },
-    "/tmp/w07-budget-before-2aded732-run2/packet-build-summary.json": {
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "bytes": 0
+      "sha256": "609c9550c2fc6ae4fea77e414e527d123c5b4b307b154f42378db39ba16be7a0",
+      "bytes": 5657
     },
     "/tmp/w07-budget-before-2aded732-run2/postgres17-capacity.jsonl": {
       "sha256": "a669e1e406e7630eaef3d941b2d82514ee624b50fee59a4fb8a064b63f142583",
