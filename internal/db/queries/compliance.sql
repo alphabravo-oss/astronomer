@@ -91,7 +91,9 @@ SELECT id, name, display_name, cluster_id,
        resource_quota_cpu_limit, resource_quota_memory_limit,
        resource_quota_pod_count, created_at
 FROM projects
-ORDER BY created_at ASC;
+-- The writer refuses the lookahead row before allocating the JSON document.
+ORDER BY created_at ASC, id ASC
+LIMIT 100001;
 
 -- name: ListAPITokensForCompliance :many
 -- Every API token row with user identity LEFT-JOINed in and the hash

@@ -79,6 +79,7 @@ func registerSecurityRoutes(r chi.Router, cfg *config.Config, deps RouterDepende
 		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/summary/", deps.ClusterResources.ImageVulns.ClusterSummary)
 		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/images/", deps.ClusterResources.ImageVulns.ClusterTopImages)
 		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/reports/{id}/", deps.ClusterResources.ImageVulns.ClusterReportDetail)
+		r.With(ivClusterRead).Get("/clusters/{cluster_id}/vulnerabilities/reports/{id}/database-status/", deps.ClusterResources.ImageVulns.ClusterReportDatabaseStatus)
 		r.With(ivWriteClusters, ivClusterUpdate, ivClusterRead).Post("/clusters/{cluster_id}/vulnerabilities/rescan/", deps.ClusterResources.ImageVulns.ClusterRescan)
 		// Sprint 081: scan history sparkline + latest-vs-prior diff +
 		// CSV download. All three are read-only and gated by the same

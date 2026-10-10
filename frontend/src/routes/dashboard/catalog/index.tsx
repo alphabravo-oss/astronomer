@@ -41,6 +41,8 @@ import { InstalledTab } from "./-installed-tab";
 import { RepositoriesTab } from "./-repositories-tab";
 import { ChartEmptyState } from "./-chart-empty-state";
 
+import { CatalogControllerWindow } from "@/components/catalog/catalog-controller-window";
+
 const TAB_KEYS = ["browse", "installed", "repositories"] as const;
 
 function CatalogPage() {
@@ -161,6 +163,8 @@ function CatalogPage() {
           </div>
         )}
       </div>
+
+      <CatalogControllerWindow />
 
       <Tabs>
         <TabStrip

@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -25,6 +26,7 @@ type DatabaseRegistryTrustOptions struct {
 	TrustDirectory string
 	RootsRef       string
 	Network        httpclient.DestinationPolicy
+	Read           *DatabaseRegistryReadOptions
 }
 
 // DatabaseRegistryTransport owns the canonical client and exact captured root
@@ -35,21 +37,22 @@ type DatabaseRegistryTransport struct {
 	mounted                             *ExecVerifier
 	reference                           string
 	network                             httpclient.DestinationPolicy
+	rootMaterial                        []byte
 	client                              *http.Client
 	rootsFingerprint, policyFingerprint string
 	mountOriginFingerprint              string
 	closed                              bool
+	readOptions                         *DatabaseRegistryReadOptions
+	readCredential                      *databaseRegistryReadCredential
+	readClients                         map[string]*http.Client
 }
 
 func CaptureDatabaseRegistryTransport(ctx context.Context, options DatabaseRegistryTrustOptions) (*DatabaseRegistryTransport, error) {
-	if ctx == nil || !strictTrustOpeningAvailable || !options.Network.Restricted || options.Network.Validate() != nil || len(options.Network.PrivateHosts) != 0 || len(options.Network.PrivateCIDRs) != 0 {
+	if ctx == nil {
 		return nil, errors.New("database registry trust constructor invalid")
 	}
-	for _, origin := range options.Network.Origins {
-		parsed, err := url.Parse(origin.URL)
-		if err != nil || parsed.Scheme != "https" {
-			return nil, errors.New("database registry requires bounded HTTPS origins")
-		}
+	if err := validateDatabaseRegistryTrustOptions(options); err != nil {
+		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -76,9 +79,14 @@ func CaptureDatabaseRegistryTransport(ctx context.Context, options DatabaseRegis
 		return nil, err
 	}
 	transport := &DatabaseRegistryTransport{mounted: verifier, reference: options.RootsRef,
-		network: policy, client: client, rootsFingerprint: registryRootFingerprint(material),
+		network: policy, client: client, rootMaterial: bytes.Clone(material), rootsFingerprint: registryRootFingerprint(material),
 		policyFingerprint:      databaseRegistryPolicyFingerprint(policy),
 		mountOriginFingerprint: registryTransportFingerprint("astronomer-database-registry-root-origin-v1", verifier.trustDir, options.RootsRef)}
+	if err := transport.captureReadClients(ctx, freezeDatabaseRegistryReadOptions(options.Read)); err != nil {
+		transport.Close()
+		return nil, err
+	}
+	transport.policyFingerprint, transport.mountOriginFingerprint = databaseRegistryReadBindings(verifier, transport.readOptions, transport.policyFingerprint, transport.mountOriginFingerprint)
 	if err := transport.Revalidate(ctx); err != nil {
 		transport.Close()
 		return nil, err
@@ -147,6 +155,9 @@ func (transport *DatabaseRegistryTransport) Revalidate(ctx context.Context) erro
 	if registryRootFingerprint(material) != transport.rootsFingerprint {
 		return errors.New("database registry mounted roots changed")
 	}
+	if err := transport.revalidateReadCredential(ctx); err != nil {
+		return err
+	}
 	return ctx.Err()
 }
 
@@ -205,18 +216,27 @@ func (transport *DatabaseRegistryTransport) Client() *http.Client {
 type databaseRegistryRoundTripper struct{ owner *DatabaseRegistryTransport }
 
 func (round databaseRegistryRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request == nil {
+	if request == nil || request.URL == nil || round.owner == nil {
 		return nil, errors.New("database registry request invalid")
 	}
 	if err := round.owner.Revalidate(request.Context()); err != nil {
 		return nil, err
 	}
 	round.owner.mutex.RLock()
-	defer round.owner.mutex.RUnlock()
 	if round.owner.closed {
+		round.owner.mutex.RUnlock()
 		return nil, errors.New("database registry transport unavailable")
 	}
-	return round.owner.client.Transport.RoundTrip(request)
+	client, err := round.owner.readClientFor(request)
+	base := round.owner.client.Transport
+	round.owner.mutex.RUnlock()
+	if err != nil {
+		return nil, err
+	}
+	if client != nil {
+		return client.Transport.RoundTrip(request)
+	}
+	return base.RoundTrip(request)
 }
 
 func (round databaseRegistryRoundTripper) CloseIdleConnections() { round.owner.closeIdleConnections() }
@@ -235,6 +255,44 @@ func (transport *DatabaseRegistryTransport) Close() {
 	defer transport.mutex.Unlock()
 	if !transport.closed {
 		transport.closed = true
+		clearBytes(transport.rootMaterial)
+		transport.rootMaterial = nil
+		transport.readCredential = nil
+		transport.readClients = nil
 		transport.client.CloseIdleConnections()
 	}
+}
+
+func validateDatabaseRegistryTrustOptions(options DatabaseRegistryTrustOptions) error {
+	if !strictTrustOpeningAvailable || !options.Network.Restricted || options.Network.Validate() != nil || len(options.Network.PrivateHosts) != 0 || len(options.Network.PrivateCIDRs) != 0 {
+		return errors.New("database registry trust constructor invalid")
+	}
+	for _, origin := range options.Network.Origins {
+		parsed, err := url.Parse(origin.URL)
+		if err != nil || parsed.Scheme != "https" {
+			return errors.New("database registry requires bounded HTTPS origins")
+		}
+	}
+	return validateDatabaseRegistryReadOptions(options.Read, options.Network)
+}
+
+// CertificateAuthorities returns an owned copy of the exact captured public
+// roots for downstream builtin certSecretRef material. It cannot select or
+// modify this transport's TLS roots. Mounted origin is rechecked before return.
+func (transport *DatabaseRegistryTransport) CertificateAuthorities(ctx context.Context) ([]byte, error) {
+	if transport == nil || ctx == nil {
+		return nil, errors.New("database registry public roots unavailable")
+	}
+	if err := transport.Revalidate(ctx); err != nil {
+		return nil, err
+	}
+	transport.mutex.RLock()
+	defer transport.mutex.RUnlock()
+	if transport.closed || len(transport.rootMaterial) == 0 || registryRootFingerprint(transport.rootMaterial) != transport.rootsFingerprint {
+		return nil, errors.New("database registry public roots unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return bytes.Clone(transport.rootMaterial), nil
 }

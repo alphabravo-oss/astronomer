@@ -118,6 +118,15 @@ func VerifyMirrorPlan(ctx context.Context, payload, signature []byte, keyRef, tr
 			if _, err := builtinbundles.NormalizeOCISourceURL(rewrite.Target); err != nil {
 				return nil, errors.New("mirror chart target is invalid")
 			}
+		case "database_repository":
+			// An authenticated operator plan may map a finite exact repository for
+			// future DB snapshots. The vendor-signed child digest remains unchanged;
+			// a feed does not select this mapping, trust policy or network permission.
+			for _, repository := range []string{rewrite.Source, rewrite.Target} {
+				if !validDatabaseUpdateSubject(repository+"@sha256:"+strings.Repeat("a", 64), "sha256:"+strings.Repeat("a", 64)) {
+					return nil, errors.New("mirror database repository identity is invalid")
+				}
+			}
 		case "image", "artifact":
 			sourceRepo, sourceDigest, ok := strings.Cut(rewrite.Source, "@")
 			targetRepo, targetDigest, targetOK := strings.Cut(rewrite.Target, "@")
@@ -134,6 +143,9 @@ func VerifyMirrorPlan(ctx context.Context, payload, signature []byte, keyRef, tr
 			return nil, errors.New("mirror rewrite kind is unsupported")
 		}
 	}
+	if err := validateDatabaseMirrorRepositories(plan.Rewrites); err != nil {
+		return nil, err
+	}
 	plan.identity = contentDigest(payload)
 	plan.verified = &verifiedMirrorPlan{document: mirrorDocument(plan), payload: slices.Clone(payload), signature: slices.Clone(signature), policy: policy, trustDirectory: trustDirectory}
 	return &plan, nil
@@ -149,6 +161,11 @@ func projectMirrors(ctx context.Context, catalog builtinbundles.Catalog, plan *M
 	charts := map[string]string{}
 	images := map[string]string{}
 	for _, rewrite := range plan.Rewrites {
+		if rewrite.Kind == "database_repository" {
+			if err := network.ValidateURL(ctx, "https://"+rewrite.Target); err != nil {
+				return builtinbundles.Catalog{}, errors.New("mirror database destination is outside operator policy")
+			}
+		}
 		if rewrite.Kind == "chart_repository" {
 			charts[rewrite.Source] = rewrite.Target
 			if err := network.ValidateURL(ctx, "https://"+strings.TrimPrefix(rewrite.Target, "oci://")); err != nil {

@@ -18,7 +18,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Characterization only: no index or acceptable-cost conclusion is inferred.
+// Candidate-window successor: every actual Scan node is summed against the
+// unchanged 250-row budget. Original 54 characterization plans remain retained.
 type catalogPreparedCapture struct {
 	sqlc.DBTX
 	queryName string
@@ -158,7 +159,7 @@ FROM generate_series(1,20000)n`, repo, prefix, needle)
 	paginationExec(t, ctx, tx, `INSERT INTO helm_chart_tags(chart_id,tag)
 SELECT id,CASE WHEN right(name,5)::integer%100=0 THEN $1 ELSE $2 END
 FROM helm_charts WHERE repository_id=ANY($3::uuid[])`, rareTag, commonTag, repos)
-	for _, table := range []string{"helm_charts", "helm_repositories", "helm_chart_tags"} {
+	for _, table := range []string{"helm_charts", "helm_repositories", "helm_chart_tags", "catalog_global_chart_keys"} {
 		// Only these three fixed identifiers are admitted; no operator SQL input.
 		paginationExec(t, ctx, tx, "ANALYZE "+table)
 	}
@@ -175,10 +176,10 @@ FROM helm_charts WHERE repository_id=ANY($3::uuid[])`, rareTag, commonTag, repos
 		expectedFirst, expectedAfter int
 		advertised                   bool
 	}{
-		{"unfiltered", "", "", 200, 200, true}, {"common tag", commonTag, "", 200, 200, true}, {"sparse tag", rareTag, "", 200, 200, true},
-		{"common search", "", prefix, 200, 200, true}, {"sparse search", "", needle, 200, 200, true},
-		{"common tag and search", commonTag, prefix, 200, 200, true}, {"sparse correlated tag and search", rareTag, needle, 4, 4, false},
-		{"absent tag", absent, "", 0, 0, false}, {"absent search", "", absent, 0, 0, false},
+		{"unfiltered", "", "", 16, 16, true}, {"common tag", commonTag, "", 16, 16, true}, {"sparse tag", rareTag, "", 0, 0, true},
+		{"common search", "", prefix, 16, 16, true}, {"sparse search", "", needle, 0, 0, true},
+		{"common tag and search", commonTag, prefix, 16, 16, true}, {"sparse correlated tag and search", rareTag, needle, 0, 0, true},
+		{"absent tag", absent, "", 0, 0, true}, {"absent search", "", absent, 0, 0, true},
 	} {
 		for _, mode := range []string{"auto", "force_generic_plan", "force_custom_plan"} {
 			t.Run(filter.name+"/"+mode, func(t *testing.T) {
@@ -194,9 +195,9 @@ FROM helm_charts WHERE repository_id=ANY($3::uuid[])`, rareTag, commonTag, repos
 					values.Set("search", filter.search)
 				}
 				for _, phase := range []string{"First", "After"} {
-					name := "ListFilteredHelmCharts"
+					name := "ListCatalogGlobalCandidateWindowFirst"
 					if phase == "After" {
-						name += "After"
+						name = "ListCatalogGlobalCandidateWindowAfter"
 					}
 					capture := &catalogPreparedCapture{DBTX: tx, queryName: name}
 					h := NewCatalogHandler(sqlc.New(capture))
@@ -240,6 +241,9 @@ FROM helm_charts WHERE repository_id=ANY($3::uuid[])`, rareTag, commonTag, repos
 					}
 					raw := explainCatalogPreparedPlan(t, ctx, tx, capture)
 					t.Logf("catalog100k filter=%s mode=%s query=%s phase=%s examined=%g actual cached plan=%s", filter.name, mode, name, phase, catalogPlanExamined(t, raw), raw)
+					if examined := catalogPlanExamined(t, raw); examined > 250 {
+						t.Fatalf("%s/%s candidate plan examined=%g exceeds unchanged 250 budget", filter.name, phase, examined)
+					}
 					if phase == "First" {
 						if page.Pagination.NextCursor != nil {
 							values.Set("cursor", *page.Pagination.NextCursor)

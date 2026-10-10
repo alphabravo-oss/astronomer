@@ -368,6 +368,7 @@ export async function getHelmCharts(
     projectId?: string;
     repository?: string;
     category?: string;
+    tag?: string;
     search?: string;
     limit?: number;
     offset?: number;
@@ -386,6 +387,7 @@ export async function getHelmCharts(
       cluster_id: params.projectId ? undefined : params.clusterId,
       project_id: params.projectId,
       search: params.search?.trim() || undefined,
+      tag: params.tag,
       limit: params.limit ?? CATALOG_PAGE_LIMIT,
       offset: params.offset,
       cursor: params.cursor,

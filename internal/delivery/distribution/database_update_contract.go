@@ -107,7 +107,19 @@ func DecodeDatabaseUpdateDocument(payload []byte, expected DatabaseUpdateBinding
 	if len(payload) == 0 || int64(len(payload)) > MaximumDatabaseUpdateBytes || now.IsZero() || expected.validate() != nil || timing.validate() != nil {
 		return document, errors.New("database update inputs invalid")
 	}
-	if decodeClosed(payload, &document) != nil || document.SchemaVersion != 1 || document.Kind != "VulnerabilityDatabaseUpdate" || document.Binding != expected || document.Generation <= 0 || len(document.Databases) == 0 || len(document.Databases) > 2 {
+	if decodeClosed(payload, &document) != nil {
+		return DatabaseUpdateDocument{}, errors.New("database update closed contract or binding invalid")
+	}
+	return validateDatabaseUpdateDocument(document, expected, timing, now, javaRequired)
+}
+
+// The decoder and an already-authenticated update share the exact finite clock
+// and descriptor rules. This typed validation does not grant authentication.
+func validateDatabaseUpdateDocument(document DatabaseUpdateDocument, expected DatabaseUpdateBinding, timing DatabaseUpdateTiming, now time.Time, javaRequired bool) (DatabaseUpdateDocument, error) {
+	if now.IsZero() || expected.validate() != nil || timing.validate() != nil {
+		return DatabaseUpdateDocument{}, errors.New("database update inputs invalid")
+	}
+	if document.SchemaVersion != 1 || document.Kind != "VulnerabilityDatabaseUpdate" || document.Binding != expected || document.Generation <= 0 || len(document.Databases) == 0 || len(document.Databases) > 2 {
 		return DatabaseUpdateDocument{}, errors.New("database update closed contract or binding invalid")
 	}
 	if !databaseUpdateUTC(document.PublishedAt) || !databaseUpdateUTC(document.ExpiresAt) || document.PublishedAt.After(now.Add(timing.ClockSkew)) || !document.ExpiresAt.After(document.PublishedAt) || document.ExpiresAt.Sub(document.PublishedAt) > timing.FeedLifetime || !now.Before(document.ExpiresAt) {

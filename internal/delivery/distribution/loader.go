@@ -50,6 +50,7 @@ type Loader struct {
 	mutex         sync.Mutex
 	options       Options
 	cached        *builtinbundles.Catalog
+	scanImages    *DatabaseScanImages
 	status        Status
 	fetchMetadata metadataArtifactFetcher
 	fetch         artifactFetcher
@@ -157,6 +158,10 @@ func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbun
 		return builtinbundles.Catalog{}, err
 	}
 	catalog.DistributionIdentity = l.options.Digest
+	scanImages, err := l.prepareDatabaseScanImages(ctx, catalog, bom, members)
+	if err != nil {
+		return builtinbundles.Catalog{}, err
+	}
 	catalog.VerificationIdentity = l.options.Policy.Identity
 	catalog.VerificationIssuer = l.options.Policy.Issuer
 	catalog.VerificationProvider = string(l.options.Policy.Provider)
@@ -211,6 +216,10 @@ func (l *Loader) prepareCatalog(ctx context.Context, payload []byte) (builtinbun
 	if err := l.verifyPublishedAssets(ctx, bom, members); err != nil {
 		return builtinbundles.Catalog{}, err
 	}
+	if scanImages != nil {
+		scanImages.DistributionIdentity = catalog.DistributionIdentity
+	}
+	l.scanImages = scanImages
 	return catalog, nil
 }
 

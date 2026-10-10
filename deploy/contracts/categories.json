@@ -796,6 +796,65 @@
       "schema": "CharlieThreadMetadataStateValue",
       "unknownBehavior": "Browser reads use explicit neutral unsupported; malformed shapes reject. Writes retain known canonical values.",
       "wireCompatibility": "Existing inline Go SDK enum identity and values retained by generated compatibility overlay."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "string",
+          "property": "scan_state",
+          "schema": "ImageDatabaseStatusV1"
+        }
+      ],
+      "database": [],
+      "domainCheck": {
+        "path": "internal/scanner/database_freshness.go",
+        "type": "WorkloadScanState"
+      },
+      "owner": "delivery/owned-database-scan",
+      "schema": "ImageDatabaseScanState",
+      "unknownBehavior": "Browser read uses explicit neutral unsupported; unknown category never qualifies current clean posture or a successful scan. Malformed shapes reject; known positive findings remain visible.",
+      "wireCompatibility": "Additive status endpoint only. Existing report structs and released SDK type layouts unchanged; new categorical aliases retain string storage/wire shape."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "string",
+          "property": "main_state",
+          "schema": "ImageDatabaseStatusV1"
+        },
+        {
+          "goSDK": "string",
+          "property": "java_state",
+          "schema": "ImageDatabaseStatusV1"
+        }
+      ],
+      "database": [],
+      "domainCheck": {
+        "path": "internal/scanner/database_freshness.go",
+        "type": "DatabasePostureState"
+      },
+      "owner": "delivery/owned-database-scan",
+      "schema": "ImageDatabasePostureState",
+      "unknownBehavior": "Browser read uses explicit neutral unsupported; unknown category never qualifies current clean posture or a successful scan. Malformed shapes reject; known positive findings remain visible.",
+      "wireCompatibility": "Additive status endpoint only. Existing report structs and released SDK type layouts unchanged; new categorical aliases retain string storage/wire shape."
+    },
+    {
+      "bindings": [
+        {
+          "goSDK": "string",
+          "property": "java_applicability",
+          "schema": "ImageDatabaseStatusV1"
+        }
+      ],
+      "database": [],
+      "domainCheck": {
+        "path": "internal/scanner/database_freshness.go",
+        "type": "JavaDatabaseApplicability"
+      },
+      "owner": "delivery/owned-database-scan",
+      "schema": "ImageDatabaseJavaApplicability",
+      "unknownBehavior": "Browser read uses explicit neutral unsupported; unknown category never qualifies current clean posture or a successful scan. Malformed shapes reject; known positive findings remain visible.",
+      "wireCompatibility": "Additive status endpoint only. Existing report structs and released SDK type layouts unchanged; new categorical aliases retain string storage/wire shape."
     }
   ],
   "schemaVersion": 1

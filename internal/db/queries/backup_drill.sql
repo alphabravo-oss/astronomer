@@ -22,7 +22,7 @@ LIMIT 1;
 -- name: ListBackupDrillResults :many
 -- Paginated history for the admin UI.
 SELECT * FROM backup_drill_results
-ORDER BY started_at DESC
+ORDER BY started_at DESC, id DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountBackupDrillResults :one

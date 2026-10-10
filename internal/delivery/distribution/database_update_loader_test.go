@@ -293,6 +293,9 @@ func TestSelectedCosignDatabaseUpdateToCanonicalLoader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if update.ValidateCurrentMetadata(now) != nil || update.ValidateCurrentMetadata(document.ExpiresAt) == nil {
+		t.Fatal("actual authenticated document did not retain finite metadata clocks")
+	}
 	if _, captured, ok := update.Snapshot(); !ok || len(captured.Databases) != 2 {
 		t.Fatal("real producer did not qualify descriptor consumer")
 	}

@@ -58,3 +58,19 @@ describe("observability query keys", () => {
     ]);
   });
 });
+
+describe("image database status query keys", () => {
+  it("isolates clusters and reports while preserving the versioned cache key", () => {
+    const key = queryKeys.clusterPages.imageDatabaseStatus(
+      "cluster-a",
+      "report-a",
+    );
+    expect(key).toEqual(["image-database-status-v1", "cluster-a", "report-a"]);
+    expect(
+      queryKeys.clusterPages.imageDatabaseStatus("cluster-b", "report-a"),
+    ).not.toEqual(key);
+    expect(
+      queryKeys.clusterPages.imageDatabaseStatus("cluster-a", "report-b"),
+    ).not.toEqual(key);
+  });
+});

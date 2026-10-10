@@ -84,3 +84,8 @@ actions:
   - target: "$.paths['/api/v1/admin/queues/{queue}/dlq'].get.responses['200'].content['application/json'].schema.allOf[1].properties.pagination"
     description: Retain the released anonymous response struct layout; existing SDK users follow native pages using unchanged per-page count.
     remove: true
+  # The additive window is read from Body by CatalogControllerWindowFromResponse.
+  # Preserve the released v1 anonymous response model's positional field layout.
+  - target: "$.paths['/api/v1/catalog/controller/status/'].get.responses['200'].content['application/json'].schema.properties.operationSummary"
+    description: Keep the released Go response struct layout while a typed compatible reader exposes the additive window contract.
+    remove: true

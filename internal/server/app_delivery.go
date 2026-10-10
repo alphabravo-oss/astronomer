@@ -40,17 +40,8 @@ func (c *productionComposition) initializeDelivery(ctx context.Context, cfg *con
 		return err
 	}
 	c.catalogHandler.SetApplicationDelivery(catalogApplicationDelivery)
-	ca, err := readBuiltinCA(cfg.DeliverySourceCAFile)
+	catalogLoader, err := c.prepareDeliveryCatalog(ctx, cfg)
 	if err != nil {
-		database.Close()
-		return err
-	}
-	catalogLoader, err := newDistributionLoader(cfg, ca)
-	if err != nil {
-		database.Close()
-		return err
-	}
-	if err := c.configureBuiltinCA(cfg, catalogLoader, ca); err != nil {
 		database.Close()
 		return err
 	}
