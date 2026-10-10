@@ -36,5 +36,5 @@ func logSnapshotErr(log *slog.Logger, msg string, err error) {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return
 	}
-	log.Warn("cluster snapshot worker", "phase", msg, "error", err.Error())
+	log.Warn("cluster snapshot worker", "phase", msg, "error", err)
 }

@@ -622,7 +622,7 @@ func buildCRDControllerRunner(logger *slog.Logger, cfg *config.Config, queries *
 			if isProductionConfig(cfg) {
 				return nil, err
 			}
-			logger.Warn("crd_controller_disabled", "reason", "no_kubeconfig", "error", err.Error())
+			logger.Warn("crd_controller_disabled", "reason", "no_kubeconfig", "error", err)
 			return nil, nil
 		}
 		restCfg = fallback
@@ -650,14 +650,14 @@ func buildCRDControllerRunner(logger *slog.Logger, cfg *config.Config, queries *
 		if isProductionConfig(cfg) {
 			return nil, err
 		}
-		logger.Warn("crd_controller_disabled", "reason", "build_manager_failed", "error", err.Error())
+		logger.Warn("crd_controller_disabled", "reason", "build_manager_failed", "error", err)
 		return nil, nil
 	}
 
 	return func(ctx context.Context) error {
 		logger.Info("crd_controller_starting", "watch_namespace", crdWatchNamespace(cfg.CRDWatchNamespace))
 		if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error("crd_controller_stopped", "error", err.Error())
+			logger.Error("crd_controller_stopped", "error", err)
 			return err
 		}
 		logger.Info("crd_controller_stopped")
