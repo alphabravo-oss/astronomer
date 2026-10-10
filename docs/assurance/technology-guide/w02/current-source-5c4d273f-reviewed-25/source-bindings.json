@@ -1,0 +1,148 @@
+{
+  "source": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "sha256:69415b4c617f920514e8d252f5f6fefe9dfae8f55cb02268aa0f8dfa45584253",
+      "size": 4697
+    },
+    {
+      "path": "deploy/security/source-policy.json",
+      "sha256": "sha256:86320bf542892a3179470f75485ad097b285ae7685042f8cf6c5cee8804c0fce",
+      "size": 416
+    },
+    {
+      "path": "internal/agent/decommission.go",
+      "sha256": "sha256:6288d8b908069647198c95190fde9ceab8c84046f519733880728b68b79e5277",
+      "size": 30685
+    },
+    {
+      "path": "internal/charlie/contract/contract_test.go",
+      "sha256": "sha256:c6e8e94fa146bcddcff008d1856d5b7ea6b8f89704222b568d86aa952b98744a",
+      "size": 3725
+    },
+    {
+      "path": "internal/charlie/contract/onboarding.go",
+      "sha256": "sha256:61c0a0d3b099ccfb8bcdce263f9f53afa14d4742c599117597e11daf8509b1b0",
+      "size": 2084
+    },
+    {
+      "path": "internal/charlie/contract/verify.go",
+      "sha256": "sha256:039e326a3316383e0ccf20744eecc5bfc8ddd0d8ca5670c7283df1ffd0eb5255",
+      "size": 1863
+    },
+    {
+      "path": "internal/charlie/mcp_runtime.go",
+      "sha256": "sha256:73bc785d42ae8ae63a58279549851d515593d49d1cb1c228d668d8f5d7117e29",
+      "size": 10715
+    },
+    {
+      "path": "internal/gitops/path.go",
+      "sha256": "sha256:ae740ba42b53e03cc1faef0573d44865e96b4e643d91074cdaa8dd6811de2a76",
+      "size": 2217
+    },
+    {
+      "path": "internal/handler/audit.go",
+      "sha256": "sha256:b58a3bece0351047daabecdfc8d718fd1b7c51da88dbc5ca9783ee321632300f",
+      "size": 27974
+    },
+    {
+      "path": "internal/handler/cloud_credentials_test_endpoint.go",
+      "sha256": "sha256:6d32d87efea4b05c763ce89eb5400d0c4173ac68598695cfe5247e1be80beabe",
+      "size": 18862
+    },
+    {
+      "path": "internal/handler/siem.go",
+      "sha256": "sha256:f253b8c882712feb8ab06175c7c9298915530bfa6aa2e47c03e75d03923da70f",
+      "size": 30669
+    },
+    {
+      "path": "internal/handler/vault.go",
+      "sha256": "sha256:c21d82de90bf649993ad329c97115c5ea1216caa96f6b9f4d83b5da301565f12",
+      "size": 30097
+    },
+    {
+      "path": "internal/handler/webhooks_endpoints.go",
+      "sha256": "sha256:ab282ba41e7effd8728af70391cd069d68427a9724f4e5180fc10cb216782756",
+      "size": 10870
+    },
+    {
+      "path": "internal/handler/webhooks_response.go",
+      "sha256": "sha256:539f084e89f67bd6799bbdb753172a2123e4f3b38457ce0599f2292342f2093c",
+      "size": 5819
+    },
+    {
+      "path": "internal/httpserver/serve.go",
+      "sha256": "sha256:709c09ca5ce6dd11959d15bcadca4830e9beb99adb5fbb1292900676d14ab3a1",
+      "size": 1148
+    },
+    {
+      "path": "internal/kubeutil/delete.go",
+      "sha256": "sha256:92c15ed21598cab10ed6688be279def23e3e3225a0020ad768d10d12966474e2",
+      "size": 817
+    },
+    {
+      "path": "internal/ops/upgradecli/artifact_capture_linux.go",
+      "sha256": "sha256:9028891c1b75efe917b70fc167fcec80bee5dd20a1ee2c4b79503315010e0075",
+      "size": 6870
+    },
+    {
+      "path": "internal/server/app_tenant_handlers.go",
+      "sha256": "sha256:68286be76976fa01daf63794864b472a241abf067c45265c6388a40447d50144",
+      "size": 8946
+    },
+    {
+      "path": "internal/vault/client.go",
+      "sha256": "sha256:75d4429d742232b149292029b17603769226ee1694de4327421656b98068b58f",
+      "size": 7959
+    },
+    {
+      "path": "internal/worker/tasks/gitops_sync.go",
+      "sha256": "sha256:93bfcbe4e30dc719e52d74c549ae802d56f091f5926653ac844bd231a7863541",
+      "size": 34019
+    },
+    {
+      "path": "internal/worker/tasks/siem_tls.go",
+      "sha256": "sha256:47f1b32825ffffa72760449f66c8de28081e208848980ef2b98ce2d9808a196a",
+      "size": 2465
+    },
+    {
+      "path": "scripts/fips-mode-probe/main.go",
+      "sha256": "sha256:91611294e3bda418e2fd13f802a45faa809b7f112c739c135be0b6211299aa4b",
+      "size": 4097
+    },
+    {
+      "path": "scripts/security-source-policy.py",
+      "sha256": "sha256:0c086bdcbb0a65117af8dc6c411468e0540e7e7b97204176a2fc65ae5480c566",
+      "size": 11494
+    }
+  ],
+  "selected_primary_library_sources": [
+    {
+      "path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/src/crypto/cipher/gcm.go",
+      "sha256": "sha256:1c438306f268e692037dbb2e98a34ba91b2ee23d0c452954d6ab415591f6f459",
+      "size": 13068
+    },
+    {
+      "path": "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.27.2.linux-amd64/src/encoding/xml/xml.go",
+      "sha256": "sha256:41a7f2c7c910a57f70ce460cbe057a31703e11dbb169b499e50a3339a5f33bdb",
+      "size": 48621
+    }
+  ],
+  "input": [
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/receipt.json",
+      "sha256": "sha256:a3f59c4591ce3cb2956c41968d0fe649afb4ce9c503fc9589b7e610b1b07ba2b",
+      "size": 295455
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/gosec.json",
+      "sha256": "sha256:3ad6bd1840fbddef7e435573f8f7b1e61b7beb1d952f3a2981f59cb596a697d5",
+      "size": 246955
+    },
+    {
+      "path": "/root/.cache/astronomer-032/qualification/w01-current-security-5c4d273f-exact-package-scan-budget-run5/policy/summary.json",
+      "sha256": "sha256:62da58a1fefbf1b727d7b4aea6852cc431144be57532eb66bd4c04259d7557b9",
+      "size": 161512
+    }
+  ]
+}

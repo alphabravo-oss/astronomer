@@ -497,6 +497,153 @@
       "review_by": "2026-10-16T00:00:00Z",
       "status": "pending",
       "evidence": ""
+    },
+    {
+      "fingerprint": "sha256:a2f5568cd4001784c92d69c2a5dd7b1a5765832ab783c9b667e5e6958c6e3ca7",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-000"
+    },
+    {
+      "fingerprint": "sha256:edae6e73bfed015827f417d3e735a85be1072078971f777158f84211854be127",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-001"
+    },
+    {
+      "fingerprint": "sha256:cf3df49fbfcdcd6c56667672f9d08ca8a11efc3e527d9831679aa9ff48d93084",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-103"
+    },
+    {
+      "fingerprint": "sha256:9ff13ab9f1171f5919564e7f89f41d238beadf4dcea081b40d83c23ba1a33825",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-104"
+    },
+    {
+      "fingerprint": "sha256:282b7779b666cf9c03dde9c3282dba2b068860544d09bf05cf0a9cf6b4ceb002",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-105"
+    },
+    {
+      "fingerprint": "sha256:33b30fa97432b0aeb7729396441ab5c8952768f9aa17336a02add6cf110db53c",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-106"
+    },
+    {
+      "fingerprint": "sha256:d33d09adc9c23cdda758c1754dbf1ab4975f542690123ff4bc1e416c8387082b",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-113"
+    },
+    {
+      "fingerprint": "sha256:53f75271d63b7418c42ff6a60c561c2aeef9b67f6e991193554d071194910b40",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-114"
+    },
+    {
+      "fingerprint": "sha256:4e918a0a7d414b9b1895c546fe8907e831045e06a070c824e117cd6030a13d0a",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-115"
+    },
+    {
+      "fingerprint": "sha256:b3d40b0e1180652eef9333da4e4e745f967b90a3e0bf6d409dc85b842b011e85",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-116"
+    },
+    {
+      "fingerprint": "sha256:1207307154cac59e4fe934a9542c7b4d08898cca280fc04135a8c0573b9bc2b3",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-117"
+    },
+    {
+      "fingerprint": "sha256:187857344a553ccced117fc3f68b3f860737cd2cd2fcf274592c079bd2dfcf12",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-118"
+    },
+    {
+      "fingerprint": "sha256:2230af0652180afc15dd854e8860d77d2db094cdbbb5f74cf677d669f84eacd8",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-172"
+    },
+    {
+      "fingerprint": "sha256:71cff4a542aa06be6a7bc9aad5868cffd2c03e5c9448fd66b6f4cf97f4d20552",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-173"
+    },
+    {
+      "fingerprint": "sha256:1fd0020a180a3c397ced90d948678282cdc30020668a7a3a7fe0dd705a904e99",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-174"
+    },
+    {
+      "fingerprint": "sha256:f8f7091bd977de2074709f8d4831fe0b3b30b94af2c5e6cc71b107944edd0f57",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-183"
+    },
+    {
+      "fingerprint": "sha256:57c4afdd4852b213b4055e16cc12ccdd94c86b484b95d9e7fa85d52a7aaf72db",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-184"
+    },
+    {
+      "fingerprint": "sha256:4751dbc4e4cdec8e7c043d508b12339dac29bce1b41a2ae77948b13310600085",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-269"
+    },
+    {
+      "fingerprint": "sha256:c10148ba70514f4ec38ac5126df6d64e6e2ee7fdd21585a51002d117826b4f04",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-290"
+    },
+    {
+      "fingerprint": "sha256:f9e06549c3ef563bd27294e3b7bfb2363808d060409e0bd3ef63c9d5eeb37381",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-291"
+    },
+    {
+      "fingerprint": "sha256:7baf4569ce3a71dea070157efacd4e8bd22c5cdd0ae91bcd6d8653b08d01393f",
+      "owner": "security/platform",
+      "review_by": "2026-10-16T00:00:00Z",
+      "status": "reviewed",
+      "evidence": "docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25/reviewed-dispositions.json sha256:82058840788464beb4bc42b0d9b7260ace3443c7bee0692ffd71002136550c9f; retained current raw-selected-findings.json and source-bound guard chain; current-gosec-294"
     }
   ]
 }
