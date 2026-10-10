@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -13,6 +14,53 @@ SPEC.loader.exec_module(allocator)
 
 
 class MetricsAllocationTests(unittest.TestCase):
+    def test_destination_rejects_dangling_link_and_nonprivate_parent(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(allocator, "PRIVATE_ROOT", Path(directory)):
+            parent = Path(directory)
+            path = parent / "postgres18-database.json"
+            parent.chmod(0o700)
+            self.assertEqual(allocator.reference_destination(path, "18"), path)
+            path.symlink_to(parent / "absent-secret.json")
+            with self.assertRaises(ValueError):
+                allocator.reference_destination(path, "18")
+            path.unlink()
+            parent.chmod(0o755)
+            with self.assertRaises(ValueError):
+                allocator.reference_destination(path, "18")
+
+    def test_destination_rejects_symlink_parent_or_wrong_lane(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private = root / "private"
+            private.mkdir(mode=0o700)
+            alias = root / "alias"
+            alias.symlink_to(private, target_is_directory=True)
+            with mock.patch.object(allocator, "PRIVATE_ROOT", alias):
+                with self.assertRaises(ValueError):
+                    allocator.reference_destination(alias / "postgres18-database.json", "18")
+            with mock.patch.object(allocator, "PRIVATE_ROOT", private):
+                with self.assertRaises(ValueError):
+                    allocator.reference_destination(private / "postgres17-database.json", "18")
+
+    def test_reference_creation_exclusive0600_and_preserves_partial_on_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reference.json"
+            prior_umask = os.umask(0)
+            try:
+                allocator.write_reference(path, {"synthetic": "value"})
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                original = path.read_bytes()
+                with self.assertRaises(FileExistsError):
+                    allocator.write_reference(path, {})
+                self.assertEqual(path.read_bytes(), original)
+                path.unlink()
+                with mock.patch.object(allocator.json, "dumps", side_effect=ValueError("synthetic failure")):
+                    with self.assertRaises(ValueError):
+                        allocator.write_reference(path, {})
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            finally:
+                os.umask(prior_umask)
+
     def test_template_reference_binds_private_exact_lane(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "template.json"

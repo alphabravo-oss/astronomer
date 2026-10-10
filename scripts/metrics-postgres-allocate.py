@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 from urllib.parse import parse_qs, urlsplit, urlunsplit
@@ -14,6 +15,30 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 SPEC = importlib.util.spec_from_file_location("metrics", Path(__file__).with_name("metrics-postgres-qualification.py"))
 metrics = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(metrics)
+PRIVATE_ROOT = Path("/root/.cache/astronomer-032/qualification/w10-metrics-databases")
+
+
+def reference_destination(path, major):
+    # Check the literal final path before resolve: a dangling symlink must not
+    # redirect an apparently absent output into a different directory.
+    path = Path(os.path.abspath(path))
+    if path != PRIVATE_ROOT / ("postgres" + major + "-database.json"):
+        raise ValueError("known private metrics output required")
+    parent = path.parent
+    info = parent.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o777 != 0o700 or parent.resolve() != parent:
+        raise ValueError("owned private0700 output directory required")
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return path
+    raise ValueError("reference already exists, including symlink")
+
+
+def write_reference(path, document):
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "w") as handle:
+        handle.write(json.dumps(document) + "\n")
 
 
 def template_reference(path, major):
@@ -61,12 +86,9 @@ def inspect(args, address, template):
 def allocate(args):
     artifact = Path(args.artifact_dir).resolve()
     artifact.mkdir(mode=0o700, exist_ok=False)
-    destination_path = Path(args.reference).resolve()
     receipt = {"startedAt": dt.datetime.now(dt.timezone.utc).isoformat(), "major": args.major, "created": False, "exitCode": 1, "templateRestoreQualified": False}
     try:
-        if destination_path.exists() or destination_path.is_symlink():
-            raise ValueError("reference already exists")
-        destination_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        destination_path = reference_destination(args.reference, args.major)
         address, template, digest = template_reference(args.template_reference, args.major)
         receipt.update(templateDatabase=template, templateReferenceSHA256=digest)
         capacity = subprocess.run(["bash", "scripts/check-build-capacity.sh", "--json"], cwd=metrics.ROOT, capture_output=True, text=True)
@@ -76,28 +98,33 @@ def allocate(args):
         # Immediately before CREATE, repeat every live endpoint/UID/DB fence.
         report = inspect(args, address, template)
         receipt["ownershipBeforeCreate"] = report
-        if not args.create:
-            receipt["exitCode"] = 0
-            return 0
-        database = metrics.LANES[args.major]["database"]
-        sql(args, report["currentPrimary"], "postgres", 'CREATE DATABASE "' + database + '" TEMPLATE "' + template + '" OWNER astronomer;\n')
-        receipt["created"] = True
-        # Never drop or reuse a destination if comment/reference creation fails.
-        sql(args, report["currentPrimary"], "postgres", 'COMMENT ON DATABASE "' + database + '" IS \'plan032-20261009 exclusive W10 metric snapshot fixture\';\n')
-        new_url = urlunsplit(address._replace(path="/" + database))
-        reference = {"database_url": new_url, "database": database, "cluster_uid": metrics.LANES[args.major]["uid"], "primary_at_allocation": report["currentPrimary"]}
-        with destination_path.open("x") as handle:
-            handle.write(json.dumps(reference) + "\n")
-        destination_path.chmod(0o600)
-        receipt.update(privateReferencePath=str(destination_path), privateReferenceSHA256=hashlib.sha256(destination_path.read_bytes()).hexdigest(), exitCode=0)
-        return 0
+        if args.create:
+            database = metrics.LANES[args.major]["database"]
+            sql(args, report["currentPrimary"], "postgres", 'CREATE DATABASE "' + database + '" TEMPLATE "' + template + '" OWNER astronomer;\n')
+            receipt["created"] = True
+            # Never drop or reuse a destination if comment/reference creation fails.
+            sql(args, report["currentPrimary"], "postgres", 'COMMENT ON DATABASE "' + database + '" IS \'plan032-20261009 exclusive W10 metric snapshot fixture\';\n')
+            new_url = urlunsplit(address._replace(path="/" + database))
+            document = {"database_url": new_url, "database": database, "cluster_uid": metrics.LANES[args.major]["uid"], "primary_at_allocation": report["currentPrimary"]}
+            write_reference(destination_path, document)
+            receipt.update(privateReferencePath=str(destination_path), privateReferenceSHA256=hashlib.sha256(destination_path.read_bytes()).hexdigest())
+        receipt["exitCode"] = 0
     except (ValueError, KeyError, TypeError, OSError, subprocess.SubprocessError):
         receipt["errorKind"] = "ownership_or_allocation_failure"
-        return 1
     finally:
+        try:
+            final = subprocess.run(["bash", "scripts/check-build-capacity.sh", "--json"], cwd=metrics.ROOT, capture_output=True, text=True)
+            (artifact / "capacity-after.json").write_text(final.stdout)
+            receipt["finalCapacityExitCode"] = final.returncode
+        except (OSError, subprocess.SubprocessError):
+            receipt["finalCapacityExitCode"] = 1
+        if receipt["exitCode"] == 0 and receipt["finalCapacityExitCode"] != 0:
+            receipt["exitCode"] = 1
+            receipt["errorKind"] = "final_capacity_failure"
         receipt["completedAt"] = dt.datetime.now(dt.timezone.utc).isoformat()
         (artifact / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
         print(json.dumps({key: receipt[key] for key in ["major", "created", "exitCode"]}))
+    return receipt["exitCode"]
 
 
 def main():
