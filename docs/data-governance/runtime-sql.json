@@ -8949,7 +8949,9 @@
     },
     {
       "name": "audit-batch",
-      "paths": ["internal/db/queryextensions/audit_v1_manual.go.tmpl"],
+      "paths": [
+        "internal/db/queryextensions/audit_v1_manual.go.tmpl"
+      ],
       "mechanism": "Fixed17-column INSERT prefix; row count selects placeholder numbers only; values are bound separately.",
       "verification": "TestAuditSQLBatchBindsValuesAndPartitionDDLRejectsIdentifiers plus existing batch tests"
     },
