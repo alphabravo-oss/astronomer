@@ -17,5 +17,10 @@
   },
   "setupFailure": "FAIL before any collected test/browser execution: webServer cwd incorrectly resolved Vite CLI at repository root",
   "scope": "Actual controlled product YamlEditor and immutable original application Monaco assets, synthetic contents; no application backend, login, API mutation, assembled signed candidate or full-stack browser qualification.",
-  "unusedInput": "characterize.mjs is retained historical preparation; executed evidence is the project Playwright editor.spec.ts/config lane, not standalone automation."
+  "unusedInput": "characterize.mjs is retained historical preparation; executed evidence is the project Playwright editor.spec.ts/config lane, not standalone automation.",
+  "fullGitFingerprintIndependentlyRecomputed": {
+    "schema_version": 2,
+    "source_file_count": 6175,
+    "source_tree_sha256": "06de7b6d2e6b617d5a643fed7b1b1ba676b39ef23b3a2444dfcaa1f4cf53de9f"
+  }
 }

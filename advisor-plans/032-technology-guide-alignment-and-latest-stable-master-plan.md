@@ -535,6 +535,8 @@ Expected: all required cases execute, no expected test is silently skipped, publ
 
 **Stop:** harness cannot prove egress denial or fresh cache state; an existing shared cluster would be mutated; optional services are required without local qualified substitute; evidence contains credentials. Fix harness or record limited scope rather than certify.
 
+W04 component qualification (2026-10-10): signed feed/immutable descriptor contracts, complete two-pass no-write payload inspection, reviewed-origin supplier capture and the pure freshness model are integrated through `acd5c334`. Root verifies all2,576 frozen Git/source input hashes and15 retained gate logs; corrected75parents/294race cases plus four freshness parents/48cases pass with zero failures/skips. The original mutable-reference/oversized-fixture failures are retained. [Root review](032-evidence/w04-core-qualified-root-review.json). Whole supplier transfer/cadence, configured publication, durable generation acceptance, measured scan-used provenance, API/UI wiring and fresh-cache no-egress qualification remain open; these component results do not close W04 tasks or qualify the combined application.
+
 ### W05 — Bound browser authentication, propagate cancellation, and finish modal forms
 
 **Priority:** P1. **Effort/risk:** M/MED. **Dependencies:** W00; W01 for frontend tooling updates. **Owner:** frontend/API.
