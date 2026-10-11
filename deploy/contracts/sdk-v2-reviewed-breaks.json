@@ -1,0 +1,124 @@
+{
+  "baseline": "v1.2.1",
+  "baseline_sha256": "db9725d5c092c10192e591264a1e0a730a83e4de5a554b5507fa06022352551c",
+  "current_sha256": "9eb264f1b29046493372b5269cf65176a2ca426fc50d9c02070164add2cd96f9",
+  "reason": "Approved v2 browser-isolation migration: main-origin tool proxy responses are HTML launch documents or 410, not tool JSON. All other released SDK symbols remain compile-checked.",
+  "release": "v2.0.0",
+  "removed_fields": {
+    "GetClustersByIdObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "GetClustersByIdObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "GetObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "GetObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "HeadClustersByIdObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "HeadClustersByIdObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "HeadObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "HeadObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "OptionsClustersByIdObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "OptionsClustersByIdObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "OptionsObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "OptionsObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "PatchClustersByIdObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "PatchClustersByIdObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "PatchObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "PatchObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "PostClustersByIdObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "PostClustersByIdObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "PostObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "PostObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "PutClustersByIdObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "PutClustersByIdObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "PutObservabilityGrafanaProxyResponse": [
+      "JSON200"
+    ],
+    "PutObservabilityGrafanaResponse": [
+      "JSON200"
+    ],
+    "ServiceProxyDeleteResponse": [
+      "JSON200"
+    ],
+    "ServiceProxyGetResponse": [
+      "JSON200"
+    ],
+    "ServiceProxyHeadResponse": [
+      "JSON200"
+    ],
+    "ServiceProxyOptionsResponse": [
+      "JSON200"
+    ],
+    "ServiceProxyPatchResponse": [
+      "JSON200"
+    ],
+    "ServiceProxyPostResponse": [
+      "JSON200"
+    ],
+    "ServiceProxyPutResponse": [
+      "JSON200"
+    ],
+    "ServiceProxySubDeleteResponse": [
+      "JSON200"
+    ],
+    "ServiceProxySubGetResponse": [
+      "JSON200"
+    ],
+    "ServiceProxySubHeadResponse": [
+      "JSON200"
+    ],
+    "ServiceProxySubOptionsResponse": [
+      "JSON200"
+    ],
+    "ServiceProxySubPatchResponse": [
+      "JSON200"
+    ],
+    "ServiceProxySubPostResponse": [
+      "JSON200"
+    ],
+    "ServiceProxySubPutResponse": [
+      "JSON200"
+    ]
+  },
+  "review": "docs/assurance/technology-guide/tool-ui-isolation-review.md"
+}

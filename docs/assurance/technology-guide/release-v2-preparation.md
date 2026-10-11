@@ -30,3 +30,10 @@ See [migration notes](../../runbooks/upgrade-2.0.md) and
 [local CNPG acceptance](../../../advisor-plans/032-evidence/2026-10-11-compact-cnpg.md).
 Plan 032 remains in progress. No cloud, production scale, Rancher benchmark,
 human accessibility, clean-license or full multi-host HA certification is claimed.
+
+The upstream kubectl 1.35.9 binary in the shell image retains three CVE IDs
+(four package findings). The release owner's existing upstream-wait policy
+applies: exact binary digests, image path, release tag and expiry are enforced
+by `deploy/release/upstream-binary-waivers.json`. Unfiltered reports and applied
+waiver records are retained as image-vulnerability evidence. Other paths and
+first-party source findings remain subject to their normal blocking gates.

@@ -264,6 +264,10 @@ func assertProductionPostgresOutageInventory(t *testing.T, families []postgresOu
 	wired := make(map[string]struct{}, len(matches))
 	for _, match := range matches {
 		name := strings.ReplaceAll(match[1], "deliveryhandler.", "delivery.")
+		if name == "handler.UserPreferencesMutationTx" {
+			// Reflection reports the defining package for this exported type alias.
+			name = reflect.TypeOf((*handler.UserPreferencesMutationTx)(nil)).Elem().String()
+		}
 		if !strings.Contains(name, ".") {
 			name = "server." + name
 		}
@@ -913,4 +917,8 @@ func waitForPostgresOutageRecovery(t *testing.T, ctx context.Context, database *
 		time.Sleep(100 * time.Millisecond)
 	}
 	t.Fatalf("PostgreSQL did not recover within 20 seconds: %v", lastErr)
+}
+
+func TestPostgresOutageInventoryTracksProductionAliases(t *testing.T) {
+	assertProductionPostgresOutageInventory(t, postgresOutageFamilies(nil))
 }

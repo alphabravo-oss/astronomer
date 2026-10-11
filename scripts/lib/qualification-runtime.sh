@@ -69,7 +69,7 @@ qualification_valkey_run() {
 qualification_valkey_ready() {
   local container="$1"
   for _ in $(seq 1 60); do
-    if docker exec "$container" valkey-cli ping 2>/dev/null | rg -q '^PONG$'; then return; fi
+    if docker exec "$container" valkey-cli ping 2>/dev/null | grep -qx 'PONG'; then return; fi
     sleep 0.5
   done
   echo 'qualification: authenticated Valkey did not become ready within 30 seconds' >&2

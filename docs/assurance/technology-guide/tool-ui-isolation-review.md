@@ -38,3 +38,14 @@ This review accepts these exact intentional major-version API changes. It
 does not waive source-security validation, authorize unrelated API changes,
 or certify a live DNS/TLS deployment. The registry remains bound to exact
 source and baseline digests, warning identities, an owner, and expiry.
+
+## Go SDK migration
+
+The same approved v2 browser isolation change removes 38 `JSON200` fields from
+legacy service/Grafana proxy response structs. Those endpoints now return HTML
+launch documents or reject unsafe main-origin requests. The exact removed fields
+and both generated SDK digests are bound in
+[`sdk-v2-reviewed-breaks.json`](../../../deploy/contracts/sdk-v2-reviewed-breaks.json).
+The released-client compile fixture still checks all other exported symbols;
+changing either SDK snapshot requires a new review. Callers must launch tools in
+the browser rather than decode tool UI documents as control-plane JSON.

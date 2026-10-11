@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "release_version": "v2.0.0",
+  "component": "shell",
+  "path": "usr/local/bin/kubectl",
+  "version": "v1.35.9",
+  "binary_sha256": {
+    "linux/amd64": "sha256:3cfeaf80be482b435b0aa214aff6e0b2c312ee23c0ff20810c75517b6004c6eb",
+    "linux/arm64": "sha256:39c98bca82875d9a9ddfb6f3c5ab17c3f78ea0801230683e538a67d5c053308d"
+  },
+  "ids": [
+    "CVE-2026-78667",
+    "CVE-2026-78669",
+    "CVE-2026-97031"
+  ],
+  "expires_at": "2026-11-06",
+  "approved_by": "release owner: upstream findings without a newer compatible upstream fix do not hold release",
+  "availability_checked_at": "2026-10-11",
+  "upstream_latest_compatible": "https://dl.k8s.io/release/stable-1.35.txt",
+  "reason": "The signed upstream kubectl v1.35.9 is the newest patch for the retained Kubernetes 1.35 client line. Its embedded Go dependencies retain these findings. Wait for the upstream binary update; do not maintain a fork. This exception applies only after verifying the exact binary hash and only to its image path. It does not waive first-party source findings."
+}

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import copy
+import gzip
 import datetime as dt
 import importlib.util
 import json
@@ -205,14 +206,16 @@ class ReviewedSourceControlsTest(unittest.TestCase):
 
 
 def immutable_git_blob(commit, relative):
-    """Read only a bounded immutable fixture blob; never print its contents."""
-    target = commit + ':' + relative
-    size = int(subprocess.check_output(['git', 'cat-file', '-s', target], cwd=ROOT, timeout=10))
-    if not 0 < size <= 1024 * 1024:
-        raise ValueError('historical fixture blob outside bound')
-    data = subprocess.check_output(['git', 'cat-file', 'blob', target], cwd=ROOT, timeout=10)
-    if len(data) != size:
-        raise ValueError('historical fixture blob size drift')
+    """Read digest-bound historical fixtures without depending on local Git refs."""
+    directory = ROOT/'scripts/testdata/security-source-policy'
+    index = json.loads((directory/'index.json').read_text())
+    digest = index[commit + ':' + relative]
+    if len(digest) != 64 or any(char not in '0123456789abcdef' for char in digest):
+        raise ValueError('invalid historical fixture digest')
+    with gzip.open(directory/(digest + '.gz'), 'rb') as handle:
+        data = handle.read(1024 * 1024 + 1)
+    if not 0 < len(data) <= 1024 * 1024 or hashlib.sha256(data).hexdigest() != digest:
+        raise ValueError('historical fixture digest or size drift')
     return data
 
 

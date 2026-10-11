@@ -291,16 +291,52 @@ jobs:
               raise SystemExit(f"multi-platform manifest missing: {sorted(missing)}; actual={sorted(actual)}")
           PY
 
+      - name: Prepare exact upstream binary waivers
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}@${{ steps.image.outputs.digest }}
+          COMPONENT: ${{ matrix.component.name }}
+          RELEASE_VERSION: ${{ needs.preflight.outputs.image-tag }}
+        run: |
+          python3 scripts/tests/upstream_binary_waivers_test.py
+          python3 scripts/prepare-upstream-binary-waivers.py \
+            --component "$COMPONENT" --image "$IMAGE_REF" --release "$RELEASE_VERSION" \
+            --output .artifacts/image-vulnerabilities
+
       - name: Scan image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: v0.75.0
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}@${{ steps.image.outputs.digest }}
+          trivyignores: .artifacts/image-vulnerabilities/trivyignore.yaml
           format: table
           vuln-type: os,library
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+
+
+      - name: Collect unfiltered image vulnerability findings
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.75.0
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.component.imageName }}@${{ steps.image.outputs.digest }}
+          scanners: vuln
+          format: json
+          output: .artifacts/image-vulnerabilities/unfiltered.json
+          trivyignores: .artifacts/image-vulnerabilities/unfiltered-ignore.yaml
+          ignore-unfixed: false
+          exit-code: "0"
+
+      - name: Retain image findings and exact upstream waivers
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-vulnerability-evidence-${{ matrix.component.name }}-${{ github.sha }}
+          path: .artifacts/image-vulnerabilities/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Sign image by digest
         env:

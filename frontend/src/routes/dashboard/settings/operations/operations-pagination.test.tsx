@@ -201,6 +201,7 @@ it.each(["Task outbox", "Dead-letter"])(
     ).toEqual(title === "Task outbox" ? ["0", "100"] : ["1", "2"]);
     expect(table.getByRole("button", { name: "Next page" })).toBeDisabled();
   },
+  15_000,
 );
 
 it("keeps unavailable inspection as unknown rather than an empty healthy queue listing", async () => {

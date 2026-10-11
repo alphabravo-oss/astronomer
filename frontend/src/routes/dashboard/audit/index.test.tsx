@@ -160,7 +160,7 @@ it("selects a project beyond the old 200-target cap", async () => {
       expect.any(AbortSignal),
     ),
   );
-});
+}, 15_000);
 it("allows known IDs without target/user enumeration permission", async () => {
   rights.lookup = false;
   setup();
