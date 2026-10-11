@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -15,6 +14,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/distribution"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )

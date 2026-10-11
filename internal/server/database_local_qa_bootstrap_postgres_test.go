@@ -114,6 +114,13 @@ func localQABootstrapAndImport(t *testing.T, ctx context.Context, cfg *config.Co
 	t.Cleanup(closeOwner)
 	go func() { result <- app.Start(positiveWitnessServerAddress(t, input.ListenURL)) }()
 	cluster := localQAEnrollCanonicalAgent(t, bootCtx, cfg, pool, input)
+	localQAAwaitAgentInput(t, bootCtx)
+	_, actualAgent := localQAKubernetes(t)
+	if actualAgent.AgentImage != cfg.AgentImageRepository {
+		t.Fatal("actual enrolled agent input differs from canonical selected release mapping")
+	}
+	localQAObserveCurrentAgent(t, bootCtx, cluster, cfg.ServerURL)
+	localQAConfigureNativeFlux(t, bootCtx, cfg)
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -133,12 +140,6 @@ func localQABootstrapAndImport(t *testing.T, ctx context.Context, cfg *config.Co
 		case <-ticker.C:
 		}
 	}
-	localQAAwaitAgentInput(t, bootCtx)
-	_, actualAgent := localQAKubernetes(t)
-	if actualAgent.AgentImage != cfg.AgentImageRepository {
-		t.Fatal("actual enrolled agent input differs from canonical selected release mapping")
-	}
-	localQAObserveCurrentAgent(t, bootCtx, cluster, cfg.ServerURL)
 	closeOwner()
 	if !joined {
 		t.Fatal("local QA initial owner must join before protected import")
