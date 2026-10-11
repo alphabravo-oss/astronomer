@@ -69,6 +69,9 @@ API authority and are cleared when the claimed work completes or is released.
 | `credential_state` | Bounded lifecycle enum. |
 | `delivery_sources.credential_key_version`, `delivery_sources.credential_epoch` | Encryption-key and rotation generation metadata. |
 | `delivery_assignment_receipts.credential_content_digest` | SHA-256 over deployment IDs and credential epochs; no secret or ciphertext input. |
+| `vulnerability_database_cluster_state.assignment_credential_digest`, `vulnerability_database_scan_claims.assignment_credential_digest` | Copy of the delivery receipt credential epoch digest; no credential material. |
+| `vulnerability_database_scan_claims.lease_token` | Short-lived scan-claim fencing nonce; requires existing authenticated claim ownership and grants no standalone API authority. |
+| `vulnerability_database_scan_claims.authority_secret_uid`, `vulnerability_database_scan_claims.image_pull_secret_uid` | Kubernetes Secret object UIDs used to bind observed resources; no Secret contents. |
 | `delivery_configuration_templates.secret_refs` | Kubernetes Secret names, keys, and Helm target paths only; secret values are never stored. |
 
 The migration classifier also sees the function-local variable `token` in

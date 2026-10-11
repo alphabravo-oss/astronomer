@@ -25,7 +25,9 @@ func TestPrerequisiteCapabilitiesRequireExactRoles(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index, asset := range assets {
-		if asset.ID == "application-catalog" || asset.ID == "distribution-registry" {
+		// Measured scanning is a separate capability; its required helper is
+		// covered by TestMeasuredScanCapabilityRequiresHelperWithoutChangingLegacyClosure.
+		if asset.ID == "application-catalog" || asset.ID == "distribution-registry" || asset.ID == "database-scan-helper" {
 			continue
 		}
 		missing := append([]Asset{}, assets[:index]...)
