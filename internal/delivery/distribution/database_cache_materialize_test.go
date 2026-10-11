@@ -5,6 +5,7 @@ package distribution
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,6 +31,22 @@ func databaseCachePrivateRoot(t *testing.T) string {
 	if err := os.Mkdir(path, 0700); err != nil {
 		t.Fatal(err)
 	}
+	// Sealed fixtures stay read-only during assertions. Restore directory write
+	// permission only at teardown so TempDir can remove them as an unprivileged user.
+	t.Cleanup(func() {
+		err := filepath.WalkDir(path, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				return os.Chmod(path, 0700)
+			}
+			return nil
+		})
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("restore fixture directory permissions: %v", err)
+		}
+	})
 	return path
 }
 

@@ -23,10 +23,7 @@ import (
 
 func workloadInputFixture(t *testing.T, claims ...uuid.UUID) (*WorkloadInput, string, uuid.UUID, WorkloadInputSnapshot) {
 	t.Helper()
-	root := t.TempDir()
-	if err := os.Chmod(root, 0700); err != nil {
-		t.Fatal(err)
-	}
+	root := privateRecordRoot(t)
 	claim := uuid.New()
 	if len(claims) > 0 {
 		claim = claims[0]
