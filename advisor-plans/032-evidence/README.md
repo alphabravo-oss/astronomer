@@ -7,8 +7,11 @@ vet passes, and the integrated frontend passes all 350 files/2,444 tests,
 TypeScript, lint, production build, CSP and unchanged bundle budgets. Canonical
 route/authentication/CSRF checks pass 244 results/seven parents. Both owned
 PostgreSQL majors pass canonical 079/080; interrupted 081 recovery remains open.
-Tagged integration compilation, a coherent signed candidate, cluster deployment,
-upgrade/restore and fresh whole-source security qualification remain open.
+Subsequent source `54763ab3` passes tagged server/distribution compilation and
+production builds for all 28 discovered Go commands with exact source/VCS metadata.
+Both original compiler failures remain retained. A coherent signed candidate,
+cluster deployment, upgrade/restore and fresh whole-source security qualification
+remain open.
 The entire plan is not complete. Earlier entries retain their original scopes.
 
 Current product source integration is `bdf0f445`, preserving qualified CLI/security histories and adding coherent schema-81 catalog/offline source `f70a934b`. Actual canonical affected generation passes nine gates (19 UI tests and23 SDK race results); actual pure pagination passes107 named race results across30 parents, vet and fresh inventories with no skips. Catalog tooling is separately integrated at `665d4dee` with its qualified62-package graph. Both majors pass disposable canonical79; PostgreSQL17 also passes the100,000-chart canonical080 measurement, with39 held gates/34 default guards and one witness fixture retained; current81 recovery/runtime, whole first-party security, candidate deployment and release qualification remain open. See the [current checkpoint](2026-10-10-current-integration-review.md#current-integration-and-pending-qualification) and [scoped integration record](scoped-control-integration-20261010.json).

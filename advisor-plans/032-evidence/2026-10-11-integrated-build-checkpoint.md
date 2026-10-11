@@ -6,7 +6,14 @@ commit adds the HTTP guard repairs, catalog factory/banner corrections and
 canonical route inventory refresh. Catalog tooling remains separately integrated
 at `665d4deec75a2ced2f3d630bb5a23d4267110452`. The entire plan is not complete.
 
-The next priority is a working integrated build and owned-cluster validation.
+The subsequent minimal qualification-helper fixes are integrated through
+`54763ab397fa97cd11f7c7c11b974f9adf377ef0`. Both tagged integration packages
+now compile, and all 28 discovered Go commands pass production builds with
+actual source stamps and matching VCS metadata. The [retained build record](../../docs/assurance/technology-guide/w01/integrated-build-54763ab3/README.md)
+preserves both original compiler failures and the successful correction. This
+does not execute the integration fixtures or build signed container images.
+
+The next priority is owned-cluster validation of the integrated candidate.
 The existing local Astronomer deployment still has the previous three immutable
 application image references; a read-only check found server, worker and frontend
 each at one ready replica out of one desired. No new deployment, PR, push, tag or
@@ -55,8 +62,8 @@ of allocated compiler archives without deleting source, modules, evidence,
 images, databases or PVCs. Later compiler builds may recreate cache paths.
 The default 20 GiB **and** 20 percent capacity thresholds remain unchanged.
 
-Open integration work includes tagged server/distribution compilation, all seven
-first-party candidate images and their signatures, genuine scanner/Flux/agent
+Open integration work includes all seven first-party candidate images and their
+signatures, genuine scanner/Flux/agent
 runtime, current collector ingestion, schema-81 interruption/recovery and wider
 database cases, complete CLI/CNPG upgrade and restore, current browser/support
 matrix, fresh whole-source security enforcement and a coherent candidate install.
