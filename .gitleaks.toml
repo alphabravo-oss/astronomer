@@ -66,7 +66,7 @@ id = "generic-api-key"
   description = "Valkey version negative fixtures deliberately use invalid version suffixes"
   condition = "AND"
   regexTarget = "match"
-  paths = ['''^scripts/tests/toolchain_test\.py$''']
+  paths = ['''^scripts/tests/(?:toolchain_test|gitleaks_release_review_test)\.py$''']
   regexes = ['''^valkey-test-runtime", "(?:9\.1\.20-alpine|[0-9.]+-(?:alpine-malicious|malicious))"$''']
 
 [[rules]]

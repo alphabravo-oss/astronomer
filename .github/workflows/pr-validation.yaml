@@ -58,6 +58,11 @@ jobs:
       - name: Install ShellCheck and ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep shellcheck
 
+      - name: Build the pinned qualification test runner
+        run: |
+          ./scripts/build-gotestsum.sh "$RUNNER_TEMP/gotestsum"
+          printf 'GOTESTSUM=%s/gotestsum\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - name: Migration roundtrip smoke (TEST-05)
         run: |
           set +e
