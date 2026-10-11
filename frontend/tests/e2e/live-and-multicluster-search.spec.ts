@@ -27,6 +27,7 @@ const cluster = {
   name: "prod-east",
   display_name: "Prod East",
   status: "active",
+  registration_phase: "ready",
   provider: "aws",
   environment: "production",
   region: "us-east-1",

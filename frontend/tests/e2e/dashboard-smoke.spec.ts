@@ -66,6 +66,7 @@ const cluster = {
   display_name: "Prod East",
   description: "Production cluster",
   status: "active",
+  registration_phase: "ready",
   health: {
     status: "active",
     lastCheck: new Date().toISOString(),
@@ -233,6 +234,7 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === "/clusters" && method === "POST") {
       return route.fulfill({
+        status: 201,
         json: apiResponse({
           ...cluster,
           id: "cluster-new",
@@ -418,6 +420,7 @@ async function mockApi(page: Page, user = adminUser) {
               title: "Bounded finding",
               severity: "high",
               state: "open",
+              workflow_state: "manual_remediation_required",
               source: "alert",
               repeatCount: 2,
               sessionId: "session-shared-incident",
@@ -442,6 +445,7 @@ async function mockApi(page: Page, user = adminUser) {
             title: "Bounded finding",
             severity: "high",
             state: "open",
+            workflow_state: "manual_remediation_required",
             affectedResource: {
               type: "agent_connection_record",
               id: "connection-1",

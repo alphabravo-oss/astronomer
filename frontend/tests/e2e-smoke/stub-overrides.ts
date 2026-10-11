@@ -65,6 +65,7 @@ const smokeCluster = {
   display_name: "Smoke East",
   description: "Route-smoke fixture cluster",
   status: "active",
+  registration_phase: "ready",
   health: { status: "active", last_check: now, components: [] },
   provider: "aws",
   environment: "production",

@@ -45,6 +45,7 @@ const clusterWire = {
   display_name: "Production EKS",
   description: "Production cluster",
   status: "active",
+  registration_phase: "ready",
   environment: "production",
   provider: "aws",
   distribution: "eks",
@@ -275,7 +276,7 @@ async function mockApi(pageContext: Page, mutations: MutationRecord[]) {
     }
     if (path === "/security/scans" && method === "POST") {
       record();
-      return route.fulfill({ status: 202, json: data(cisScanWire) });
+      return route.fulfill({ status: 201, json: data(cisScanWire) });
     }
     if (path === "/security/scans/scan-keyboard" && method === "GET") {
       return route.fulfill({ json: data(cisScanWire) });

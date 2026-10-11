@@ -99,6 +99,7 @@ async function mockApi(page: Page, mutations: MutationRecord[]) {
           name: CLUSTER_ID,
           displayName: "Keyboard Cluster",
           status: "active",
+          registration_phase: "ready",
           health: { status: "active", components: [] },
           labels: {},
           annotations: {},
