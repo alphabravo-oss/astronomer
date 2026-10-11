@@ -32,12 +32,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--component", required=True, choices=["server", "worker", "agent", "migrate", "shell", "dr", "frontend"])
     parser.add_argument("--image", required=True)
-    parser.add_argument("--release", required=True)
+    parser.add_argument("--release")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     chart_version = next(line.split(":", 1)[1].strip() for line in
                          (ROOT / "deploy/chart/Chart.yaml").read_text().splitlines()
                          if line.startswith("version:"))
+    args.release = args.release or "v" + chart_version
     if args.release != "v" + chart_version:
         raise ValueError("waiver evaluation release differs from chart identity")
     args.output.mkdir(parents=True, exist_ok=True)

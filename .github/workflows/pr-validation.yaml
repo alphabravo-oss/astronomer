@@ -446,11 +446,10 @@ jobs:
         env:
           IMAGE_REF: ${{ matrix.component == 'server' && 'astronomer-go-server' || matrix.component == 'worker' && 'astronomer-go-worker' || matrix.component == 'agent' && 'astronomer-go-agent' || matrix.component == 'migrate' && 'astronomer-go-migrate' || matrix.component == 'shell' && 'astronomer-shell' || matrix.component == 'dr' && 'astronomer-dr' || 'astronomer-frontend' }}:ci
           COMPONENT: ${{ matrix.component }}
-          RELEASE_VERSION: v2.0.0
         run: |
           python3 scripts/tests/upstream_binary_waivers_test.py
           python3 scripts/prepare-upstream-binary-waivers.py \
-            --component "$COMPONENT" --image "$IMAGE_REF" --release "$RELEASE_VERSION" \
+            --component "$COMPONENT" --image "$IMAGE_REF" \
             --output .artifacts/image-vulnerabilities
 
       - name: Scan image

@@ -20,7 +20,7 @@ accompanies, and a short description. Codes are grouped by status family; a
 handful of codes legitimately appear under more than one status depending on
 context, so the grouping reflects the dominant usage, not an exhaustive contract.
 
-**Total codes: 223**
+**Total codes: 225**
 
 ## Codes by category
 
@@ -30,6 +30,8 @@ Dominant HTTP status: 400 · Provenance: seed
 
 | Constant | Wire value | HTTP | Description |
 | --- | --- | --- | --- |
+| `OffsetNotSupported` | `offset_not_supported` | 400 | rejects a continuation beyond the bounded legacy range. |
+| `CursorNotSupported` | `cursor_not_supported` | 400 | rejects an opaque continuation on a legacy collection. |
 | `AgentOverloaded` | `agent_overloaded` | 400 | indicates the connected cluster agent reached its bounded in-flight request capacity. Clients may retry after the response's Retry-After interval (HTTP 429). |
 | `InvalidBody` | `invalid_body` | 400 | indicates the request body could not be decoded (malformed JSON or wrong shape). |
 | `InvalidID` | `invalid_id` | 400 | indicates a path or query identifier failed to parse (e.g. a non-UUID id). |

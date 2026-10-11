@@ -486,7 +486,7 @@
           "value": "cf430e030ddbb5b0abf93d22962f4752f3646cd9"
         },
         {
-          "count": 10,
+          "count": 11,
           "kind": "regex",
           "path": ".github/workflows/pr-validation.yaml",
           "selector": "uses:\\s*actions/upload\\-artifact(?:/[^@\\s]+)?@([a-f0-9]{40})",
@@ -577,7 +577,7 @@
           "value": "cf430e030ddbb5b0abf93d22962f4752f3646cd9"
         },
         {
-          "count": 6,
+          "count": 7,
           "kind": "regex",
           "path": ".github/workflows/release.yaml",
           "selector": "uses:\\s*actions/upload\\-artifact(?:/[^@\\s]+)?@([a-f0-9]{40})",
@@ -690,14 +690,14 @@
       "artifacts": [],
       "consumers": [
         {
-          "count": 1,
+          "count": 2,
           "kind": "regex",
           "path": ".github/workflows/pr-validation.yaml",
           "selector": "uses:\\s*aquasecurity/trivy\\-action(?:/[^@\\s]+)?@([a-f0-9]{40})",
           "value": "ed142fd0673e97e23eac54620cfb913e5ce36c25"
         },
         {
-          "count": 1,
+          "count": 2,
           "kind": "regex",
           "path": ".github/workflows/release.yaml",
           "selector": "uses:\\s*aquasecurity/trivy\\-action(?:/[^@\\s]+)?@([a-f0-9]{40})",
@@ -7479,14 +7479,14 @@
           "value": "0.75.0"
         },
         {
-          "count": 1,
+          "count": 2,
           "kind": "regex",
           "path": ".github/workflows/pr-validation.yaml",
           "selector": "uses: aquasecurity/trivy-action@[^\\n]+\\n\\s*with:\\n\\s*version: v([0-9.]+)",
           "value": "{version}"
         },
         {
-          "count": 1,
+          "count": 2,
           "kind": "regex",
           "path": ".github/workflows/release.yaml",
           "selector": "uses: aquasecurity/trivy-action@[^\\n]+\\n\\s*with:\\n\\s*version: v([0-9.]+)",
@@ -8110,7 +8110,7 @@
     },
     {
       "component": "action:actions/upload-artifact",
-      "count": 10,
+      "count": 11,
       "kind": "action",
       "owner": "platform/CI",
       "path": ".github/workflows/pr-validation.yaml",
@@ -8132,7 +8132,7 @@
     },
     {
       "component": "action:aquasecurity/trivy-action",
-      "count": 1,
+      "count": 2,
       "kind": "action",
       "owner": "platform/CI",
       "path": ".github/workflows/pr-validation.yaml",
@@ -8187,7 +8187,7 @@
     },
     {
       "component": "action:aquasecurity/trivy-action",
-      "count": 1,
+      "count": 2,
       "kind": "action-version",
       "owner": "platform/CI",
       "path": ".github/workflows/pr-validation.yaml",
@@ -8547,7 +8547,7 @@
     },
     {
       "component": "action:actions/upload-artifact",
-      "count": 6,
+      "count": 7,
       "kind": "action",
       "owner": "platform/CI",
       "path": ".github/workflows/release.yaml",
@@ -8569,7 +8569,7 @@
     },
     {
       "component": "action:aquasecurity/trivy-action",
-      "count": 1,
+      "count": 2,
       "kind": "action",
       "owner": "platform/CI",
       "path": ".github/workflows/release.yaml",
@@ -8657,7 +8657,7 @@
     },
     {
       "component": "action:aquasecurity/trivy-action",
-      "count": 1,
+      "count": 2,
       "kind": "action-version",
       "owner": "platform/CI",
       "path": ".github/workflows/release.yaml",
