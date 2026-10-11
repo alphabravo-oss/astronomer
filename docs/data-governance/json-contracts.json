@@ -17502,6 +17502,64 @@
         "compatibility_mode": "additive",
         "json_type": "array"
       }
+    },
+    {
+      "model": "VulnerabilityDatabaseScanClaim",
+      "column": "prepared_record",
+      "schema_version": 1,
+      "storage": "byte_slot",
+      "table": "vulnerability_database_scan_claims",
+      "sql_type": "bytea",
+      "classification": "versioned_internal",
+      "owner": "delivery/provider + scanner/databasejob",
+      "schema": "AstronomerDatabaseScanPreparation schema1/2; exact bounded16KiB preparation DATA with claim,scanner,main/Java content+metadata and optional workload identity",
+      "reader_behavior": "NULL is permitted only before preparation; nonempty records are strictly decoded by DecodePreparation with schema/kind/digest/size/UTC/workload checks. Current locked claim/feed/assignment, real completed owned helper Job/Pod/log/runtime image and stable bytes are independently required. Preparation DATA cannot grant acceptance, scan-use witness or clean eligibility; malformed/stale records fail or return unknown with clean=false.",
+      "query_bindings": [
+        {
+          "path": "internal/db/queries/vulnerability_database_scans.sql",
+          "query": "GetVulnerabilityDatabaseScanClaim"
+        },
+        {
+          "path": "internal/db/queries/vulnerability_database_scans.sql",
+          "query": "GetVulnerabilityDatabaseScanClaimForUpdate"
+        },
+        {
+          "path": "internal/db/queries/vulnerability_database_scans.sql",
+          "query": "GetOwnedVulnerabilityDatabaseScanCycleForUpdate"
+        },
+        {
+          "path": "internal/db/queries/vulnerability_database_scans.sql",
+          "query": "CreateOwnedVulnerabilityDatabaseScanClaim"
+        },
+        {
+          "path": "internal/db/queries/vulnerability_database_scans.sql",
+          "query": "RecordOwnedDatabasePreparation"
+        }
+      ],
+      "canonical_helper_bindings": [
+        {
+          "path": "internal/scanner/databasejob/record.go",
+          "function": "DecodePreparation"
+        },
+        {
+          "path": "internal/delivery/provider/database_scan_preparation.go",
+          "function": "collectPreparation"
+        }
+      ],
+      "reader_bindings": [
+        {
+          "path": "internal/delivery/provider/database_scan_completion.go",
+          "function": "*DatabaseScanOwner.completeOwnedScan",
+          "operation": "jsoncontract.Decode",
+          "error_handling": "return_or_local_binding"
+        },
+        {
+          "path": "internal/delivery/provider/database_scan_status.go",
+          "function": "*DatabaseScanOwner.ReadImageDatabaseStatus",
+          "operation": "jsoncontract.Decode",
+          "error_handling": "return_or_local_binding"
+        }
+      ]
     }
   ],
   "nonrequest_decoder_exceptions": [
