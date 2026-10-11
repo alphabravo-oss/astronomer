@@ -1,5 +1,14 @@
 # Plan 032 implementation evidence
 
+The [October 11 local k3s smoke and cleanup review](2026-10-11-local-k3s-smoke-and-cleanup-review.md)
+is the latest runtime checkpoint: Helm revision 236 runs the integrated candidate,
+schema 81 is clean, and core API/browser/mutation smoke checks pass. Live testing
+fixed empty delivery inventory persistence and diagnostic severity handling.
+The user's narrowed local acceptance is satisfied; the original whole-plan
+cleanup and guide-alignment claim is **not**. The review records concrete remaining
+collector, API-schema, audit-stub, and repository-consolidation work. Historical
+deployment-open statements below describe their earlier checkpoints.
+
 The [October 11 integrated-build checkpoint](2026-10-11-integrated-build-checkpoint.md)
 supersedes earlier current-status statements below. Source work builds on
 `27102246`: the HTTP guard race passes 72 results/31 parents, full internal/cmd
