@@ -72,24 +72,35 @@ func (e *Elector) Close() {
 // TryLeader acquires a session-scoped advisory lock for jobName on a dedicated
 // connection. When held=false the returned release func is a no-op.
 func (e *Elector) TryLeader(ctx context.Context, jobName string) (func(), bool, error) {
+	conn, err := e.acquire(ctx, jobName)
+	if err != nil || conn == nil {
+		return func() {}, false, err
+	}
+	return e.release(conn, jobName), true, nil
+}
+
+func (e *Elector) acquire(ctx context.Context, jobName string) (*pgxpool.Conn, error) {
 	if e == nil || e.pool == nil {
-		return func() {}, false, nil
+		return nil, nil
 	}
 	conn, err := e.pool.Acquire(ctx)
 	if err != nil {
-		return nil, false, fmt.Errorf("acquire advisory-lock connection: %w", err)
+		return nil, fmt.Errorf("acquire advisory-lock connection: %w", err)
 	}
 
 	var held bool
 	if err := conn.QueryRow(ctx, tryLeaderSQL, jobName).Scan(&held); err != nil {
 		conn.Release()
-		return nil, false, fmt.Errorf("pg_try_advisory_lock(%q): %w", jobName, err)
+		return nil, fmt.Errorf("pg_try_advisory_lock(%q): %w", jobName, err)
 	}
 	if !held {
 		conn.Release()
-		return func() {}, false, nil
+		return nil, nil
 	}
+	return conn, nil
+}
 
+func (e *Elector) release(conn *pgxpool.Conn, jobName string) func() {
 	var releaseOnce sync.Once
 	release := func() {
 		releaseOnce.Do(func() {
@@ -104,5 +115,5 @@ func (e *Elector) TryLeader(ctx context.Context, jobName string) (func(), bool, 
 			conn.Release()
 		})
 	}
-	return release, true, nil
+	return release
 }

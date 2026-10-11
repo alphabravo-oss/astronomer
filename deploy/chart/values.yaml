@@ -442,6 +442,10 @@ redis:
   sentinel:
     replicas: 3
     sentinels: 3
+    # Sentinel coordinates failover; it does not hold the data set.
+    resources:
+      requests: {cpu: 25m, memory: 64Mi}
+      limits: {cpu: 250m, memory: 256Mi}
     masterName: astronomer
     quorum: 2
     downAfterMilliseconds: 5000

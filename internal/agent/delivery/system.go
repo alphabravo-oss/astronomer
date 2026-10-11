@@ -124,6 +124,9 @@ func (m *SystemManager) Reconcile(ctx context.Context, release protocol.Delivery
 	}
 
 	objects := systemObjects(release)
+	if err := m.configureControllerPlacement(ctx, objects); err != nil {
+		return false, err
+	}
 	for _, object := range objects {
 		if err := m.applyOwned(ctx, object); err != nil {
 			return false, err

@@ -110,7 +110,9 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 		}
 		return runRuntimeLoopGroup(ctx, loops...)
 	}
-	if cfg.ServerReplicas > 1 && c.database != nil {
+	// Election is required even at one replica: HPA/kubectl scaling does not
+	// change the environment of existing pods.
+	if c.database != nil {
 		if err := c.runtime.Go("leader-reconcilers", true, func(ctx context.Context) error {
 			return runServerReconcilerLeader(ctx, c.taskLeader, logger, runReconcilers)
 		}); err != nil {

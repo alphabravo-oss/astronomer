@@ -1,0 +1,30 @@
+# kube-prometheus-stack overlay for clusters with Astronomer's Flux-managed
+# baseline exporters. Do not use without those exporters installed and Ready.
+kubeStateMetrics:
+  enabled: false
+nodeExporter:
+  enabled: false
+prometheus:
+  prometheusSpec:
+    resources:
+      requests: {cpu: 100m, memory: 512Mi}
+      limits: {cpu: "2", memory: 2Gi}
+  additionalServiceMonitors:
+    - name: astronomer-baseline-kube-state-metrics
+      namespaceSelector:
+        matchNames: [astronomer-monitoring]
+      selector:
+        matchLabels:
+          app.kubernetes.io/instance: kube-state-metrics
+          app.kubernetes.io/name: kube-state-metrics
+      endpoints:
+        - {port: http, path: /metrics, honorLabels: true}
+    - name: astronomer-baseline-prometheus-node-exporter
+      namespaceSelector:
+        matchNames: [astronomer-monitoring]
+      selector:
+        matchLabels:
+          app.kubernetes.io/instance: prometheus-node-exporter
+          app.kubernetes.io/name: prometheus-node-exporter
+      endpoints:
+        - {port: metrics, path: /metrics, honorLabels: true}

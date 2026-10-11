@@ -484,6 +484,9 @@ spec:
         {{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
         - podSelector:
             matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "preflight") | nindent 14 }}
+        - podSelector:
+            matchLabels:
               cnpg.io/cluster: {{ include "astronomer.cnpgClusterName" . | quote }}
         {{- end }}
       ports:

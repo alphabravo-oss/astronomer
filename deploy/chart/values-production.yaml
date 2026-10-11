@@ -14,16 +14,11 @@
 #     --set config.serverURL=https://astronomer.example.com \
 #     --set 'gateway.hosts={astronomer.example.com}' \
 #     --set gateway.tls.secretName=astronomer-tls \
-#     --set postgres.external.dsnSecretRef.name=astronomer-postgres-dsn \
-#     --set postgres.external.dsnSecretRef.key=dsn \
-#     --set redis.external.address=redis.astronomer.svc.cluster.local:6379 \
 #     --set-file secrets.encryptionKey=./prod-fernet-key
 #
 # What this file DOES change vs values.yaml:
-#   1. Disables bundled Postgres + Redis. You MUST point to an external
-#      managed Postgres (RDS/Aurora/CloudSQL/Hetzner-Cloud) and external
-#      Redis (ElastiCache/MemoryDB/Hetzner-Cloud). Bundled defaults are
-#      single-replica StatefulSets that are NOT a production posture.
+#   1. Uses three CloudNativePG instances and Valkey Sentinel. Install the
+#      CNPG operator first. External managed datastores are optional overrides.
 #   2. Lifts replica counts to 3 / 3 / 3 for server/worker/frontend so a
 #      single-node loss doesn't take the management plane down. PDB
 #      minAvailable bumps to 2 in lockstep.
@@ -37,13 +32,13 @@
 #      compatibility layer.
 #   5. Tightens CORS and forces env=production / debug=false / log=info.
 #   6. Raises per-pod CPU/mem limits to numbers more in line with
-#      "production density 50–200 managed clusters per shard".
+#      an HA baseline. Qualify capacity against the intended workload.
 #   7. Enables Prometheus ServiceMonitor so a kube-prometheus-stack /
 #      Thanos receiver scrapes the dedicated :9090 metrics ports.
 #
 # What this file does NOT cover (intentional — operator decision):
-#   - The actual Postgres DSN secret + Redis address. Set those via
-#     `helm install --set ...` so secret material doesn't live in git.
+#   - The CNPG operator installation, backup storage and Valkey auth Secret.
+#     For external datastore overrides, provide their Secret references.
 #   - Image registry / pullSecrets if you're not pulling from your own
 #     registry. Override image.registry + image.pullSecrets on the CLI.
 #   - cert-manager Issuer choice. Some clusters use cluster-scoped
@@ -167,19 +162,12 @@ redis:
   # was removed in FEATURES-051126 T02 because it masked misconfig in
   # air-gapped / split-network production deployments.
   #
-  # Supported HA topologies:
-  #
-  #   Single-node managed Redis (cloud-provider):
-  #     --set redis.external.address=cache.internal.example.com:6379
-  #
-  #   Redis Sentinel (failover-managed primary):
-  #     The address syntax depends on the client; this chart uses
-  #     `redis://...?sentinel=...` form via the underlying asynq parser.
-  #     Example:
-  #       --set redis.external.address='redis-sentinel://sentinel-0:26379,sentinel-1:26379,sentinel-2:26379/mymaster/0'
-  #
-  #   Redis Cluster (sharded):
-  #     --set redis.external.address='redis-cluster://r0:6379,r1:6379,r2:6379'
+  # Managed HA uses the Sentinel settings above. For externally managed
+  # services, set mode=external with address/passwordSecretRef, or provide a
+  # urlSecretRef containing the supported Sentinel URI:
+  # redis-sentinel://sentinel-0:26379,sentinel-1:26379?master=mymaster&db=0
+  # Redis Cluster (sharded) is not supported by all application clients.
+  # Credentials belong in Secret references, never inline example URIs.
   #
   # When Redis is down, /readyz on the server returns 503 (the pod is
   # removed from Service endpoints until Redis recovers), and the worker
