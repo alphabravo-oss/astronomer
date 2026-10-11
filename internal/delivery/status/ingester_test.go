@@ -61,6 +61,7 @@ func (r *fakeRunner) Run(ctx context.Context, work func(Transaction) error) erro
 }
 
 type fakeTransaction struct {
+	inventory    *sqlc.AcceptDeliveryStatusInventoryParams
 	fenceErr     error
 	current      sqlc.ClusterDeployment
 	updated      *sqlc.UpdateClusterDeploymentObservedCASParams
@@ -116,6 +117,12 @@ func (f *fakeTransaction) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTas
 }
 
 func (f *fakeTransaction) AcceptDeliveryStatusInventory(_ context.Context, arg sqlc.AcceptDeliveryStatusInventoryParams) (sqlc.AcceptDeliveryStatusInventoryRow, error) {
+	f.inventory = &arg
+	for _, collection := range [][]byte{arg.Components, arg.SystemComponents, arg.ApiVersions} {
+		if string(collection) == "null" {
+			return sqlc.AcceptDeliveryStatusInventoryRow{}, errors.New("durable JSON inventory rejects null")
+		}
+	}
 	f.compat = arg.CompatibilityStatus
 	f.code = arg.ErrorCode
 	return sqlc.AcceptDeliveryStatusInventoryRow{StatusChanged: !f.unchanged}, nil
@@ -302,4 +309,21 @@ func validStatus() protocol.DeliveryStatusV2 {
 	}
 	status.StatusDigest = status.SemanticDigest()
 	return status
+}
+
+func TestIngestEmptyStartupInventoryUsesDurableCollectionShapes(t *testing.T) {
+	payload := validStatus()
+	payload.ControllerInventory.Ready = false
+	payload.ControllerInventory.Components = nil
+	payload.ControllerInventory.SystemComponents = nil
+	payload.ControllerInventory.APIVersions = nil
+	payload.Deployments = nil
+	payload.StatusDigest = payload.SemanticDigest()
+	tx := &fakeTransaction{}
+	if err := NewIngester(&fakeRunner{tx: tx}).Ingest(context.Background(), clusterID, connectionID, "startup-session", payload); err != nil {
+		t.Fatal(err)
+	}
+	if tx.inventory == nil || string(tx.inventory.Components) != "{}" || string(tx.inventory.SystemComponents) != "[]" || string(tx.inventory.ApiVersions) != "[]" {
+		t.Fatalf("unexpected persisted inventory: %#v", tx.inventory)
+	}
 }

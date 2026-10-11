@@ -97,3 +97,14 @@ func TestWrappedDatabaseAndKubernetesErrorsOmitServerPayload(t *testing.T) {
 		}
 	}
 }
+
+func TestProductionJSONHandlerPreservesSeverity(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(NewJSONHandler(&output, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	for _, level := range []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError} {
+		logger.Log(context.Background(), level, "safe diagnostic")
+		if !strings.Contains(output.String(), `"level":"`+level.String()+`"`) {
+			t.Errorf("missing severity %s: %s", level, output.String())
+		}
+	}
+}
