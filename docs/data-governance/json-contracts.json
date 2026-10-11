@@ -19623,6 +19623,136 @@
       "path": "pkg/astroclient/catalog_controller_window.go",
       "owner": "sdk/catalog",
       "scope": "Typed additive recent-operation summary reader for the actual v1 data envelope and released flat response compatibility; 2 MiB response bound, six required known fields, no persistence or authority escalation"
+    },
+    {
+      "path": "internal/delivery/builtin/component_compiler.go",
+      "owner": "delivery/builtin",
+      "scope": "Extracted canonical built-in component compiler serializers; exact existing v1 semantic classifications moved from ensureComponent, no new compiler or trust authority."
+    },
+    {
+      "path": "internal/delivery/distribution/database_offline_export.go",
+      "owner": "delivery/distribution",
+      "scope": "DatabaseOfflineUpdateKit bounded64KiB index for exact signed feed/child/blob closure. Encode only after canonical current-base feed authentication and complete payload inspection; exclusive owned output then canonical no-network readback. Encoding grants neither imported reservation nor publication."
+    },
+    {
+      "path": "internal/delivery/distribution/database_publication_artifact.go",
+      "owner": "delivery/distribution",
+      "scope": "Closed signed DatabaseUpdateDocument or canonical OCI artifact manifest for exact prepared feed. Encode constructor-owned prepared document/immutable descriptors; size/hash checks and actual guarded push/readback precede signing/decision. No caller approval or publication inference."
+    },
+    {
+      "path": "internal/delivery/distribution/database_publication_signer.go",
+      "owner": "delivery/distribution",
+      "scope": "Canonical Cosign payload bound to one exact immutable subject. Serialize exact constructor-owned signing subject; actual protected signer identity, joined body/content and canonical verification remain mandatory. OIDC credentials never serialized."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_cleanup.go",
+      "owner": "delivery/provider",
+      "scope": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths. Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_cleanup_requester.go",
+      "owner": "delivery/provider",
+      "scope": "Kubernetes v1 DeleteOptions with exact UID/resourceVersion preconditions, grace0 and Foreground propagation. Only private terminal-claim cleanup constructor serializes this literal deletion body; scoped path/cluster/terminal lock/current UID remain mandatory. No generic DELETE authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_completion.go",
+      "owner": "delivery/provider",
+      "scope": "Bounded databasejob.Preparation schema1/2 DATA, maximum MaximumRecordBytes. Strict canonical Decode then DecodePreparation and current locked claim/feed/assignment/report revision checks; helper DATA alone cannot grant a witness."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_discovery.go",
+      "owner": "delivery/provider",
+      "scope": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths. Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_dispatch.go",
+      "owner": "delivery/provider",
+      "scope": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths. Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_observation.go",
+      "owner": "delivery/provider",
+      "scope": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths. Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_preparation.go",
+      "owner": "delivery/provider",
+      "scope": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths. Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_report.go",
+      "owner": "delivery/provider",
+      "scope": "Selected Trivy native schema2 container_image report with typed critical fields and opaque inventory extensions. Bounded strict canonical Decode rejects duplicate/deep/trailing/unknown typed fields; exact scanner/config/workload/actual termination interval and finite results checked. Private ImageConfig cleared; Java remains unknown, no witness from report alone."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_resources.go",
+      "owner": "delivery/provider",
+      "scope": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths. Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_status.go",
+      "owner": "delivery/provider",
+      "scope": "Current claim preparation DATA plus independently accepted feed/state and monotonic report observation revision. Strict canonical Decode then DecodePreparation; stale/missing/mismatched/current-workload-unchecked state returns unknown with clean=false. Completion clock does not mint freshness."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_workload.go",
+      "owner": "delivery/provider",
+      "scope": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths. Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_snapshot_projection.go",
+      "owner": "delivery/provider",
+      "scope": "Canonical compiler expected.Source.Trust DATA for exact current assignment comparison. Serialize same canonical assignment/compiler output, preserve exact source/renderer/trust/current locked receipt comparisons; encoding cannot accept/promote a feed."
+    },
+    {
+      "path": "internal/delivery/resolver/artifact_offline_graph.go",
+      "owner": "delivery/resolver",
+      "scope": "Exact original OCI Cosign signature manifest bounded1MiB with finite signature/config/layer closure. Authenticate descriptor hash/size and canonical signatures before decoding original manifest; reject unsupported schema/media/subject/descriptors and retain exact original blobs. No upstream signature assumption."
+    },
+    {
+      "path": "internal/delivery/resolver/database_job_pull_credential.go",
+      "owner": "delivery/resolver",
+      "scope": "Protected docker auths object with only username/password per constructor-selected exact registry. Strict Decode after bounded32KiB stable no-follow private mounted read; exact registry set/cardinality, string limits and controls checked. Revalidate current mounted material; no credHelpers/ambient credentials/push reuse."
+    },
+    {
+      "path": "internal/delivery/resolver/database_registry_read_credential.go",
+      "owner": "delivery/resolver",
+      "scope": "Protected schema1 username/password constructor read credential, maximum32KiB. Strict Decode after canonical stable no-follow mounted FD/private-mode checks; required bounded fields and control/colon constraints; clear original bytes and retain material identity. Pull authority separate from push; no public serialization."
+    },
+    {
+      "path": "internal/delivery/resolver/workload_image_metadata.go",
+      "owner": "delivery/resolver",
+      "scope": "Exact OCI/Docker immutable image manifest <=1MiB and config <=4MiB, selected linux amd64/arm64 platform. Whole manifest/config SHA256 and exact descriptor bytes precede strict Decode; schema/media/platform/rootfs/diffIDs and finite layers/aggregate validated. URLs and ambiguous changed descriptors cannot supply authority."
+    },
+    {
+      "path": "internal/delivery/rollout/database_deployment_intent.go",
+      "owner": "delivery/rollout",
+      "scope": "Canonical effective Helm renderer DATA from existing rollout/model resolver. Serialize exact canonical projection with existing hash domains/validation; no reconstructed renderer or independent assignment compiler."
+    },
+    {
+      "path": "internal/scanner/databasejob/preparation_output.go",
+      "owner": "scanner/databasejob",
+      "scope": "Validated databasejob.Preparation schema1/2 bounded MaximumRecordBytes. Serialize already validated preparation DATA into bounded output; staged/sealed content and current actual worker/runtime checks remain separate."
+    },
+    {
+      "path": "internal/scanner/databasejob/record.go",
+      "owner": "scanner/databasejob",
+      "scope": "Bounded versioned databasejob.Preparation or Measurement schema1/2 with exact claim/scanner/two-role content/metadata and optional workload DATA. Canonical strict Decode or typed encoding with MaximumRecordBytes; schema/kind/digest/size/UTC/role/expected equality checks. Measurement helper clock is DATA; Kubernetes log timestamp/process exit/imageID/current locked report required for witness."
+    },
+    {
+      "path": "internal/scanner/databasejob/record_linux.go",
+      "owner": "scanner/databasejob",
+      "scope": "Validated bounded preparation/initial measurement DATA written to private owned coordination files. Canonical typed serialization follows preparation validation; exclusive no-follow owned-file write and readback. Initial acknowledgement never proves actual scan use or final completion."
+    },
+    {
+      "path": "internal/scanner/databasejob/workload_input_linux.go",
+      "owner": "scanner/databasejob",
+      "scope": "Pinned original workload OCI manifest and exact single-platform OCI index, literal linux architecture. Read bounded stable sealed original metadata, strict Decode and canonical ValidateWorkloadImageMetadata exact hashes before closure comparison. Emit only literal one-descriptor index; no mutable tag or artifact-selected transport."
+    },
+    {
+      "path": "internal/server/app_database_read_registry.go",
+      "owner": "server",
+      "scope": "Typed operator-config exact repository string array, maximum32KiB and1..32 entries. All-empty preserves anonymous role; partial configuration fails. Strict Decode rejects ambiguity/unknown/non-array/null; constructor validates independent registry/realm/service/reference/repository scope. No secret bytes or implicit push credential reuse."
     }
   ],
   "json_sites": [
@@ -22172,8 +22302,8 @@
       "reader_behavior": "Preserve named-function v1 handling; discarded_result_requires_domain_review"
     },
     {
-      "path": "internal/delivery/builtin/provisioner.go",
-      "function": "ensureComponent",
+      "path": "internal/delivery/builtin/component_compiler.go",
+      "function": "compileComponentVersion",
       "operation": "json.Marshal",
       "arguments": ["component.Values"],
       "owner": "/delivery/builtin",
@@ -22181,8 +22311,8 @@
       "reader_behavior": "Preserve named-function v1 handling; return_or_local_binding"
     },
     {
-      "path": "internal/delivery/builtin/provisioner.go",
-      "function": "ensureComponent",
+      "path": "internal/delivery/builtin/component_compiler.go",
+      "function": "compileComponentVersion",
       "operation": "json.Marshal",
       "arguments": ["resolvedSource"],
       "owner": "/delivery/builtin",
@@ -22190,8 +22320,8 @@
       "reader_behavior": "Preserve named-function v1 handling; discarded_result_requires_domain_review"
     },
     {
-      "path": "internal/delivery/builtin/provisioner.go",
-      "function": "ensureComponent",
+      "path": "internal/delivery/builtin/component_compiler.go",
+      "function": "compileComponentVersion",
       "operation": "json.Marshal",
       "arguments": ["draft.Renderer"],
       "owner": "/delivery/builtin",
@@ -22199,8 +22329,8 @@
       "reader_behavior": "Preserve named-function v1 handling; discarded_result_requires_domain_review"
     },
     {
-      "path": "internal/delivery/builtin/provisioner.go",
-      "function": "ensureComponent",
+      "path": "internal/delivery/builtin/component_compiler.go",
+      "function": "compileComponentVersion",
       "operation": "json.Marshal",
       "arguments": ["reconciliation"],
       "owner": "/delivery/builtin",
@@ -22208,8 +22338,8 @@
       "reader_behavior": "Preserve named-function v1 handling; discarded_result_requires_domain_review"
     },
     {
-      "path": "internal/delivery/builtin/provisioner.go",
-      "function": "ensureComponent",
+      "path": "internal/delivery/builtin/component_compiler.go",
+      "function": "compileComponentVersion",
       "operation": "json.Marshal",
       "arguments": ["requirements"],
       "owner": "/delivery/builtin",
@@ -30549,6 +30679,542 @@
       "owner": "sdk/catalog",
       "schema": "Additive v1 CatalogControllerWindow with scope, windowLimit, returned, total(nullable), complete and notice; actual data wrapper plus released flat compatibility",
       "reader_behavior": "Decode the typed six-field summary then require EOF, validate scope/global-or-authorized-clusters, window1000, returned0..1000, nonnegative nullable total, notice<=512 runes and complete only when known total equals returned. Compatible extra fields are ignored; syntax/type/range errors are content-free."
+    },
+    {
+      "path": "internal/delivery/distribution/database_offline_export.go",
+      "function": "*DatabaseAuthority.ExportOfflineUpdateKit",
+      "operation": "json.Marshal",
+      "arguments": [
+        "kit"
+      ],
+      "owner": "delivery/distribution",
+      "schema": "DatabaseOfflineUpdateKit bounded64KiB index for exact signed feed/child/blob closure.",
+      "reader_behavior": "Encode only after canonical current-base feed authentication and complete payload inspection; exclusive owned output then canonical no-network readback. Encoding grants neither imported reservation nor publication."
+    },
+    {
+      "path": "internal/delivery/distribution/database_publication_artifact.go",
+      "function": "*DatabasePublicationRegistry.PublishFeed",
+      "operation": "json.Marshal",
+      "arguments": [
+        "document"
+      ],
+      "owner": "delivery/distribution",
+      "schema": "Closed signed DatabaseUpdateDocument or canonical OCI artifact manifest for exact prepared feed.",
+      "reader_behavior": "Encode constructor-owned prepared document/immutable descriptors; size/hash checks and actual guarded push/readback precede signing/decision. No caller approval or publication inference."
+    },
+    {
+      "path": "internal/delivery/distribution/database_publication_artifact.go",
+      "function": "*DatabasePublicationRegistry.publishArtifact",
+      "operation": "json.Marshal",
+      "arguments": [
+        "manifest"
+      ],
+      "owner": "delivery/distribution",
+      "schema": "Closed signed DatabaseUpdateDocument or canonical OCI artifact manifest for exact prepared feed.",
+      "reader_behavior": "Encode constructor-owned prepared document/immutable descriptors; size/hash checks and actual guarded push/readback precede signing/decision. No caller approval or publication inference."
+    },
+    {
+      "path": "internal/delivery/distribution/database_publication_signer.go",
+      "function": "*DatabasePublicationSigner.sign",
+      "operation": "json.Marshal",
+      "arguments": [
+        "payload"
+      ],
+      "owner": "delivery/distribution",
+      "schema": "Canonical Cosign payload bound to one exact immutable subject.",
+      "reader_behavior": "Serialize exact constructor-owned signing subject; actual protected signer identity, joined body/content and canonical verification remain mandatory. OIDC credentials never serialized."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_cleanup.go",
+      "function": "readTerminalDatabaseResource",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&envelope"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_cleanup.go",
+      "function": "waitTerminalDatabaseJobPodsGone",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&pods"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_cleanup_requester.go",
+      "function": "newDatabaseScanTerminalRequester",
+      "operation": "json.Marshal",
+      "arguments": [
+        "metav1.DeleteOptions{TypeMeta: metav1.TypeMeta{APIVersion: \"v1\", Kind: \"DeleteOptions\"}, Preconditions: &metav1.Preconditions{UID: &uid, ResourceVersion: &version}, GracePeriodSeconds: &zero, PropagationPolicy: &foreground}"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Kubernetes v1 DeleteOptions with exact UID/resourceVersion preconditions, grace0 and Foreground propagation.",
+      "reader_behavior": "Only private terminal-claim cleanup constructor serializes this literal deletion body; scoped path/cluster/terminal lock/current UID remain mandatory. No generic DELETE authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_completion.go",
+      "function": "*DatabaseScanOwner.completeOwnedScan",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "claim.PreparedRecord",
+        "&prepared"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded databasejob.Preparation schema1/2 DATA, maximum MaximumRecordBytes.",
+      "reader_behavior": "Strict canonical Decode then DecodePreparation and current locked claim/feed/assignment/report revision checks; helper DATA alone cannot grant a witness."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_discovery.go",
+      "function": "*DatabaseScanOwner.discoverCluster",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&pods"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_discovery.go",
+      "function": "*DatabaseScanOwner.readCandidateNode",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&node"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_dispatch.go",
+      "function": "*DatabaseScanOwner.ensureClaimJob",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&current"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_dispatch.go",
+      "function": "*DatabaseScanOwner.lookupClaimPod",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "jobBytes",
+        "&job"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_dispatch.go",
+      "function": "*DatabaseScanOwner.lookupClaimPod",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "podBytes",
+        "&list"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_dispatch.go",
+      "function": "databaseScanJobDigest",
+      "operation": "json.Marshal",
+      "arguments": [
+        "job.Spec"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Typed canonical Job spec, actual completed container status set or current workload critical spec DATA.",
+      "reader_behavior": "Serialize the named exact current typed structure for content identity/current comparison; observed statuses and hashes alone cannot grant acceptance or witness."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_observation.go",
+      "function": "readDatabaseScanObjects",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "jobBytes",
+        "&job"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_observation.go",
+      "function": "readDatabaseScanObjects",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "podBytes",
+        "&pods"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_observation.go",
+      "function": "databaseScanCompletedStatuses",
+      "operation": "json.Marshal",
+      "arguments": [
+        "struct{ Containers, Initializers []corev1.ContainerStatus }{pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses}"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Typed canonical Job spec, actual completed container status set or current workload critical spec DATA.",
+      "reader_behavior": "Serialize the named exact current typed structure for content identity/current comparison; observed statuses and hashes alone cannot grant acceptance or witness."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_preparation.go",
+      "function": "decodeDatabasePreparationJob",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&job"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_report.go",
+      "function": "normalizeDatabaseNativeReport",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&report"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Selected Trivy native schema2 container_image report with typed critical fields and opaque inventory extensions.",
+      "reader_behavior": "Bounded strict canonical Decode rejects duplicate/deep/trailing/unknown typed fields; exact scanner/config/workload/actual termination interval and finite results checked. Private ImageConfig cleared; Java remains unknown, no witness from report alone."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_resources.go",
+      "function": "*DatabaseScanOwner.ensureOwnedObject",
+      "operation": "json.Marshal",
+      "arguments": [
+        "object"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Exact immutable canonical typed namespace/Secret/PVC/policy/Job request <=databaseScanMaximumAPIBytes.",
+      "reader_behavior": "Serialize current constructor-built object; size/hash bound and intent ledger precede scoped POST, actual GET readback/current physical trust mandatory. No name-only adoption; completion uses readOnly mode and no POST."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_resources.go",
+      "function": "*DatabaseScanOwner.ensureScanNamespace",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&current"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_resources.go",
+      "function": "*DatabaseScanOwner.ensureScanMaterial",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&current"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_resources.go",
+      "function": "*DatabaseScanOwner.ensureScanVolume",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&current"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_resources.go",
+      "function": "*DatabaseScanOwner.ensureDenyPolicy",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&current"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_resources.go",
+      "function": "*DatabaseScanOwner.ensureDenyPolicy",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "listBytes",
+        "&list"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_resources.go",
+      "function": "*DatabaseScanOwner.ensureScanImagePullSecret",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&current"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_status.go",
+      "function": "*DatabaseScanOwner.ReadImageDatabaseStatus",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "claim.PreparedRecord",
+        "&prepared"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Current claim preparation DATA plus independently accepted feed/state and monotonic report observation revision.",
+      "reader_behavior": "Strict canonical Decode then DecodePreparation; stale/missing/mismatched/current-workload-unchecked state returns unknown with clean=false. Completion clock does not mint freshness."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_workload.go",
+      "function": "*DatabaseScanOwner.recheckCurrentWorkload",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&pod"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_workload.go",
+      "function": "*DatabaseScanOwner.recheckCurrentWorkload",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "nodeBytes",
+        "&node"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Bounded selected Kubernetes typed object/list or cleanup envelope from constructor-scoped owned request paths.",
+      "reader_behavior": "Canonical strict Decode after finite bounded API read; validate outer kind/version, UID/namespace/current critical spec/owner/labels and finite lists as required by the named function. Typed PodList alone permits absent item TypeMeta normalization but rejects conflicting values. Current locked claim, physical trust and exact resource lifecycle remain separate; no response creates authority."
+    },
+    {
+      "path": "internal/delivery/provider/database_scan_workload.go",
+      "function": "databaseWorkloadSpecDigest",
+      "operation": "json.Marshal",
+      "arguments": [
+        "spec"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Typed canonical Job spec, actual completed container status set or current workload critical spec DATA.",
+      "reader_behavior": "Serialize the named exact current typed structure for content identity/current comparison; observed statuses and hashes alone cannot grant acceptance or witness."
+    },
+    {
+      "path": "internal/delivery/provider/database_snapshot_projection.go",
+      "function": "databaseProjectionExpectedAssignment",
+      "operation": "json.Marshal",
+      "arguments": [
+        "expected.Source.Trust"
+      ],
+      "owner": "delivery/provider",
+      "schema": "Canonical compiler expected.Source.Trust DATA for exact current assignment comparison.",
+      "reader_behavior": "Serialize same canonical assignment/compiler output, preserve exact source/renderer/trust/current locked receipt comparisons; encoding cannot accept/promote a feed."
+    },
+    {
+      "path": "internal/delivery/resolver/artifact_offline_graph.go",
+      "function": "CaptureVerifiedOfflineArtifactMetadata",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "signatureBytes",
+        "&manifest"
+      ],
+      "owner": "delivery/resolver",
+      "schema": "Exact original OCI Cosign signature manifest bounded1MiB with finite signature/config/layer closure.",
+      "reader_behavior": "Authenticate descriptor hash/size and canonical signatures before decoding original manifest; reject unsupported schema/media/subject/descriptors and retain exact original blobs. No upstream signature assumption."
+    },
+    {
+      "path": "internal/delivery/resolver/database_job_pull_credential.go",
+      "function": "validateDatabaseJobDockerConfig",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&document"
+      ],
+      "owner": "delivery/resolver",
+      "schema": "Protected docker auths object with only username/password per constructor-selected exact registry.",
+      "reader_behavior": "Strict Decode after bounded32KiB stable no-follow private mounted read; exact registry set/cardinality, string limits and controls checked. Revalidate current mounted material; no credHelpers/ambient credentials/push reuse."
+    },
+    {
+      "path": "internal/delivery/resolver/database_registry_read_credential.go",
+      "function": "readDatabaseRegistryCredential",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "material",
+        "&document"
+      ],
+      "owner": "delivery/resolver",
+      "schema": "Protected schema1 username/password constructor read credential, maximum32KiB.",
+      "reader_behavior": "Strict Decode after canonical stable no-follow mounted FD/private-mode checks; required bounded fields and control/colon constraints; clear original bytes and retain material identity. Pull authority separate from push; no public serialization."
+    },
+    {
+      "path": "internal/delivery/resolver/workload_image_metadata.go",
+      "function": "ValidateWorkloadImageMetadata",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "configBytes",
+        "&image"
+      ],
+      "owner": "delivery/resolver",
+      "schema": "Exact OCI/Docker immutable image manifest <=1MiB and config <=4MiB, selected linux amd64/arm64 platform.",
+      "reader_behavior": "Whole manifest/config SHA256 and exact descriptor bytes precede strict Decode; schema/media/platform/rootfs/diffIDs and finite layers/aggregate validated. URLs and ambiguous changed descriptors cannot supply authority."
+    },
+    {
+      "path": "internal/delivery/resolver/workload_image_metadata.go",
+      "function": "validateWorkloadManifest",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "manifestBytes",
+        "&manifest"
+      ],
+      "owner": "delivery/resolver",
+      "schema": "Exact OCI/Docker immutable image manifest <=1MiB and config <=4MiB, selected linux amd64/arm64 platform.",
+      "reader_behavior": "Whole manifest/config SHA256 and exact descriptor bytes precede strict Decode; schema/media/platform/rootfs/diffIDs and finite layers/aggregate validated. URLs and ambiguous changed descriptors cannot supply authority."
+    },
+    {
+      "path": "internal/delivery/rollout/database_deployment_intent.go",
+      "function": "ResolveUnconfiguredDeployment",
+      "operation": "json.Marshal",
+      "arguments": [
+        "renderer"
+      ],
+      "owner": "delivery/rollout",
+      "schema": "Canonical effective Helm renderer DATA from existing rollout/model resolver.",
+      "reader_behavior": "Serialize exact canonical projection with existing hash domains/validation; no reconstructed renderer or independent assignment compiler."
+    },
+    {
+      "path": "internal/scanner/databasejob/preparation_output.go",
+      "function": "WritePreparationRecord",
+      "operation": "json.Marshal",
+      "arguments": [
+        "value"
+      ],
+      "owner": "scanner/databasejob",
+      "schema": "Validated databasejob.Preparation schema1/2 bounded MaximumRecordBytes.",
+      "reader_behavior": "Serialize already validated preparation DATA into bounded output; staged/sealed content and current actual worker/runtime checks remain separate."
+    },
+    {
+      "path": "internal/scanner/databasejob/record.go",
+      "function": "DecodePreparation",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&value"
+      ],
+      "owner": "scanner/databasejob",
+      "schema": "Bounded versioned databasejob.Preparation or Measurement schema1/2 with exact claim/scanner/two-role content/metadata and optional workload DATA.",
+      "reader_behavior": "Canonical strict Decode or typed encoding with MaximumRecordBytes; schema/kind/digest/size/UTC/role/expected equality checks. Measurement helper clock is DATA; Kubernetes log timestamp/process exit/imageID/current locked report required for witness."
+    },
+    {
+      "path": "internal/scanner/databasejob/record.go",
+      "function": "emitMeasurement",
+      "operation": "json.Marshal",
+      "arguments": [
+        "row"
+      ],
+      "owner": "scanner/databasejob",
+      "schema": "Bounded versioned databasejob.Preparation or Measurement schema1/2 with exact claim/scanner/two-role content/metadata and optional workload DATA.",
+      "reader_behavior": "Canonical strict Decode or typed encoding with MaximumRecordBytes; schema/kind/digest/size/UTC/role/expected equality checks. Measurement helper clock is DATA; Kubernetes log timestamp/process exit/imageID/current locked report required for witness."
+    },
+    {
+      "path": "internal/scanner/databasejob/record.go",
+      "function": "DecodeMeasurement",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "payload",
+        "&row"
+      ],
+      "owner": "scanner/databasejob",
+      "schema": "Bounded versioned databasejob.Preparation or Measurement schema1/2 with exact claim/scanner/two-role content/metadata and optional workload DATA.",
+      "reader_behavior": "Canonical strict Decode or typed encoding with MaximumRecordBytes; schema/kind/digest/size/UTC/role/expected equality checks. Measurement helper clock is DATA; Kubernetes log timestamp/process exit/imageID/current locked report required for witness."
+    },
+    {
+      "path": "internal/scanner/databasejob/record_linux.go",
+      "function": "PublishPreparation",
+      "operation": "json.Marshal",
+      "arguments": [
+        "value"
+      ],
+      "owner": "scanner/databasejob",
+      "schema": "Validated bounded preparation/initial measurement DATA written to private owned coordination files.",
+      "reader_behavior": "Canonical typed serialization follows preparation validation; exclusive no-follow owned-file write and readback. Initial acknowledgement never proves actual scan use or final completion."
+    },
+    {
+      "path": "internal/scanner/databasejob/record_linux.go",
+      "function": "publishInitialMeasurement",
+      "operation": "json.Marshal",
+      "arguments": [
+        "row"
+      ],
+      "owner": "scanner/databasejob",
+      "schema": "Validated bounded preparation/initial measurement DATA written to private owned coordination files.",
+      "reader_behavior": "Canonical typed serialization follows preparation validation; exclusive no-follow owned-file write and readback. Initial acknowledgement never proves actual scan use or final completion."
+    },
+    {
+      "path": "internal/scanner/databasejob/workload_input_linux.go",
+      "function": "*WorkloadInput.inspectGraph",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "manifestBytes",
+        "&manifest"
+      ],
+      "owner": "scanner/databasejob",
+      "schema": "Pinned original workload OCI manifest and exact single-platform OCI index, literal linux architecture.",
+      "reader_behavior": "Read bounded stable sealed original metadata, strict Decode and canonical ValidateWorkloadImageMetadata exact hashes before closure comparison. Emit only literal one-descriptor index; no mutable tag or artifact-selected transport."
+    },
+    {
+      "path": "internal/scanner/databasejob/workload_input_linux.go",
+      "function": "workloadIndexBytes",
+      "operation": "json.Marshal",
+      "arguments": [
+        "ocispec.Index{Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ocispec.MediaTypeImageIndex, Manifests: []ocispec.Descriptor{{MediaType: metadata.ManifestDescriptor.MediaType, Digest: metadata.ManifestDescriptor.Digest, Size: metadata.ManifestDescriptor.Size, Platform: &ocispec.Platform{OS: \"linux\", Architecture: architecture}}}}"
+      ],
+      "owner": "scanner/databasejob",
+      "schema": "Pinned original workload OCI manifest and exact single-platform OCI index, literal linux architecture.",
+      "reader_behavior": "Read bounded stable sealed original metadata, strict Decode and canonical ValidateWorkloadImageMetadata exact hashes before closure comparison. Emit only literal one-descriptor index; no mutable tag or artifact-selected transport."
+    },
+    {
+      "path": "internal/server/app_database_read_registry.go",
+      "function": "databaseReadRegistryOptions",
+      "operation": "jsoncontract.Decode",
+      "arguments": [
+        "[]byte(cfg.DeliveryDatabaseReadRepositories)",
+        "&repositories"
+      ],
+      "owner": "server",
+      "schema": "Typed operator-config exact repository string array, maximum32KiB and1..32 entries.",
+      "reader_behavior": "All-empty preserves anonymous role; partial configuration fails. Strict Decode rejects ambiguity/unknown/non-array/null; constructor validates independent registry/realm/service/reference/repository scope. No secret bytes or implicit push credential reuse."
     }
   ]
 }
