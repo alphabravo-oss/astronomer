@@ -287,7 +287,7 @@ func localQAObserveSelectedFluxController(t *testing.T, ctx context.Context, cli
 		t.Fatal("LOCAL QA canonical controller repository invalid")
 	}
 	repository := controller.Reference[:separator]
-	image := repository + "@" + controller.Digest
+	image := controller.Reference + "@" + controller.Digest
 	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	deployment, err := client.AppsV1().Deployments(localQAFluxNamespace).Get(bounded, "source-controller", metav1.GetOptions{})
