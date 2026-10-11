@@ -1765,6 +1765,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}/database-status"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/clusters/{cluster_id}/vulnerabilities/reports/{report_id}/history"
   },
   {

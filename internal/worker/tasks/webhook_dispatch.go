@@ -146,12 +146,20 @@ func (runtime DispatchRuntime) dispatchWebhook(ctx context.Context, row sqlc.Web
 		return
 	}
 
+	responseStatus, statusErr := outcome.ResponseStatus()
+	if statusErr != nil {
+		outcome.Status = 0
+		if outcome.Err == nil {
+			outcome.Err = statusErr
+		}
+	}
+
 	if outcome.IsSuccess() {
 		webhook.RecordOutcome("delivered", elapsed)
 		_ = runtime.Webhook.Queries.MarkWebhookDeliveryDelivered(ctx, sqlc.MarkWebhookDeliveryDeliveredParams{
 			ID:             row.ID,
 			Attempts:       row.Attempts + 1,
-			ResponseStatus: int32(outcome.Status),
+			ResponseStatus: responseStatus,
 			ResponseBody:   outcome.ResponseBody,
 			DeliveredAt:    pgtype.Timestamptz{Time: now, Valid: true},
 		})
@@ -171,7 +179,7 @@ func (runtime DispatchRuntime) dispatchWebhook(ctx context.Context, row sqlc.Web
 		_ = runtime.Webhook.Queries.MarkWebhookDeliveryDropped(ctx, sqlc.MarkWebhookDeliveryDroppedParams{
 			ID:             row.ID,
 			Attempts:       nextAttempts,
-			ResponseStatus: int32(outcome.Status),
+			ResponseStatus: responseStatus,
 			ResponseBody:   outcome.ResponseBody,
 			LastError:      truncateDispatchLastError(failureReason(outcome), 1024),
 		})
@@ -183,7 +191,7 @@ func (runtime DispatchRuntime) dispatchWebhook(ctx context.Context, row sqlc.Web
 	_ = runtime.Webhook.Queries.MarkWebhookDeliveryFailed(ctx, sqlc.MarkWebhookDeliveryFailedParams{
 		ID:             row.ID,
 		Attempts:       nextAttempts,
-		ResponseStatus: int32(outcome.Status),
+		ResponseStatus: responseStatus,
 		ResponseBody:   outcome.ResponseBody,
 		LastError:      truncateDispatchLastError(failureReason(outcome), 1024),
 		NextAttemptAt:  pgtype.Timestamptz{Time: now.Add(backoff), Valid: true},

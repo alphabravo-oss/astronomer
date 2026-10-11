@@ -1,5 +1,16 @@
 # Plan 032 implementation evidence
 
+The [October 11 integrated-build checkpoint](2026-10-11-integrated-build-checkpoint.md)
+supersedes earlier current-status statements below. Source work builds on
+`27102246`: the HTTP guard race passes 72 results/31 parents, full internal/cmd
+vet passes, and the integrated frontend passes all 350 files/2,444 tests,
+TypeScript, lint, production build, CSP and unchanged bundle budgets. Canonical
+route/authentication/CSRF checks pass 244 results/seven parents. Both owned
+PostgreSQL majors pass canonical 079/080; interrupted 081 recovery remains open.
+Tagged integration compilation, a coherent signed candidate, cluster deployment,
+upgrade/restore and fresh whole-source security qualification remain open.
+The entire plan is not complete. Earlier entries retain their original scopes.
+
 Current product source integration is `bdf0f445`, preserving qualified CLI/security histories and adding coherent schema-81 catalog/offline source `f70a934b`. Actual canonical affected generation passes nine gates (19 UI tests and23 SDK race results); actual pure pagination passes107 named race results across30 parents, vet and fresh inventories with no skips. Catalog tooling is separately integrated at `665d4dee` with its qualified62-package graph. Both majors pass disposable canonical79; PostgreSQL17 also passes the100,000-chart canonical080 measurement, with39 held gates/34 default guards and one witness fixture retained; current81 recovery/runtime, whole first-party security, candidate deployment and release qualification remain open. See the [current checkpoint](2026-10-10-current-integration-review.md#current-integration-and-pending-qualification) and [scoped integration record](scoped-control-integration-20261010.json).
 
 [Current integration review, October 10](2026-10-10-current-integration-review.md): reviewed queue, extended Driver, bounded mesh and catalog interoperability fixture/evidence are locally integrated through `0ed128a8`. Frozen Driver passes 203 parents/1,444 race terminals and vet/statics; frozen mesh passes 22 parents/23 children and applicable governance. Catalog has a separate qualified 62-package environment, passing corrected tooling/Ruff/Mypy/export/audit/SBOM continuation, and actual canonical producer/consumer interoperability with 12 race terminals. Isolated scanner config generation and upgrade report AST/formatting checks also pass within their recorded scopes; new runtime paths remain open. Lossless packets retain original failed attempts. Combined current qualification, scanner two-Job/nonroot scan/079 transactions, collector ingestion, complete CLI lifecycle, supporting consumer routing and deployment remain open. The preserved cached Alloy index/image-config mismatch requires the reviewed image-identity successor before a collector run; compressed metadata does not prove adequate unpacked reserve. Reviewed exact cleanup of 231 released compiler archives recovers 2.86 GiB and the unchanged 20 GiB/20% guard passes at the latest check; serialized native checks resume with individual capacity guards. Earlier entries below are historical scoped observations, not current candidate certification.

@@ -1,4 +1,5 @@
 import { toolQueryKeys } from "./query-keys-tools";
+import { catalogControllerWindowKey } from "./query-keys-catalog-controller";
 import type { EffectivePermissionParams } from "@/lib/api/rbac";
 import type { ResourceType } from "@/lib/api/resources";
 
@@ -554,6 +555,7 @@ export const queryKeys = {
     detail: (id: string) => ["projects", "detail", id] as const,
   },
   catalog: {
+    controllerWindow: catalogControllerWindowKey,
     release: (id: string) => ["catalog", "release", id] as const,
     releaseValues: (id: string) =>
       ["catalog", "release", id, "values"] as const,

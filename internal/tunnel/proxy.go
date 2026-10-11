@@ -739,6 +739,7 @@ func (p *ProxyHandler) forwardFilteredOwnerResponse(w http.ResponseWriter, resp 
 // No global timeout because some forwarded requests (e.g. watches) are
 // long-lived; per-request context cancellation governs lifetime.
 var proxyHTTPClient = &http.Client{
+	CheckRedirect: RejectPeerRedirect,
 	Transport: &http.Transport{
 		MaxIdleConns:          16,
 		IdleConnTimeout:       60 * time.Second,

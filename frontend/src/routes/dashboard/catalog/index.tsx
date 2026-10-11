@@ -45,6 +45,15 @@ import { CatalogControllerWindow } from "@/components/catalog/catalog-controller
 
 const TAB_KEYS = ["browse", "installed", "repositories"] as const;
 
+function CatalogClusterBanner({ name }: { name: string }) {
+  return (
+    <div className="mt-2 inline-flex items-center gap-2 text-xs px-2 py-1 rounded-sm bg-accent/40 text-foreground">
+      <Package className="h-3.5 w-3.5" />
+      Installing onto <span className="font-medium">{name}</span>
+    </div>
+  );
+}
+
 function CatalogPage() {
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, "browse");
   const [selectedCategory, setSelectedCategory] = useState<
@@ -152,15 +161,13 @@ function CatalogPage() {
           }
         />
         {presetClusterIdPage && (
-          <div className="mt-2 inline-flex items-center gap-2 text-xs px-2 py-1 rounded-sm bg-accent/40 text-foreground">
-            <Package className="h-3.5 w-3.5" />
-            Installing onto{" "}
-            <span className="font-medium">
-              {presetCluster?.displayName ||
-                presetCluster?.name ||
-                presetClusterIdPage}
-            </span>
-          </div>
+          <CatalogClusterBanner
+            name={
+              presetCluster?.displayName ||
+              presetCluster?.name ||
+              presetClusterIdPage
+            }
+          />
         )}
       </div>
 
