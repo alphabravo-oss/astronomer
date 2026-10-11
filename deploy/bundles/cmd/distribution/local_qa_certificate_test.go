@@ -137,7 +137,7 @@ func (signer *localQACertificateSigner) signSubject(ctx context.Context, layout,
 	}
 	var bundle localQALegacyBundle
 	bundle.SignedEntryTimestamp = set
-	bundle.Payload.Body = rekor.Body
+	bundle.Payload.Body = body
 	bundle.Payload.IntegratedTime = rekor.IntegratedTime
 	bundle.Payload.LogIndex = rekor.LogIndex
 	bundle.Payload.LogID = rekor.LogID
