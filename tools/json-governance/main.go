@@ -136,8 +136,8 @@ func qualified(expr ast.Expr, aliases map[string]string, path, name string) bool
 	ident, ok := sel.X.(*ast.Ident)
 	return ok && ident.Obj == nil && aliases[ident.Name] == path
 }
-func requestNames(fn *ast.FuncDecl, aliases map[string]string) map[string]*ast.Object {
-	names := map[string]*ast.Object{}
+func requestNames(fn *ast.FuncDecl, aliases map[string]string) map[string]*ast.Object { //nolint:staticcheck // Bounded syntax inventory uses parser object identity for local shadowing, not whole-program type resolution.
+	names := map[string]*ast.Object{} //nolint:staticcheck // Bounded syntax inventory uses parser object identity for local shadowing, not whole-program type resolution.
 	for _, field := range fn.Type.Params.List {
 		star, ok := field.Type.(*ast.StarExpr)
 		if !ok || !qualified(star.X, aliases, "net/http", "Request") {
@@ -149,7 +149,7 @@ func requestNames(fn *ast.FuncDecl, aliases map[string]string) map[string]*ast.O
 	}
 	return names
 }
-func bodyBinding(expr ast.Expr, names map[string]*ast.Object) bool {
+func bodyBinding(expr ast.Expr, names map[string]*ast.Object) bool { //nolint:staticcheck // Bounded syntax inventory uses parser object identity for local shadowing, not whole-program type resolution.
 	bound := false
 	ast.Inspect(expr, func(node ast.Node) bool {
 		sel, ok := node.(*ast.SelectorExpr)
@@ -196,10 +196,8 @@ func discoverSites(path, relative string) ([]site, []site, error) {
 			for _, arg := range call.Args {
 				item.Arguments = append(item.Arguments, expression(set, arg))
 			}
-			jsonCall := false
-			if qualified(call.Fun, aliases, "github.com/alphabravocompany/astronomer-go/internal/jsoncontract", "Decode") {
-				jsonCall = true
-			}
+			jsonCall := qualified(call.Fun, aliases, "github.com/alphabravocompany/astronomer-go/internal/jsoncontract", "Decode")
+
 			for _, method := range []string{"Marshal", "Unmarshal", "NewDecoder", "NewEncoder", "Valid"} {
 				if qualified(call.Fun, aliases, "encoding/json", method) {
 					jsonCall = true
@@ -226,10 +224,8 @@ func discoverSites(path, relative string) ([]site, []site, error) {
 				})
 				calls = append(calls, item)
 			}
-			requestCall := false
-			if qualified(call.Fun, aliases, "encoding/json", "NewDecoder") && len(call.Args) > 0 && bodyBinding(call.Args[0], requestBindings) {
-				requestCall = true
-			}
+			requestCall := qualified(call.Fun, aliases, "encoding/json", "NewDecoder") && len(call.Args) > 0 && bodyBinding(call.Args[0], requestBindings)
+
 			helper := call.Fun
 			switch indexed := helper.(type) {
 			case *ast.IndexExpr:

@@ -69,7 +69,7 @@ def verifier_command(args: argparse.Namespace) -> list[str]:
 
 
 def export(args: argparse.Namespace) -> None:
-    if re.fullmatch(r"v1\.[0-9]+\.[0-9]+", args.release) is None:
+    if re.fullmatch(r"v[1-9][0-9]*\.[0-9]+\.[0-9]+", args.release) is None:
         raise CatalogArchiveError("exact supported release identity required")
     report = json.loads(run(verifier_command(args) + ["--application-profiles", str(args.profile_index),
                          "--catalog", str(args.catalog), "--platform-evidence", str(args.platform_evidence)]))

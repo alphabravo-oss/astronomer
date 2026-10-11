@@ -199,10 +199,10 @@ func TestTargetDatabaseObservationDoesNotAcknowledgeFailedOrUnboundReads(t *test
 	if _, err := observer.Observe(context.Background()); err == nil {
 		t.Fatal("uncaptured storage admitted")
 	}
-	if observer.Capture(nil) == nil {
+	if observer.Capture(nil) == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil capture context admitted")
 	}
-	if _, err := observer.Observe(nil); err == nil {
+	if _, err := observer.Observe(nil); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil observation context admitted")
 	}
 	previous := observer.source.fence.execute

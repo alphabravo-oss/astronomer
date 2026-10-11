@@ -250,8 +250,10 @@ func reportInsecureDevKeys(cfg *config.Config, logger *slog.Logger) {
 }
 
 func validateProductionSecurityWiring(cfg *config.Config, deps RouterDependencies) error {
-	_ = cfg // Security wiring is mandatory in every environment.
 	var errs []string
+	if err := validateToolUIConfig(cfg); err != nil {
+		errs = append(errs, err.Error())
+	}
 	if deps.CoreAuth.JWT == nil {
 		errs = append(errs, "JWT manager is not wired")
 	} else if !deps.CoreAuth.JWT.HasRevocationChecker() {

@@ -279,7 +279,7 @@ func databaseScanCompletedStatuses(job *batchv1.Job, pod *corev1.Pod) (databaseS
 	// Equal second endpoints are structurally valid after JSON precision loss;
 	// they never establish a positive scalar duration. Final logs must still
 	// follow the complete scanner finish interval in DecodeOrderedMeasurements.
-	result := databaseScanStatus{scannerImageID: scanner.ImageID, helperImageID: helper.ImageID, helperImageIDs: helpers, runtimeDigest: runtimeDigest, scannerStarted: scannerState.StartedAt.Time.UTC(), scannerFinished: scannerState.FinishedAt.Time.UTC(), helperFinished: helperState.FinishedAt.Time.UTC()}
+	result := databaseScanStatus{scannerImageID: scanner.ImageID, helperImageID: helper.ImageID, helperImageIDs: helpers, runtimeDigest: runtimeDigest, scannerStarted: scannerState.StartedAt.UTC(), scannerFinished: scannerState.FinishedAt.UTC(), helperFinished: helperState.FinishedAt.UTC()}
 	if result.scannerFinished.Before(result.scannerStarted) || result.helperFinished.Before(result.scannerFinished) || result.helperFinished.After(time.Now().UTC()) {
 		return empty, errors.New("owned database runtime clock ordering invalid")
 	}

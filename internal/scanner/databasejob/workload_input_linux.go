@@ -69,7 +69,7 @@ func createWorkloadInput(ctx context.Context, root string, claim uuid.UUID, meta
 	if err != nil {
 		return nil, err
 	}
-	defer parent.Close()
+	defer func(close func() error) { _ = close() }(parent.Close)
 	name := "workload-" + claim.String()
 	if unix.Mkdirat(int(parent.Fd()), name, 0700) != nil {
 		return nil, errors.New("workload exclusive staging creation failed")
@@ -174,7 +174,7 @@ func reopenWorkloadInput(ctx context.Context, root string, claim uuid.UUID, expe
 	if err != nil {
 		return nil, err
 	}
-	defer parent.Close()
+	defer func(close func() error) { _ = close() }(parent.Close)
 	name := "workload-" + claim.String()
 	directory, err := openWorkloadDirectory(int(parent.Fd()), name, 0555)
 	if err != nil {
@@ -261,7 +261,7 @@ func (owner *WorkloadInput) measureMember(ctx context.Context, index int, mode u
 		_ = unix.Close(fd)
 		return errors.New("workload measurement handle unavailable")
 	}
-	defer opened.Close()
+	defer func(close func() error) { _ = close() }(opened.Close)
 	before, beforeErr := original.Stat()
 	start, startErr := opened.Stat()
 	if beforeErr != nil || startErr != nil || !workloadMemberOwner(fd, mode) || !os.SameFile(before, start) || before.Size() != member.Size || !before.ModTime().Equal(start.ModTime()) {

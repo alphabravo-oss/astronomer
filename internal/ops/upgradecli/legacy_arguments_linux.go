@@ -24,11 +24,11 @@ type LegacyUpgradeArguments struct {
 type UpgradeUsageError struct{}
 
 func (UpgradeUsageError) Error() string {
-	return "usage: upgrade-release [--yes] [--dry-run-only] <exact stable v1 version>"
+	return "usage: upgrade-release [--yes] [--dry-run-only] <exact stable version>"
 }
 func (UpgradeUsageError) ExitCode() int { return 2 }
 
-var legacyStableTarget = regexp.MustCompile(`^v1\.[0-9]+\.[0-9]+$`)
+var legacyStableTarget = regexp.MustCompile(`^v[1-9][0-9]*\.[0-9]+\.[0-9]+$`)
 
 func ParseLegacyUpgradeArguments(args []string) (LegacyUpgradeArguments, error) {
 	result := LegacyUpgradeArguments{Mode: upgrade.Preview}

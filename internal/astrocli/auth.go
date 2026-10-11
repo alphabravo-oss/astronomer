@@ -86,7 +86,7 @@ func IssuePasswordAPIToken(
 
 	csrfToken := ""
 	for _, cookie := range jar.Cookies(baseURL) {
-		if cookie.Name == auth.CSRFCookieName {
+		if cookie.Name == auth.CSRFCookieName || cookie.Name == "__Host-"+auth.CSRFCookieName {
 			csrfToken = cookie.Value
 			break
 		}

@@ -193,11 +193,11 @@ func registerResourcesWorkloadsRoutes(r chi.Router, deps RouterDependencies) {
 		r.With(
 			requireServiceProxyScope(),
 			requireServiceProxyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries),
-		).Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/", deps.ClusterResources.ServiceProxy)
+		).Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/", toolUIEntry(deps.CoreAuth.ToolUI, "service"))
 		r.With(
 			requireServiceProxyScope(),
 			requireServiceProxyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries),
-		).Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", deps.ClusterResources.ServiceProxy)
+		).Handle("/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", toolUIEntry(deps.CoreAuth.ToolUI, "service"))
 	}
 
 }

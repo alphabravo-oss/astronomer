@@ -8,10 +8,10 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 
 ## Scan Scope
 
-- Worker Go files scanned: 110
-- Handler Go files scanned: 374
-- Production source files scanned: 523
-- Task constants resolved: 160
+- Worker Go files scanned: 114
+- Handler Go files scanned: 380
+- Production source files scanned: 539
+- Task constants resolved: 161
 - Worker handler registrations: 91
 - Periodic schedules: 62
 - Task constructors: 71
@@ -45,7 +45,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | [`internal/worker/job_metrics.go:69`](internal/worker/job_metrics.go:69) |EnqueueWithCorrelation |task.Type( |wrapper-only |backend/worker |This is a shared instrumentation wrapper around asynq.Client.Enqueue, not an independent product action producer. |Callers remain responsible for their own durable intent or best-effort classification. |
 | [`internal/worker/tasks/cluster_template_apply.go:612`](internal/worker/tasks/cluster_template_apply.go:612) |HandleClusterTemplateDriftCheck |NewClusterTemplateApplyTask |repair-backed |backend/templates |This direct enqueue happens inside the recovery sweep for failed template applications. If delivery fails, the durable failed row remains eligible for the next sweep after backoff. |cluster_template:drift_check is scheduled on the tunnel queue and guards repeated failures with failedApplyMinBackoff. |
 | [`internal/worker/tasks/cluster_template_apply.go:655`](internal/worker/tasks/cluster_template_apply.go:655) |HandleClusterTemplateDriftCheck |NewClusterTemplateApplyTask |repair-backed |backend/templates |This direct enqueue happens inside the recovery sweep for failed template applications. If delivery fails, the durable failed row remains eligible for the next sweep after backoff. |cluster_template:drift_check is scheduled on the tunnel queue and guards repeated failures with failedApplyMinBackoff. |
-| [`internal/worker/tasks/gitops_sync.go:552`](internal/worker/tasks/gitops_sync.go:552) |enqueueDecommission |unknown |repair-backed |backend/gitops |The path creates a durable cluster_decommissions operation before dispatch and prefers a deduplicated task_outbox row. If both outbox and direct acceleration are unavailable, the pending operation remains eligible for repair. |cluster:decommission_all is scheduled every minute on the tunnel queue, re-enqueues pending rows, and the reconciler uses a lease claim plus persisted idempotent phase state; TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue verifies the normal outbox contract. |
+| [`internal/worker/tasks/gitops_sync.go:556`](internal/worker/tasks/gitops_sync.go:556) |enqueueDecommission |unknown |repair-backed |backend/gitops |The path creates a durable cluster_decommissions operation before dispatch and prefers a deduplicated task_outbox row. If both outbox and direct acceleration are unavailable, the pending operation remains eligible for repair. |cluster:decommission_all is scheduled every minute on the tunnel queue, re-enqueues pending rows, and the reconciler uses a lease claim plus persisted idempotent phase state; TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue verifies the normal outbox contract. |
 | [`internal/worker/tasks/notification_dispatch.go:201`](internal/worker/tasks/notification_dispatch.go:201) |HandleNotificationSend |unknown |outbox-backed |backend/notifications |Email delivery is handed off from the durable notification task into the PostgreSQL email_messages queue with a stable per-recipient dedupe key before the notification task succeeds. |The notification intent originates in task_outbox; email.Enqueuer persists email_messages idempotently, and a persistence failure returns an error so asynq retries the durable notification task. |
 
 ## Worker Task Registry
@@ -112,7 +112,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `gatekeeper:policy_apply` |HandleGatekeeperPolicyApply (tunnel) [`internal/worker/task_registry.go:163`](internal/worker/task_registry.go:163) |@every 5m / tunnel [`internal/worker/task_registry.go:258`](internal/worker/task_registry.go:258) |NewGatekeeperPolicyApplyTask [`internal/worker/tasks/gatekeeper_policy_apply.go:36`](internal/worker/tasks/gatekeeper_policy_apply.go:36) |1 |
 | `gatekeeper_constraint:reconcile` |HandleGatekeeperConstraintReconcile (tunnel) [`internal/worker/task_registry.go:164`](internal/worker/task_registry.go:164) |none |NewGatekeeperConstraintReconcileTask [`internal/worker/tasks/gatekeeper_constraint_reconcile.go:36`](internal/worker/tasks/gatekeeper_constraint_reconcile.go:36) |1 |
 | `gatekeeper_constraint:reconcile_all` |HandleGatekeeperConstraintReconcileAll (tunnel) [`internal/worker/task_registry.go:165`](internal/worker/task_registry.go:165) |@every 1m / tunnel [`internal/worker/task_registry.go:259`](internal/worker/task_registry.go:259) |NewGatekeeperConstraintReconcileAllTask [`internal/worker/tasks/gatekeeper_constraint_reconcile.go:49`](internal/worker/tasks/gatekeeper_constraint_reconcile.go:49) |1 |
-| `gitops:sync` |rejectUnboundRuntimeTask (worker) [`internal/worker/task_registry.go:131`](internal/worker/task_registry.go:131) |@every 60s / default [`internal/worker/task_registry.go:236`](internal/worker/task_registry.go:236) |NewGitOpsSourceSyncTask [`internal/worker/tasks/gitops_sync.go:71`](internal/worker/tasks/gitops_sync.go:71)<br>NewGitOpsSyncTask [`internal/worker/tasks/gitops_sync.go:214`](internal/worker/tasks/gitops_sync.go:214) |2 |
+| `gitops:sync` |rejectUnboundRuntimeTask (worker) [`internal/worker/task_registry.go:131`](internal/worker/task_registry.go:131) |@every 60s / default [`internal/worker/task_registry.go:236`](internal/worker/task_registry.go:236) |NewGitOpsSourceSyncTask [`internal/worker/tasks/gitops_sync.go:70`](internal/worker/tasks/gitops_sync.go:70)<br>NewGitOpsSyncTask [`internal/worker/tasks/gitops_sync.go:213`](internal/worker/tasks/gitops_sync.go:213) |2 |
 | `kubectl:session_reap` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:158`](internal/worker/task_registry.go:158) |@every 60s / tunnel [`internal/worker/task_registry.go:252`](internal/worker/task_registry.go:252) |NewKubectlSessionReapTask [`internal/worker/tasks/kubectl_session_reap.go:39`](internal/worker/tasks/kubectl_session_reap.go:39) |1 |
 | `maintenance:dispatch_deferred` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:125`](internal/worker/task_registry.go:125) |@every 60s / tunnel [`internal/worker/task_registry.go:233`](internal/worker/task_registry.go:233) |none |0 |
 | `management_backup:operation` |HandleManagementBackupOperation (worker) [`internal/worker/task_registry.go:112`](internal/worker/task_registry.go:112) |none |NewManagementBackupOperationTask [`internal/worker/tasks/management_backup.go:47`](internal/worker/tasks/management_backup.go:47) |1 |
@@ -151,7 +151,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | [`internal/worker/job_metrics.go:69`](internal/worker/job_metrics.go:69) |EnqueueWithCorrelation |task.Type( |no |return client.Enqueue(task, opts...) |
 | [`internal/worker/tasks/cluster_template_apply.go:612`](internal/worker/tasks/cluster_template_apply.go:612) |HandleClusterTemplateDriftCheck |NewClusterTemplateApplyTask |no |_, enqueueErr := enqueuer.Enqueue(task, |
 | [`internal/worker/tasks/cluster_template_apply.go:655`](internal/worker/tasks/cluster_template_apply.go:655) |HandleClusterTemplateDriftCheck |NewClusterTemplateApplyTask |no |_, enqueueErr := enqueuer.Enqueue(task, |
-| [`internal/worker/tasks/gitops_sync.go:552`](internal/worker/tasks/gitops_sync.go:552) |enqueueDecommission |unknown |no |if _, err := runtime.Deps.Enqueuer.Enqueue(task, asynq.Queue(ClusterTemplateApplyQueueName)); err != nil { |
+| [`internal/worker/tasks/gitops_sync.go:556`](internal/worker/tasks/gitops_sync.go:556) |enqueueDecommission |unknown |no |if _, err := runtime.Deps.Enqueuer.Enqueue(task, asynq.Queue(ClusterTemplateApplyQueueName)); err != nil { |
 | [`internal/worker/tasks/notification_dispatch.go:201`](internal/worker/tasks/notification_dispatch.go:201) |HandleNotificationSend |unknown |no |if _, err := emails.Enqueue(ctx, email.Request{ |
 
 ## Task Outbox Producers
@@ -175,13 +175,13 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/handler/control_plane_snapshots.go:119`](internal/handler/control_plane_snapshots.go:119) - `_, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/gatekeeper_constraints.go:406`](internal/handler/gatekeeper_constraints.go:406) - `return tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/gitops_helpers.go:37`](internal/handler/gitops_helpers.go:37) - `intent, err := tasks.EnqueueTaskOutbox(r.Context(), outbox, task, tasks.TaskOutboxOptions{`
-- [`internal/handler/image_vulns.go:280`](internal/handler/image_vulns.go:280) - `if _, err := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
+- [`internal/handler/image_vulns.go:281`](internal/handler/image_vulns.go:281) - `if _, err := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/network_policies.go:825`](internal/handler/network_policies.go:825) - `_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/node_operations.go:167`](internal/handler/node_operations.go:167) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/platform_default_template.go:358`](internal/handler/platform_default_template.go:358) - `app, persisted, txErr = upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), q, q, sqlc.UpsertClusterTemplateApplicationParams{`
 - [`internal/handler/resource_operations.go:203`](internal/handler/resource_operations.go:203) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/workloads_resources.go:409`](internal/handler/workloads_resources.go:409) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
-- [`internal/worker/tasks/gitops_sync.go:530`](internal/worker/tasks/gitops_sync.go:530) - `if _, err := EnqueueTaskOutbox(ctx, runtime.Deps.TaskOutbox, task, TaskOutboxOptions{`
+- [`internal/worker/tasks/gitops_sync.go:534`](internal/worker/tasks/gitops_sync.go:534) - `if _, err := EnqueueTaskOutbox(ctx, runtime.Deps.TaskOutbox, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/notification_dispatch.go:120`](internal/worker/tasks/notification_dispatch.go:120) - `_, err = EnqueueTaskOutbox(ctx, q, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/security_scan.go:255`](internal/worker/tasks/security_scan.go:255) - `_, err = EnqueueTaskOutbox(ctx, runtime.Deps.Outbox, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/task_outbox_enqueue.go:18`](internal/worker/tasks/task_outbox_enqueue.go:18) - `UpsertTaskOutbox(ctx context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)`
@@ -253,7 +253,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `deferred` |1 |[`internal/handler/maintenance_gate.go:202`](internal/handler/maintenance_gate.go:202) |
 | `gatekeeper_constraint_create` |1 |[`internal/handler/gatekeeper_constraints.go:263`](internal/handler/gatekeeper_constraints.go:263) |
 | `gatekeeper_constraint_delete` |1 |[`internal/handler/gatekeeper_constraints.go:340`](internal/handler/gatekeeper_constraints.go:340) |
-| `image-vulnerability-rescans` |1 |[`internal/handler/image_vulns.go:242`](internal/handler/image_vulns.go:242) |
+| `image-vulnerability-rescans` |1 |[`internal/handler/image_vulns.go:243`](internal/handler/image_vulns.go:243) |
 | `logging` |11 |[`internal/handler/logging_attach.go:161`](internal/handler/logging_attach.go:161)<br>[`internal/handler/logging_loki_token.go:80`](internal/handler/logging_loki_token.go:80)<br>[`internal/handler/logging_outputs.go:101`](internal/handler/logging_outputs.go:101)<br>[`internal/handler/logging_outputs.go:161`](internal/handler/logging_outputs.go:161) |
 | `management_backup` |1 |[`internal/handler/admin_management_backup_operations.go:105`](internal/handler/admin_management_backup_operations.go:105) |
 | `monitoring` |3 |[`internal/handler/monitoring_stack_cluster.go:202`](internal/handler/monitoring_stack_cluster.go:202)<br>[`internal/handler/monitoring_stack_cluster.go:334`](internal/handler/monitoring_stack_cluster.go:334)<br>[`internal/handler/monitoring_stack_shared.go:342`](internal/handler/monitoring_stack_shared.go:342) |
@@ -263,7 +263,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `pod-deletes` |1 |[`internal/handler/workloads_resources.go:366`](internal/handler/workloads_resources.go:366) |
 | `restore` |1 |[`internal/handler/backups_restores.go:76`](internal/handler/backups_restores.go:76) |
 | `support_bundle` |1 |[`internal/handler/supportbundle_api.go:37`](internal/handler/supportbundle_api.go:37) |
-| `tools` |1 |[`internal/handler/tools_operation_engine.go:48`](internal/handler/tools_operation_engine.go:48) |
+| `tools` |1 |[`internal/handler/tools_operation_engine.go:49`](internal/handler/tools_operation_engine.go:49) |
 | `user-preferences:v1` |1 |[`internal/handler/user_preferences.go:88`](internal/handler/user_preferences.go:88) |
 | `workloads` |1 |[`internal/handler/workloads_operations.go:32`](internal/handler/workloads_operations.go:32) |
 

@@ -284,7 +284,7 @@ func TestDatabaseJobOwnedRecordsRejectReplacementLinksAndModes(t *testing.T) {
 				if err := os.Link(filepath.Join(root, "prepare.json"), record); err != nil {
 					t.Fatal(err)
 				}
-				defer os.Remove(record)
+				defer func() { _ = os.Remove(record) }()
 			case "public":
 				if err := os.WriteFile(record, before, 0644); err != nil {
 					t.Fatal(err)

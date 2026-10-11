@@ -293,7 +293,7 @@ func bindMetadataArtifact(ctx context.Context, path string, maximum int64) (meta
 		return empty, errors.New("open private recovery artifact")
 	}
 	file := os.NewFile(uintptr(fd), "private-recovery-artifact")
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	opened, err := file.Stat()
 	if err != nil || !sameArtifact(before, opened) {
 		return empty, errors.New("opened private recovery artifact differs")

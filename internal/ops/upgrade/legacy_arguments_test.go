@@ -10,6 +10,7 @@ func TestLegacyUpgradeArgumentsPreserveShellModeAndHelpOrder(t *testing.T) {
 		help      bool
 	}{
 		{[]string{"1.2.2"}, Preview, "v1.2.2", false},
+		{[]string{"--yes", "v2.0.0"}, Execute, "v2.0.0", false},
 		{[]string{"--yes", "v1.2.2"}, Execute, "v1.2.2", false},
 		{[]string{"v1.2.2", "--yes", "--yes"}, Execute, "v1.2.2", false},
 		{[]string{"--yes", "--dry-run-only", "v1.2.2"}, Preview, "v1.2.2", false},
@@ -23,7 +24,7 @@ func TestLegacyUpgradeArgumentsPreserveShellModeAndHelpOrder(t *testing.T) {
 	}
 }
 func TestLegacyUpgradeArgumentsRetainUsageExitForUnsupportedInputs(t *testing.T) {
-	for _, arguments := range [][]string{nil, {"--unknown", "--help"}, {"--"}, {"v1.2.2", "v1.2.3"}, {"v2.0.0"}, {"v1.2.2-rc.1"}, {"latest"}} {
+	for _, arguments := range [][]string{nil, {"--unknown", "--help"}, {"--"}, {"v1.2.2", "v1.2.3"}, {"v2.0.0-rc.1"}, {"v1.2.2-rc.1"}, {"latest"}} {
 		_, err := ParseLegacyArguments(arguments)
 		if err == nil || ParseUsageExit(err) != 2 {
 			t.Fatalf("malformed legacy argument admitted: %v", arguments)

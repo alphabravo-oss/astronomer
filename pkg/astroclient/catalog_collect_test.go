@@ -43,11 +43,12 @@ func TestCatalogCollectionGeneratedTransportEmptyProgress(t *testing.T) {
 					if values[0] != "advance-one" {
 						t.Error("empty page did not advance exact opaque token")
 					}
-					if name == "repeated-token" {
+					switch name {
+					case "repeated-token":
 						next = "advance-one"
-					} else if name == "missing-token" {
+					case "missing-token":
 						next = nil
-					} else {
+					default:
 						data = []map[string]any{{"id": chartID}}
 						more = false
 						next = nil

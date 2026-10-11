@@ -16,7 +16,7 @@ func blockedRotationPID(t *testing.T, ctx context.Context, db *sql.DB) int {
 	if err != nil {
 		t.Fatal("read exclusively owned blocked rotation backend")
 	}
-	defer rows.Close()
+	defer func(close func() error) { _ = close() }(rows.Close)
 	var ids []int
 	for rows.Next() {
 		var id int

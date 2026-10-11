@@ -182,7 +182,7 @@ func copyRecoveryArtifact(ctx context.Context, directory, name string, input pro
 	if err != nil {
 		return empty, errors.New("open private recovery scope")
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	before, err := root.Lstat(filepath.Base(input.Path))
 	if err != nil {
 		return empty, errors.New("read original private capture identity")
@@ -191,7 +191,7 @@ func copyRecoveryArtifact(ctx context.Context, directory, name string, input pro
 	if err != nil {
 		return empty, errors.New("open original private capture")
 	}
-	defer source.Close()
+	defer func(close func() error) { _ = close() }(source.Close)
 	opened, err := source.Stat()
 	if err != nil || !sameArtifact(before, opened) {
 		return empty, errors.New("original private capture changed before copy")
@@ -200,7 +200,7 @@ func copyRecoveryArtifact(ctx context.Context, directory, name string, input pro
 	if err != nil {
 		return empty, errors.New("create exclusive private recovery copy")
 	}
-	defer target.Close()
+	defer func(close func() error) { _ = close() }(target.Close)
 	hash := sha256.New()
 	buffer := make([]byte, 32<<10)
 	var size int64

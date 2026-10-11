@@ -220,7 +220,7 @@ func forwardBanner(ctx context.Context, directory, name, expected string) (bool,
 	if err != nil {
 		return false, errors.New("open private forwarder capture root")
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	openedParent, err := root.Stat(".")
 	if err != nil || !os.SameFile(parent, openedParent) {
 		return false, errors.New("private forwarder capture root replaced")
@@ -232,7 +232,7 @@ func forwardBanner(ctx context.Context, directory, name, expected string) (bool,
 	if err != nil {
 		return false, errors.New("open private forwarder progress")
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 || info.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) || info.Sys().(*syscall.Stat_t).Nlink != 1 || info.Size() > 64<<10 {
 		return false, errors.New("forwarder progress identity or byte bound differs")

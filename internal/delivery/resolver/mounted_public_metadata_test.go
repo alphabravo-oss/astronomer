@@ -55,7 +55,7 @@ func TestMountedPublicMetadataOnlyHashesExactBoundedRegularInput(t *testing.T) {
 	if _, err := FingerprintMountedPublicMetadata(canceled, path); !errors.Is(err, context.Canceled) {
 		t.Fatal("metadata hash lost cancellation")
 	}
-	if _, err := FingerprintMountedPublicMetadata(nil, path); err == nil {
+	if _, err := FingerprintMountedPublicMetadata(nil, path); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context accepted")
 	}
 }

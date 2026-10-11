@@ -14,7 +14,7 @@ func TestLegacyBootstrapHelpAndUsageHaveNoPreparationEffects(t *testing.T) {
 		t.Fatal("early argv decision read operator environment")
 		return "", false
 	}}
-	result, err := BootstrapLegacyUpgrade(nil, []string{"--yes", "--help"}, input)
+	result, err := BootstrapLegacyUpgrade(nil, []string{"--yes", "--help"}, input) //nolint:staticcheck // Deliberately tests rejection of a missing context.
 	if err != nil || !result.Help || result.ExitCode != 0 || calls != 0 {
 		t.Fatal("legacy help acquired bootstrap resources")
 	}

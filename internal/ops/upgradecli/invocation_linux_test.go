@@ -57,7 +57,7 @@ func TestPrepareInvocationPreservesCancellationBeforeOwnedCommands(t *testing.T)
 	if _, err := PrepareInvocation(ctx, options); !errors.Is(err, context.Canceled) {
 		t.Fatal("initial cancellation identity lost", err)
 	}
-	if _, err := PrepareInvocation(nil, options); err == nil {
+	if _, err := PrepareInvocation(nil, options); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil preparation context admitted")
 	}
 }
@@ -68,10 +68,11 @@ func TestInvocationDoesNotReplayAfterCloseOrAdmitPartialDriver(t *testing.T) {
 		t.Fatal("nil invocation admitted")
 	}
 	zero := &Invocation{plan: upgrade.Plan{Mode: upgrade.Preview}}
-	if zero.Run(nil).ExitCode == 0 || zero.Run(context.Background()).ExitCode == 0 {
+	if zero.Run(nil).ExitCode == 0 || zero.Run(context.Background()).ExitCode == 0 { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("unbound invocation ran")
 	}
-	if zero.Close() != nil || zero.Close() != nil || zero.Run(context.Background()).ExitCode == 0 {
+	firstClose, secondClose := zero.Close(), zero.Close()
+	if firstClose != nil || secondClose != nil || zero.Run(context.Background()).ExitCode == 0 {
 		t.Fatal("closed invocation replayed")
 	}
 }

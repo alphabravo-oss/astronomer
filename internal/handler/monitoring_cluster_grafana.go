@@ -41,12 +41,12 @@ func (h *MonitoringHandler) clusterGrafanaValues(req MonitoringStackRequest, clu
 	}
 
 	values["grafana.ini"] = map[string]any{
-		"server":         map[string]any{"root_url": strings.TrimRight(h.serverURL, "/") + publicPath, "serve_from_sub_path": false},
+		"server":         map[string]any{"root_url": h.grafanaUIURL(clusterID), "serve_from_sub_path": false},
 		"auth":           map[string]any{"disable_login_form": true, "disable_signout_menu": true},
 		"auth.anonymous": map[string]any{"enabled": false},
 		"auth.basic":     map[string]any{"enabled": false},
 		"auth.proxy":     map[string]any{"enabled": true, "header_name": "X-WEBAUTH-USER", "header_property": "email", "auto_sign_up": true, "enable_login_token": false, "sync_ttl": 0, "whitelist": "127.0.0.1", "headers": "Email:X-WEBAUTH-USER Name:X-WEBAUTH-USER Role:X-WEBAUTH-ROLE"},
-		"security":       map[string]any{"allow_embedding": true, "csrf_trusted_origins": hostnameOf(h.serverURL)},
+		"security":       map[string]any{"allow_embedding": true, "csrf_trusted_origins": hostnameOf(h.grafanaUIURL(clusterID))},
 		"users":          map[string]any{"allow_sign_up": false, "auto_assign_org": true, "auto_assign_org_role": "Viewer"},
 		"live":           map[string]any{"max_connections": 0},
 	}

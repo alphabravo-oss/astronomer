@@ -229,7 +229,7 @@ func toolIdentity(tool Tool) (os.FileInfo, error) {
 		return nil, errors.New("open bound tool")
 	}
 	file := os.NewFile(uintptr(fd), "bound-tool")
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	opened, err := file.Stat()
 	if err != nil || !os.SameFile(before, opened) || !opened.Mode().IsRegular() || opened.Size() > 512<<20 || opened.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
 		return nil, errors.New("bound tool owner or identity differs")
@@ -253,7 +253,7 @@ func readCapture(directory, name string, maximum int64, expected string) ([]byte
 	if err != nil {
 		return nil, errors.New("open private capture scope")
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	actualParent, err := root.Stat(".")
 	if err != nil || !os.SameFile(parent, actualParent) {
 		return nil, errors.New("private capture parent identity changed")
@@ -266,7 +266,7 @@ func readCapture(directory, name string, maximum int64, expected string) ([]byte
 	if err != nil {
 		return nil, errors.New("open private capture")
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	opened, err := file.Stat()
 	if err != nil || !os.SameFile(before, opened) || !opened.Mode().IsRegular() || opened.Mode().Perm() != 0o600 || opened.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
 		return nil, errors.New("private capture identity differs")

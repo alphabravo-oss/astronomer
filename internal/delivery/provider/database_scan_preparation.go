@@ -75,7 +75,7 @@ func (owner *DatabaseScanOwner) collectPreparation(ctx context.Context, claim sq
 		return nil, err
 	}
 	defer clear(payload)
-	record, err := decodeOwnedPreparationLog(payload, status.State.Terminated.StartedAt.Time.UTC(), status.State.Terminated.FinishedAt.Time.UTC())
+	record, err := decodeOwnedPreparationLog(payload, status.State.Terminated.StartedAt.UTC(), status.State.Terminated.FinishedAt.UTC())
 	if err != nil {
 		return nil, err
 	}

@@ -4,11 +4,14 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 
-import { clearLegacyTokenStorage } from "@/lib/auth/session";
+import {
+  clearLegacyTokenStorage,
+  browserCookieName,
+  CSRF_COOKIE,
+} from "@/lib/auth/session";
 import { API_BASE } from "@/lib/env";
 import { refreshSession, waitForRefresh } from "./authentication-refresh";
 
-const CSRF_COOKIE = "astronomer_csrf";
 const CSRF_HEADER = "X-CSRF-Token";
 
 type AstronomerRequestConfig = InternalAxiosRequestConfig & {
@@ -31,7 +34,7 @@ function isUnsafeMethod(method?: string): boolean {
 }
 
 function csrfHeaders(): Record<string, string> {
-  const token = readCookie(CSRF_COOKIE);
+  const token = readCookie(browserCookieName(CSRF_COOKIE));
   return token ? { [CSRF_HEADER]: token } : {};
 }
 
@@ -53,7 +56,7 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     clearLegacyTokenStorage();
     if (isUnsafeMethod(config.method) && config.headers) {
-      const token = readCookie(CSRF_COOKIE);
+      const token = readCookie(browserCookieName(CSRF_COOKIE));
       if (token) config.headers.set(CSRF_HEADER, token);
     }
     // Kubernetes proxy suffixes are opaque upstream paths. Every management

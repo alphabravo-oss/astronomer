@@ -340,7 +340,7 @@ func verifyOwnedTransferBlob(ctx context.Context, path, subject string, size int
 	if err != nil {
 		return errors.New("owned transfer readback unavailable")
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	opened, err := file.Stat()
 	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(before, opened) || opened.Size() != size {
 		return errors.New("owned transfer readback changed before opening")

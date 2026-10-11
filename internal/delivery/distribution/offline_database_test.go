@@ -20,7 +20,7 @@ func TestDatabaseMetadataZeroObjectCannotGrantFileAuthority(t *testing.T) {
 	if empty.CopyDatabaseLayer(t.Context(), "", bytes.NewReader([]byte("untrusted")), &output) == nil || output.Len() != 0 {
 		t.Fatal("zero metadata object wrote data")
 	}
-	if _, err := VerifyOfflineDatabaseMetadata(nil, OfflineOptions{}, nil, nil); err == nil {
+	if _, err := VerifyOfflineDatabaseMetadata(nil, OfflineOptions{}, nil, nil); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context accepted")
 	}
 	canceled, cancel := context.WithCancel(t.Context())

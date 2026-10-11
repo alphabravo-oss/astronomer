@@ -1,13 +1,13 @@
 apiVersion: v2
 name: astronomer
-description: Astronomer v1 multi-cluster management and delivery plane
+description: Astronomer multi-cluster management and delivery plane
 type: application
-version: 1.2.1
-appVersion: "1.2.1"
+version: 2.0.0
+appVersion: "2.0.0"
 kubeVersion: ">=1.33.0-0 <1.36.0-0"
 home: https://astronomer.io
 sources:
-  - https://github.com/alphabravocompany/astronomer-go
+  - https://github.com/alphabravo-oss/astronomer
 maintainers:
   - name: Astronomer Team
     email: team@astronomer.io

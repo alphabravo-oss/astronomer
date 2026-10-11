@@ -50,7 +50,7 @@ func TestDatabasePhysicalCatalogUsesOpaqueProofAndOwnedCanonicalCopy(t *testing.
 			t.Fatal("caller/foreign proof granted physical catalog")
 		}
 	}
-	if _, err := authority.Catalog(nil, proof); err == nil {
+	if _, err := authority.Catalog(nil, proof); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context accepted")
 	}
 	ctx, cancel := context.WithCancel(t.Context())

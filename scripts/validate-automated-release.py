@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the explicitly scoped v1.2.0/v1.2.1 automated publication qualification."""
+"""Verify the explicitly scoped approved exact-tag automated publication qualification."""
 
 import argparse
 import datetime as dt
@@ -50,7 +50,7 @@ def validate_waivers(runtime, directory, tag, now):
 
 
 def validate(args, directory=Path("."), now=None):
-    publication_policy.require_historical_automated(args.tag)
+    publication_policy.require_automated(args.tag)
     if not approval.COMMIT.fullmatch(args.source_commit) or any(
         not approval.RUN_ID.fullmatch(run) for run in (args.source_run_id, args.producer_run_id)
     ):

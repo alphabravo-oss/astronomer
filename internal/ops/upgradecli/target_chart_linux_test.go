@@ -104,7 +104,7 @@ func TestTargetChartReadsBoundedExactArchiveCompatibilityWithoutExtraction(t *te
 	if err != nil || bounds.Minimum != uint32(m.Compatibility.PostgreSQL.MinimumUpgradeSchema) || bounds.Target != uint32(m.Compatibility.PostgreSQL.TargetSchema) {
 		t.Fatal("signed schema bounds differ", err)
 	}
-	if _, err := targetChartCompatibility(nil, raw, m); err == nil {
+	if _, err := targetChartCompatibility(nil, raw, m); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil archive context admitted")
 	}
 	ctx, cancel := context.WithCancel(context.Background())

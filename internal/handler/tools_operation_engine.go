@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -337,6 +338,9 @@ func adoptExistingToolRelease(ctx context.Context, queries toolInstallPersister,
 	}
 	if status == nil {
 		return errors.New("helm status not provided")
+	}
+	if status.Revision < math.MinInt32 || status.Revision > math.MaxInt32 {
+		return errors.New("helm release revision exceeds the supported database range")
 	}
 	preset := pgtype.Text{String: env.Preset, Valid: env.Preset != ""}
 	toolSlug := pgtype.Text{String: env.ToolSlug, Valid: env.ToolSlug != ""}

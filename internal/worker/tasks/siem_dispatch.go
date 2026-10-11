@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -270,6 +271,10 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		// record the error on the status row.
 		_ = runtime.SIEM.Queries.IncrementSIEMQueueAttempts(ctx, ids)
 		depth, _ := runtime.SIEM.Queries.CountSIEMQueueByForwarder(ctx, sub.ID)
+		if depth < 0 || depth > math.MaxInt32 {
+			runtimeLogger(ctx).WarnContext(ctx, "siem: queue depth exceeds database status range", "forwarder", sub.Name)
+			return
+		}
 		metric.Dispatched(ctx, formatID, "failed", len(rows))
 		metric.QueueDepth(ctx, int(depth))
 		_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{
@@ -299,6 +304,10 @@ func (runtime DispatchRuntime) dispatchSIEMForwarder(ctx context.Context, sub sq
 		return
 	}
 	depth, _ := runtime.SIEM.Queries.CountSIEMQueueByForwarder(ctx, sub.ID)
+	if depth < 0 || depth > math.MaxInt32 {
+		runtimeLogger(ctx).WarnContext(ctx, "siem: queue depth exceeds database status range", "forwarder", sub.Name)
+		return
+	}
 	metric.Dispatched(ctx, formatID, "delivered", len(rows))
 	metric.QueueDepth(ctx, int(depth))
 	_ = runtime.SIEM.Queries.UpsertSIEMForwarderStatus(ctx, sqlc.UpsertSIEMForwarderStatusParams{

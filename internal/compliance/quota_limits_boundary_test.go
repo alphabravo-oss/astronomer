@@ -57,7 +57,7 @@ func quotaSnapshotFixture(t *testing.T, field string, value int64) (*quotaBounda
 func TestRevertRejectsUnrepresentableQuotaSnapshotBeforeWrites(t *testing.T) {
 	for _, field := range quotaBoundaryFields {
 		for _, edge := range []struct {
-			name string
+			name  string
 			value int64
 		}{{"overflow", int64(math.MaxInt32) + 1}, {"underflow", int64(math.MinInt32) - 1}} {
 			t.Run(field+"/"+edge.name, func(t *testing.T) {
@@ -77,7 +77,7 @@ func TestRevertRejectsUnrepresentableQuotaSnapshotBeforeWrites(t *testing.T) {
 func TestRevertPreservesRepresentableSignedQuotaValues(t *testing.T) {
 	for _, field := range quotaBoundaryFields {
 		for _, edge := range []struct {
-			name string
+			name  string
 			value int64
 		}{{"maximum", math.MaxInt32}, {"minimum", math.MinInt32}, {"zero", 0}, {"negative", -1}} {
 			t.Run(field+"/"+edge.name, func(t *testing.T) {

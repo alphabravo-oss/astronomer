@@ -53,14 +53,14 @@ func publishOwnedRecord(ctx context.Context, rootPath, name string, claimID uuid
 	if !ready {
 		return errors.New("database scan preparation root unavailable")
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	temporary := "." + name + "-" + claimID.String()
 	fd, err := unix.Openat(int(root.Fd()), temporary, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0600)
 	if err != nil {
 		return errors.New("database scan preparation exclusive creation failed")
 	}
 	file := os.NewFile(uintptr(fd), "owned database scan preparation")
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	// Failures retain the exact owned partial original. No deletion can remove a
 	// path replacement; a future Job must use a fresh volume/claim instead.
 	if err := ctx.Err(); err != nil {
@@ -104,7 +104,7 @@ func readOwnedRecord(ctx context.Context, rootPath, name string) ([]byte, bool, 
 	if err != nil || !ready {
 		return nil, false, err
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	fd, err := unix.Openat(int(root.Fd()), name, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
 	if errors.Is(err, unix.ENOENT) {
 		return nil, false, nil
@@ -113,7 +113,7 @@ func readOwnedRecord(ctx context.Context, rootPath, name string) ([]byte, bool, 
 		return nil, false, errors.New("database scan preparation read open failed")
 	}
 	file := os.NewFile(uintptr(fd), "owned database scan preparation")
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	var pinned unix.Stat_t
 	if unix.Fstat(fd, &pinned) != nil || pinned.Mode&unix.S_IFMT != unix.S_IFREG || pinned.Mode&07777 != 0444 || int(pinned.Uid) != os.Geteuid() || pinned.Nlink != 1 || pinned.Size <= 0 || pinned.Size > MaximumRecordBytes {
 		return nil, false, errors.New("database scan preparation file ownership invalid")
@@ -161,7 +161,7 @@ func openPreparationRoot(ctx context.Context, path string) (*os.File, os.FileInf
 	file := os.NewFile(uintptr(fd), "owned database scan preparation root")
 	var current unix.Stat_t
 	if unix.Fstat(fd, &current) != nil || current.Mode&unix.S_IFMT != unix.S_IFDIR || current.Mode&07777 != 0700 || int(current.Uid) != os.Geteuid() || validatePreparationRoot(path, file, before) != nil {
-		file.Close()
+		_ = file.Close()
 		return nil, nil, false, errors.New("database scan preparation root changed")
 	}
 	return file, before, true, nil

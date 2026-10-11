@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -202,7 +201,7 @@ func TestCatalogGlobalProjectionPostgresOwnerInterleavings(t *testing.T) {
 					expected = 0
 				}
 				if err != nil || private != 0 || missing != 0 || stale != 0 || keys != expected {
-					t.Fatal(fmt.Sprintf("committed projection invariant private=%d missing=%d stale=%d keys=%d expected=%d", private, missing, stale, keys, expected))
+					t.Fatalf("committed projection invariant private=%d missing=%d stale=%d keys=%d expected=%d", private, missing, stale, keys, expected)
 				}
 			})
 		}
@@ -436,7 +435,7 @@ func TestCatalogGlobalProjectionPostgresChartFirstInterleavings(t *testing.T) {
 					expected = 0
 				}
 				if err != nil || private != 0 || missing != 0 || stale != 0 || keys != expected {
-					t.Fatal(fmt.Sprintf("committed projection invariant private=%d missing=%d stale=%d keys=%d expected=%d", private, missing, stale, keys, expected))
+					t.Fatalf("committed projection invariant private=%d missing=%d stale=%d keys=%d expected=%d", private, missing, stale, keys, expected)
 				}
 			})
 		}

@@ -8,6 +8,11 @@
       "source_sha256": "76924fa943caa2efcb51d6a6e3b7519bda4c588a1bfd17c977ff5d5526de4593"
     },
     {
+      "path": "cmd/database-cache-helper/main.go",
+      "owner": "database cache helper",
+      "source_sha256": "07de755d2fb3d0cec8c624a2afe6406cc0071897647ffa85ac45dc67c724165c"
+    },
+    {
       "path": "cmd/keyrotate/main.go",
       "owner": "keyrotate backend",
       "source_sha256": "7e1afdf4c7f43be29ed4265a0b325b12991432b39028ac34056f8085fe5885a9"
@@ -20,12 +25,12 @@
     {
       "path": "cmd/server/main.go",
       "owner": "server backend",
-      "source_sha256": "f029e1836fb9a6d484e3d0526749f61199c81fb14dfa85065c684c2acb9b5588"
+      "source_sha256": "93920d2f1a3480f1d32b39ad758d2b40115aa8148d4e24bf9813eacf9c357d20"
     },
     {
       "path": "cmd/worker/main.go",
       "owner": "worker backend",
-      "source_sha256": "bb80d203fd753a4b74de704a263b26fc01decf97ac9a3c8d42a499efb104bccb"
+      "source_sha256": "0c5183be93a9283eda201cc19b94133251d608c683bd6c7af39d008524a9e82e"
     },
     {
       "path": "internal/agent/delivery/materializer.go",
@@ -100,7 +105,7 @@
     {
       "path": "internal/charlie/finding_projection.go",
       "owner": "Charlie backend",
-      "source_sha256": "3ea607914d3fca55e6a0acdad5a5fb830c0312442132592e1c27c8cc353cfdaf"
+      "source_sha256": "55da552d3c5982c41c4bf6adbd2a1bac064e09cd58f706f2d22515462bec1338"
     },
     {
       "path": "internal/charlie/mcp.go",
@@ -305,7 +310,7 @@
     {
       "path": "internal/db/schema_version.go",
       "owner": "db backend",
-      "source_sha256": "9f474a8caa800786f5ef8f40f14f3ffb55b59dde3491e60e37d6dc15ed90489f"
+      "source_sha256": "5fbbe9edd292b4a4fd7ca54e3b48475381d7d10c38e09afcf8a67ebecdda5b0c"
     },
     {
       "path": "internal/delivery/catalogapp/service.go",
@@ -330,12 +335,12 @@
     {
       "path": "internal/delivery/provider/provider.go",
       "owner": "delivery backend",
-      "source_sha256": "b2ddfb0aeb83424a1c00c8cb1e297c0ed04697388aaa9c7c29d93aada672f85b"
+      "source_sha256": "0527b9291a4522e0df618e831248d6a9f66f57eee918a1c43de3660b4c9b44fa"
     },
     {
       "path": "internal/delivery/resolver/database_registry_auth.go",
       "owner": "delivery/resolver backend",
-      "source_sha256": "47965f82dd478672ccba859bd913b89548acd5c33a312c746bc24eb93f9bce46"
+      "source_sha256": "43f7dc8428cba16ccfb4a4b76e519e9f72848d2ab46bfb8e63226c797279ed1a"
     },
     {
       "path": "internal/delivery/rollout/control.go",
@@ -395,7 +400,7 @@
     {
       "path": "internal/handler/auth_sessions.go",
       "owner": "HTTP backend",
-      "source_sha256": "6aa83cd6653a43848394112eb94457b073a479827925d7ed1350f4dcc72c5f00"
+      "source_sha256": "764e8e9b3377f98dde687cb2941f2b65ebac89608cbd913c305694d645252b30"
     },
     {
       "path": "internal/handler/backups_helpers.go",
@@ -410,7 +415,7 @@
     {
       "path": "internal/handler/catalog_cursor.go",
       "owner": "handler backend: reviewed W07 collection request/continuation boundary",
-      "source_sha256": "1f2851d7cd16f1fbedf1fd26fd1ca74c6759e73d39d5d7429b186c750f3e26b5"
+      "source_sha256": "dca53714b51de25e8401c4a7dc3849c006c3536a8517aab62c2ea6c08bdddd9f"
     },
     {
       "path": "internal/handler/catalog_installations.go",
@@ -480,7 +485,7 @@
     {
       "path": "internal/handler/compliance.go",
       "owner": "HTTP backend",
-      "source_sha256": "093ff8a52bc2349595136b3810c81a4a0bc7cbcb9b814d1c079af6dcd43de265"
+      "source_sha256": "51d151118fe05da58ae4199b5c2bd8a66be8bc13b6e5551073cf4db01868eba7"
     },
     {
       "path": "internal/handler/control_plane_cursor.go",
@@ -530,7 +535,7 @@
     {
       "path": "internal/handler/image_vulns.go",
       "owner": "HTTP backend",
-      "source_sha256": "524bcce3aaf58d8e376cd0aeb62d6107d1cd1575eb2daefdbacf9377cdd70886"
+      "source_sha256": "e38548a30f5477ab8e71759d58efef89f57dace3b194ee147c9b268f881ffc4f"
     },
     {
       "path": "internal/handler/kubectl_shell_stream.go",
@@ -580,12 +585,12 @@
     {
       "path": "internal/handler/monitoring_operations.go",
       "owner": "HTTP backend",
-      "source_sha256": "8497c98ad55fc9cee822aeb1af395802c234469179756329a251950c01c3c817"
+      "source_sha256": "688dd9a4aaed46e979c6876e80ddf89ec4ec518545dfe0f5c63708a4b3f63595"
     },
     {
       "path": "internal/handler/monitoring_operations_readiness.go",
       "owner": "HTTP backend",
-      "source_sha256": "9703ad45ef863ed41c007d02ae6462b8facd5698ed2dac4426fcf35d96ebda17"
+      "source_sha256": "7a13f7d3a723ac0d43b6c79c0e13c1e10294c0dd653509cde182bde534869d4d"
     },
     {
       "path": "internal/handler/monitoring_sizer.go",
@@ -600,7 +605,7 @@
     {
       "path": "internal/handler/monitoring_stack_grafana.go",
       "owner": "HTTP backend",
-      "source_sha256": "56baa49549be5508f710ce51a0f763cb70414549969d30db7c7df7ca4d36fe8b"
+      "source_sha256": "d1059c60e36269256c1a027fdfc3ff93cfc2ef03d353a85b43c69fd73dff9d67"
     },
     {
       "path": "internal/handler/monitoring_stack_loki.go",
@@ -725,7 +730,7 @@
     {
       "path": "internal/handler/sso.go",
       "owner": "HTTP backend",
-      "source_sha256": "5da0cb8817661c3d48733a4f80cb8e8398a821de7ac0afb13c683700102124b0"
+      "source_sha256": "4552016fe0134280fa03fa8995896f7a4dee0e7fde1167ab9b275d9100bc5f6b"
     },
     {
       "path": "internal/handler/supportbundle_diagnostics.go",
@@ -763,6 +768,11 @@
       "source_sha256": "866e386b90439ffe8697bae730b6653b9b0cfcf66c597819df91470cca017b1f"
     },
     {
+      "path": "internal/handler/user_preferences.go",
+      "owner": "handler/user-preferences",
+      "source_sha256": "4997960b67b8f449a78aee593f43e9c1cdc39a5b2c65bae3835ddb30aca161d3"
+    },
+    {
       "path": "internal/handler/workloads_resources.go",
       "owner": "HTTP backend",
       "source_sha256": "4a557fb8b5f009958353b39c094259d21005e7c3c7407b2a5644db8afc32afb2"
@@ -773,9 +783,14 @@
       "source_sha256": "d96d3d239bc459b3002dceb5428417843b2e1fcdd0fe2925d96d973a9822f39f"
     },
     {
+      "path": "internal/ops/upgrade/helm_rollback_arguments.go",
+      "owner": "typed upgrade operations core",
+      "source_sha256": "281fce0764a59396982c8df493cc4f7d259141c3b370e04e50d9f2a6484d22c9"
+    },
+    {
       "path": "internal/ops/upgrade/plan.go",
       "owner": "ops/upgrade backend",
-      "source_sha256": "3f90ca2d67e78f9b94f791fdf5201c1c076ca923dd2670b7c19a40843b981ed7"
+      "source_sha256": "1678ffbaecf1e3df494f16d381438b8018f882d62e3d2c20dd2fc115ee3f502a"
     },
     {
       "path": "internal/rbac/types.go",
@@ -810,7 +825,7 @@
     {
       "path": "internal/server/routes.go",
       "owner": "server backend",
-      "source_sha256": "2b7a00a70048454d98e0fd2c9815ec119adbf72dfc597291d845e5688d501042"
+      "source_sha256": "159c8f5f2a9999992fa3658cb2859001e6b3de7e703e3651b0c4316b8e8b53a2"
     },
     {
       "path": "internal/server/routes_delivery.go",
@@ -825,12 +840,12 @@
     {
       "path": "internal/server/routes_resources_workloads.go",
       "owner": "server backend",
-      "source_sha256": "687fd70f2f08bc5d9d2700a499da0040d7aada0fd5e128c4fd10b7fec083bc24"
+      "source_sha256": "fe97154b88c8a53cc12d11ea968fbebf80cf3bad62342fde5a3ce58fae61b597"
     },
     {
       "path": "internal/server/server.go",
       "owner": "server backend",
-      "source_sha256": "88f8acfa5ed4d8c6f7f7bea1f251c57943a77028b4ec616a19d76d2f760c47a1"
+      "source_sha256": "4f72dd86e0cadc81939f9a0b20e553b97ae075cfdb7618f567bae2d1b7985dc1"
     },
     {
       "path": "internal/tunnel/audit.go",
@@ -850,12 +865,12 @@
     {
       "path": "internal/tunnel/proxy.go",
       "owner": "tunnel backend",
-      "source_sha256": "430da2a02513804eccca14af3019084df8465005757403ef877ea770adb1874d"
+      "source_sha256": "e6bf777e8693776ba6b092e06be622cf5b2e2ed70de00450ed521a15f3b2fd3c"
     },
     {
       "path": "internal/worker/leader/leader.go",
       "owner": "worker backend",
-      "source_sha256": "0578b6a68c23a59d34e1a1c7b05f82982820a8219b96dd62e47abc23cad4fa25"
+      "source_sha256": "d3cf6772eaa1d7c408f93eaf1d0b6957a2c6e2792aea3fa98d2b748fae1f33c1"
     },
     {
       "path": "internal/worker/queue_metrics.go",
@@ -885,7 +900,7 @@
     {
       "path": "internal/worker/tasks/gitops_sync.go",
       "owner": "worker backend",
-      "source_sha256": "4957954f9e6ae9680c2dffdcb3c244a5d3cf717c0b9017583508837d92f48b49"
+      "source_sha256": "7b5cbb935d2569cb2b5d75df6d317c2c26e718b350d7060460d0a116d3ce24ff"
     },
     {
       "path": "internal/worker/tasks/notification_dispatch.go",
@@ -900,17 +915,7 @@
     {
       "path": "pkg/astroclient/astroclient.gen.go",
       "owner": "paired generated public SDK",
-      "source_sha256": "27c07eb5aeaf40089a93e87e3e859dfc1810db8adcf888a2032d520d345ae19c"
-    },
-    {
-      "path": "internal/handler/user_preferences.go",
-      "owner": "handler/user-preferences",
-      "source_sha256": "4997960b67b8f449a78aee593f43e9c1cdc39a5b2c65bae3835ddb30aca161d3"
-    },
-    {
-      "path": "internal/ops/upgrade/helm_rollback_arguments.go",
-      "owner": "typed upgrade operations core",
-      "source_sha256": "281fce0764a59396982c8df493cc4f7d259141c3b370e04e50d9f2a6484d22c9"
+      "source_sha256": "9eb264f1b29046493372b5269cf65176a2ca426fc50d9c02070164add2cd96f9"
     }
   ],
   "sites": [
@@ -940,6 +945,15 @@
       "scope_sha256": "638669fe50c8e7f63dd3c2fac1c1ced0c461a145e5b0ca37486c498004854c25",
       "classification": "non-sql-candidate",
       "control": "Exact lexical candidate is existing prose/CLI input, not a SQL statement; enclosing source is bound."
+    },
+    {
+      "path": "cmd/database-cache-helper/main.go",
+      "function": "run",
+      "operation": "SQLLiteral",
+      "sha256": "fcf93bb3f4ec9aa6ccd690b37130a32f96109250bbff8c18d286256273c732a9",
+      "scope_sha256": "ef0d06f000ae17bf4be3d4997cb1bd043eec22aebae8b905d4d013f279e9ebce",
+      "classification": "non-sql-candidate",
+      "control": "CLI boolean flag help text for copy-input mode; this string is never submitted to a database. No runtime SQL authority is added."
     },
     {
       "path": "cmd/keyrotate/main.go",
@@ -4543,10 +4557,10 @@
     },
     {
       "path": "internal/delivery/provider/provider.go",
-      "function": "*Provider.assignmentMetadata",
+      "function": "compileAssignmentMetadata",
       "operation": "SQLLiteral",
       "sha256": "da25480fb483e6ce3d30f1a179c3c07e9f3b045425b0ac54acc6758a97e2db62",
-      "scope_sha256": "1bdd799848899289dfde1727b06b927e0e1e57410b70c47bde29f881f83a666a",
+      "scope_sha256": "e8eebc01212aaadd222b9b46eb39384b62a1b35bc7275caff4a61b245dc09249",
       "classification": "non-sql-candidate",
       "control": "Exact lexical candidate is existing prose/CLI input, not a SQL statement; enclosing source is bound."
     },
@@ -4843,7 +4857,7 @@
       "function": "*CatalogHandler.ListCharts",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "3d552c9d317531c7f92a2300bd67cae0541d71f44d45e97955558f522e7675b4",
+      "scope_sha256": "a03483e4662622ecec4dc67ecd7767fef25a39eff7253a86e774ec53af09dbb2",
       "classification": "non-sql-candidate",
       "control": "Exact HTTP URL.Query parameter access in reviewed W07 bounded-offset/keyset request handling; not a database call. Canonical sqlc owns the actual typed list queries."
     },
@@ -4852,7 +4866,7 @@
       "function": "*CatalogHandler.ListCharts",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "3d552c9d317531c7f92a2300bd67cae0541d71f44d45e97955558f522e7675b4",
+      "scope_sha256": "a03483e4662622ecec4dc67ecd7767fef25a39eff7253a86e774ec53af09dbb2",
       "classification": "non-sql-candidate",
       "control": "Exact HTTP URL.Query parameter access in reviewed W07 bounded-offset/keyset request handling; not a database call. Canonical sqlc owns the actual typed list queries."
     },
@@ -6301,7 +6315,7 @@
       "function": "*SSOHandler.Callback",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "40009b11a88e1ee260f15b9a35bd217f104875116aa665a734b30c462eaa338b",
+      "scope_sha256": "5d462752d4afbe6917565058eadc14c1165573e728a94101518e7f92e460fd76",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -6310,7 +6324,7 @@
       "function": "*SSOHandler.Callback",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "40009b11a88e1ee260f15b9a35bd217f104875116aa665a734b30c462eaa338b",
+      "scope_sha256": "5d462752d4afbe6917565058eadc14c1165573e728a94101518e7f92e460fd76",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -6319,7 +6333,7 @@
       "function": "*SSOHandler.Callback",
       "operation": "Query",
       "sha256": "6953421653d69a15d10d1098d36eaf37f75175997d918f5e4e01d69d434847aa",
-      "scope_sha256": "40009b11a88e1ee260f15b9a35bd217f104875116aa665a734b30c462eaa338b",
+      "scope_sha256": "5d462752d4afbe6917565058eadc14c1165573e728a94101518e7f92e460fd76",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -6328,7 +6342,7 @@
       "function": "*SSOHandler.Callback",
       "operation": "Query",
       "sha256": "52d7776a545c929fc28c2253edce2395dd79ad7d86976df6ea28e6d6ec6d3742",
-      "scope_sha256": "40009b11a88e1ee260f15b9a35bd217f104875116aa665a734b30c462eaa338b",
+      "scope_sha256": "5d462752d4afbe6917565058eadc14c1165573e728a94101518e7f92e460fd76",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
     },
@@ -6823,27 +6837,27 @@
       "function": "validateProductionSecurityWiring",
       "operation": "MethodValue.Exec",
       "sha256": "22dae98e68245afc70649d1c444fea7fedbb2a255da47f607f0c12b222d865db",
-      "scope_sha256": "e4a0cb7e741be406732c3e3cf2fd61caa601c517ee41ee418c785b5e0b57001e",
+      "scope_sha256": "e9a7e570c4c9147247e0f7e26441816ac9ae0b848f8406a82fcc82821a4bd45e",
       "classification": "non-sql-candidate",
-      "control": "Existing non-SQL Query/Queue/Exec data field or runtime callback; bounded syntax cannot resolve its type. Exact declaration and module source binding requires review before replacement or a new alias."
+      "control": "deps.StreamingInternal.Exec is a tunnel ExecConsumer field checked for nil during security wiring, not SQL execution. The declaration also validates tool UI configuration."
     },
     {
       "path": "internal/server/server.go",
       "function": "validateProductionSecurityWiring",
       "operation": "MethodValue.Exec",
       "sha256": "22dae98e68245afc70649d1c444fea7fedbb2a255da47f607f0c12b222d865db",
-      "scope_sha256": "e4a0cb7e741be406732c3e3cf2fd61caa601c517ee41ee418c785b5e0b57001e",
+      "scope_sha256": "e9a7e570c4c9147247e0f7e26441816ac9ae0b848f8406a82fcc82821a4bd45e",
       "classification": "non-sql-candidate",
-      "control": "Existing non-SQL Query/Queue/Exec data field or runtime callback; bounded syntax cannot resolve its type. Exact declaration and module source binding requires review before replacement or a new alias."
+      "control": "deps.StreamingInternal.Exec is a tunnel ExecConsumer field checked for nil during security wiring, not SQL execution. The declaration also validates tool UI configuration."
     },
     {
       "path": "internal/server/server.go",
       "function": "validateProductionSecurityWiring",
       "operation": "MethodValue.Exec",
       "sha256": "22dae98e68245afc70649d1c444fea7fedbb2a255da47f607f0c12b222d865db",
-      "scope_sha256": "e4a0cb7e741be406732c3e3cf2fd61caa601c517ee41ee418c785b5e0b57001e",
+      "scope_sha256": "e9a7e570c4c9147247e0f7e26441816ac9ae0b848f8406a82fcc82821a4bd45e",
       "classification": "non-sql-candidate",
-      "control": "Existing non-SQL Query/Queue/Exec data field or runtime callback; bounded syntax cannot resolve its type. Exact declaration and module source binding requires review before replacement or a new alias."
+      "control": "deps.StreamingInternal.Exec is a tunnel ExecConsumer field checked for nil during security wiring, not SQL execution. The declaration also validates tool UI configuration."
     },
     {
       "path": "internal/tunnel/audit.go",
@@ -6964,21 +6978,21 @@
     },
     {
       "path": "internal/worker/leader/leader.go",
-      "function": "*Elector.TryLeader",
+      "function": "*Elector.acquire",
       "operation": "QueryRow",
       "sha256": "f3e3455f1dda407a98f237e8e1465d8308764989cd1a898eb23ed8717c78936c",
-      "scope_sha256": "2beaf541f3b078f0ce21bffca37e0e3bc43c5f4b7eb570029461be040b732580",
+      "scope_sha256": "44cd9088efd1bea98d400d302dd6c4b6cb913d20a579c18a4d811a846aa29281",
       "classification": "low-level-runtime",
-      "control": "Existing explicit execution boundary; exact call, enclosing declaration and module source are bound. This classification does not prove remote dataflow or authorize new SQL."
+      "control": "Fixed parameterized PostgreSQL advisory-lock acquisition/release on a dedicated connection; jobName is a $1 argument. Extraction into acquire/release preserves the reviewed SQL literal and call. Release is guarded by sync.Once."
     },
     {
       "path": "internal/worker/leader/leader.go",
-      "function": "*Elector.TryLeader",
+      "function": "*Elector.release",
       "operation": "QueryRow",
       "sha256": "292e0383b5b969e88865f9afc5721b0b467006d4fc557381474301312cf2d60d",
-      "scope_sha256": "2beaf541f3b078f0ce21bffca37e0e3bc43c5f4b7eb570029461be040b732580",
+      "scope_sha256": "11191dcf5f61a35733125702999b3d2fb1f336ebf10304c2fc206784c7ac07ab",
       "classification": "low-level-runtime",
-      "control": "Existing explicit execution boundary; exact call, enclosing declaration and module source are bound. This classification does not prove remote dataflow or authorize new SQL."
+      "control": "Fixed parameterized PostgreSQL advisory-lock acquisition/release on a dedicated connection; jobName is a $1 argument. Extraction into acquire/release preserves the reviewed SQL literal and call. Release is guarded by sync.Once."
     },
     {
       "path": "internal/worker/queue_metrics.go",
@@ -7204,6 +7218,51 @@
       "scope_sha256": "e86e40c5df5d4786668f92d3f64702e827deaafe5820c7307cb4818237f9576c",
       "classification": "low-level-runtime",
       "control": "Existing explicit execution boundary; exact call, enclosing declaration and module source are bound. This classification does not prove remote dataflow or authorize new SQL."
+    },
+    {
+      "path": "internal/delivery/resolver/database_registry_auth.go",
+      "function": "*databaseAuthenticationTransport.isTokenRequest",
+      "operation": "Query",
+      "sha256": "6f9265e7b40c957f4237f78f47a49dd8d54dd8eeed87c51ce01ef356f949e08b",
+      "scope_sha256": "b10b3456a41249575401ee6178fa4b190c45451489c1b05af0343eb0bc761f4b",
+      "classification": "non-sql-candidate",
+      "control": "URL.Query parses the finite registry authentication request URL to verify its service/scope query. It does not execute SQL; exact expression, enclosing declaration and module are bound."
+    },
+    {
+      "path": "internal/delivery/resolver/database_registry_auth.go",
+      "function": "*databaseAuthenticationTransport.isTokenRequest",
+      "operation": "Query",
+      "sha256": "6f9265e7b40c957f4237f78f47a49dd8d54dd8eeed87c51ce01ef356f949e08b",
+      "scope_sha256": "b10b3456a41249575401ee6178fa4b190c45451489c1b05af0343eb0bc761f4b",
+      "classification": "non-sql-candidate",
+      "control": "URL.Query parses the finite registry authentication request URL to verify its service/scope query. It does not execute SQL; exact expression, enclosing declaration and module are bound."
+    },
+    {
+      "path": "internal/ops/upgrade/plan.go",
+      "function": "package",
+      "operation": "SQLLiteral",
+      "sha256": "da25480fb483e6ce3d30f1a179c3c07e9f3b045425b0ac54acc6758a97e2db62",
+      "scope_sha256": "b0bac573725b3000a6bf957baa98050d0f28bda02fe95db9a0656ccd183efcb4",
+      "classification": "non-sql-candidate",
+      "control": "The rollback literal is a typed upgrade Stage enum value. It is not a SQL statement or execution; the exact declaration and module source are bound."
+    },
+    {
+      "path": "internal/handler/user_preferences.go",
+      "function": "*AuthHandler.PutUserPreferences",
+      "operation": "Prepare",
+      "sha256": "975790bdadfd8cb16f0538c9ff4368adda3e46989aced7a66d1e5a0f96de1e48",
+      "scope_sha256": "085cd4c4359a22af813b9d2a3424e5046b51e1a8cca32a53b02589fbbfdde9cb",
+      "classification": "non-sql-candidate",
+      "control": "Exact userpreferences.Prepare(prefs) call prepares a validated normalized preference command and canonical JSON/digest before the injected mutation transaction; not database/sql Prepare, raw SQL or a query builder. Domain Prepare performs no transaction, pool or SQL operation."
+    },
+    {
+      "path": "internal/ops/upgrade/helm_rollback_arguments.go",
+      "function": "HelmInputs.RollbackArguments",
+      "operation": "SQLLiteral",
+      "sha256": "da25480fb483e6ce3d30f1a179c3c07e9f3b045425b0ac54acc6758a97e2db62",
+      "scope_sha256": "579fea5bcd8963b7c3f58f753bc190d026dafba0847a1b94caa75e891aea08df",
+      "classification": "non-sql-candidate",
+      "control": "Exact lexical rollback token is a Helm CLI argv element returned by HelmInputs.RollbackArguments; it is passed to the bound owned Helm executable, never a database API. Plan, explicit anchored numeric revision and actual tool-major contract are validated before argv construction."
     },
     {
       "path": "pkg/astroclient/astroclient.gen.go",
@@ -8941,51 +9000,6 @@
       "scope_sha256": "3f68bd0a8bf65fa6df17810990474abd05479da022b8cd73e18d42ad8a254eee",
       "classification": "non-sql-candidate",
       "control": "Existing URL/Cobra/Kubernetes/runtime selector-name candidate; exact enclosing module binding prevents a same-name SQL replacement from retaining approval."
-    },
-    {
-      "path": "internal/delivery/resolver/database_registry_auth.go",
-      "function": "*databaseAuthenticationTransport.isTokenRequest",
-      "operation": "Query",
-      "sha256": "6f9265e7b40c957f4237f78f47a49dd8d54dd8eeed87c51ce01ef356f949e08b",
-      "scope_sha256": "b10b3456a41249575401ee6178fa4b190c45451489c1b05af0343eb0bc761f4b",
-      "classification": "non-sql-candidate",
-      "control": "URL.Query parses the finite registry authentication request URL to verify its service/scope query. It does not execute SQL; exact expression, enclosing declaration and module are bound."
-    },
-    {
-      "path": "internal/delivery/resolver/database_registry_auth.go",
-      "function": "*databaseAuthenticationTransport.isTokenRequest",
-      "operation": "Query",
-      "sha256": "6f9265e7b40c957f4237f78f47a49dd8d54dd8eeed87c51ce01ef356f949e08b",
-      "scope_sha256": "b10b3456a41249575401ee6178fa4b190c45451489c1b05af0343eb0bc761f4b",
-      "classification": "non-sql-candidate",
-      "control": "URL.Query parses the finite registry authentication request URL to verify its service/scope query. It does not execute SQL; exact expression, enclosing declaration and module are bound."
-    },
-    {
-      "path": "internal/ops/upgrade/plan.go",
-      "function": "package",
-      "operation": "SQLLiteral",
-      "sha256": "da25480fb483e6ce3d30f1a179c3c07e9f3b045425b0ac54acc6758a97e2db62",
-      "scope_sha256": "b0bac573725b3000a6bf957baa98050d0f28bda02fe95db9a0656ccd183efcb4",
-      "classification": "non-sql-candidate",
-      "control": "The rollback literal is a typed upgrade Stage enum value. It is not a SQL statement or execution; the exact declaration and module source are bound."
-    },
-    {
-      "path": "internal/handler/user_preferences.go",
-      "function": "*AuthHandler.PutUserPreferences",
-      "operation": "Prepare",
-      "sha256": "975790bdadfd8cb16f0538c9ff4368adda3e46989aced7a66d1e5a0f96de1e48",
-      "scope_sha256": "085cd4c4359a22af813b9d2a3424e5046b51e1a8cca32a53b02589fbbfdde9cb",
-      "classification": "non-sql-candidate",
-      "control": "Exact userpreferences.Prepare(prefs) call prepares a validated normalized preference command and canonical JSON/digest before the injected mutation transaction; not database/sql Prepare, raw SQL or a query builder. Domain Prepare performs no transaction, pool or SQL operation."
-    },
-    {
-      "path": "internal/ops/upgrade/helm_rollback_arguments.go",
-      "function": "HelmInputs.RollbackArguments",
-      "operation": "SQLLiteral",
-      "sha256": "da25480fb483e6ce3d30f1a179c3c07e9f3b045425b0ac54acc6758a97e2db62",
-      "scope_sha256": "579fea5bcd8963b7c3f58f753bc190d026dafba0847a1b94caa75e891aea08df",
-      "classification": "non-sql-candidate",
-      "control": "Exact lexical rollback token is a Helm CLI argv element returned by HelmInputs.RollbackArguments; it is passed to the bound owned Helm executable, never a database API. Plan, explicit anchored numeric revision and actual tool-major contract are validated before argv construction."
     }
   ],
   "builders": [

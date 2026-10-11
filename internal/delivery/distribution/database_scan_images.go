@@ -152,7 +152,7 @@ func databaseScanImageGraph(reference string, data []byte) (DatabaseScanImage, e
 	seen := map[string]bool{}
 	for _, manifest := range index.Manifests {
 		platform := manifest.Platform
-		if manifest.MediaType != ocispec.MediaTypeImageManifest || manifest.Digest.Validate() != nil || !digestPattern.MatchString(manifest.Digest.String()) || manifest.Size <= 0 || manifest.Size > 4<<20 || len(manifest.URLs) != 0 || len(manifest.Data) != 0 || manifest.ArtifactType != "" || platform == nil || platform.OS != "linux" || platform.OSVersion != "" || len(platform.OSFeatures) != 0 || (platform.Architecture != "amd64" && platform.Architecture != "arm64") || seen[platform.Architecture] || (platform.Variant != "" && !(platform.Architecture == "arm64" && platform.Variant == "v8")) {
+		if manifest.MediaType != ocispec.MediaTypeImageManifest || manifest.Digest.Validate() != nil || !digestPattern.MatchString(manifest.Digest.String()) || manifest.Size <= 0 || manifest.Size > 4<<20 || len(manifest.URLs) != 0 || len(manifest.Data) != 0 || manifest.ArtifactType != "" || platform == nil || platform.OS != "linux" || platform.OSVersion != "" || len(platform.OSFeatures) != 0 || (platform.Architecture != "amd64" && platform.Architecture != "arm64") || seen[platform.Architecture] || (platform.Variant != "" && (platform.Architecture != "arm64" || platform.Variant != "v8")) {
 			return DatabaseScanImage{}, errors.New("measured scan image platform descriptor invalid")
 		}
 		seen[platform.Architecture] = true

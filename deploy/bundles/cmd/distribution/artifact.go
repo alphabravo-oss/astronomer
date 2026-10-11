@@ -273,7 +273,7 @@ func boundedFile(name string, maximum int64) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("input unavailable")
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	info, err = file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maximum {
 		return nil, errors.New("bounded regular input required")

@@ -133,9 +133,9 @@ jobs:
         env:
           QUALIFICATION: ${{ matrix.qualification }}
           POSTGRES_QUALIFICATION_MAJOR: ${{ matrix.postgres-major }}
-          GOTESTSUM: ${{ runner.temp }}/gotestsum
           QUALIFICATION_ARTIFACT_DIR: stateful-evidence/structured
         run: |
+          export GOTESTSUM="$RUNNER_TEMP/gotestsum"
           case "$QUALIFICATION" in
             postgres-integrations) qualification_command='make test-postgres-integration' ;;
             postgres-integrations-race) qualification_command='POSTGRES_INTEGRATION_RACE=1 make test-postgres-integration' ;;

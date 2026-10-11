@@ -165,7 +165,7 @@ func TestHelmDiscoveryUsesOwnedGetterAndJoinsCancellation(t *testing.T) {
 	}
 }
 func TestHelmOwnedGetterRejectsAbsentOrExpiredContext(t *testing.T) {
-	if _, err := RequestClientGetter(nil, requestGetterFixture{}); err == nil {
+	if _, err := RequestClientGetter(nil, requestGetterFixture{}); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil owner admitted")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -201,7 +201,7 @@ func TestHelmOperationDeadlinePreservesEarlierCallerAndRejectsInvalidScope(t *te
 			t.Fatal("invalid timeout admitted")
 		}
 	}
-	if _, _, err := OperationContext(nil, time.Minute); err == nil {
+	if _, _, err := OperationContext(nil, time.Minute); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context admitted")
 	}
 	stop()

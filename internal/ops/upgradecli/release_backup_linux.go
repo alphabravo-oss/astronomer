@@ -250,9 +250,10 @@ func (b *ReleaseBackup) verifyFiles(ctx context.Context) error {
 		if name != "astronomer.pgcustom" {
 			maximum = b.recovery.policy.MaximumBytes
 		}
-		if name == "target-release-compatibility.json" {
+		switch name {
+		case "target-release-compatibility.json":
 			maximum = 1 << 20
-		} else if name == "astronomer.pgcustom.list" {
+		case "astronomer.pgcustom.list":
 			maximum = b.commands().options.MaximumCaptureBytes
 		}
 		if err := verifyArtifactInput(ctx, directory, &capture, maximum); err != nil {
@@ -346,7 +347,7 @@ func writeBackupBytes(ctx context.Context, c *Commands, name string, raw []byte,
 	if err != nil {
 		return empty, errors.New("open private backup scope")
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	opened, err := root.Stat(".")
 	if err != nil || !os.SameFile(before, opened) {
 		return empty, errors.New("private backup directory changed before write")
@@ -355,7 +356,7 @@ func writeBackupBytes(ctx context.Context, c *Commands, name string, raw []byte,
 	if err != nil {
 		return empty, errors.New("create exclusive private backup content")
 	}
-	defer output.Close()
+	defer func(close func() error) { _ = close() }(output.Close)
 	if err := ctx.Err(); err != nil {
 		return empty, err
 	}

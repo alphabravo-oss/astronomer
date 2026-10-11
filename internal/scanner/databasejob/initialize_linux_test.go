@@ -152,7 +152,7 @@ func TestOwnedJobInitializationRefusesUnsafeIdentityAndPreservesCancellation(t *
 	if err != nil || len(entries) != 0 {
 		t.Fatal("failed initialization wrote claim")
 	}
-	if err := initializeClaimVolume(nil, path, claim); err == nil {
+	if err := initializeClaimVolume(nil, path, claim); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context accepted")
 	}
 }
@@ -163,7 +163,7 @@ func TestOwnedJobInitializationDetectsReplacedPinnedRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	saved := path + "-original"
 	if err := os.Rename(path, saved); err != nil {
 		t.Fatal(err)

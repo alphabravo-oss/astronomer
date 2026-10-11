@@ -256,7 +256,7 @@ func TestOwnedProcessRejectsMissingDependencyAndDuplicateEnvironment(t *testing.
 
 func TestOwnedProcessRejectsNilContextAndOversizedSecret(t *testing.T) {
 	spec := processFixture(t, "wait")
-	result, err := Run(nil, spec)
+	result, err := Run(nil, spec) //nolint:staticcheck // Deliberately tests rejection of a missing context.
 	if err == nil || result.Started {
 		t.Fatal("nil context admitted")
 	}

@@ -58,13 +58,13 @@ func (authority *DatabaseAuthority) CapturePublicationSupplier(ctx context.Conte
 		return nil, nil, err
 	}
 	started := time.Now()
-	verified, err := inspector.Transfer(bounded, captured, outputPath, now)
+	_, err = inspector.Transfer(bounded, captured, outputPath, now)
 	if err != nil {
 		return nil, nil, err
 	}
 	// A long successful transfer must not renew age from completion or keep a
 	// now-expired supplier snapshot. Inspect again with the elapsed clock.
-	verified, err = inspector.Inspect(bounded, captured, outputPath, now.Add(time.Since(started)))
+	verified, err := inspector.Inspect(bounded, captured, outputPath, now.Add(time.Since(started)))
 	if err != nil {
 		return nil, nil, err
 	}

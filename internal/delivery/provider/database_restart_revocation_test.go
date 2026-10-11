@@ -72,7 +72,7 @@ func TestDatabaseRestartRevocationRequiresProtectedConstructor(t *testing.T) {
 		if _, err := owner.RevokeLostCurrent(context.Background()); err == nil {
 			t.Fatal("zero restart owner granted revocation")
 		}
-		if _, err := owner.RevokeLostCurrent(nil); err == nil {
+		if _, err := owner.RevokeLostCurrent(nil); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 			t.Fatal("nil context granted restart operation")
 		}
 	}

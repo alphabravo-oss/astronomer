@@ -158,7 +158,7 @@ func TestCompleteBackupConstructorRejectsUnrelatedStageOwnersBeforeCapture(t *te
 	if err != nil {
 		t.Fatal("same stage owner source constructor failed", err)
 	}
-	if err := b.Capture(nil); err == nil {
+	if err := b.Capture(nil); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context started backup")
 	}
 	ctx, stop := context.WithCancel(context.Background())

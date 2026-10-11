@@ -88,7 +88,7 @@ func TestMountedSigningInspectorRetainsKnownOriginWithoutSnapshotAllocation(t *t
 	if _, err := inspector.Fingerprint(ctx); !errors.Is(err, context.Canceled) || errors.Is(err, ErrMountedDatabaseTrustLost) {
 		t.Fatal("cancellation became physical material loss")
 	}
-	if _, err := inspector.Fingerprint(nil); err == nil || errors.Is(err, ErrMountedDatabaseTrustLost) {
+	if _, err := inspector.Fingerprint(nil); err == nil || errors.Is(err, ErrMountedDatabaseTrustLost) { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("missing context became physical material loss")
 	}
 }

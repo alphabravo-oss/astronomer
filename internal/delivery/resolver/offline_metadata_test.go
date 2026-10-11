@@ -80,7 +80,7 @@ func TestOfflineMetadataRequiresFiniteExplicitSignedPolicyAndLiveContext(t *test
 	if _, err := verifier.VerifyOfflineMetadata(canceled, artifact, fixture.protoBundle, policy); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation identity lost")
 	}
-	if _, err := verifier.VerifyOfflineMetadata(nil, artifact, fixture.protoBundle, policy); err == nil {
+	if _, err := verifier.VerifyOfflineMetadata(nil, artifact, fixture.protoBundle, policy); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context admitted")
 	}
 	var missing *ExecVerifier

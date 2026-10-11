@@ -137,7 +137,7 @@ func TestPreferencePostgresProductionRouteGeneratedClientContract(t *testing.T) 
 		if err != nil {
 			t.Fatal("generated preference client transport failed")
 		}
-		defer response.Body.Close()
+		defer func(close func() error) { _ = close() }(response.Body.Close)
 		body, err := io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
 		if err != nil || len(body) > 64<<10 || response.StatusCode != expected {
 			t.Fatalf("generated preference response mismatch: status=%d expected=%d", response.StatusCode, expected)

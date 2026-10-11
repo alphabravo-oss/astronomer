@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -124,7 +123,7 @@ func TestCatalogGlobalProjectionPostgresBulkOwnerWriteCost(t *testing.T) {
 (SELECT count(*) FROM helm_charts c WHERE c.repository_id=$1 AND NOT EXISTS(SELECT 1 FROM catalog_global_chart_keys k WHERE k.chart_id=c.id AND k.repository_id=c.repository_id AND k.name=c.name)),
 (SELECT count(*) FROM catalog_global_chart_keys k LEFT JOIN helm_charts c ON c.id=k.chart_id WHERE k.repository_id=$1 AND (c.id IS NULL OR c.repository_id<>k.repository_id OR c.name<>k.name))`, repository).Scan(&charts, &keys, &private, &missing, &stale)
 		if err != nil || charts != 100000 || keys != 100000 || private != 0 || missing != 0 || stale != 0 {
-			t.Fatal(fmt.Sprintf("owned bulk backfill cardinality charts=%d keys=%d private=%d missing=%d stale=%d", charts, keys, private, missing, stale))
+			t.Fatalf("owned bulk backfill cardinality charts=%d keys=%d private=%d missing=%d stale=%d", charts, keys, private, missing, stale)
 		}
 	})
 }

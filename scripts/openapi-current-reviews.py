@@ -51,7 +51,7 @@ def effective_review(registry, review, report, source_digest, base_digest, now):
         key = identity(row)
         if key in entries or row["ignoreLine"] in lines:
             raise ValueError("duplicate current review")
-        if row["level"] not in (2, 3) or row["operation"] not in {"GET", "POST", "PUT"} or not row["path"].startswith("/api/v1/"):
+        if row["level"] not in (2, 3) or row["operation"] not in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"} or not row["path"].startswith("/api/v1/"):
             raise ValueError("invalid exact review identity")
         expected = f'- {row["operation"]} {row["path"]} {row["text"]}'
         if row["ignoreLine"].replace("\\\\", "\\") != expected:

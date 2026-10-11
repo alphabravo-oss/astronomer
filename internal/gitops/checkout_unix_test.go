@@ -65,7 +65,7 @@ func TestCheckoutFileRejectsSymlinkHardlinkFIFOAndReplacementAfterEnumeration(t 
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer root.Close()
+			defer func(close func() error) { _ = close() }(root.Close)
 			enumerated, err := root.Lstat("clusters/one.yaml")
 			if err != nil {
 				t.Fatal(err)

@@ -58,6 +58,13 @@
       ]
     },
     {
+      "classification": "derived_authority_invalidation",
+      "owner": "scanner report ingestion",
+      "mechanism": "UpsertImageVulnerabilityObservation deletes the previous report database witness in the same report/CVE transaction; each observation increments the revision and a deferred foreign key prevents reuse of stale authority",
+      "audit": "parent report ingestion and scan claim provenance remain authoritative; invalidation grants no new freshness and has no independent deletion audit",
+      "tables": ["image_vulnerability_database_witnesses"]
+    },
+    {
       "classification": "tombstone_then_retention",
       "owner": "cluster-decommission",
       "mechanism": "soft delete, durable decommission phases, audit identity archival, then bounded purge",

@@ -100,7 +100,7 @@ func writeBootstrapBytes(ctx context.Context, directory, name string, raw []byte
 	if err != nil {
 		return errors.New("open private bootstrap directory")
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	file, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, mode)
 	if err != nil {
 		return errors.New("exclusive bootstrap output unavailable")
@@ -136,7 +136,7 @@ func writeBootstrapBytes(ctx context.Context, directory, name string, raw []byte
 	if err != nil {
 		return errors.New("open bootstrap durability scope")
 	}
-	defer parent.Close()
+	defer func(close func() error) { _ = close() }(parent.Close)
 	if err := parent.Sync(); err != nil {
 		return errors.New("sync bootstrap directory")
 	}
@@ -235,7 +235,7 @@ func selectBootstrapArtifact(authority bootstrapAuthority, name, platform string
 		if component.Selected == nil || !bootstrapSelectionAllowed(component, time.Now()) {
 			return empty, errors.New("bootstrap executable requires canonical stable selection or current owned kubectl skew exception")
 		}
-		if len(component.Platforms) != 2 || !((component.Platforms[0] == "linux/amd64" && component.Platforms[1] == "linux/arm64") || (component.Platforms[1] == "linux/amd64" && component.Platforms[0] == "linux/arm64")) {
+		if len(component.Platforms) != 2 || ((component.Platforms[0] != "linux/amd64" || component.Platforms[1] != "linux/arm64") && (component.Platforms[1] != "linux/amd64" || component.Platforms[0] != "linux/arm64")) {
 			return empty, errors.New("canonical executable declared platforms differ")
 		}
 		var selected *ExecutableArtifact

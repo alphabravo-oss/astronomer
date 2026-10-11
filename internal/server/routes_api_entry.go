@@ -218,7 +218,7 @@ func registerAPIUtilityEntryRoutes(r chi.Router, cfg *config.Config, deps Router
 		// forwards through the cluster tunnel and applies monitoring RBAC plus
 		// cluster-scoped query rewriting on every request.
 		grafanaAuthed := r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries))
-		grafanaHandler := http.HandlerFunc(deps.ClusterResources.Monitoring.ProxyGrafana)
+		grafanaHandler := toolUIEntry(deps.CoreAuth.ToolUI, "grafana")
 		for _, path := range []string{"/observability/grafana", "/observability/grafana/", "/observability/grafana/*"} {
 			for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions} {
 				grafanaAuthed.Method(method, path, grafanaHandler)

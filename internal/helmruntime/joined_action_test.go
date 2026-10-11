@@ -116,7 +116,7 @@ func TestHelmJoinedActionRejectsExpiredOrMissingOwnerWithoutStartingSDK(t *testi
 	if _, err := RunJoined(owner, run); !errors.Is(err, context.Canceled) || called {
 		t.Fatal("expired action started the SDK")
 	}
-	if _, err := RunJoined(nil, run); err == nil || called {
+	if _, err := RunJoined(nil, run); err == nil || called { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("missing owner started the SDK")
 	}
 	if _, err := RunJoined(context.Background(), nil); err == nil {

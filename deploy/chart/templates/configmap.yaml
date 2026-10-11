@@ -52,6 +52,7 @@ data:
   API_K8S_PROXY_RATE_LIMIT_BURST: {{ .Values.config.apiK8sProxyRateLimitBurst | quote }}
   # External URL of this install; seeds platform_configuration.server_url.
   SERVER_URL: {{ .Values.config.serverURL | default "" | quote }}
+  TOOL_UI_DOMAIN: {{ .Values.toolUI.domain | quote }}
   JWT_ISSUER: {{ .Values.config.jwtIssuer | quote }}
   JWT_AUDIENCE: {{ .Values.config.jwtAudience | quote }}
   # Running server image — grafana-proxy extraObjects must use this, not a

@@ -56,7 +56,7 @@ func packOfflineDatabaseMetadata(ctx context.Context, options distribution.Offli
 	if err != nil {
 		return nil, nil, errors.New("owned database metadata unavailable")
 	}
-	defer os.RemoveAll(directory)
+	defer func() { _ = os.RemoveAll(directory) }()
 	if err := writeJSON(filepath.Join(directory, "index.json"), index); err != nil {
 		return nil, nil, err
 	}

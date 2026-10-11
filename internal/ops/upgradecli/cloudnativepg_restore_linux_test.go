@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -243,6 +242,6 @@ func TestCNPGOwnedRestoreRefusesExistingPodAndMismatchedMajorBeforeCreation(t *t
 		t.Fatal("different major admitted")
 	}
 	if f.state.dumpCalls != 1 {
-		t.Fatal(fmt.Sprintf("unexpected source dumps: %d", f.state.dumpCalls))
+		t.Fatalf("unexpected source dumps: %d", f.state.dumpCalls)
 	}
 }

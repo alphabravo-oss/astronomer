@@ -10,10 +10,8 @@ import (
 // collector engineering limit, not an assertion of qualified fleet capacity.
 // Exactly 10,000 rows permit one final empty page; any larger observation is
 // refused so a partial collection can never authorize owner retirement.
-const (
-	ConnectionMetricsPageSize  int32 = 500
-	ConnectionMetricsMaxOwners       = 10_000
-)
+const ConnectionMetricsPageSize int32 = 500
+const ConnectionMetricsMaxOwners = 10_000
 
 var ErrConnectionMetricsBudget = errors.New("connection metrics collection exceeded its bounded owner budget")
 

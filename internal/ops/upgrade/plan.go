@@ -64,11 +64,11 @@ type Plan struct {
 	Replace        *DisposableLease
 }
 
-var stableV1 = regexp.MustCompile(`^v1\.[0-9]+\.[0-9]+$`)
+var stableRelease = regexp.MustCompile(`^v[1-9][0-9]*\.[0-9]+\.[0-9]+$`)
 
 func (p Plan) Validate() error {
-	if !stableV1.MatchString(p.Target) || !stableV1.MatchString(p.Previous) || (p.Mode != Preview && p.Mode != Execute) {
-		return errors.New("exact stable v1 target, previous release and mode required")
+	if !stableRelease.MatchString(p.Target) || !stableRelease.MatchString(p.Previous) || (p.Mode != Preview && p.Mode != Execute) {
+		return errors.New("exact stable target, previous release and mode required")
 	}
 	target, targetErr := semver.NewVersion(p.Target)
 	previous, previousErr := semver.NewVersion(p.Previous)

@@ -31,7 +31,7 @@ func validateChartArchive(payload []byte, depth int, budget *chartBudget) error 
 	if err != nil {
 		return errors.New("chart compression is invalid")
 	}
-	defer compressed.Close()
+	defer func(close func() error) { _ = close() }(compressed.Close)
 	compressed.Multistream(false)
 	expanded, err := io.ReadAll(io.LimitReader(compressed, MaximumExpandedBytes+1))
 	if err != nil || int64(len(expanded)) > MaximumExpandedBytes || input.Len() != 0 {

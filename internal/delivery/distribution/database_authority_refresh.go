@@ -67,7 +67,7 @@ func (authority *DatabaseAuthority) TransferUpdatePayload(ctx context.Context, p
 			snapshot = item
 		}
 	}
-	child, subject, valid := strings.Cut(snapshot.PublishedSubject, "@")
+	_, _, valid = strings.Cut(snapshot.PublishedSubject, "@")
 	if !valid || snapshot.Layer.validate(role) != nil {
 		return nil, errors.New("database update transfer signed role unavailable")
 	}
@@ -84,7 +84,7 @@ func (authority *DatabaseAuthority) TransferUpdatePayload(ctx context.Context, p
 	if err != nil {
 		return nil, err
 	}
-	child, subject, valid = strings.Cut(location, "@")
+	child, subject, valid := strings.Cut(location, "@")
 	if !valid {
 		return nil, errors.New("database update transfer mirrored child invalid")
 	}

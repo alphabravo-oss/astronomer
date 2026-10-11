@@ -86,19 +86,19 @@ func TestDatabaseJobPrecisionIntervalRejectsAmbiguousPostTermination(t *testing.
 	initial := line("initial", started.Add(-time.Millisecond))
 	for _, offset := range []time.Duration{0, 100 * time.Millisecond, 900 * time.Millisecond, time.Second - time.Nanosecond} {
 		logs := append(append([]byte(nil), initial...), line("final", floor.Add(offset))...)
-		if _, err := DecodeOrderedMeasurements(logs, value, started, decoded.Time.UTC(), floor.Add(time.Second)); err == nil {
+		if _, err := DecodeOrderedMeasurements(logs, value, started, decoded.UTC(), floor.Add(time.Second)); err == nil {
 			t.Fatal("same finish interval granted post-termination authority")
 		}
 	}
 	valid := append(append([]byte(nil), initial...), line("final", floor.Add(time.Second+100*time.Millisecond))...)
-	if _, err := DecodeOrderedMeasurements(valid, value, started, decoded.Time.UTC(), floor.Add(time.Second)); err != nil {
+	if _, err := DecodeOrderedMeasurements(valid, value, started, decoded.UTC(), floor.Add(time.Second)); err != nil {
 		t.Fatal("fractional log before exclusive helper upper bound rejected", err)
 	}
 	if _, err := DecodeOrderedMeasurements(valid, value, started, floor.Add(2*time.Second), floor.Add(3*time.Second)); err == nil {
 		t.Fatal("later actual scanner termination inherited earlier final measurement")
 	}
 	tooLate := append(append([]byte(nil), initial...), line("final", floor.Add(2*time.Second))...)
-	if _, err := DecodeOrderedMeasurements(tooLate, value, started, decoded.Time.UTC(), floor.Add(time.Second)); err == nil {
+	if _, err := DecodeOrderedMeasurements(tooLate, value, started, decoded.UTC(), floor.Add(time.Second)); err == nil {
 		t.Fatal("exclusive helper interval upper bound accepted")
 	}
 }

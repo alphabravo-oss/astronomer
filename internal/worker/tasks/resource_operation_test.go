@@ -166,3 +166,19 @@ func TestHandleResourceOperationNonRetryableFailureIsTerminal(t *testing.T) {
 		t.Fatalf("non-retryable outcome err=%v failed=%+v retrying=%+v method=%s", err, store.failed, store.retrying, k8s.method)
 	}
 }
+
+func TestResourceOperationRejectsInvalidObservedStatus(t *testing.T) {
+	for _, status := range []int{-1, 0, 1000, 4294967496} {
+		op := sqlc.ResourceOperation{ID: uuid.New(), ClusterID: uuid.New(), Action: "delete", ApiPath: "/api/v1/services/api", Generation: 1, Status: "running"}
+		store := &resourceOperationTaskStore{operation: op}
+		runtime := CoreRuntime{Deps: RuntimeDependencies{Queries: store, K8s: &resourceOperationK8s{status: status}}}
+		task, _ := NewResourceOperationTask(op.ID, 1)
+		err := HandleResourceOperation(runtime.Context(context.Background()), task)
+		if !errors.Is(err, asynq.SkipRetry) || len(store.failed) != 1 || len(store.succeeded) != 0 {
+			t.Fatalf("status %d: err=%v failed=%v", status, err, store.failed)
+		}
+		if store.failed[0].ObservedStatusCode.Valid || store.failed[0].ErrorCode != "invalid_http_status" {
+			t.Fatalf("invalid status reinterpreted: %+v", store.failed[0])
+		}
+	}
+}

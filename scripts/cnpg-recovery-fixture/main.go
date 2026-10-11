@@ -137,7 +137,7 @@ func run() error {
 		if err != nil {
 			return errors.New("manifest must be new")
 		}
-		defer file.Close()
+		defer func(close func() error) { _ = close() }(file.Close)
 		m, err := seed(ctx, connection.Pool(), *keyRef, *commit)
 		if err != nil {
 			return err

@@ -21,7 +21,7 @@ func openSealedDatabaseCache(ctx context.Context, rootPath, child string, expect
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	directory, err := openSealedDatabaseCacheDirectory(int(root.Fd()), child)
 	if err != nil {
 		return nil, err

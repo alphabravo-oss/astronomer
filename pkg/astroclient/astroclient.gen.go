@@ -93269,7 +93269,6 @@ func (r GetClustersByClusterIdProjectsResponse) StatusCode() int {
 type ServiceProxyDeleteResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93295,7 +93294,6 @@ func (r ServiceProxyDeleteResponse) StatusCode() int {
 type ServiceProxyGetResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93321,7 +93319,6 @@ func (r ServiceProxyGetResponse) StatusCode() int {
 type ServiceProxyHeadResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93347,7 +93344,6 @@ func (r ServiceProxyHeadResponse) StatusCode() int {
 type ServiceProxyOptionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93373,7 +93369,6 @@ func (r ServiceProxyOptionsResponse) StatusCode() int {
 type ServiceProxyPatchResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93399,7 +93394,6 @@ func (r ServiceProxyPatchResponse) StatusCode() int {
 type ServiceProxyPostResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93425,7 +93419,6 @@ func (r ServiceProxyPostResponse) StatusCode() int {
 type ServiceProxyPutResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93685,7 +93678,6 @@ func (r TraceClustersByClusterIdProxyServiceByNamespaceByServicePortProxyRespons
 type ServiceProxySubDeleteResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93711,7 +93703,6 @@ func (r ServiceProxySubDeleteResponse) StatusCode() int {
 type ServiceProxySubGetResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93737,7 +93728,6 @@ func (r ServiceProxySubGetResponse) StatusCode() int {
 type ServiceProxySubHeadResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93763,7 +93753,6 @@ func (r ServiceProxySubHeadResponse) StatusCode() int {
 type ServiceProxySubOptionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93789,7 +93778,6 @@ func (r ServiceProxySubOptionsResponse) StatusCode() int {
 type ServiceProxySubPatchResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93815,7 +93803,6 @@ func (r ServiceProxySubPatchResponse) StatusCode() int {
 type ServiceProxySubPostResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -93841,7 +93828,6 @@ func (r ServiceProxySubPostResponse) StatusCode() int {
 type ServiceProxySubPutResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *interface{}
 	JSON400      *ErrorEnvelope
 	JSON401      *Unauthorized
 	JSON403      *ErrorEnvelope
@@ -96326,7 +96312,6 @@ func (r DeleteClustersByIdObservabilityGrafanaResponse) StatusCode() int {
 type GetClustersByIdObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96353,7 +96338,6 @@ func (r GetClustersByIdObservabilityGrafanaResponse) StatusCode() int {
 type HeadClustersByIdObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96380,7 +96364,6 @@ func (r HeadClustersByIdObservabilityGrafanaResponse) StatusCode() int {
 type OptionsClustersByIdObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96407,7 +96390,6 @@ func (r OptionsClustersByIdObservabilityGrafanaResponse) StatusCode() int {
 type PatchClustersByIdObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96434,7 +96416,6 @@ func (r PatchClustersByIdObservabilityGrafanaResponse) StatusCode() int {
 type PostClustersByIdObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96461,7 +96442,6 @@ func (r PostClustersByIdObservabilityGrafanaResponse) StatusCode() int {
 type PutClustersByIdObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96514,7 +96494,6 @@ func (r DeleteClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
 type GetClustersByIdObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96541,7 +96520,6 @@ func (r GetClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
 type HeadClustersByIdObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96568,7 +96546,6 @@ func (r HeadClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
 type OptionsClustersByIdObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96595,7 +96572,6 @@ func (r OptionsClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
 type PatchClustersByIdObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96622,7 +96598,6 @@ func (r PatchClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
 type PostClustersByIdObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -96649,7 +96624,6 @@ func (r PostClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
 type PutClustersByIdObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100159,7 +100133,6 @@ func (r DeleteObservabilityGrafanaResponse) StatusCode() int {
 type GetObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100186,7 +100159,6 @@ func (r GetObservabilityGrafanaResponse) StatusCode() int {
 type HeadObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100213,7 +100185,6 @@ func (r HeadObservabilityGrafanaResponse) StatusCode() int {
 type OptionsObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100240,7 +100211,6 @@ func (r OptionsObservabilityGrafanaResponse) StatusCode() int {
 type PatchObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100267,7 +100237,6 @@ func (r PatchObservabilityGrafanaResponse) StatusCode() int {
 type PostObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100294,7 +100263,6 @@ func (r PostObservabilityGrafanaResponse) StatusCode() int {
 type PutObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100374,7 +100342,6 @@ func (r DeleteObservabilityGrafanaProxyResponse) StatusCode() int {
 type GetObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100401,7 +100368,6 @@ func (r GetObservabilityGrafanaProxyResponse) StatusCode() int {
 type HeadObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100428,7 +100394,6 @@ func (r HeadObservabilityGrafanaProxyResponse) StatusCode() int {
 type OptionsObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100455,7 +100420,6 @@ func (r OptionsObservabilityGrafanaProxyResponse) StatusCode() int {
 type PatchObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100482,7 +100446,6 @@ func (r PatchObservabilityGrafanaProxyResponse) StatusCode() int {
 type PostObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -100509,7 +100472,6 @@ func (r PostObservabilityGrafanaProxyResponse) StatusCode() int {
 type PutObservabilityGrafanaProxyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *RouteResponseEnvelope
 	JSON400      *BadRequest
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
@@ -135019,13 +134981,6 @@ func ParseServiceProxyDeleteResponse(rsp *http.Response) (*ServiceProxyDeleteRes
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -135053,9 +135008,6 @@ func ParseServiceProxyDeleteResponse(rsp *http.Response) (*ServiceProxyDeleteRes
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -135076,13 +135028,6 @@ func ParseServiceProxyGetResponse(rsp *http.Response) (*ServiceProxyGetResponse,
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -135110,9 +135055,6 @@ func ParseServiceProxyGetResponse(rsp *http.Response) (*ServiceProxyGetResponse,
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -135133,13 +135075,6 @@ func ParseServiceProxyHeadResponse(rsp *http.Response) (*ServiceProxyHeadRespons
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -135167,9 +135102,6 @@ func ParseServiceProxyHeadResponse(rsp *http.Response) (*ServiceProxyHeadRespons
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -135190,13 +135122,6 @@ func ParseServiceProxyOptionsResponse(rsp *http.Response) (*ServiceProxyOptionsR
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -135224,9 +135149,6 @@ func ParseServiceProxyOptionsResponse(rsp *http.Response) (*ServiceProxyOptionsR
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -135247,13 +135169,6 @@ func ParseServiceProxyPatchResponse(rsp *http.Response) (*ServiceProxyPatchRespo
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -135281,9 +135196,6 @@ func ParseServiceProxyPatchResponse(rsp *http.Response) (*ServiceProxyPatchRespo
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -135304,13 +135216,6 @@ func ParseServiceProxyPostResponse(rsp *http.Response) (*ServiceProxyPostRespons
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -135338,9 +135243,6 @@ func ParseServiceProxyPostResponse(rsp *http.Response) (*ServiceProxyPostRespons
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -135361,13 +135263,6 @@ func ParseServiceProxyPutResponse(rsp *http.Response) (*ServiceProxyPutResponse,
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -135395,9 +135290,6 @@ func ParseServiceProxyPutResponse(rsp *http.Response) (*ServiceProxyPutResponse,
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -135907,13 +135799,6 @@ func ParseServiceProxySubDeleteResponse(rsp *http.Response) (*ServiceProxySubDel
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -135941,9 +135826,6 @@ func ParseServiceProxySubDeleteResponse(rsp *http.Response) (*ServiceProxySubDel
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -135964,13 +135846,6 @@ func ParseServiceProxySubGetResponse(rsp *http.Response) (*ServiceProxySubGetRes
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -135998,9 +135873,6 @@ func ParseServiceProxySubGetResponse(rsp *http.Response) (*ServiceProxySubGetRes
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -136021,13 +135893,6 @@ func ParseServiceProxySubHeadResponse(rsp *http.Response) (*ServiceProxySubHeadR
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -136055,9 +135920,6 @@ func ParseServiceProxySubHeadResponse(rsp *http.Response) (*ServiceProxySubHeadR
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -136078,13 +135940,6 @@ func ParseServiceProxySubOptionsResponse(rsp *http.Response) (*ServiceProxySubOp
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -136112,9 +135967,6 @@ func ParseServiceProxySubOptionsResponse(rsp *http.Response) (*ServiceProxySubOp
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -136135,13 +135987,6 @@ func ParseServiceProxySubPatchResponse(rsp *http.Response) (*ServiceProxySubPatc
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -136169,9 +136014,6 @@ func ParseServiceProxySubPatchResponse(rsp *http.Response) (*ServiceProxySubPatc
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -136192,13 +136034,6 @@ func ParseServiceProxySubPostResponse(rsp *http.Response) (*ServiceProxySubPostR
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -136226,9 +136061,6 @@ func ParseServiceProxySubPostResponse(rsp *http.Response) (*ServiceProxySubPostR
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -136249,13 +136081,6 @@ func ParseServiceProxySubPutResponse(rsp *http.Response) (*ServiceProxySubPutRes
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest interface{}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -136283,9 +136108,6 @@ func ParseServiceProxySubPutResponse(rsp *http.Response) (*ServiceProxySubPutRes
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	case rsp.StatusCode == 200:
-		// Content-type (application/octet-stream) unsupported
 
 	}
 
@@ -140902,13 +140724,6 @@ func ParseGetClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*GetC
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -140963,13 +140778,6 @@ func ParseHeadClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*Hea
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -141024,13 +140832,6 @@ func ParseOptionsClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -141085,13 +140886,6 @@ func ParsePatchClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*Pa
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -141146,13 +140940,6 @@ func ParsePostClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*Pos
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -141207,13 +140994,6 @@ func ParsePutClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*PutC
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -141322,13 +141102,6 @@ func ParseGetClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -141383,13 +141156,6 @@ func ParseHeadClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) 
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -141444,13 +141210,6 @@ func ParseOptionsClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Respons
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -141505,13 +141264,6 @@ func ParsePatchClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response)
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -141566,13 +141318,6 @@ func ParsePostClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) 
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -141627,13 +141372,6 @@ func ParsePutClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -147546,13 +147284,6 @@ func ParseGetObservabilityGrafanaResponse(rsp *http.Response) (*GetObservability
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -147607,13 +147338,6 @@ func ParseHeadObservabilityGrafanaResponse(rsp *http.Response) (*HeadObservabili
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -147668,13 +147392,6 @@ func ParseOptionsObservabilityGrafanaResponse(rsp *http.Response) (*OptionsObser
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -147729,13 +147446,6 @@ func ParsePatchObservabilityGrafanaResponse(rsp *http.Response) (*PatchObservabi
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -147790,13 +147500,6 @@ func ParsePostObservabilityGrafanaResponse(rsp *http.Response) (*PostObservabili
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -147851,13 +147554,6 @@ func ParsePutObservabilityGrafanaResponse(rsp *http.Response) (*PutObservability
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -148027,13 +147723,6 @@ func ParseGetObservabilityGrafanaProxyResponse(rsp *http.Response) (*GetObservab
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -148088,13 +147777,6 @@ func ParseHeadObservabilityGrafanaProxyResponse(rsp *http.Response) (*HeadObserv
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -148149,13 +147831,6 @@ func ParseOptionsObservabilityGrafanaProxyResponse(rsp *http.Response) (*Options
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -148210,13 +147885,6 @@ func ParsePatchObservabilityGrafanaProxyResponse(rsp *http.Response) (*PatchObse
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -148271,13 +147939,6 @@ func ParsePostObservabilityGrafanaProxyResponse(rsp *http.Response) (*PostObserv
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -148332,13 +147993,6 @@ func ParsePutObservabilityGrafanaProxyResponse(rsp *http.Response) (*PutObservab
 	}
 
 	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest RouteResponseEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {

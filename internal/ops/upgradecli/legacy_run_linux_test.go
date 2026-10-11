@@ -19,7 +19,7 @@ func TestRunLegacyUpgradeHelpAndUsageNeverPrepareOrPublish(t *testing.T) {
 		code int
 		help bool
 	}{{[]string{"--help"}, 0, true}, {[]string{"--unknown"}, 2, false}, {nil, 2, false}} {
-		result, err := RunLegacyUpgrade(nil, tc.args, InvocationOptions{}, "unbound-evidence")
+		result, err := RunLegacyUpgrade(nil, tc.args, InvocationOptions{}, "unbound-evidence") //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		if result.Help != tc.help || result.ExitCode != tc.code || result.Report.Published || result.Report.Path != "" || result.CloseError != nil || result.PublicationError != nil || (err != nil) == tc.help {
 			t.Fatal("early legacy result reached concrete lifecycle", result, err)
 		}

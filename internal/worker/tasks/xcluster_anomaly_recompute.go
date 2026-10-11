@@ -109,13 +109,19 @@ func RunXClusterAnomalyRecompute(ctx context.Context, q xclusterRecomputeQuerier
 			key := xclusterGroupKey{metric: b.MetricName, window: b.WindowSeconds}
 			groups[key] = append(groups[key], xclusterMember{clusterID: b.ClusterID, mean: b.Mean})
 		}
-		if int32(len(page)) < pageSize {
+		if len(page) < int(pageSize) {
 			break
+		}
+		if offset > math.MaxInt32-pageSize {
+			return fmt.Errorf("baseline pagination exceeds the supported database range")
 		}
 	}
 
 	now := time.Now().UTC()
 	for key, members := range groups {
+		if len(members) > math.MaxInt32 {
+			return fmt.Errorf("cluster count exceeds the supported database range")
+		}
 		samples := make([]anomaly.Sample, 0, len(members))
 		for _, m := range members {
 			samples = append(samples, anomaly.Sample{Value: m.mean, Time: now})

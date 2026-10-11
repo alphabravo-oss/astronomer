@@ -8,7 +8,7 @@
     "schema_version": {"const": 1},
     "release": {"type": "string", "pattern": "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$", "maxLength": 63},
     "namespace": {"type": "string", "pattern": "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$", "maxLength": 63},
-    "target_version": {"type": "string", "pattern": "^v1\\.[0-9]+\\.[0-9]+$"},
+    "target_version": {"type": "string", "pattern": "^v[1-9][0-9]*\\.[0-9]+\\.[0-9]+$"},
     "mode": {"enum": ["dry_run", "upgrade"]},
     "result": {"enum": ["passed", "failed"]},
     "api_identity_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},

@@ -85,3 +85,28 @@ func execDroppedLabelsMatch(labels []*dto.LabelPair, want map[string]string) boo
 	}
 	return true
 }
+
+func TestExecResizeRejectsOverflowWithoutDeliveringEvent(t *testing.T) {
+	for _, dimensions := range [][2]int{{80, 24}, {0, 0}, {65535, 65535}, {65536, 24}, {80, 65537}, {-1, 24}, {80, -1}} {
+		handler := &ExecHandler{log: slog.Default(), sessions: map[string]*execSession{"s": {resizeC: make(chan remotecommand.TerminalSize, 1)}}}
+		raw, err := json.Marshal(protocol.ExecResizePayload{Width: dimensions[0], Height: dimensions[1]})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = handler.HandleExecResize(&protocol.Message{StreamID: "s", Payload: raw})
+		valid := dimensions[0] >= 0 && dimensions[0] <= 65535 && dimensions[1] >= 0 && dimensions[1] <= 65535
+		if (err == nil) != valid {
+			t.Fatalf("dimensions %v: %v", dimensions, err)
+		}
+		select {
+		case got := <-handler.sessions["s"].resizeC:
+			if !valid || int(got.Width) != dimensions[0] || int(got.Height) != dimensions[1] {
+				t.Fatalf("incorrect event: %v", got)
+			}
+		default:
+			if valid {
+				t.Fatal("valid resize not delivered")
+			}
+		}
+	}
+}

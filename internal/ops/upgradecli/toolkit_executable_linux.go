@@ -30,7 +30,7 @@ func sameToolkitExecutable(before, after os.FileInfo) bool {
 		return false
 	}
 	mode := before.Mode().Perm()
-	return (mode == 0700 || mode == 0755) && before.Mode().IsRegular() && after.Mode().IsRegular() && before.Mode() == after.Mode() && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime() == after.ModTime() && before.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && after.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && before.Sys().(*syscall.Stat_t).Nlink == 1 && after.Sys().(*syscall.Stat_t).Nlink == 1
+	return (mode == 0700 || mode == 0755) && before.Mode().IsRegular() && after.Mode().IsRegular() && before.Mode() == after.Mode() && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()) && before.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && after.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && before.Sys().(*syscall.Stat_t).Nlink == 1 && after.Sys().(*syscall.Stat_t).Nlink == 1
 }
 
 func readToolkitExecutable(ctx context.Context, path string, maximum int64) ([]byte, toolkitExecutableInput, error) {
@@ -55,7 +55,7 @@ func readToolkitExecutable(ctx context.Context, path string, maximum int64) ([]b
 		return nil, empty, errors.New("open toolkit executable input")
 	}
 	file := os.NewFile(uintptr(fd), "toolkit-executable-input")
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	opened, err := file.Stat()
 	if err != nil || !sameToolkitExecutable(before, opened) {
 		return nil, empty, errors.New("opened toolkit executable identity differs")

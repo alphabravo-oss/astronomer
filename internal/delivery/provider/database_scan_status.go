@@ -149,10 +149,11 @@ func (owner *DatabaseScanOwner) ReadImageDatabaseStatus(ctx context.Context, clu
 		used.Schema = usedMetadata.Schema
 		used.UpdatedAt = usedMetadata.UpdatedAt
 		used.NextUpdate = usedMetadata.NextUpdate
-		if database.Role == "trivy-database" {
+		switch database.Role {
+		case "trivy-database":
 			accepted.Main = value
 			measured.Main = used
-		} else if database.Role == "trivy-java-database" {
+		case "trivy-java-database":
 			accepted.Java = value
 			measured.Java = used
 		}

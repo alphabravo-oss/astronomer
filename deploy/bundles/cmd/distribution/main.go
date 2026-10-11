@@ -287,7 +287,7 @@ func pinnedImage(raw string) (string, error) {
 		return "", errors.New("render or values contain a mutable image")
 	}
 	for _, character := range digest[7:] {
-		if !(character >= '0' && character <= '9' || character >= 'a' && character <= 'f') {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
 			return "", errors.New("image digest is invalid")
 		}
 	}

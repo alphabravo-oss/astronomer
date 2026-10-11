@@ -117,7 +117,7 @@ func TestSignedMetadataRejectsUnboundInputsAndIncompleteRecoveryBeforeTrust(t *t
 	if _, err := NewSignedReleaseMetadata(ctx, "/private", "/trust", "v1.2.2", ArtifactPolicy{1}); !errors.Is(err, context.Canceled) {
 		t.Fatal("caller cancellation identity lost")
 	}
-	if _, err := NewSignedReleaseMetadata(nil, "/private", "/trust", "v1.2.2", ArtifactPolicy{1}); err == nil {
+	if _, err := NewSignedReleaseMetadata(nil, "/private", "/trust", "v1.2.2", ArtifactPolicy{1}); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context admitted")
 	}
 	directory := t.TempDir()

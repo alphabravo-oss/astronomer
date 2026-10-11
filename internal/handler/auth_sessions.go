@@ -22,7 +22,7 @@ import (
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	// Browser refresh is cookie-only. Accepting a bearer value in JSON exposes
 	// the long-lived credential to JavaScript and defeats the HttpOnly boundary.
-	cookie, err := r.Cookie(auth.RefreshCookieName)
+	cookie, err := auth.BrowserCookie(r, auth.RefreshCookieName)
 	if err != nil || strings.TrimSpace(cookie.Value) == "" {
 		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.refresh_failed", "user", "", "", map[string]any{
 			"reason": "missing_cookie",
@@ -404,6 +404,7 @@ func (h *AuthHandler) LogoutDone(w http.ResponseWriter, r *http.Request) {
 	// signed — there's no security boundary here, just a UX hint.
 	http.SetCookie(w, &http.Cookie{
 		Name:     "astro_logged_out",
+		Secure:   reqctx.RequestIsHTTPS(r),
 		Value:    "1",
 		Path:     "/",
 		HttpOnly: false, // SPA-readable
@@ -428,7 +429,7 @@ func (h *AuthHandler) LogoutDone(w http.ResponseWriter, r *http.Request) {
 func bearerTokenFromRequest(r *http.Request) string {
 	header := r.Header.Get("Authorization")
 	if header == "" {
-		if c, err := r.Cookie(auth.SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
+		if c, err := auth.BrowserCookie(r, auth.SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
 			return c.Value
 		}
 		return ""

@@ -176,7 +176,7 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.SSOInvalidRequest, "Missing code or state")
 		return
 	}
-	// CSRF protection is enforced by the HMAC-signed `astro_sso_state`
+	// CSRF protection is enforced by the HMAC-signed, host-bound SSO state
 	// cookie verified below, which is stateless and therefore HA-safe: a
 	// Login served by replica A and a Callback served by replica B (behind
 	// a round-robin LB) both validate against the same JWT signing key.
@@ -186,7 +186,7 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	// detection + GC) but never fail the callback on a miss; the signed
 	// cookie is the authority.
 	h.consumeState(state, provider)
-	cookie, err := r.Cookie("astro_sso_state")
+	cookie, err := r.Cookie(ssoStateCookieName(provider))
 	if err != nil {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.SSOInvalidState, "OAuth state cookie missing")
 		return
@@ -233,12 +233,15 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target.String(), http.StatusFound)
 }
 
+func ssoStateCookieName(provider string) string {
+	return "__Host-astro_sso_state_" + strings.ToLower(strings.TrimSpace(provider))
+}
+
 func ssoStateCookie(provider, value string, lifetime time.Duration, now time.Time) *http.Cookie {
-	path := "/api/v1/auth/login/" + strings.ToLower(strings.TrimSpace(provider)) + "/callback"
 	cookie := &http.Cookie{
-		Name:     "astro_sso_state",
+		Name:     ssoStateCookieName(provider),
 		Value:    value,
-		Path:     path,
+		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,

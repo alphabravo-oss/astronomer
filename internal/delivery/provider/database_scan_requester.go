@@ -37,16 +37,17 @@ func (scope *databaseScanScopedRequester) Do(ctx context.Context, cluster, metho
 	if callerid.HasAuthenticatedUserContext(ctx) || !marked || source != callerid.SourceDatabaseScan || !identity.IsMachine() || identity.User != callerid.MachineSubject(callerid.SourceDatabaseScan) {
 		return nil, errors.New("owned database scan request origin invalid")
 	}
-	if method == http.MethodGet {
+	switch method {
+	case http.MethodGet:
 		if !scope.reads[path] || len(body) != 0 || len(headers) != 0 {
 			return nil, errors.New("owned database scan read outside current claim")
 		}
-	} else if method == http.MethodPost {
+	case http.MethodPost:
 		expected, found := scope.writes[path]
 		if !found || len(body) == 0 || len(body) > databaseScanMaximumAPIBytes || digest.FromBytes(body).String() != expected || !reflect.DeepEqual(headers, map[string]string{"Content-Type": "application/json"}) {
 			return nil, errors.New("owned database scan write outside exact owned object")
 		}
-	} else {
+	default:
 		return nil, errors.New("owned database scan request verb unsupported")
 	}
 	if err := ctx.Err(); err != nil {

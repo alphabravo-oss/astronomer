@@ -189,7 +189,7 @@ func (c *TargetChartContent) readArchive(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("open bound target chart")
 	}
-	defer source.Close()
+	defer func(close func() error) { _ = close() }(source.Close)
 	opened, err := source.Stat()
 	if err != nil || !sameArtifact(c.input.identity, opened) {
 		return nil, errors.New("bound target chart changed before read")
@@ -266,7 +266,7 @@ func targetChartCompatibilityWithValues(ctx context.Context, raw []byte, manifes
 	if err != nil {
 		return nil, errors.New("target chart gzip is invalid")
 	}
-	defer gzipReader.Close()
+	defer func(close func() error) { _ = close() }(gzipReader.Close)
 	gzipReader.Multistream(false)
 	expanded := &io.LimitedReader{R: chartContextReader{ctx, gzipReader}, N: targetChartExpandedMaximum + 1}
 	archive := tar.NewReader(expanded)
@@ -299,7 +299,7 @@ func targetChartCompatibilityWithValues(ctx context.Context, raw []byte, manifes
 			}
 			continue
 		}
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA { //nolint:staticcheck // Preserve regular-file compatibility with old tar archives using the NUL type flag.
 			return nil, errors.New("target chart entry is not regular content")
 		}
 		if name == "astronomer/Chart.yaml" || name == "astronomer/files/release-compatibility.json" || values != nil && name == "astronomer/values.yaml" {
@@ -310,11 +310,12 @@ func targetChartCompatibilityWithValues(ctx context.Context, raw []byte, manifes
 			if err != nil || int64(len(data)) != header.Size {
 				return nil, errors.New("target chart metadata is truncated")
 			}
-			if name == "astronomer/Chart.yaml" {
+			switch name {
+			case "astronomer/Chart.yaml":
 				metadata = data
-			} else if name == "astronomer/values.yaml" {
+			case "astronomer/values.yaml":
 				chartValues = data
-			} else {
+			default:
 				compatibility = data
 			}
 		} else if _, err := io.CopyBuffer(io.Discard, chartContextReader{ctx, archive}, make([]byte, 32<<10)); err != nil {

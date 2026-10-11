@@ -93,6 +93,7 @@ func bindOptionalEnvironment(v *viper.Viper) error {
 		"astronomer_bootstrap_force_password_change",
 		"trusted_proxy_cidrs",
 		"server_url",
+		"tool_ui_domain",
 		"audit_log_retention_months",
 		"cluster_tombstone_retention_days",
 		"server_metrics_addr",

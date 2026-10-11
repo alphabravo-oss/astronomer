@@ -699,3 +699,59 @@ Reviewed 2026-10-10 by the Plan032 W07 executor for release integration review; 
 - GET /api/v1/controllers/silences for the `query` request parameter `offset`, the max was set to `10000.00`
 - GET /api/v1/controllers/silences the `pagination/next_cursor` response property's maxLength was increased from `1024` to `4096` for the response status `200`
 - GET /api/v1/catalog/charts/ removed `#/components/schemas/PageEnvelope` from the response body `allOf` list for the response status `200`
+
+Reviewed 2026-10-11 for v2.0.0 browser-origin isolation. See [the exact compatibility review](assurance/technology-guide/tool-ui-isolation-review.md).
+
+- DELETE /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the success response with the status `200`
+- GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the media type `application/json` for the response with the status `200`
+- GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the media type `application/octet-stream` for the response with the status `200`
+- HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the media type `application/octet-stream` for the response with the status `200`
+- OPTIONS /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the success response with the status `200`
+- PATCH /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the success response with the status `200`
+- POST /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the success response with the status `200`
+- PUT /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port} removed the success response with the status `200`
+- DELETE /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the success response with the status `204`
+- GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the media type `*/*` for the response with the status `200`
+- HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the media type `*/*` for the response with the status `200`
+- OPTIONS /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the success response with the status `200`
+- PATCH /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the success response with the status `200`
+- POST /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the success response with the status `200`
+- PUT /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/* removed the success response with the status `200`
+- DELETE /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the success response with the status `200`
+- GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the media type `application/json` for the response with the status `200`
+- GET /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the media type `application/octet-stream` for the response with the status `200`
+- HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the media type `application/octet-stream` for the response with the status `200`
+- OPTIONS /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the success response with the status `200`
+- PATCH /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the success response with the status `200`
+- POST /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the success response with the status `200`
+- PUT /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/{path} removed the success response with the status `200`
+- DELETE /api/v1/clusters/{id}/observability/grafana removed the success response with the status `204`
+- GET /api/v1/clusters/{id}/observability/grafana removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/clusters/{id}/observability/grafana removed the media type `application/json` for the response with the status `200`
+- OPTIONS /api/v1/clusters/{id}/observability/grafana removed the success response with the status `200`
+- PATCH /api/v1/clusters/{id}/observability/grafana removed the success response with the status `200`
+- POST /api/v1/clusters/{id}/observability/grafana removed the success response with the status `200`
+- PUT /api/v1/clusters/{id}/observability/grafana removed the success response with the status `200`
+- DELETE /api/v1/clusters/{id}/observability/grafana/* removed the success response with the status `204`
+- GET /api/v1/clusters/{id}/observability/grafana/* removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/clusters/{id}/observability/grafana/* removed the media type `application/json` for the response with the status `200`
+- OPTIONS /api/v1/clusters/{id}/observability/grafana/* removed the success response with the status `200`
+- PATCH /api/v1/clusters/{id}/observability/grafana/* removed the success response with the status `200`
+- POST /api/v1/clusters/{id}/observability/grafana/* removed the success response with the status `200`
+- PUT /api/v1/clusters/{id}/observability/grafana/* removed the success response with the status `200`
+- DELETE /api/v1/observability/grafana removed the success response with the status `204`
+- GET /api/v1/observability/grafana removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/observability/grafana removed the media type `application/json` for the response with the status `200`
+- OPTIONS /api/v1/observability/grafana removed the success response with the status `200`
+- PATCH /api/v1/observability/grafana removed the success response with the status `200`
+- POST /api/v1/observability/grafana removed the success response with the status `200`
+- PUT /api/v1/observability/grafana removed the success response with the status `200`
+- DELETE /api/v1/observability/grafana/* removed the success response with the status `204`
+- GET /api/v1/observability/grafana/* removed the media type `application/json` for the response with the status `200`
+- HEAD /api/v1/observability/grafana/* removed the media type `application/json` for the response with the status `200`
+- OPTIONS /api/v1/observability/grafana/* removed the success response with the status `200`
+- PATCH /api/v1/observability/grafana/* removed the success response with the status `200`
+- POST /api/v1/observability/grafana/* removed the success response with the status `200`
+- PUT /api/v1/observability/grafana/* removed the success response with the status `200`

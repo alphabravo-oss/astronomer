@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -70,7 +71,7 @@ func (p *ClusterProbe) inspectSystemComponents(ctx context.Context, kubernetesVe
 		}
 		classes = classList.Items
 	}
-	if claims, err := p.client.CoreV1().PersistentVolumeClaims("").List(ctx, metav1.ListOptions{}); err == nil && len(claims.Items) > 0 {
+	if claims, err := p.client.CoreV1().PersistentVolumeClaims("").List(ctx, metav1.ListOptions{}); err == nil && len(claims.Items) > 0 && len(claims.Items) <= math.MaxInt32 {
 		component, observed := persistentVolumeComponent(claims.Items, classes, p.volumeSnapshotCounts(ctx))
 		components = append(components, component)
 		volumes = observed

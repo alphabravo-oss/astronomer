@@ -36,7 +36,7 @@ type interruptedRows struct {
 }
 
 func (d interruptedDriver) Open(string) (driver.Conn, error) {
-	return interruptedConn{d.ciphertext, d.queryError}, nil
+	return interruptedConn(d), nil
 }
 func (c interruptedConn) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("unexpected prepare")
@@ -81,7 +81,7 @@ func TestRotationRejectsIncompleteCiphertextPage(t *testing.T) {
 	if err != nil {
 		t.Fatal("open synthetic iterator")
 	}
-	defer db.Close()
+	defer func(close func() error) { _ = close() }(db.Close)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	result := rewriteColumn(context.Background(), log, db, enc,
 		target{"synthetic_rows", "id", "ciphertext"}, 2, false)
@@ -98,7 +98,7 @@ func TestRotationDatabaseErrorLogsExcludeUntrustedContent(t *testing.T) {
 	if err != nil {
 		t.Fatal("open synthetic error driver")
 	}
-	defer db.Close()
+	defer func(close func() error) { _ = close() }(db.Close)
 	var output bytes.Buffer
 	log := slog.New(slog.NewJSONHandler(&output, nil))
 	result := rewriteColumn(context.Background(), log, db, nil, target{"synthetic_rows", "id", "ciphertext"}, 2, false)

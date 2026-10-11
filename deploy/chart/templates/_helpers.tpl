@@ -394,6 +394,9 @@ DNS names list for the Certificate. Unions gateway.hosts and ingress.host
 */}}
 {{- define "astronomer.tls.dnsNames" -}}
 {{- $names := list -}}
+{{- if .Values.toolUI.domain -}}
+{{- $names = append $names (printf "*.%s" .Values.toolUI.domain) -}}
+{{- end -}}
 {{- if .Values.gateway.enabled -}}
 {{- range .Values.gateway.hosts -}}
 {{- $names = append $names . -}}

@@ -5,7 +5,7 @@ set -euo pipefail
 die() { printf 'rc-rehearsal: %s\n' "$*" >&2; exit 1; }
 [[ $# == 3 ]] || die "usage: $0 <target-v1.x.y> <source-run-id> <previous-v1.x.y>"
 target="$1"; source_run_id="$2"; previous="$3"
-[[ "$target" =~ ^v1\.[0-9]+\.[0-9]+$ && "$previous" =~ ^v1\.[0-9]+\.[0-9]+$ ]] || die "exact stable v1 tags required"
+[[ "$target" =~ ^v[1-9][0-9]*\.[0-9]+\.[0-9]+$ && "$previous" =~ ^v[1-9][0-9]*\.[0-9]+\.[0-9]+$ ]] || die "exact stable tags required"
 [[ "$source_run_id" =~ ^[1-9][0-9]*$ ]] || die "source run id must be numeric"
 [[ "$(printf '%s\n%s\n' "$previous" "$target" | sort -V | tail -1)" == "$target" && "$previous" != "$target" ]] || die "target must be newer"
 run_id="${GITHUB_RUN_ID:-}"; [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || die "GITHUB_RUN_ID is required"

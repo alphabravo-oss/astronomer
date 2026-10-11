@@ -2,7 +2,46 @@
 
 ## Unreleased
 
-Target release: **1.2.1**.
+Target release: **2.0.0**.
+
+### Changes
+
+- Integrate the technology-guide implementation: updated toolchain and dependency
+  authority, API and generated-client contracts, pagination, typed database and
+  JSON boundaries, observability, distribution verification and upgrade tooling.
+- Add a compact single-node Helm profile using CloudNativePG with one database
+  instance. Production retains three CNPG instances and synchronous replication.
+  Reduce application resource reservations, separate Sentinel resource budgets,
+  consolidate monitoring exporters and adjust Flux placement on single-node sites.
+- Monitor the PostgreSQL session holding server reconciler leadership and stop
+  guarded loops when that session is lost. Replica scaling no longer depends on
+  a static replica-count environment variable.
+- Validate CNPG upgrade schema state and reject empty upgrade targets. Switching
+  an existing bundled database to CNPG still requires an explicit dump/restore;
+  changing Helm values alone does not migrate data.
+
+### Migration and acceptance
+
+This is a major release. Read [the 2.0 migration notes](docs/runbooks/upgrade-2.0.md)
+before upgrading, preserve database and encryption-key backups, and update API
+clients for the documented contract changes. The integrated schema is version 81.
+
+The release owner explicitly approved carrying the v1.2.1 qualification deferrals
+and upstream vulnerability risk acceptance forward to **v2.0.0**. Builds, fresh
+vulnerability scans, exact-image waivers, SBOMs, signatures, Kubernetes clean
+installs and signed upgrade/backup/restore checks remain mandatory. Cloud, scale,
+Rancher benchmarking, human accessibility and license qualification remain
+deferred; findings are retained and those certifications are not claimed.
+Other future tags retain the strict publication policy.
+
+Local single-node acceptance passed before release preparation; this is not a
+multi-host HA or disaster-recovery certification. Technology-guide Plan 032
+remains incomplete: development telemetry still uses Promtail, six public API
+schemas remain permissive, a selectable agent audit stub remains, and repository
+consolidation is outstanding. This release does not claim complete guide alignment
+or introduce an embedded-k3s Docker appliance.
+
+## 1.2.1 - 2026-10-08
 
 ### Added
 

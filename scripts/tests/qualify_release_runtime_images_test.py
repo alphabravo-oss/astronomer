@@ -121,6 +121,12 @@ class RuntimeQualifierTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             module.qualify_findings("v1.2.1", REF, ["CVE-2099-1"], [])
 
+    def test_v200_defers_licenses_but_requires_vulnerability_waivers(self):
+        result = module.qualify_findings("v2.0.0", REF, [], ["GPL-2.0-only"])
+        self.assertEqual(result["license_qualification"], "pending_review")
+        with self.assertRaises(ValueError):
+            module.qualify_findings("v2.0.0", REF, ["CVE-2099-1"], [])
+
     def test_release_scoped_waiver_cannot_carry_to_another_release(self):
         waiver={"reference":REF,"category":"vulnerability","ids":["CVE-2099-1"],"reason":"owner accepted upstream risk","approved_by":"release owner","expires_at":"2099-01-01T00:00:00Z","release_version":"v1.2.0"}
         document={"schema_version":1,"waivers":[waiver]}
@@ -166,7 +172,7 @@ class RuntimeQualifierTest(unittest.TestCase):
             module.qualify_findings("v1.2.0", REF, ["CVE-2099-1"], ["NOASSERTION:busybox"])
 
     def test_other_versions_keep_license_qualification_mandatory(self):
-        for version in ("v1.1.0", "v1.2.2", "v1.3.0", "v2.0.0"):
+        for version in ("v1.1.0", "v1.2.2", "v1.3.0", "v2.0.1"):
             with self.subTest(version=version), self.assertRaises(ValueError):
                 module.qualify_findings(version, REF, [], ["GPL-2.0-only"])
 

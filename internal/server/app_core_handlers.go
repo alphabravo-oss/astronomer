@@ -88,6 +88,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	monitoringHandler.SetGrafanaTickets(grafanaTickets)
 	monitoringHandler.SetUserLookup(queries)
 	monitoringHandler.SetServerURL(cfg.ServerURL)
+	monitoringHandler.SetToolUIDomain(cfg.ToolUIDomain)
 	monitoringHandler.SetGrafanaProxyImage(cfg.ServerImage)
 	platformGatewayNamespace := cfg.GatewayNamespace
 	if platformGatewayNamespace == "" {

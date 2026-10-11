@@ -125,7 +125,7 @@ func TestDatabaseStartupContinuationOnlyRecognizesExactReduceOnlyResults(t *test
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if databaseStartupCanLoad(ctx, provider.ErrDatabaseRestartBaseAbsent) || databaseStartupCanLoad(nil, distribution.ErrNoConfirmedDatabaseRestartTrustLoss) {
+	if databaseStartupCanLoad(ctx, provider.ErrDatabaseRestartBaseAbsent) || databaseStartupCanLoad(nil, distribution.ErrNoConfirmedDatabaseRestartTrustLoss) { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("context failure granted bootstrap")
 	}
 }

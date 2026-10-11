@@ -76,7 +76,7 @@ func TestRotationAllDatabaseErrorPathsKeepBoundedDiagnostics(t *testing.T) {
 			if err != nil {
 				t.Fatal("open synthetic driver")
 			}
-			defer db.Close()
+			defer func(close func() error) { _ = close() }(db.Close)
 			var output bytes.Buffer
 			logger := slog.New(slog.NewJSONHandler(&output, nil))
 			result := rewriteColumn(context.Background(), logger, db, current, target{"synthetic_rows", "id", "ciphertext"}, 2, false)

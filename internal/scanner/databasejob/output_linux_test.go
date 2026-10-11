@@ -20,8 +20,8 @@ func TestDatabaseJobMeasurementPipeIsFiniteAndOwnsOnlyDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer read.Close()
-	defer write.Close()
+	defer func(close func() error) { _ = close() }(read.Close)
+	defer func(close func() error) { _ = close() }(write.Close)
 	originalDescriptor := int(write.Fd())
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
@@ -74,7 +74,7 @@ func TestDatabaseJobMeasurementPipeIsFiniteAndOwnsOnlyDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	if _, err := NewMeasurementPipe(t.Context(), file); err == nil {
 		t.Fatal("regular output credited as bounded container pipe")
 	}

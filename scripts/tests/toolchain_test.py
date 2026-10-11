@@ -18,14 +18,14 @@ SPEC.loader.exec_module(toolchain)
 class ToolchainTests(unittest.TestCase):
     def setUp(self):
         self.document = json.loads(toolchain.AUTHORITY.read_text())
-        self.now = dt.datetime(2026, 10, 9, 23, 59, tzinfo=dt.timezone.utc)
+        self.now = dt.datetime(2026, 10, 11, 12, 0, tzinfo=dt.timezone.utc)
 
     def test_git_primary_requires_one_dated_final_release(self):
         c = next(c for c in self.document["components"] if c["id"] == "git-flux-fixture")
         markup = b'Latest source release</h4><span class="version">2.56.0</span><a href="/release">Release Notes</a><time>(2026-09-28)</time>'
         with patch.object(toolchain, "fetch_bytes", return_value=(markup, "digest")):
             self.assertEqual(toolchain.resolve(c, self.now)["upstreamStable"], "2.56.0")
-        for invalid in (markup + markup, markup.replace(b"2.56.0", b"2.57.0-rc1"), markup.replace(b"2026-09-28", b"2026-10-10")):
+        for invalid in (markup + markup, markup.replace(b"2.56.0", b"2.57.0-rc1"), markup.replace(b"2026-09-28", b"2027-01-01")):
             with patch.object(toolchain, "fetch_bytes", return_value=(invalid, "digest")):
                 with self.assertRaises(ValueError):
                     toolchain.resolve(c, self.now)
@@ -51,7 +51,7 @@ class ToolchainTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "explicit UTC offset"):
             toolchain.timestamp("2026-10-09T00:00:00")
         c = self.document["components"][0]
-        c["discovery"]["observedAt"] = "2026-10-10T00:30:00-01:00"
+        c["discovery"]["observedAt"] = "2027-01-01T00:30:00-01:00"
         with self.assertRaisesRegex(ValueError, "future"):
             toolchain.validate(self.document, self.now)
 

@@ -496,7 +496,7 @@ func setBrowserSessionCookies(w http.ResponseWriter, r *http.Request, accessToke
 	secure := reqctx.RequestIsHTTPS(r)
 	if csrfToken, err := newBrowserCSRFToken(); err == nil {
 		http.SetCookie(w, &http.Cookie{
-			Name:     auth.CSRFCookieName,
+			Name:     auth.BrowserCookieName(r, auth.CSRFCookieName),
 			Value:    csrfToken,
 			Path:     "/",
 			HttpOnly: false,
@@ -506,7 +506,7 @@ func setBrowserSessionCookies(w http.ResponseWriter, r *http.Request, accessToke
 	}
 	if accessToken != "" {
 		http.SetCookie(w, &http.Cookie{
-			Name:     auth.SessionCookieName,
+			Name:     auth.BrowserCookieName(r, auth.SessionCookieName),
 			Value:    accessToken,
 			Path:     "/",
 			HttpOnly: true,
@@ -516,7 +516,7 @@ func setBrowserSessionCookies(w http.ResponseWriter, r *http.Request, accessToke
 	}
 	if refreshToken != "" {
 		http.SetCookie(w, &http.Cookie{
-			Name:     auth.RefreshCookieName,
+			Name:     auth.BrowserCookieName(r, auth.RefreshCookieName),
 			Value:    refreshToken,
 			Path:     "/",
 			HttpOnly: true,
@@ -531,7 +531,7 @@ func clearBrowserSessionCookies(w http.ResponseWriter, r *http.Request) {
 	secure := reqctx.RequestIsHTTPS(r)
 	for _, name := range []string{auth.SessionCookieName, auth.RefreshCookieName, auth.CSRFCookieName} {
 		http.SetCookie(w, &http.Cookie{
-			Name:     name,
+			Name:     auth.BrowserCookieName(r, name),
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,

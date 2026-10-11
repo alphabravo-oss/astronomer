@@ -23,7 +23,7 @@ func TestDatabaseOfflineTransferRejectsMissingFeatureAndClosedCommandInputsBefor
 	if _, err := ExportDatabaseUpdate(t.Context(), enabled, DatabaseExportCommandOptions{OutputDirectory: "/private/new-kit", FeedDigest: "latest"}); err == nil {
 		t.Fatal("mutable export feed accepted")
 	}
-	if _, err := ImportDatabaseUpdate(nil, enabled, DatabaseImportCommandOptions{KitDirectory: "/private/kit"}); err == nil {
+	if _, err := ImportDatabaseUpdate(nil, enabled, DatabaseImportCommandOptions{KitDirectory: "/private/kit"}); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil command context accepted")
 	}
 }

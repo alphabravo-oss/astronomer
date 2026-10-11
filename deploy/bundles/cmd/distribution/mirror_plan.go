@@ -150,7 +150,7 @@ func contentSubject(reference string) (string, string, error) {
 		return "", "", errors.New("canonical immutable mirror subject required")
 	}
 	for _, c := range parsed.Reference[7:] {
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return "", "", errors.New("mirror subject digest invalid")
 		}
 	}

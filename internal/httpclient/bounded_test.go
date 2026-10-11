@@ -49,7 +49,7 @@ func TestBoundedResponseChunkedSentinelAndExactLimit(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer response.Body.Close()
+			defer func(close func() error) { _ = close() }(response.Body.Close)
 			value, err := ReadBoundedResponse(context.Background(), response, 4)
 			if !errors.Is(err, fixture.want) || (err == nil && string(value) != fixture.text) || (err != nil && value != nil) {
 				t.Fatal("chunked transfer did not enforce its exact sentinel bound")
@@ -76,7 +76,7 @@ func TestBoundedResponseCancellationAfterHeadersJoinsRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	defer func(close func() error) { _ = close() }(response.Body.Close)
 	if value, err := ReadBoundedResponse(ctx, response, 8); value != nil || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal("whole-body cancellation identity was lost")
 	}

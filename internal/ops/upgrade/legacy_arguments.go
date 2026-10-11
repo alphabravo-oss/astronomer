@@ -40,13 +40,13 @@ func ParseLegacyArguments(arguments []string) (LegacyArguments, error) {
 		}
 	}
 	if parsed.Target == "" {
-		return parsed, &UsageError{"exact stable v1 target required"}
+		return parsed, &UsageError{"exact stable target required"}
 	}
 	if !strings.HasPrefix(parsed.Target, "v") {
 		parsed.Target = "v" + parsed.Target
 	}
-	if !stableV1.MatchString(parsed.Target) {
-		return parsed, &UsageError{"target must be an exact stable v1 version"}
+	if !stableRelease.MatchString(parsed.Target) {
+		return parsed, &UsageError{"target must be an exact stable version"}
 	}
 	if approve && !dryRun {
 		parsed.Mode = Execute

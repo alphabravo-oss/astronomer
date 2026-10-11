@@ -171,7 +171,7 @@ func streamOfflineDatabaseExportInput(ctx context.Context, input databaseExportI
 	if err != nil {
 		return errors.New("offline database export original layer unavailable")
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	opened, err := file.Stat()
 	if err != nil || !sameTransferInput(input.before, opened) {
 		return errors.New("offline database export original changed before opening")

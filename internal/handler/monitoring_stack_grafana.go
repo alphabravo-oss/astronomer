@@ -216,8 +216,8 @@ func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, ba
 		expose = h.grafanaExpose
 	}
 	extra := grafanaFamilyExtraObjects(req, backend, image, serverURL, expose)
-	rootURL := strings.TrimRight(serverURL, "/") + sharedGrafanaProxyPath
-	csrfOrigins := hostnameOf(serverURL)
+	rootURL := h.grafanaUIURL("")
+	csrfOrigins := hostnameOf(rootURL)
 	return map[string]any{
 		"replicas": req.Replicas,
 		"service": map[string]any{

@@ -163,7 +163,7 @@ func privateBoundInput(path string) (os.FileInfo, [32]byte, error) {
 		return nil, empty, errors.New("open private operation input reference")
 	}
 	file := os.NewFile(uintptr(fd), "private-kubeconfig")
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	actual, err := file.Stat()
 	if err != nil || !os.SameFile(before, actual) || !actual.Mode().IsRegular() || actual.Mode().Perm() != 0o600 || actual.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
 		return nil, empty, errors.New("private operation input owner or identity differs")

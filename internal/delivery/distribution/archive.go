@@ -96,7 +96,7 @@ func ReadBoundedRegularArchive(payload []byte, maximumCompressed, maximumExpande
 	if err != nil {
 		return nil, errors.New("distribution archive compression is invalid")
 	}
-	defer compressed.Close()
+	defer func(close func() error) { _ = close() }(compressed.Close)
 	compressed.Multistream(false)
 	expanded, err := io.ReadAll(io.LimitReader(compressed, maximumExpanded+1))
 	if err != nil || int64(len(expanded)) > maximumExpanded || compressedInput.Len() != 0 {

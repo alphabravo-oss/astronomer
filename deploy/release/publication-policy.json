@@ -1,7 +1,16 @@
 {
   "schema_version": 1,
-  "historical_automated_tags": ["v1.2.0", "v1.2.1"],
-  "historical_deferred_qualifications": ["license", "cloud", "scale", "rancher", "human_accessibility"],
+  "historical_automated_tags": [
+    "v1.2.0",
+    "v1.2.1"
+  ],
+  "historical_deferred_qualifications": [
+    "license",
+    "cloud",
+    "scale",
+    "rancher",
+    "human_accessibility"
+  ],
   "future_default": {
     "contract": "strict_signed_release_approval",
     "deferred_qualifications": [],
@@ -15,5 +24,8 @@
     "applicable_tags": [],
     "required_decision": "Release owner must approve exact tag, qualifications, owners, expiries and retained signed evidence before publication."
   },
-  "upstream_policy": "adopt_fixed_newer_upstream_otherwise_exact_expiring_waiver_no_fork"
+  "upstream_policy": "adopt_fixed_newer_upstream_otherwise_exact_expiring_waiver_no_fork",
+  "release_scoped_automated_tags": [
+    "v2.0.0"
+  ]
 }

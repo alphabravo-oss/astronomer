@@ -569,8 +569,8 @@ type ParsedDoc struct {
 // file. Returns the HEAD sha + parsed docs.
 func (runtime GitOpsRuntime) walkSource(ctx context.Context, src sqlc.GitopsRegistrationSource) (string, []ParsedDoc, error) {
 	dir := runtime.cloneDir(src.ID)
-	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
-		return "", nil, fmt.Errorf("mkdir clone parent: %w", err)
+	if err := protectCloneParent(filepath.Dir(dir)); err != nil {
+		return "", nil, err
 	}
 	repo, err := runtime.openOrClone(ctx, src, dir)
 	if err != nil {

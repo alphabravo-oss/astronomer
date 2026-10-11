@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
@@ -192,6 +193,9 @@ func (h *ExecHandler) HandleExecResize(msg *protocol.Message) error {
 	var payload protocol.ExecResizePayload
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 		return fmt.Errorf("decode exec resize payload: %w", err)
+	}
+	if payload.Width < 0 || payload.Width > math.MaxUint16 || payload.Height < 0 || payload.Height > math.MaxUint16 {
+		return fmt.Errorf("exec terminal dimensions must be between 0 and %d", math.MaxUint16)
 	}
 
 	h.mu.Lock()

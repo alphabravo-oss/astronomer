@@ -69,7 +69,7 @@ func assertArtifactBinding(t *testing.T, result Result, acknowledged bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 || info.Size() != artifact.SizeBytes {
 		t.Fatal("artifact identity/size/private mode differs")

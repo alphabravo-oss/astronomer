@@ -88,23 +88,23 @@ image:
   server:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""             # Published upgrades set the exact sha256 digest.
   worker:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-worker
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
   agent:
     # Used by the server when rendering install.yaml.template for new clusters.
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-agent
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
   migrate:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-migrate
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
 
 # =============================================================================
@@ -143,7 +143,7 @@ frontend:
     whenUnsatisfiable: ScheduleAnyway
   image:
     repository: astronomer-frontend
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   hostAliases: []
@@ -542,7 +542,7 @@ preflight:
     # Same image runs the in-browser kubectl shell pods, so air-gapped
     # operators only need to mirror one image for both surfaces.
     repository: astronomer-shell
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   # Read-only upgrade admission for external databases. Empty databases are
@@ -889,6 +889,11 @@ bootstrap:
 # TLS — single source of truth, consumed by both gateway.* and ingress.*.
 # Mirrors Rancher's ingress.tls.source model.
 # =============================================================================
+# Each downstream tool/cluster gets a deterministic hostname under this suffix.
+# Set wildcard DNS and TLS before enabling; empty leaves UI launch unavailable.
+toolUI:
+  domain: ""
+
 tls:
   # Mode selector:
   #   none        — no TLS (HTTP only). Fine for local dev.
@@ -920,6 +925,11 @@ tls:
     # otherwise ingress.className. Set explicitly when the ACME HTTP-01
     # solver should use a different class than the public listener.
     ingressClassName: ""
+    # Optional DNS-01. Required for toolUI.domain with Let's Encrypt.
+    # Create this Secret separately; never put the token in Helm values.
+    cloudflare:
+      apiTokenSecretName: ""
+      apiTokenSecretKey: api-token
 
   # When true, fail helm install/upgrade if cert-manager CRDs are missing
   # and the selected mode needs them. Default true. Set to false if you
@@ -1223,7 +1233,7 @@ managementBackup:
   # air-gapped.
   image:
     repository: ghcr.io/alphabravo-oss/astronomer-dr
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry
@@ -1332,7 +1342,7 @@ managementRestoreDrill:
   # as managementBackup so the drill can run wherever the backup runs.
   image:
     repository: ghcr.io/alphabravo-oss/astronomer-dr
-    tag: "v1.2.1"
+    tag: "v2.0.0"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry

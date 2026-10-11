@@ -53,7 +53,7 @@ func copyOfflineMirror(ctx context.Context, payload []byte, options mirrorExecut
 	if err != nil {
 		return empty, err
 	}
-	defer os.RemoveAll(temp)
+	defer func() { _ = os.RemoveAll(temp) }()
 	if err := writeJSON(filepath.Join(temp, "expected.json"), schedule.Plan); err != nil {
 		return empty, err
 	}
@@ -180,6 +180,6 @@ func importOfflineTransferBytes(ctx context.Context, payload []byte, destination
 	if err := os.WriteFile(file, payload, 0600); err != nil {
 		return err
 	}
-	defer os.Remove(file)
+	defer func() { _ = os.Remove(file) }()
 	return importOfflineTransfer(ctx, file, destination, options)
 }

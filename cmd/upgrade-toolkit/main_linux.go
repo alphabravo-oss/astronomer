@@ -64,6 +64,6 @@ func run(args []string) int {
 		}
 		return 1
 	}
-	fmt.Fprintln(os.Stdout, "Verified toolkit output retained.")
+	_, _ = fmt.Fprintln(os.Stdout, "Verified toolkit output retained.")
 	return 0
 }

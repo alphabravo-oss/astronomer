@@ -102,14 +102,14 @@ def evaluate(gosec, vuln, exceptions, statuses, scope, root=ROOT, now=None):
         raise ValueError('owned review document invalid')
     owned = {}
     for review in reviews['reviews']:
-        if set(review) != {'fingerprint','owner','review_by','status','evidence'} or review['status'] not in {'pending','reviewed'} or not review['owner'].strip():
+        if set(review) != {'fingerprint','owner','review_by','status','evidence'} or review['status'] not in {'pending','reviewed','blocked'} or not review['owner'].strip():
             raise ValueError('owned review metadata invalid')
         if review['fingerprint'] in owned:
             raise ValueError('duplicate owned review')
         deadline = dt.datetime.fromisoformat(review['review_by'].replace('Z','+00:00'))
         if deadline.tzinfo is None or deadline.utcoffset() != dt.timedelta(0):
             raise ValueError('owned review deadline must be UTC')
-        if review['status'] == 'reviewed' and not review['evidence'].strip():
+        if review['status'] in {'reviewed','blocked'} and not review['evidence'].strip():
             raise ValueError('completed review requires evidence')
         owned[review['fingerprint']] = (review, deadline)
     for finding in findings:
@@ -126,6 +126,8 @@ def evaluate(gosec, vuln, exceptions, statuses, scope, root=ROOT, now=None):
                 finding['review_owner'] = review['owner']
                 finding['review_due_at'] = review['review_by']
                 finding['review_status'] = review['status']
+                if review['status'] == 'blocked':
+                    failures.append('MED finding has an unresolved confirmed defect')
                 if review['status'] == 'pending' and deadline <= now:
                     failures.append('MED finding review is overdue')
     return dict(schema_version=1, release_scope=scope, passed=not failures, failures=sorted(set(failures)), findings=findings)

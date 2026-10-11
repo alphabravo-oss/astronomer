@@ -28,7 +28,7 @@ func verifyApplicationArchive(archiveFile, document, evidence, trustDirectory, p
 		return errors.New("application archive publisher authentication failed")
 	}
 	var transfer applicationTransferDocument
-	if len(data) > 1<<20 || closedJSON(data, &transfer) != nil || transfer.SchemaVersion != 1 || transfer.Kind != "application_catalog_transfer" || !regexp.MustCompile(`^v1\.[0-9]+\.[0-9]+$`).MatchString(transfer.Release) || (transfer.PublisherMode != "production" && transfer.PublisherMode != "qa") {
+	if len(data) > 1<<20 || closedJSON(data, &transfer) != nil || transfer.SchemaVersion != 1 || transfer.Kind != "application_catalog_transfer" || !regexp.MustCompile(`^v[1-9][0-9]*\.[0-9]+\.[0-9]+$`).MatchString(transfer.Release) || (transfer.PublisherMode != "production" && transfer.PublisherMode != "qa") {
 		return errors.New("application transfer contract invalid")
 	}
 	payload, err := boundedFile(archiveFile, distribution.MaximumArchiveBytes)

@@ -178,8 +178,8 @@ func TestTypedProxyTLSHandshakePreservesTransportAndEarlierOwnerLimits(t *testin
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			client, server := net.Pipe()
-			defer server.Close()
-			defer client.Close()
+			defer func(close func() error) { _ = close() }(server.Close)
+			defer func(close func() error) { _ = close() }(client.Close)
 			owner, cancel := context.WithTimeout(context.Background(), tc.owner)
 			defer cancel()
 			transport := &http.Transport{TLSHandshakeTimeout: tc.handshake, DialContext: func(context.Context, string, string) (net.Conn, error) { return client, nil }}

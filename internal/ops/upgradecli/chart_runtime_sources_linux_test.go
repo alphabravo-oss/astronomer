@@ -81,7 +81,7 @@ func TestChartRuntimeSourcesKeepsContextAndFiniteInputBounds(t *testing.T) {
 	if _, err := chartRuntimeSources(ctx, []byte(runtimeValuesFixture), manifest); !errors.Is(err, context.Canceled) {
 		t.Fatal("runtime source cancellation identity lost", err)
 	}
-	if _, err := chartRuntimeSources(nil, []byte(runtimeValuesFixture), manifest); err == nil {
+	if _, err := chartRuntimeSources(nil, []byte(runtimeValuesFixture), manifest); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil source context admitted")
 	}
 	if _, err := chartRuntimeSources(context.Background(), []byte(strings.Repeat("x", (1<<20)+1)), manifest); err == nil {

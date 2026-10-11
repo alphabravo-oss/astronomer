@@ -82,9 +82,8 @@ for (const [routePath, pathItemRaw] of Object.entries(spec.paths ?? {})) {
       ? "blob"
       : responseMedia.some(
             (media) =>
-              media.includes("yaml") ||
-              media === "text/csv" ||
-              media === "text/plain",
+              media.startsWith("text/") ||
+              media.includes("yaml"),
           )
         ? "text"
         : "json";

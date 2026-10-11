@@ -50,7 +50,7 @@ func createKeys(path string) (keys, string, error) {
 	if err != nil {
 		return k, "", errors.New("disposable key reference must be new")
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	if _, err := file.Write(data); err != nil {
 		return k, "", errors.New("key reference write failed")
 	}

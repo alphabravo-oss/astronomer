@@ -11,7 +11,6 @@ import (
 	"net/netip"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -68,25 +67,6 @@ func (p NetworkPolicy) allows(host string, address netip.Addr) bool {
 	return (httpclient.DestinationPolicy{PrivateHosts: p.AllowedPrivateHosts, PrivateCIDRs: p.AllowedPrivateCIDRs}).AllowsAddress(host, address)
 }
 
-func hostAllowed(host string, patterns []string) bool {
-	host = strings.ToLower(strings.TrimSuffix(host, "."))
-	for _, pattern := range patterns {
-		pattern = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(pattern), "."))
-		if pattern == host {
-			return true
-		}
-		if strings.HasPrefix(pattern, "*.") && strings.HasSuffix(host, pattern[1:]) && host != pattern[2:] {
-			return true
-		}
-	}
-	return false
-}
-
-func isCGNATAddress(address netip.Addr) bool {
-	prefix := netip.MustParsePrefix("100.64.0.0/10")
-	return address.Is4() && prefix.Contains(address)
-}
-
 type safeClientFactory struct{}
 
 func (safeClientFactory) Client(policy NetworkPolicy, tlsConfig *tls.Config, proxyRaw string, limits Limits) (*http.Client, error) {
@@ -118,24 +98,6 @@ func (p NetworkPolicy) dialContext(ctx context.Context, network, address string)
 		}
 	}
 	return nil, &Error{Code: CodeUpstreamTemporary, Message: "source connection failed", Retryable: true}
-}
-
-func sameOrigin(a, b *url.URL) bool {
-	if a == nil || b == nil || !strings.EqualFold(a.Scheme, b.Scheme) || !strings.EqualFold(a.Hostname(), b.Hostname()) {
-		return false
-	}
-	return effectivePort(a) == effectivePort(b)
-}
-
-func effectivePort(value *url.URL) int {
-	if value.Port() != "" {
-		port, _ := strconv.Atoi(value.Port())
-		return port
-	}
-	if value.Scheme == "https" {
-		return 443
-	}
-	return 80
 }
 
 func denied(message string) error {

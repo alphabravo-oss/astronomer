@@ -39,11 +39,12 @@ func TestWorkloadImageMetadataIsExactPlatformContentNotTagAuthority(t *testing.T
 				if err := json.Unmarshal(config, &image); err != nil {
 					t.Fatal(err)
 				}
-				if name == "wrong-platform" {
+				switch name {
+				case "wrong-platform":
 					image.Architecture = "arm64"
-				} else if name == "wrong-os" {
+				case "wrong-os":
 					image.OS = "windows"
-				} else {
+				default:
 					image.RootFS.DiffIDs = nil
 				}
 				var err error

@@ -22,8 +22,8 @@ class ResolutionTests(unittest.TestCase):
     def setUp(self):
         self.authority = resolution.toolchain.AUTHORITY.read_bytes()
         self.document = json.loads(self.authority)
-        self.now = dt.datetime(2026, 10, 9, 23, 59, tzinfo=dt.timezone.utc)
-        self.receipt = {"schemaVersion": 1, "authorityDigest": "sha256:" + hashlib.sha256(self.authority).hexdigest(), "generatedAt": "2026-10-09T23:00:00Z", "expiresAt": "2026-10-10T00:00:00Z", "sourceCommit": "a" * 40, "components": resolution.bindings(self.document)}
+        self.now = dt.datetime(2026, 10, 11, 12, 0, tzinfo=dt.timezone.utc)
+        self.receipt = {"schemaVersion": 1, "authorityDigest": "sha256:" + hashlib.sha256(self.authority).hexdigest(), "generatedAt": "2026-10-11T11:00:00Z", "expiresAt": "2026-10-12T00:00:00Z", "sourceCommit": "a" * 40, "components": resolution.bindings(self.document)}
 
     def test_exact_authority_binding(self):
         resolution.verify_binding(self.receipt, self.document, self.authority, self.now)
@@ -41,7 +41,7 @@ class ResolutionTests(unittest.TestCase):
             resolution.verify_binding(self.receipt, self.document, self.authority, self.now)
 
     def test_expired_and_overlong_resolution(self):
-        self.receipt["expiresAt"] = "2026-10-09T23:01:00Z"
+        self.receipt["expiresAt"] = "2026-10-11T11:01:00Z"
         with self.assertRaisesRegex(ValueError, "expired"):
             resolution.verify_binding(self.receipt, self.document, self.authority, self.now)
         self.receipt["expiresAt"] = "2027-01-01T00:00:00Z"

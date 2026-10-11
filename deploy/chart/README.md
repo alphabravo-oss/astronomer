@@ -1,6 +1,6 @@
 # Astronomer management-plane chart
 
-This chart installs the Astronomer 1.2.1 API, worker, web application, database
+This chart installs the Astronomer 2.0.0 API, worker, web application, database
 migration job, and optional supporting services. It is the only supported
 management-plane installation path for the v1 release line.
 
@@ -12,7 +12,7 @@ never installs delivery controllers in the management cluster.
 
 | Contract | Supported value |
 |---|---|
-| Chart and application | 1.2.1 |
+| Chart and application | 2.0.0 |
 | Kubernetes | 1.33 through 1.35 |
 | Agent protocol | 2 |
 | Flux | 2.9.3 |
@@ -471,3 +471,7 @@ A release is not complete until online and disconnected installs have both
 passed, a newly enrolled test cluster reaches Ready using the pinned downstream
 distribution, an application rollout converges, status reaches the UI, and a
 clean Helm upgrade from the previous v1 tag succeeds.
+
+### Downstream UI isolation
+
+Set `toolUI.domain` to a dedicated wildcard DNS suffix under the console's registrable domain. Every tool target receives a separate HTTPS hostname; the chart routes all tool paths to the server. Configure DNS-01 with `tls.letsEncrypt.cloudflare.apiTokenSecretName`, supply a wildcard TLS Secret, or use an external HTTPS Gateway. Without this configuration, downstream UI launches fail closed while management APIs remain available. See the [setup and validation runbook](../../docs/runbooks/tool-ui-isolation.md).

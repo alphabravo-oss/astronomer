@@ -18,9 +18,10 @@ ruleset=module('ruleset','scripts/check-security-policy-contract.py')
 
 class PolicyContractTest(unittest.TestCase):
     def test_future_deferrals_rejected(self):
-        for tag in ('v1.2.2','v2.0.0'):
-            with self.subTest(tag=tag),self.assertRaises(ValueError): publication.require_historical_automated(tag)
-        publication.require_historical_automated('v1.2.1')
+        for tag in ('v1.2.2','v2.0.1','v3.0.0'):
+            with self.subTest(tag=tag),self.assertRaises(ValueError): publication.require_automated(tag)
+        publication.require_automated('v1.2.1')
+        publication.require_automated('v2.0.0')
     def test_policy_no_new_approval(self):
         p=publication.load(); p['maintenance_automated_policy']['applicable_tags']=['v1.2.2']
         with tempfile.TemporaryDirectory() as tmp:

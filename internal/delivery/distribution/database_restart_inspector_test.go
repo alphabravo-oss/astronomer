@@ -49,9 +49,10 @@ func TestDatabaseRestartObservesExactLossAfterOriginalConstructorClosed(t *testi
 		t.Run(role, func(t *testing.T) {
 			options, snapshot, fixture := databaseRestartFixture(t)
 			path := filepath.Join(options.Distribution.TrustDirectory, options.Distribution.Policy.KeyRef+".pub")
-			if role == "operator" {
+			switch role {
+			case "operator":
 				path = filepath.Join(options.Mirror.TrustDirectory, options.Mirror.KeyRef+".pub")
-			} else if role == "registry" {
+			case "registry":
 				path = filepath.Join(options.Registry.TrustDirectory, options.Registry.RootsRef+".pem")
 			}
 			original, err := os.ReadFile(path) // Owned public material only.
@@ -309,7 +310,7 @@ func TestDatabaseRestartConstructorCannotSelectFallbackOrCallerAuthority(t *test
 		t.Fatal("constructor guard requested registry")
 	}
 	var empty DatabaseRestartInspector
-	if _, err := empty.ObserveLoss(nil, DatabaseAuthoritySnapshot{}); err == nil {
+	if _, err := empty.ObserveLoss(nil, DatabaseAuthoritySnapshot{}); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("empty inspection/context granted loss")
 	}
 	if err := empty.RevalidateLoss(t.Context(), &ObservedDatabaseRestartTrustLoss{}); err == nil {

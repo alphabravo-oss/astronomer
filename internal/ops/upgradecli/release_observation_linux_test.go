@@ -60,7 +60,7 @@ func TestReleaseObservationUsesBoundActualLatestMetadataWithoutReplay(t *testing
 	if err != nil || !outcome.Known || !outcome.Applied || outcome.Replaced || *calls != 2 {
 		t.Fatal("actual repeated target assessment failed", err)
 	}
-	if _, err := o.Read(nil); err == nil {
+	if _, err := o.Read(nil); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil observation context admitted")
 	}
 	if _, err := NewHelmStateObservation(o.release, &Readiness{}, nil); err == nil {

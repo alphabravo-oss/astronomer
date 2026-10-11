@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Upgrade an existing Astronomer v1 Helm release to one exact signed tag.
+# Upgrade an existing Astronomer Helm release to one exact signed tag.
 #
 # The management-plane chart is dependency-free. Helm is the sole owner of the
 # release lifecycle; downstream Flux controllers remain agent-managed and are
@@ -11,7 +11,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/upgrade-release.sh [--yes] [--dry-run-only] <version>
 
-  version         Exact v1 stable release, for example v1.0.1 or 1.0.1
+  version         Exact stable release, for example v2.0.0 or 2.0.0
   --yes           Perform the upgrade after backup and server-side dry run
   --dry-run-only  Stop after backup and server-side Helm dry run
 
@@ -73,8 +73,8 @@ done
 image_tag="$version"
 [[ "$image_tag" == v* ]] || image_tag="v${image_tag}"
 chart_version="${image_tag#v}"
-[[ "$chart_version" =~ ^1\.[0-9]+\.[0-9]+$ ]] || {
-  printf 'target must be an exact stable v1 semantic version, got %q\n' "$version" >&2
+[[ "$chart_version" =~ ^[1-9][0-9]*\.[0-9]+\.[0-9]+$ ]] || {
+  printf 'target must be an exact stable semantic version, got %q\n' "$version" >&2
   exit 2
 }
 
@@ -125,7 +125,7 @@ current_chart_name="$(jq -r '.chart // empty' <<<"$current_metadata")"
 current_chart_version="$(jq -r '.version // empty' <<<"$current_metadata")"
 [[ "$current_chart_name" == "astronomer" ]] || \
   die "installed release chart is '$current_chart_name', expected astronomer"
-[[ "$current_chart_version" =~ ^1\.[0-9]+\.[0-9]+$ ]] || \
+[[ "$current_chart_version" =~ ^[1-9][0-9]*\.[0-9]+\.[0-9]+$ ]] || \
   die "v1 is fresh-install-only; refusing to upgrade installed chart version '$current_chart_version'"
 [[ "$chart_version" != "$current_chart_version" ]] || \
   die "target $chart_version is already installed"

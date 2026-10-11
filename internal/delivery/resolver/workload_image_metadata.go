@@ -122,7 +122,7 @@ func validateWorkloadManifest(manifestBytes []byte, subject string) (ocispec.Man
 	if config.Digest.Validate() != nil || config.Digest.Algorithm() != digest.SHA256 || config.Size <= 0 || config.Size > 4<<20 || len(config.URLs) != 0 || (config.MediaType != ocispec.MediaTypeImageConfig && config.MediaType != "application/vnd.docker.container.image.v1+json") {
 		return ocispec.Manifest{}, errors.New("workload image config descriptor unsupported")
 	}
-	var aggregate int64 = config.Size + int64(len(manifestBytes))
+	var aggregate = config.Size + int64(len(manifestBytes))
 	seen := map[digest.Digest]ocispec.Descriptor{}
 	for _, layer := range manifest.Layers {
 		if layer.Digest.Validate() != nil || layer.Digest.Algorithm() != digest.SHA256 || layer.Size <= 0 || layer.Size > 2<<30 || len(layer.URLs) != 0 || len(layer.Data) != 0 || !workloadImageLayerMedia(layer.MediaType) || layer.Size > (8<<30)-aggregate {

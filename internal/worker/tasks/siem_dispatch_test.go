@@ -27,6 +27,7 @@ type fakeSIEMQuerier struct {
 	failedTests     [][]int64
 	oldDeleteCutoff time.Time
 	oldDeleteCount  int64
+	countOverride   *int64
 }
 
 func (f *fakeSIEMQuerier) MarkSIEMTestOperationsSucceededByQueueIDs(_ context.Context, ids []int64) error {
@@ -125,6 +126,9 @@ func (f *fakeSIEMQuerier) IncrementSIEMQueueAttempts(_ context.Context, ids []in
 func (f *fakeSIEMQuerier) CountSIEMQueueByForwarder(_ context.Context, id uuid.UUID) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.countOverride != nil {
+		return *f.countOverride, nil
+	}
 	return int64(len(f.queue[id])), nil
 }
 
@@ -426,5 +430,18 @@ func TestHTTPClientForForwarder_ReusesPooledClient(t *testing.T) {
 	}
 	if c4 == c1 {
 		t.Fatal("expected distinct clients per forwarder id")
+	}
+}
+
+func TestDispatcherRejectsUnrepresentableQueueDepth(t *testing.T) {
+	for _, depth := range []int64{-1, 2147483648, 4294967297} {
+		fid := uuid.New()
+		fwd := sqlc.SiemForwarder{ID: fid, Name: "fixture", Transport: siem.TransportSplunkHEC, Endpoint: "https://splunk:8088", Format: siem.FormatNDJSONID, BatchSize: 10, Enabled: true}
+		q := &fakeSIEMQuerier{countOverride: &depth, queue: map[uuid.UUID][]sqlc.SiemForwardQueue{fid: {queueRow(1, fid, "audit.user.login")}}}
+		runtime := DispatchRuntime{SIEM: SIEMDeps{Queries: q, TransportFactory: func(sqlc.SiemForwarder, authBlob) (siem.Transport, error) { return &fakeTransport{}, nil }}}.normalized()
+		runtime.dispatchSIEMForwarder(context.Background(), fwd)
+		if len(q.statusCalls) != 0 {
+			t.Fatalf("depth %d reinterpreted: %+v", depth, q.statusCalls)
+		}
 	}
 }

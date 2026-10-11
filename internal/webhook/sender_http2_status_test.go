@@ -75,7 +75,7 @@ func serveOversizedHTTP2Status(listener net.Listener) error {
 	if err != nil {
 		return err
 	}
-	defer raw.Close()
+	defer func(close func() error) { _ = close() }(raw.Close)
 	if err := raw.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
 		return err
 	}

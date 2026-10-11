@@ -74,7 +74,7 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 			header := r.Header.Get("Authorization")
 			usedSessionCookie := false
 			if header == "" {
-				if c, err := r.Cookie(auth.SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
+				if c, err := auth.BrowserCookie(r, auth.SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
 					header = "Bearer " + c.Value
 					usedSessionCookie = true
 				} else {

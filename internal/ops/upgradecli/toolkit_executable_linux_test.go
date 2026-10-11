@@ -62,7 +62,7 @@ func TestToolkitExecutableReaderRejectsAliasesSpecialInputsBoundsAndCancellation
 			maximum := int64(len(body))
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			var owner context.Context = ctx
+			var owner = ctx
 			switch kind {
 			case "symlink":
 				alias := filepath.Join(directory, "alias")

@@ -149,19 +149,19 @@ func streamPreparedDatabase(source, destination string, descriptor ocispec.Descr
 	if err != nil {
 		return errors.New("streamed database input unavailable")
 	}
-	defer input.Close()
+	defer func(close func() error) { _ = close() }(input.Close)
 	opened, err := input.Stat()
 	if err != nil || !os.SameFile(before, opened) || !opened.Mode().IsRegular() || opened.Size() != descriptor.Size {
 		return errors.New("streamed database input changed before capture")
 	}
-	var target io.Writer = io.Discard
+	var target = io.Discard
 	var output *os.File
 	if destination != "" {
 		output, err = os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil {
 			return errors.New("owned database output must be new")
 		}
-		defer output.Close()
+		defer func(close func() error) { _ = close() }(output.Close)
 		target = output
 	}
 	hash := sha256.New()

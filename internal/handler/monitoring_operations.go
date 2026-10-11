@@ -265,13 +265,17 @@ func enqueueSharedMonitoringOperationWith[Req any](ctx context.Context, h *Monit
 	if err != nil {
 		return sqlc.MonitoringOperation{}, err
 	}
+	attempts, err := h.resolveMaxRetryAttempts(backend)
+	if err != nil {
+		return sqlc.MonitoringOperation{}, err
+	}
 	payload, err := json.Marshal(monitoringOperationEnvelope{
 		ClusterID:                clusterID,
 		Request:                  rawReq,
 		Values:                   values,
 		SecretSpec:               secretSpec,
 		ResolvedAutoRollback:     h.resolveAutoRollbackPolicy(backend, rollbackOverride),
-		ResolvedMaxRetryAttempts: h.resolveMaxRetryAttempts(backend),
+		ResolvedMaxRetryAttempts: attempts,
 	})
 	if err != nil {
 		return sqlc.MonitoringOperation{}, err

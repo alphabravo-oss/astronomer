@@ -3,6 +3,7 @@ package charlie
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -62,7 +63,7 @@ func (s *ClusterAgentHealthService) List(ctx context.Context, filter ClusterAgen
 	if s == nil || s.reader == nil {
 		return nil, fmt.Errorf("cluster-agent health telemetry is unavailable")
 	}
-	if filter.Page < 0 || filter.PageSize < 1 || filter.PageSize > maxClusterAgentPageSize {
+	if filter.Page < 0 || filter.PageSize < 1 || filter.PageSize > maxClusterAgentPageSize || filter.Page > math.MaxInt32/filter.PageSize {
 		return nil, fmt.Errorf("cluster-agent pagination is out of bounds")
 	}
 	if filter.ConnectionState != "" && filter.ConnectionState != "connected" && filter.ConnectionState != "disconnected" && filter.ConnectionState != "never" {

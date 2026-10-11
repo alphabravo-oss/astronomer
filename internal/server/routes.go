@@ -89,6 +89,7 @@ func NewProductionRouter(cfg *config.Config, deps RouterDependencies) (chi.Route
 // focused tests; every missing security dependency still fails closed.
 func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r := chi.NewRouter()
+	deps.CoreAuth.ToolUI = newToolUIGateway(cfg, deps)
 
 	// Per-endpoint-class rate limiter. Bucket store
 	// lives for the lifetime of the process; the janitor inside cleans up
@@ -111,7 +112,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r.Use(appmiddleware.TrustedRealIP(cfg.TrustedProxyCIDRs))
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-			next.ServeHTTP(w, request.WithContext(reqctx.WithSecureCookiesRequired(request.Context(), config.IsProduction(cfg))))
+			next.ServeHTTP(w, request.WithContext(reqctx.WithSecureCookiesRequired(request.Context(), config.IsProduction(cfg) || cfg.ToolUIDomain != "")))
 		})
 	})
 	r.Use(appmiddleware.SecurityHeaders)
@@ -121,13 +122,8 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	// Keep the server-level ReadTimeout at zero for WebSockets/SSE while still
 	// bounding every REST/SCIM mutation body by bytes and socket read time.
 	r.Use(appmiddleware.BoundRequestBodies(appmiddleware.DefaultMaxRequestBodyBytes, appmiddleware.DefaultRequestBodyTimeout))
-	// Normalise `/api/v1/foo` → `/api/v1/foo/` before chi matches so
-	// the frontend's no-trailing-slash REST calls hit the same route
-	// the trailing-slash form does. Without this, DELETE /clusters/{id}
-	// 404s because the route is mounted as /{id}/ — the user-facing
-	// symptom is "the cluster delete button in the UI silently fails."
-	// Scoped to /api/v1/* so static helm-repo assets are not
-	// affected.
+	// Split tool hosts before normalizing first-party API paths.
+	r.Use(deps.CoreAuth.ToolUI.Dispatch)
 	r.Use(appmiddleware.NormalizeAPITrailingSlash)
 	// Rename the otelhttp server span to use chi's route pattern
 	// once routing has run. otelhttp.NewHandler wraps the router with

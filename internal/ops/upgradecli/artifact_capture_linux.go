@@ -119,7 +119,7 @@ func verifyArtifactCapture(ctx context.Context, directory, name string, maximum 
 	if err != nil {
 		return errors.New("open private artifact scope")
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	currentParent, err := root.Stat(".")
 	if err != nil || !os.SameFile(parent, currentParent) {
 		return errors.New("private artifact parent identity changed")
@@ -132,7 +132,7 @@ func verifyArtifactCapture(ctx context.Context, directory, name string, maximum 
 	if err != nil {
 		return errors.New("open private artifact capture")
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	opened, err := file.Stat()
 	if err != nil || !sameArtifact(before, opened) {
 		return errors.New("opened private artifact identity changed")
@@ -178,5 +178,5 @@ func verifyArtifactCapture(ctx context.Context, directory, name string, maximum 
 }
 
 func sameArtifact(before, after os.FileInfo) bool {
-	return after != nil && after.Mode().IsRegular() && after.Mode().Perm() == 0o600 && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime() == after.ModTime() && after.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && after.Sys().(*syscall.Stat_t).Nlink == 1
+	return after != nil && after.Mode().IsRegular() && after.Mode().Perm() == 0o600 && os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime()) && after.Sys().(*syscall.Stat_t).Uid == uint32(os.Getuid()) && after.Sys().(*syscall.Stat_t).Nlink == 1
 }

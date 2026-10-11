@@ -69,7 +69,7 @@ func createPrivateBootstrapParent(directory string) error {
 	if err != nil {
 		return errors.New("open upgrade parent anchor")
 	}
-	defer func() { root.Close() }()
+	defer func() { _ = root.Close() }()
 	for _, name := range components {
 		before, err := root.Lstat(name)
 		if errors.Is(err, os.ErrNotExist) {
@@ -87,10 +87,10 @@ func createPrivateBootstrapParent(directory string) error {
 		}
 		opened, err := next.Stat(".")
 		if err != nil || !os.SameFile(before, opened) {
-			next.Close()
+			_ = next.Close()
 			return errors.New("upgrade parent component identity changed")
 		}
-		root.Close()
+		_ = root.Close()
 		root = next
 	}
 	return privateBootstrapDirectory(directory)

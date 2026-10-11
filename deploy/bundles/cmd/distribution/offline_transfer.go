@@ -44,7 +44,7 @@ func packOfflineTransfer(ctx context.Context, options distribution.OfflineOption
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(directory)
+	defer func() { _ = os.RemoveAll(directory) }()
 	if err := writeJSON(filepath.Join(directory, "index.json"), index); err != nil {
 		return nil, err
 	}

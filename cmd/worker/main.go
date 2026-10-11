@@ -543,9 +543,8 @@ func workerDBMaxConns(configured int32, concurrency int) int32 {
 		minimum  = int32(25)
 		headroom = int32(8)
 	)
-	derived := int32(concurrency) + headroom
-	if derived < minimum {
+	if concurrency <= int(minimum-headroom) {
 		return minimum
 	}
-	return derived
+	return int32(concurrency) + headroom
 }

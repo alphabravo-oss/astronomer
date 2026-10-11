@@ -53,7 +53,7 @@ func TestApprovedV12PromotionRequiresAutomatedRehearsal(t *testing.T) {
 		if err := yaml.Unmarshal(raw, &workflow); err != nil {
 			t.Fatal(err)
 		}
-		approved := `contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)`
+		approved := `contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag)`
 		externalGate := "!" + approved
 		rc := workflow.Jobs["rc-rehearsal"]
 		rcCondition := approved

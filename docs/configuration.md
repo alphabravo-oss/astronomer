@@ -53,6 +53,7 @@ Production-specific invariants are enforced at startup by
 | `REGISTRATION_TOKEN_TTL_HOURS` | `RegistrationTokenTTLHours` | integer | `1` | No |
 | `MANIFEST_SIGNING_SECRET` | `ManifestSigningSecret` | string | Go zero value | Yes |
 | `SERVER_URL` | `ServerURL` | string | Go zero value | No |
+| `TOOL_UI_DOMAIN` | `ToolUIDomain` | string | Go zero value | No |
 | `ASTRONOMER_ENCRYPTION_KEY` | `EncryptionKey` | string | Go zero value | Yes |
 | `ASTRONOMER_INTERNAL_PSK` | `InternalPSK` | string | Go zero value | Yes |
 | `ASTRONOMER_INTERNAL_PSK_PREVIOUS` | `InternalPSKPrevious` | string | Go zero value | No |

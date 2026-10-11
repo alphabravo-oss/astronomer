@@ -159,7 +159,7 @@ func newSSOCallbackRequest(t *testing.T, h *SSOHandler) *http.Request {
 		t.Fatal(err)
 	}
 	r := withProvider(httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/dex/?code=ok&state=state", nil), "dex")
-	r.AddCookie(&http.Cookie{Name: "astro_sso_state", Value: state})
+	r.AddCookie(&http.Cookie{Name: ssoStateCookieName("dex"), Value: state})
 	return r
 }
 

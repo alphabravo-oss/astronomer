@@ -57,7 +57,7 @@ func TestReadinessUsesOwnedLegacyResourceScopes(t *testing.T) {
 	if _, err := NewReadiness(r.fence, 0); err == nil {
 		t.Fatal("zero node minimum admitted")
 	}
-	if err := r.Check(nil); err == nil {
+	if err := r.Check(nil); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context admitted")
 	}
 }

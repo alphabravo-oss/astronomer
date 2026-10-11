@@ -162,11 +162,12 @@ func (authority *DatabaseAuthority) captureOfflineKitMetadata(ctx context.Contex
 		originals = append(originals, snapshot.PublishedSubject)
 		media = append(media, snapshot.Layer.MediaType)
 		maximum = append(maximum, snapshot.Layer.Size)
-		if snapshot.Role == "trivy-database" {
+		switch snapshot.Role {
+		case "trivy-database":
 			kit.Main = snapshot.Layer
-		} else if snapshot.Role == "trivy-java-database" {
+		case "trivy-java-database":
 			kit.Java = snapshot.Layer
-		} else {
+		default:
 			return kit, nil, errors.New("offline database export unexpected role")
 		}
 	}

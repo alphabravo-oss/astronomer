@@ -5,7 +5,7 @@
   "required": ["schema_version", "tag", "source_commit", "source_run_id", "approver", "approved_at", "runtime_images", "rc_rehearsal", "cloud_acceptance", "scale_certification", "rancher_benchmark", "accessibility"],
   "properties": {
     "schema_version": {"const": 2},
-    "tag": {"type": "string", "pattern": "^v1\\.[0-9]+\\.[0-9]+$"},
+    "tag": {"type": "string", "pattern": "^v[1-9][0-9]*\\.[0-9]+\\.[0-9]+$"},
     "source_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
     "source_run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
     "approver": {"type": "string", "minLength": 1, "maxLength": 128},
@@ -30,7 +30,7 @@
       "properties": {
         "status": {"const": "passed"}, "evidence_digest": {"$ref": "#/$defs/digest"},
         "source_run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
-        "source_ref": {"type": "string", "pattern": "^refs/tags/v1\\.[0-9]+\\.[0-9]+$"},
+        "source_ref": {"type": "string", "pattern": "^refs/tags/v[1-9][0-9]*\\.[0-9]+\\.[0-9]+$"},
         "artifact_name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"}
       }
     }

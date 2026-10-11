@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/google/uuid"
@@ -124,6 +125,9 @@ func (h *LoggingHandler) reconcileFluentBitIngestMounts(ctx context.Context, clu
 			status = s
 		}
 		if result.Revision > 0 {
+			if result.Revision > math.MaxInt32 {
+				return fmt.Errorf("fluent-bit release revision exceeds the supported database range")
+			}
 			revision = int32(result.Revision)
 		}
 	}

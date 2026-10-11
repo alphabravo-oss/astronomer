@@ -60,7 +60,7 @@ func (h *HelmHandler) actionConfig(ctx context.Context, namespace string) (*acti
 		return nil, fmt.Errorf("init helm config: %w", err)
 	}
 	if client, ok := cfg.KubeClient.(*kube.Client); ok {
-		client.WaitContext = ctx
+		client.WaitContext = ctx //nolint:staticcheck // Helm 4.3 LegacyStrategy still reads this field and ignores WithWaitContext; preserve cancellation.
 	} else {
 		return nil, fmt.Errorf("unsupported Helm Kubernetes wait client")
 	}

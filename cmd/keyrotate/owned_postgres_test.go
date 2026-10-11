@@ -172,7 +172,7 @@ func TestPostgresRotationCatalogCoversActualEncryptedColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal("read actual encrypted column inventory")
 	}
-	defer rows.Close()
+	defer func(close func() error) { _ = close() }(rows.Close)
 	covered := map[string]bool{}
 	for _, item := range rewriteTargets {
 		covered[item.table+"."+item.column] = true

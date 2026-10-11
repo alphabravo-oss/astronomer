@@ -18,7 +18,7 @@ func readDistributionInput(path string) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("distribution metadata file is unavailable")
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() > 1<<20 {
 		return nil, errors.New("distribution metadata file is invalid")

@@ -69,7 +69,7 @@ func publishPublicReport(ctx context.Context, directory, name string, raw []byte
 	if err != nil {
 		return result, errors.New("open owned public evidence directory")
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	parentStable := func() error {
 		opened, e := root.Stat(".")
 		named, n := os.Lstat(directory)

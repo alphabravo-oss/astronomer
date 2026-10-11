@@ -93,6 +93,10 @@ type Config struct {
 	// it is intentionally omitted from a development install.
 	ServerURL string `mapstructure:"server_url"`
 
+	// ToolUIDomain is the dedicated wildcard DNS suffix for isolated downstream UIs.
+	// Requires HTTPS, wildcard DNS/TLS, and a suffix separate from ServerURL.
+	ToolUIDomain string `mapstructure:"tool_ui_domain"`
+
 	EncryptionKey string `mapstructure:"astronomer_encryption_key"`
 	// InternalPSK authenticates body-bound, short-lived cross-pod tunnel RPC.
 	// It must be independent from both the JWT signing and Fernet keys.
@@ -533,7 +537,7 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	captureHelmOperatorProxy(cfg, v.IsSet("helm_repository_no_proxy"))
-	if err := normalizeHelmAndDeliveryTrust(cfg); err != nil {
+	if err := validateRuntimeBounds(cfg); err != nil {
 		return nil, err
 	}
 	if err := applyReleaseManifest(cfg); err != nil {

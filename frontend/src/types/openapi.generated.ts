@@ -7370,7 +7370,7 @@ export interface OpenAPIOperations {
           "id": string;
         };
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: string;
   };
   "headClustersByIdObservabilityGrafana": {
     method: "HEAD";
@@ -7380,7 +7380,7 @@ export interface OpenAPIOperations {
           "id": string;
         };
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: string;
   };
   "optionsClustersByIdObservabilityGrafana": {
     method: "OPTIONS";
@@ -7390,7 +7390,7 @@ export interface OpenAPIOperations {
           "id": string;
         };
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "patchClustersByIdObservabilityGrafana": {
     method: "PATCH";
@@ -7401,7 +7401,7 @@ export interface OpenAPIOperations {
         };
         "body": unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "postClustersByIdObservabilityGrafana": {
     method: "POST";
@@ -7412,7 +7412,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "putClustersByIdObservabilityGrafana": {
     method: "PUT";
@@ -7423,7 +7423,7 @@ export interface OpenAPIOperations {
         };
         "body": unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "deleteClustersByIdObservabilityGrafanaProxy": {
     method: "DELETE";
@@ -7443,7 +7443,7 @@ export interface OpenAPIOperations {
           "id": string;
         };
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: string;
   };
   "headClustersByIdObservabilityGrafanaProxy": {
     method: "HEAD";
@@ -7453,7 +7453,7 @@ export interface OpenAPIOperations {
           "id": string;
         };
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: string;
   };
   "optionsClustersByIdObservabilityGrafanaProxy": {
     method: "OPTIONS";
@@ -7463,7 +7463,7 @@ export interface OpenAPIOperations {
           "id": string;
         };
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "patchClustersByIdObservabilityGrafanaProxy": {
     method: "PATCH";
@@ -7474,7 +7474,7 @@ export interface OpenAPIOperations {
         };
         "body": unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "postClustersByIdObservabilityGrafanaProxy": {
     method: "POST";
@@ -7485,7 +7485,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "putClustersByIdObservabilityGrafanaProxy": {
     method: "PUT";
@@ -7496,7 +7496,7 @@ export interface OpenAPIOperations {
         };
         "body": unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "deleteObservabilityGrafana": {
     method: "DELETE";
@@ -7508,19 +7508,19 @@ export interface OpenAPIOperations {
     method: "GET";
     path: "/api/v1/observability/grafana";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: string;
   };
   "headObservabilityGrafana": {
     method: "HEAD";
     path: "/api/v1/observability/grafana";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: string;
   };
   "optionsObservabilityGrafana": {
     method: "OPTIONS";
     path: "/api/v1/observability/grafana";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "patchObservabilityGrafana": {
     method: "PATCH";
@@ -7528,7 +7528,7 @@ export interface OpenAPIOperations {
     arguments: {
         "body": unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "postObservabilityGrafana": {
     method: "POST";
@@ -7536,7 +7536,7 @@ export interface OpenAPIOperations {
     arguments: {
         "body"?: unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "putObservabilityGrafana": {
     method: "PUT";
@@ -7544,7 +7544,7 @@ export interface OpenAPIOperations {
     arguments: {
         "body": unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "deleteObservabilityGrafanaProxy": {
     method: "DELETE";
@@ -7556,19 +7556,19 @@ export interface OpenAPIOperations {
     method: "GET";
     path: "/api/v1/observability/grafana/*";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: string;
   };
   "headObservabilityGrafanaProxy": {
     method: "HEAD";
     path: "/api/v1/observability/grafana/*";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: string;
   };
   "optionsObservabilityGrafanaProxy": {
     method: "OPTIONS";
     path: "/api/v1/observability/grafana/*";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "patchObservabilityGrafanaProxy": {
     method: "PATCH";
@@ -7576,7 +7576,7 @@ export interface OpenAPIOperations {
     arguments: {
         "body": unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "postObservabilityGrafanaProxy": {
     method: "POST";
@@ -7584,7 +7584,7 @@ export interface OpenAPIOperations {
     arguments: {
         "body"?: unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "putObservabilityGrafanaProxy": {
     method: "PUT";
@@ -7592,7 +7592,7 @@ export interface OpenAPIOperations {
     arguments: {
         "body": unknown;
       };
-    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+    response: void;
   };
   "internalTunnelK8sCapability": {
     method: "GET";
@@ -8866,7 +8866,7 @@ export interface OpenAPIOperations {
           "service_port": string;
         };
       };
-    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+    response: string;
   };
   "headClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
     method: "HEAD";
@@ -8878,7 +8878,7 @@ export interface OpenAPIOperations {
           "service_port": string;
         };
       };
-    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+    response: string;
   };
   "optionsClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
     method: "OPTIONS";
@@ -8890,7 +8890,7 @@ export interface OpenAPIOperations {
           "service_port": string;
         };
       };
-    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+    response: void;
   };
   "patchClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
     method: "PATCH";
@@ -8903,7 +8903,7 @@ export interface OpenAPIOperations {
         };
         "body": unknown;
       };
-    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+    response: void;
   };
   "postClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
     method: "POST";
@@ -8916,7 +8916,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+    response: void;
   };
   "putClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
     method: "PUT";
@@ -8929,7 +8929,7 @@ export interface OpenAPIOperations {
         };
         "body": unknown;
       };
-    response: OpenAPIComponents['schemas']['ServiceProxyResponse'];
+    response: void;
   };
   "traceClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": {
     method: "TRACE";
@@ -17496,7 +17496,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: string;
   };
   "serviceProxyHead": {
     method: "HEAD";
@@ -17509,7 +17509,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: string;
   };
   "serviceProxyOptions": {
     method: "OPTIONS";
@@ -17522,7 +17522,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: void;
   };
   "serviceProxyPost": {
     method: "POST";
@@ -17535,7 +17535,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: void;
   };
   "serviceProxyPut": {
     method: "PUT";
@@ -17548,7 +17548,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: void;
   };
   "serviceProxyPatch": {
     method: "PATCH";
@@ -17561,7 +17561,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: void;
   };
   "serviceProxyDelete": {
     method: "DELETE";
@@ -17574,7 +17574,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: void;
   };
   "serviceProxyTrace": {
     method: "TRACE";
@@ -17601,7 +17601,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: string;
   };
   "serviceProxySubHead": {
     method: "HEAD";
@@ -17615,7 +17615,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: string;
   };
   "serviceProxySubOptions": {
     method: "OPTIONS";
@@ -17629,7 +17629,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: void;
   };
   "serviceProxySubPost": {
     method: "POST";
@@ -17643,7 +17643,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: void;
   };
   "serviceProxySubPut": {
     method: "PUT";
@@ -17657,7 +17657,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: void;
   };
   "serviceProxySubPatch": {
     method: "PATCH";
@@ -17671,7 +17671,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: void;
   };
   "serviceProxySubDelete": {
     method: "DELETE";
@@ -17685,7 +17685,7 @@ export interface OpenAPIOperations {
         };
         "body"?: unknown;
       };
-    response: unknown | string;
+    response: void;
   };
   "serviceProxySubTrace": {
     method: "TRACE";
@@ -17823,33 +17823,33 @@ export interface OpenAPIOperations {
 
 export interface OpenAPIReadOperations {
   "deleteClustersByIdObservabilityGrafana": { response: void };
-  "getClustersByIdObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "headClustersByIdObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "optionsClustersByIdObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "patchClustersByIdObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "postClustersByIdObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "putClustersByIdObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
+  "getClustersByIdObservabilityGrafana": { response: string };
+  "headClustersByIdObservabilityGrafana": { response: string };
+  "optionsClustersByIdObservabilityGrafana": { response: void };
+  "patchClustersByIdObservabilityGrafana": { response: void };
+  "postClustersByIdObservabilityGrafana": { response: void };
+  "putClustersByIdObservabilityGrafana": { response: void };
   "deleteClustersByIdObservabilityGrafanaProxy": { response: void };
-  "getClustersByIdObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "headClustersByIdObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "optionsClustersByIdObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "patchClustersByIdObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "postClustersByIdObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "putClustersByIdObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
+  "getClustersByIdObservabilityGrafanaProxy": { response: string };
+  "headClustersByIdObservabilityGrafanaProxy": { response: string };
+  "optionsClustersByIdObservabilityGrafanaProxy": { response: void };
+  "patchClustersByIdObservabilityGrafanaProxy": { response: void };
+  "postClustersByIdObservabilityGrafanaProxy": { response: void };
+  "putClustersByIdObservabilityGrafanaProxy": { response: void };
   "deleteObservabilityGrafana": { response: void };
-  "getObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "headObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "optionsObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "patchObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "postObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "putObservabilityGrafana": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
+  "getObservabilityGrafana": { response: string };
+  "headObservabilityGrafana": { response: string };
+  "optionsObservabilityGrafana": { response: void };
+  "patchObservabilityGrafana": { response: void };
+  "postObservabilityGrafana": { response: void };
+  "putObservabilityGrafana": { response: void };
   "deleteObservabilityGrafanaProxy": { response: void };
-  "getObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "headObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "optionsObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "patchObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "postObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
-  "putObservabilityGrafanaProxy": { response: OpenAPIReadComponents['schemas']['RouteResponseEnvelope'] };
+  "getObservabilityGrafanaProxy": { response: string };
+  "headObservabilityGrafanaProxy": { response: string };
+  "optionsObservabilityGrafanaProxy": { response: void };
+  "patchObservabilityGrafanaProxy": { response: void };
+  "postObservabilityGrafanaProxy": { response: void };
+  "putObservabilityGrafanaProxy": { response: void };
   "internalTunnelK8sCapability": { response: {
         "supported": boolean;
       } };
@@ -17998,12 +17998,12 @@ export interface OpenAPIReadOperations {
   "getClustersByClusterIdLimitRanges": { response: OpenAPIReadComponents['schemas']['MirroredLimitRangePage'] };
   "getClustersByClusterIdNetworkPolicies": { response: OpenAPIReadComponents['schemas']['MirroredNetworkPolicyPage'] };
   "deleteClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: void };
-  "getClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: OpenAPIReadComponents['schemas']['ServiceProxyResponse'] };
-  "headClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: OpenAPIReadComponents['schemas']['ServiceProxyResponse'] };
-  "optionsClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: OpenAPIReadComponents['schemas']['ServiceProxyResponse'] };
-  "patchClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: OpenAPIReadComponents['schemas']['ServiceProxyResponse'] };
-  "postClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: OpenAPIReadComponents['schemas']['ServiceProxyResponse'] };
-  "putClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: OpenAPIReadComponents['schemas']['ServiceProxyResponse'] };
+  "getClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: string };
+  "headClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: string };
+  "optionsClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: void };
+  "patchClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: void };
+  "postClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: void };
+  "putClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: void };
   "traceClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { response: OpenAPIReadComponents['schemas']['ServiceProxyResponse'] };
   "getClustersByClusterIdResourceQuotas": { response: OpenAPIReadComponents['schemas']['MirroredResourceQuotaPage'] };
   "getClustersByClusterIdSecurityPolicy": { response: OpenAPIReadComponents['schemas']['ClusterSecurityPolicyEnvelope'] };
@@ -19653,21 +19653,21 @@ export interface OpenAPIReadOperations {
   "k8sProxyPatch": { response: unknown | string };
   "k8sProxyDelete": { response: unknown | string };
   "k8sProxyTrace": { response: unknown | string };
-  "serviceProxyGet": { response: unknown | string };
-  "serviceProxyHead": { response: unknown | string };
-  "serviceProxyOptions": { response: unknown | string };
-  "serviceProxyPost": { response: unknown | string };
-  "serviceProxyPut": { response: unknown | string };
-  "serviceProxyPatch": { response: unknown | string };
-  "serviceProxyDelete": { response: unknown | string };
+  "serviceProxyGet": { response: string };
+  "serviceProxyHead": { response: string };
+  "serviceProxyOptions": { response: void };
+  "serviceProxyPost": { response: void };
+  "serviceProxyPut": { response: void };
+  "serviceProxyPatch": { response: void };
+  "serviceProxyDelete": { response: void };
   "serviceProxyTrace": { response: unknown | string };
-  "serviceProxySubGet": { response: unknown | string };
-  "serviceProxySubHead": { response: unknown | string };
-  "serviceProxySubOptions": { response: unknown | string };
-  "serviceProxySubPost": { response: unknown | string };
-  "serviceProxySubPut": { response: unknown | string };
-  "serviceProxySubPatch": { response: unknown | string };
-  "serviceProxySubDelete": { response: unknown | string };
+  "serviceProxySubGet": { response: string };
+  "serviceProxySubHead": { response: string };
+  "serviceProxySubOptions": { response: void };
+  "serviceProxySubPost": { response: void };
+  "serviceProxySubPut": { response: void };
+  "serviceProxySubPatch": { response: void };
+  "serviceProxySubDelete": { response: void };
   "serviceProxySubTrace": { response: unknown | string };
   "kubectlShellWebSocket": { response: void };
   "podExecWebSocket": { response: void };

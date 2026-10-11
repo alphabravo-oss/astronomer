@@ -29,7 +29,7 @@ func run(args []string) int {
 		return 2
 	}
 	if parsed.Help {
-		fmt.Fprint(os.Stdout, upgradecli.LegacyUpgradeHelp)
+		_, _ = fmt.Fprint(os.Stdout, upgradecli.LegacyUpgradeHelp)
 		return 0
 	}
 	directory, err := os.Getwd()
@@ -92,7 +92,7 @@ func run(args []string) int {
 		fmt.Fprintln(os.Stderr, "upgrade-release: bounded upgrade failed; retained private originals require assessment")
 	}
 	if result.Report.Published {
-		fmt.Fprintln(os.Stdout, "Sanitized upgrade report retained.")
+		_, _ = fmt.Fprintln(os.Stdout, "Sanitized upgrade report retained.")
 	}
 	return result.ExitCode
 }

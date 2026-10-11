@@ -122,7 +122,7 @@ func (reader *SupplierPublicationReader) Close() error {
 	}
 	reader.closed = true
 	defer reader.cancel()
-	defer reader.file.Close()
+	defer func(close func() error) { _ = close() }(reader.file.Close)
 	if reader.failure != nil {
 		return reader.failure
 	}

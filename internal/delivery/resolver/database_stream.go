@@ -126,7 +126,7 @@ func streamPinnedOCILayer(ctx context.Context, client *http.Client, repositoryNa
 }
 
 func consumeDatabaseRange(response *http.Response, writer io.Writer, buffer []byte, start, end, size int64) error {
-	defer response.Body.Close()
+	defer func(close func() error) { _ = close() }(response.Body.Close)
 	length := end - start + 1
 	if response.StatusCode != http.StatusPartialContent || len(response.Header.Values("Content-Range")) != 1 || response.Header.Get("Content-Range") != fmt.Sprintf("bytes %d-%d/%d", start, end, size) || strings.HasPrefix(strings.ToLower(response.Header.Get("Content-Type")), "multipart/") || response.Uncompressed || (response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity") || (response.ContentLength >= 0 && response.ContentLength != length) {
 		return errors.New("streamed database range response differs from exact bounds")

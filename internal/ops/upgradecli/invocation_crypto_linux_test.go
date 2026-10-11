@@ -175,7 +175,7 @@ func invocationCanonicalProxy(t *testing.T, ip net.IP, localOCI *http.Client) (h
 			http.Error(w, "owned OCI upstream failed", http.StatusBadGateway)
 			return
 		}
-		defer response.Body.Close()
+		defer func(close func() error) { _ = close() }(response.Body.Close)
 		for key, values := range response.Header {
 			for _, value := range values {
 				w.Header().Add(key, value)

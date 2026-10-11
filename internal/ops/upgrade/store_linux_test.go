@@ -210,7 +210,7 @@ func TestPrivateCheckpointCannotRewindAcknowledgedProgress(t *testing.T) {
 	if store.Save(context.Background(), state) == nil {
 		t.Fatal("rewound acknowledged stage")
 	}
-	if _, err = store.Load(nil); err == nil || store.Save(nil, progressed) == nil {
+	if _, err = store.Load(nil); err == nil || store.Save(nil, progressed) == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil checkpoint context admitted")
 	}
 }

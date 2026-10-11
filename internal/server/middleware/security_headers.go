@@ -22,6 +22,8 @@ const defaultContentSecurityPolicy = "default-src 'self'; base-uri 'self'; objec
 func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
+		setHeaderIfEmpty(h, "Origin-Agent-Cluster", "?1")
+		setHeaderIfEmpty(h, "Permissions-Policy", "document-domain=()")
 		setHeaderIfEmpty(h, "X-Content-Type-Options", "nosniff")
 		setHeaderIfEmpty(h, "Referrer-Policy", "strict-origin-when-cross-origin")
 		setHeaderIfEmpty(h, "X-Frame-Options", "DENY")

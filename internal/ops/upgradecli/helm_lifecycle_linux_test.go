@@ -142,7 +142,7 @@ func TestHelmLifecycleConstructorRejectsUnverifiedManifestBytes(t *testing.T) {
 	if _, err := NewHelmRelease(context.Background(), release.fence, release.tool, options); err == nil {
 		t.Fatal("unbound manifest bytes admitted")
 	}
-	if _, err := NewHelmRelease(nil, release.fence, release.tool, options); err == nil {
+	if _, err := NewHelmRelease(nil, release.fence, release.tool, options); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil construction context admitted")
 	}
 	// Matching bytes are insufficient: the canonical closed contract must load.

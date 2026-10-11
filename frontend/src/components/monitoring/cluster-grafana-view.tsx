@@ -78,6 +78,7 @@ export function ClusterGrafanaView({
             <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
               <iframe
                 title="Cluster Grafana"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups"
                 src={(data.grafanaProxyPath || base) + suffix}
                 className="h-[calc(100vh-12rem)] min-h-152 w-full bg-background"
                 referrerPolicy="same-origin"

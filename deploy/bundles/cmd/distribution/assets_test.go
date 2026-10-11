@@ -11,12 +11,12 @@ import (
 
 func TestProducerClosesEnabledScannerDatabaseSubjects(t *testing.T) {
 	catalogFile, charts, assetFile, platforms := producerFixture(t, "apiVersion: v1\nkind: Pod\nspec:\n  containers:\n  - image: {{ .Values.image }}\n")
-	result, err := produce(catalogFile, charts)
+	_, err := produce(catalogFile, charts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	assets := configureScannerDatabaseFixture(t, catalogFile, assetFile)
-	result, err = produce(catalogFile, charts)
+	result, err := produce(catalogFile, charts)
 	if err != nil {
 		t.Fatal(err)
 	}

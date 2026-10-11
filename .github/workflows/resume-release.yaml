@@ -101,6 +101,10 @@ jobs:
             grep -Fxq "$expected" <<<"$artifacts"
           done
 
+          if [[ "$TAG" != v1.2.0 && "$TAG" != v1.2.1 ]]; then
+            grep -Fxq "upgrade-toolkit-${TAG}" <<<"$artifacts"
+          fi
+
           metadata_required=false
           metadata_run_id="$SOURCE_RUN_ID"
           if ! grep -Fxq "chart-${TAG}" <<<"$artifacts"; then
@@ -741,11 +745,11 @@ jobs:
             -l app.kubernetes.io/instance=astronomer || true
 
   rc-rehearsal:
-    name: qualify v1.2.0/v1.2.1 upgrade, backup and clean restore
+    name: qualify approved release upgrade, backup and clean restore
     # Metadata completion is intentionally skipped when the original chart exists.
     # Override the implicit success() across that skipped ancestor, while requiring
     # both direct prerequisite jobs to have succeeded.
-    if: always() && !cancelled() && needs.preflight.result == 'success' && needs.qualify.result == 'success' && contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
+    if: always() && !cancelled() && needs.preflight.result == 'success' && needs.qualify.result == 'success' && contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag)
     needs: [preflight, qualify]
     runs-on: ubuntu-24.04
     timeout-minutes: 75
@@ -796,8 +800,8 @@ jobs:
     needs: [preflight, qualify, rc-rehearsal]
     if: >-
       always() && !cancelled() && needs.preflight.result == 'success' && needs.qualify.result == 'success' &&
-      ((contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag) && needs.rc-rehearsal.result == 'success') ||
-       (!contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag) && needs.rc-rehearsal.result == 'skipped'))
+      ((contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag) && needs.rc-rehearsal.result == 'success') ||
+       (!contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag) && needs.rc-rehearsal.result == 'skipped'))
     runs-on: ubuntu-latest
     environment: release-production
     permissions:
@@ -830,13 +834,13 @@ jobs:
         with: {cosign-release: v2.5.3}
 
       - name: Download current-run v1.2.0/v1.2.1 rehearsal evidence
-        if: contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
+        if: contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag)
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rc-rehearsal-${{ github.run_id }}
 
       - name: Verify automated v1.2.0/v1.2.1 publication evidence
-        if: contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag)
+        if: contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag)
         env:
           TAG: ${{ needs.preflight.outputs.image-tag }}
           SOURCE_COMMIT: ${{ needs.preflight.outputs.tag-commit }}
@@ -850,7 +854,7 @@ jobs:
             --repository "$REPOSITORY" --rc-identity "$RC_IDENTITY"
 
       - name: Verify protected release approval and external accessibility evidence
-        if: ${{ !contains(fromJSON('["v1.2.0","v1.2.1"]'), needs.preflight.outputs.image-tag) }}
+        if: ${{ !contains(fromJSON('["v1.2.0","v1.2.1","v2.0.0"]'), needs.preflight.outputs.image-tag) }}
         env:
           RELEASE_APPROVAL_JSON: ${{ vars.RELEASE_APPROVAL_JSON }}
           TAG: ${{ needs.preflight.outputs.image-tag }}
@@ -937,22 +941,39 @@ jobs:
               -name 'release-recovery*.json' -o -name 'RELEASE_NOTES.md' -o \
               -name 'rc-rehearsal-evidence*.json' -o -name 'release-qualification.json' -o \
               -name 'values-production.yaml' -o \
+              -name 'astronomer-upgrade-toolkit-*' -o \
               -name 'astronomer-images.txt' -o \
               -name 'RELEASE_IMAGES' -o -name 'RELEASE_SUBJECTS' \
             \) -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
           qualification_assets=()
-          if [[ "$TAG" == v1.2.0 || "$TAG" == v1.2.1 ]]; then
+          if [[ "$TAG" == v1.2.0 || "$TAG" == v1.2.1 || "$TAG" == v2.0.0 ]]; then
             qualification_assets=(rc-rehearsal-evidence.json rc-rehearsal-evidence.sigstore.json release-qualification.json)
           fi
           if [[ -f release-recovery.json ]]; then
             qualification_assets+=(release-recovery.json release-recovery.sigstore.json)
           fi
-          gh release create "$TAG" "${qualification_assets[@]}" \
+          upgrade_toolkit_assets=()
+          if [[ "$TAG" != v1.2.0 && "$TAG" != v1.2.1 ]]; then
+            for architecture in amd64 arm64; do
+              stem="astronomer-upgrade-toolkit-${TAG}-linux-${architecture}"
+              archive="astronomer-upgrade-${TAG}-linux-${architecture}.tar.gz"
+              test -s "$archive" && test -s "$stem" && test -s "${stem}.json" && test -s "${stem}.sigstore.json" && test -s "${stem}.installer.sigstore.json"
+              upgrade_toolkit_assets+=("$archive" "$stem" "${stem}.json" "${stem}.sigstore.json" "${stem}.installer.sigstore.json")
+            done
+          fi
+          release_tarballs=()
+          for archive in *.tar.gz; do
+            case "$archive" in
+              "astronomer-upgrade-${TAG}-linux-amd64.tar.gz"|"astronomer-upgrade-${TAG}-linux-arm64.tar.gz") ;;
+              *) release_tarballs+=("$archive") ;;
+            esac
+          done
+          gh release create "$TAG" "${qualification_assets[@]}" "${upgrade_toolkit_assets[@]}" \
             --repo "$REPOSITORY" \
             --verify-tag \
             --notes-file RELEASE_NOTES.md \
             --title "Astronomer ${TAG}" \
-            astronomer-*.tgz *.tar.gz sbom-*.spdx.json provenance-*.slsa.json \
+            astronomer-*.tgz "${release_tarballs[@]}" sbom-*.spdx.json provenance-*.slsa.json \
             release-manifest.json release-manifest.sigstore.json \
             runtime-image-evidence.json runtime-image-evidence.sigstore.json \
             values-production.yaml astronomer-images.txt RELEASE_NOTES.md \

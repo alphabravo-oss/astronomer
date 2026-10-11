@@ -20,7 +20,7 @@ import (
 // A schema tag is resolved once; all later reads use the captured digest.
 func CaptureSupplierDatabaseMetadata(ctx context.Context, client *http.Client, repositoryName, schemaTag, mediaType string) (string, ArtifactMetadata, error) {
 	var empty ArtifactMetadata
-	if ctx == nil || client == nil || !(schemaTag == "2" && mediaType == "application/vnd.aquasec.trivy.db.layer.v1.tar+gzip" || schemaTag == "1" && mediaType == "application/vnd.aquasec.trivy.javadb.layer.v1.tar+gzip") {
+	if ctx == nil || client == nil || ((schemaTag != "2" || mediaType != "application/vnd.aquasec.trivy.db.layer.v1.tar+gzip") && (schemaTag != "1" || mediaType != "application/vnd.aquasec.trivy.javadb.layer.v1.tar+gzip")) {
 		return "", empty, errors.New("supplier database capture inputs invalid")
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)

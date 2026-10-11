@@ -46,7 +46,7 @@ func TestActualRendererHonorsReviewedChartValuesSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer input.Close()
+	defer func(close func() error) { _ = close() }(input.Close)
 	reader := tar.NewReader(input)
 	var output bytes.Buffer
 	compressed := gzip.NewWriter(&output)

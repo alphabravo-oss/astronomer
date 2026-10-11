@@ -34,7 +34,7 @@ func WalkCheckout(ctx context.Context, directory, prefix string, visit func(stri
 	if err != nil {
 		return fmt.Errorf("open repository root: %w", err)
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	opened, err := root.Stat(".")
 	if err != nil {
 		return fmt.Errorf("stat opened repository root: %w", err)
@@ -110,7 +110,7 @@ func readCheckoutFile(ctx context.Context, root *os.Root, name string, enumerate
 	if err != nil {
 		return nil, errors.New("repository YAML no-follow open failed")
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	before, err := file.Stat()
 	if err != nil {
 		return nil, errors.New("repository YAML descriptor stat failed")

@@ -44,13 +44,13 @@ func TestTracingRejectsMalformedEndpointWithoutCredentialDisclosure(t *testing.T
 func TestTracingDisabledInstallsNoopProvider(t *testing.T) {
 	preserveTracingGlobals(t)
 	prior := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
-	defer prior.Shutdown(context.Background())
+	defer func() { _ = prior.Shutdown(context.Background()) }()
 	otel.SetTracerProvider(prior)
 	shutdown, err := InitTracing(context.Background(), nil, TracingConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer shutdown(context.Background())
+	defer func() { _ = shutdown(context.Background()) }()
 	_, span := otel.Tracer("disabled-probe").Start(context.Background(), "must-not-record")
 	defer span.End()
 	if span.IsRecording() {

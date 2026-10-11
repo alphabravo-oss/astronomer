@@ -50,12 +50,12 @@ func copyProjectedPreparationMaterialWithMapping(ctx context.Context, projected,
 	if err != nil {
 		return err
 	}
-	defer source.Close()
+	defer func(close func() error) { _ = close() }(source.Close)
 	target, targetBefore, err := openRootProjection(destination)
 	if err != nil {
 		return err
 	}
-	defer target.Close()
+	defer func(close func() error) { _ = close() }(target.Close)
 	names, err := target.Readdirnames(1)
 	if err != io.EOF || len(names) != 0 {
 		return errors.New("owned Job material target not empty")
@@ -69,7 +69,7 @@ func copyProjectedPreparationMaterialWithMapping(ctx context.Context, projected,
 		return errors.New("owned Job projection epoch unavailable")
 	}
 	epoch := os.NewFile(uintptr(epochFD), "owned Job projection epoch")
-	defer epoch.Close()
+	defer func(close func() error) { _ = close() }(epoch.Close)
 	var epochBefore unix.Stat_t
 	if unix.Fstat(epochFD, &epochBefore) != nil || epochBefore.Mode&unix.S_IFMT != unix.S_IFDIR || epochBefore.Uid != 0 || epochBefore.Mode&07777 != 0755 {
 		return errors.New("owned Job projection epoch owner invalid")
@@ -99,7 +99,7 @@ func copyProjectedPreparationMaterialWithMapping(ctx context.Context, projected,
 		return errors.New("owned Job private trust unavailable")
 	}
 	trust := os.NewFile(uintptr(trustFD), "owned Job private trust")
-	defer trust.Close()
+	defer func(close func() error) { _ = close() }(trust.Close)
 	for _, member := range members {
 		if err := bounded.Err(); err != nil {
 			return err
@@ -151,7 +151,7 @@ func openRootProjection(path string) (*os.File, unix.Stat_t, error) {
 	file := os.NewFile(uintptr(fd), "owned Job material root")
 	var before unix.Stat_t
 	if unix.Fstat(fd, &before) != nil || before.Mode&unix.S_IFMT != unix.S_IFDIR || before.Uid != 0 || before.Mode&07777 != 0755 {
-		file.Close()
+		_ = file.Close()
 		return nil, unix.Stat_t{}, errors.New("owned Job material root owner invalid")
 	}
 	return file, before, nil
@@ -181,7 +181,7 @@ func copyProjectedMember(ctx context.Context, epoch, source *os.File, epochName 
 		return errors.New("owned Job projected material unavailable")
 	}
 	input := os.NewFile(uintptr(fd), "owned Job projected material")
-	defer input.Close()
+	defer func(close func() error) { _ = close() }(input.Close)
 	var before unix.Stat_t
 	if unix.Fstat(fd, &before) != nil || before.Mode&unix.S_IFMT != unix.S_IFREG || before.Uid != 0 || before.Mode&07777 != 0444 || before.Nlink != 1 || before.Size <= 0 || before.Size > member.maximum {
 		return errors.New("owned Job projected material owner or bounds invalid")
@@ -203,7 +203,7 @@ func copyProjectedMember(ctx context.Context, epoch, source *os.File, epochName 
 		return errors.New("owned Job material exclusive output failed")
 	}
 	output := os.NewFile(uintptr(outFD), "owned Job private material")
-	defer output.Close()
+	defer func(close func() error) { _ = close() }(output.Close)
 	copied, err := output.Write(payload)
 	if err != nil || copied != len(payload) || output.Sync() != nil || unix.Fchown(outFD, uid, -1) != nil || unix.Fchmod(outFD, 0400) != nil {
 		return errors.New("owned Job material copy failed")

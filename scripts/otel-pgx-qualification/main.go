@@ -82,7 +82,7 @@ func readReference(path string) (string, error) {
 		return "", errors.New("protected database reference unavailable")
 	}
 	f := os.NewFile(uintptr(fd), "database reference")
-	defer f.Close()
+	defer func(close func() error) { _ = close() }(f.Close)
 	stat, err := f.Stat()
 	if err != nil || !stat.Mode().IsRegular() || stat.Mode().Perm()&0077 != 0 {
 		return "", errors.New("database reference must be a private regular file")
@@ -159,7 +159,7 @@ func run(ctx context.Context, connection string) (*receipt, error) {
 	if err != nil {
 		return nil, errors.New("production connection callback failed")
 	}
-	defer direct.Close(ctx)
+	defer func() { _ = direct.Close(ctx) }()
 	if _, err = database.Pool().Exec(ctx, "CREATE TABLE IF NOT EXISTS callback_rows (id integer PRIMARY KEY, value text NOT NULL)"); err != nil {
 		return nil, errors.New("owned fixture table creation failed")
 	}

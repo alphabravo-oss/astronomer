@@ -139,13 +139,13 @@ func NormalizeSourceURL(raw string) (string, error) {
 }
 
 func (c Catalog) Validate() error {
-	if c.SchemaVersion != 1 || !strings.HasPrefix(c.Release, "v1.") || len(c.Components) == 0 {
+	if c.SchemaVersion != 1 || !regexp.MustCompile(`^v[1-9][0-9]*\.[0-9]+\.[0-9]+$`).MatchString(c.Release) || len(c.Components) == 0 {
 		return errors.New("built-in bundle catalog has invalid release metadata")
 	}
 	seen := make(map[string]struct{}, len(c.Components))
 	artifacts := make(map[string]string, len(c.Components))
 	for index, component := range c.Components {
-		if component.Slug == "" || component.Name == "" || (component.Source.Kind != "helm_http" && !(c.DistributionIdentity != "" && component.Source.OriginalURL != "" && component.Source.Kind == "helm_oci")) ||
+		if component.Slug == "" || component.Name == "" || (component.Source.Kind != "helm_http" && (c.DistributionIdentity == "" || component.Source.OriginalURL == "" || component.Source.Kind != "helm_oci")) ||
 			component.Source.Chart == "" ||
 			component.Source.Version == "" || !digestPattern.MatchString(component.Source.ChartDigest) ||
 			component.Scope != "platform" || component.TargetNamespace == "" || component.ReleaseName == "" ||

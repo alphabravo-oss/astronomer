@@ -148,7 +148,7 @@ func (o *InitialObserver) Observe(ctx context.Context, target string) (InitialIn
 	}
 	var metadata initialHelmMetadata
 	if jsoncontract.Decode(raw, &metadata) != nil || metadata.Name != o.selection.Release || metadata.Namespace != o.selection.Namespace || metadata.Chart != "astronomer" || metadata.Status != "deployed" || metadata.Revision == 0 || !legacyStableTarget.MatchString("v"+metadata.Version) || semver.Compare("v"+metadata.Version, target) >= 0 {
-		return empty, errors.New("initial deployed v1 release or forward target differs")
+		return empty, errors.New("initial deployed release or forward target differs")
 	}
 	secret := "sh.helm.release.v1." + o.selection.Release + ".v" + strconv.FormatUint(metadata.Revision, 10)
 	if !kubeName.MatchString(secret) {

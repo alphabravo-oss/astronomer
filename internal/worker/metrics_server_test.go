@@ -232,7 +232,7 @@ func TestWorkerMetricsShutdownDrainsCompletedScrape(t *testing.T) {
 			body <- "error"
 			return
 		}
-		defer response.Body.Close()
+		defer func(close func() error) { _ = close() }(response.Body.Close)
 		data, _ := io.ReadAll(response.Body)
 		body <- string(data)
 	}()

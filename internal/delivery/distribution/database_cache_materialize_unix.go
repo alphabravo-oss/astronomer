@@ -36,7 +36,7 @@ func createDatabaseCacheDestinationForJob(rootPath string, size int64, jobName s
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	if err := supplierRefreshCapacity(root, size); err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func measureDatabaseCacheMember(ctx context.Context, directory *os.File, name st
 		_ = unix.Close(fd)
 		return errors.New("database cache sealed member handle unavailable")
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	if !sealedDatabaseCacheMemberOwner(fd) || !sealedDatabaseCacheMemberOwner(int(original.Fd())) {
 		return errors.New("database cache sealed member owner changed")
 	}

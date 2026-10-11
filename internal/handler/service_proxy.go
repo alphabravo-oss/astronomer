@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -25,6 +27,7 @@ const serviceProxyMaxBodyBytes = 10 << 20
 
 type ServiceProxyToolQuerier interface {
 	ListEnabledTools(ctx context.Context) ([]sqlc.ClusterTool, error)
+	GetInstalledChartByClusterAndTool(ctx context.Context, arg sqlc.GetInstalledChartByClusterAndToolParams) (sqlc.InstalledChart, error)
 }
 
 type ServiceProxyHandler struct {
@@ -71,7 +74,7 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidServiceProxyTarget, err.Error())
 		return
 	}
-	if err := h.authorizeTarget(r.Context(), target); err != nil {
+	if err := h.authorizeTarget(r.Context(), clusterUUID, target); err != nil {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.ServiceProxyDenied, err.Error())
 		return
 	}
@@ -125,6 +128,13 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	body, _ = decodeResponseBody(resp)
+	privatePrefix := "/api/v1/namespaces/" + target.namespace + "/services/http:" + target.serviceName + ":" + target.port + "/proxy"
+	if strings.HasPrefix(w.Header().Get("Content-Type"), "text/html") && w.Header().Get("Content-Encoding") == "" {
+		body = bytes.ReplaceAll(body, []byte(privatePrefix+"/"), []byte("/"))
+	}
+	if location := w.Header().Get("Location"); strings.HasPrefix(location, privatePrefix+"/") {
+		w.Header().Set("Location", strings.TrimPrefix(location, privatePrefix))
+	}
 	if resp.StatusCode == 0 {
 		resp.StatusCode = http.StatusOK
 	}
@@ -162,7 +172,7 @@ func parseServiceProxyTarget(namespace, servicePort string) (serviceProxyTarget,
 	return serviceProxyTarget{namespace: namespace, serviceName: serviceName, port: port}, nil
 }
 
-func (h *ServiceProxyHandler) authorizeTarget(ctx context.Context, target serviceProxyTarget) error {
+func (h *ServiceProxyHandler) authorizeTarget(ctx context.Context, clusterID uuid.UUID, target serviceProxyTarget) error {
 	if h == nil || h.tools == nil {
 		return httpError("service proxy allowlist is not configured")
 	}
@@ -172,7 +182,10 @@ func (h *ServiceProxyHandler) authorizeTarget(ctx context.Context, target servic
 	}
 	for _, tool := range tools {
 		if serviceProxyToolAllowsTarget(tool, target) {
-			return nil
+			installed, err := h.tools.GetInstalledChartByClusterAndTool(ctx, sqlc.GetInstalledChartByClusterAndToolParams{ClusterID: clusterID, ToolSlug: tool.Slug})
+			if err == nil && installed.ClusterID == clusterID && installed.Namespace == target.namespace {
+				return nil
+			}
 		}
 	}
 	return httpError("service proxy target is not enabled")

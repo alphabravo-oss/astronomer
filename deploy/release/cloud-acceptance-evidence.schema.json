@@ -6,7 +6,7 @@
   "properties": {
     "schema_version": {"const": 1},
     "result": {"enum": ["passed", "failed"]},
-    "target_version": {"type": "string", "pattern": "^v1\\.[0-9]+\\.[0-9]+$"},
+    "target_version": {"type": "string", "pattern": "^v[1-9][0-9]*\\.[0-9]+\\.[0-9]+$"},
     "source_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
     "source_run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
     "base_url_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},

@@ -223,15 +223,15 @@ func readTerminalDatabaseResource(ctx context.Context, scope databaseScanRequest
 		return result, false, errors.New("owned terminal resource envelope invalid")
 	}
 	kind, version := "", "v1"
-	switch {
-	case envelope.Kind == "Job":
+	switch envelope.Kind {
+	case "Job":
 		kind = "Job"
 		version = "batch/v1"
-	case envelope.Kind == "Secret":
+	case "Secret":
 		kind = "Secret"
-	case envelope.Kind == "PersistentVolumeClaim":
+	case "PersistentVolumeClaim":
 		kind = "PersistentVolumeClaim"
-	case envelope.Kind == "NetworkPolicy":
+	case "NetworkPolicy":
 		kind = "NetworkPolicy"
 		version = "networking.k8s.io/v1"
 	}

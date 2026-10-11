@@ -51,7 +51,7 @@ func openInitializationVolume(path string, allowEmptyDir bool) (*os.File, unix.S
 	}
 	file := os.NewFile(uintptr(fd), "owned Job initialization")
 	var before, location unix.Stat_t
-	if unix.Fstat(fd, &before) != nil || unix.Lstat(path, &location) != nil || before.Mode&unix.S_IFMT != unix.S_IFDIR || before.Uid != 0 || (before.Mode&07777 != 0755 && !(allowEmptyDir && before.Mode&07777 == 0777)) || !sameInitializationIdentity(before, location) {
+	if unix.Fstat(fd, &before) != nil || unix.Lstat(path, &location) != nil || before.Mode&unix.S_IFMT != unix.S_IFDIR || before.Uid != 0 || (before.Mode&07777 != 0755 && (!allowEmptyDir || before.Mode&07777 != 0777)) || !sameInitializationIdentity(before, location) {
 		_ = file.Close()
 		return nil, unix.Stat_t{}, errors.New("owned Job initialization volume identity invalid")
 	}
@@ -80,7 +80,7 @@ func initializeEmptyVolume(ctx context.Context, path string, uid int, mode uint3
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	// One name is enough to refuse existing content; this census never grows.
 	names, err := file.Readdirnames(1)
 	if len(names) != 0 || !errors.Is(err, io.EOF) {
@@ -118,7 +118,7 @@ func initializeClaimVolume(ctx context.Context, path string, claim uuid.UUID) er
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	name := "input-" + claim.String()
 	if unix.Mkdirat(int(file.Fd()), name, 0700) != nil {
 		return errors.New("owned Job initialization refuses existing claim directory")
@@ -127,7 +127,7 @@ func initializeClaimVolume(ctx context.Context, path string, claim uuid.UUID) er
 	if err != nil {
 		return errors.New("owned Job initialization claim directory unavailable")
 	}
-	defer unix.Close(fd)
+	defer func() { _ = unix.Close(fd) }()
 	for _, child := range []string{"staging", "cache", "workload"} {
 		if err := bounded.Err(); err != nil {
 			return err

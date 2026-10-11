@@ -92,7 +92,7 @@ func inspectPinnedDatabaseContentTo(ctx context.Context, role, inputPath string,
 	if err != nil {
 		return databaseInspectedContent{}, err
 	}
-	defer file.Close()
+	defer func(close func() error) { _ = close() }(file.Close)
 	if err := hashDatabaseInspectionFile(ctx, file, layer); err != nil {
 		return databaseInspectedContent{}, err
 	}
@@ -112,7 +112,7 @@ func inspectPinnedDatabaseContentTo(ctx context.Context, role, inputPath string,
 	if err != nil {
 		return databaseInspectedContent{}, databaseInspectionError(ctx, "database payload gzip invalid")
 	}
-	defer zipper.Close()
+	defer func(close func() error) { _ = close() }(zipper.Close)
 	zipper.Multistream(false)
 	expanded := &io.LimitedReader{R: zipper, N: MaximumDatabaseExpandedBytes + 1}
 	inspected, err := inspectDatabaseMemberContentTo(ctx, expanded, role, metadataSize, sink)
@@ -174,15 +174,6 @@ func hashDatabaseInspectionFile(ctx context.Context, file *os.File, expected Dat
 	return ctx.Err()
 }
 
-func inspectDatabaseMembers(ctx context.Context, expanded io.Reader, role string, metadataSize int64) ([]byte, error) {
-	inspected, err := inspectDatabaseMemberContent(ctx, expanded, role, metadataSize)
-	return inspected.metadata, err
-}
-
-func inspectDatabaseMemberContent(ctx context.Context, expanded io.Reader, role string, metadataSize int64) (databaseInspectedContent, error) {
-	return inspectDatabaseMemberContentTo(ctx, expanded, role, metadataSize, nil)
-}
-
 func inspectDatabaseMemberContentTo(ctx context.Context, expanded io.Reader, role string, metadataSize int64, sink func(string, int64) (io.Writer, error)) (databaseInspectedContent, error) {
 	archive := tar.NewReader(expanded)
 	databaseName := "trivy.db"
@@ -197,14 +188,14 @@ func inspectDatabaseMemberContentTo(ctx context.Context, expanded io.Reader, rol
 		if err == io.EOF {
 			break
 		}
-		if err != nil || count >= 2 || header == nil || header.Typeflag != tar.TypeReg || header.Linkname != "" || len(header.PAXRecords) != 0 || len(header.Xattrs) != 0 || header.Format != tar.FormatUSTAR && header.Format != tar.FormatGNU || seen[header.Name] || header.Size <= 0 || header.Size > MaximumDatabaseExpandedBytes || header.Name != databaseName && header.Name != "metadata.json" {
+		if err != nil || count >= 2 || header == nil || header.Typeflag != tar.TypeReg || header.Linkname != "" || len(header.PAXRecords) != 0 || len(header.Xattrs) != 0 || header.Format != tar.FormatUSTAR && header.Format != tar.FormatGNU || seen[header.Name] || header.Size <= 0 || header.Size > MaximumDatabaseExpandedBytes || header.Name != databaseName && header.Name != "metadata.json" { //nolint:staticcheck // Reject legacy extended attributes as well as PAX metadata at the archive trust boundary.
 			return databaseInspectedContent{}, databaseInspectionError(ctx, "database payload archive member invalid")
 		}
 		if header.Name == "metadata.json" && (metadataSize > 0 && header.Size != metadataSize || header.Size > 64<<10) {
 			return databaseInspectedContent{}, errors.New("database payload metadata size binding failed")
 		}
 		seen[header.Name] = true
-		var output io.Writer = io.Discard
+		var output = io.Discard
 		if sink != nil {
 			output, err = sink(header.Name, header.Size)
 			if err != nil || output == nil {

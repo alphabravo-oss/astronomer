@@ -38,7 +38,7 @@ func (f *grafanaAuthenticatedRequesterFake) DoWithGrafanaAuth(_ context.Context,
 	return f.response, nil
 }
 
-func TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie(t *testing.T) {
+func TestProxyGrafanaUsesTunnelWithoutBrowserCookies(t *testing.T) {
 	h, q := newStackLifecycleHandler(t)
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
 	h.SetGrafanaTickets(auth.NewGrafanaTicketStore(time.Minute))
@@ -90,12 +90,12 @@ func TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie(t *testing.T) {
 		t.Fatalf("CSP = %q", got)
 	}
 	cookies := rec.Result().Cookies()
-	if len(cookies) != 1 || cookies[0].Name != protocol.GrafanaProxyCookieName || cookies[0].Path != sharedGrafanaProxyPath || !cookies[0].HttpOnly {
+	if len(cookies) != 0 {
 		t.Fatalf("cookies = %+v", cookies)
 	}
 }
 
-func TestProxyGrafanaForwardsOnlySignedProxyCookie(t *testing.T) {
+func TestProxyGrafanaReissuesIdentityInsteadOfTrustingBrowserCookie(t *testing.T) {
 	h, q := newStackLifecycleHandler(t)
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
 	h.SetGrafanaTickets(auth.NewGrafanaTicketStore(time.Minute))
@@ -117,7 +117,7 @@ func TestProxyGrafanaForwardsOnlySignedProxyCookie(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	if fake.auth.Cookie != "signed.proxy.cookie" || fake.auth.Ticket != "" {
+	if fake.auth.Cookie != "" || fake.auth.Ticket == "" {
 		t.Fatalf("auth = %+v", fake.auth)
 	}
 	if _, ok := fake.headers["Cookie"]; ok {

@@ -92,6 +92,20 @@ class SecurityPolicyTest(unittest.TestCase):
         review['review_by']='2026-10-08T00:00:00Z'
         path.write_text(json.dumps({'schema_version':1,'reviews':[review]}))
         self.assertFalse(self.run_policy()['passed'])
+    def test_confirmed_medium_defect_blocks_even_before_review_deadline(self):
+        self.g['Issues']=[{'severity':'MEDIUM','rule_id':'G705','file':'sample.go','line':'1'}]
+        finding=self.run_policy()['findings'][0]
+        review={'fingerprint':finding['fingerprint'],'owner':'security/platform','review_by':'2026-10-16T00:00:00Z','status':'blocked','evidence':'Confirmed source-to-sink defect; repair required.'}
+        path=self.root/'deploy/security/source-reviews.json'
+        path.write_text(json.dumps({'schema_version':1,'reviews':[review]}))
+        result=self.run_policy()
+        self.assertFalse(result['passed'])
+        self.assertIn('MED finding has an unresolved confirmed defect', result['failures'])
+        self.assertEqual(result['findings'][0]['review_status'], 'blocked')
+        review['status']='reviewed'
+        path.write_text(json.dumps({'schema_version':1,'reviews':[review]}))
+        self.assertTrue(self.run_policy()['passed'])
+
     def test_symlink_outside_and_unknown_rule(self):
         self.high(); (self.root/'sample.go').unlink(); (self.root/'sample.go').symlink_to(ROOT/'go.mod')
         with self.assertRaises(ValueError): self.run_policy()
@@ -107,7 +121,7 @@ class SecurityPolicyTest(unittest.TestCase):
         self.assertEqual(len(s['runs'][0]['results']),1); self.assertNotIn('SOURCE SNIPPET',json.dumps(s))
 
 class ReviewedSourceControlsTest(unittest.TestCase):
-    """Exercise the reviewed set without granting its generated namespace or rules."""
+    """Exercise immutable historical reviews without granting namespaces or rules."""
 
     def setUp(self):
         SecurityPolicyTest.setUp(self)
@@ -120,13 +134,15 @@ class ReviewedSourceControlsTest(unittest.TestCase):
         for finding in self.controls:
             path = self.root/finding['path']
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes((ROOT/finding['path']).read_bytes())
+            original = immutable_git_blob('927151bebf20c6a8f63fe76ff804b45e86044ded', finding['path'])
+            self.assertEqual(policy.digest(original), finding['source_digest'])
+            path.write_bytes(original)
             self.g['Issues'].append({
                 'severity': finding['level'], 'rule_id': finding['rule_id'],
                 'file': finding['path'], 'line': str(finding['line']),
                 'column': str(finding['column']),
             })
-        self.e = json.loads(EXCEPTIONS.read_text())
+        self.e = json.loads(immutable_git_blob('5d56e7ba9df17115a2650353b368c92de4f2bd4d', 'deploy/security/source-exceptions.json'))
         known = {row['fingerprint'] for row in self.controls}
         self.e['exceptions'] = [row for row in self.e['exceptions'] if row['fingerprint'] in known]
         # Production uses the real clock. This fixture evaluates the dated reviews
@@ -297,8 +313,8 @@ class ReviewedCurrentAuditStatusControlTest(ReviewedAuditStatusControlTest):
 
 
 
-class CurrentReviewed25SourceControlsTest(unittest.TestCase):
-    """Only the 21 exactly reviewed guards; all four unresolved rows stay blocked."""
+class HistoricalReviewed25SourceControlsTest(unittest.TestCase):
+    """The historical 21 guards apply only to their immutable source snapshot."""
     def setUp(self):
         SecurityPolicyTest.setUp(self)
         directory = ROOT/'docs/assurance/technology-guide/w02/current-source-5c4d273f-reviewed-25'
@@ -310,11 +326,11 @@ class CurrentReviewed25SourceControlsTest(unittest.TestCase):
             finding = row['canonical_finding']
             target = self.root/finding['path']
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes((ROOT/finding['path']).read_bytes())
+            target.write_bytes(immutable_git_blob('5c4d273ff564aab0ede8bb9265c789380f6f640d', finding['path']))
             self.assertEqual(policy.digest(target.read_bytes()), finding['source_digest'])
             if row['verdict'] == 'not_actionable':
                 self.g['Issues'].append(copy.deepcopy(row['raw_issue']) | {'file':finding['path']})
-        self.e = json.loads(EXCEPTIONS.read_text())
+        self.e = json.loads(immutable_git_blob('5d56e7ba9df17115a2650353b368c92de4f2bd4d', 'deploy/security/source-exceptions.json'))
         self.e['exceptions'] = [row for row in self.e['exceptions'] if row['fingerprint'] in known]
         self.assertEqual(len(self.e['exceptions']), 21)
         self.now = dt.datetime(2026,10,10,tzinfo=dt.timezone.utc)

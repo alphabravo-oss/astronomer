@@ -106,10 +106,10 @@ func TestObservedDatabaseTrustLossRejectsForeignAndZeroProof(t *testing.T) {
 	if first.RevalidateTrustLoss(t.Context(), &ObservedDatabaseTrustLoss{}) == nil {
 		t.Fatal("zero loss accepted")
 	}
-	if observed, err := first.ObserveTrustLoss(nil, proof); err == nil || observed != nil {
+	if observed, err := first.ObserveTrustLoss(nil, proof); err == nil || observed != nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context accepted")
 	}
-	if first.RevalidateTrustLoss(nil, nil) == nil {
+	if first.RevalidateTrustLoss(nil, nil) == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil loss/context accepted")
 	}
 	if err := os.Remove(filepath.Join(options.TrustDirectory, "qa.pub")); err != nil {

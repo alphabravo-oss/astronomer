@@ -133,11 +133,12 @@ func TestDecommissionCapturedObjectsRejectReplacementOwnershipAndDeleteRace(t *t
 				if err != nil {
 					t.Fatal(err)
 				}
-				if kind == "deployment-recreated" {
+				switch kind {
+				case "deployment-recreated":
 					dep.UID = "replacement-deployment"
-				} else if kind == "deployment-missing-rv" {
+				case "deployment-missing-rv":
 					dep.ResourceVersion = ""
-				} else {
+				default:
 					dep.Labels = nil
 				}
 				if _, err := cs.AppsV1().Deployments(DefaultAgentNamespace).Update(ctx, dep, metav1.UpdateOptions{}); err != nil {
@@ -263,7 +264,7 @@ func TestDecommissionActualACKWriteOwnsContextBoundDeleteAndJoinedTunnel(t *test
 		}
 		peerEnterOnce.Do(func() { close(peerEntered) })
 		defer peerStopOnce.Do(func() { close(peerStopped) })
-		defer conn.CloseNow()
+		defer func(close func() error) { _ = close() }(conn.CloseNow)
 		connect, _, err := readFrame(r.Context(), conn)
 		if err != nil {
 			return

@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 DIGEST = re.compile(r"sha256:[a-f0-9]{64}\Z")
-TAG = re.compile(r"v1\.[0-9]+\.[0-9]+\Z")
+TAG = re.compile(r"v[1-9][0-9]*\.[0-9]+\.[0-9]+\Z")
 
 
 def digest(path: Path) -> str:
@@ -25,7 +25,7 @@ def main() -> None:
     parser.add_argument("--target", required=True)
     parser.add_argument("--release", default="astronomer")
     args = parser.parse_args()
-    if not TAG.fullmatch(args.target): raise ValueError("target must be an exact v1 tag")
+    if not TAG.fullmatch(args.target): raise ValueError("target must be an exact release tag")
     upgrade = json.loads(args.upgrade_evidence.read_text(encoding="utf-8"))
     expected = {"schema_version", "release", "namespace", "target_version", "mode", "result", "api_identity_sha256", "release_manifest_sha256", "backup_manifest_sha256", "database_restore_mode", "rollback_attempted", "completed_at"}
     if not isinstance(upgrade, dict) or set(upgrade) != expected:

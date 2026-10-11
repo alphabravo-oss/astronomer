@@ -50,7 +50,7 @@ func (r *InClusterHelmReleaser) helmConfig(ctx context.Context) (*cli.EnvSetting
 		return nil, nil, fmt.Errorf("init Charlie agent Helm: %w", err)
 	}
 	if client, ok := cfg.KubeClient.(*kube.Client); ok {
-		client.WaitContext = ctx
+		client.WaitContext = ctx //nolint:staticcheck // Helm 4.3 LegacyStrategy still reads this field and ignores WithWaitContext; preserve cancellation.
 	} else {
 		return nil, nil, fmt.Errorf("unsupported Charlie Helm wait client")
 	}

@@ -144,7 +144,7 @@ func captureManifestGraph(ctx context.Context, repository *remote.Repository, re
 }
 
 func captureBytes(reader io.ReadCloser, descriptor ocispec.Descriptor, maximum int64) ([]byte, error) {
-	defer reader.Close()
+	defer func(close func() error) { _ = close() }(reader.Close)
 	if descriptor.Digest.Algorithm() != digest.SHA256 || descriptor.Size <= 0 || descriptor.Size > maximum || len(descriptor.URLs) != 0 || len(descriptor.Data) != 0 {
 		return nil, errors.New("export content descriptor invalid")
 	}

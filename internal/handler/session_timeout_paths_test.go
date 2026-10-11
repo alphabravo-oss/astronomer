@@ -119,7 +119,7 @@ func TestSessionTimeoutExplicitValueAcrossActualMintPaths(t *testing.T) {
 			t.Fatalf("signStateCookie: %v", err)
 		}
 		req := withProvider(httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/test/?code=ok&state="+state, nil), "test")
-		req.AddCookie(&http.Cookie{Name: "astro_sso_state", Value: cookie})
+		req.AddCookie(&http.Cookie{Name: ssoStateCookieName("test"), Value: cookie})
 		w := httptest.NewRecorder()
 
 		h.Callback(w, req)

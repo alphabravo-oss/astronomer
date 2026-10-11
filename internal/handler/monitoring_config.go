@@ -65,6 +65,10 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
+	if _, err := monitoringRetryPolicy(req.AuthConfig); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
+	}
 	// RMW site (migration 146). This used to be a pure writer: whatever the
 	// client sent as authConfig became the whole stored document. That stopped
 	// being viable the moment reads started answering with the non-secret
@@ -115,6 +119,10 @@ func (h *MonitoringHandler) UpdateBackendConfig(w http.ResponseWriter, r *http.R
 		policies["maxRetryAttempts"] = req.MaxRetryAttempts
 	} else if _, ok := policies["maxRetryAttempts"]; !ok {
 		policies["maxRetryAttempts"] = int32(1)
+	}
+	if _, err := monitoringRetryAttempts(policies["maxRetryAttempts"]); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
+		return
 	}
 	authConfigMap["operationPolicies"] = policies
 	if req.BackendType == "" {

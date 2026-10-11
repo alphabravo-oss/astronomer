@@ -35,7 +35,7 @@ func TestLegacyUpgradeArgumentsPreservePreviewAndExplicitApproval(t *testing.T) 
 			}
 		})
 	}
-	for _, args := range [][]string{nil, {""}, {"--yes"}, {"--unknown", "--help"}, {"--"}, {"v1.2.3", "v1.2.4"}, {"--yes=true", "v1.2.3"}, {"v2.0.0"}, {"v1.2.3-rc.1"}, {"v1.2.3+build"}, {"v1.2"}, {"1.2.3;echo bad"}} {
+	for _, args := range [][]string{nil, {""}, {"--yes"}, {"--unknown", "--help"}, {"--"}, {"v1.2.3", "v1.2.4"}, {"--yes=true", "v1.2.3"}, {"v2.0.0-rc.1"}, {"v1.2.3-rc.1"}, {"v1.2.3+build"}, {"v1.2"}, {"1.2.3;echo bad"}} {
 		if _, err := ParseLegacyUpgradeArguments(args); err == nil {
 			t.Fatal("invalid shell argv accepted")
 		} else {
@@ -83,13 +83,20 @@ func TestLegacyUpgradePlanBindsOnlyModeAndRetainsObservedAuthority(t *testing.T)
 }
 
 func TestPrepareLegacyInvocationRejectsUsageAndTargetBeforeConcreteAdmission(t *testing.T) {
-	if invocation, help, err := PrepareLegacyInvocation(nil, []string{"--help"}, InvocationOptions{}); err != nil || !help || invocation != nil {
+	if invocation, help, err := PrepareLegacyInvocation(nil, []string{"--help"}, InvocationOptions{}); err != nil || !help || invocation != nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("help reached concrete factory")
 	}
-	if invocation, help, err := PrepareLegacyInvocation(nil, []string{"--unknown"}, InvocationOptions{}); err == nil || help || invocation != nil {
+	if invocation, help, err := PrepareLegacyInvocation(nil, []string{"--unknown"}, InvocationOptions{}); err == nil || help || invocation != nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("usage reached concrete factory")
 	}
-	if invocation, help, err := PrepareLegacyInvocation(nil, []string{"--yes", "v1.2.3"}, InvocationOptions{Plan: upgrade.Plan{Target: "v1.2.4"}}); err == nil || help || invocation != nil {
+	if invocation, help, err := PrepareLegacyInvocation(nil, []string{"--yes", "v1.2.3"}, InvocationOptions{Plan: upgrade.Plan{Target: "v1.2.4"}}); err == nil || help || invocation != nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("unauthenticated argument target reached concrete factory")
+	}
+}
+
+func TestMajorReleaseUpgradeArguments(t *testing.T) {
+	got, err := ParseLegacyUpgradeArguments([]string{"--yes", "v2.0.0"})
+	if err != nil || got.Target != "v2.0.0" || got.Mode != upgrade.Execute {
+		t.Fatalf("major-release upgrade rejected: %+v %v", got, err)
 	}
 }

@@ -46,7 +46,7 @@ func (c *TargetChartContent) captureOperatorRoute(ctx context.Context, commands 
 	if err != nil {
 		return "", errors.New("open owned chart route")
 	}
-	defer root.Close()
+	defer func(close func() error) { _ = close() }(root.Close)
 	_, _, err = commands.Execute(ctx, helm, []string{"pull", reference, "--version", strings.TrimPrefix(plan.Target, "v"), "--destination", directory})
 	if err != nil {
 		return "", err

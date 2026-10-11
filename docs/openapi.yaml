@@ -11834,15 +11834,15 @@ paths:
       operationId: deleteClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "Delete clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '204':
-          description: Resource deleted or already absent
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11852,7 +11852,7 @@ paths:
       operationId: getClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "Read clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11860,10 +11860,10 @@ paths:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11873,7 +11873,7 @@ paths:
       operationId: headClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "HEAD clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11881,10 +11881,10 @@ paths:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11894,18 +11894,15 @@ paths:
       operationId: optionsClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "OPTIONS clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11915,7 +11912,7 @@ paths:
       operationId: patchClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "Update clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11928,11 +11925,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11942,7 +11936,7 @@ paths:
       operationId: postClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "Create or execute clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11955,11 +11949,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11969,7 +11960,7 @@ paths:
       operationId: putClustersByIdObservabilityGrafana
       tags: [Clusters]
       summary: "Replace clusters/{id}/observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -11982,11 +11973,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -11997,15 +11985,15 @@ paths:
       operationId: deleteClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "Delete clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '204':
-          description: Resource deleted or already absent
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12015,7 +12003,7 @@ paths:
       operationId: getClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "Read clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12023,10 +12011,10 @@ paths:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12036,7 +12024,7 @@ paths:
       operationId: headClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "HEAD clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12044,10 +12032,10 @@ paths:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12057,18 +12045,15 @@ paths:
       operationId: optionsClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "OPTIONS clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12078,7 +12063,7 @@ paths:
       operationId: patchClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "Update clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12091,11 +12076,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12105,7 +12087,7 @@ paths:
       operationId: postClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "Create or execute clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12118,11 +12100,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12132,7 +12111,7 @@ paths:
       operationId: putClustersByIdObservabilityGrafanaProxy
       tags: [Clusters]
       summary: "Replace clusters/{id}/observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12145,11 +12124,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12160,13 +12136,13 @@ paths:
       operationId: deleteObservabilityGrafana
       tags: [Observability]
       summary: "Delete observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
-        '204':
-          description: Resource deleted or already absent
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12176,16 +12152,16 @@ paths:
       operationId: getObservabilityGrafana
       tags: [Observability]
       summary: "Read observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12195,16 +12171,16 @@ paths:
       operationId: headObservabilityGrafana
       tags: [Observability]
       summary: "HEAD observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12214,16 +12190,13 @@ paths:
       operationId: optionsObservabilityGrafana
       tags: [Observability]
       summary: "OPTIONS observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12234,7 +12207,7 @@ paths:
       operationId: patchObservabilityGrafana
       tags: [Observability]
       summary: "Update observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12245,11 +12218,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12260,7 +12230,7 @@ paths:
       operationId: postObservabilityGrafana
       tags: [Observability]
       summary: "Create or execute observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12271,11 +12241,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12286,7 +12253,7 @@ paths:
       operationId: putObservabilityGrafana
       tags: [Observability]
       summary: "Replace observability/grafana"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12297,11 +12264,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12312,13 +12276,13 @@ paths:
       operationId: deleteObservabilityGrafanaProxy
       tags: [Observability]
       summary: "Delete observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
-        '204':
-          description: Resource deleted or already absent
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12328,16 +12292,16 @@ paths:
       operationId: getObservabilityGrafanaProxy
       tags: [Observability]
       summary: "Read observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12347,16 +12311,16 @@ paths:
       operationId: headObservabilityGrafanaProxy
       tags: [Observability]
       summary: "HEAD observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12366,16 +12330,13 @@ paths:
       operationId: optionsObservabilityGrafanaProxy
       tags: [Observability]
       summary: "OPTIONS observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12386,7 +12347,7 @@ paths:
       operationId: patchObservabilityGrafanaProxy
       tags: [Observability]
       summary: "Update observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12397,11 +12358,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12412,7 +12370,7 @@ paths:
       operationId: postObservabilityGrafanaProxy
       tags: [Observability]
       summary: "Create or execute observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12423,11 +12381,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -12438,7 +12393,7 @@ paths:
       operationId: putObservabilityGrafanaProxy
       tags: [Observability]
       summary: "Replace observability/grafana/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-auth: "bearer-or-session"
@@ -12449,11 +12404,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15319,15 +15271,15 @@ paths:
       operationId: deleteClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "Delete clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
         - {name: namespace, in: path, required: true, schema: {type: string, minLength: 1}}
         - {name: service_port, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '204':
-          description: Resource deleted or already absent
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15339,7 +15291,7 @@ paths:
       operationId: getClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "Read clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
@@ -15347,10 +15299,10 @@ paths:
         - {name: service_port, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15362,7 +15314,7 @@ paths:
       operationId: headClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "HEAD clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
@@ -15370,10 +15322,10 @@ paths:
         - {name: service_port, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
         '200':
-          description: Successful operation
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+            text/html:
+              schema: {type: string}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15385,18 +15337,15 @@ paths:
       operationId: optionsClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "OPTIONS clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
         - {name: namespace, in: path, required: true, schema: {type: string, minLength: 1}}
         - {name: service_port, in: path, required: true, schema: {type: string, minLength: 1}}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15408,7 +15357,7 @@ paths:
       operationId: patchClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "Update clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
@@ -15421,11 +15370,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15437,7 +15383,7 @@ paths:
       operationId: postClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "Create or execute clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
@@ -15450,11 +15396,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -15466,7 +15409,7 @@ paths:
       operationId: putClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
       tags: [Clusters]
       summary: "Replace clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Browser UI launch on a dedicated HTTPS tool origin. Requires a browser session; downstream content is never served on the console origin. Configure toolUI.domain and wildcard TLS.
       x-astronomer-route-class: proxy
       parameters:
         - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
@@ -15479,11 +15422,8 @@ paths:
           application/json:
             schema: {}
       responses:
-        '200':
-          description: Successful operation
-          content:
-            '*/*':
-              schema: {$ref: '#/components/schemas/ServiceProxyResponse'}
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -32779,7 +32719,7 @@ paths:
       operationId: postAuthRefresh
       summary: Rotate the HttpOnly browser session
       description: |
-        PUBLIC. Requires the HttpOnly `astronomer_refresh` cookie plus the
+        PUBLIC. Requires the HTTPS HttpOnly `__Host-astronomer_refresh` cookie (unprefixed for HTTP-only local development) plus the
         double-submit CSRF header/cookie. JSON bearer refresh tokens are not
         accepted. Rotated access and refresh values are returned only through
         Set-Cookie headers.
@@ -40783,14 +40723,10 @@ paths:
               format: binary
       responses:
         '200':
-          description: Proxied service response.
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+            text/html:
+              schema: {type: string}
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -40834,14 +40770,10 @@ paths:
               format: binary
       responses:
         '200':
-          description: Proxied service response.
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+            text/html:
+              schema: {type: string}
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -40884,15 +40816,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -40935,15 +40860,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -40986,15 +40904,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41037,15 +40948,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41088,15 +40992,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41221,14 +41118,10 @@ paths:
               format: binary
       responses:
         '200':
-          description: Proxied service response.
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+            text/html:
+              schema: {type: string}
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41272,14 +41165,10 @@ paths:
               format: binary
       responses:
         '200':
-          description: Proxied service response.
+          description: Gateway-owned single-use launch form for the isolated tool hostname.
           content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+            text/html:
+              schema: {type: string}
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41322,15 +41211,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41373,15 +41255,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41424,15 +41299,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41475,15 +41343,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:
@@ -41526,15 +41387,8 @@ paths:
               type: string
               format: binary
       responses:
-        '200':
-          description: Proxied service response.
-          content:
-            application/json:
-              schema: {}
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
+        '410':
+          description: Downstream UI requests must use the isolated tool origin obtained through browser launch.
         '400':
           description: Invalid service-proxy target or unreadable body.
           content:

@@ -242,12 +242,12 @@ func TestDatabaseJobCacheReadCannotRenewMidReadModeChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer original.Close()
+	defer func(close func() error) { _ = close() }(original.Close)
 	directory, err := os.Open(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer directory.Close()
+	defer func(close func() error) { _ = close() }(directory.Close)
 	sum := sha256.Sum256(body)
 	ctx := &cacheReadMutationContext{Context: t.Context(), mutate: func() error { return os.Chmod(path, 0644) }}
 	err = measureDatabaseCacheMember(ctx, directory, "member", original, "sha256:"+hex.EncodeToString(sum[:]), int64(len(body)))

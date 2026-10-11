@@ -146,7 +146,7 @@ func decodeUpgradeToolkit(ctx context.Context, archive []byte, inventory Toolkit
 	if err != nil {
 		return nil, errors.New("toolkit gzip is invalid")
 	}
-	defer stream.Close()
+	defer func(close func() error) { _ = close() }(stream.Close)
 	stream.Multistream(false)
 	reader := tar.NewReader(stream)
 	files := make(map[string][]byte, 7)
@@ -164,7 +164,7 @@ func decodeUpgradeToolkit(ctx context.Context, archive []byte, inventory Toolkit
 		}
 		spec, known := inventory.Files[header.Name]
 		_, duplicate := files[header.Name]
-		if !known || duplicate || header.Typeflag != tar.TypeReg || header.Linkname != "" || filepath.IsAbs(header.Name) || filepath.Clean(header.Name) != header.Name || strings.Contains(header.Name, "..") || header.Uid != 0 || header.Gid != 0 || len(header.PAXRecords) > 0 || len(header.Xattrs) > 0 || header.Size <= 0 || header.Size != spec.SizeBytes || header.Mode != int64(spec.Mode) || !contentSHA.MatchString(spec.SHA256) {
+		if !known || duplicate || header.Typeflag != tar.TypeReg || header.Linkname != "" || filepath.IsAbs(header.Name) || filepath.Clean(header.Name) != header.Name || strings.Contains(header.Name, "..") || header.Uid != 0 || header.Gid != 0 || len(header.PAXRecords) > 0 || len(header.Xattrs) > 0 || header.Size <= 0 || header.Size != spec.SizeBytes || header.Mode != int64(spec.Mode) || !contentSHA.MatchString(spec.SHA256) { //nolint:staticcheck // Reject legacy extended attributes as well as PAX metadata at the archive trust boundary.
 			return nil, errors.New("toolkit member identity differs")
 		}
 		mode := uint32(0600)

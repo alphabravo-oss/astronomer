@@ -255,6 +255,10 @@ type routeSecurityServiceProxyTools struct {
 	tools []sqlc.ClusterTool
 }
 
+func (q routeSecurityServiceProxyTools) GetInstalledChartByClusterAndTool(_ context.Context, arg sqlc.GetInstalledChartByClusterAndToolParams) (sqlc.InstalledChart, error) {
+	return sqlc.InstalledChart{ClusterID: arg.ClusterID, Namespace: "observability"}, nil
+}
+
 func (q routeSecurityServiceProxyTools) ListEnabledTools(context.Context) ([]sqlc.ClusterTool, error) {
 	return q.tools, nil
 }
@@ -1934,8 +1938,8 @@ func TestServiceProxyAllowsServicesProxy(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNoContent, rec.Body.String())
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
 	}
 }
 
@@ -2002,8 +2006,8 @@ func TestServiceProxyAPITokenMutationsRequireWriteScope(t *testing.T) {
 	writeReq.Header.Set("Authorization", "Bearer "+writeToken)
 	writeRec := httptest.NewRecorder()
 	writeRouter.ServeHTTP(writeRec, writeReq)
-	if writeRec.Code != http.StatusNoContent {
-		t.Fatalf("write-scoped token status = %d, want %d; body=%s", writeRec.Code, http.StatusNoContent, writeRec.Body.String())
+	if writeRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("write-scoped token status = %d, want %d; body=%s", writeRec.Code, http.StatusServiceUnavailable, writeRec.Body.String())
 	}
 }
 
@@ -2061,7 +2065,7 @@ func TestMonitoringMutationsRequireWriteScope(t *testing.T) {
 	}
 }
 
-func TestServiceProxyRejectsTargetsOutsideAllowlist(t *testing.T) {
+func TestMainServiceProxyRequiresIsolationConfiguration(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
@@ -2075,8 +2079,8 @@ func TestServiceProxyRejectsTargetsOutsideAllowlist(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusForbidden, rec.Body.String())
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusServiceUnavailable, rec.Body.String())
 	}
 }
 

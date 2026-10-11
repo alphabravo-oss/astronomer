@@ -15,7 +15,7 @@ func TestReleaseDriverConstructorRejectsUnboundAndPartiallyForgedAdapters(t *tes
 			t.Fatal("missing authenticated composition admitted")
 		}
 	}
-	if _, err := NewReleaseDriver(nil, nil, nil, nil); err == nil {
+	if _, err := NewReleaseDriver(nil, nil, nil, nil); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context admitted")
 	}
 }
@@ -47,16 +47,16 @@ func TestReleaseDriverRequiresExplicitContextAtEveryBoundary(t *testing.T) {
 	if partial.Cleanup(context.Background(), upgrade.Plan{}, upgrade.CleanupPolicy{OwnedEphemeralOnly: true, PreserveBackup: true, PreserveCheckpoint: true}) == nil {
 		t.Fatal("zero Driver cleaned resources")
 	}
-	if partial.Fence(nil, upgrade.Identity{}, nil) == nil {
+	if partial.Fence(nil, upgrade.Identity{}, nil) == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context fenced ownership")
 	}
-	if _, err := partial.Step(nil, upgrade.Apply, upgrade.Plan{}); err == nil {
+	if _, err := partial.Step(nil, upgrade.Apply, upgrade.Plan{}); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context applied")
 	}
-	if _, err := partial.Reconcile(nil, upgrade.Checkpoint{}); err == nil {
+	if _, err := partial.Reconcile(nil, upgrade.Checkpoint{}); err == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context reconciled")
 	}
-	if partial.Cleanup(nil, upgrade.Plan{}, upgrade.CleanupPolicy{}) == nil {
+	if partial.Cleanup(nil, upgrade.Plan{}, upgrade.CleanupPolicy{}) == nil { //nolint:staticcheck // Deliberately tests rejection of a missing context.
 		t.Fatal("nil context cleaned resources")
 	}
 }

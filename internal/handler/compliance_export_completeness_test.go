@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var complianceCollectionReadFailure = errors.New("owned compliance collection read failed")
+var errComplianceCollectionReadFailure = errors.New("owned compliance collection read failed")
 
 func complianceCollectionID(kind string, index int) uuid.UUID {
 	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(fmt.Sprintf("owned-compliance-%s-%d", kind, index)))
@@ -46,7 +46,7 @@ func (q *compliancePolicyPages) ListProjectRoleBindingsByProject(_ context.Conte
 		return nil, errors.New("owned policy page arguments changed")
 	}
 	if p.Offset == q.failOffset {
-		return nil, complianceCollectionReadFailure
+		return nil, errComplianceCollectionReadFailure
 	}
 	start := int(p.Offset)
 	if start >= len(q.rows) {
@@ -104,7 +104,7 @@ func TestCompliancePolicySnapshotCollectionCompleteness(t *testing.T) {
 			q.failOffset = tc.offset
 			var body bytes.Buffer
 			err := WritePolicySnapshotJSON(context.Background(), &body, q, nil)
-			if !errors.Is(err, complianceCollectionReadFailure) || body.Len() != 0 {
+			if !errors.Is(err, errComplianceCollectionReadFailure) || body.Len() != 0 {
 				t.Fatal("policy snapshot concealed an unknown binding collection as successful JSON")
 			}
 		})
@@ -197,15 +197,15 @@ func complianceDrillFixture(size int) *complianceDrillPages {
 
 type complianceFailWriter struct{}
 
-func (complianceFailWriter) Write([]byte) (int, error) { return 0, complianceCollectionReadFailure }
+func (complianceFailWriter) Write([]byte) (int, error) { return 0, errComplianceCollectionReadFailure }
 
 func TestComplianceDrillHistoryCollectionCompleteness(t *testing.T) {
 	t.Run("10001-count-failure", func(t *testing.T) {
 		q := complianceDrillFixture(10001)
-		q.countError = complianceCollectionReadFailure
+		q.countError = errComplianceCollectionReadFailure
 		var body bytes.Buffer
 		n, err := WriteBackupDrillHistoryCSV(context.Background(), &body, q)
-		if !errors.Is(err, complianceCollectionReadFailure) || n != 0 || len(q.calls) != 0 {
+		if !errors.Is(err, errComplianceCollectionReadFailure) || n != 0 || len(q.calls) != 0 {
 			t.Fatal("drill history count failure silently exported a successful 10000-row subset")
 		}
 	})
@@ -258,7 +258,7 @@ func TestComplianceDrillHistoryCollectionCompleteness(t *testing.T) {
 	})
 	t.Run("flush-error", func(t *testing.T) {
 		q := complianceDrillFixture(1)
-		if _, err := WriteBackupDrillHistoryCSV(context.Background(), complianceFailWriter{}, q); !errors.Is(err, complianceCollectionReadFailure) {
+		if _, err := WriteBackupDrillHistoryCSV(context.Background(), complianceFailWriter{}, q); !errors.Is(err, errComplianceCollectionReadFailure) {
 			t.Fatal("drill CSV reported success after buffered output flush failed")
 		}
 	})

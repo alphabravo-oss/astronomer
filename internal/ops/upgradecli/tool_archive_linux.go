@@ -62,7 +62,7 @@ func decodeToolArtifact(ctx context.Context, artifact ExecutableArtifact, raw []
 	if err != nil {
 		return nil, errors.New("executable gzip header invalid")
 	}
-	defer zipped.Close()
+	defer func(close func() error) { _ = close() }(zipped.Close)
 	zipped.Multistream(false)
 	expanded := &toolContextReader{context: ctx, reader: io.LimitReader(zipped, toolMaximumExpanded+1)}
 	archive := tar.NewReader(expanded)
@@ -82,7 +82,7 @@ func decodeToolArtifact(ctx context.Context, artifact ExecutableArtifact, raw []
 			}
 			return nil, errors.New("executable tar header invalid")
 		}
-		if count >= 4096 || !safeToolMember(strings.TrimSuffix(header.Name, "/")) || header.Size < 0 || header.Size > toolMaximumBinary || header.PAXRecords != nil || header.Xattrs != nil {
+		if count >= 4096 || !safeToolMember(strings.TrimSuffix(header.Name, "/")) || header.Size < 0 || header.Size > toolMaximumBinary || header.PAXRecords != nil || header.Xattrs != nil { //nolint:staticcheck // Reject legacy extended attributes as well as PAX metadata at the archive trust boundary.
 			return nil, errors.New("executable archive entry exceeds closed contract")
 		}
 		if _, exists := seen[header.Name]; exists {
@@ -95,7 +95,7 @@ func decodeToolArtifact(ctx context.Context, artifact ExecutableArtifact, raw []
 			}
 			continue
 		}
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA { //nolint:staticcheck // Preserve regular-file compatibility with old tar archives using the NUL type flag.
 			return nil, errors.New("executable archive special entry forbidden")
 		}
 		if header.Name == artifact.ArchiveMember {

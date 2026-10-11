@@ -76,6 +76,7 @@ record_skip() { SMOKE_SKIPPED_CHECKS+=("$1"); }
 # browser login look unauthenticated to this headless smoke client.
 cookie_value() {
   local name="$1"
+  if [[ "$ASTRO_URL" == https://* ]]; then name="__Host-$name"; fi
   awk -v wanted="$name" \
     '($0 !~ /^#/ || $0 ~ /^#HttpOnly_/) && $6 == wanted { value = $7 } END { print value }' \
     "$COOKIE_JAR" 2>/dev/null || true
