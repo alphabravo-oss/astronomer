@@ -29,6 +29,14 @@ target, stop writers for the final copy, compare data, then switch the applicati
 After writes resume, the old database is stale; a Helm rollback alone cannot
 recover the new writes. Configure off-host backups and recovery independently.
 
+## Agent compatibility
+
+The management plane accepts its matching 2.0 agent and retains the 1.x agent
+application range for staged upgrades. Existing tunnel, heartbeat and required
+capability checks still apply; an older agent that cannot satisfy those contracts
+is rejected. Upgrade the management plane before deploying 2.0 agents, because
+the 1.x management plane rejects them as a future major version.
+
 ## API clients
 
 Regenerate clients from the shipped OpenAPI document and review the retained

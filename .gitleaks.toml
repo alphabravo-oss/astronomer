@@ -69,6 +69,13 @@ id = "generic-api-key"
   paths = ['''^scripts/tests/(?:toolchain_test|gitleaks_release_review_test)\.py$''']
   regexes = ['''^valkey-test-runtime", "(?:9\.1\.20-alpine|[0-9.]+-(?:alpine-malicious|malicious))"$''']
 
+  [[rules.allowlists]]
+  description = "Four reviewed security regression fixture SHA-256 digests verified against retained source blobs"
+  condition = "AND"
+  regexTarget = "secret"
+  paths = ['''^scripts/testdata/security-source-policy/index\.json$''']
+  regexes = ['''^(?:6d32d87efea4b05c763ce89eb5400d0c4173ac68598695cfe5247e1be80beabe|72edc473b0bfed55efec81fbe1fafe8a0145bf38f91e0db39c1bbb1eb71ea001|ad2814b556194043e28301b44ffedcdca0dd4612084de7b4da1a7c9228db4dde|f3c0d36f4691c8a980da66786b279da4262624b95584c9ec0298939f3deb5fa2)$''']
+
 [[rules]]
 id = "private-key"
 

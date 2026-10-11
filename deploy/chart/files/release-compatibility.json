@@ -5,10 +5,10 @@
       "maximum": 2,
       "minimum": 2
     },
-    "maximum_supported_version_exclusive": "v2.0.0",
+    "maximum_supported_version_exclusive": "v3.0.0",
     "minimum_compatible_version": "v1.0.0",
     "minimum_supported_version": "v1.1.0",
-    "support_window_release_lines": 2,
+    "support_window_release_lines": 3,
     "tunnel_protocol": {
       "maximum": 1,
       "minimum": 1
@@ -39,11 +39,12 @@
     ],
     "supported_upgrade_release_lines": [
       "1.1.x",
-      "1.2.x"
+      "1.2.x",
+      "2.0.x"
     ],
     "target_schema": 81,
     "tls_required_in_production": true
   },
-  "release_line": "1.2.x",
+  "release_line": "2.0.x",
   "schema_version": 1
 }

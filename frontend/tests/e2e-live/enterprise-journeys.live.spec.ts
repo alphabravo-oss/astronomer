@@ -246,14 +246,18 @@ test("resource YAML dry-run gates and then applies the reviewed manifest", async
     data: { message: "after-live-apply" },
   });
   await page.locator(".monaco-editor").click();
-  const input = page.locator(".monaco-editor textarea.inputarea");
+  const input = page.getByRole("textbox", {
+    name: "Editor content",
+    exact: true,
+  });
   await expect(input).toBeFocused();
   await input.press("Control+A");
   await input.press("Backspace");
   // Use real key events so Monaco handles its paired-character editing. The
   // Firefox bulk-insertion failure duplicated the entire document before any
   // dry-run request; verify the visible edit before exercising the transport.
-  await input.pressSequentially(manifest);
+  // Leave an input frame between keys for Monaco's EditContext handling.
+  await input.pressSequentially(manifest, { delay: 20 });
   await expect(page.locator(".view-lines")).toContainText("after-live-apply");
   expect(
     (await page.locator(".view-lines").innerText()).match(/after-live-apply/g)

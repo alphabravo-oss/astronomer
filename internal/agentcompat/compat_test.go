@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 func TestEvaluate(t *testing.T) {
@@ -19,7 +20,8 @@ func TestEvaluate(t *testing.T) {
 		"1.1.0-main.b22651e1": {"deprecated", false},
 		"v1.0.0":              {"deprecated", false},
 		"v0.9.9":              {"blocked", true},
-		"v2.0.0":              {"blocked", true},
+		"v2.0.0":              {"supported", false},
+		"v3.0.0":              {"blocked", true},
 		"":                    {"unknown", true},
 		"1.2":                 {"unknown", true},
 		"1.2.3.4":             {"unknown", true},
@@ -49,7 +51,7 @@ func TestEvaluateConnectNegotiatesIndependentSurfaces(t *testing.T) {
 		edit func(*protocol.ConnectPayload)
 		code string
 	}{
-		{"future agent", func(p *protocol.ConnectPayload) { p.AgentVersion = "v2.0.0" }, "agent_version_future_major"},
+		{"future agent", func(p *protocol.ConnectPayload) { p.AgentVersion = "v3.0.0" }, "agent_version_future_major"},
 		{"tunnel", func(p *protocol.ConnectPayload) { p.TunnelProtocolVersion++ }, "tunnel_protocol_unsupported"},
 		{"heartbeat", func(p *protocol.ConnectPayload) { p.HeartbeatSchemaVersion++ }, "heartbeat_schema_unsupported"},
 		{"delivery", func(p *protocol.ConnectPayload) { p.DeliveryProtocolVersion = "3.0" }, "delivery_protocol_unsupported"},
@@ -65,5 +67,19 @@ func TestEvaluateConnectNegotiatesIndependentSurfaces(t *testing.T) {
 				t.Fatalf("EvaluateConnect() = %+v, want blocked code %s", got, test.code)
 			}
 		})
+	}
+}
+
+// A version bump must never produce an agent rejected by its own server.
+func TestShippedAgentCanConnect(t *testing.T) {
+	payload := protocol.ConnectPayload{
+		AgentVersion:            version.Version,
+		TunnelProtocolVersion:   protocol.TunnelProtocolVersion,
+		HeartbeatSchemaVersion:  protocol.HeartbeatSchemaVersion,
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion,
+		Capabilities:            protocol.RequiredConnectCapabilities(),
+	}
+	if got := EvaluateConnect(payload); got.Blocked || got.Status != "supported" {
+		t.Fatalf("shipped agent %s cannot connect: %+v", version.Version, got)
 	}
 }

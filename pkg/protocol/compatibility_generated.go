@@ -16,7 +16,7 @@ const (
 	DeliveryProtocolVersion               = "2.0"
 	MinimumCompatibleAgentVersion         = "v1.0.0"
 	MinimumSupportedAgentVersion          = "v1.1.0"
-	MaximumSupportedAgentVersionExclusive = "v2.0.0"
+	MaximumSupportedAgentVersionExclusive = "v3.0.0"
 )
 
 var requiredConnectCapabilities = [...]string{
