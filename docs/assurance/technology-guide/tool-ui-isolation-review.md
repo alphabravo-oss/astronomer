@@ -69,3 +69,12 @@ adds a `Data` member with the existing payload type and JSON tag; it rejects
 changes to that payload or unrelated response families. Every remaining v1.2.1
 public symbol is still compile-checked. This does not extend source-security,
 vulnerability, or external-certification waivers.
+
+The OpenAPI comparison against v1.2.1 reports 218 required properties moving
+under `data` across those 40 responses. A structural comparison against
+`989eced5:docs/openapi.yaml` verifies that each `data` schema equals the former
+response schema and that replacing those 40 wrappers leaves the complete
+specification equal. The exact warning identities are dated and bound to the
+current specification digest plus the immutable release and main baselines in
+`deploy/contracts/openapi-current-reviews.json`; historical review bytes remain
+unchanged. The same gate is checked against both current main and v1.2.1.

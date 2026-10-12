@@ -31,7 +31,7 @@ class CurrentReviewTests(unittest.TestCase):
         effective = self.run_review()
         history = self.review.split(self.registry["historicalBoundary"])[0]
         self.assertTrue(effective.startswith(history))
-        self.assertEqual(len(self.rows), 135)
+        self.assertEqual(len(self.rows), 353)
         inherited = self.registry["entries"][:76]
         # Canonical entry digest from reviewed e0f92cf7; includes every old
         # identity, owner, review/expiry instant and evidence disposition.
