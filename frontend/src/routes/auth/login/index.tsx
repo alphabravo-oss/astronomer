@@ -59,14 +59,11 @@ function LoginPage() {
   const form = useAppForm({
     defaultValues: { email: "", password: "" },
     validators: {
-      // Old check (imperative, pre-submit): `if (!form.email || !form.password)`
-      // → ported 1:1 as a form-level onSubmit validator.
       onSubmit: ({ value }) =>
         !value.email || !value.password
           ? "Please enter your email address and password"
           : undefined,
     },
-    // Same UX as before: the failed check surfaces as a toast, not inline.
     onSubmitInvalid: () =>
       toastError("Please enter your email address and password"),
     onSubmit: async ({ value }) => {
