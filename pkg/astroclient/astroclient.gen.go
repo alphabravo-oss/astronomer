@@ -83100,10 +83100,12 @@ func (r GetAdminBackupDrillHistoryResponse) StatusCode() int {
 type AdminCharlieAccessGetResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminAccess
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminAccess `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83125,12 +83127,14 @@ func (r AdminCharlieAccessGetResponse) StatusCode() int {
 type AdminCharlieAccessUpdateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminAccess
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminAccess `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83152,12 +83156,14 @@ func (r AdminCharlieAccessUpdateResponse) StatusCode() int {
 type AdminCharlieActionPolicyUpdateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminActionPolicy
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminActionPolicy `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83179,12 +83185,14 @@ func (r AdminCharlieActionPolicyUpdateResponse) StatusCode() int {
 type AdminCharlieAlertDeliveryProofsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminAlertDeliveryProofView
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminAlertDeliveryProofView `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83206,10 +83214,12 @@ func (r AdminCharlieAlertDeliveryProofsResponse) StatusCode() int {
 type AdminCharlieAlertPolicyGetResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminAlertPolicy
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminAlertPolicy `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83231,12 +83241,14 @@ func (r AdminCharlieAlertPolicyGetResponse) StatusCode() int {
 type AdminCharlieAlertPolicyUpdateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminAlertPolicy
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminAlertPolicy `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83258,10 +83270,12 @@ func (r AdminCharlieAlertPolicyUpdateResponse) StatusCode() int {
 type AdminCharlieDiagnosticsRunResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminDiagnostics
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminDiagnostics `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83283,12 +83297,14 @@ func (r AdminCharlieDiagnosticsRunResponse) StatusCode() int {
 type AdminCharlieDisconnectResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminStatus
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminStatus `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83310,10 +83326,12 @@ func (r AdminCharlieDisconnectResponse) StatusCode() int {
 type AdminCharlieKubernetesVisibilityGetResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieKubernetesVisibility
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieKubernetesVisibility `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83335,12 +83353,14 @@ func (r AdminCharlieKubernetesVisibilityGetResponse) StatusCode() int {
 type AdminCharlieKubernetesVisibilityUpdateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieKubernetesVisibility
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieKubernetesVisibility `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83362,12 +83382,14 @@ func (r AdminCharlieKubernetesVisibilityUpdateResponse) StatusCode() int {
 type AdminCharlieModeUpdateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminMode
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminMode `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83389,10 +83411,12 @@ func (r AdminCharlieModeUpdateResponse) StatusCode() int {
 type AdminCharlieOnboardingConsumeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieOnboardingStatus
-	JSON400      *ErrorResponse
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
+	JSON200      *struct {
+		Data CharlieOnboardingStatus `json:"data"`
+	}
+	JSON400 *ErrorResponse
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
 }
 
 // Status returns HTTPResponse.Status
@@ -83414,10 +83438,12 @@ func (r AdminCharlieOnboardingConsumeResponse) StatusCode() int {
 type AdminCharlieOnboardingValidateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieOnboardingStatus
-	JSON400      *ErrorResponse
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
+	JSON200      *struct {
+		Data CharlieOnboardingStatus `json:"data"`
+	}
+	JSON400 *ErrorResponse
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
 }
 
 // Status returns HTTPResponse.Status
@@ -83439,12 +83465,14 @@ func (r AdminCharlieOnboardingValidateResponse) StatusCode() int {
 type AdminCharlieDiscoveryQualificationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminDiscoveryQualification
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminDiscoveryQualification `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83466,10 +83494,12 @@ func (r AdminCharlieDiscoveryQualificationResponse) StatusCode() int {
 type AdminCharlieStatusResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminStatus
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminStatus `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83492,7 +83522,9 @@ type AdminCharlieTriggerEventsListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Items []CharlieAdminTriggerEvent `json:"items"`
+		Data struct {
+			Items []CharlieAdminTriggerEvent `json:"items"`
+		} `json:"data"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -83577,10 +83609,12 @@ func (r AdminCharlieTriggerEventRetryResponse) StatusCode() int {
 type AdminCharlieTriggerRulesListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminAutomation
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieAdminAutomation `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -83602,11 +83636,13 @@ func (r AdminCharlieTriggerRulesListResponse) StatusCode() int {
 type AdminCharlieTriggerRuleCreateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *CharlieAdminTriggerRule
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
+	JSON201      *struct {
+		Data CharlieAdminTriggerRule `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
 }
 
 // Status returns HTTPResponse.Status
@@ -83653,11 +83689,13 @@ func (r AdminCharlieTriggerRuleDeleteResponse) StatusCode() int {
 type AdminCharlieTriggerRuleUpdateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieAdminTriggerRule
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON409      *ErrorEnvelope
+	JSON200      *struct {
+		Data CharlieAdminTriggerRule `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *ErrorEnvelope
 }
 
 // Status returns HTTPResponse.Status
@@ -90327,8 +90365,10 @@ type CharlieActivationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Activated bool    `json:"activated"`
-		Endpoint  *string `json:"endpoint,omitempty"`
+		Data struct {
+			Activated bool    `json:"activated"`
+			Endpoint  *string `json:"endpoint,omitempty"`
+		} `json:"data"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -90354,7 +90394,9 @@ type ListCharlieApprovalsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Items []CharlieApprovalSummary `json:"items"`
+		Data struct {
+			Items []CharlieApprovalSummary `json:"items"`
+		} `json:"data"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -90381,8 +90423,10 @@ type DecideCharlieApprovalResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Approval Bounded display metadata only; signed authority material never crosses the browser boundary.
-		Approval CharlieApprovalSummary `json:"approval"`
+		Data struct {
+			// Approval Bounded display metadata only; signed authority material never crosses the browser boundary.
+			Approval CharlieApprovalSummary `json:"approval"`
+		} `json:"data"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -90408,9 +90452,11 @@ func (r DecideCharlieApprovalResponse) StatusCode() int {
 type ListCharlieCommandsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieCommandCatalog
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
+	JSON200      *struct {
+		Data CharlieCommandCatalog `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
 }
 
 // Status returns HTTPResponse.Status
@@ -90433,7 +90479,9 @@ type SearchCharlieContextResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Items []CharlieContextSearchResult `json:"items"`
+		Data struct {
+			Items []CharlieContextSearchResult `json:"items"`
+		} `json:"data"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -90460,7 +90508,9 @@ type ListCharlieFindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Items []CharlieFindingSummary `json:"items"`
+		Data struct {
+			Items []CharlieFindingSummary `json:"items"`
+		} `json:"data"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -90486,7 +90536,9 @@ type GetCharlieFindingResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Finding CharlieFindingDetail `json:"finding"`
+		Data struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		} `json:"data"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -90512,7 +90564,9 @@ type AcknowledgeCharlieFindingResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Finding CharlieFindingDetail `json:"finding"`
+		Data struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		} `json:"data"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -90540,7 +90594,9 @@ type DismissCharlieFindingResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Finding CharlieFindingDetail `json:"finding"`
+		Data struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		} `json:"data"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -90568,7 +90624,9 @@ type RequestCharlieFindingVerificationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Finding CharlieFindingDetail `json:"finding"`
+		Data struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		} `json:"data"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -90596,7 +90654,9 @@ type ResolveCharlieFindingResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Finding CharlieFindingDetail `json:"finding"`
+		Data struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		} `json:"data"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -90624,7 +90684,9 @@ type StartCharlieFindingRemediationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Finding CharlieFindingDetail `json:"finding"`
+		Data struct {
+			Finding CharlieFindingDetail `json:"finding"`
+		} `json:"data"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -90651,10 +90713,12 @@ func (r StartCharlieFindingRemediationResponse) StatusCode() int {
 type GetCharlieOperationStatusResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *CharlieOperationStatus
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON503      *ServiceUnavailable
+	JSON200      *struct {
+		Data CharlieOperationStatus `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -90677,13 +90741,15 @@ type ListCharlieSessionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Mode     ListCharlieSessions200Mode `json:"mode"`
-		Sessions []CharlieSessionMetadata   `json:"sessions"`
+		Data struct {
+			Mode     ListCharlieSessions200DataMode `json:"mode"`
+			Sessions []CharlieSessionMetadata       `json:"sessions"`
+		} `json:"data"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
 }
-type ListCharlieSessions200Mode string
+type ListCharlieSessions200DataMode string
 
 // Status returns HTTPResponse.Status
 func (r ListCharlieSessionsResponse) Status() string {
@@ -90705,8 +90771,10 @@ type CreateCharlieSessionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON201      *struct {
-		Replayed bool                   `json:"replayed"`
-		Session  CharlieSessionMetadata `json:"session"`
+		Data struct {
+			Replayed bool                   `json:"replayed"`
+			Session  CharlieSessionMetadata `json:"session"`
+		} `json:"data"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -90734,8 +90802,10 @@ type GetCharlieSessionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Remote  map[string]interface{} `json:"remote"`
-		Session CharlieSessionMetadata `json:"session"`
+		Data struct {
+			Remote  map[string]interface{} `json:"remote"`
+			Session CharlieSessionMetadata `json:"session"`
+		} `json:"data"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -90860,7 +90930,9 @@ type ListCharlieThreadsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Threads []CharlieThreadMetadata `json:"threads"`
+		Data struct {
+			Threads []CharlieThreadMetadata `json:"threads"`
+		} `json:"data"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -90885,9 +90957,11 @@ func (r ListCharlieThreadsResponse) StatusCode() int {
 type GetActiveCharlieThreadResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
+	JSON200      *struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
 }
 
 // Status returns HTTPResponse.Status
@@ -90909,11 +90983,13 @@ func (r GetActiveCharlieThreadResponse) StatusCode() int {
 type CreateCharlieThreadMessageResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *map[string]interface{}
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON503      *ServiceUnavailable
+	JSON202      *struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -90935,9 +91011,11 @@ func (r CreateCharlieThreadMessageResponse) StatusCode() int {
 type CreateCharlieThreadResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *map[string]interface{}
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
+	JSON201      *struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
 }
 
 // Status returns HTTPResponse.Status
@@ -90959,10 +91037,12 @@ func (r CreateCharlieThreadResponse) StatusCode() int {
 type GetCharlieThreadHistoryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
+	JSON200      *struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
 }
 
 // Status returns HTTPResponse.Status
@@ -115885,7 +115965,9 @@ func ParseAdminCharlieAccessGetResponse(rsp *http.Response) (*AdminCharlieAccess
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminAccess
+		var dest struct {
+			Data CharlieAdminAccess `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -115932,7 +116014,9 @@ func ParseAdminCharlieAccessUpdateResponse(rsp *http.Response) (*AdminCharlieAcc
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminAccess
+		var dest struct {
+			Data CharlieAdminAccess `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -115993,7 +116077,9 @@ func ParseAdminCharlieActionPolicyUpdateResponse(rsp *http.Response) (*AdminChar
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminActionPolicy
+		var dest struct {
+			Data CharlieAdminActionPolicy `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116054,7 +116140,9 @@ func ParseAdminCharlieAlertDeliveryProofsResponse(rsp *http.Response) (*AdminCha
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminAlertDeliveryProofView
+		var dest struct {
+			Data CharlieAdminAlertDeliveryProofView `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116115,7 +116203,9 @@ func ParseAdminCharlieAlertPolicyGetResponse(rsp *http.Response) (*AdminCharlieA
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminAlertPolicy
+		var dest struct {
+			Data CharlieAdminAlertPolicy `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116162,7 +116252,9 @@ func ParseAdminCharlieAlertPolicyUpdateResponse(rsp *http.Response) (*AdminCharl
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminAlertPolicy
+		var dest struct {
+			Data CharlieAdminAlertPolicy `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116223,7 +116315,9 @@ func ParseAdminCharlieDiagnosticsRunResponse(rsp *http.Response) (*AdminCharlieD
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminDiagnostics
+		var dest struct {
+			Data CharlieAdminDiagnostics `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116270,7 +116364,9 @@ func ParseAdminCharlieDisconnectResponse(rsp *http.Response) (*AdminCharlieDisco
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminStatus
+		var dest struct {
+			Data CharlieAdminStatus `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116331,7 +116427,9 @@ func ParseAdminCharlieKubernetesVisibilityGetResponse(rsp *http.Response) (*Admi
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieKubernetesVisibility
+		var dest struct {
+			Data CharlieKubernetesVisibility `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116378,7 +116476,9 @@ func ParseAdminCharlieKubernetesVisibilityUpdateResponse(rsp *http.Response) (*A
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieKubernetesVisibility
+		var dest struct {
+			Data CharlieKubernetesVisibility `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116439,7 +116539,9 @@ func ParseAdminCharlieModeUpdateResponse(rsp *http.Response) (*AdminCharlieModeU
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminMode
+		var dest struct {
+			Data CharlieAdminMode `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116500,7 +116602,9 @@ func ParseAdminCharlieOnboardingConsumeResponse(rsp *http.Response) (*AdminCharl
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieOnboardingStatus
+		var dest struct {
+			Data CharlieOnboardingStatus `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116547,7 +116651,9 @@ func ParseAdminCharlieOnboardingValidateResponse(rsp *http.Response) (*AdminChar
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieOnboardingStatus
+		var dest struct {
+			Data CharlieOnboardingStatus `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116594,7 +116700,9 @@ func ParseAdminCharlieDiscoveryQualificationResponse(rsp *http.Response) (*Admin
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminDiscoveryQualification
+		var dest struct {
+			Data CharlieAdminDiscoveryQualification `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116655,7 +116763,9 @@ func ParseAdminCharlieStatusResponse(rsp *http.Response) (*AdminCharlieStatusRes
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminStatus
+		var dest struct {
+			Data CharlieAdminStatus `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116703,7 +116813,9 @@ func ParseAdminCharlieTriggerEventsListResponse(rsp *http.Response) (*AdminCharl
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Items []CharlieAdminTriggerEvent `json:"items"`
+			Data struct {
+				Items []CharlieAdminTriggerEvent `json:"items"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -116878,7 +116990,9 @@ func ParseAdminCharlieTriggerRulesListResponse(rsp *http.Response) (*AdminCharli
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminAutomation
+		var dest struct {
+			Data CharlieAdminAutomation `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -116925,7 +117039,9 @@ func ParseAdminCharlieTriggerRuleCreateResponse(rsp *http.Response) (*AdminCharl
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest CharlieAdminTriggerRule
+		var dest struct {
+			Data CharlieAdminTriggerRule `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -117026,7 +117142,9 @@ func ParseAdminCharlieTriggerRuleUpdateResponse(rsp *http.Response) (*AdminCharl
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieAdminTriggerRule
+		var dest struct {
+			Data CharlieAdminTriggerRule `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -129888,8 +130006,10 @@ func ParseCharlieActivationResponse(rsp *http.Response) (*CharlieActivationRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Activated bool    `json:"activated"`
-			Endpoint  *string `json:"endpoint,omitempty"`
+			Data struct {
+				Activated bool    `json:"activated"`
+				Endpoint  *string `json:"endpoint,omitempty"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -129931,7 +130051,9 @@ func ParseListCharlieApprovalsResponse(rsp *http.Response) (*ListCharlieApproval
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Items []CharlieApprovalSummary `json:"items"`
+			Data struct {
+				Items []CharlieApprovalSummary `json:"items"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -129980,8 +130102,10 @@ func ParseDecideCharlieApprovalResponse(rsp *http.Response) (*DecideCharlieAppro
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Approval Bounded display metadata only; signed authority material never crosses the browser boundary.
-			Approval CharlieApprovalSummary `json:"approval"`
+			Data struct {
+				// Approval Bounded display metadata only; signed authority material never crosses the browser boundary.
+				Approval CharlieApprovalSummary `json:"approval"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130029,7 +130153,9 @@ func ParseListCharlieCommandsResponse(rsp *http.Response) (*ListCharlieCommandsR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieCommandCatalog
+		var dest struct {
+			Data CharlieCommandCatalog `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -130070,7 +130196,9 @@ func ParseSearchCharlieContextResponse(rsp *http.Response) (*SearchCharlieContex
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Items []CharlieContextSearchResult `json:"items"`
+			Data struct {
+				Items []CharlieContextSearchResult `json:"items"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130119,7 +130247,9 @@ func ParseListCharlieFindingsResponse(rsp *http.Response) (*ListCharlieFindingsR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Items []CharlieFindingSummary `json:"items"`
+			Data struct {
+				Items []CharlieFindingSummary `json:"items"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130161,7 +130291,9 @@ func ParseGetCharlieFindingResponse(rsp *http.Response) (*GetCharlieFindingRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Finding CharlieFindingDetail `json:"finding"`
+			Data struct {
+				Finding CharlieFindingDetail `json:"finding"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130203,7 +130335,9 @@ func ParseAcknowledgeCharlieFindingResponse(rsp *http.Response) (*AcknowledgeCha
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Finding CharlieFindingDetail `json:"finding"`
+			Data struct {
+				Finding CharlieFindingDetail `json:"finding"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130259,7 +130393,9 @@ func ParseDismissCharlieFindingResponse(rsp *http.Response) (*DismissCharlieFind
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Finding CharlieFindingDetail `json:"finding"`
+			Data struct {
+				Finding CharlieFindingDetail `json:"finding"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130315,7 +130451,9 @@ func ParseRequestCharlieFindingVerificationResponse(rsp *http.Response) (*Reques
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Finding CharlieFindingDetail `json:"finding"`
+			Data struct {
+				Finding CharlieFindingDetail `json:"finding"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130371,7 +130509,9 @@ func ParseResolveCharlieFindingResponse(rsp *http.Response) (*ResolveCharlieFind
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Finding CharlieFindingDetail `json:"finding"`
+			Data struct {
+				Finding CharlieFindingDetail `json:"finding"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130427,7 +130567,9 @@ func ParseStartCharlieFindingRemediationResponse(rsp *http.Response) (*StartChar
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Finding CharlieFindingDetail `json:"finding"`
+			Data struct {
+				Finding CharlieFindingDetail `json:"finding"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130482,7 +130624,9 @@ func ParseGetCharlieOperationStatusResponse(rsp *http.Response) (*GetCharlieOper
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CharlieOperationStatus
+		var dest struct {
+			Data CharlieOperationStatus `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -130530,8 +130674,10 @@ func ParseListCharlieSessionsResponse(rsp *http.Response) (*ListCharlieSessionsR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Mode     ListCharlieSessions200Mode `json:"mode"`
-			Sessions []CharlieSessionMetadata   `json:"sessions"`
+			Data struct {
+				Mode     ListCharlieSessions200DataMode `json:"mode"`
+				Sessions []CharlieSessionMetadata       `json:"sessions"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130573,8 +130719,10 @@ func ParseCreateCharlieSessionResponse(rsp *http.Response) (*CreateCharlieSessio
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
 		var dest struct {
-			Replayed bool                   `json:"replayed"`
-			Session  CharlieSessionMetadata `json:"session"`
+			Data struct {
+				Replayed bool                   `json:"replayed"`
+				Session  CharlieSessionMetadata `json:"session"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130630,8 +130778,10 @@ func ParseGetCharlieSessionResponse(rsp *http.Response) (*GetCharlieSessionRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Remote  map[string]interface{} `json:"remote"`
-			Session CharlieSessionMetadata `json:"session"`
+			Data struct {
+				Remote  map[string]interface{} `json:"remote"`
+				Session CharlieSessionMetadata `json:"session"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130854,7 +131004,9 @@ func ParseListCharlieThreadsResponse(rsp *http.Response) (*ListCharlieThreadsRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Threads []CharlieThreadMetadata `json:"threads"`
+			Data struct {
+				Threads []CharlieThreadMetadata `json:"threads"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130895,7 +131047,9 @@ func ParseGetActiveCharlieThreadResponse(rsp *http.Response) (*GetActiveCharlieT
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest struct {
+			Data map[string]interface{} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -130935,7 +131089,9 @@ func ParseCreateCharlieThreadMessageResponse(rsp *http.Response) (*CreateCharlie
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest map[string]interface{}
+		var dest struct {
+			Data map[string]interface{} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -130989,7 +131145,9 @@ func ParseCreateCharlieThreadResponse(rsp *http.Response) (*CreateCharlieThreadR
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest map[string]interface{}
+		var dest struct {
+			Data map[string]interface{} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -131029,7 +131187,9 @@ func ParseGetCharlieThreadHistoryResponse(rsp *http.Response) (*GetCharlieThread
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
+		var dest struct {
+			Data map[string]interface{} `json:"data"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

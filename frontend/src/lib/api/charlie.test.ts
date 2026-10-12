@@ -36,18 +36,20 @@ describe("Charlie browser gateway mapping", () => {
   beforeEach(() => vi.clearAllMocks());
   it("maps the generated raw session wire shape", async () => {
     mockedApi.get.mockResolvedValue({
-      sessions: [
-        {
-          id: "s",
-          client_session_id: "c",
-          intent: "inspect",
-          resource_scope_summary: "installation/a",
-          state: "active",
-          visibility: "private",
-          central_revision: 2,
-        },
-      ],
-      mode: "approval",
+      data: {
+        sessions: [
+          {
+            id: "s",
+            client_session_id: "c",
+            intent: "inspect",
+            resource_scope_summary: "installation/a",
+            state: "active",
+            visibility: "private",
+            central_revision: 2,
+          },
+        ],
+        mode: "approval",
+      },
     });
     await expect(listCharlieSessions()).resolves.toEqual([
       expect.objectContaining({
@@ -59,17 +61,19 @@ describe("Charlie browser gateway mapping", () => {
   });
   it("uses authoritative remote terminal state when local SSE projection is stale", async () => {
     mockedApi.get.mockResolvedValue({
-      session: {
-        id: "local-session",
-        client_session_id: "client-session",
-        intent: "inspect",
-        resource_scope_summary: "installation",
-        state: "active",
-        visibility: "private",
-        central_revision: 1,
-        source: "user",
+      data: {
+        session: {
+          id: "local-session",
+          client_session_id: "client-session",
+          intent: "inspect",
+          resource_scope_summary: "installation",
+          state: "active",
+          visibility: "private",
+          central_revision: 1,
+          source: "user",
+        },
+        remote: { state: "failed", revision: 2 },
       },
-      remote: { state: "failed", revision: 2 },
     });
 
     await expect(getCharlieSession("local/session")).resolves.toEqual(
@@ -139,30 +143,32 @@ describe("Charlie browser gateway mapping", () => {
   });
   it("maps the generated raw thread session needed to open live progress", async () => {
     mockedApi.post.mockResolvedValue({
-      thread: {
-        id: "thread-1",
-        title: "health",
-        state: "active",
-        current_session_id: "local-session-1",
-        created_at: "2026-08-11T23:27:10Z",
-      },
-      current_session: {
-        id: "local-session-1",
-        client_session_id: "client-session-1",
-        intent: "assess health",
-        resource_scope_summary: "installation/current",
-        state: "active",
-        visibility: "private",
-        central_revision: 1,
-        source: "user",
-      },
-      session_ids: ["local-session-1"],
-      needs_continue: false,
-      messageable: true,
-      receipt: {
-        session_id: "central-session-1",
-        turn_id: "turn-1",
-        accepted_at: "2026-08-11T23:27:12Z",
+      data: {
+        thread: {
+          id: "thread-1",
+          title: "health",
+          state: "active",
+          current_session_id: "local-session-1",
+          created_at: "2026-08-11T23:27:10Z",
+        },
+        current_session: {
+          id: "local-session-1",
+          client_session_id: "client-session-1",
+          intent: "assess health",
+          resource_scope_summary: "installation/current",
+          state: "active",
+          visibility: "private",
+          central_revision: 1,
+          source: "user",
+        },
+        session_ids: ["local-session-1"],
+        needs_continue: false,
+        messageable: true,
+        receipt: {
+          session_id: "central-session-1",
+          turn_id: "turn-1",
+          accepted_at: "2026-08-11T23:27:12Z",
+        },
       },
     });
     await expect(sendCharlieThreadMessage("assess health")).resolves.toEqual(
@@ -187,25 +193,27 @@ describe("Charlie browser gateway mapping", () => {
   });
   it("maps a raw active-thread read consistently with message responses", async () => {
     mockedApi.get.mockResolvedValue({
-      thread: {
-        id: "thread-2",
-        title: "queue health",
-        state: "active",
-        current_session_id: "local-session-2",
+      data: {
+        thread: {
+          id: "thread-2",
+          title: "queue health",
+          state: "active",
+          current_session_id: "local-session-2",
+        },
+        current_session: {
+          id: "local-session-2",
+          client_session_id: "client-session-2",
+          intent: "inspect queues",
+          resource_scope_summary: "installation/current",
+          state: "active",
+          visibility: "private",
+          central_revision: 4,
+          source: "user",
+        },
+        session_ids: ["local-session-1", "local-session-2"],
+        needs_continue: true,
+        messageable: false,
       },
-      current_session: {
-        id: "local-session-2",
-        client_session_id: "client-session-2",
-        intent: "inspect queues",
-        resource_scope_summary: "installation/current",
-        state: "active",
-        visibility: "private",
-        central_revision: 4,
-        source: "user",
-      },
-      session_ids: ["local-session-1", "local-session-2"],
-      needs_continue: true,
-      messageable: false,
     });
     await expect(getCharlieActiveThread()).resolves.toEqual(
       expect.objectContaining({
@@ -221,16 +229,18 @@ describe("Charlie browser gateway mapping", () => {
   });
   it("loads the versioned product command catalog and sends a structured command selection", async () => {
     mockedApi.get.mockResolvedValue({
-      schema: "astronomer.charlie-command-catalog/v1",
-      version: 1,
-      commands: [],
+      data: {
+        schema: "astronomer.charlie-command-catalog/v1",
+        version: 1,
+        commands: [],
+      },
     });
     await expect(getCharlieCommands()).resolves.toEqual(
       expect.objectContaining({ version: 1, commands: [] }),
     );
     expect(mockedApi.get).toHaveBeenCalledWith({ signal: undefined });
 
-    mockedApi.post.mockResolvedValue({ thread: null });
+    mockedApi.post.mockResolvedValue({ data: { thread: null } });
     await sendCharlieThreadMessage("/health", {
       command: { id: "health", version: "1", arguments: {} },
     });
@@ -245,41 +255,43 @@ describe("Charlie browser gateway mapping", () => {
   });
   it("maps bounded local finding data plus on-demand central detail", async () => {
     mockedApi.get.mockResolvedValue({
-      finding: {
-        id: "f",
-        title: "Finding",
-        severity: "high",
-        state: "open",
-        summary: "bounded",
-        reason_no_action: "read_only",
-        affected_resource: {
-          type: "installation",
-          id: "a",
-          required_verb: "read",
-        },
-        risk_impact: "availability",
-        verification_summary: "re-read",
-        proposed_action: {
-          label: "Restart",
-          mode: "approval",
-          eligible: true,
-          approval_id: "approval-a",
-        },
-        detail: {
-          finding: {
-            confidence: 0.8,
-            operator_checks: ["check health"],
-            preconditions: ["healthy backup"],
-            expectedResult: "ready",
-            workflow: {
-              state: "manual_remediation_required",
-              manual_remediation: {
-                preconditions: ["authorized operator"],
-                steps: ["review current state"],
-                expected_impact: "restore health",
-                verification: {
-                  method: "product.current_state",
-                  steps: ["re-read current state"],
+      data: {
+        finding: {
+          id: "f",
+          title: "Finding",
+          severity: "high",
+          state: "open",
+          summary: "bounded",
+          reason_no_action: "read_only",
+          affected_resource: {
+            type: "installation",
+            id: "a",
+            required_verb: "read",
+          },
+          risk_impact: "availability",
+          verification_summary: "re-read",
+          proposed_action: {
+            label: "Restart",
+            mode: "approval",
+            eligible: true,
+            approval_id: "approval-a",
+          },
+          detail: {
+            finding: {
+              confidence: 0.8,
+              operator_checks: ["check health"],
+              preconditions: ["healthy backup"],
+              expectedResult: "ready",
+              workflow: {
+                state: "manual_remediation_required",
+                manual_remediation: {
+                  preconditions: ["authorized operator"],
+                  steps: ["review current state"],
+                  expected_impact: "restore health",
+                  verification: {
+                    method: "product.current_state",
+                    steps: ["re-read current state"],
+                  },
                 },
               },
             },
@@ -306,7 +318,7 @@ describe("Charlie browser gateway mapping", () => {
     );
   });
   it("requests the bounded full finding window for accurate topbar state filtering", async () => {
-    mockedApi.get.mockResolvedValue({ items: [] });
+    mockedApi.get.mockResolvedValue({ data: { items: [] } });
     await listCharlieFindings();
     expect(mockedApi.get).toHaveBeenCalledWith({
       query: { limit: 100 },
@@ -314,7 +326,7 @@ describe("Charlie browser gateway mapping", () => {
     });
   });
   it("sends a fresh idempotency key with an approval decision", async () => {
-    mockedApi.post.mockResolvedValue({});
+    mockedApi.post.mockResolvedValue({ data: {} });
     await decideCharlieApproval("approval/a", "approve", "bounded rationale");
     expect(mockedApi.post).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -328,7 +340,7 @@ describe("Charlie browser gateway mapping", () => {
     );
   });
   it("maps workflow decisions to fixed product-owned paths", async () => {
-    mockedApi.post.mockResolvedValue({});
+    mockedApi.post.mockResolvedValue({ data: {} });
     await transitionCharlieFinding("finding/a", "request_verification");
     expect(mockedApi.post).toHaveBeenCalledWith(
       expect.objectContaining({

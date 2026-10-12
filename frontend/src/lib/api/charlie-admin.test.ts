@@ -27,6 +27,8 @@ vi.mock("@/lib/api/generated/client", () => ({
 
 import {
   disconnectCharlie,
+  getCharlieActivation,
+  getCharlieAgent,
   listCharlieTriggerEvents,
   retryCharlieTriggerEvent,
   updateCharlieActionPolicy,
@@ -122,17 +124,56 @@ const actionPolicyWire = {
 describe("Charlie admin generated-operation boundary", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("reads activation from the server data envelope", async () => {
+    vi.mocked(generated.charlieActivation).mockResolvedValue({
+      data: { activated: true, endpoint: "https://charlie.example.test" },
+    });
+    await expect(getCharlieActivation()).resolves.toEqual({
+      activated: true,
+      endpoint: "https://charlie.example.test",
+    });
+  });
+
+  it("maps healthy agent status from the server data envelope", async () => {
+    vi.mocked(generated.adminCharlieStatus).mockResolvedValue({
+      data: {
+        connection: { connected: true, disclosure_acknowledged: false },
+        agent: {
+          application_state: "ready",
+          desired_replicas: 2,
+          ready_replicas: 2,
+          standby_replicas: ["replica-1"],
+          replicas: [],
+          agent_version: "1.0.64",
+        },
+        mode: modeWire,
+      },
+    });
+    const controller = new AbortController();
+    await expect(getCharlieAgent(controller.signal)).resolves.toMatchObject({
+      applicationState: "ready",
+      desiredReplicas: 2,
+      readyReplicas: 2,
+      agentVersion: "1.0.64",
+    });
+    expect(generated.adminCharlieStatus).toHaveBeenCalledWith({
+      signal: controller.signal,
+    });
+  });
+
   it("normalizes connect credentials and maps raw wire casing", async () => {
-    vi.mocked(generated.adminCharlieOnboardingValidate).mockResolvedValue(
-      onboardingWire,
-    );
+    vi.mocked(generated.adminCharlieOnboardingValidate).mockResolvedValue({
+      data: onboardingWire,
+    });
 
     const result = await validateCharlieConnect({
       endpoint: " https://charlie.example.test/charlie/v1/ ",
       connectToken: "charlie.connect.v1.abc\n",
     });
 
-    expect(result).toEqual(expect.objectContaining({ packageId: "p", routeId: "r" }));
+    expect(result).toEqual(
+      expect.objectContaining({ packageId: "p", routeId: "r" }),
+    );
     expect(generated.adminCharlieOnboardingValidate).toHaveBeenCalledWith({
       body: {
         endpoint: "https://charlie.example.test/charlie/v1/",
@@ -143,9 +184,9 @@ describe("Charlie admin generated-operation boundary", () => {
   });
 
   it("forwards cancellation and the exact onboarding snake-case contract", async () => {
-    vi.mocked(generated.adminCharlieOnboardingValidate).mockResolvedValue(
-      onboardingWire,
-    );
+    vi.mocked(generated.adminCharlieOnboardingValidate).mockResolvedValue({
+      data: onboardingWire,
+    });
     const controller = new AbortController();
 
     await validateCharlieOnboarding(
@@ -177,15 +218,17 @@ describe("Charlie admin generated-operation boundary", () => {
 
   it("preserves the exact disconnect confirmation phrase", async () => {
     vi.mocked(generated.adminCharlieDisconnect).mockResolvedValue({
-      connection: { connected: false, disclosure_acknowledged: false },
-      agent: {
-        application_state: "inactive",
-        desired_replicas: 0,
-        ready_replicas: 0,
-        standby_replicas: [],
-        replicas: [],
+      data: {
+        connection: { connected: false, disclosure_acknowledged: false },
+        agent: {
+          application_state: "inactive",
+          desired_replicas: 0,
+          ready_replicas: 0,
+          standby_replicas: [],
+          replicas: [],
+        },
+        mode: modeWire,
       },
-      mode: modeWire,
     });
 
     await expect(disconnectCharlie()).resolves.toEqual({
@@ -210,7 +253,9 @@ describe("Charlie admin generated-operation boundary", () => {
   });
 
   it("preserves cancellation and the long-running mode timeout", async () => {
-    vi.mocked(generated.adminCharlieModeUpdate).mockResolvedValue(modeWire);
+    vi.mocked(generated.adminCharlieModeUpdate).mockResolvedValue({
+      data: modeWire,
+    });
     const controller = new AbortController();
 
     await updateCharlieMode("read_only", 3, controller.signal);
@@ -224,30 +269,34 @@ describe("Charlie admin generated-operation boundary", () => {
 
   it("serializes every trigger policy field without hidden client defaults", async () => {
     vi.mocked(generated.adminCharlieTriggerRuleUpdate).mockResolvedValue({
-      id: "r",
-      name: "Agent flap",
-      source_type: "agent",
-      enabled: true,
-      severities: ["high"],
-      scopes: ["prod"],
-      cooldown_seconds: 1800,
-      grace_period_seconds: 300,
-      flap_window_seconds: 900,
-      flap_count: 3,
-      estate_threshold_percent: 25,
-      suppressed: false,
-      maximum_attempts: 5,
-      dead_letter_enabled: true,
-      service_identity: "system:charlie-automation",
-      mode_ceiling: "auto",
+      data: {
+        id: "r",
+        name: "Agent flap",
+        source_type: "agent",
+        enabled: true,
+        severities: ["high"],
+        scopes: ["prod"],
+        cooldown_seconds: 1800,
+        grace_period_seconds: 300,
+        flap_window_seconds: 900,
+        flap_count: 3,
+        estate_threshold_percent: 25,
+        suppressed: false,
+        maximum_attempts: 5,
+        dead_letter_enabled: true,
+        service_identity: "system:charlie-automation",
+        mode_ceiling: "auto",
+      },
     });
     vi.mocked(generated.adminCharlieAccessUpdate).mockResolvedValue({
-      effective_permissions: [],
-      automation_grants: [],
+      data: {
+        effective_permissions: [],
+        automation_grants: [],
+      },
     });
-    vi.mocked(generated.adminCharlieTriggerRulesList).mockResolvedValue(
-      automationWire,
-    );
+    vi.mocked(generated.adminCharlieTriggerRulesList).mockResolvedValue({
+      data: automationWire,
+    });
 
     await updateCharlieAutomation({
       defaultsRevision: 3,
@@ -298,7 +347,9 @@ describe("Charlie admin generated-operation boundary", () => {
 
   it("bounds event queries and sends a fresh UUID idempotency key", async () => {
     vi.mocked(generated.adminCharlieTriggerEventsList).mockResolvedValue({
-      items: [],
+      data: {
+        items: [],
+      },
     });
     vi.mocked(generated.adminCharlieTriggerEventRetry).mockResolvedValue({
       data: {
@@ -332,9 +383,9 @@ describe("Charlie admin generated-operation boundary", () => {
   });
 
   it("updates only the bounded local action-policy controls", async () => {
-    vi.mocked(generated.adminCharlieActionPolicyUpdate).mockResolvedValue(
-      actionPolicyWire,
-    );
+    vi.mocked(generated.adminCharlieActionPolicyUpdate).mockResolvedValue({
+      data: actionPolicyWire,
+    });
 
     await updateCharlieActionPolicy({
       capability: "astronomer.queue.retry_task",
@@ -359,9 +410,9 @@ describe("Charlie admin generated-operation boundary", () => {
   });
 
   it("keeps alert routing product-local and sends channel references only", async () => {
-    vi.mocked(generated.adminCharlieAlertPolicyUpdate).mockResolvedValue(
-      alertPolicyWire,
-    );
+    vi.mocked(generated.adminCharlieAlertPolicyUpdate).mockResolvedValue({
+      data: alertPolicyWire,
+    });
 
     await updateCharlieAlertPolicy({
       enabled: true,
