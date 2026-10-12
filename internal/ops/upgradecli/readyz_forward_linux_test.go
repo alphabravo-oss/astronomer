@@ -188,7 +188,7 @@ func TestReadyzForwardJoinsOnHealthCancellationAndEarlyExit(t *testing.T) {
 				}
 			} else if mode == "cancel" {
 				if !errors.Is(result, context.Canceled) {
-					t.Fatal("cancellation identity lost")
+					t.Fatalf("cancellation identity lost: %v", result)
 				}
 			} else if result == nil {
 				t.Fatal("early child exit admitted health")

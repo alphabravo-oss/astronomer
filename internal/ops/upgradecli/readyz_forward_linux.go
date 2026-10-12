@@ -161,7 +161,7 @@ func (o *ReadyzObservation) forward(ctx context.Context, args []string, port int
 		select {
 		case value := <-done:
 			completed = &value
-			return errors.New("owned readiness forwarder exited before health observation")
+			return errors.Join(errors.New("owned readiness forwarder exited before health observation"), value.err, bounded.Err())
 		case <-bounded.Done():
 			return bounded.Err()
 		case <-ticker.C:
@@ -195,7 +195,7 @@ func (o *ReadyzObservation) forward(ctx context.Context, args []string, port int
 		select {
 		case value := <-done:
 			completed = &value
-			return errors.New("readiness forwarder exited before acknowledged health")
+			return errors.Join(errors.New("readiness forwarder exited before acknowledged health"), value.err, bounded.Err())
 		default:
 		}
 		if _, err := writeBackupBytes(bounded, c, fmt.Sprintf("readyz-%03d.json", sequence), body, 64<<10); err != nil {

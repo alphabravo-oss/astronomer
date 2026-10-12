@@ -47,6 +47,16 @@ describe("sanitizeReturnTo (D3 open-redirect guard)", () => {
     expect(sanitizeReturnTo("//evil.example.com/dashboard")).toBe("/dashboard");
   });
 
+  it("rejects paths browsers normalize into another origin", () => {
+    for (const target of [
+      "/\\evil.example.com",
+      "/\t/evil.example.com",
+      "/\n/evil.example.com",
+    ]) {
+      expect(sanitizeReturnTo(target)).toBe("/dashboard");
+    }
+  });
+
   it("rejects absolute URLs", () => {
     expect(sanitizeReturnTo("https://evil.example.com")).toBe("/dashboard");
     expect(sanitizeReturnTo("javascript:alert(1)")).toBe("/dashboard");

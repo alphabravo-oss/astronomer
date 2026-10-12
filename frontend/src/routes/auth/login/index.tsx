@@ -1,10 +1,8 @@
 import { Input } from "@/components/ui/input";
 import { FormShell } from "@/components/ui/form-shell";
-// Route files are the eslint-exempted surface for direct navigate imports.
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { useNavigate } from "@tanstack/react-router";
 import { sanitizeReturnTo } from "@/lib/auth/session";
 import {
   GitFork,
@@ -40,7 +38,6 @@ export const Route = createFileRoute("/auth/login/")({
 });
 
 function LoginPage() {
-  const navigate = useNavigate();
   // returnTo round-trips the deep link the auth guard (or the api.ts 401 handler) captured; sanitizeReturnTo guards against open redirects (D3).
   const { returnTo } = Route.useSearch();
   const { login } = useAuthStore();
@@ -84,7 +81,9 @@ function LoginPage() {
           return;
         }
         login(result.user);
-        void navigate({ to: sanitizeReturnTo(returnTo) });
+        // A new document observes the committed session cookies in WebKit too,
+        // and discards query state belonging to the previous session.
+        window.location.assign(sanitizeReturnTo(returnTo));
       } catch (error) {
         setSubmissionError(
           error instanceof Error
@@ -99,7 +98,7 @@ function LoginPage() {
 
   const completeTotp = (user: User) => {
     login(user);
-    void navigate({ to: sanitizeReturnTo(returnTo) });
+    window.location.assign(sanitizeReturnTo(returnTo));
   };
 
   const handleSSO = async (provider: string) => {
@@ -168,7 +167,8 @@ function LoginPage() {
         </div>
 
         <div className="relative space-y-4">
-          {/* eslint-disable-line no-restricted-syntax -- brand hero heading */}<h1 className="text-4xl font-bold text-white leading-tight">
+          {/* eslint-disable-next-line no-restricted-syntax -- brand hero heading */}
+          <h1 className="text-4xl font-bold text-white leading-tight">
             Kubernetes Multi-Cluster
             <br />
             <span className="text-gradient">Management Platform</span>
@@ -283,7 +283,8 @@ function LoginPage() {
 
           {/* Login Form */}
           {!challenge && (
-            <FormShell form={form}
+            <FormShell
+              form={form}
               onSubmit={(e) => {
                 e.preventDefault();
                 void form.handleSubmit();

@@ -33,7 +33,9 @@ export function sanitizeReturnTo(returnTo: unknown): string {
   if (
     typeof returnTo === "string" &&
     returnTo.startsWith("/") &&
-    !returnTo.startsWith("//")
+    !returnTo.startsWith("//") &&
+    !returnTo.includes("\\") &&
+    [...returnTo].every((character) => character.charCodeAt(0) > 0x20)
   ) {
     return returnTo;
   }
