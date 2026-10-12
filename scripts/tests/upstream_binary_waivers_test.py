@@ -19,7 +19,7 @@ class UpstreamBinaryWaiversTest(unittest.TestCase):
         self.now = dt.date(2026, 10, 11)
 
     def check(self, **kwargs):
-        return module.validated_ignores(kwargs.get("policy", self.policy), kwargs.get("release", "v2.0.0"),
+        return module.validated_ignores(kwargs.get("policy", self.policy), kwargs.get("release", "v2.0.1"),
                                         kwargs.get("digest", self.digest), kwargs.get("now", self.now))
 
     def test_exact_official_bytes_and_path_only(self):
@@ -37,7 +37,7 @@ class UpstreamBinaryWaiversTest(unittest.TestCase):
 
     def test_future_releases_are_not_waived(self):
         with self.assertRaises(ValueError):
-            self.check(release="v2.0.1")
+            self.check(release="v2.0.2")
 
     def test_expiry_is_enforced(self):
         with self.assertRaises(ValueError):

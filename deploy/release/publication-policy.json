@@ -26,6 +26,7 @@
   },
   "upstream_policy": "adopt_fixed_newer_upstream_otherwise_exact_expiring_waiver_no_fork",
   "release_scoped_automated_tags": [
-    "v2.0.0"
+    "v2.0.0",
+    "v2.0.1"
   ]
 }
