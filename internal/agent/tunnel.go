@@ -15,7 +15,6 @@ import (
 	"github.com/coder/websocket"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -596,6 +595,7 @@ func InitialReconnectSpread(baseSeconds int, rng *rand.Rand) time.Duration {
 
 // readLoop reads messages from the WebSocket and dispatches them to handlers.
 func (tc *TunnelClient) readLoop(ctx context.Context) {
+	var execOrder execDispatchOrder
 	for {
 		msg, err := tc.readMessage(ctx, tc.conn)
 		if err != nil {
@@ -648,39 +648,15 @@ func (tc *TunnelClient) readLoop(ctx context.Context) {
 		// the session goroutine; see dispatchPermit.
 		permit := newDispatchPermit(func() { tc.releaseDispatch(class) })
 		dispatchCtx := withDispatchPermit(ctx, permit)
+		wait, finish := execOrder.reserve(msg)
 
 		go func(m *protocol.Message, c dispatchClass, p *dispatchPermit) {
 			defer p.finishHandler()
-			handlerCtx, span := tc.startMessageSpan(dispatchCtx, m)
-			if m.Type == protocol.MsgDecommission {
-				var owner *decommissionReply
-				handlerCtx, owner = withDecommissionReply(handlerCtx)
-				defer owner.discardUnlessQueued()
-			}
-			defer span.End()
-			logger := observability.WithTraceID(tc.log, handlerCtx)
-			resp, err := handler(handlerCtx, m)
-			status := "success"
-			synthesized := false
-			if err != nil {
-				status = "error"
-				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
-				logger.Error("handler error", "type", m.Type, "error", err)
-				resp = handlerErrorReply(m, err)
-				synthesized = true
-			}
-			if resp == nil {
-				observability.IncrementWithTraceExemplar(handlerCtx, agentTunnelMessagesTotal.WithLabelValues(observability.MetricValues(string(m.Type), status)...))
+			defer finish()
+			if !wait(dispatchCtx) {
 				return
 			}
-			if sendErr := tc.sendHandlerReply(handlerCtx, resp, c, synthesized); sendErr != nil {
-				status = "error"
-				span.RecordError(sendErr)
-				span.SetStatus(codes.Error, sendErr.Error())
-				logger.Error("failed to send response", "error", sendErr)
-			}
-			observability.IncrementWithTraceExemplar(handlerCtx, agentTunnelMessagesTotal.WithLabelValues(observability.MetricValues(string(m.Type), status)...))
+			tc.dispatchMessage(dispatchCtx, m, c, handler)
 		}(msg, class, permit)
 	}
 }

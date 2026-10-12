@@ -1,20 +1,32 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
-import { createClusterViaApi, csrfToken, loginViaForm, waitForStreamOpen } from './live.helpers';
+import {
+  createClusterViaApi,
+  csrfToken,
+  loginViaForm,
+  waitForStreamOpen,
+} from "./live.helpers";
 
 // Live tier (P7.2): create a cluster via the real API and watch its row
 // appear in the clusters list WITHOUT navigating. Proves the whole live
 // pipeline: ticket mint → EventSource → Go bus publish (cluster.created) →
 // dispatch → query-cache invalidation → refetch → render.
 
-test('cluster created via API appears in the list over SSE', async ({ page, context }) => {
+test("cluster created via API appears in the list over SSE", async ({
+  page,
+  context,
+}) => {
   await loginViaForm(page);
 
   // Full page load of /dashboard/clusters remounts the layout, so a fresh
   // stream connects; awaiting it means the POST below races nothing.
+  // Retire the login landing page's stream before observing the new document.
+  // Otherwise its delayed response can satisfy this page's connection wait.
+  await page.goto("about:blank");
   const streamOpen = waitForStreamOpen(page);
-  await page.goto('/dashboard/clusters');
+  await page.goto("/dashboard/clusters");
   await streamOpen;
+  await expect(page.getByTestId("app-shell")).toBeVisible();
 
   const name = `e2e-live-sse-${Date.now()}`;
   await createClusterViaApi(context.request, await csrfToken(context), name);

@@ -1,6 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from "@playwright/test";
 
-import { createClusterViaApi, csrfToken, loginViaForm, waitForStreamOpen } from './live.helpers';
+import {
+  createClusterViaApi,
+  csrfToken,
+  loginViaForm,
+  waitForStreamOpen,
+} from "./live.helpers";
 
 // Live tier (P7.2): the resume story. Invalidate-on-reconnect (not
 // Last-Event-ID replay) is how the client heals missed events, so this is
@@ -9,15 +14,19 @@ import { createClusterViaApi, csrfToken, loginViaForm, waitForStreamOpen } from 
 // queries — a cluster created around the blip appears either via the fresh
 // stream's cluster.created or via the reconnect invalidation refetch.
 
-test('stream recovers from an offline blip: re-mint + invalidate-on-reconnect', async ({
+test("stream recovers from an offline blip: re-mint + invalidate-on-reconnect", async ({
   page,
   context,
 }) => {
   await loginViaForm(page);
 
+  // Retire the login landing page's stream before observing the new document.
+  // Otherwise its delayed response can satisfy this page's connection wait.
+  await page.goto("about:blank");
   const streamOpen = waitForStreamOpen(page);
-  await page.goto('/dashboard/clusters');
+  await page.goto("/dashboard/clusters");
   await streamOpen;
+  await expect(page.getByTestId("app-shell")).toBeVisible();
 
   // Sever the network long enough for the EventSource to error and the
   // stream to enter its 1s→30s backoff loop.

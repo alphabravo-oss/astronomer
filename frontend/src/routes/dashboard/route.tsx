@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate, useLocation } from "@tanstack/react-router";
+import { DashboardSessionGate } from "@/components/auth/dashboard-session-gate";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { GlobalBanner } from "@/components/layout/global-banner";
@@ -15,9 +16,7 @@ import { WindowManager } from "@/components/window-manager/window-manager";
 import { ExtensionProvider } from "@/components/extensions/ExtensionProvider";
 import { EmptyState, StatePanel } from "@/components/ui/empty-state";
 import { errorDigest, errorMessage } from "@/lib/error-message";
-import { useAuthStore } from "@/lib/store";
 import { useCharlieActivated, useFeatureFlags } from "@/lib/hooks/clusters";
-import { useCurrentUser } from "@/lib/hooks/auth";
 import type { FeatureFlags, FeatureFlagKey } from "@/lib/api/feature-flags";
 import { useLiveClusterMetricsMerger } from "@/lib/live/cluster-merger";
 import { useLiveEvents } from "@/lib/live/hooks";
@@ -132,47 +131,11 @@ function DashboardError({ error, reset }: ErrorComponentProps) {
 }
 
 function DashboardLayout() {
-  const navigate = useNavigate();
-  const updateUser = useAuthStore((s) => s.updateUser);
-  const {
-    data: currentUser,
-    isFetched: currentUserFetched,
-    isError: currentUserError,
-  } = useCurrentUser();
-  const mustChangePassword = currentUser
-    ? currentUser.mustChangePassword || currentUser.must_change_password
-    : false;
-
-  useEffect(() => {
-    if (currentUser) updateUser(currentUser);
-  }, [currentUser, updateUser]);
-
-  useEffect(() => {
-    if (currentUserFetched && mustChangePassword) {
-      void navigate({ to: "/auth/change-password", replace: true });
-    } else if (currentUserFetched && (currentUserError || !currentUser)) {
-      void navigate({ to: "/auth/login", replace: true });
-    }
-  }, [
-    currentUser,
-    currentUserError,
-    currentUserFetched,
-    mustChangePassword,
-    navigate,
-  ]);
-
-  // This is a pre-mount security gate: dashboard children, extensions,
-  // feature queries and SSE transports do not exist until the session has
-  // been resolved and is allowed past forced password rotation.
-  if (!currentUserFetched || !currentUser || mustChangePassword) {
-    return (
-      <div className="flex h-screen items-center justify-center" role="status">
-        Checking session…
-      </div>
-    );
-  }
-
-  return <DashboardAuthorizedShell />;
+  return (
+    <DashboardSessionGate>
+      <DashboardAuthorizedShell />
+    </DashboardSessionGate>
+  );
 }
 
 function DashboardAuthorizedShell() {
