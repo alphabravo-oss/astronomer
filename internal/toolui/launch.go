@@ -64,7 +64,9 @@ func (g *Gateway) Launch(w http.ResponseWriter, r *http.Request, target Target, 
 	}
 	nonce := randomToken()
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Referrer-Policy", "no-referrer")
+	// Cross-origin form navigations need a non-opaque Origin for redeem.
+	// no-referrer makes browsers send Origin: null; disclose only the origin.
+	w.Header().Set("Referrer-Policy", "strict-origin")
 	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 	w.Header().Set("Origin-Agent-Cluster", "?1")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

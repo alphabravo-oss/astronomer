@@ -48,6 +48,9 @@ func launchAndRedeem(t *testing.T, g *Gateway, access string, target Target) *ht
 	if w.Code != 200 {
 		t.Fatalf("launch: %d %s", w.Code, w.Body.String())
 	}
+	if policy := w.Header().Get("Referrer-Policy"); policy != "strict-origin" {
+		t.Fatalf("launch policy %q can suppress the browser Origin required for redemption", policy)
+	}
 	if strings.Contains(w.Body.String(), access) {
 		t.Fatal("parent JWT leaked into launch")
 	}
@@ -55,15 +58,20 @@ func launchAndRedeem(t *testing.T, g *Gateway, access string, target Target) *ht
 	if len(grant) != 2 {
 		t.Fatal("missing launch form")
 	}
-	redeem := func() *httptest.ResponseRecorder {
+	redeem := func(origin string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("POST", "https://"+g.host(target)+redeemPath, strings.NewReader(url.Values{"grant": {grant[1]}}.Encode()))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		r.Header.Set("Origin", g.main.String())
+		r.Header.Set("Origin", origin)
 		w := httptest.NewRecorder()
 		g.Dispatch(http.NotFoundHandler()).ServeHTTP(w, r)
 		return w
 	}
-	w = redeem()
+	for _, origin := range []string{"", "null", "https://untrusted.example.test"} {
+		if denied := redeem(origin); denied.Code != http.StatusForbidden {
+			t.Fatalf("unsafe launch origin %q accepted: %d", origin, denied.Code)
+		}
+	}
+	w = redeem(g.main.String())
 	if w.Code != 303 {
 		t.Fatalf("redeem: %d %s", w.Code, w.Body.String())
 	}
@@ -78,7 +86,7 @@ func launchAndRedeem(t *testing.T, g *Gateway, access string, target Target) *ht
 	if c.Name != CookieName || !c.Secure || !c.HttpOnly || c.Domain != "" || c.Path != "/" {
 		t.Fatalf("unsafe cookie attributes: %s", c.Name)
 	}
-	if repeat := redeem(); repeat.Code != 401 {
+	if repeat := redeem(g.main.String()); repeat.Code != 401 {
 		t.Fatal("launch grant replay accepted")
 	}
 	return c

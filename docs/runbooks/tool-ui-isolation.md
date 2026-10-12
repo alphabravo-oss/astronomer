@@ -79,6 +79,59 @@ host. Existing absolute console Grafana links in HTML and redirects are rewritte
 at the gateway. Newly installed/upgraded Grafana releases receive the isolated
 `root_url`; their internal ticket redemption URL remains the console URL.
 
+## v2.0.1 browser launch workaround
+
+The immutable v2.0.1 launch response uses `Referrer-Policy: no-referrer`. Browsers
+can therefore send `Origin: null` on its cross-origin form POST, and the gateway
+correctly rejects the request with `Invalid launch origin`. An HTTP client that
+sets `Origin` explicitly does not reproduce this browser behavior.
+
+For v2.0.1, set the launch response's `Referrer-Policy` to `strict-origin` at the
+console ingress. This discloses only the HTTPS console origin, never a URL path,
+query, grant or cookie. Keep the gateway's exact-origin check, CSP, host-only
+cookies and separate tool hostnames. Never accept `null` or disable origin
+validation to work around this error. The subsequent source fix sets this policy
+on the launch response itself; it does not alter the published v2.0.1 images.
+
+For an existing ingress-nginx installation:
+
+1. Add `Referrer-Policy` to the controller ConfigMap's
+   `global-allowed-response-headers`, preserving any existing entries.
+2. Create a ConfigMap in the Astronomer namespace containing:
+
+   ```yaml
+   apiVersion: v1
+   kind: ConfigMap
+   metadata:
+     name: astronomer-browser-headers
+     namespace: astronomer
+   data:
+     Referrer-Policy: strict-origin
+   ```
+
+3. Preserve this annotation in the deployment's Helm values:
+
+   ```yaml
+   ingress:
+     annotations:
+       nginx.ingress.kubernetes.io/custom-headers: astronomer/astronomer-browser-headers
+   ```
+
+4. Reconcile the ingress after updating the ConfigMap; a ConfigMap edit alone
+   may not trigger a controller reload. Check the launch response header and
+   reopen Grafana in a real browser. Its page must render and parent access to
+   the tool frame must still throw `SecurityError`.
+
+The chart applies ingress annotations to both console and tool ingresses. This
+header remains restricted to Astronomer's ingress resources; allowing its name
+in the controller does not set it on other applications. Gateway API and other
+ingress controllers should apply their supported response-header override to
+the console launch routes instead.
+
+References: [Fetch origin-header rules](https://fetch.spec.whatwg.org/#append-a-request-origin-header),
+[ingress-nginx custom headers](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/annotations/#custom-headers),
+[allowed response headers](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/#global-allowed-response-headers).
+
 ## Validate
 
 1. Resolve an arbitrary name under the wildcard to the ingress address.
