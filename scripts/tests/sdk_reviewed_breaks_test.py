@@ -39,6 +39,30 @@ class ReviewedSDKBreaksTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             module.reviewed_baseline(self.before, self.after, self.review)
 
+    def test_only_exact_data_envelope_is_migrated(self):
+        before = b'type CharlieResponse struct {\n\tJSON200 *Payload\n\tBody []byte\n}\n'
+        after = b'type CharlieResponse struct {\n\tJSON200 *struct {\n\t\tData Payload `json:"data"`\n\t}\n\tBody []byte\n}\n'
+        review = {'baseline_sha256': hashlib.sha256(before).hexdigest(),
+                  'current_sha256': hashlib.sha256(after).hexdigest(),
+                  'removed_fields': {}, 'wrapped_fields': {'CharlieResponse': ['JSON200']}}
+        migrated, removed = module.reviewed_baseline(before, after, review)
+        self.assertEqual(migrated, after.decode())
+        self.assertEqual(removed, 0)
+        changed = after.replace(b'Data Payload', b'Data DifferentPayload')
+        review['current_sha256'] = hashlib.sha256(changed).hexdigest()
+        with self.assertRaises(ValueError):
+            module.reviewed_baseline(before, changed, review)
+
+    def test_non_charlie_envelope_is_not_eligible(self):
+        review = dict(self.review, removed_fields={}, wrapped_fields={'ToolResponse': ['JSON200']})
+        with self.assertRaises(ValueError):
+            module.reviewed_baseline(self.before, self.after, review)
+
+    def test_unlisted_type_rename_is_not_eligible(self):
+        review = dict(self.review, renamed_types={'ToolResponse': 'OtherResponse'})
+        with self.assertRaises(ValueError):
+            module.reviewed_baseline(self.before, self.after, review)
+
 
 if __name__ == '__main__':
     unittest.main()

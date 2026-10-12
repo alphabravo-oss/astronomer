@@ -49,3 +49,23 @@ and both generated SDK digests are bound in
 The released-client compile fixture still checks all other exported symbols;
 changing either SDK snapshot requires a new review. Callers must launch tools in
 the browser rather than decode tool UI documents as control-plane JSON.
+
+
+## Charlie response-envelope integration review
+
+On 2026-10-12, integration of main commit
+`c2f48e13` corrected Charlie OpenAPI success responses to match the server's
+existing `data` envelope. The regenerated SDK introduces that envelope on 40
+explicitly enumerated success-response fields (including the accepted thread
+message receipt) and renames `ListCharlieSessions200Mode` to
+`ListCharlieSessions200DataMode`. Go callers access these payloads through
+`response.JSON200.Data` (or the corresponding JSON201/JSON202 field) and regenerate
+clients for v2.0.0. This changes generated types, not the server's existing wire
+response. Frontend adapters and browser fixtures now consume the same envelope.
+
+The same digest-bound SDK review registry lists every affected field and the
+single type rename. The fixture transformation verifies that each change only
+adds a `Data` member with the existing payload type and JSON tag; it rejects
+changes to that payload or unrelated response families. Every remaining v1.2.1
+public symbol is still compile-checked. This does not extend source-security,
+vulnerability, or external-certification waivers.

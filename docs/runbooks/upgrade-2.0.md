@@ -53,6 +53,12 @@ documented hyphenated kubeconfig endpoints and Flux delivery APIs; retired alias
 are not restored. The [API compatibility review](../api-breaking-change-review.md)
 records the exact reviewed changes.
 
+Charlie SDK success responses now describe the server's existing `data` envelope.
+Generated Go clients read payloads through `JSON200.Data`, `JSON201.Data`, or
+`JSON202.Data`, as applicable. The session-list mode type is now
+`ListCharlieSessions200DataMode`. Regenerate Charlie clients rather than treating
+the former unwrapped SDK response shape as the wire contract.
+
 ## Release evidence and limitations
 
 The owner approved the same external certification and license deferrals for this

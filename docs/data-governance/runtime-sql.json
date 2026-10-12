@@ -915,7 +915,7 @@
     {
       "path": "pkg/astroclient/astroclient.gen.go",
       "owner": "paired generated public SDK",
-      "source_sha256": "9eb264f1b29046493372b5269cf65176a2ca426fc50d9c02070164add2cd96f9"
+      "source_sha256": "92cbf76d58d28032930e3ee344d8ba5ee14a1f387509e9b8ca0623cc1dafd7f6"
     }
   ],
   "sites": [
