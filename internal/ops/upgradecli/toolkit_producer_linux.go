@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	canonical "github.com/alphabravocompany/astronomer-go/deploy/toolchain"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
 
 const installedUpgradeWrapper = `#!/usr/bin/env bash
@@ -93,7 +92,7 @@ func BuildUpgradeToolkit(ctx context.Context, resolutionDirectory, executable, s
 		return empty, err
 	}
 	files := map[string][]byte{"scripts/upgrade-release.sh": []byte(installedUpgradeWrapper), "bin/upgrade-release": cli, "share/astronomer-upgrade/toolchain/toolchain-resolution.json": record, "share/astronomer-upgrade/toolchain/toolchain-resolution.sigstore.json": bundle}
-	client, err := httpclient.NewDestinationClientContext(ctx, httpclient.DestinationPolicy{}, httpclient.DestinationOptions{MaxResponseBytes: toolkitMaximum})
+	client, err := newToolkitDownloadClient(ctx)
 	if err != nil {
 		return empty, err
 	}

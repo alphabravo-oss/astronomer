@@ -80,8 +80,8 @@ def reviewed_baseline(baseline, current, review):
 if __name__ == '__main__':
     baseline, current = map(Path, sys.argv[1:])
     review = json.loads((ROOT/'deploy/contracts/sdk-v2-reviewed-breaks.json').read_text())
-    if review['release'] != 'v2.0.0' or '\nversion: 2.0.0\n' not in (ROOT/'deploy/chart/Chart.yaml').read_text():
-        raise ValueError('SDK break review applies only to v2.0.0')
+    if review['release'] != 'v2.0.1' or '\nversion: 2.0.1\n' not in (ROOT/'deploy/chart/Chart.yaml').read_text():
+        raise ValueError('SDK break review applies only to v2.0.1')
     text, count = reviewed_baseline(baseline.read_bytes(), current.read_bytes(), review)
     baseline.write_text(text)
     print(f"SDK compatibility: {count} reviewed UI fields removed, {len(review.get('wrapped_fields', {}))} exact Charlie data envelopes, {len(review.get('renamed_types', {}))} type rename; all other public symbols checked")

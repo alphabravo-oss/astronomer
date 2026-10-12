@@ -3,7 +3,7 @@
   "baseline_sha256": "db9725d5c092c10192e591264a1e0a730a83e4de5a554b5507fa06022352551c",
   "current_sha256": "92cbf76d58d28032930e3ee344d8ba5ee14a1f387509e9b8ca0623cc1dafd7f6",
   "reason": "Approved v2 browser-isolation migration: main-origin tool proxy responses are HTML launch documents or 410, not tool JSON. All other released SDK symbols remain compile-checked. The merged main Charlie API correction makes SDK success payloads match the existing HTTP data envelope; only the listed exact wrappers and generated mode-type rename are migrated in the fixture.",
-  "release": "v2.0.0",
+  "release": "v2.0.1",
   "removed_fields": {
     "GetClustersByIdObservabilityGrafanaProxyResponse": [
       "JSON200"

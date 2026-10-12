@@ -62,7 +62,8 @@ the former unwrapped SDK response shape as the wire contract.
 ## Release evidence and limitations
 
 The owner approved the same external certification and license deferrals for this
-exact v2.0.0 tag on 2026-10-11. Raw findings, SBOMs, image signatures and automated
+exact v2.0.0 tag on 2026-10-11 and v2.0.1 on 2026-10-12. The patch release
+fixes toolkit downloads without changing the migration contract or waiver expiry. Raw findings, SBOMs, image signatures and automated
 qualification remain required. Upstream vulnerability waivers are exact-image,
 exact-finding and expiring; they acknowledge risk and do not assert remediation.
 No production-scale, cloud, Rancher benchmark, human accessibility, clean-license

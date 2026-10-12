@@ -21,7 +21,7 @@ mkdir -p "$bin" "$state/target" "$state/previous" "$work/chart/astronomer/files"
 : >"$trace"
 export RC_HARNESS_STATE="$state" RC_HARNESS_TRACE="$trace"
 
-target=v2.0.0
+target=v2.0.1
 previous=v1.1.0
 source_run=777
 producer_run=888
@@ -31,8 +31,8 @@ webhook_id=11111111-1111-1111-1111-111111111111
 
 printf '{"postgresql":{"minimum_upgrade_schema":1,"target_schema":2}}\n' \
   >"$work/chart/astronomer/files/release-compatibility.json"
-tar -czf "$state/target/astronomer-2.0.0.tgz" -C "$work/chart" astronomer
-cp "$state/target/astronomer-2.0.0.tgz" "$state/previous/astronomer-1.1.0.tgz"
+tar -czf "$state/target/astronomer-2.0.1.tgz" -C "$work/chart" astronomer
+cp "$state/target/astronomer-2.0.1.tgz" "$state/previous/astronomer-1.1.0.tgz"
 
 image_refs=()
 for component in server worker agent migrate frontend shell dr; do
@@ -46,11 +46,11 @@ for component in server worker agent migrate frontend shell dr; do
 done
 image_json="$(printf '%s\n' "${image_refs[@]}" | jq -R . | jq -s \
   'to_entries | map({name:(["server","worker","agent","migrate","frontend","shell","dr"][.key]),reference:.value})')"
-target_chart="sha256:$(sha256sum "$state/target/astronomer-2.0.0.tgz" | awk '{print $1}')"
+target_chart="sha256:$(sha256sum "$state/target/astronomer-2.0.1.tgz" | awk '{print $1}')"
 previous_chart="sha256:$(sha256sum "$state/previous/astronomer-1.1.0.tgz" | awk '{print $1}')"
 jq -n --arg commit "$source_commit" --arg chart "$target_chart" --argjson images "$image_json" '{
   schema_version:1,
-  release:{version:"v2.0.0",source_commit:$commit},
+  release:{version:"v2.0.1",source_commit:$commit},
   astronomer:{
     chart:{kind:"helm_chart",content_digest:$chart}, images:$images,
     runtime_images:[
@@ -78,7 +78,7 @@ make_stub gh <<'STUB'
 set -euo pipefail
 printf 'gh %s\n' "$*" >>"$RC_HARNESS_TRACE"
 if [[ "$1 $2" == "api repos/alphabravo-oss/astronomer/actions/runs/777" ]]; then
-  branch=v2.0.0
+  branch=v2.0.1
   [[ "${RC_HARNESS_BAD_RUN:-0}" == 0 ]] || branch=main
   printf '{"head_sha":"%s","path":".github/workflows/release.yaml","head_branch":"%s"}\n' \
     "$(printf 'b%.0s' {1..40})" "$branch"
@@ -165,16 +165,16 @@ elif [[ "$*" == *" history "* ]]; then
   printf '[{"revision":1}]\n'
 elif [[ "$*" == *" get manifest "* ]]; then
   jq -r '.astronomer.images[].reference' "$RC_HARNESS_STATE/target/release-manifest.json"
-  printf 'AGENT_IMAGE_REPOSITORY: "%s"\nAGENT_IMAGE_TAG: "v2.0.0"\n' \
+  printf 'AGENT_IMAGE_REPOSITORY: "%s"\nAGENT_IMAGE_TAG: "v2.0.1"\n' \
     "$(cat "$RC_HARNESS_STATE/target/agent.digest")"
 elif [[ "$*" == *" show chart "* ]]; then
-  printf 'version: 2.0.0\n'
+  printf 'version: 2.0.1\n'
 elif [[ "$*" == *" pull "* ]]; then
   args=("$@")
   for ((i=0; i<${#args[@]}; i++)); do
     [[ "${args[i]}" == --destination ]] && output="${args[i+1]}"
   done
-  cp "$RC_HARNESS_STATE/target/astronomer-2.0.0.tgz" "$output/"
+  cp "$RC_HARNESS_STATE/target/astronomer-2.0.1.tgz" "$output/"
 elif [[ "$*" == *"--dry-run=server"* ]]; then
   printf 'dry-run\n'
 elif [[ "$*" == *"--atomic --cleanup-on-fail --wait --wait-for-jobs"* ]]; then
@@ -289,7 +289,7 @@ grep -Fq "certificate-identity https://github.com/alphabravo-oss/astronomer/.git
 grep -Fq "ref=$previous_commit" "$trace"
 grep -Fq 'previous-install' "$trace"
 grep -Fq 'image.server.tag=v1.1.0' "$trace"
-grep -Fq 'image.server.tag=v2.0.0' "$trace"
+grep -Fq 'image.server.tag=v2.0.1' "$trace"
 
 # The receiver exception must not permit another destination, port or workload.
 jq -e '.spec == {

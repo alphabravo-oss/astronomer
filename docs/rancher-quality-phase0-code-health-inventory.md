@@ -10,8 +10,8 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 - Frontend source files: 1282
 - Frontend source lines: 240551
-- Go source files under `internal/` excluding generated sqlc and tests: 1308
-- Go source files scanned for sqlc query references excluding generated sqlc: 2962
+- Go source files under `internal/` excluding generated sqlc and tests: 1309
+- Go source files scanned for sqlc query references excluding generated sqlc: 2964
 - sqlc query declarations: 1409
 - Component files scanned: 463
 - Helm top-level values scanned: 36
@@ -103,7 +103,7 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `contains` in [`internal/delivery/placement/placement.go:565`](internal/delivery/placement/placement.go:565), [`internal/server/vault_observer.go:131`](internal/server/vault_observer.go:131)
 - `containsControl` in [`internal/delivery/model/types.go:641`](internal/delivery/model/types.go:641), [`internal/handler/delivery/common.go:277`](internal/handler/delivery/common.go:277)
 - `containsString` in [`internal/agent/delivery/validator.go:454`](internal/agent/delivery/validator.go:454), [`internal/charlie/capability_schema.go:357`](internal/charlie/capability_schema.go:357)
-- `contentDigest` in [`internal/delivery/distribution/contract.go:68`](internal/delivery/distribution/contract.go:68), [`internal/ops/upgradecli/toolkit_producer_linux.go:161`](internal/ops/upgradecli/toolkit_producer_linux.go:161)
+- `contentDigest` in [`internal/delivery/distribution/contract.go:68`](internal/delivery/distribution/contract.go:68), [`internal/ops/upgradecli/toolkit_producer_linux.go:160`](internal/ops/upgradecli/toolkit_producer_linux.go:160)
 - `copyProjectedPreparationMaterial` in [`internal/scanner/databasejob/material_linux.go:37`](internal/scanner/databasejob/material_linux.go:37), [`internal/scanner/databasejob/material_other.go:12`](internal/scanner/databasejob/material_other.go:12)
 - `copyProjectedPreparationMaterialWithMapping` in [`internal/scanner/databasejob/material_linux.go:40`](internal/scanner/databasejob/material_linux.go:40), [`internal/scanner/databasejob/material_other.go:16`](internal/scanner/databasejob/material_other.go:16)
 - `createDatabaseCacheDestination` in [`internal/delivery/distribution/database_cache_materialize_other.go:11`](internal/delivery/distribution/database_cache_materialize_other.go:11), [`internal/delivery/distribution/database_cache_materialize_unix.go:21`](internal/delivery/distribution/database_cache_materialize_unix.go:21)

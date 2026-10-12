@@ -99,6 +99,26 @@ class AutomatedReleaseTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.validate()
 
+    def test_v201_requalifies_exact_patch_release_and_discloses_same_deferrals(self):
+        self.args.tag = "v2.0.1"
+        self.args.rc_identity = "https://github.com/owner/repo/.github/workflows/release.yaml@refs/tags/v2.0.1"
+        self.write("release-manifest", {"release": {"version": self.args.tag, "source_commit": self.args.source_commit}})
+        digest = validator.approval.sha256(self.root / "release-manifest.json")
+        self.runtime.update(release_version=self.args.tag, release_manifest_sha256=digest)
+        self.waiver["release_version"] = self.args.tag
+        self.retain_waivers()
+        self.write("runtime-image-evidence", self.runtime)
+        self.rc.update(target_version=self.args.tag, release_manifest_sha256=digest)
+        self.write("rc-rehearsal-evidence", self.rc)
+        result = self.validate()
+        self.assertEqual(result["policy"], "v2.0.1-automated-publication")
+        self.assertEqual(set(result["external_certifications"].values()), {"deferred"})
+        self.assertEqual([call.args[2] for call in self.verify.call_args_list], [self.args.rc_identity] * 3)
+        self.rc["clean_restore"] = "failed"
+        self.write("rc-rehearsal-evidence", self.rc)
+        with self.assertRaises(ValueError):
+            self.validate()
+
     def test_recovery_rechecks_expiry_at_publication(self):
         self.validate()
         for day in (6, 7):

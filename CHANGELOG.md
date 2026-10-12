@@ -2,9 +2,14 @@
 
 ## Unreleased
 
-Target release: **2.0.0**.
+Target release: **2.0.1**.
 
 ### Changes
+
+- Fix offline toolkit downloads by allowing the exact GitHub release-asset redirect
+  while preserving public destination checks, TLS, digest verification and bounds.
+  The incomplete v2.0.0 publication retains its immutable tag and signed images;
+  v2.0.1 rebuilds and qualifies the complete artifact set from its own source.
 
 - Integrate the technology-guide implementation: updated toolchain and dependency
   authority, API and generated-client contracts, pagination, typed database and
@@ -27,7 +32,8 @@ before upgrading, preserve database and encryption-key backups, and update API
 clients for the documented contract changes. The integrated schema is version 81.
 
 The release owner explicitly approved carrying the v1.2.1 qualification deferrals
-and upstream vulnerability risk acceptance forward to **v2.0.0**. Builds, fresh
+and upstream vulnerability risk acceptance forward to **v2.0.0**, and explicitly renewed the same scope for **v2.0.1**
+on 2026-10-12. CVE identities, image digests and waiver expiries remain unchanged. Builds, fresh
 vulnerability scans, exact-image waivers, SBOMs, signatures, Kubernetes clean
 installs and signed upgrade/backup/restore checks remain mandatory. Cloud, scale,
 Rancher benchmarking, human accessibility and license qualification remain

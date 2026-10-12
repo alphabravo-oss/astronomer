@@ -17,7 +17,7 @@ def load(path=POLICY):
     maintenance=data['maintenance_automated_policy']
     if set(maintenance)!={'status','applicable_tags','required_decision'} or maintenance['status']!='not_approved' or maintenance['applicable_tags'] or not maintenance['required_decision'].strip():
         raise ValueError('maintenance policy has no approval')
-    if data['release_scoped_automated_tags'] != ['v2.0.0']:
+    if data['release_scoped_automated_tags'] != ['v2.0.0', 'v2.0.1']:
         raise ValueError('release-scoped deferrals require an explicit release-owner decision')
     if data['upstream_policy']!='adopt_fixed_newer_upstream_otherwise_exact_expiring_waiver_no_fork':
         raise ValueError('upstream policy changed')
@@ -33,4 +33,4 @@ def require_automated(tag):
 
 if __name__=='__main__':
     load()
-    print('Release publication policy: PASS (v2.0.0 explicitly deferred; other future tags strict)')
+    print('Release publication policy: PASS (v2.0.0 and v2.0.1 explicitly deferred; other future tags strict)')
