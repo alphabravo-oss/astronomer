@@ -325,6 +325,7 @@ def pack(
         for name, mode in (
             ("airgap-kit.py", 0o755),
             ("verify-release-metadata.py", 0o755),
+            ("recover-v201-manifest.py", 0o755),
             ("mirror-release.py", 0o755),
             ("astronomer-save-images.sh", 0o755),
             ("astronomer-load-images.sh", 0o755),

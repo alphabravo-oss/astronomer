@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Verify release metadata, including the bounded v1.2.0 packaging recovery."""
+"""Verify original release metadata and explicitly bounded recovery evidence."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -67,6 +68,38 @@ def metadata_identity(directory, tag, source_commit=None, source_run_id=None, ma
     return RECOVERY_IDENTITY
 
 
+def runtime_identity(directory, tag, source_commit=None, source_run_id=None):
+    """The v2.0.1 runtime report may be requalified; its manifest stays original."""
+    proof = directory / "runtime-qualification-recovery.json"
+    bundle = directory / "runtime-qualification-recovery.sigstore.json"
+    if not proof.exists() and not bundle.exists():
+        return metadata_identity(directory, tag, source_commit, source_run_id)
+    spec = importlib.util.spec_from_file_location("v201", Path(__file__).with_name("recover-v201-manifest.py"))
+    recovery = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(recovery)
+    if not proof.is_file() or not bundle.is_file():
+        raise ValueError("incomplete runtime qualification recovery")
+    recovery.require_release(tag, recovery.COMMIT if source_commit is None else source_commit, recovery.SOURCE_RUN if source_run_id is None else source_run_id)
+    verify_signature(proof, bundle, RECOVERY_IDENTITY)
+    record = json.loads(proof.read_text())
+    keys = {"schema_version", "tag", "source_commit", "source_run_id", "producer_run_id", "producer_commit", "files"}
+    if not isinstance(record, dict) or set(record) != keys or record["schema_version"] != 1:
+        raise ValueError("invalid runtime recovery record")
+    recovery.require_release(record["tag"], record["source_commit"], record["source_run_id"])
+    if (not isinstance(record["producer_run_id"], str) or not re.fullmatch(r"[1-9][0-9]*", record["producer_run_id"])
+            or not isinstance(record["producer_commit"], str) or not re.fullmatch(r"[a-f0-9]{40}", record["producer_commit"])):
+        raise ValueError("invalid runtime recovery producer")
+    files = {"release-manifest.json", "runtime-image-evidence.json", "runtime-image-evidence.tar.gz"}
+    if not isinstance(record["files"], dict) or set(record["files"]) != files:
+        raise ValueError("invalid runtime recovery file set")
+    for name in files:
+        if sha(directory / name) != record["files"][name]:
+            raise ValueError("runtime recovery content mismatch: " + name)
+    if record["files"]["release-manifest.json"] != "sha256:" + recovery.MANIFEST_SHA:
+        raise ValueError("runtime recovery manifest differs from original")
+    return RECOVERY_IDENTITY
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", type=Path, required=True)
@@ -89,6 +122,8 @@ def main():
                        check=True, stdout=subprocess.DEVNULL)
     else:
         name = "release-manifest" if args.subject == "manifest" else "runtime-image-evidence"
+        if args.subject == "runtime":
+            identity = runtime_identity(args.directory, args.tag, args.source_commit, args.source_run_id)
         verify_signature(args.directory / f"{name}.json", args.directory / f"{name}.sigstore.json", identity)
 
 

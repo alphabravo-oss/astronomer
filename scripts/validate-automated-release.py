@@ -69,8 +69,12 @@ def validate(args, directory=Path("."), now=None):
         if args.repository != metadata.REPOSITORY:
             raise ValueError("recovery repository mismatch")
         metadata_signer = metadata.metadata_identity(directory, args.tag, args.source_commit, args.source_run_id)
+    runtime_recovered = any((directory / name).exists() for name in ("runtime-qualification-recovery.json", "runtime-qualification-recovery.sigstore.json"))
+    if runtime_recovered and args.repository != metadata.REPOSITORY:
+        raise ValueError("runtime recovery repository mismatch")
+    runtime_signer = metadata.runtime_identity(directory, args.tag, args.source_commit, args.source_run_id) if runtime_recovered else metadata_signer
     values = {}
-    for name, identity in (("release-manifest", metadata_signer), ("runtime-image-evidence", metadata_signer), ("rc-rehearsal-evidence", args.rc_identity)):
+    for name, identity in (("release-manifest", metadata_signer), ("runtime-image-evidence", runtime_signer), ("rc-rehearsal-evidence", args.rc_identity)):
         path = directory / f"{name}.json"
         values[name] = approval.read_json(path, name)
         approval.verify_signature(path, directory / f"{name}.sigstore.json", identity)
@@ -97,6 +101,7 @@ def validate(args, directory=Path("."), now=None):
         "release_manifest_sha256": digest,
         "release_recovery_sha256": approval.sha256(directory / "release-recovery.json") if recovered else None,
         "runtime_image_evidence_sha256": approval.sha256(directory / "runtime-image-evidence.json"),
+        "runtime_qualification_recovery_sha256": approval.sha256(directory / "runtime-qualification-recovery.json") if runtime_recovered else None,
         "rc_rehearsal_evidence_sha256": approval.sha256(directory / "rc-rehearsal-evidence.json"),
         "external_certifications": {name: "deferred" for name in (
             "cloud_acceptance", "scale_certification", "rancher_benchmark", "human_accessibility")},
