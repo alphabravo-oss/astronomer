@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import ssl
 import urllib.request
 
 TAG = 'v2.0.1'
@@ -36,10 +37,23 @@ def original_bundle(entries, manifest):
     if (entry['logIndex'] != LOG_INDEX or body['kind'] != 'hashedrekord'
             or body['spec']['data']['hash'] != {'algorithm': 'sha256', 'value': MANIFEST_SHA}):
         raise ValueError('transparency entry does not bind the original manifest')
-    return {'base64Signature': body['spec']['signature']['content'],
-            'cert': body['spec']['signature']['publicKey']['content'],
-            'rekorBundle': {'SignedEntryTimestamp': entry['verification']['signedEntryTimestamp'],
-                            'Payload': {k: entry[k] for k in ('body', 'integratedTime', 'logIndex', 'logID')}}}
+    certificate = ssl.PEM_cert_to_DER_cert(base64.b64decode(body['spec']['signature']['publicKey']['content'], validate=True).decode())
+    proof = entry['verification']['inclusionProof']
+    encode_hex = lambda value: base64.b64encode(bytes.fromhex(value)).decode()
+    return {'mediaType': 'application/vnd.dev.sigstore.bundle.v0.3+json',
+            'verificationMaterial': {
+                'certificate': {'rawBytes': base64.b64encode(certificate).decode()},
+                'tlogEntries': [{
+                    'logIndex': str(entry['logIndex']), 'logId': {'keyId': encode_hex(entry['logID'])},
+                    'kindVersion': {'kind': body['kind'], 'version': body['apiVersion']},
+                    'integratedTime': str(entry['integratedTime']), 'canonicalizedBody': entry['body'],
+                    'inclusionPromise': {'signedEntryTimestamp': entry['verification']['signedEntryTimestamp']},
+                    'inclusionProof': {'logIndex': str(proof['logIndex']), 'rootHash': encode_hex(proof['rootHash']),
+                                       'treeSize': str(proof['treeSize']), 'hashes': [encode_hex(x) for x in proof['hashes']],
+                                       'checkpoint': {'envelope': proof['checkpoint']}}
+                }]},
+            'messageSignature': {'messageDigest': {'algorithm': 'SHA2_256', 'digest': encode_hex(MANIFEST_SHA)},
+                                 'signature': body['spec']['signature']['content']}}
 
 
 def restore(directory):
@@ -52,7 +66,7 @@ def restore(directory):
     bundle.write_text(json.dumps(original_bundle(json.loads(raw), manifest.read_bytes()), indent=2) + '\n')
     # This verifies the original signature, certificate identity, issuer and
     # transparency promise. No new manifest signing authority is introduced.
-    subprocess.run(['cosign', 'verify-blob', '--bundle', str(bundle),
+    subprocess.run(['cosign', 'verify-blob', '--new-bundle-format', '--bundle', str(bundle),
                     '--certificate-identity', IDENTITY, '--certificate-oidc-issuer', ISSUER,
                     str(manifest)], check=True)
 

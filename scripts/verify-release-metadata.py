@@ -23,7 +23,8 @@ def sha(path):
 
 
 def verify_signature(path, bundle, identity):
-    subprocess.run(["cosign", "verify-blob", "--bundle", str(bundle),
+    modern = ["--new-bundle-format"] if json.loads(bundle.read_text()).get("mediaType") else []
+    subprocess.run(["cosign", "verify-blob", *modern, "--bundle", str(bundle),
                     "--certificate-identity", identity, "--certificate-oidc-issuer", ISSUER,
                     str(path)], check=True, stdout=subprocess.DEVNULL)
 

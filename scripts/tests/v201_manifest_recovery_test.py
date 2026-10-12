@@ -25,10 +25,10 @@ class OriginalSignatureRecoveryTest(unittest.TestCase):
     def setUp(self):
         self.manifest = json.dumps({'release': {'version': recovery.TAG, 'source_commit': recovery.COMMIT}}).encode()
         self.digest = hashlib.sha256(self.manifest).hexdigest()
-        self.body = {'kind': 'hashedrekord', 'spec': {'data': {'hash': {'algorithm': 'sha256', 'value': self.digest}},
-                     'signature': {'content': 'original-signature', 'publicKey': {'content': 'original-certificate'}}}}
+        self.body = {'apiVersion': '0.0.1', 'kind': 'hashedrekord', 'spec': {'data': {'hash': {'algorithm': 'sha256', 'value': self.digest}},
+                     'signature': {'content': 'original-signature', 'publicKey': {'content': base64.b64encode(b'-----BEGIN CERTIFICATE-----\nY2VydA==\n-----END CERTIFICATE-----').decode()}}}}
         self.entry = {'body': base64.b64encode(json.dumps(self.body).encode()).decode(), 'logIndex': recovery.LOG_INDEX,
-                      'integratedTime': 1, 'logID': 'original-log', 'verification': {'signedEntryTimestamp': 'original-promise'}}
+                      'integratedTime': 1, 'logID': 'ab' * 32, 'verification': {'signedEntryTimestamp': 'original-promise', 'inclusionProof': {'logIndex': recovery.LOG_INDEX, 'rootHash': 'ab' * 32, 'treeSize': 4000000000, 'hashes': ['ab' * 32], 'checkpoint': 'original-checkpoint'}}}
 
     def recover(self, entry=None, manifest=None):
         with patch.object(recovery, 'MANIFEST_SHA', self.digest):
@@ -36,10 +36,10 @@ class OriginalSignatureRecoveryTest(unittest.TestCase):
 
     def test_preserves_original_signature_certificate_and_signed_payload(self):
         result = self.recover()
-        self.assertEqual(result['base64Signature'], 'original-signature')
-        self.assertEqual(result['cert'], 'original-certificate')
-        self.assertEqual(result['rekorBundle']['SignedEntryTimestamp'], 'original-promise')
-        self.assertEqual(result['rekorBundle']['Payload']['body'], self.entry['body'])
+        self.assertEqual(result['messageSignature']['signature'], 'original-signature')
+        self.assertEqual(result['verificationMaterial']['certificate']['rawBytes'], 'Y2VydA==')
+        self.assertEqual(result['verificationMaterial']['tlogEntries'][0]['inclusionPromise']['signedEntryTimestamp'], 'original-promise')
+        self.assertEqual(result['verificationMaterial']['tlogEntries'][0]['canonicalizedBody'], self.entry['body'])
 
     def test_changed_manifest_or_wrong_log_entry_fails(self):
         with self.assertRaises(ValueError): self.recover(manifest=self.manifest + b' ')

@@ -24,7 +24,7 @@ class RecoveryMetadataTest(unittest.TestCase):
         self.record = dict(schema_version=1, tag=metadata.RECOVERY_TAG, source_commit=metadata.RECOVERY_COMMIT,
                            source_run_id=metadata.RECOVERY_SOURCE_RUN, producer_run_id="999", producer_commit="b" * 40,
                            files={name: metadata.sha(self.root / name) for name in metadata.FILES})
-        (self.root / "release-recovery.sigstore.json").write_text("bundle")
+        (self.root / "release-recovery.sigstore.json").write_text("{}")
         self.write(self.record)
         mock = patch.object(metadata, "verify_signature")
         self.verify = mock.start()
@@ -109,7 +109,7 @@ class RecoveryMetadataTest(unittest.TestCase):
         alias = self.root / "operator-manifest.json"
         alias.write_bytes((self.root / "release-manifest.json").read_bytes())
         signature = self.root / "operator.sigstore.json"
-        signature.write_text("bundle")
+        signature.write_text("{}")
         with patch.object(kit.subprocess, "run"):
             kit.verify_release_manifest(alias, signature, self.manifest)
             alias.write_text(json.dumps(dict(self.manifest, unexpected="modified payload")))

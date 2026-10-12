@@ -242,6 +242,7 @@ def verify_release_manifest(manifest_path: Path, signature: Path, manifest: dict
         [
             "cosign",
             "verify-blob",
+            *(["--new-bundle-format"] if json.loads(signature.read_text()).get("mediaType") else []),
             "--bundle",
             str(signature),
             "--certificate-identity",
