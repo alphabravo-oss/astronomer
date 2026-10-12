@@ -542,7 +542,7 @@
           "value": "cf430e030ddbb5b0abf93d22962f4752f3646cd9"
         },
         {
-          "count": 2,
+          "count": 3,
           "kind": "regex",
           "path": ".github/workflows/resume-release.yaml",
           "selector": "uses:\\s*actions/upload\\-artifact(?:/[^@\\s]+)?@([a-f0-9]{40})",
@@ -8838,7 +8838,7 @@
     },
     {
       "component": "action:actions/upload-artifact",
-      "count": 2,
+      "count": 3,
       "kind": "action",
       "owner": "platform/CI",
       "path": ".github/workflows/resume-release.yaml",

@@ -62,11 +62,14 @@
         "CVE-2026-56864",
         "CVE-2026-56865",
         "CVE-2026-71556",
+        "CVE-2026-78667",
+        "CVE-2026-78669",
         "CVE-2026-84304",
         "CVE-2026-84445",
+        "CVE-2026-97031",
         "GHSA-hrxh-6v49-42gf"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v2.0.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
@@ -77,11 +80,14 @@
       "ids": [
         "CVE-2026-50163",
         "CVE-2026-56854",
+        "CVE-2026-78667",
+        "CVE-2026-78669",
         "CVE-2026-84304",
         "CVE-2026-84445",
-        "CVE-2026-85731"
+        "CVE-2026-85731",
+        "CVE-2026-97031"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v2.0.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
@@ -92,11 +98,14 @@
       "ids": [
         "CVE-2026-103111",
         "CVE-2026-56854",
+        "CVE-2026-78667",
+        "CVE-2026-78669",
         "CVE-2026-84304",
         "CVE-2026-84445",
+        "CVE-2026-97031",
         "GHSA-hrxh-6v49-42gf"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v2.0.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
@@ -111,11 +120,14 @@
         "CVE-2026-56864",
         "CVE-2026-56865",
         "CVE-2026-71556",
+        "CVE-2026-78667",
+        "CVE-2026-78669",
         "CVE-2026-84304",
         "CVE-2026-84445",
-        "CVE-2026-85731"
+        "CVE-2026-85731",
+        "CVE-2026-97031"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v2.0.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
@@ -145,9 +157,12 @@
         "CVE-2026-56858",
         "CVE-2026-56859",
         "CVE-2026-56860",
-        "CVE-2026-56862"
+        "CVE-2026-56862",
+        "CVE-2026-78667",
+        "CVE-2026-78669",
+        "CVE-2026-97031"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v2.0.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
@@ -164,9 +179,12 @@
         "CVE-2026-56858",
         "CVE-2026-56859",
         "CVE-2026-56860",
-        "CVE-2026-56862"
+        "CVE-2026-56862",
+        "CVE-2026-78667",
+        "CVE-2026-78669",
+        "CVE-2026-97031"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v2.0.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
@@ -176,11 +194,14 @@
       "category": "vulnerability",
       "ids": [
         "CVE-2026-56854",
+        "CVE-2026-78667",
+        "CVE-2026-78669",
         "CVE-2026-84304",
         "CVE-2026-84445",
+        "CVE-2026-97031",
         "GHSA-hrxh-6v49-42gf"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v2.0.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
       "expires_at": "2026-11-06T00:00:00Z"
     },
@@ -190,10 +211,52 @@
       "category": "vulnerability",
       "ids": [
         "CVE-2026-14456",
-        "CVE-2026-56854"
+        "CVE-2026-56854",
+        "CVE-2026-78667",
+        "CVE-2026-78669",
+        "CVE-2026-97031"
       ],
-      "reason": "The release owner explicitly accepts these upstream package findings for v2.0.1 while awaiting fixed upstream images. Available upstream updates are applied; no custom builds are maintained. Package presence is confirmed by Trivy, but exploitability is not asserted. Scans and raw findings remain retained; new IDs, changed image digests, later releases and expired approvals are not covered.",
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
       "approved_by": "Astronomer release owner, explicit user instruction in this release thread on 2026-10-07: \"we dont hold for upstream vulns. we waive and still release\"",
+      "expires_at": "2026-11-06T00:00:00Z"
+    },
+    {
+      "reference": "ghcr.io/alphabravo-oss/astronomer-shell@sha256:1e939126481e0a6c46c2fc78c9e991cdb450c6ce22c9f1d7b2a1d745bc145cd8",
+      "release_version": "v2.0.1",
+      "category": "vulnerability",
+      "ids": [
+        "CVE-2026-78667",
+        "CVE-2026-78669",
+        "CVE-2026-97031"
+      ],
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
+      "approved_by": "Astronomer release owner: upstream vulnerabilities do not hold release; v2.0.1 explicitly authorized with the same upstream-waiver policy.",
+      "expires_at": "2026-11-06T00:00:00Z"
+    },
+    {
+      "reference": "mirror.gcr.io/aquasec/trivy-operator@sha256:4cdb11af98ff409cfa7af980098203a841a5fe957cc6a0bbb0df7668065eb5fa",
+      "release_version": "v2.0.1",
+      "category": "vulnerability",
+      "ids": [
+        "CVE-2026-78667",
+        "CVE-2026-78669",
+        "CVE-2026-97031"
+      ],
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
+      "approved_by": "Astronomer release owner: upstream vulnerabilities do not hold release; v2.0.1 explicitly authorized with the same upstream-waiver policy.",
+      "expires_at": "2026-11-06T00:00:00Z"
+    },
+    {
+      "reference": "mirror.gcr.io/aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa",
+      "release_version": "v2.0.1",
+      "category": "vulnerability",
+      "ids": [
+        "CVE-2026-78667",
+        "CVE-2026-78669",
+        "CVE-2026-97031"
+      ],
+      "reason": "Retain the exact signed v2.0.1 artifact while awaiting fixed upstream binaries for these dependency findings. The owner-approved upstream waiver policy applies; no first-party source finding is waived. Evidence and upstream availability: docs/assurance/technology-guide/v201-runtime-recovery.md. Fresh reports, exact image digests and the original expiry are retained. This record does not cover changed digests, other CVE IDs, later releases or expired approvals.",
+      "approved_by": "Astronomer release owner: upstream vulnerabilities do not hold release; v2.0.1 explicitly authorized with the same upstream-waiver policy.",
       "expires_at": "2026-11-06T00:00:00Z"
     }
   ]

@@ -108,9 +108,11 @@ jobs:
           metadata_required=false
           metadata_run_id="$SOURCE_RUN_ID"
           if ! grep -Fxq "chart-${TAG}" <<<"$artifacts"; then
-            test "$TAG" = v1.2.0
-            test "$tag_commit" = 4a9986c22a582d71273da61e398b03f0dde4e8d8
-            test "$SOURCE_RUN_ID" = 37705872945
+            case "$TAG:$tag_commit:$SOURCE_RUN_ID" in
+              v1.2.0:4a9986c22a582d71273da61e398b03f0dde4e8d8:37705872945) ;;
+              v2.0.1:9fee3c5ddc59353413c9f5574d6f119e283cc808:38199835448) ;;
+              *) echo "unapproved metadata recovery identity" >&2; exit 1 ;;
+            esac
             test "$GITHUB_REF" = refs/heads/main
             metadata_required=true
             metadata_run_id="$GITHUB_RUN_ID"
@@ -465,22 +467,31 @@ jobs:
             --charlie-certificate-identity "$CHARLIE_CERTIFICATE_IDENTITY" \
             --charlie-certificate-oidc-issuer "$CHARLIE_CERTIFICATE_OIDC_ISSUER" \
             --output release-manifest.json
-          cosign sign-blob --yes --bundle release-manifest.sigstore.json release-manifest.json
-          manifest_tag="ghcr.io/alphabravo-oss/astronomer-release-manifest:${IMAGE_TAG}"
-          if manifest_digest="$(oras resolve "$manifest_tag" 2>/dev/null)"; then
-            mkdir existing-manifest
-            oras pull "${manifest_tag%:*}@${manifest_digest}" -o existing-manifest
-            cmp release-manifest.json existing-manifest/release-manifest.json
+          if [[ "$IMAGE_TAG" == v2.0.1 ]]; then
+            python3 qualification-tools/scripts/recover-v201-manifest.py --tag "$IMAGE_TAG" \
+              --source-commit "${{ needs.preflight.outputs.tag-commit }}" --source-run-id "${{ inputs.source_run_id }}" --directory .
+            manifest_ref="ghcr.io/alphabravo-oss/astronomer-release-manifest@sha256:3b4e1bf38f43062e813be4df5178883592288eaa0c9626b02b0be90b100f3da9"
+            cosign verify --certificate-identity "https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/v2.0.1" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$manifest_ref"
+            printf '%s\n' "$manifest_ref" > release-manifest.digest
           else
-            oras push --format json "$manifest_tag" \
-              --artifact-type application/vnd.astronomer.release-manifest.v1+json \
-              release-manifest.json:application/vnd.astronomer.release-manifest.v1+json > release-manifest.push.json
-            manifest_digest="$(jq -er '.digest | select(test("^sha256:[a-f0-9]{64}$"))' release-manifest.push.json)"
+            cosign sign-blob --yes --bundle release-manifest.sigstore.json release-manifest.json
+            manifest_tag="ghcr.io/alphabravo-oss/astronomer-release-manifest:${IMAGE_TAG}"
+            if manifest_digest="$(oras resolve "$manifest_tag" 2>/dev/null)"; then
+              mkdir existing-manifest
+              oras pull "${manifest_tag%:*}@${manifest_digest}" -o existing-manifest
+              cmp release-manifest.json existing-manifest/release-manifest.json
+            else
+              oras push --format json "$manifest_tag" \
+                --artifact-type application/vnd.astronomer.release-manifest.v1+json \
+                release-manifest.json:application/vnd.astronomer.release-manifest.v1+json > release-manifest.push.json
+              manifest_digest="$(jq -er '.digest | select(test("^sha256:[a-f0-9]{64}$"))' release-manifest.push.json)"
+            fi
+            [[ "$manifest_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            manifest_ref="ghcr.io/alphabravo-oss/astronomer-release-manifest@${manifest_digest}"
+            cosign sign --yes "$manifest_ref"
+            printf '%s\n' "$manifest_ref" > release-manifest.digest
           fi
-          [[ "$manifest_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
-          manifest_ref="ghcr.io/alphabravo-oss/astronomer-release-manifest@${manifest_digest}"
-          cosign sign --yes "$manifest_ref"
-          printf '%s\n' "$manifest_ref" > release-manifest.digest
           cp deploy/chart/values-production.yaml values-production.yaml
 
       - name: Install checksum-verified Trivy
@@ -495,36 +506,57 @@ jobs:
           sudo install -m 0755 trivy /usr/local/bin/trivy
 
       - name: Qualify every transitive runtime image
+        env:
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
         run: |
           set -euo pipefail
+          waivers=deploy/release/runtime-image-waivers.json
+          [[ "$IMAGE_TAG" != v2.0.1 ]] || waivers=qualification-tools/deploy/release/runtime-image-waivers.json
           python3 qualification-tools/scripts/qualify-release-runtime-images.py \
             --manifest release-manifest.json \
-            --waivers deploy/release/runtime-image-waivers.json \
+            --waivers "$waivers" \
             --license-policy deploy/release/license-policy.json \
             --work-dir runtime-image-evidence \
             --charlie-oci-layout "$RUNNER_TEMP/charlie-oci" \
             --output runtime-image-evidence.json
-          cp deploy/release/runtime-image-waivers.json runtime-image-evidence/waivers.json
+          cp "$waivers" runtime-image-evidence/waivers.json
           cosign sign-blob --yes --bundle runtime-image-evidence.sigstore.json runtime-image-evidence.json
           tar -czf runtime-image-evidence.tar.gz runtime-image-evidence/
+
+      - name: Retain runtime qualification diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: runtime-recovery-diagnostics-${{ github.run_id }}
+          path: |
+            runtime-image-evidence/
+            runtime-image-evidence.json
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Bind recovered metadata to the interrupted release
         env:
           SOURCE_COMMIT: ${{ needs.preflight.outputs.tag-commit }}
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
           PRODUCER_COMMIT: ${{ github.sha }}
+          IMAGE_TAG: ${{ needs.preflight.outputs.image-tag }}
         run: |
           python3 - <<'PYPROOF'
           import hashlib, json, os
           from pathlib import Path
-          names = ("release-manifest.json", "runtime-image-evidence.json", "runtime-image-evidence.tar.gz", "astronomer-1.2.0.tgz")
-          record = {"schema_version": 1, "tag": "v1.2.0", "source_commit": os.environ["SOURCE_COMMIT"],
+          tag = os.environ["IMAGE_TAG"]
+          names = ["release-manifest.json", "runtime-image-evidence.json", "runtime-image-evidence.tar.gz"]
+          if tag == "v1.2.0": names.append("astronomer-1.2.0.tgz")
+          proof = "runtime-qualification-recovery" if tag == "v2.0.1" else "release-recovery"
+          record = {"schema_version": 1, "tag": tag, "source_commit": os.environ["SOURCE_COMMIT"],
                     "source_run_id": os.environ["SOURCE_RUN_ID"], "producer_run_id": os.environ["GITHUB_RUN_ID"],
                     "producer_commit": os.environ["PRODUCER_COMMIT"],
                     "files": {name: "sha256:" + hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in names}}
-          Path("release-recovery.json").write_text(json.dumps(record, indent=2) + "\n")
+          Path(proof + ".json").write_text(json.dumps(record, indent=2) + "\n")
           PYPROOF
-          cosign sign-blob --yes --bundle release-recovery.sigstore.json release-recovery.json
+          proof=release-recovery
+          [[ "$IMAGE_TAG" != v2.0.1 ]] || proof=runtime-qualification-recovery
+          cosign sign-blob --yes --bundle "$proof.sigstore.json" "$proof.json"
 
       - name: Attest packaged chart file
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -549,6 +581,8 @@ jobs:
             resolved-images.json
             release-recovery.json
             release-recovery.sigstore.json
+            runtime-qualification-recovery.json
+            runtime-qualification-recovery.sigstore.json
             values-production.yaml
           retention-days: 90
 
@@ -927,6 +961,9 @@ jobs:
         run: |
           git show "refs/tags/$TAG:CHANGELOG.md" | awk '/^## Unreleased/{emit=1; next} /^## /{if (emit) exit} emit' > RELEASE_NOTES.md
           test -s RELEASE_NOTES.md
+          if [[ -f runtime-qualification-recovery.json ]]; then
+            printf '\nRuntime image findings were requalified under the approved upstream-CVE waiver policy by the signed recovery workflow. Original images, chart, manifest and upgrade toolkit retain their tagged source and original signatures. See runtime-qualification-recovery.json for exact provenance.\n' >> RELEASE_NOTES.md
+          fi
           if [[ -f release-recovery.json ]]; then
             producer_commit="$(jq -er .producer_commit release-recovery.json)"
             printf '\nRelease metadata was completed by the signed recovery workflow. Application images and delivery bundles retain their original tagged source and signatures. For upgrades use operator tools from https://github.com/alphabravo-oss/astronomer/tree/%s/scripts (including upgrade-release.sh and verify-release-metadata.py), or the included air-gap kit. See release-recovery.json for the exact source and producer identities.\n' "$producer_commit" >> RELEASE_NOTES.md
@@ -938,7 +975,7 @@ jobs:
               -name 'sbom-*.spdx.json' -o -name 'provenance-*.slsa.json' -o \
               -name 'release-manifest.json' -o -name 'release-manifest.sigstore.json' -o \
               -name 'runtime-image-evidence.json' -o -name 'runtime-image-evidence.sigstore.json' -o \
-              -name 'release-recovery*.json' -o -name 'RELEASE_NOTES.md' -o \
+              -name 'release-recovery*.json' -o -name 'runtime-qualification-recovery*.json' -o -name 'RELEASE_NOTES.md' -o \
               -name 'rc-rehearsal-evidence*.json' -o -name 'release-qualification.json' -o \
               -name 'values-production.yaml' -o \
               -name 'astronomer-upgrade-toolkit-*' -o \
@@ -951,6 +988,9 @@ jobs:
           fi
           if [[ -f release-recovery.json ]]; then
             qualification_assets+=(release-recovery.json release-recovery.sigstore.json)
+          fi
+          if [[ -f runtime-qualification-recovery.json ]]; then
+            qualification_assets+=(runtime-qualification-recovery.json runtime-qualification-recovery.sigstore.json)
           fi
           upgrade_toolkit_assets=()
           if [[ "$TAG" != v1.2.0 && "$TAG" != v1.2.1 ]]; then

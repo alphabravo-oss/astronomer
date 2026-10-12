@@ -242,6 +242,7 @@ def verify_release_manifest(manifest_path: Path, signature: Path, manifest: dict
         [
             "cosign",
             "verify-blob",
+            *(["--new-bundle-format"] if json.loads(signature.read_text()).get("mediaType") else []),
             "--bundle",
             str(signature),
             "--certificate-identity",
@@ -325,6 +326,7 @@ def pack(
         for name, mode in (
             ("airgap-kit.py", 0o755),
             ("verify-release-metadata.py", 0o755),
+            ("recover-v201-manifest.py", 0o755),
             ("mirror-release.py", 0o755),
             ("astronomer-save-images.sh", 0o755),
             ("astronomer-load-images.sh", 0o755),
