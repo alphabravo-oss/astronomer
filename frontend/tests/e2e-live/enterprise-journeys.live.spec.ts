@@ -251,8 +251,14 @@ test("resource YAML dry-run gates and then applies the reviewed manifest", async
     exact: true,
   });
   await expect(input).toBeFocused();
-  await input.press("Control+A");
+  // Monaco selects macOS shortcuts from the emulated user agent, including
+  // Desktop Safari running in the Linux WebKit test process.
+  const selectAll = await page.evaluate(() =>
+    navigator.userAgent.includes("Macintosh") ? "Meta+A" : "Control+A",
+  );
+  await input.press(selectAll);
   await input.press("Backspace");
+  await expect(page.locator(".view-lines")).not.toContainText("apiVersion");
   // Use real key events so Monaco handles its paired-character editing. The
   // Firefox bulk-insertion failure duplicated the entire document before any
   // dry-run request; verify the visible edit before exercising the transport.
