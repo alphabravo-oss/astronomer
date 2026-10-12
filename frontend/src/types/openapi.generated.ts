@@ -15811,27 +15811,35 @@ export interface OpenAPIOperations {
     method: "GET";
     path: "/api/v1/charlie/commands/";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['CharlieCommandCatalog'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieCommandCatalog'];
+      };
   };
   "listCharlieThreads": {
     method: "GET";
     path: "/api/v1/charlie/threads/";
     arguments: Record<string, never>;
     response: {
-        "threads": OpenAPIComponents['schemas']['CharlieThreadMetadata'][];
+        "data": {
+          "threads": OpenAPIComponents['schemas']['CharlieThreadMetadata'][];
+        };
       };
   };
   "getActiveCharlieThread": {
     method: "GET";
     path: "/api/v1/charlie/threads/active/";
     arguments: Record<string, never>;
-    response: Record<string, unknown>;
+    response: {
+        "data": Record<string, unknown>;
+      };
   };
   "createCharlieThread": {
     method: "POST";
     path: "/api/v1/charlie/threads/new/";
     arguments: Record<string, never>;
-    response: Record<string, unknown>;
+    response: {
+        "data": Record<string, unknown>;
+      };
   };
   "createCharlieThreadMessage": {
     method: "POST";
@@ -15839,7 +15847,9 @@ export interface OpenAPIOperations {
     arguments: {
         "body": OpenAPIComponents['schemas']['CharlieThreadMessageRequest'];
       };
-    response: Record<string, unknown>;
+    response: {
+        "data": Record<string, unknown>;
+      };
   };
   "getCharlieThreadHistory": {
     method: "GET";
@@ -15849,7 +15859,9 @@ export interface OpenAPIOperations {
           "thread_id": string;
         };
       };
-    response: Record<string, unknown>;
+    response: {
+        "data": Record<string, unknown>;
+      };
   };
   "listCharlieSessions": {
     method: "GET";
@@ -15861,8 +15873,10 @@ export interface OpenAPIOperations {
         };
       };
     response: {
-        "sessions": OpenAPIComponents['schemas']['CharlieSessionMetadata'][];
-        "mode": "disabled" | "read_only" | "approval" | "auto";
+        "data": {
+          "sessions": OpenAPIComponents['schemas']['CharlieSessionMetadata'][];
+          "mode": "disabled" | "read_only" | "approval" | "auto";
+        };
       };
   };
   "createCharlieSession": {
@@ -15872,8 +15886,10 @@ export interface OpenAPIOperations {
         "body": OpenAPIComponents['schemas']['CharlieSessionCreateRequest'];
       };
     response: {
-        "session": OpenAPIComponents['schemas']['CharlieSessionMetadata'];
-        "replayed": boolean;
+        "data": {
+          "session": OpenAPIComponents['schemas']['CharlieSessionMetadata'];
+          "replayed": boolean;
+        };
       };
   };
   "getCharlieSession": {
@@ -15885,8 +15901,10 @@ export interface OpenAPIOperations {
         };
       };
     response: {
-        "session": OpenAPIComponents['schemas']['CharlieSessionMetadata'];
-        "remote": Record<string, unknown>;
+        "data": {
+          "session": OpenAPIComponents['schemas']['CharlieSessionMetadata'];
+          "remote": Record<string, unknown>;
+        };
       };
   };
   "getCharlieSessionHistory": {
@@ -15945,7 +15963,9 @@ export interface OpenAPIOperations {
         };
       };
     response: {
-        "items": OpenAPIComponents['schemas']['CharlieContextSearchResult'][];
+        "data": {
+          "items": OpenAPIComponents['schemas']['CharlieContextSearchResult'][];
+        };
       };
   };
   "getCharlieOperationStatus": {
@@ -15956,14 +15976,18 @@ export interface OpenAPIOperations {
           "operation_id": string;
         };
       };
-    response: OpenAPIComponents['schemas']['CharlieOperationStatus'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieOperationStatus'];
+      };
   };
   "listCharlieApprovals": {
     method: "GET";
     path: "/api/v1/charlie/approvals/";
     arguments: Record<string, never>;
     response: {
-        "items": OpenAPIComponents['schemas']['CharlieApprovalSummary'][];
+        "data": {
+          "items": OpenAPIComponents['schemas']['CharlieApprovalSummary'][];
+        };
       };
   };
   "decideCharlieApproval": {
@@ -15976,7 +16000,9 @@ export interface OpenAPIOperations {
         "body": OpenAPIComponents['schemas']['CharlieApprovalDecisionRequest'];
       };
     response: {
-        "approval": OpenAPIComponents['schemas']['CharlieApprovalSummary'];
+        "data": {
+          "approval": OpenAPIComponents['schemas']['CharlieApprovalSummary'];
+        };
       };
   };
   "listCharlieFindings": {
@@ -15990,7 +16016,9 @@ export interface OpenAPIOperations {
         };
       };
     response: {
-        "items": OpenAPIComponents['schemas']['CharlieFindingSummary'][];
+        "data": {
+          "items": OpenAPIComponents['schemas']['CharlieFindingSummary'][];
+        };
       };
   };
   "getCharlieFinding": {
@@ -16002,7 +16030,9 @@ export interface OpenAPIOperations {
         };
       };
     response: {
-        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        };
       };
   };
   "acknowledgeCharlieFinding": {
@@ -16015,7 +16045,9 @@ export interface OpenAPIOperations {
         "body": OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
       };
     response: {
-        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        };
       };
   };
   "dismissCharlieFinding": {
@@ -16028,7 +16060,9 @@ export interface OpenAPIOperations {
         "body": OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
       };
     response: {
-        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        };
       };
   };
   "startCharlieFindingRemediation": {
@@ -16041,7 +16075,9 @@ export interface OpenAPIOperations {
         "body": OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
       };
     response: {
-        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        };
       };
   };
   "requestCharlieFindingVerification": {
@@ -16054,7 +16090,9 @@ export interface OpenAPIOperations {
         "body": OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
       };
     response: {
-        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        };
       };
   };
   "resolveCharlieFinding": {
@@ -16067,7 +16105,9 @@ export interface OpenAPIOperations {
         "body": OpenAPIComponents['schemas']['CharlieFindingTransitionRequest'];
       };
     response: {
-        "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIComponents['schemas']['CharlieFindingDetail'];
+        };
       };
   };
   "adminCharlieOnboardingValidate": {
@@ -16076,7 +16116,9 @@ export interface OpenAPIOperations {
     arguments: {
         "body": OpenAPIComponents['schemas']['CharlieOnboardingRequest'];
       };
-    response: OpenAPIComponents['schemas']['CharlieOnboardingStatus'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieOnboardingStatus'];
+      };
   };
   "adminCharlieOnboardingConsume": {
     method: "POST";
@@ -16084,22 +16126,28 @@ export interface OpenAPIOperations {
     arguments: {
         "body": OpenAPIComponents['schemas']['CharlieOnboardingRequest'];
       };
-    response: OpenAPIComponents['schemas']['CharlieOnboardingStatus'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieOnboardingStatus'];
+      };
   };
   "charlieActivation": {
     method: "GET";
     path: "/api/v1/charlie/activation/";
     arguments: Record<string, never>;
     response: {
-        "activated": boolean;
-        "endpoint"?: string;
+        "data": {
+          "activated": boolean;
+          "endpoint"?: string;
+        };
       };
   };
   "adminCharlieStatus": {
     method: "GET";
     path: "/api/v1/admin/charlie/status/";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['CharlieAdminStatus'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminStatus'];
+      };
   };
   "adminCharlieDisconnect": {
     method: "POST";
@@ -16107,7 +16155,9 @@ export interface OpenAPIOperations {
     arguments: {
         "body": OpenAPIComponents['schemas']['CharlieAdminActionRequest'];
       };
-    response: OpenAPIComponents['schemas']['CharlieAdminStatus'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminStatus'];
+      };
   };
   "adminCharlieModeUpdate": {
     method: "PATCH";
@@ -16115,13 +16165,17 @@ export interface OpenAPIOperations {
     arguments: {
         "body": OpenAPIComponents['schemas']['CharlieModeRequest'];
       };
-    response: OpenAPIComponents['schemas']['CharlieAdminMode'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminMode'];
+      };
   };
   "adminCharlieKubernetesVisibilityGet": {
     method: "GET";
     path: "/api/v1/admin/charlie/kubernetes-visibility/";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['CharlieKubernetesVisibility'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieKubernetesVisibility'];
+      };
   };
   "adminCharlieKubernetesVisibilityUpdate": {
     method: "PUT";
@@ -16129,13 +16183,17 @@ export interface OpenAPIOperations {
     arguments: {
         "body": OpenAPIComponents['schemas']['CharlieKubernetesVisibilityRequest'];
       };
-    response: OpenAPIComponents['schemas']['CharlieKubernetesVisibility'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieKubernetesVisibility'];
+      };
   };
   "adminCharlieTriggerRulesList": {
     method: "GET";
     path: "/api/v1/admin/charlie/trigger-rules/";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['CharlieAdminAutomation'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminAutomation'];
+      };
   };
   "adminCharlieTriggerRuleCreate": {
     method: "POST";
@@ -16143,13 +16201,17 @@ export interface OpenAPIOperations {
     arguments: {
         "body": OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
       };
-    response: OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
+      };
   };
   "adminCharlieAlertPolicyGet": {
     method: "GET";
     path: "/api/v1/admin/charlie/alert-policy/";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['CharlieAdminAlertPolicy'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminAlertPolicy'];
+      };
   };
   "adminCharlieAlertPolicyUpdate": {
     method: "PUT";
@@ -16157,7 +16219,9 @@ export interface OpenAPIOperations {
     arguments: {
         "body": OpenAPIComponents['schemas']['CharlieAdminAlertPolicyInput'];
       };
-    response: OpenAPIComponents['schemas']['CharlieAdminAlertPolicy'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminAlertPolicy'];
+      };
   };
   "adminCharlieAlertDeliveryProofs": {
     method: "GET";
@@ -16167,7 +16231,9 @@ export interface OpenAPIOperations {
           "finding_id": string;
         };
       };
-    response: OpenAPIComponents['schemas']['CharlieAdminAlertDeliveryProofView'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminAlertDeliveryProofView'];
+      };
   };
   "adminCharlieDiscoveryQualification": {
     method: "POST";
@@ -16175,7 +16241,9 @@ export interface OpenAPIOperations {
     arguments: {
         "body": OpenAPIComponents['schemas']['CharlieDiscoveryQualificationRequest'];
       };
-    response: OpenAPIComponents['schemas']['CharlieAdminDiscoveryQualification'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminDiscoveryQualification'];
+      };
   };
   "adminCharlieTriggerRuleUpdate": {
     method: "PATCH";
@@ -16186,7 +16254,9 @@ export interface OpenAPIOperations {
         };
         "body": OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
       };
-    response: OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminTriggerRule'];
+      };
   };
   "adminCharlieTriggerRuleDelete": {
     method: "DELETE";
@@ -16208,7 +16278,9 @@ export interface OpenAPIOperations {
         };
         "body": OpenAPIComponents['schemas']['CharlieAdminActionPolicyInput'];
       };
-    response: OpenAPIComponents['schemas']['CharlieAdminActionPolicy'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminActionPolicy'];
+      };
   };
   "adminCharlieTriggerEventsList": {
     method: "GET";
@@ -16221,7 +16293,9 @@ export interface OpenAPIOperations {
         };
       };
     response: {
-        "items": OpenAPIComponents['schemas']['CharlieAdminTriggerEvent'][];
+        "data": {
+          "items": OpenAPIComponents['schemas']['CharlieAdminTriggerEvent'][];
+        };
       };
   };
   "adminCharlieTriggerEventRetry": {
@@ -16256,7 +16330,9 @@ export interface OpenAPIOperations {
     method: "GET";
     path: "/api/v1/admin/charlie/access/";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['CharlieAdminAccess'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminAccess'];
+      };
   };
   "adminCharlieAccessUpdate": {
     method: "PUT";
@@ -16264,13 +16340,17 @@ export interface OpenAPIOperations {
     arguments: {
         "body": OpenAPIComponents['schemas']['CharlieAccessRequest'];
       };
-    response: OpenAPIComponents['schemas']['CharlieAdminAccess'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminAccess'];
+      };
   };
   "adminCharlieDiagnosticsRun": {
     method: "POST";
     path: "/api/v1/admin/charlie/diagnostics/run/";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['CharlieAdminDiagnostics'];
+    response: {
+        "data": OpenAPIComponents['schemas']['CharlieAdminDiagnostics'];
+      };
   };
   "adminKeyStatus": {
     method: "GET";
@@ -19309,83 +19389,157 @@ export interface OpenAPIReadOperations {
           }>;
         };
       } };
-  "listCharlieCommands": { response: OpenAPIReadComponents['schemas']['CharlieCommandCatalog'] };
-  "listCharlieThreads": { response: {
-        "threads": OpenAPIReadComponents['schemas']['CharlieThreadMetadata'][];
+  "listCharlieCommands": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieCommandCatalog'];
       } };
-  "getActiveCharlieThread": { response: Record<string, unknown> };
-  "createCharlieThread": { response: Record<string, unknown> };
-  "createCharlieThreadMessage": { response: Record<string, unknown> };
-  "getCharlieThreadHistory": { response: Record<string, unknown> };
+  "listCharlieThreads": { response: {
+        "data": {
+          "threads": OpenAPIReadComponents['schemas']['CharlieThreadMetadata'][];
+        };
+      } };
+  "getActiveCharlieThread": { response: {
+        "data": Record<string, unknown>;
+      } };
+  "createCharlieThread": { response: {
+        "data": Record<string, unknown>;
+      } };
+  "createCharlieThreadMessage": { response: {
+        "data": Record<string, unknown>;
+      } };
+  "getCharlieThreadHistory": { response: {
+        "data": Record<string, unknown>;
+      } };
   "listCharlieSessions": { response: {
-        "sessions": OpenAPIReadComponents['schemas']['CharlieSessionMetadata'][];
-        "mode": "disabled" | "read_only" | "approval" | "auto";
+        "data": {
+          "sessions": OpenAPIReadComponents['schemas']['CharlieSessionMetadata'][];
+          "mode": "disabled" | "read_only" | "approval" | "auto";
+        };
       } };
   "createCharlieSession": { response: {
-        "session": OpenAPIReadComponents['schemas']['CharlieSessionMetadata'];
-        "replayed": boolean;
+        "data": {
+          "session": OpenAPIReadComponents['schemas']['CharlieSessionMetadata'];
+          "replayed": boolean;
+        };
       } };
   "getCharlieSession": { response: {
-        "session": OpenAPIReadComponents['schemas']['CharlieSessionMetadata'];
-        "remote": Record<string, unknown>;
+        "data": {
+          "session": OpenAPIReadComponents['schemas']['CharlieSessionMetadata'];
+          "remote": Record<string, unknown>;
+        };
       } };
   "getCharlieSessionHistory": { response: Record<string, unknown>[] };
   "streamCharlieSessionEvents": { response: string };
   "createCharlieSessionMessage": { response: Record<string, unknown> };
   "abortCharlieSession": { response: void };
   "searchCharlieContext": { response: {
-        "items": OpenAPIReadComponents['schemas']['CharlieContextSearchResult'][];
+        "data": {
+          "items": OpenAPIReadComponents['schemas']['CharlieContextSearchResult'][];
+        };
       } };
-  "getCharlieOperationStatus": { response: OpenAPIReadComponents['schemas']['CharlieOperationStatus'] };
+  "getCharlieOperationStatus": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieOperationStatus'];
+      } };
   "listCharlieApprovals": { response: {
-        "items": OpenAPIReadComponents['schemas']['CharlieApprovalSummary'][];
+        "data": {
+          "items": OpenAPIReadComponents['schemas']['CharlieApprovalSummary'][];
+        };
       } };
   "decideCharlieApproval": { response: {
-        "approval": OpenAPIReadComponents['schemas']['CharlieApprovalSummary'];
+        "data": {
+          "approval": OpenAPIReadComponents['schemas']['CharlieApprovalSummary'];
+        };
       } };
   "listCharlieFindings": { response: {
-        "items": OpenAPIReadComponents['schemas']['CharlieFindingSummary'][];
+        "data": {
+          "items": OpenAPIReadComponents['schemas']['CharlieFindingSummary'][];
+        };
       } };
   "getCharlieFinding": { response: {
-        "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        };
       } };
   "acknowledgeCharlieFinding": { response: {
-        "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        };
       } };
   "dismissCharlieFinding": { response: {
-        "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        };
       } };
   "startCharlieFindingRemediation": { response: {
-        "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        };
       } };
   "requestCharlieFindingVerification": { response: {
-        "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        };
       } };
   "resolveCharlieFinding": { response: {
-        "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        "data": {
+          "finding": OpenAPIReadComponents['schemas']['CharlieFindingDetail'];
+        };
       } };
-  "adminCharlieOnboardingValidate": { response: OpenAPIReadComponents['schemas']['CharlieOnboardingStatus'] };
-  "adminCharlieOnboardingConsume": { response: OpenAPIReadComponents['schemas']['CharlieOnboardingStatus'] };
+  "adminCharlieOnboardingValidate": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieOnboardingStatus'];
+      } };
+  "adminCharlieOnboardingConsume": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieOnboardingStatus'];
+      } };
   "charlieActivation": { response: {
-        "activated": boolean;
-        "endpoint"?: string;
+        "data": {
+          "activated": boolean;
+          "endpoint"?: string;
+        };
       } };
-  "adminCharlieStatus": { response: OpenAPIReadComponents['schemas']['CharlieAdminStatus'] };
-  "adminCharlieDisconnect": { response: OpenAPIReadComponents['schemas']['CharlieAdminStatus'] };
-  "adminCharlieModeUpdate": { response: OpenAPIReadComponents['schemas']['CharlieAdminMode'] };
-  "adminCharlieKubernetesVisibilityGet": { response: OpenAPIReadComponents['schemas']['CharlieKubernetesVisibility'] };
-  "adminCharlieKubernetesVisibilityUpdate": { response: OpenAPIReadComponents['schemas']['CharlieKubernetesVisibility'] };
-  "adminCharlieTriggerRulesList": { response: OpenAPIReadComponents['schemas']['CharlieAdminAutomation'] };
-  "adminCharlieTriggerRuleCreate": { response: OpenAPIReadComponents['schemas']['CharlieAdminTriggerRule'] };
-  "adminCharlieAlertPolicyGet": { response: OpenAPIReadComponents['schemas']['CharlieAdminAlertPolicy'] };
-  "adminCharlieAlertPolicyUpdate": { response: OpenAPIReadComponents['schemas']['CharlieAdminAlertPolicy'] };
-  "adminCharlieAlertDeliveryProofs": { response: OpenAPIReadComponents['schemas']['CharlieAdminAlertDeliveryProofView'] };
-  "adminCharlieDiscoveryQualification": { response: OpenAPIReadComponents['schemas']['CharlieAdminDiscoveryQualification'] };
-  "adminCharlieTriggerRuleUpdate": { response: OpenAPIReadComponents['schemas']['CharlieAdminTriggerRule'] };
+  "adminCharlieStatus": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminStatus'];
+      } };
+  "adminCharlieDisconnect": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminStatus'];
+      } };
+  "adminCharlieModeUpdate": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminMode'];
+      } };
+  "adminCharlieKubernetesVisibilityGet": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieKubernetesVisibility'];
+      } };
+  "adminCharlieKubernetesVisibilityUpdate": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieKubernetesVisibility'];
+      } };
+  "adminCharlieTriggerRulesList": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminAutomation'];
+      } };
+  "adminCharlieTriggerRuleCreate": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminTriggerRule'];
+      } };
+  "adminCharlieAlertPolicyGet": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminAlertPolicy'];
+      } };
+  "adminCharlieAlertPolicyUpdate": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminAlertPolicy'];
+      } };
+  "adminCharlieAlertDeliveryProofs": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminAlertDeliveryProofView'];
+      } };
+  "adminCharlieDiscoveryQualification": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminDiscoveryQualification'];
+      } };
+  "adminCharlieTriggerRuleUpdate": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminTriggerRule'];
+      } };
   "adminCharlieTriggerRuleDelete": { response: void };
-  "adminCharlieActionPolicyUpdate": { response: OpenAPIReadComponents['schemas']['CharlieAdminActionPolicy'] };
+  "adminCharlieActionPolicyUpdate": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminActionPolicy'];
+      } };
   "adminCharlieTriggerEventsList": { response: {
-        "items": OpenAPIReadComponents['schemas']['CharlieAdminTriggerEvent'][];
+        "data": {
+          "items": OpenAPIReadComponents['schemas']['CharlieAdminTriggerEvent'][];
+        };
       } };
   "adminCharlieTriggerEventRetry": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
         "data"?: OpenAPIReadComponents['schemas']['CharlieTriggerRetryReceipt'];
@@ -19393,9 +19547,15 @@ export interface OpenAPIReadOperations {
   "adminCharlieTriggerEventGet": { response: OpenAPIReadComponents['schemas']['DataEnvelope'] & {
         "data"?: OpenAPIReadComponents['schemas']['CharlieAdminTriggerEvent'];
       } };
-  "adminCharlieAccessGet": { response: OpenAPIReadComponents['schemas']['CharlieAdminAccess'] };
-  "adminCharlieAccessUpdate": { response: OpenAPIReadComponents['schemas']['CharlieAdminAccess'] };
-  "adminCharlieDiagnosticsRun": { response: OpenAPIReadComponents['schemas']['CharlieAdminDiagnostics'] };
+  "adminCharlieAccessGet": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminAccess'];
+      } };
+  "adminCharlieAccessUpdate": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminAccess'];
+      } };
+  "adminCharlieDiagnosticsRun": { response: {
+        "data": OpenAPIReadComponents['schemas']['CharlieAdminDiagnostics'];
+      } };
   "adminKeyStatus": { response: {
         "encryption_keys": number;
         "encryption_key_inventory": Array<{

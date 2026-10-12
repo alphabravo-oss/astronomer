@@ -380,7 +380,9 @@ export async function getCharlieOverview(
   sessions: CharlieSession[];
   mode: "disabled" | "read_only" | "approval" | "auto";
 }> {
-  const value = await listCharlieSessionsOperation({ signal: options?.signal });
+  const { data: value } = await listCharlieSessionsOperation({
+    signal: options?.signal,
+  });
   return {
     sessions: (value.sessions ?? []).map(mapCharlieSession),
     mode: value.mode ?? "disabled",
@@ -401,7 +403,7 @@ export async function createCharlieSession(
   },
   options?: CharlieRequestOptions,
 ): Promise<CharlieSession> {
-  const data = await createCharlieSessionOperation({
+  const { data } = await createCharlieSessionOperation({
     body: {
       client_session_id: input.clientSessionId,
       intent: input.intent,
@@ -421,7 +423,7 @@ export async function getCharlieSession(
   id: string,
   options?: CharlieRequestOptions,
 ): Promise<CharlieSession> {
-  const value = await getCharlieSessionOperation({
+  const { data: value } = await getCharlieSessionOperation({
     path: { session_id: id },
     signal: options?.signal,
   });
@@ -444,6 +446,9 @@ export async function getCharlieHistory(
     path: { session_id: id },
     signal: options?.signal,
   });
+  return mapCharlieHistory(value);
+}
+function mapCharlieHistory(value: unknown): CharlieMessage[] {
   if (!Array.isArray(value)) return [];
   return (value as CharlieHistoryItemWire[]).map((item) => {
     const citations = (Array.isArray(item.citations) ? item.citations : [])
@@ -592,16 +597,18 @@ export type CharlieTurnReceipt = {
 export async function getCharlieCommands(
   options?: CharlieRequestOptions,
 ): Promise<CharlieCommandCatalog> {
-  return listCharlieCommands({ signal: options?.signal });
+  return (await listCharlieCommands({ signal: options?.signal })).data;
 }
 
 export async function getCharlieActiveThread(
   options?: CharlieRequestOptions,
 ): Promise<CharlieActiveThread> {
   return mapCharlieActiveThread(
-    (await getActiveCharlieThread({
-      signal: options?.signal,
-    })) as CharlieActiveThreadWire,
+    (
+      await getActiveCharlieThread({
+        signal: options?.signal,
+      })
+    ).data as CharlieActiveThreadWire,
   );
 }
 
@@ -609,9 +616,11 @@ export async function newCharlieChat(
   options?: CharlieRequestOptions,
 ): Promise<CharlieActiveThread> {
   return mapCharlieActiveThread(
-    (await createCharlieThread({
-      signal: options?.signal,
-    })) as CharlieActiveThreadWire,
+    (
+      await createCharlieThread({
+        signal: options?.signal,
+      })
+    ).data as CharlieActiveThreadWire,
   );
 }
 
@@ -625,21 +634,23 @@ export async function sendCharlieThreadMessage(
     signal?: AbortSignal;
   },
 ): Promise<CharlieActiveThread & { receipt?: CharlieTurnReceipt }> {
-  const value = (await createCharlieThreadMessage({
-    body: {
-      client_message_id: crypto.randomUUID(),
-      message,
-      trigger: options?.trigger,
-      current_ui_context: options?.currentUiContext,
-      resources: options?.resources?.map((r) => ({
-        type: r.type,
-        id: r.id,
-        required_verb: r.requiredVerb,
-      })),
-      command: options?.command,
-    },
-    signal: options?.signal,
-  })) as CharlieActiveThreadWire & {
+  const value = (
+    await createCharlieThreadMessage({
+      body: {
+        client_message_id: crypto.randomUUID(),
+        message,
+        trigger: options?.trigger,
+        current_ui_context: options?.currentUiContext,
+        resources: options?.resources?.map((r) => ({
+          type: r.type,
+          id: r.id,
+          required_verb: r.requiredVerb,
+        })),
+        command: options?.command,
+      },
+      signal: options?.signal,
+    })
+  ).data as CharlieActiveThreadWire & {
     receipt?: {
       sessionId?: string;
       session_id?: string;
@@ -674,43 +685,12 @@ export async function getCharlieThreadHistory(
   threadId: string,
   options?: CharlieRequestOptions,
 ): Promise<CharlieMessage[]> {
-  const response = await getCharlieThreadHistoryOperation({
+  const { data: response } = await getCharlieThreadHistoryOperation({
     path: { thread_id: threadId },
     signal: options?.signal,
   });
   const value = (response as { items?: unknown }).items ?? response;
-  if (!Array.isArray(value)) return [];
-  return (value as CharlieHistoryItemWire[]).map((item) => {
-    const citations = (Array.isArray(item.citations) ? item.citations : [])
-      .slice(0, 16)
-      .flatMap((citation) => {
-        const id = typeof citation.id === "string" ? citation.id : "";
-        const title =
-          typeof citation.title === "string" ? citation.title.trim() : "";
-        const source =
-          typeof citation.source === "string" ? citation.source.trim() : "";
-        if (!id || !title || !source) return [];
-        return [
-          {
-            id: id.slice(0, 128),
-            title: title.slice(0, 1024),
-            source: source.slice(0, 2048),
-          },
-        ];
-      });
-    return {
-      id: item.itemId ?? item.item_id ?? "",
-      role:
-        item.kind === "user_message"
-          ? "user"
-          : item.kind === "assistant_message"
-            ? "assistant"
-            : "system",
-      content: item.redactedContent ?? item.redacted_content ?? "",
-      ...(citations.length ? { citations } : {}),
-      createdAt: item.createdAt ?? item.created_at,
-    };
-  });
+  return mapCharlieHistory(value);
 }
 
 export async function listCharlieThreads(
@@ -719,7 +699,7 @@ export async function listCharlieThreads(
   Array<{ id: string; title: string; state: string; updated_at?: string }>
 > {
   const value = (await listCharlieThreadsOperation({ signal: options?.signal }))
-    .threads;
+    .data.threads;
   if (!Array.isArray(value)) return [];
   return value.map((row: Record<string, unknown>) => ({
     id: String(row.id ?? ""),
@@ -852,7 +832,7 @@ export async function searchCharlieContext(
       query: { q: query, limit: 20 },
       signal: options?.signal,
     })
-  ).items.map((wire) => ({
+  ).data.items.map((wire) => ({
     type: wire.type,
     id: wire.id,
     requiredVerb: "read",
@@ -868,13 +848,13 @@ export async function listCharlieFindings(
       query: { limit: 100 },
       signal: options?.signal,
     })
-  ).items.map(mapCharlieFinding);
+  ).data.items.map(mapCharlieFinding);
 }
 export async function getCharlieFinding(
   id: string,
   options?: CharlieRequestOptions,
 ): Promise<CharlieFinding> {
-  const data = await getCharlieFindingOperation({
+  const { data } = await getCharlieFindingOperation({
     path: { finding_id: id },
     signal: options?.signal,
   });
@@ -907,7 +887,7 @@ export async function transitionCharlieFinding(
 export async function listCharlieApprovals(
   options?: CharlieRequestOptions,
 ): Promise<CharlieApproval[]> {
-  return (await listCharlieApprovalsOperation({ signal: options?.signal }))
+  return (await listCharlieApprovalsOperation({ signal: options?.signal })).data
     .items as CharlieApproval[];
 }
 export async function decideCharlieApproval(

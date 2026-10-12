@@ -2149,11 +2149,18 @@ export const categoricalResponses: Record<
   listCharlieThreads: {
     "200": {
       properties: {
-        threads: {
+        data: {
           required: true,
           node: {
-            items: {
-              ref: "CharlieThreadMetadata",
+            properties: {
+              threads: {
+                required: true,
+                node: {
+                  items: {
+                    ref: "CharlieThreadMetadata",
+                  },
+                },
+              },
             },
           },
         },
@@ -2163,11 +2170,18 @@ export const categoricalResponses: Record<
   listCharlieSessions: {
     "200": {
       properties: {
-        sessions: {
+        data: {
           required: true,
           node: {
-            items: {
-              ref: "CharlieSessionMetadata",
+            properties: {
+              sessions: {
+                required: true,
+                node: {
+                  items: {
+                    ref: "CharlieSessionMetadata",
+                  },
+                },
+              },
             },
           },
         },
@@ -2177,10 +2191,17 @@ export const categoricalResponses: Record<
   createCharlieSession: {
     "201": {
       properties: {
-        session: {
+        data: {
           required: true,
           node: {
-            ref: "CharlieSessionMetadata",
+            properties: {
+              session: {
+                required: true,
+                node: {
+                  ref: "CharlieSessionMetadata",
+                },
+              },
+            },
           },
         },
       },
@@ -2189,10 +2210,17 @@ export const categoricalResponses: Record<
   getCharlieSession: {
     "200": {
       properties: {
-        session: {
+        data: {
           required: true,
           node: {
-            ref: "CharlieSessionMetadata",
+            properties: {
+              session: {
+                required: true,
+                node: {
+                  ref: "CharlieSessionMetadata",
+                },
+              },
+            },
           },
         },
       },
@@ -2201,11 +2229,18 @@ export const categoricalResponses: Record<
   listCharlieApprovals: {
     "200": {
       properties: {
-        items: {
+        data: {
           required: true,
           node: {
-            items: {
-              ref: "CharlieApprovalSummary",
+            properties: {
+              items: {
+                required: true,
+                node: {
+                  items: {
+                    ref: "CharlieApprovalSummary",
+                  },
+                },
+              },
             },
           },
         },
@@ -2215,10 +2250,17 @@ export const categoricalResponses: Record<
   decideCharlieApproval: {
     "200": {
       properties: {
-        approval: {
+        data: {
           required: true,
           node: {
-            ref: "CharlieApprovalSummary",
+            properties: {
+              approval: {
+                required: true,
+                node: {
+                  ref: "CharlieApprovalSummary",
+                },
+              },
+            },
           },
         },
       },
@@ -2227,11 +2269,18 @@ export const categoricalResponses: Record<
   listCharlieFindings: {
     "200": {
       properties: {
-        items: {
+        data: {
           required: true,
           node: {
-            items: {
-              ref: "CharlieFindingSummary",
+            properties: {
+              items: {
+                required: true,
+                node: {
+                  items: {
+                    ref: "CharlieFindingSummary",
+                  },
+                },
+              },
             },
           },
         },
@@ -2241,10 +2290,17 @@ export const categoricalResponses: Record<
   getCharlieFinding: {
     "200": {
       properties: {
-        finding: {
+        data: {
           required: true,
           node: {
-            ref: "CharlieFindingDetail",
+            properties: {
+              finding: {
+                required: true,
+                node: {
+                  ref: "CharlieFindingDetail",
+                },
+              },
+            },
           },
         },
       },
@@ -2253,10 +2309,17 @@ export const categoricalResponses: Record<
   acknowledgeCharlieFinding: {
     "200": {
       properties: {
-        finding: {
+        data: {
           required: true,
           node: {
-            ref: "CharlieFindingDetail",
+            properties: {
+              finding: {
+                required: true,
+                node: {
+                  ref: "CharlieFindingDetail",
+                },
+              },
+            },
           },
         },
       },
@@ -2265,10 +2328,17 @@ export const categoricalResponses: Record<
   dismissCharlieFinding: {
     "200": {
       properties: {
-        finding: {
+        data: {
           required: true,
           node: {
-            ref: "CharlieFindingDetail",
+            properties: {
+              finding: {
+                required: true,
+                node: {
+                  ref: "CharlieFindingDetail",
+                },
+              },
+            },
           },
         },
       },
@@ -2277,10 +2347,17 @@ export const categoricalResponses: Record<
   startCharlieFindingRemediation: {
     "200": {
       properties: {
-        finding: {
+        data: {
           required: true,
           node: {
-            ref: "CharlieFindingDetail",
+            properties: {
+              finding: {
+                required: true,
+                node: {
+                  ref: "CharlieFindingDetail",
+                },
+              },
+            },
           },
         },
       },
@@ -2289,10 +2366,17 @@ export const categoricalResponses: Record<
   requestCharlieFindingVerification: {
     "200": {
       properties: {
-        finding: {
+        data: {
           required: true,
           node: {
-            ref: "CharlieFindingDetail",
+            properties: {
+              finding: {
+                required: true,
+                node: {
+                  ref: "CharlieFindingDetail",
+                },
+              },
+            },
           },
         },
       },
@@ -2301,10 +2385,17 @@ export const categoricalResponses: Record<
   resolveCharlieFinding: {
     "200": {
       properties: {
-        finding: {
+        data: {
           required: true,
           node: {
-            ref: "CharlieFindingDetail",
+            properties: {
+              finding: {
+                required: true,
+                node: {
+                  ref: "CharlieFindingDetail",
+                },
+              },
+            },
           },
         },
       },
@@ -2312,47 +2403,103 @@ export const categoricalResponses: Record<
   },
   adminCharlieOnboardingValidate: {
     "200": {
-      ref: "CharlieOnboardingStatus",
+      properties: {
+        data: {
+          required: true,
+          node: {
+            ref: "CharlieOnboardingStatus",
+          },
+        },
+      },
     },
   },
   adminCharlieOnboardingConsume: {
     "200": {
-      ref: "CharlieOnboardingStatus",
+      properties: {
+        data: {
+          required: true,
+          node: {
+            ref: "CharlieOnboardingStatus",
+          },
+        },
+      },
     },
   },
   adminCharlieStatus: {
     "200": {
-      ref: "CharlieAdminStatus",
+      properties: {
+        data: {
+          required: true,
+          node: {
+            ref: "CharlieAdminStatus",
+          },
+        },
+      },
     },
   },
   adminCharlieDisconnect: {
     "200": {
-      ref: "CharlieAdminStatus",
+      properties: {
+        data: {
+          required: true,
+          node: {
+            ref: "CharlieAdminStatus",
+          },
+        },
+      },
     },
   },
   adminCharlieKubernetesVisibilityGet: {
     "200": {
-      ref: "CharlieKubernetesVisibility",
+      properties: {
+        data: {
+          required: true,
+          node: {
+            ref: "CharlieKubernetesVisibility",
+          },
+        },
+      },
     },
   },
   adminCharlieKubernetesVisibilityUpdate: {
     "200": {
-      ref: "CharlieKubernetesVisibility",
+      properties: {
+        data: {
+          required: true,
+          node: {
+            ref: "CharlieKubernetesVisibility",
+          },
+        },
+      },
     },
   },
   adminCharlieAlertDeliveryProofs: {
     "200": {
-      ref: "CharlieAdminAlertDeliveryProofView",
+      properties: {
+        data: {
+          required: true,
+          node: {
+            ref: "CharlieAdminAlertDeliveryProofView",
+          },
+        },
+      },
     },
   },
   adminCharlieTriggerEventsList: {
     "200": {
       properties: {
-        items: {
+        data: {
           required: true,
           node: {
-            items: {
-              ref: "CharlieAdminTriggerEvent",
+            properties: {
+              items: {
+                required: true,
+                node: {
+                  items: {
+                    ref: "CharlieAdminTriggerEvent",
+                  },
+                },
+              },
             },
           },
         },
@@ -2385,7 +2532,14 @@ export const categoricalResponses: Record<
   },
   adminCharlieDiagnosticsRun: {
     "200": {
-      ref: "CharlieAdminDiagnostics",
+      properties: {
+        data: {
+          required: true,
+          node: {
+            ref: "CharlieAdminDiagnostics",
+          },
+        },
+      },
     },
   },
   createNamedClusterResource: {

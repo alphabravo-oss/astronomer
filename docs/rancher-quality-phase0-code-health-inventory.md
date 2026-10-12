@@ -9,7 +9,7 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 ## Scan Scope
 
 - Frontend source files: 1282
-- Frontend source lines: 240166
+- Frontend source lines: 240551
 - Go source files under `internal/` excluding generated sqlc and tests: 1308
 - Go source files scanned for sqlc query references excluding generated sqlc: 2962
 - sqlc query declarations: 1409

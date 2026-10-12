@@ -6,7 +6,7 @@
     "cmd/astro/rbac.go": 1593,
     "frontend/src/components/monitoring/hooks.ts": 773,
     "frontend/src/components/monitoring/stack-spec.ts": 792,
-    "frontend/src/lib/api/charlie.ts": 947,
+    "frontend/src/lib/api/charlie.ts": 927,
     "frontend/src/lib/api/monitoring-stack.ts": 766,
     "frontend/src/lib/api/project-detail.ts": 987,
     "internal/agent/state_subscriber.go": 1017,

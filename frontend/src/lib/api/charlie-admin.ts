@@ -319,10 +319,12 @@ export async function validateCharlieOnboarding(
   signal?: AbortSignal,
 ): Promise<CharlieOnboardingView> {
   return mapCharlieOnboarding(
-    await adminCharlieOnboardingValidate({
-      body: onboardingWire(input),
-      signal,
-    }),
+    (
+      await adminCharlieOnboardingValidate({
+        body: onboardingWire(input),
+        signal,
+      })
+    ).data,
   );
 }
 export async function consumeCharlieOnboarding(
@@ -330,10 +332,12 @@ export async function consumeCharlieOnboarding(
   signal?: AbortSignal,
 ): Promise<CharlieOnboardingView> {
   return mapCharlieOnboarding(
-    await adminCharlieOnboardingConsume({
-      body: onboardingWire(input),
-      signal,
-    }),
+    (
+      await adminCharlieOnboardingConsume({
+        body: onboardingWire(input),
+        signal,
+      })
+    ).data,
   );
 }
 export async function validateCharlieConnect(
@@ -341,7 +345,8 @@ export async function validateCharlieConnect(
   signal?: AbortSignal,
 ): Promise<CharlieOnboardingView> {
   return mapCharlieOnboarding(
-    await adminCharlieOnboardingValidate({ body: connectWire(input), signal }),
+    (await adminCharlieOnboardingValidate({ body: connectWire(input), signal }))
+      .data,
   );
 }
 export async function consumeCharlieConnect(
@@ -349,19 +354,20 @@ export async function consumeCharlieConnect(
   signal?: AbortSignal,
 ): Promise<CharlieOnboardingView> {
   return mapCharlieOnboarding(
-    await adminCharlieOnboardingConsume({ body: connectWire(input), signal }),
+    (await adminCharlieOnboardingConsume({ body: connectWire(input), signal }))
+      .data,
   );
 }
 async function getCharlieAdminStatus(
   signal?: AbortSignal,
 ): Promise<CharlieAdminStatusView> {
-  return mapCharlieAdminStatus(await adminCharlieStatus({ signal }));
+  return mapCharlieAdminStatus((await adminCharlieStatus({ signal })).data);
 }
 export async function getCharlieActivation(signal?: AbortSignal): Promise<{
   activated: boolean;
   endpoint?: string;
 }> {
-  const value = await charlieActivation({ signal });
+  const value = (await charlieActivation({ signal })).data;
   const endpoint = value.endpoint?.trim();
   return {
     activated: value.activated === true,
@@ -387,7 +393,7 @@ export async function getCharlieKubernetesVisibility(
   signal?: AbortSignal,
 ): Promise<CharlieKubernetesVisibilityView> {
   return mapCharlieKubernetesVisibility(
-    await adminCharlieKubernetesVisibilityGet({ signal }),
+    (await adminCharlieKubernetesVisibilityGet({ signal })).data,
   );
 }
 export async function updateCharlieKubernetesVisibility(
@@ -399,14 +405,16 @@ export async function updateCharlieKubernetesVisibility(
   signal?: AbortSignal,
 ): Promise<CharlieKubernetesVisibilityView> {
   return mapCharlieKubernetesVisibility(
-    await adminCharlieKubernetesVisibilityUpdate({
-      body: {
-        profile: input.profile,
-        pod_logs: input.podLogs,
-        revision: input.revision,
-      },
-      signal,
-    }),
+    (
+      await adminCharlieKubernetesVisibilityUpdate({
+        body: {
+          profile: input.profile,
+          pod_logs: input.podLogs,
+          revision: input.revision,
+        },
+        signal,
+      })
+    ).data,
   );
 }
 export async function updateCharlieMode(
@@ -415,20 +423,24 @@ export async function updateCharlieMode(
   signal?: AbortSignal,
 ): Promise<CharlieModeView> {
   return mapCharlieMode(
-    await adminCharlieModeUpdate({
-      body: { mode, revision },
-      signal,
-      timeoutMs: 180_000,
-    }),
+    (
+      await adminCharlieModeUpdate({
+        body: { mode, revision },
+        signal,
+        timeoutMs: 180_000,
+      })
+    ).data,
   );
 }
 export async function disconnectCharlie(
   signal?: AbortSignal,
 ): Promise<CharlieConnectionView> {
-  const status = await adminCharlieDisconnect({
-    body: { confirmation: "DISCONNECT CHARLIE" },
-    signal,
-  });
+  const status = (
+    await adminCharlieDisconnect({
+      body: { confirmation: "DISCONNECT CHARLIE" },
+      signal,
+    })
+  ).data;
   return mapCharlieConnection(status.connection);
 }
 export async function emergencyDisableCharlie(
@@ -436,11 +448,13 @@ export async function emergencyDisableCharlie(
   signal?: AbortSignal,
 ): Promise<CharlieModeView> {
   return mapCharlieMode(
-    await adminCharlieModeUpdate({
-      body: { mode: "disabled", revision, emergency_disable: true },
-      signal,
-      timeoutMs: 180_000,
-    }),
+    (
+      await adminCharlieModeUpdate({
+        body: { mode: "disabled", revision, emergency_disable: true },
+        signal,
+        timeoutMs: 180_000,
+      })
+    ).data,
   );
 }
 export async function acknowledgeCharlieDisclosure(
@@ -448,21 +462,27 @@ export async function acknowledgeCharlieDisclosure(
   signal?: AbortSignal,
 ): Promise<CharlieModeView> {
   return mapCharlieMode(
-    await adminCharlieModeUpdate({
-      body: { acknowledge_disclosure_digest: digest },
-      signal,
-    }),
+    (
+      await adminCharlieModeUpdate({
+        body: { acknowledge_disclosure_digest: digest },
+        signal,
+      })
+    ).data,
   );
 }
 export async function getCharlieAutomation(
   signal?: AbortSignal,
 ): Promise<CharlieAutomationView> {
-  return mapCharlieAutomation(await adminCharlieTriggerRulesList({ signal }));
+  return mapCharlieAutomation(
+    (await adminCharlieTriggerRulesList({ signal })).data,
+  );
 }
 export async function getCharlieAlertPolicy(
   signal?: AbortSignal,
 ): Promise<CharlieAlertPolicy> {
-  return mapCharlieAlertPolicy(await adminCharlieAlertPolicyGet({ signal }));
+  return mapCharlieAlertPolicy(
+    (await adminCharlieAlertPolicyGet({ signal })).data,
+  );
 }
 export async function updateCharlieAlertPolicy(
   input: CharlieAlertPolicy,
@@ -470,21 +490,23 @@ export async function updateCharlieAlertPolicy(
 ): Promise<CharlieAlertPolicy> {
   try {
     return mapCharlieAlertPolicy(
-      await adminCharlieAlertPolicyUpdate({
-        body: {
-          revision: input.revision,
-          enabled: input.enabled,
-          minimum_severity: input.minimumSeverity,
-          dedupe_window_seconds: input.dedupeWindowSeconds,
-          escalation_after_seconds: input.escalationAfterSeconds,
-          quiet_hours_enabled: input.quietHoursEnabled,
-          quiet_hours_start: input.quietHoursStart,
-          quiet_hours_end: input.quietHoursEnd,
-          quiet_hours_timezone: input.quietHoursTimezone,
-          channel_ids: input.channelIds,
-        },
-        signal,
-      }),
+      (
+        await adminCharlieAlertPolicyUpdate({
+          body: {
+            revision: input.revision,
+            enabled: input.enabled,
+            minimum_severity: input.minimumSeverity,
+            dedupe_window_seconds: input.dedupeWindowSeconds,
+            escalation_after_seconds: input.escalationAfterSeconds,
+            quiet_hours_enabled: input.quietHoursEnabled,
+            quiet_hours_start: input.quietHoursStart,
+            quiet_hours_end: input.quietHoursEnd,
+            quiet_hours_timezone: input.quietHoursTimezone,
+            channel_ids: input.channelIds,
+          },
+          signal,
+        })
+      ).data,
     );
   } catch (error) {
     const status = (error as { response?: { status?: number } }).response
@@ -528,17 +550,19 @@ export async function updateCharlieActionPolicy(
 ): Promise<CharlieActionPolicy> {
   try {
     return mapCharlieActionPolicy(
-      await adminCharlieActionPolicyUpdate({
-        path: { capability: input.capability },
-        body: {
-          enabled: input.enabled,
-          max_actions_per_incident: input.maxActionsPerIncident,
-          max_actions_per_window: input.maxActionsPerWindow,
-          budget_window_seconds: input.budgetWindowSeconds,
-          cooldown_seconds: input.cooldownSeconds,
-        },
-        signal,
-      }),
+      (
+        await adminCharlieActionPolicyUpdate({
+          path: { capability: input.capability },
+          body: {
+            enabled: input.enabled,
+            max_actions_per_incident: input.maxActionsPerIncident,
+            max_actions_per_window: input.maxActionsPerWindow,
+            budget_window_seconds: input.budgetWindowSeconds,
+            cooldown_seconds: input.cooldownSeconds,
+          },
+          signal,
+        })
+      ).data,
     );
   } catch (error) {
     const status = (error as { response?: { status?: number } }).response
@@ -611,14 +635,16 @@ export async function listCharlieTriggerEvents(
   limit = 20,
   signal?: AbortSignal,
 ): Promise<CharlieTriggerEvent[]> {
-  const response = await adminCharlieTriggerEventsList({
-    query: {
-      state,
-      offset: Math.max(0, Math.trunc(offset)),
-      limit: Math.min(100, Math.max(1, Math.trunc(limit))),
-    },
-    signal,
-  });
+  const response = (
+    await adminCharlieTriggerEventsList({
+      query: {
+        state,
+        offset: Math.max(0, Math.trunc(offset)),
+        limit: Math.min(100, Math.max(1, Math.trunc(limit))),
+      },
+      signal,
+    })
+  ).data;
   return response.items.map(mapCharlieTriggerEvent);
 }
 export async function retryCharlieTriggerEvent(
@@ -644,10 +670,12 @@ export async function retryCharlieTriggerEvent(
 export async function getCharlieAccess(
   signal?: AbortSignal,
 ): Promise<CharlieAccessView> {
-  return mapCharlieAccess(await adminCharlieAccessGet({ signal }));
+  return mapCharlieAccess((await adminCharlieAccessGet({ signal })).data);
 }
 export async function getCharlieDiagnostics(
   signal?: AbortSignal,
 ): Promise<CharlieDiagnosticsView> {
-  return mapCharlieDiagnostics(await adminCharlieDiagnosticsRun({ signal }));
+  return mapCharlieDiagnostics(
+    (await adminCharlieDiagnosticsRun({ signal })).data,
+  );
 }

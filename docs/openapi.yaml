@@ -34999,7 +34999,7 @@ paths:
       responses:
         '200':
           description: The command catalog available to the authenticated user.
-          content: {application/json: {schema: {$ref: '#/components/schemas/CharlieCommandCatalog'}}}
+          content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieCommandCatalog'}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/charlie/threads/:
@@ -35018,9 +35018,19 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [threads]
+                required:
+                - data
                 properties:
-                  threads: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieThreadMetadata'}}
+                  data:
+                    type: object
+                    required:
+                    - threads
+                    properties:
+                      threads:
+                        type: array
+                        maxItems: 100
+                        items:
+                          $ref: '#/components/schemas/CharlieThreadMetadata'
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/charlie/threads/active/:
@@ -35035,7 +35045,7 @@ paths:
       responses:
         '200':
           description: Active conversation metadata, or a null thread when none exists.
-          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+          content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: object, additionalProperties: true}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/charlie/threads/new/:
@@ -35050,7 +35060,7 @@ paths:
       responses:
         '201':
           description: New owner-scoped active conversation metadata.
-          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+          content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: object, additionalProperties: true}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/charlie/threads/messages/:
@@ -35071,7 +35081,7 @@ paths:
       responses:
         '202':
           description: Active thread metadata and the accepted Charlie turn receipt.
-          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+          content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: object, additionalProperties: true}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35091,7 +35101,7 @@ paths:
       responses:
         '200':
           description: Retention-bounded redacted items stitched across the conversation's Charlie sessions.
-          content: {application/json: {schema: {type: object, additionalProperties: true}}}
+          content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: object, additionalProperties: true}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -35114,10 +35124,27 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [sessions, mode]
+                required:
+                - data
                 properties:
-                  sessions: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieSessionMetadata'}}
-                  mode: {type: string, enum: [disabled, read_only, approval, auto]}
+                  data:
+                    type: object
+                    required:
+                    - sessions
+                    - mode
+                    properties:
+                      sessions:
+                        type: array
+                        maxItems: 100
+                        items:
+                          $ref: '#/components/schemas/CharlieSessionMetadata'
+                      mode:
+                        type: string
+                        enum:
+                        - disabled
+                        - read_only
+                        - approval
+                        - auto
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
     post:
@@ -35140,10 +35167,19 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [session, replayed]
+                required:
+                - data
                 properties:
-                  session: {$ref: '#/components/schemas/CharlieSessionMetadata'}
-                  replayed: {type: boolean}
+                  data:
+                    type: object
+                    required:
+                    - session
+                    - replayed
+                    properties:
+                      session:
+                        $ref: '#/components/schemas/CharlieSessionMetadata'
+                      replayed:
+                        type: boolean
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35166,10 +35202,20 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [session, remote]
+                required:
+                - data
                 properties:
-                  session: {$ref: '#/components/schemas/CharlieSessionMetadata'}
-                  remote: {type: object, additionalProperties: true}
+                  data:
+                    type: object
+                    required:
+                    - session
+                    - remote
+                    properties:
+                      session:
+                        $ref: '#/components/schemas/CharlieSessionMetadata'
+                      remote:
+                        type: object
+                        additionalProperties: true
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/charlie/sessions/{session_id}/history/:
@@ -35281,9 +35327,19 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required:
+                - data
                 properties:
-                  items: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/CharlieContextSearchResult'}}
+                  data:
+                    type: object
+                    required:
+                    - items
+                    properties:
+                      items:
+                        type: array
+                        maxItems: 20
+                        items:
+                          $ref: '#/components/schemas/CharlieContextSearchResult'
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35301,7 +35357,7 @@ paths:
       responses:
         '200':
           description: Action state with arguments, evidence, credentials, and raw results excluded.
-          content: {application/json: {schema: {$ref: '#/components/schemas/CharlieOperationStatus'}}}
+          content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieOperationStatus'}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -35322,9 +35378,19 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required:
+                - data
                 properties:
-                  items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/CharlieApprovalSummary'}}
+                  data:
+                    type: object
+                    required:
+                    - items
+                    properties:
+                      items:
+                        type: array
+                        maxItems: 200
+                        items:
+                          $ref: '#/components/schemas/CharlieApprovalSummary'
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -35350,9 +35416,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [approval]
+                required:
+                - data
                 properties:
-                  approval: {$ref: '#/components/schemas/CharlieApprovalSummary'}
+                  data:
+                    type: object
+                    required:
+                    - approval
+                    properties:
+                      approval:
+                        $ref: '#/components/schemas/CharlieApprovalSummary'
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {description: 'Approval is stale, ineligible, mismatched, or not confirmed; no action was authorized.', content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
@@ -35376,9 +35449,19 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required:
+                - data
                 properties:
-                  items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieFindingSummary'}}
+                  data:
+                    type: object
+                    required:
+                    - items
+                    properties:
+                      items:
+                        type: array
+                        maxItems: 100
+                        items:
+                          $ref: '#/components/schemas/CharlieFindingSummary'
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/charlie/findings/{finding_id}/:
@@ -35399,9 +35482,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [finding]
+                required:
+                - data
                 properties:
-                  finding: {$ref: '#/components/schemas/CharlieFindingDetail'}
+                  data:
+                    type: object
+                    required:
+                    - finding
+                    properties:
+                      finding:
+                        $ref: '#/components/schemas/CharlieFindingDetail'
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/charlie/findings/{finding_id}/acknowledge/:
@@ -35419,7 +35509,7 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
       responses:
-        '200': {description: Finding acknowledged., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '200': {description: Finding acknowledged., content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35439,7 +35529,7 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
       responses:
-        '200': {description: Finding dismissed., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '200': {description: Finding dismissed., content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35460,7 +35550,7 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
       responses:
-        '200': {description: Remediation marked in progress., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '200': {description: Remediation marked in progress., content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35481,7 +35571,7 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
       responses:
-        '200': {description: Verification requested., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '200': {description: Verification requested., content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35501,7 +35591,7 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/CharlieFindingTransitionRequest'}}}
       responses:
-        '200': {description: Finding resolved., content: {application/json: {schema: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}
+        '200': {description: Finding resolved., content: {application/json: {schema: {type: object, required: [data], properties: {data: {type: object, required: [finding], properties: {finding: {$ref: '#/components/schemas/CharlieFindingDetail'}}}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35532,7 +35622,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CharlieOnboardingStatus'
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CharlieOnboardingStatus'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -35569,7 +35664,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CharlieOnboardingStatus'
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CharlieOnboardingStatus'
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '401':
@@ -35598,11 +35698,20 @@ paths:
             application/json:
               schema:
                 type: object
-                additionalProperties: false
-                required: [activated]
+                required:
+                - data
                 properties:
-                  activated: {type: boolean}
-                  endpoint: {type: string, format: uri}
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required:
+                    - activated
+                    properties:
+                      activated:
+                        type: boolean
+                      endpoint:
+                        type: string
+                        format: uri
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/admin/charlie/status/:
@@ -35615,7 +35724,7 @@ paths:
       tags: [platform-admin-settings]
       security: [{bearerJWT: []}]
       responses:
-        '200': {description: 'Connection, product-agent, and authoritative mode status.', content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminStatus'}}}}
+        '200': {description: 'Connection, product-agent, and authoritative mode status.', content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminStatus'}}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -35635,7 +35744,7 @@ paths:
       security: [{bearerJWT: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionRequest'}}}}
       responses:
-        '200': {description: 'Disconnected connection, product-agent, and mode status.', content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminStatus'}}}}
+        '200': {description: 'Disconnected connection, product-agent, and mode status.', content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminStatus'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35653,7 +35762,7 @@ paths:
       security: [{bearerJWT: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieModeRequest'}}}}
       responses:
-        '200': {description: Current locally safe and centrally authoritative mode., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminMode'}}}}
+        '200': {description: Current locally safe and centrally authoritative mode., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminMode'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35669,7 +35778,7 @@ paths:
       tags: [platform-admin-settings]
       security: [{bearerJWT: []}]
       responses:
-        '200': {description: Current Kubernetes visibility profile and hard prohibitions., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieKubernetesVisibility'}}}}
+        '200': {description: Current Kubernetes visibility profile and hard prohibitions., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieKubernetesVisibility'}}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -35684,7 +35793,7 @@ paths:
       security: [{bearerJWT: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieKubernetesVisibilityRequest'}}}}
       responses:
-        '200': {description: Updated Kubernetes visibility profile., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieKubernetesVisibility'}}}}
+        '200': {description: Updated Kubernetes visibility profile., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieKubernetesVisibility'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35700,7 +35809,7 @@ paths:
       tags: [platform-admin-settings]
       security: [{bearerJWT: []}]
       responses:
-        '200': {description: Bounded automation configuration., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAutomation'}}}}
+        '200': {description: Bounded automation configuration., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminAutomation'}}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -35714,7 +35823,7 @@ paths:
       security: [{bearerJWT: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}}}
       responses:
-        '201': {description: Created trigger rule., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}}}
+        '201': {description: Created trigger rule., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35730,7 +35839,7 @@ paths:
       tags: [platform-admin-settings]
       security: [{bearerJWT: []}]
       responses:
-        '200': {description: Current local alert policy and redacted channel choices., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAlertPolicy'}}}}
+        '200': {description: Current local alert policy and redacted channel choices., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminAlertPolicy'}}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -35745,7 +35854,7 @@ paths:
       security: [{bearerJWT: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAlertPolicyInput'}}}}
       responses:
-        '200': {description: Updated local alert policy., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAlertPolicy'}}}}
+        '200': {description: Updated local alert policy., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminAlertPolicy'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35764,7 +35873,7 @@ paths:
       parameters:
         - {name: finding_id, in: query, required: true, schema: {type: string, format: uuid}}
       responses:
-        '200': {description: Bounded current-deployment delivery proof., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAlertDeliveryProofView'}}}}
+        '200': {description: Bounded current-deployment delivery proof., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminAlertDeliveryProofView'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35782,7 +35891,7 @@ paths:
       security: [{bearerJWT: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieDiscoveryQualificationRequest'}}}}
       responses:
-        '200': {description: Fixed discovery generation verdict., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminDiscoveryQualification'}}}}
+        '200': {description: Fixed discovery generation verdict., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminDiscoveryQualification'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35801,7 +35910,7 @@ paths:
         - {name: rule_id, in: path, required: true, schema: {type: string, format: uuid}}
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}}}
       responses:
-        '200': {description: Updated trigger rule., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}}}
+        '200': {description: Updated trigger rule., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminTriggerRule'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35837,7 +35946,7 @@ paths:
         - {name: capability, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9_.:-]{0,127}$'}}
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionPolicyInput'}}}}
       responses:
-        '200': {description: Current safe action policy., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminActionPolicy'}}}}
+        '200': {description: Current safe action policy., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminActionPolicy'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35864,9 +35973,19 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required:
+                - data
                 properties:
-                  items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CharlieAdminTriggerEvent'}}
+                  data:
+                    type: object
+                    required:
+                    - items
+                    properties:
+                      items:
+                        type: array
+                        maxItems: 100
+                        items:
+                          $ref: '#/components/schemas/CharlieAdminTriggerEvent'
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -35938,7 +36057,7 @@ paths:
       tags: [platform-admin-settings]
       security: [{bearerJWT: []}]
       responses:
-        '200': {description: Effective and explicitly granted permissions., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAccess'}}}}
+        '200': {description: Effective and explicitly granted permissions., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminAccess'}}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
@@ -35952,7 +36071,7 @@ paths:
       security: [{bearerJWT: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAccessRequest'}}}}
       responses:
-        '200': {description: Effective and explicitly granted permissions., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminAccess'}}}}
+        '200': {description: Effective and explicitly granted permissions., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminAccess'}}}}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -35968,7 +36087,7 @@ paths:
       tags: [platform-admin-settings]
       security: [{bearerJWT: []}]
       responses:
-        '200': {description: Redacted diagnostic checks and correlation ID., content: {application/json: {schema: {$ref: '#/components/schemas/CharlieAdminDiagnostics'}}}}
+        '200': {description: Redacted diagnostic checks and correlation ID., content: {application/json: {schema: {type: object, required: [data], properties: {data: {$ref: '#/components/schemas/CharlieAdminDiagnostics'}}}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
