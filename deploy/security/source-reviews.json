@@ -534,39 +534,39 @@
       "evidence": "v2.0.0 source review, internal/handler/totp.go:216 (sha256:23829e0d17dfe7899d5a1425bb72b0f71cea3efbb8ccfccfcdbe02b4fc848553): Enrollment Secret is encrypted with the configured encryptor before JSON encoding into a short-lived purpose-bound challenge JWT; missing encryptor fails closed. The raw TOTP secret is not put into that signed-but-readable payload. See handler/totp.go enrollment and challenge tests."
     },
     {
-      "fingerprint": "sha256:f84fecf1fb25d341d8ba1c5ffff497b89c7bf22e4eaaabe7918a3ffbedc1efa2",
+      "fingerprint": "sha256:87d004b9948ff0ede04f66cb5aa97a7d2375158adbedc83276863e935a021b31",
       "owner": "security/platform",
       "review_by": "2026-10-16T00:00:00Z",
       "status": "reviewed",
-      "evidence": "v2.0.0 source review, pkg/astroclient/astroclient.gen.go:78476 (sha256:9eb264f1b29046493372b5269cf65176a2ca426fc50d9c02070164add2cd96f9): Generated SDK encodes caller-provided Password/ClientSecret fields into the intentional authentication/configuration HTTP request body. This is neither a log nor an unintended response disclosure. Generation follows docs/openapi.yaml and caller-selected server/TLS policy; no generated edits or field suppression applied."
+      "evidence": "v2.0.0 source review, pkg/astroclient/astroclient.gen.go:78476 (sha256:92cbf76d58d28032930e3ee344d8ba5ee14a1f387509e9b8ca0623cc1dafd7f6): Generated SDK encodes caller-provided Password/ClientSecret fields into the intentional authentication/configuration HTTP request body. This is neither a log nor an unintended response disclosure. Generation follows docs/openapi.yaml and caller-selected server/TLS policy; no generated edits or field suppression applied."
     },
     {
-      "fingerprint": "sha256:73ad25bc4c85e1c2c610229c2a14b2c35d50597cc43c58783d5b5a45327086aa",
+      "fingerprint": "sha256:ab8d3643a00619ba89a639e837f8f90da7b1d2910e3a737e2e203c47da70431c",
       "owner": "security/platform",
       "review_by": "2026-10-16T00:00:00Z",
       "status": "reviewed",
-      "evidence": "v2.0.0 source review, pkg/astroclient/astroclient.gen.go:78274 (sha256:9eb264f1b29046493372b5269cf65176a2ca426fc50d9c02070164add2cd96f9): Generated SDK encodes caller-provided Password/ClientSecret fields into the intentional authentication/configuration HTTP request body. This is neither a log nor an unintended response disclosure. Generation follows docs/openapi.yaml and caller-selected server/TLS policy; no generated edits or field suppression applied."
+      "evidence": "v2.0.0 source review, pkg/astroclient/astroclient.gen.go:78274 (sha256:92cbf76d58d28032930e3ee344d8ba5ee14a1f387509e9b8ca0623cc1dafd7f6): Generated SDK encodes caller-provided Password/ClientSecret fields into the intentional authentication/configuration HTTP request body. This is neither a log nor an unintended response disclosure. Generation follows docs/openapi.yaml and caller-selected server/TLS policy; no generated edits or field suppression applied."
     },
     {
-      "fingerprint": "sha256:6e306f3f1c161e24a25b3bc7a5e17de08ae319ed41ad8818b6d32c92778b141f",
+      "fingerprint": "sha256:6fd9a070e65cf6acf50a2592704a6f8e5fb9dde4d4569cd6a18faadbf3becb17",
       "owner": "security/platform",
       "review_by": "2026-10-16T00:00:00Z",
       "status": "reviewed",
-      "evidence": "v2.0.0 source review, pkg/astroclient/astroclient.gen.go:47257 (sha256:9eb264f1b29046493372b5269cf65176a2ca426fc50d9c02070164add2cd96f9): Generated SDK encodes caller-provided Password/ClientSecret fields into the intentional authentication/configuration HTTP request body. This is neither a log nor an unintended response disclosure. Generation follows docs/openapi.yaml and caller-selected server/TLS policy; no generated edits or field suppression applied."
+      "evidence": "v2.0.0 source review, pkg/astroclient/astroclient.gen.go:47257 (sha256:92cbf76d58d28032930e3ee344d8ba5ee14a1f387509e9b8ca0623cc1dafd7f6): Generated SDK encodes caller-provided Password/ClientSecret fields into the intentional authentication/configuration HTTP request body. This is neither a log nor an unintended response disclosure. Generation follows docs/openapi.yaml and caller-selected server/TLS policy; no generated edits or field suppression applied."
     },
     {
-      "fingerprint": "sha256:dde338d473ca3e381b004b6f34430794099e7d19590768e7bd4aaeeb1dc709a9",
+      "fingerprint": "sha256:29b903aef3bf03eb0d39c3017f4dbd310dfe50e110de68b1ccdbfa1dd11a9a15",
       "owner": "security/platform",
       "review_by": "2026-10-16T00:00:00Z",
       "status": "reviewed",
-      "evidence": "v2.0.0 source review, pkg/astroclient/astroclient.gen.go:42709 (sha256:9eb264f1b29046493372b5269cf65176a2ca426fc50d9c02070164add2cd96f9): Generated SDK encodes caller-provided Password/ClientSecret fields into the intentional authentication/configuration HTTP request body. This is neither a log nor an unintended response disclosure. Generation follows docs/openapi.yaml and caller-selected server/TLS policy; no generated edits or field suppression applied."
+      "evidence": "v2.0.0 source review, pkg/astroclient/astroclient.gen.go:42709 (sha256:92cbf76d58d28032930e3ee344d8ba5ee14a1f387509e9b8ca0623cc1dafd7f6): Generated SDK encodes caller-provided Password/ClientSecret fields into the intentional authentication/configuration HTTP request body. This is neither a log nor an unintended response disclosure. Generation follows docs/openapi.yaml and caller-selected server/TLS policy; no generated edits or field suppression applied."
     },
     {
-      "fingerprint": "sha256:66d85861930cd273746ecd8e387b39fa32d443556d25919b523ef669e9d3dda6",
+      "fingerprint": "sha256:5081e447c37891b60b18a142bd2291cb66a9fd79024a00aa8cf0ffc4fbd76967",
       "owner": "security/platform",
       "review_by": "2026-10-16T00:00:00Z",
       "status": "reviewed",
-      "evidence": "v2.0.0 source review, pkg/astroclient/astroclient.gen.go:46476 (sha256:9eb264f1b29046493372b5269cf65176a2ca426fc50d9c02070164add2cd96f9): Generated SDK encodes caller-provided Password/ClientSecret fields into the intentional authentication/configuration HTTP request body. This is neither a log nor an unintended response disclosure. Generation follows docs/openapi.yaml and caller-selected server/TLS policy; no generated edits or field suppression applied."
+      "evidence": "v2.0.0 source review, pkg/astroclient/astroclient.gen.go:46476 (sha256:92cbf76d58d28032930e3ee344d8ba5ee14a1f387509e9b8ca0623cc1dafd7f6): Generated SDK encodes caller-provided Password/ClientSecret fields into the intentional authentication/configuration HTTP request body. This is neither a log nor an unintended response disclosure. Generation follows docs/openapi.yaml and caller-selected server/TLS policy; no generated edits or field suppression applied."
     },
     {
       "fingerprint": "sha256:3885d412b20f0d49a625e0098bff4e6549620d32cf744af4c443469151503e24",
